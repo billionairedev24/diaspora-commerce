@@ -15,8 +15,12 @@ import (
 type Upstream struct {
 	URL     string        `yaml:"url"`
 	Timeout time.Duration `yaml:"timeout"`
-	Retries int           `yaml:"retries"` // extra attempts for idempotent GETs only
-	Breaker struct {
+	// SlowTimeout bounds calls that wait for a downstream saga or call chain (orders: POST /v1/checkout and its
+	// confirm, above orders' checkout-response-timeout; deliveryRuns: late pre-order adds, above its 15s orders
+	// timeout). Defaults to Timeout.
+	SlowTimeout time.Duration `yaml:"slowTimeout"`
+	Retries     int           `yaml:"retries"` // extra attempts for idempotent GETs only
+	Breaker     struct {
 		Failures int           `yaml:"failures"` // consecutive failures that open the breaker
 		Cooldown time.Duration `yaml:"cooldown"` // open → half-open after this long
 	} `yaml:"breaker"`
@@ -251,6 +255,9 @@ func (c *Config) Validate(env string) error {
 		}
 		if u.Timeout <= 0 {
 			u.Timeout = 3 * time.Second
+		}
+		if u.SlowTimeout < u.Timeout {
+			u.SlowTimeout = u.Timeout
 		}
 		if u.Breaker.Failures <= 0 {
 			u.Breaker.Failures = 5

@@ -27,6 +27,8 @@ type ShopperServices struct {
 	Lola     app.LolaService
 	// SearchClicks reports result clicks to search (optional).
 	SearchClicks app.SearchClickService
+	// PayLinks serves the pay-now page of late pre-order adds (optional; public, the link's token is the credential).
+	PayLinks app.PayLinkService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -49,6 +51,12 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	// Returns
 	route("GET /v1/account/returns/{rmaId}", h.returnDetail)
 	route("POST /v1/account/returns/{rmaId}/cancel", h.cancelReturn)
+	// Pay-now page of late pre-order adds (no session: the signed token is the credential; rate-limited per IP)
+	if h.s.Shopper.PayLinks != nil {
+		lookup := func(fn http.HandlerFunc) http.HandlerFunc { return h.rl.wrap("lookup", h.o.LookupPerMinute, fn) }
+		route("POST /v1/pay-links/{orderNumber}/lookup", lookup(h.payLinkLookup))
+		route("POST /v1/pay-links/{orderNumber}/confirm", lookup(h.payLinkConfirm))
+	}
 	// Checkout payment
 	route("GET /v1/checkout/orders/{orderNumber}", h.checkoutStatus)
 	route("POST /v1/checkout/orders/{orderNumber}/confirm", h.confirmCheckout)
@@ -139,6 +147,32 @@ func (h *handlersImpl) returnDetail(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) cancelReturn(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Shopper.Returns.Cancel(r.Context(), callerFrom(r.Context()), r.PathValue("rmaId"))
 	h.ok(w, r, v, err)
+}
+
+// ---------------------------------------------------------------- pay-now links
+
+type payLinkBody struct {
+	Token string `json:"token"`
+}
+
+func (h *handlersImpl) payLinkLookup(w http.ResponseWriter, r *http.Request) {
+	var b payLinkBody
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Shopper.PayLinks.Lookup(r.Context(), r.PathValue("orderNumber"), b.Token)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) payLinkConfirm(w http.ResponseWriter, r *http.Request) {
+	var b payLinkBody
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Shopper.PayLinks.Confirm(r.Context(), r.PathValue("orderNumber"), b.Token)
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 // ---------------------------------------------------------------- checkout

@@ -1584,6 +1584,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pay-links/{orderNumber}/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The pay-now page of a late pre-order add (no session; the SMS link's signed token is the credential)
+         * @description Customer service texts a pay-now link to AfroTransact's own page (/orders/{orderNumber}/pay?token=…); customers never get a Stripe-hosted page. While the order awaits payment the answer carries the client secret of its existing manual-capture PaymentIntent, which the page confirms with Stripe Elements (stripe.confirmPayment, redirect if_required). A paid order is status paid without a client secret; an unknown order or a wrong token is 404 PAY_LINK_NOT_FOUND; an expired or voided one is 410 PAY_LINK_EXPIRED. Rate-limited per IP.
+         */
+        post: operations["lookupPayLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/pay-links/{orderNumber}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * After stripe.confirmPayment on the pay-now page — place the order once the payment is authorised
+         * @description Orders reads the PaymentIntent from Stripe and places the order when it is authorised (idempotent; the webhook does the same). Answers like lookup; failureMessage after a decline (the customer may try again on the same PaymentIntent until the link expires).
+         */
+        post: operations["confirmPayLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/services/search": {
         parameters: {
             query?: never;
@@ -1824,6 +1864,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        PayLinkToken: {
+            /** @description The token of the SMS pay-now link */
+            token: string;
+        };
+        /** @description The pay-now page of a late pre-order add (AfroTransact's own page; Stripe Elements) */
+        PayLink: {
+            orderNumber: string;
+            /** @enum {string} */
+            status: "awaiting_payment" | "paid";
+            /** Format: int64 */
+            totalMinor: number;
+            /** Format: int64 */
+            deliveryFeeMinor: number;
+            currency: string;
+            /** @description The order's PaymentIntent client secret; null once paid */
+            clientSecret: string | null;
+            /** @description Stripe publishable key for Stripe.js (empty locally = test form) */
+            publishableKey: string;
+            /** @description The last decline; the customer may try again */
+            failureMessage?: string | null;
+            /** Format: date-time */
+            expiresAt?: string | null;
+            windowName?: string | null;
+            /** Format: date */
+            deliversOn?: string | null;
+            fulfilment?: string | null;
+            lines: {
+                title: string;
+                quantity: number;
+                /** Format: int64 */
+                totalMinor: number;
+            }[];
+        };
         Problem: {
             /** Format: uri */
             type: string;
@@ -6040,6 +6113,68 @@ export interface operations {
             401: components["responses"]["Problem"];
             402: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    lookupPayLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayLinkToken"];
+            };
+        };
+        responses: {
+            /** @description The order and, while awaiting payment, its client secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayLink"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmPayLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PayLinkToken"];
+            };
+        };
+        responses: {
+            /** @description awaiting_payment or paid */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayLink"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Problem"];
         };
     };

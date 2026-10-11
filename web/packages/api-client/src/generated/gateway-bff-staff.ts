@@ -1114,9 +1114,12 @@ export interface paths {
         /**
          * Add a late order for a customer (tagged Agent (late))
          * @description delivery-runs `POST /v1/preorders/{id}/late-orders` (preorders:late-add; APPROVE, EDIT or FULL on preorders),
-         *     which creates the on-behalf order in orders-service (saved card charged off-session, or a payment link sent by
+         *     which creates the on-behalf order in orders-service (saved card charged off-session, or a pay-now link sent by
          *     SMS when lateAdd.paymentLink is allowed in the payment settings). Only while the window is CLOSED (or OPEN, as
-         *     an assisted order); refused once DELIVERED. `Idempotency-Key` is relayed.
+         *     an assisted order); refused once DELIVERED. `Idempotency-Key` is required (422 without it): the console
+         *     makes one when the dialog opens and reuses it on every retry, so a retry returns the same order and charges
+         *     once. PAYMENT_LINK texts a pay-now link to AfroTransact's own pay page (never a Stripe-hosted page).
+         *     409 when the same items were just added for the customer under another key.
          */
         post: operations["addStaffPreorderLateOrder"];
         delete?: never;
@@ -6436,8 +6439,8 @@ export interface operations {
     addStaffPreorderLateOrder: {
         parameters: {
             query?: never;
-            header?: {
-                "Idempotency-Key"?: string;
+            header: {
+                "Idempotency-Key": string;
             };
             path: {
                 /** @description Window id or code */

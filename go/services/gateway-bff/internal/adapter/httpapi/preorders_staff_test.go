@@ -357,8 +357,20 @@ func TestStaffPreordersConformance(t *testing.T) {
 	// Late adds: support (APPROVE) and managers; finance (VIEW) may not.
 	late := map[string]any{"customerId": "cus-1", "addressId": "adr-1", "phoneConfirmed": true, "items": []any{map[string]any{"atin": "ATGARI0001", "qty": 2}},
 		"payment": "PAYMENT_LINK", "reason": "Customer called", "note": "Leave at the door"}
-	if v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", late, 201)); v["number"] != "LBK-L90" {
+	// The Idempotency-Key is required: the console makes one per dialog and reuses it on every retry.
+	const lateKey = "late-add-dialog-0001"
+	if e := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", late, 422))["errors"].(map[string]any); e["Idempotency-Key"] == nil {
+		t.Fatalf("keyless late order errors = %v", e)
+	}
+	do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", late, 422, "Idempotency-Key", "short")
+	if len(f.bodies["POST /v1/preorders/win-7/late-orders"]) != 0 {
+		t.Fatal("a late order without a valid key reached delivery-runs")
+	}
+	if v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", late, 201, "Idempotency-Key", lateKey)); v["number"] != "LBK-L90" {
 		t.Fatalf("late order = %v", v)
+	}
+	if got := f.idemKeys["POST /v1/preorders/win-7/late-orders"]; got != lateKey {
+		t.Fatalf("relayed Idempotency-Key = %q", got)
 	}
 	// A saved address id goes to delivery-runs with its snapshot, filled from identity's address book.
 	sent := f.bodies["POST /v1/preorders/win-7/late-orders"]
@@ -372,7 +384,7 @@ func TestStaffPreordersConformance(t *testing.T) {
 		withSnap[k] = v
 	}
 	withSnap["address"] = map[string]any{"line1": "2401 Broadway Unit B", "instructions": "Call on arrival"}
-	do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", withSnap, 201)
+	do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", withSnap, 201, "Idempotency-Key", lateKey+"-b")
 	if a, _ := f.bodies["POST /v1/preorders/win-7/late-orders"]["address"].(map[string]any); a["line1"] != "2401 Broadway Unit B" ||
 		a["instructions"] != "Call on arrival" || a["zip"] != "79401" || a["region"] != "TX" {
 		t.Fatalf("merged snapshot = %v", a)
@@ -383,10 +395,10 @@ func TestStaffPreordersConformance(t *testing.T) {
 		unknown[k] = v
 	}
 	unknown["addressId"] = "adr-404"
-	if e := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", unknown, 422))["errors"].(map[string]any); e["addressId"] == nil {
+	if e := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", unknown, 422, "Idempotency-Key", lateKey+"-c"))["errors"].(map[string]any); e["addressId"] == nil {
 		t.Fatalf("unknown address errors = %v", e)
 	}
-	do("finance", "POST", "/v1/staff/preorders/win-7/late-orders", late, 403)
+	do("finance", "POST", "/v1/staff/preorders/win-7/late-orders", late, 403, "Idempotency-Key", lateKey+"-d")
 	if e := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", map[string]any{"customerId": "cus-1"}, 422))["errors"].(map[string]any); e["phoneConfirmed"] == nil || e["items"] == nil {
 		t.Fatalf("late order errors = %v", e)
 	}

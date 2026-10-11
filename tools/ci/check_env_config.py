@@ -19,6 +19,10 @@ Checks every service against the environment rules in docs/engineering/environme
                in dev/uat or a pk_live_ key in prod, so the storefront's dev-only Stripe stand-in is local-only);
                payments' at.payments.stripe.secret-key / webhook-secret have no default outside local and
                require-live-key is true in prod only; the Helm charts list the Stripe keys their secret store must hold.
+  timeouts     (payments idempotency) gateway-bff's upstreams.orders.slowTimeout is above orders'
+               at.orders.checkout-response-timeout in every environment, and upstreams.deliveryRuns.slowTimeout above
+               delivery-runs' orders timeout: the BFF never reports a failure for a checkout or late add that still
+               completes (a retry would then look like a new purchase).
 
   python3 tools/ci/check_env_config.py                 # whole repository; exit 1 on violations
   python3 tools/ci/check_env_config.py --format github # ::error annotations
@@ -269,6 +273,43 @@ def check_stripe(svc_dir: pathlib.Path, rep: Report) -> None:
             rep.error(f, f"at.payments.stripe.require-live-key must be {str(env == 'prod').lower()} in {env}")
 
 
+def duration_seconds(value) -> float | None:
+    """'25s', '1500ms', '2m' (or a ${VAR:default} placeholder's default) in seconds."""
+    v = resolve(value)
+    if v is None:
+        return None
+    m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(ms|s|m|h)?\s*", str(v))
+    if not m:
+        return None
+    return float(m.group(1)) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600, None: 1}[m.group(2)]
+
+
+def check_timeouts(rep: Report) -> None:
+    bff = ROOT / "go/services/gateway-bff/config"
+    orders = ROOT / "java/services/orders/src/main/resources"
+    runs = ROOT / "java/services/delivery-runs/src/main/resources"
+    if not (bff.is_dir() and orders.is_dir() and runs.is_dir()):
+        return
+    base_orders, base_runs = load(orders / "application.yml"), load(runs / "application.yml")
+    for env in ENVS:
+        cfg = load(bff / f"{env}.yaml")
+        o_env = orders / f"application-{env}.yml"
+        r_env = runs / f"application-{env}.yml"
+        o = deep_merge(base_orders, load(o_env)) if o_env.exists() else base_orders
+        r = deep_merge(base_runs, load(r_env)) if r_env.exists() else base_runs
+        pairs = [("orders", get(o, "at.orders.checkout-response-timeout"), "orders' checkout-response-timeout"),
+                 ("deliveryRuns", get(r, "at.delivery-runs.orders.timeout"), "delivery-runs' orders timeout")]
+        for name, downstream, what in pairs:
+            up = get(cfg, f"upstreams.{name}") or {}
+            slow = duration_seconds(up.get("slowTimeout", up.get("timeout")))
+            limit = duration_seconds(downstream)
+            if slow is None or limit is None:
+                rep.error(bff / f"{env}.yaml", f"upstreams.{name}.slowTimeout or {what} is missing")
+            elif slow <= limit:
+                rep.error(bff / f"{env}.yaml", f"upstreams.{name}.slowTimeout ({slow:g}s) must be above {what} "
+                                              f"({limit:g}s)")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--format", choices=["text", "github"], default="text")
@@ -288,6 +329,8 @@ def main() -> int:
             check_helm(chart, rep)
         else:
             rep.error(svc_dir, "missing deploy/helm chart")
+    if not args.service:
+        check_timeouts(rep)
     if args.service and rep.checked == 0:
         print(f"no such service: {', '.join(args.service)}", file=sys.stderr)
         return 2

@@ -45,7 +45,8 @@ var preorderCommsRules = []EventRule{
 		IDField: "orders", When: fieldIs("kind", PreorderOutForDelivery), Enrich: preorderComms("ofd")},
 }
 
-// preorderLatePaymentRule texts the payment link of a late add (payment PAYMENT_LINK) to the customer; a late add
+// preorderLatePaymentRule texts the pay-now link of a late add (payment PAYMENT_LINK) to the customer: AfroTransact's own
+// pay page (/orders/<number>/pay?token=…), never a Stripe-hosted page; a late add
 // charged to the saved card is confirmed by orders.order.placed like any pre-order.
 var preorderLatePaymentRule = EventRule{Topic: TopicDeliveryRuns, Template: "preorder.late_order.payment_link", Channels: chSMS,
 	Recipient: RecipientPayload, IDField: "customerId", Enrich: enrichPreorderLatePayment,
@@ -302,7 +303,8 @@ func enrichPreorderLatePayment(d map[string]any, _ Links) {
 	setDefault(d, "number", str(d, "orderNumber"))
 	setDefault(d, "deliversDisplay", friendlyDate(str(d, "deliversOn")))
 	d["deliversDisplay"] = smsSafeDisplay(str(d, "deliversDisplay"))
-	d["paymentUrl"] = withAttribution(str(d, "paymentUrl"), "sms", str(d, "code"), "late")
+	// No attribution parameters: the signed pay-now link must stay short enough for a single SMS segment.
+	d["paymentUrl"] = str(d, "paymentUrl")
 }
 
 func firstNonEmptyStr(vals ...string) string {

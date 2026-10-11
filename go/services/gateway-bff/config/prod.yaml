@@ -74,6 +74,8 @@ upstreams:
   orders:
     url: http://orders
     timeout: 10s
+    # POST /v1/checkout waits up to orders' checkout-response-timeout (20s): never give up before it.
+    slowTimeout: 25s
     retries: 0
     breaker: {failures: 5, cooldown: 15s}
   notifications:
@@ -139,6 +141,8 @@ upstreams:
   deliveryRuns:
     url: http://delivery-runs
     timeout: 3s
+    # Late pre-order adds wait for delivery-runs → orders (15s) → payments → Stripe.
+    slowTimeout: 20s
     retries: 1
     breaker: {failures: 5, cooldown: 15s}
 rateLimit:

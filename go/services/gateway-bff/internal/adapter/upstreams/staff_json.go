@@ -20,7 +20,7 @@ func NewStaffUpstream(c httpclient.Client) port.StaffUpstream { return &staffJSO
 func (s *staffJSONImpl) Name() string { return s.c.Name() }
 
 func (s *staffJSONImpl) Call(ctx context.Context, bearer string, sc port.StaffCall, out any) error {
-	req := httpclient.Request{Method: sc.Method, Path: sc.Path, Query: sc.Query, JSON: sc.Body, Bearer: bearer}
+	req := httpclient.Request{Method: sc.Method, Path: sc.Path, Query: sc.Query, JSON: sc.Body, Bearer: bearer, Slow: sc.Slow}
 	if sc.IdempotencyKey != "" || sc.IfMatch != "" {
 		req.Header = http.Header{}
 		if sc.IdempotencyKey != "" {

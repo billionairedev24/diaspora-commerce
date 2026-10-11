@@ -41,7 +41,7 @@ func SampleEvents(l Links) map[string][]map[string]any {
 		},
 		"preorder.late_order.added": {{"windowId": samplePreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7",
 			"orderId": "6d3e9f20-4b5c-4d6e-9f70-8b9c0d1e2f32", "number": "LBK-L90", "customerId": "cust-1", "phone": "+15550001111",
-			"payment": "PAYMENT_LINK", "paymentUrl": "https://buy.stripe.com/test_8wM5kR", "totalMinor": 4297, "currency": "USD",
+			"payment": "PAYMENT_LINK", "paymentUrl": "http://localhost:3000/orders/AT-2026-PAY001/pay?token=1.vbkms0.Fh2nQ8l5XyZr0aB3cD4eFg", "totalMinor": 4297, "currency": "USD",
 			"deliversOn": "2026-10-25", "expiresAt": "2026-10-23T05:00:00Z", "reason": "Customer called", "actor": "staff-4"}},
 		"orders.order.cancelled": {{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
 			"customerId": "cust-1", "code": "orders.all-shipments-cancelled", "wasPlaced": true, "cancelledAt": "2026-10-10T10:00:00Z"}},

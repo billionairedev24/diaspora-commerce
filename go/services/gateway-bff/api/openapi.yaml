@@ -1898,6 +1898,63 @@ paths:
         '402': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/pay-links/{orderNumber}/lookup:
+    post:
+      tags: [Checkout]
+      operationId: lookupPayLink
+      summary: The pay-now page of a late pre-order add (no session; the SMS link's signed token is the credential)
+      description: >-
+        Customer service texts a pay-now link to AfroTransact's own page (/orders/{orderNumber}/pay?token=…); customers
+        never get a Stripe-hosted page. While the order awaits payment the answer carries the client secret of its
+        existing manual-capture PaymentIntent, which the page confirms with Stripe Elements
+        (stripe.confirmPayment, redirect if_required). A paid order is status paid without a client secret; an unknown
+        order or a wrong token is 404 PAY_LINK_NOT_FOUND; an expired or voided one is 410 PAY_LINK_EXPIRED.
+        Rate-limited per IP.
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string, maxLength: 40}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PayLinkToken'}
+      responses:
+        '200':
+          description: The order and, while awaiting payment, its client secret
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PayLink'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/pay-links/{orderNumber}/confirm:
+    post:
+      tags: [Checkout]
+      operationId: confirmPayLink
+      summary: After stripe.confirmPayment on the pay-now page — place the order once the payment is authorised
+      description: >-
+        Orders reads the PaymentIntent from Stripe and places the order when it is authorised (idempotent; the
+        webhook does the same). Answers like lookup; failureMessage after a decline (the customer may try again on the
+        same PaymentIntent until the link expires).
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string, maxLength: 40}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PayLinkToken'}
+      responses:
+        '200':
+          description: awaiting_payment or paid
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PayLink'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/services/search:
     get:
       tags: [Services]
@@ -2271,6 +2328,37 @@ components:
       headers:
         Location: {schema: {type: string}}
   schemas:
+    PayLinkToken:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string, minLength: 1, maxLength: 200, description: The token of the SMS pay-now link}
+    PayLink:
+      type: object
+      description: The pay-now page of a late pre-order add (AfroTransact's own page; Stripe Elements)
+      required: [orderNumber, status, totalMinor, deliveryFeeMinor, currency, clientSecret, publishableKey, lines]
+      properties:
+        orderNumber: {type: string}
+        status: {type: string, enum: [awaiting_payment, paid]}
+        totalMinor: {type: integer, format: int64}
+        deliveryFeeMinor: {type: integer, format: int64}
+        currency: {type: string}
+        clientSecret: {type: [string, 'null'], description: The order's PaymentIntent client secret; null once paid}
+        publishableKey: {type: string, description: Stripe publishable key for Stripe.js (empty locally = test form)}
+        failureMessage: {type: [string, 'null'], description: The last decline; the customer may try again}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        windowName: {type: [string, 'null']}
+        deliversOn: {type: [string, 'null'], format: date}
+        fulfilment: {type: [string, 'null']}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [title, quantity, totalMinor]
+            properties:
+              title: {type: string}
+              quantity: {type: integer}
+              totalMinor: {type: integer, format: int64}
     Problem:
       type: object
       required: [type, title, status]

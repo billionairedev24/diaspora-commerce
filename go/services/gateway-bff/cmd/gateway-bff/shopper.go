@@ -43,5 +43,6 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
 		Checkout: app.NewCheckoutPaymentService(d), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d), Settings: settings,
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
-		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market)}
+		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
+		PayLinks:     app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey)}
 }

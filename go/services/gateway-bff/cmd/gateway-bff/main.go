@@ -83,7 +83,7 @@ func run() error {
 	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	metrics := httpclient.NewMetrics(reg)
 	client := func(name string, u config.Upstream) httpclient.Client {
-		return httpclient.New(httpclient.Options{Name: name, BaseURL: u.URL, Timeout: u.Timeout, Retries: u.Retries,
+		return httpclient.New(httpclient.Options{Name: name, BaseURL: u.URL, Timeout: u.Timeout, SlowTimeout: u.SlowTimeout, Retries: u.Retries,
 			BreakerFailures: u.Breaker.Failures, BreakerCooldown: u.Breaker.Cooldown, Metrics: metrics})
 	}
 	up := cfg.Upstreams

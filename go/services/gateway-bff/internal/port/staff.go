@@ -26,6 +26,8 @@ type StaffCall struct {
 	IfMatch string
 	// Accept is the media type a streamed document is asked for (default text/csv).
 	Accept string
+	// Slow uses the upstream's slowTimeout (calls that wait for a downstream chain, e.g. late pre-order adds).
+	Slow bool
 }
 
 // StaffUpstream is one domain service as the staff routes see it: authenticated JSON calls decoded into out

@@ -535,7 +535,12 @@ func (s *staffPreordersImpl) LateOrder(ctx context.Context, c *domain.Caller, id
 		errs["items"] = "Add at least one item"
 	}
 	if p, _ := body["payment"].(string); !slices.Contains(latePayments, p) {
-		errs["payment"] = "Charge the saved card or send a payment link"
+		errs["payment"] = "Charge the saved card or send a pay-now link"
+	}
+	// The console makes one key when the dialog opens and reuses it until the order is added: a retry after a
+	// timeout then returns the same order instead of charging the saved card again.
+	if k := strings.TrimSpace(idem); len(k) < 16 || len(k) > 64 {
+		errs["Idempotency-Key"] = "Send a 16–64 character Idempotency-Key header, the same one on every retry"
 	}
 	if r, _ := body["reason"].(string); strings.TrimSpace(r) == "" || len(r) > 120 {
 		errs["reason"] = "Say why the order is late"
@@ -558,8 +563,12 @@ func (s *staffPreordersImpl) LateOrder(ctx context.Context, c *domain.Caller, id
 			return nil, err
 		}
 	}
-	sc.idem = idem
-	return sc.send(ctx, http.MethodPost, windowPath(id, "/late-orders"), "", body)
+	sc.idem = strings.TrimSpace(idem)
+	var out any
+	// Slow: delivery-runs waits for orders (15s), which charges the card through payments and Stripe.
+	err = sc.call(ctx, sc.up.DeliveryRuns, port.StaffCall{Method: http.MethodPost, Path: windowPath(id, "/late-orders"),
+		Body: body, IdempotencyKey: sc.idem, Slow: true}, &out)
+	return out, err
 }
 
 // lateAddressFields maps delivery-runs' late-order address snapshot (PreorderLateAddress) to identity's saved

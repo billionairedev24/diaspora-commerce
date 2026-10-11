@@ -24,6 +24,11 @@ const (
 	ShopperProviderID  = "org_braids"
 	ShopperBookingID   = "0c0c0c0c-0000-4000-8000-000000000002"
 	ShopperRMAID       = "0d0d0d0d-0000-4000-8000-000000000001"
+	// PayLinkOrderNumber is the late pre-order add of the pay-now link fakes; PayLinkToken is its valid token,
+	// PayLinkExpiredToken an expired one; any other token is unknown.
+	PayLinkOrderNumber  = "AT-2026-PAY001"
+	PayLinkToken        = "v1.1893456000.good-signature" //nolint:gosec // a test fixture, not a credential
+	PayLinkExpiredToken = "v1.1600000000.expired-signature"
 	// ShopperCurrentPassword is the fake account's password for PUT /v1/me/password.
 	ShopperCurrentPassword = "Current-Passw0rd!"
 )
@@ -63,6 +68,42 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 			}
 		}
 	}
+
+	// ---- orders: pay-now links (service token; the link token in the body)
+	payLinkPaid := false
+	payLink := func(w http.ResponseWriter, r *http.Request, confirm bool) {
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+			problem(w, 401, "unauthenticated", "service token required", nil)
+			return
+		}
+		tok, _ := readJSON(r)["token"].(string)
+		switch {
+		case r.PathValue("number") != PayLinkOrderNumber || (tok != PayLinkToken && tok != PayLinkExpiredToken):
+			problem(w, 404, "orders.pay-link-not-found", "This payment link is not valid.", nil)
+			return
+		case tok == PayLinkExpiredToken:
+			problem(w, 410, "orders.pay-link-expired", "This payment link has expired.", nil)
+			return
+		}
+		st.mu.Lock()
+		if confirm {
+			payLinkPaid = true
+		}
+		paid := payLinkPaid
+		st.mu.Unlock()
+		out := map[string]any{"orderNumber": PayLinkOrderNumber, //nolint:gosec // test fixture
+			"status": "AWAITING_PAYMENT", "totalMinor": 4297,
+			"deliveryFeeMinor": 799, "currency": "USD", "clientSecret": "pi_paylink_secret_test",
+			"expiresAt": "2030-01-01T00:00:00Z", "windowName": "Lubbock Harvest", "deliversOn": "2026-10-24", "fulfilment": "DOOR",
+			"lines": []map[string]any{{"title": "Egusi seeds", "quantity": 2, "totalMinor": 3498}}}
+		if paid {
+			out["status"] = "PAID"
+			out["clientSecret"] = nil
+		}
+		writeJSON(w, 200, out)
+	}
+	mux.HandleFunc("POST /v1/service/pay-links/{number}/lookup", func(w http.ResponseWriter, r *http.Request) { payLink(w, r, false) })
+	mux.HandleFunc("POST /v1/service/pay-links/{number}/confirm", func(w http.ResponseWriter, r *http.Request) { payLink(w, r, true) })
 
 	// ---- payments
 	mux.HandleFunc("GET /v1/customers/me/payment-methods", authed(func(w http.ResponseWriter, _ *http.Request) {

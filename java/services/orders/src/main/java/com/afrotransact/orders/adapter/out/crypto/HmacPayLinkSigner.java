@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Optional;
 
@@ -15,14 +16,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * HMAC-SHA256 pay-now link tokens: {@code v1.<expiry epoch seconds>.<base64url mac>} over
- * {@code paylink.v1|<orderId>|<orderNumber>|<expiry>}. The key comes from {@code at.orders.pay-links.key}
- * (PAY_LINK_KEY in cloud; never a default outside local). Comparison is constant-time.
+ * HMAC-SHA256 pay-now link tokens: {@code 1.<expiry epoch seconds, base 36>.<base64url of the first 128 bits of the
+ * mac>} over {@code paylink.1|<orderId>|<orderNumber>|<expiry>}. Compact so the SMS stays one segment; 128 bits of
+ * HMAC are unguessable. The key comes from {@code at.orders.pay-links.key} (PAY_LINK_KEY in cloud; never a default
+ * outside local). Comparison is constant-time.
  */
 @Component
 class HmacPayLinkSigner implements PayLinkSigner {
 
-    private static final String VERSION = "v1";
+    private static final String VERSION = "1";
+    private static final int MAC_BYTES = 16;
     private static final String ALGORITHM = "HmacSHA256";
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
 
@@ -38,7 +41,7 @@ class HmacPayLinkSigner implements PayLinkSigner {
     @Override
     public String sign(String orderId, String orderNumber, Instant expiresAt) {
         long exp = expiresAt.getEpochSecond();
-        return VERSION + "." + exp + "." + mac(orderId, orderNumber, exp);
+        return VERSION + "." + Long.toString(exp, Character.MAX_RADIX) + "." + mac(orderId, orderNumber, exp);
     }
 
     @Override
@@ -52,7 +55,7 @@ class HmacPayLinkSigner implements PayLinkSigner {
         }
         long exp;
         try {
-            exp = Long.parseLong(parts[1]);
+            exp = Long.parseLong(parts[1], Character.MAX_RADIX);
         } catch (NumberFormatException e) {
             return Optional.empty();
         }
@@ -67,7 +70,7 @@ class HmacPayLinkSigner implements PayLinkSigner {
             mac.init(key);
             byte[] sig = mac.doFinal(("paylink." + VERSION + "|" + orderId + "|" + orderNumber + "|" + exp)
                     .getBytes(StandardCharsets.UTF_8));
-            return ENCODER.encodeToString(sig);
+            return ENCODER.encodeToString(Arrays.copyOf(sig, MAC_BYTES));
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("HMAC-SHA256 is unavailable", e);
         }

@@ -155,12 +155,12 @@ func TestPreorderOrderPlacedAndLatePayment(t *testing.T) {
 	if len(n.reqs) != 1 || n.reqs[0].TemplateKey != "preorder.confirmed" {
 		t.Fatalf("pre-order only = %+v", n.reqs)
 	}
-	// Late add with a payment link → SMS with the tracked link; saved card → nothing here.
+	// Late add with a pay-now link → SMS with the link to our own pay page; saved card → nothing here.
 	n.reqs = nil
 	late := evs["preorder.late_order.added"][0]
 	handle(t, ing, "preorder.late_order.added", late)
 	if len(n.reqs) != 1 || n.reqs[0].Recipient.Phone != "+15550001111" ||
-		n.reqs[0].Data["paymentUrl"] != "https://buy.stripe.com/test_8wM5kR?src=sms&po=LBK-7&cr=late" {
+		n.reqs[0].Data["paymentUrl"] != "http://localhost:3000/orders/AT-2026-PAY001/pay?token=1.vbkms0.Fh2nQ8l5XyZr0aB3cD4eFg" {
 		t.Fatalf("late payment = %+v", n.reqs)
 	}
 	n.reqs = nil

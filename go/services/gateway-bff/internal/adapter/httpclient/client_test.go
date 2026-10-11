@@ -140,3 +140,24 @@ func TestBreakerHalfOpenProbe(t *testing.T) {
 		t.Fatalf("transitions = %v", states)
 	}
 }
+
+// TestSlowCallsUseTheSlowTimeout: a call that waits for a downstream saga (checkout, late pre-order add) must not give
+// up at the ordinary timeout while the upstream is still working.
+func TestSlowCallsUseTheSlowTimeout(t *testing.T) {
+	c, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(150 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}, httpclient.Options{Timeout: 50 * time.Millisecond, SlowTimeout: time.Second, BreakerFailures: 100})
+	if _, err := c.Do(context.Background(), httpclient.Request{Method: http.MethodPost, Path: "/checkout"}); !errors.Is(err, domain.ErrUpstreamUnavailable) {
+		t.Fatalf("ordinary call: err=%v, want a timeout", err)
+	}
+	if _, err := c.Do(context.Background(), httpclient.Request{Method: http.MethodPost, Path: "/checkout", Slow: true}); err != nil {
+		t.Fatalf("slow call: %v", err)
+	}
+	// Without a slow timeout, slow calls fall back to the ordinary one (never shorter).
+	d, _ := newClient(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }, httpclient.Options{Timeout: time.Second})
+	if _, err := d.Do(context.Background(), httpclient.Request{Slow: true}); err != nil {
+		t.Fatalf("slow call without SlowTimeout: %v", err)
+	}
+}

@@ -43,6 +43,11 @@ type Request struct {
 	BasicUser, BasicPassword string
 	// RetryUnsafe allows retries for a non-GET that is idempotent by design (e.g. carries an Idempotency-Key).
 	RetryUnsafe bool
+	// Slow uses the upstream's SlowTimeout instead of Timeout: calls that wait for a downstream saga or chain (POST
+	// /v1/checkout waits up to orders' checkout-response-timeout; a late pre-order add waits for delivery-runs →
+	// orders → payments → Stripe). Giving up earlier would report a failure for work that still completes, and
+	// the client would retry it.
+	Slow bool
 }
 
 // Response is a successful (2xx/3xx) upstream answer.
@@ -83,9 +88,11 @@ type Client interface {
 
 // Options tune one upstream client.
 type Options struct {
-	Name            string
-	BaseURL         string
-	Timeout         time.Duration
+	Name    string
+	BaseURL string
+	Timeout time.Duration
+	// SlowTimeout bounds Request.Slow calls (defaults to Timeout).
+	SlowTimeout     time.Duration
 	Retries         int
 	BreakerFailures int
 	BreakerCooldown time.Duration
@@ -139,6 +146,9 @@ func New(o Options) Client {
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = 3 * time.Second
+	}
+	if o.SlowTimeout < o.Timeout {
+		o.SlowTimeout = o.Timeout
 	}
 	if o.RetryBackoff <= 0 {
 		o.RetryBackoff = 50 * time.Millisecond
@@ -203,7 +213,11 @@ func (c *clientImpl) once(ctx context.Context, method string, req Request) (*Res
 		c.o.Metrics.duration.WithLabelValues(c.o.Name, method, outcome).Observe(time.Since(start).Seconds())
 		c.o.Metrics.requests.WithLabelValues(c.o.Name, method, outcome).Inc()
 	}()
-	actx, cancel := context.WithTimeout(ctx, c.o.Timeout)
+	timeout := c.o.Timeout
+	if req.Slow {
+		timeout = c.o.SlowTimeout
+	}
+	actx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	hreq, err := c.build(actx, method, req)
 	if err != nil {

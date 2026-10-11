@@ -100,8 +100,9 @@ func (o *customerOrdersImpl) Cancel(ctx context.Context, bearer, number, shipmen
 
 func (o *customerOrdersImpl) Checkout(ctx context.Context, bearer, key string, req port.UpCheckoutRequest) (port.UpCheckout, int, error) {
 	var out port.UpCheckout
+	// Slow: orders answers once the saga reached awaiting payment, waiting up to its checkout-response-timeout.
 	res, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/checkout", Bearer: bearer, JSON: req,
-		Header: idem(key), RetryUnsafe: true}, &out)
+		Header: idem(key), RetryUnsafe: true, Slow: true}, &out)
 	if err != nil {
 		return out, 0, err
 	}
@@ -117,7 +118,7 @@ func (o *customerOrdersImpl) CheckoutStatus(ctx context.Context, bearer, number 
 func (o *customerOrdersImpl) ConfirmPayment(ctx context.Context, bearer, number string) (port.UpCheckout, error) {
 	var out port.UpCheckout
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/checkout/" + esc(number) + "/confirm", Bearer: bearer,
-		RetryUnsafe: true}, &out)
+		RetryUnsafe: true, Slow: true}, &out)
 	return out, err
 }
 

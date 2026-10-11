@@ -67,7 +67,7 @@ at:
         grant-types: [authorization_code, refresh_token, client_credentials]
         redirect-uris: ["${PUBLIC_WEB_URL:https://afrotransact.com}/api/bff/v1/auth/oidc/callback", "${SELLER_CENTER_URL:https://seller.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${STAFF_CONSOLE_URL:https://admin.afrotransact.com}/api/bff/v1/auth/oidc/callback"]
         post-logout-redirect-uris: ["${PUBLIC_WEB_URL:https://afrotransact.com}/", "${SELLER_CENTER_URL:https://seller.afrotransact.com}/", "${STAFF_CONSOLE_URL:https://admin.afrotransact.com}/"]
-        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read"]
+        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read", "orders:pay-link"]
       - client-id: seller-service
         name: Seller service
         type: confidential
