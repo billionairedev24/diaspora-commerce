@@ -35,9 +35,9 @@ export function useHubAccess() {
 }
 
 const TONE: Record<string, RecordTone> = {
-  SELLABLE: 'good', LIVE: 'good', CLOSED: 'good', POSTED: 'good', COMPLETED: 'good', MATCHED: 'good', APPROVED: 'good', RECEIVED: 'good', CONFIRMED: 'good', ACTIVE: 'good', DONE: 'good',
-  QUARANTINE: 'warn', DAMAGED: 'warn', PAUSED: 'warn', PENDING_APPROVAL: 'warn', COUNTED: 'warn', EXCEPTION: 'warn', ON_HOLD: 'warn', PARTIALLY_RECEIVED: 'warn', WAITING: 'warn', RECEIVING: 'warn',
-  EXPIRED: 'bad', CANCELLED: 'bad', REJECTED: 'bad', WRITTEN_OFF: 'bad', BROKEN: 'bad',
+  SELLABLE: 'good', LIVE: 'good', CLOSED: 'good', POSTED: 'good', COMPLETED: 'good', MATCHED: 'good', APPROVED: 'good', RECEIVED: 'good', CONFIRMED: 'good', ACTIVE: 'good', DONE: 'good', OK: 'good',
+  QUARANTINE: 'warn', DAMAGED: 'warn', PAUSED: 'warn', PENDING_APPROVAL: 'warn', COUNTED: 'warn', EXCEPTION: 'warn', ON_HOLD: 'warn', PARTIALLY_RECEIVED: 'warn', WAITING: 'warn', RECEIVING: 'warn', PENDING: 'warn',
+  EXPIRED: 'bad', CANCELLED: 'bad', REJECTED: 'bad', WRITTEN_OFF: 'bad', BROKEN: 'bad', MISSING: 'bad', HOLD: 'bad',
   WORKING: 'info', SHIPPED: 'info', DRAFT: 'info', SENT: 'info', OPEN: 'info', POSTING: 'info'
 };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { inventoryHubQueries, type PoInput,type PurchaseOrder } from '@afrotransact/api-client';
+import { inventoryHubQueries, type PoInput, type PurchaseOrder, type ShipmentDocumentStatus } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, cx, Select, Sheet, TextField } from '@afrotransact/ui';
 import { ArrowRight, Plus, Trash } from '@phosphor-icons/react/ssr';
@@ -177,6 +177,10 @@ export function PoSheet({ id, onClose }: { id: string | null; onClose: () => voi
   const [inv, setInv] = useState({ number: '', date: todayIso() });
   const act = useHubMutation((a: 'submit' | 'approve' | 'send-back' | 'send' | 'confirm' | 'close' | 'cancel') => api.retail.poAction(po?.id ?? '', a, po?.version, note ? { note } : {}), (x) => `${x.number}: ${humanize(x.status).toLowerCase()}.`, () => setNote(''));
   const advance = useHubMutation((s: { id: string; version: number }) => api.retail.advanceShipment(s.id, s.version), (s) => `${s.reference}: ${s.stageLabel ?? humanize(s.stage)}.`);
+  const setDoc = useHubMutation(
+    (d: { id: string; name: string; status: ShipmentDocumentStatus }) => api.retail.setDocument(d.id, d.name, d.status),
+    (s) => `${s.reference}: documents updated.`
+  );
   const openGrn = useHubMutation((shipmentId: string | undefined) => api.retail.openReceipt({ shipmentId, poId: shipmentId ? undefined : po?.id, dock: 'Dock 1' }), (r) => `${r.number} opened at the dock.`, (r) => router.push(`/inventory?tab=receiving&grn=${r.id}`));
   const register = useHubMutation(
     () => api.retail.registerInvoice({ poId: po?.id ?? '', invoiceNumber: inv.number.trim(), invoiceDate: inv.date, lines: (po?.lines ?? []).filter((l) => l.qtyReceived > 0).map((l) => ({ poLineNo: l.lineNo, qty: l.qtyReceived, unitPriceMinor: l.unitCostMinor })) }),
@@ -270,7 +274,26 @@ export function PoSheet({ id, onClose }: { id: string | null; onClose: () => voi
                 <span className="text-xs text-muted">
                   ASN: {s.lines.map((l) => `${l.qty} × ${l.sku} lot ${l.lotNo ?? '—'} exp ${l.expDate ?? '—'}`).join(' · ')}
                 </span>
-                <span className="text-xs text-muted">Documents: {s.documents.map((d) => `${d.name} ${humanize(d.status).toLowerCase()}`).join(' · ')}</span>
+                <span className="flex flex-wrap items-center gap-2 text-xs text-muted" data-testid="po-shipment-documents">
+                  Documents:
+                  {s.documents.map((d) => (
+                    <span key={d.name} className="inline-flex items-center gap-1">
+                      <StatusPill tone={toneOf(d.status)}>
+                        {d.name} · {humanize(d.status).toLowerCase()}
+                      </StatusPill>
+                      {retailEdit && d.status !== 'OK' ? (
+                        <button type="button" className={smallButton} onClick={() => setDoc.mutate({ id: s.id, name: d.name, status: 'OK' })}>
+                          Mark {d.name.toLowerCase()} OK
+                        </button>
+                      ) : null}
+                      {retailEdit && d.status === 'OK' ? (
+                        <button type="button" className={smallButton} onClick={() => setDoc.mutate({ id: s.id, name: d.name, status: 'HOLD' })}>
+                          Hold
+                        </button>
+                      ) : null}
+                    </span>
+                  ))}
+                </span>
                 <span className="flex flex-wrap gap-2">
                   {retailEdit && !['DELIVERED_TO_FC', 'RECEIVED'].includes(s.stage) ? <button type="button" className={smallButton} onClick={() => advance.mutate({ id: s.id, version: s.version })}>Next milestone</button> : null}
                   {retailEdit && s.stage !== 'RECEIVED' ? <button type="button" className={smallButton} onClick={() => openGrn.mutate(s.id)}>Receive at the dock</button> : null}

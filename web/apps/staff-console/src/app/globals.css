@@ -144,7 +144,7 @@
 
 @media print {
   html.printing-labels body > *:not(.at-print-root) {
-    display: none !important;
+    display: none;
   }
 
   html.printing-labels .at-print-root {

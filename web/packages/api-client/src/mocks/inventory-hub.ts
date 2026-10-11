@@ -130,7 +130,7 @@ function seed(now: Date): HubDb {
     id: uuid(1, 'ffff0001'), reference: 'SHP-2610-GH01', poId: must(db.pos[0]).id, poNumber: 'PO-1P-000322', mode: 'OCEAN_FCL', carrier: 'MSC', trackingRef: 'MSCU4829137', destinationNodeId: 'HOU-FC',
     etd: iso(addDays(now, -10)), eta: iso(addDays(now, 9)), stage: 'DEPARTED', stageLabel: 'Departed origin', asnLocked: true,
     lines: [{ lineNo: 1, poLineNo: 1, itemId: must(db.items[0]).id, sku: 'AT-JOL-200061', qty: 240, lotNo: 'JOL-2610', mfgDate: iso(addDays(now, -20)), expDate: iso(addDays(now, 540)) }],
-    cartons: [], documents: [{ name: 'Commercial invoice', status: 'RECEIVED', reference: 'CI-0322' }, { name: 'Bill of lading', status: 'RECEIVED', reference: 'MSCU4829137' }, { name: 'FDA prior notice', status: 'MISSING', reference: null }],
+    cartons: [], documents: [{ name: 'Commercial invoice', status: 'OK', reference: 'CI-0322' }, { name: 'Bill of lading', status: 'OK', reference: 'MSCU4829137' }, { name: 'FDA prior notice', status: 'MISSING', reference: null }],
     milestones: [{ stage: 'BOOKED', at: addDays(now, -15).toISOString(), by: 'Kemi Adebayo' }, { stage: 'DEPARTED', at: addDays(now, -10).toISOString(), by: 'Kemi Adebayo' }], version: 3
   }];
   db.movements = db.lots.map((l, i) => ({ id: i + 1, occurredAt: l.receivedAt ?? now.toISOString(), type: 'RECEIVE', sku: l.sku, nodeId: l.nodeId, ownerOrg: l.ownerOrg, lotId: l.id, lotNo: l.lotNo, qty: l.qtyOnHand, reference: 'GRN-SEED', actor: 'Ama Owusu', reason: null }));
@@ -784,6 +784,44 @@ function retailRoutes(W: string, gate: HubGate) {
   };
   return [
     http.get(`${W}/suppliers`, h('VIEW', (ctx) => page(ctx.db.suppliers, ctx.url, 200))),
+    http.post(`${W}/suppliers`, h('EDIT', async (ctx) => {
+      const b = await bodyOf(ctx.request);
+      const code = String(b.code ?? '').toUpperCase();
+      if (!/^SUP-[A-Z0-9]{2,12}$/.test(code)) throw invalid('Invalid supplier', { code: 'SUP- and 2 to 12 letters or digits' });
+      if (ctx.db.suppliers.some((x) => x.code === code)) throw conflict(`${code} already exists.`);
+      const n = ++ctx.db.seq;
+      const sup: Supplier = { id: uuid(n, 'aaaa0001'), code, name: String(b.name ?? ''), country: String(b.country ?? ''), city: (b.city as string | undefined) ?? null, currency: String(b.currency ?? 'USD'), paymentTerms: (b.paymentTerms as string | undefined) ?? null, leadTimeDays: Number(b.leadTimeDays ?? 0), status: 'ONBOARDING', canReceivePurchaseOrders: false, scorecard: { receipts: 0, onTimePercent: null, defectPercent: null }, version: 0 };
+      ctx.db.suppliers.push(sup);
+      return sup;
+    }, 201)),
+    http.post(`${W}/suppliers/:id/status`, h('APPROVE', async (ctx, p) => {
+      const sup = ctx.db.suppliers.find((x) => x.id === p.id);
+      if (!sup) throw notFound('supplier');
+      sup.status = String((await bodyOf(ctx.request)).status ?? sup.status);
+      sup.canReceivePurchaseOrders = sup.status === 'APPROVED' || sup.status === 'ON_WATCH';
+      sup.version += 1;
+      return sup;
+    })),
+    http.post(`${W}/items`, h('EDIT', async (ctx) => {
+      const b = await bodyOf(ctx.request);
+      const errors: Record<string, string> = {};
+      if (String(b.name ?? '').trim().length < 3) errors.name = 'At least 3 characters';
+      if (!ctx.db.suppliers.some((x) => x.id === b.primarySupplierId)) errors.primarySupplierId = 'Pick the supplier';
+      if (!(Number(b.shelfLifeDays) > 0)) errors.shelfLifeDays = 'Positive';
+      if (!b.hsCode) errors.hsCode = 'Required';
+      if (Object.keys(errors).length) throw invalid('Invalid item', errors);
+      const n = ++ctx.db.seq;
+      const body = String(860012000000 + n).slice(0, 11);
+      const digits = body.split('').reverse().map(Number);
+      const check = (10 - (digits.reduce((a, d, i) => a + d * (i % 2 === 0 ? 3 : 1), 0) % 10)) % 10;
+      const it: RetailItem = {
+        id: uuid(n, 'bbbb0001'), sku: `AT-${String(b.name).replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase()}-${200000 + n}`, gtin: `0${body}${check}`.slice(-12), gtin14: null, name: String(b.name), category: (b.category as string | undefined) ?? null,
+        atin: (b.atin as string | undefined) ?? null, primarySupplierId: String(b.primarySupplierId), supplierItems: (b.supplierItems as RetailItem['supplierItems'] | undefined) ?? [], shelfLifeDays: Number(b.shelfLifeDays), storage: String(b.storage ?? 'AMBIENT'),
+        reorderPoint: Number(b.reorderPoint ?? 0), packSize: (b.packSize as string | undefined) ?? null, casePack: Number(b.casePack ?? 1), priceMinor: Number(b.priceMinor ?? 0), currency: 'USD', listingStatus: 'DRAFT', version: 0
+      };
+      ctx.db.items.push(it);
+      return it;
+    }, 201)),
     http.get(`${W}/items`, h('VIEW', (ctx) => {
       const q = (ctx.url.searchParams.get('q') ?? '').toLowerCase();
       const listing = ctx.url.searchParams.get('listing');
@@ -800,7 +838,7 @@ function retailRoutes(W: string, gate: HubGate) {
       it.version += 1;
       return it;
     })),
-    http.put(`${W}/items/:id/listing`, h('EDIT', async (ctx, p) => {
+    http.post(`${W}/items/:id/listing`, h('EDIT', async (ctx, p) => {
       const it = itemOf(ctx, p.id);
       checkVersion(ctx, it.version);
       const status = String((await bodyOf(ctx.request)).status ?? '') as RetailItem['listingStatus'];
@@ -877,7 +915,7 @@ function retailRoutes(W: string, gate: HubGate) {
           const pl = must(po.lines.find((x) => x.lineNo === Number(l.poLineNo)) ?? po.lines[0]);
           return { lineNo: i + 1, poLineNo: pl.lineNo, itemId: pl.itemId, sku: pl.sku, qty: Number(l.qty), lotNo: (l.lotNo as string | undefined) ?? null, mfgDate: (l.mfgDate as string | undefined) ?? null, expDate: (l.expDate as string | undefined) ?? null };
         }),
-        cartons: [], documents: [{ name: 'Commercial invoice', status: 'MISSING', reference: null }, { name: 'Packing list', status: 'RECEIVED', reference: null }], milestones: [{ stage: 'BOOKED', at: ctx.now.toISOString(), by: ctx.actor }], version: 0
+        cartons: [], documents: [{ name: 'Commercial invoice', status: 'MISSING', reference: null }, { name: 'Packing list', status: 'PENDING', reference: null }], milestones: [{ stage: 'BOOKED', at: ctx.now.toISOString(), by: ctx.actor }], version: 0
       };
       po.shipmentBooked = true;
       ctx.db.shipments.unshift(s);
@@ -898,10 +936,29 @@ function retailRoutes(W: string, gate: HubGate) {
       const labels = ['PO confirmed', 'Cargo ready', 'Picked up at origin', 'Export cleared', 'Departed origin', 'Arrived US port', 'US customs cleared', 'Delivered to FC', 'Received & put away'];
       const i = order.indexOf(s.stage);
       if (i >= order.length - 2) throw conflict('Receive the shipment at the fulfilment centre to finish it.');
+      const blocking = (st: string) => s.documents.filter((d) => d.status === st).map((d) => d.name).join(', ');
+      if (order[i + 1] === 'DEPARTED' && blocking('MISSING')) throw conflict(`Documents missing: ${blocking('MISSING')}. Missing documents block departure.`);
+      if (order[i + 1] === 'CUSTOMS_CLEARED' && blocking('HOLD')) throw conflict(`Documents on hold: ${blocking('HOLD')}. A hold blocks customs clearance.`);
       s.stage = order[i + 1] ?? s.stage;
       s.stageLabel = labels[i + 1] ?? s.stageLabel;
       s.asnLocked = i + 1 >= 4;
       s.milestones.push({ stage: s.stage, at: ctx.now.toISOString(), by: ctx.actor });
+      s.version += 1;
+      return s;
+    })),
+    http.post(`${W}/shipments/:id/documents`, h('EDIT', async (ctx, p) => {
+      const s = ctx.db.shipments.find((x) => x.id === p.id);
+      if (!s) throw notFound('shipment');
+      const b = await bodyOf(ctx.request);
+      const name = String(b.name ?? '').trim();
+      const status = String(b.status ?? '');
+      if (!name || !['MISSING', 'PENDING', 'OK', 'HOLD'].includes(status)) throw conflict('A document needs a name and a status of MISSING, PENDING, OK or HOLD.');
+      const reference = typeof b.reference === 'string' && b.reference ? b.reference : null;
+      const doc = s.documents.find((d) => d.name === name);
+      if (doc) {
+        doc.status = status;
+        doc.reference = reference ?? doc.reference;
+      } else s.documents.push({ name, status, reference });
       s.version += 1;
       return s;
     })),

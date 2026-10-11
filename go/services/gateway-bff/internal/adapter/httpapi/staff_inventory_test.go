@@ -122,7 +122,7 @@ func (f *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"atin": "AT00000042", "buyBox": map[string]any{"soldBy": "AfroTransact Retail", "fulfilment": "AFROTRANSACT",
 			"availableQty": 12, "deliveryDays": 2, "badges": []string{"FULFILLED_BY_AFROTRANSACT"}}})
 	case p == "/v1/search":
-		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"atin": "AT00000041", "availability": "IN_STOCK", "availableQty": 12}}})
+		writeJ(w, 200, map[string]any{"hits": []any{map[string]any{"atin": "AT00000041", "availability": "IN_STOCK", "availableQty": 12}}})
 	default:
 		problemJ(w, 404, "test.not-found")
 	}

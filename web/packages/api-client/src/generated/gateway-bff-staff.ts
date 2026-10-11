@@ -1902,12 +1902,12 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
+        put?: never;
         /**
-         * retail `PUT /v1/items/{id}/listing`
-         * @description Mirrors retail `PUT /v1/items/{id}/listing` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `Item` (contracts/openapi/retail.yaml).
+         * retail `POST /v1/items/{id}/listing`
+         * @description Mirrors retail `POST /v1/items/{id}/listing` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `Item` (contracts/openapi/retail.yaml).
          */
-        put: operations["putStaffItemsListing"];
-        post?: never;
+        post: operations["postStaffItemsListing"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1952,6 +1952,26 @@ export interface paths {
         get: operations["getStaffSuppliersById"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/suppliers/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/suppliers/{id}/status`
+         * @description Mirrors retail `POST /v1/suppliers/{id}/status` 1:1 with the staff member's token (module `retail` at APPROVE or above; retail checks its own permissions again). The body is retail's `Supplier` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffSuppliersStatus"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7591,7 +7611,7 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
-    putStaffItemsListing: {
+    postStaffItemsListing: {
         parameters: {
             query?: never;
             header?: {
@@ -7720,6 +7740,45 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffSuppliersStatus: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

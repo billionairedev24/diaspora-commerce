@@ -1,6 +1,6 @@
 'use client';
 
-import { type GoodsReceipt, inventoryHubQueries, type ReceiptValidation, receiptVariance } from '@afrotransact/api-client';
+import { type GoodsReceipt, inventoryHubQueries, type ReceiptValidation, receiptVariance, type RetailShipment } from '@afrotransact/api-client';
 import { Button, cx, Select, TextField } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
@@ -26,11 +26,21 @@ interface Row {
   qa: 'PENDING' | 'PASS' | 'FAIL';
 }
 
-const rowsOf = (r: GoodsReceipt): Row[] =>
-  r.lines.map((l) => ({
-    lineNo: l.lineNo, poLineNo: l.poLineNo, sku: l.sku, expected: l.expectedQty, asnLot: l.asnLotNo ?? null, lotNo: l.lotNo ?? '', mfgDate: l.mfgDate ?? '', expDate: l.expDate ?? '',
-    good: l.qtyGood ? String(l.qtyGood) : '', damaged: l.qtyDamaged ? String(l.qtyDamaged) : '', bin: l.bin ?? '', qa: l.qa
-  }));
+type AsnLine = RetailShipment['lines'][number];
+
+/**
+ * Receipt rows; a line not counted yet starts from the batch the supplier announced on the ASN (lot, made and expiry
+ * dates), so the receiver confirms or corrects it instead of retyping it.
+ */
+export const rowsOf = (r: GoodsReceipt, asn: readonly AsnLine[] = []): Row[] =>
+  r.lines.map((l) => {
+    const a = asn.find((x) => x.poLineNo === l.poLineNo && (!l.asnLotNo || x.lotNo === l.asnLotNo)) ?? asn.find((x) => x.sku === l.sku);
+    return {
+      lineNo: l.lineNo, poLineNo: l.poLineNo, sku: l.sku, expected: l.expectedQty, asnLot: l.asnLotNo ?? a?.lotNo ?? null,
+      lotNo: l.lotNo ?? l.asnLotNo ?? a?.lotNo ?? '', mfgDate: l.mfgDate ?? a?.mfgDate ?? '', expDate: l.expDate ?? a?.expDate ?? '',
+      good: l.qtyGood ? String(l.qtyGood) : '', damaged: l.qtyDamaged ? String(l.qtyDamaged) : '', bin: l.bin ?? '', qa: l.qa
+    };
+  });
 
 /**
  * A retail goods receipt at the dock (AfroTransact Retail POs): count each batch against the ASN, split mixed batches,
@@ -42,11 +52,13 @@ export function RetailReceiptScreen({ id }: { id: string }) {
   const { retailEdit, retailApprove } = useHubAccess();
   const q = useQuery(inventoryHubQueries.receipt(api, id));
   const r = q.data;
+  const ships = useQuery({ ...inventoryHubQueries.poShipments(api, r?.poId ?? ''), enabled: Boolean(r?.poId && r.shipmentId) });
+  const asn = ships.data?.items.find((s) => s.id === r?.shipmentId)?.lines;
   const [rows, setRows] = useState<Row[]>([]);
   const [check, setCheck] = useState<ReceiptValidation | null>(null);
   useEffect(() => {
-    if (r) setRows(rowsOf(r));
-  }, [r?.id, r?.version]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (r) setRows(rowsOf(r, asn));
+  }, [r?.id, r?.version, asn]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((x, k) => (k === i ? { ...x, ...patch } : x)));
   const save = useHubMutation(
     () =>
@@ -111,6 +123,11 @@ export function RetailReceiptScreen({ id }: { id: string }) {
         );
       })}
       {check?.receiptErrors.map((e) => <p key={e} role="alert" className="m-0 text-sm text-danger">{e}</p>)}
+      {Object.entries(check?.fieldErrors ?? {}).map(([field, e]) => (
+        <p key={field} role="alert" className="m-0 text-sm text-danger" data-testid="grn-field-error">
+          {e}
+        </p>
+      ))}
       {open ? (
         <div className="flex flex-wrap gap-2">
           <Button variant="neutral" loading={save.isPending} onClick={() => save.mutate(undefined)}>

@@ -151,10 +151,11 @@ var opsRoutes = []opsRoute{
 	route(areaRetail, opGet, "/items/{id}", "/v1/items/{id}", lvView),
 	route(areaRetail, opPut, "/items/{id}", "/v1/items/{id}", lvEdit),
 	route(areaRetail, opPut, "/items/{id}/atin", "/v1/items/{id}/atin", lvEdit),
-	route(areaRetail, opPut, "/items/{id}/listing", "/v1/items/{id}/listing", lvEdit),
+	route(areaRetail, opPost, "/items/{id}/listing", "/v1/items/{id}/listing", lvEdit),
 	route(areaRetail, opGet, "/suppliers", "/v1/suppliers", lvView, withPage("q", "status")...),
 	route(areaRetail, opPost, "/suppliers", "/v1/suppliers", lvEdit),
 	route(areaRetail, opGet, "/suppliers/{id}", "/v1/suppliers/{id}", lvView),
+	route(areaRetail, opPost, "/suppliers/{id}/status", "/v1/suppliers/{id}/status", lvAppr),
 	route(areaRetail, opGet, "/purchase-orders", "/v1/purchase-orders", lvView, withPage("status", "supplierId")...),
 	route(areaRetail, opPost, "/purchase-orders", "/v1/purchase-orders", lvEdit),
 	route(areaRetail, opGet, "/purchase-orders/{id}", "/v1/purchase-orders/{id}", lvView),
@@ -616,11 +617,11 @@ func (s *staffInventoryImpl) Trace(ctx context.Context, c *domain.Caller, atin, 
 		t.StorefrontPath = "/p/" + url.PathEscape(firstNonEmpty(jstr(offer, "productAtin"), atin))
 		if sc.up.Search != nil && t.Title != "" {
 			var res struct {
-				Items []jobj `json:"items"`
+				Hits []jobj `json:"hits"`
 			}
 			if err := sc.get(ctx, sc.up.Search, "/v1/search", url.Values{"q": {t.Title}, "size": {"24"}}, &res); err == nil {
 				var hit jobj
-				for _, it := range res.Items {
+				for _, it := range res.Hits {
 					if jstr(it, "atin") == atin || jstr(it, "atin") == jstr(offer, "productAtin") {
 						hit = it
 					}

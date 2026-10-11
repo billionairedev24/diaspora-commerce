@@ -292,6 +292,10 @@ export const RetailItemSchema = z.object({
 export type RetailItem = z.infer<typeof RetailItemSchema>;
 export const RetailItemPageSchema = pageOf(RetailItemSchema);
 
+/** Customs / shipping document states (retail DocumentRequest): MISSING blocks departure, HOLD blocks customs clearance. */
+export const SHIPMENT_DOCUMENT_STATUSES = ['MISSING', 'PENDING', 'OK', 'HOLD'] as const;
+export type ShipmentDocumentStatus = (typeof SHIPMENT_DOCUMENT_STATUSES)[number];
+
 export const PoStatusSchema = z.enum(['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SENT', 'CONFIRMED', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CLOSED', 'CANCELLED']);
 export const PO_STATUSES = PoStatusSchema.options;
 
@@ -483,6 +487,32 @@ export interface PoInput {
   incoterm: string;
   expectedDate?: string;
   lines: { itemId: string; qty: number; unitCostMinor?: number }[];
+}
+export interface RetailItemInput {
+  name: string;
+  category?: string;
+  atin?: string;
+  primarySupplierId: string;
+  supplierItems: { supplierId: string; supplierSku: string; casePack: number; minOrderQty?: number; unitCostMinor: number; currency: string }[];
+  originCountry?: string;
+  hsCode: string;
+  dutyRatePercent?: number;
+  shelfLifeDays: number;
+  storage: 'AMBIENT' | 'CHILLED' | 'FROZEN' | 'HAZMAT';
+  reorderPoint?: number;
+  packSize?: string;
+  casePack: number;
+  standardCostMinor: number;
+  priceMinor: number;
+}
+export interface SupplierInput {
+  code: string;
+  name: string;
+  country: string;
+  city?: string;
+  currency: string;
+  paymentTerms?: string;
+  leadTimeDays: number;
 }
 export interface ReceiptCountLineInput {
   lineNo: number;
@@ -710,7 +740,11 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
       linkAtin: (id: string, atin: string, version?: number): Promise<RetailItem> =>
         request(`${R}/items/${enc(id)}/atin`, RetailItemSchema, { method: 'PUT', body: { atin }, headers: ifMatch(version) }),
       setListing: (id: string, status: 'DRAFT' | 'LIVE' | 'PAUSED', version?: number): Promise<RetailItem> =>
-        request(`${R}/items/${enc(id)}/listing`, RetailItemSchema, { method: 'PUT', body: { status }, headers: ifMatch(version) }),
+        request(`${R}/items/${enc(id)}/listing`, RetailItemSchema, { method: 'POST', body: { status }, headers: ifMatch(version) }),
+      createItem: (body: RetailItemInput, key?: string): Promise<RetailItem> => request(`${R}/items`, RetailItemSchema, { method: 'POST', body, headers: idem(key) }),
+      createSupplier: (body: SupplierInput): Promise<Supplier> => request(`${R}/suppliers`, SupplierSchema, { method: 'POST', body }),
+      setSupplierStatus: (id: string, status: 'APPROVED' | 'ON_WATCH' | 'INACTIVE', reason?: string): Promise<Supplier> =>
+        request(`${R}/suppliers/${enc(id)}/status`, SupplierSchema, { method: 'POST', body: { status, reason } }),
       purchaseOrders: (q: { status?: string; page: number; size: number }, signal?: AbortSignal) => request(`${R}/purchase-orders`, PurchaseOrderPageSchema, { query: qs(q), signal }),
       purchaseOrder: (id: string, signal?: AbortSignal): Promise<PurchaseOrder> => request(`${R}/purchase-orders/${enc(id)}`, PurchaseOrderSchema, { signal }),
       createPo: (body: PoInput, key?: string): Promise<PurchaseOrder> => request(`${R}/purchase-orders`, PurchaseOrderSchema, { method: 'POST', body, headers: idem(key) }),
@@ -723,8 +757,8 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
       bookShipment: (body: { poId: string; mode: string; carrier?: string; trackingRef?: string; etd?: string; eta?: string; lines?: { poLineNo: number; qty: number; lotNo?: string; mfgDate?: string; expDate?: string }[] }) =>
         request(`${R}/shipments`, RetailShipmentSchema, { method: 'POST', body }),
       advanceShipment: (id: string, version?: number) => request(`${R}/shipments/${enc(id)}/advance`, RetailShipmentSchema, { method: 'POST', headers: ifMatch(version) }),
-      setDocument: (id: string, name: string, status: 'MISSING' | 'RECEIVED' | 'CLEARED' | 'HOLD' | string) =>
-        request(`${R}/shipments/${enc(id)}/documents`, RetailShipmentSchema, { method: 'POST', body: { name, status } }),
+      setDocument: (id: string, name: string, status: ShipmentDocumentStatus, reference?: string) =>
+        request(`${R}/shipments/${enc(id)}/documents`, RetailShipmentSchema, { method: 'POST', body: { name, status, ...(reference ? { reference } : {}) } }),
       receipts: (q: { status?: string; poId?: string; page: number; size: number }, signal?: AbortSignal) => request(`${R}/receipts`, GoodsReceiptPageSchema, { query: qs(q), signal }),
       receipt: (id: string, signal?: AbortSignal): Promise<GoodsReceipt> => request(`${R}/receipts/${enc(id)}`, GoodsReceiptSchema, { signal }),
       openReceipt: (body: { shipmentId?: string; poId?: string; dock?: string }): Promise<GoodsReceipt> => request(`${R}/receipts`, GoodsReceiptSchema, { method: 'POST', body }),

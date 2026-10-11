@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { type LotStatus } from '../src/inventory-hub';
 import { daysToExpiry, expiryTone, fefoAllocate, fefoOrder, inboundStep, receiptVariance, requiresExpiry, validateCountEntry, validateInboundLine } from '../src/inventory-hub';
 
 const today = '2026-10-11';
@@ -50,8 +51,7 @@ describe('receiving and counting', () => {
 });
 
 describe('FEFO and expiry', () => {
-  const lot = (lotNo: string, expDate: string | null, qtyAvailable: number, status = 'SELLABLE', receivedAt = '2026-09-01T00:00:00Z') =>
-    ({ lotNo, expDate, qtyAvailable, status, receivedAt }) as const;
+  const lot = (lotNo: string, expDate: string | null, qtyAvailable: number, status: LotStatus = 'SELLABLE', receivedAt = '2026-09-01T00:00:00Z') => ({ lotNo, expDate, qtyAvailable, status, receivedAt });
 
   it('picks the earliest expiry first, skips held and empty lots, and puts lots without expiry last', () => {
     const lots = [lot('C', null, 5), lot('B', '2027-03-01', 4), lot('A', '2026-12-01', 2), lot('Q', '2026-11-01', 9, 'QUARANTINE'), lot('Z', '2026-10-20', 0)];

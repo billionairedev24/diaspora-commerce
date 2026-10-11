@@ -16,6 +16,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { dateTime, humanize, money } from '@/lib/format';
 import { exportDataset } from '@/lib/table-export';
 
+import { ItemForm, SupplierForm } from './MasterData';
 import { PurchaseOrdersPanel } from './PurchaseOrders';
 import { RetailReceiptScreen } from './ReceiptScreen';
 
@@ -102,6 +103,8 @@ function ItemsPanel() {
   const params = useSearchParams();
   const state = useTableState({ searchParams: params, prefix: 'it' });
   const [id, setId] = useParam('item');
+  const [creating, setCreating] = useState(false);
+  const { retailEdit } = useHubAccess();
   const query = useQuery(inventoryHubQueries.items(api, { page: 0, size: 200 }));
   const columns = useMemo<ColumnDef<RetailItem>[]>(
     () => [
@@ -132,11 +135,20 @@ function ItemsPanel() {
         error={query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : undefined}
         onRowClick={(i) => setId(i.id)}
         activeRowId={id}
+        toolbar={retailEdit ? <Button size="sm" onClick={() => setCreating(true)}>New item</Button> : undefined}
         empty="No retail items yet."
         onExport={(req) => exportDataset(qc, req)}
         exportsHref="/exports"
       />
-      <ItemSheet id={id} onClose={() => setId(null)} />
+      <Sheet open={creating} onOpenChange={setCreating} title="New AfroTransact product" className="w-[min(100vw,720px)]">
+        <ItemForm
+          onDone={(i) => {
+            setCreating(false);
+            setId(i.id);
+          }}
+        />
+      </Sheet>
+      <ItemSheet id={creating ? null : id} onClose={() => setId(null)} />
     </>
   );
 }
@@ -243,6 +255,9 @@ function InvoicesPanel() {
 function SuppliersPanel() {
   const api = useHub();
   const qc = useQueryClient();
+  const { retailEdit, retailApprove } = useHubAccess();
+  const [creating, setCreating] = useState(false);
+  const approve = useHubMutation((ids: string[]) => Promise.all(ids.map((i) => api.retail.setSupplierStatus(i, 'APPROVED', 'Vetted'))), (r) => `${r.length} suppliers approved.`);
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'sup' });
   const query = useQuery(inventoryHubQueries.suppliers(api));
   const columns = useMemo<ColumnDef<Supplier>[]>(
@@ -259,6 +274,7 @@ function SuppliersPanel() {
     []
   );
   return (
+    <>
     <DataTable<Supplier>
       id="staff.retail.suppliers"
       label="Suppliers"
@@ -271,10 +287,16 @@ function SuppliersPanel() {
       loading={query.isPending}
       fetching={query.isFetching}
       error={query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : undefined}
+      toolbar={retailEdit ? <Button size="sm" onClick={() => setCreating(true)}>New supplier</Button> : undefined}
+      bulkActions={retailApprove ? (rows, clear) => <Button size="sm" variant="neutral" loading={approve.isPending} onClick={() => approve.mutate(rows.filter((r) => r.status !== 'APPROVED').map((r) => r.id), { onSuccess: clear })}>Approve</Button> : undefined}
       empty="No suppliers yet."
       onExport={(req) => exportDataset(qc, req)}
       exportsHref="/exports"
     />
+    <Sheet open={creating} onOpenChange={setCreating} title="New supplier" className="w-[min(100vw,560px)]">
+      <SupplierForm onDone={() => setCreating(false)} />
+    </Sheet>
+    </>
   );
 }
 

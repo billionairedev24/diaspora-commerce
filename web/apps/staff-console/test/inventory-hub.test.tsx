@@ -1,4 +1,4 @@
-import { type Lot, type RetailItem } from '@afrotransact/api-client';
+import { GoodsReceiptSchema, type Lot, type RetailItem } from '@afrotransact/api-client';
 import { resetHubDb } from '@afrotransact/api-client/mocks/staff';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -10,6 +10,7 @@ import { draftErrors } from '@/components/inventory/InboundPanel';
 import { palletSscc } from '@/components/inventory/Labels';
 import { ReceivingPanel } from '@/components/inventory/ReceivingPanel';
 import { pickRanks } from '@/components/inventory/StockPanel';
+import { rowsOf } from '@/components/retail/ReceiptScreen';
 
 import { renderScreen } from './render';
 import { nav } from './setup';
@@ -107,5 +108,26 @@ describe('receiving and cycle count screens', () => {
     await waitFor(() => expect(post).toBeEnabled());
     await user.click(post);
     expect(await within(sheet).findByText(/-2 posted/)).toBeInTheDocument();
+  });
+});
+
+describe('retail goods receipt rows (S281)', () => {
+  const grn = GoodsReceiptSchema.parse({
+    id: 'g1', number: 'GRN-1', poId: 'p1', shipmentId: 's1', nodeId: 'HOU-FC', status: 'OPEN',
+    lines: [
+      { lineNo: 1, poLineNo: 1, itemId: 'i1', sku: 'AT-COC-200100', expectedQty: 96, asnLotNo: 'CC2610A', lotNo: null, mfgDate: null, expDate: null, qtyGood: 0, qtyDamaged: 0 },
+      { lineNo: 2, poLineNo: 2, itemId: 'i2', sku: 'AT-JOL-200061', expectedQty: 24, lotNo: 'J1', mfgDate: '2026-01-01', expDate: '2027-06-30', qtyGood: 24, qtyDamaged: 0 }
+    ]
+  });
+  const asn = [
+    { lineNo: 1, poLineNo: 1, itemId: 'i1', sku: 'AT-COC-200100', qty: 96, lotNo: 'CC2610A', mfgDate: '2026-09-20', expDate: '2027-09-20' },
+    { lineNo: 2, poLineNo: 2, itemId: 'i2', sku: 'AT-JOL-200061', qty: 24, lotNo: 'J0', mfgDate: '2025-12-01', expDate: '2027-01-01' }
+  ];
+  it('starts an uncounted line from the batch announced on the ASN', () => {
+    expect(rowsOf(grn, asn)[0]).toMatchObject({ lotNo: 'CC2610A', mfgDate: '2026-09-20', expDate: '2027-09-20', asnLot: 'CC2610A', good: '' });
+  });
+  it('keeps what the receiver already counted', () => {
+    expect(rowsOf(grn, asn)[1]).toMatchObject({ lotNo: 'J1', mfgDate: '2026-01-01', expDate: '2027-06-30', good: '24' });
+    expect(rowsOf(grn)[0]).toMatchObject({ lotNo: 'CC2610A', mfgDate: '', expDate: '' });
   });
 });
