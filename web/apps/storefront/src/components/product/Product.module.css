@@ -17,7 +17,9 @@
 .facts dd { margin: 0; }
 .variants { display: flex; flex-wrap: wrap; gap: var(--at-space-2); margin: 0; padding: 0; list-style: none; }
 .variant { display: inline-flex; flex-direction: column; gap: 2px; min-height: var(--at-size-touch); padding: var(--at-space-2) var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-sm); color: var(--at-color-text); text-decoration: none; font-size: var(--at-text-sm); }
-.variant:hover { background: var(--at-color-surface-hover); text-decoration: none; color: var(--at-color-text); }
+@media (hover: hover) {
+  .variant:hover { background: var(--at-color-surface-hover); text-decoration: none; color: var(--at-color-text); }
+}
 .variant[aria-current='true'] { border: 2px solid var(--at-color-action-primary); background: var(--at-gold-50); }
 .variantOff { color: var(--at-color-text-subtle); text-decoration: line-through; }
 .h2 { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
@@ -53,11 +55,22 @@
   .info { grid-column: 2 / 4; grid-row: 2; }
 }
 
+/* Phones: one column — the gallery full-bleed, its thumbnails in a swipeable row, the title and price, then the buy
+   box, then the details (the info column's children join the grid so the buy box can sit right under the price). */
 @media (max-width: 760px) {
-  .grid { grid-template-columns: 1fr; }
-  .thumbs { flex-direction: row; order: 2; }
-  .thumbs li { width: 56px; }
-  .main { position: static; }
-  .info { grid-column: auto; grid-row: auto; }
-  .box { position: static; }
+  .grid { grid-template-columns: minmax(0, 1fr); gap: var(--at-space-3); margin-top: var(--at-space-2); }
+  .main { position: static; order: 1; margin-inline: calc(-1 * var(--at-page-gutter)); }
+  .thumbs { order: 2; flex-direction: row; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding-bottom: var(--at-space-1); }
+  .thumbs li { flex: none; width: 56px; scroll-snap-align: start; }
+  .info { display: contents; }
+  .info > * { order: 5; }
+  .info > :nth-child(-n + 6) { order: 3; }
+  .info > .rule:nth-of-type(2), .info > .facts { order: 5; }
+  .box { position: static; order: 4; padding: var(--at-space-4); }
+}
+
+@media (pointer: coarse) {
+  .crumbs a, .store a { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
+  .thumbs li { width: var(--at-size-touch); min-width: 56px; }
+  .qtySelect { height: var(--at-size-touch); }
 }

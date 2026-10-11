@@ -4,10 +4,14 @@
   position: sticky;
   top: 0;
   z-index: var(--at-z-sticky);
+  transition: top var(--at-duration) var(--at-ease);
   padding-top: env(safe-area-inset-top, 0px);
   background: var(--at-color-header-bg);
   color: var(--at-color-header-text);
 }
+
+/* Short phone screens, scrolling down: the first row tucks away above the top edge (Header.tsx useStickyHeader). */
+.header[data-compact='true'] { top: calc(-1 * var(--at-header-collapse, 0px)); }
 .bar { display: flex; align-items: center; gap: var(--at-space-2); padding: var(--at-space-2) var(--at-page-gutter); flex-wrap: nowrap; min-width: 0; }
 
 .chromeBtn {
@@ -15,6 +19,8 @@
   display: flex;
   align-items: flex-end;
   gap: var(--at-space-1);
+  justify-content: center;
+  min-width: var(--at-size-touch);
   min-height: var(--at-size-touch);
   padding: var(--at-space-1) var(--at-space-2);
   border: 0;
@@ -27,7 +33,9 @@
   font: inherit;
 }
 
-.chromeBtn:hover { background: var(--at-color-header-hover-bg); color: inherit; text-decoration: none; }
+@media (hover: hover) {
+  .chromeBtn:hover { background: var(--at-color-header-hover-bg); color: inherit; text-decoration: none; }
+}
 /* No outline ring on header items: keyboard focus gets the hover fill plus a gold underline instead. */
 .chromeBtn:focus-visible { outline: none; background: var(--at-color-header-hover-bg); box-shadow: inset 0 -2px 0 var(--at-color-header-indicator); }
 .logoBtn { align-items: center; }
@@ -58,7 +66,7 @@
 .cartLabel { font-size: var(--at-text-md); font-weight: var(--at-weight-bold); }
 
 .nav { background: var(--at-color-subheader-bg); }
-.navList { display: flex; align-items: center; gap: var(--at-space-1); margin: 0; padding: var(--at-space-1) var(--at-page-gutter); list-style: none; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; font-size: var(--at-text-md); }
+.navList { display: flex; align-items: center; gap: var(--at-space-1); margin: 0; padding: var(--at-space-1) var(--at-page-gutter); list-style: none; flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; white-space: nowrap; font-size: var(--at-text-md); }
 
 .navItem {
   flex: none;
@@ -78,7 +86,9 @@
   white-space: nowrap;
 }
 
-.navItem:hover { background: var(--at-color-header-hover-bg); color: var(--at-color-subheader-text); text-decoration: none; }
+@media (hover: hover) {
+  .navItem:hover { background: var(--at-color-header-hover-bg); color: var(--at-color-subheader-text); text-decoration: none; }
+}
 .navItem:focus-visible { outline: none; background: var(--at-color-header-hover-bg); box-shadow: inset 0 -2px 0 var(--at-color-header-indicator); }
 .navItem[aria-current='page'] { box-shadow: inset 0 -2px 0 var(--at-color-header-indicator); }
 .navBold { font-weight: var(--at-weight-bold); }
@@ -87,12 +97,13 @@
 /* ≤1100px: hide secondary labels (deliver-to text, "Lola") — header stays one row down to ~900px. */
 @media (max-width: 1100px) {
   .locText, .lolaLabel { display: none; }
+  .locBtn { align-items: center; }
 }
 
 /* <900px: the search box moves to its own full-width row. The department bar never wraps: it scrolls sideways at every
    width (no visible scrollbar, global rule in tokens.css). */
 @media (max-width: 899px) {
-  .bar { flex-wrap: wrap; }
+  .bar { flex-wrap: wrap; row-gap: var(--at-space-1); padding-block: var(--at-space-1) var(--at-space-2); }
   .search { order: 10; flex-basis: 100%; min-width: 0; }
   .spacer { flex: 1; }
   .cartLabel { display: none; }
@@ -100,4 +111,16 @@
 
 @media (max-width: 420px) {
   .wordmark { display: none; }
+}
+
+/* Phones: the first row is logo, deliver-to, account and cart (Lola stays one tap away in the department bar). */
+@media (max-width: 599px) {
+  .bar { column-gap: var(--at-space-1); }
+  .lolaBtn { display: none; }
+}
+
+/* Touch screens: 44px targets in the department bar (the bar itself scrolls sideways with a finger). */
+@media (pointer: coarse) {
+  .navList { padding-block: 0; }
+  .navItem { min-height: var(--at-size-touch); }
 }

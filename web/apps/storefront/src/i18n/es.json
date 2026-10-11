@@ -101,6 +101,8 @@
   "results.title": "Resultados",
   "results.note": "Consulta cada página de producto para ver otras opciones de compra. Precio y entrega mostrados para {location}.",
   "results.filters": "Filtros",
+  "results.closeFilters": "Cerrar filtros",
+  "results.showResults": "Mostrar resultados",
   "results.delivery": "Entrega",
   "results.fulfilment": "Gestión de envío",
   "results.soldBy": "Vendido por",

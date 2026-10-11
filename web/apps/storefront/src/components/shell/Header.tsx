@@ -22,30 +22,70 @@ import { useLolaLauncher } from './LolaLauncher';
 import { SearchBox } from './SearchBox';
 
 /** Publishes the sticky header's live height as --at-sticky-header-h (scroll-padding-top, so keyboard focus and in-page
-    anchors never land under it; WCAG 2.4.11). The height changes with the breakpoint (search row) and the font size. */
-function useStickyHeight() {
+    anchors never land under it; WCAG 2.4.11). The height changes with the breakpoint (search row) and the font size.
+
+    Short phone screens: when the header takes more than 22% of the screen, scrolling down tucks its first row (logo,
+    deliver-to, account, cart) away above the top edge — the search and the department bar stay — and scrolling up brings
+    it back. Only the sticky offset changes (no layout shift); --at-header-collapse is that first row's height. */
+function useStickyHeader() {
   const ref = useRef<HTMLElement>(null);
+  const [compact, setCompact] = useState(false);
+  const compactRef = useRef(false);
   useEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const root = document.documentElement;
-    const set = () => root.style.setProperty('--at-sticky-header-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
-    set();
-    const ro = new ResizeObserver(set);
+    let collapse = 0;
+    const measure = () => {
+      const search = el.querySelector<HTMLElement>('[data-header-search]');
+      const top = el.getBoundingClientRect().top;
+      // The search row's offset is the first row's height once the search wraps onto its own row (<900px).
+      const offset = search ? Math.round(search.getBoundingClientRect().top - top - 4) : 0;
+      collapse = offset > 24 && el.offsetHeight > window.innerHeight * 0.22 ? offset : 0;
+      el.style.setProperty('--at-header-collapse', `${collapse}px`);
+      const visible = Math.ceil(el.getBoundingClientRect().height) - (compactRef.current ? collapse : 0);
+      root.style.setProperty('--at-sticky-header-h', `${visible}px`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      const next = collapse > 0 && y > el.offsetHeight ? (y > lastY + 4 ? true : y < lastY - 4 ? false : compactRef.current) : false;
+      lastY = y;
+      if (next !== compactRef.current) {
+        compactRef.current = next;
+        setCompact(next);
+        measure();
+      }
+    };
+    // Keyboard focus never lands in the tucked-away row (WCAG 2.4.11): focusing into the header brings it back.
+    const onFocus = () => {
+      if (!compactRef.current) return;
+      compactRef.current = false;
+      setCompact(false);
+      measure();
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', measure);
+    el.addEventListener('focusin', onFocus);
     return () => {
       ro.disconnect();
+      el.removeEventListener('focusin', onFocus);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', measure);
       root.style.removeProperty('--at-sticky-header-h');
     };
   }, []);
-  return ref;
+  return { ref, compact };
 }
 
 /** Storefront header: the top bar and the department bar stay fixed at the top while the page scrolls. The announcement
     bar and the pre-order ribbon / send-to-family banner sit under it and scroll away with the page (Shop design). */
 export function Header() {
   const t = useT();
-  const headerRef = useStickyHeight();
+  const { ref: headerRef, compact } = useStickyHeader();
   const api = browserApi();
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
   const { data: cart } = useQuery(cartQueries.current(api));
@@ -63,24 +103,24 @@ export function Header() {
 
   return (
     <>
-      <header ref={headerRef} className={styles.header} data-testid="site-header" data-noprint>
+      <header ref={headerRef} className={styles.header} data-compact={compact ? 'true' : undefined} data-testid="site-header" data-noprint>
         <div className={styles.bar}>
           <Link href="/" className={`${styles.chromeBtn} ${styles.logoBtn}`} aria-label={t('header.home')}>
             <LogoMark size={32} />
             <span className={`${wordmarkClassName} ${styles.wordmark}`}>afrotransact</span>
           </Link>
-          <button type="button" className={styles.chromeBtn} onClick={() => setLocOpen(true)} aria-label={t('header.deliverToAria', { label })} aria-haspopup="dialog">
+          <button type="button" className={`${styles.chromeBtn} ${styles.locBtn}`} onClick={() => setLocOpen(true)} aria-label={t('header.deliverToAria', { label })} aria-haspopup="dialog">
             <MapPin size={20} aria-hidden />
             <span className={styles.locText}>
               <span className={styles.locSmall}>{t('header.deliverTo')}</span>
               <span className={styles.locMain}>{label}</span>
             </span>
           </button>
-          <div className={styles.search}>
+          <div className={styles.search} data-header-search>
             <SearchBox />
           </div>
           <span className={styles.spacer} />
-          <button type="button" className={`${styles.chromeBtn} ${styles.logoBtn}`} onClick={() => lola.open()} aria-label={t('header.lolaAria')} aria-haspopup="dialog">
+          <button type="button" className={`${styles.chromeBtn} ${styles.logoBtn} ${styles.lolaBtn}`} onClick={() => lola.open()} aria-label={t('header.lolaAria')} aria-haspopup="dialog">
             <Sparkle size={20} weight="fill" className={styles.sparkle} aria-hidden />
             <span className={styles.lolaLabel}>{t('header.lola')}</span>
           </button>

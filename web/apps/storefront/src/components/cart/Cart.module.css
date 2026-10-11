@@ -17,13 +17,19 @@
 .optionsLabel { font-weight: var(--at-weight-semibold); color: var(--at-color-text); }
 .nudge { margin: var(--at-space-2) var(--at-space-4) 0; font-size: var(--at-text-xs); color: var(--at-color-success); }
 .lines { margin: 0; padding: 0; list-style: none; }
-.line { display: grid; grid-template-columns: 22px 150px minmax(0, 1fr) auto; gap: var(--at-space-4); padding: var(--at-space-5) 0; border-top: 1px solid var(--at-color-border); }
+.line { display: grid; grid-template-columns: 24px 150px minmax(0, 1fr) auto; gap: var(--at-space-4); padding: var(--at-space-5) 0; border-top: 1px solid var(--at-color-border); }
 .line:first-child { border-top: 0; }
 .select { width: 18px; height: 18px; margin-top: var(--at-space-1); accent-color: var(--at-color-action-secondary); cursor: pointer; }
 .thumb { display: block; border-radius: var(--at-radius-sm); overflow: hidden; }
 .lineBody { display: flex; flex-direction: column; gap: var(--at-space-1); min-width: 0; }
 .lineTitle { color: var(--at-color-text); font-size: var(--at-text-lg); font-weight: var(--at-weight-medium); line-height: var(--at-leading-tight); text-decoration: none; }
-.lineTitle:hover { color: var(--at-color-link); text-decoration: none; }
+@media (hover: hover) {
+  .lineTitle:hover { text-decoration: none; }
+}
+
+@media (hover: hover) {
+  .lineTitle:hover { color: var(--at-color-link); }
+}
 .stock { font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); }
 .inStock { color: var(--at-color-in-stock); }
 .lowStock { color: var(--at-color-low-stock); }
@@ -48,12 +54,41 @@
 .recName { font-size: var(--at-text-sm); line-height: var(--at-leading-tight); }
 .recPrice { font-size: var(--at-text-md); color: var(--at-color-deal); }
 
+/* <900px: one column. The order summary (subtotal and Proceed to checkout) becomes a bar stuck to the bottom of the
+   screen while the cart scrolls, and settles at the end of the page; recommendations follow the cart. */
 @media (max-width: 899px) {
-  .layout { grid-template-columns: 1fr; }
-  .aside { position: static; }
-  .line { grid-template-columns: 22px 96px minmax(0, 1fr); }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .col { order: 1; }
+  .aside { display: contents; }
+  .recs { order: 2; }
+  .summary {
+    order: 3;
+    position: sticky;
+    bottom: 0;
+    z-index: var(--at-z-sticky);
+    gap: var(--at-space-2);
+    margin-inline: calc(-1 * var(--at-page-gutter));
+    padding: var(--at-space-3) var(--at-page-gutter) calc(var(--at-space-3) + env(safe-area-inset-bottom, 0px));
+    border-width: 1px 0 0;
+    border-radius: 0;
+    box-shadow: var(--at-shadow-md);
+  }
+
+  .line { grid-template-columns: 24px 96px minmax(0, 1fr); }
   .linePrice { grid-column: 3; text-align: left; }
   .card { padding: var(--at-space-4); }
+}
+
+@media (max-width: 479px) {
+  .line { grid-template-columns: 24px 72px minmax(0, 1fr); gap: var(--at-space-3); }
+  .title { font-size: var(--at-text-2xl); }
+}
+
+@media (pointer: coarse) {
+  .gift { min-height: var(--at-size-touch); }
+  .recName, .savedName { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
+  .actions > a, .actions > button { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
+  .select { width: 24px; height: 24px; }
 }
 
 /* Pre-order package (S273): lines under the dark group header, then the door / pickup choice. */

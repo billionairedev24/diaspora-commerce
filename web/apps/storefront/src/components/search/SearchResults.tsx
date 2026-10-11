@@ -1,7 +1,7 @@
 'use client';
 
 import { type FacetBucket, parseSearchUrl, PRICE_BUCKETS, type ProductSummary, type SearchQuery, type SearchSort } from '@afrotransact/api-client';
-import { Button, Skeleton, Stars } from '@afrotransact/ui';
+import { Button, Skeleton, Stars, X } from '@afrotransact/ui';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -47,6 +47,24 @@ export function SearchResults() {
   }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // <900px the filters are a non-modal side sheet: opening it moves focus to its heading, Esc or Close returns it.
+  const filtersToggle = useRef<HTMLButtonElement>(null);
+  const filtersHeading = useRef<HTMLHeadingElement>(null);
+  const closeFilters = () => {
+    setFiltersOpen(false);
+    filtersToggle.current?.focus({ preventScroll: true });
+  };
+  useEffect(() => {
+    if (!filtersOpen) return;
+    if (filtersHeading.current?.offsetParent) filtersHeading.current.focus({ preventScroll: true });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setFiltersOpen(false);
+      filtersToggle.current?.focus({ preventScroll: true });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [filtersOpen]);
   // Result clicks feed search analytics and charge sponsored products (S240); fire and forget.
   const reportClick = (p: ProductSummary, position: number) => {
     if (!data?.searchId) return;
@@ -101,10 +119,26 @@ export function SearchResults() {
       </div>
       <div className={styles.layout}>
         <div>
-          <Button variant="neutral" size="sm" className={styles.filtersToggle} aria-expanded={filtersOpen} aria-controls="search-filters" onClick={() => setFiltersOpen((o) => !o)}>
+          <Button
+            ref={filtersToggle}
+            variant="neutral"
+            size="sm"
+            className={styles.filtersToggle}
+            aria-expanded={filtersOpen}
+            aria-controls="search-filters"
+            onClick={() => setFiltersOpen((o) => !o)}
+          >
             {t('results.filters')}
           </Button>
           <aside id="search-filters" className={styles.aside} data-open={filtersOpen ? 'true' : 'false'} aria-label={t('results.filters')}>
+            <div className={styles.sheetHead}>
+              <h2 ref={filtersHeading} tabIndex={-1} className={styles.sheetTitle}>
+                {t('results.filters')}
+              </h2>
+              <button type="button" className={styles.sheetClose} onClick={closeFilters} aria-label={t('results.closeFilters')}>
+                <X size={20} aria-hidden />
+              </button>
+            </div>
             <fieldset className={styles.group}>
               <legend className={styles.legend}>{t('results.delivery')}</legend>
               <label className={styles.check}>
@@ -164,6 +198,11 @@ export function SearchResults() {
             <Link href={searchHref({ q: query.q, sort: query.sort })} scroll={false} className={styles.clear}>
               {t('results.clearAll')}
             </Link>
+            <div className={styles.sheetFoot}>
+              <Button block onClick={closeFilters}>
+                {t('results.showResults')}
+              </Button>
+            </div>
           </aside>
         </div>
         <div className={styles.main}>

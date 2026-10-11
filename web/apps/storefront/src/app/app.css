@@ -3,7 +3,9 @@
 .page:focus { outline: none; }
 .full-bleed { margin-left: calc(-1 * var(--at-page-gutter)); margin-right: calc(-1 * var(--at-page-gutter)); }
 .link-button { border: 0; background: none; padding: 0; color: var(--at-color-link); cursor: pointer; font: inherit; text-align: left; }
-.link-button:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+@media (hover: hover) {
+  .link-button:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+}
 .sep { color: var(--at-color-border-strong); }
 h1, h2, h3 { text-wrap: balance; }
 
@@ -12,4 +14,9 @@ h1, h2, h3 { text-wrap: balance; }
   /* Doubled attribute: outranks any single component class without !important. */
   [data-noprint][data-noprint] { display: none; }
   body { background: none; }
+}
+
+/* Touch screens: stand-alone text buttons (Edit, Delete, Set as default…) get a 44px-tall target. */
+@media (pointer: coarse) {
+  .link-button { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
 }

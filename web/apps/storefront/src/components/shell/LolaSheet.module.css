@@ -23,7 +23,9 @@
 .status { font-size: var(--at-text-xs); color: var(--at-color-text-muted); animation: lolapulse 1.4s ease-in-out infinite; }
 .chips { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
 .chip { padding: var(--at-space-1) var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-pill); background: var(--at-color-surface); font: inherit; font-size: var(--at-text-xs); cursor: pointer; }
-.chip:hover { background: var(--at-color-surface-hover); }
+@media (hover: hover) {
+  .chip:hover { background: var(--at-color-surface-hover); }
+}
 .compose { display: flex; gap: var(--at-space-2); }
 .input { flex: 1; min-width: 0; height: 44px; padding: 0 var(--at-space-3); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-pill); font: inherit; }
 .send { width: 44px; height: 44px; border: 0; border-radius: var(--at-radius-pill); background: var(--at-color-action-primary); color: var(--at-color-action-primary-text); display: grid; place-items: center; font-size: var(--at-text-xl); cursor: pointer; }

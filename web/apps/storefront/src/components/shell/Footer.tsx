@@ -3,15 +3,16 @@
 import { type LegalDocumentKey, legalDocumentKeyOf, legalHref, NewsletterRequestSchema, type SiteConfig } from '@afrotransact/api-client';
 import { isLocale, localeCookie, LOCALES } from '@afrotransact/i18n';
 import { useLocale } from '@afrotransact/i18n/react';
-import { AppleGlyph, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink, useToast } from '@afrotransact/ui';
+import { AppleGlyph, CaretDown, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { type FormEvent, type ReactNode, useId, useState } from 'react';
 
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchHref, siteQueries } from '@/lib/api/queries';
+import { useMediaQuery } from '@/lib/ui/useMediaQuery';
 
 import styles from './Footer.module.css';
 
@@ -126,6 +127,30 @@ function Newsletter() {
   );
 }
 
+/** A footer link column; on phones its heading is a disclosure button and the links start folded. */
+function FooterColumn({ title, collapsible, children }: { title: string; collapsible: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const expanded = !collapsible || open;
+  return (
+    <nav className={styles.col} aria-label={title}>
+      <h2 className={styles.colTitle}>
+        {collapsible ? (
+          <button type="button" className={styles.colToggle} aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+            {title}
+            <CaretDown size={16} aria-hidden className={styles.colCaret} />
+          </button>
+        ) : (
+          title
+        )}
+      </h2>
+      <ul id={id} className={styles.colList} hidden={!expanded}>
+        {children}
+      </ul>
+    </nav>
+  );
+}
+
 export interface FooterViewProps {
   config: SiteConfig | undefined;
   locale?: string;
@@ -139,6 +164,8 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
   const router = useRouter();
   const toast = useToast();
   const phone = config?.contacts.phone ?? '';
+  // Phones: the link columns fold into accordions (one heading button each) so the footer stays short.
+  const narrow = useMediaQuery('(max-width: 640px)');
   const appLink = (href: string | null | undefined, small: string, big: string, icon: ReactNode) =>
     href ? (
       <a className={styles.appBtn} href={href} target="_blank" rel="noopener noreferrer">
@@ -188,24 +215,21 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
           )}
         </div>
         {FOOTER_COLUMNS.map((col) => (
-          <nav key={col.title} className={styles.col} aria-label={t(col.title)}>
-            <h2 className={styles.colTitle}>{t(col.title)}</h2>
-            <ul className={styles.colList}>
-              {col.links.map((l) => (
-                <li key={l.href + l.label}>
-                  {l.external ? (
-                    <a className={styles.link} href={l.href}>
-                      {label(t, l.label)}
-                    </a>
-                  ) : (
-                    <Link className={styles.link} href={l.href}>
-                      {label(t, l.label)}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <FooterColumn key={col.title} title={t(col.title)} collapsible={narrow}>
+            {col.links.map((l) => (
+              <li key={l.href + l.label}>
+                {l.external ? (
+                  <a className={styles.link} href={l.href}>
+                    {label(t, l.label)}
+                  </a>
+                ) : (
+                  <Link className={styles.link} href={l.href}>
+                    {label(t, l.label)}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </FooterColumn>
         ))}
       </div>
       <div className={styles.apps}>

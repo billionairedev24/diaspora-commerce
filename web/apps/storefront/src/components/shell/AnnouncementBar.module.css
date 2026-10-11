@@ -4,7 +4,22 @@
 .green { background: var(--at-green-600); color: var(--at-ink-0); }
 .sand { background: var(--at-sand-100); color: var(--at-ink-900); }
 .cta { color: inherit; text-decoration: underline; }
-.cta:hover { color: inherit; }
+@media (hover: hover) {
+  .cta:hover { color: inherit; }
+}
 .pos { font-weight: var(--at-weight-regular); font-size: var(--at-text-xs); }
 .dismiss { display: grid; place-items: center; width: 32px; height: 32px; border: 0; background: none; padding: 0; color: inherit; cursor: pointer; border-radius: var(--at-radius-pill); }
 .icon { font-size: var(--at-text-lg); }
+
+/* Phones: one compact row (text, link, dismiss) so the bar doesn't push the page down; the position counter hides. */
+@media (max-width: 599px) {
+  .bar { flex-wrap: nowrap; justify-content: flex-start; gap: var(--at-space-2); padding-block: var(--at-space-1); font-size: var(--at-text-xs); text-align: start; }
+  .bar > span:first-of-type { flex: 1; min-width: 0; }
+  .icon, .pos { display: none; }
+  .cta { flex: none; }
+}
+
+@media (pointer: coarse) {
+  .dismiss { width: var(--at-size-touch); height: var(--at-size-touch); flex: none; }
+  .cta { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
+}

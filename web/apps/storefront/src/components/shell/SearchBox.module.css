@@ -4,7 +4,9 @@
 .dept { flex: none; width: 68px; border: 0; background: var(--at-color-surface-muted); color: var(--at-color-text); font-size: var(--at-text-xs); padding: 0 var(--at-space-1); cursor: pointer; }
 .input { flex: 1; min-width: 0; border: 0; padding: 0 var(--at-space-3); font-size: var(--at-text-base); color: var(--at-color-text); background: var(--at-color-surface); outline: none; }
 .submit { width: 48px; border: 0; background: var(--at-color-action-primary); color: var(--at-color-action-primary-text); cursor: pointer; display: grid; place-items: center; }
-.submit:hover { background: var(--at-color-action-primary-hover); }
+@media (hover: hover) {
+  .submit:hover { background: var(--at-color-action-primary-hover); }
+}
 
 .list {
   position: absolute;

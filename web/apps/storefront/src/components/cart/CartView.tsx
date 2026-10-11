@@ -273,8 +273,9 @@ export function CartView() {
           </section>
         )}
       </div>
-      <aside className={styles.aside} aria-label={t('co.orderSummary')}>
-        <div className={styles.summary}>
+      {/* Desktop: a sticky right column. Phones: the summary is a sticky bar at the bottom of the screen (Cart.module.css). */}
+      <div className={styles.aside}>
+        <aside className={styles.summary} aria-label={t('co.orderSummary')}>
           <span style={{ fontSize: 'var(--at-text-lg)' }}>
             {subtotal} <strong data-testid="cart-subtotal">{fmt.money(cart.subtotalMinor, cart.currency)}</strong>
           </span>
@@ -295,9 +296,9 @@ export function CartView() {
               )
             }
           </CartPreorderSummary>
-        </div>
+        </aside>
         <Recommendations exclude={new Set(lines.map((l) => l.atin))} />
-      </aside>
+      </div>
     </div>
   );
 }

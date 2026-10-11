@@ -10,7 +10,9 @@
 .job { background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); overflow: hidden; }
 .jobHead { margin: 0; }
 .toggle { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-2); width: 100%; padding: var(--at-space-4) var(--at-space-5); border: 0; background: var(--at-color-surface); text-align: left; cursor: pointer; color: inherit; font: inherit; }
-.toggle:hover { background: var(--at-color-surface-hover); }
+@media (hover: hover) {
+  .toggle:hover { background: var(--at-color-surface-hover); }
+}
 .jobTitle { font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
 .caret { font-size: var(--at-text-xl); align-self: center; }
 .detail { padding: 0 var(--at-space-5) var(--at-space-5); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: var(--at-space-6); border-top: 1px solid var(--at-color-border); }

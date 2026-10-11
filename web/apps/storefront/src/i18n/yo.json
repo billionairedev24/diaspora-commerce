@@ -101,6 +101,8 @@
   "results.title": "Àwọn èsì",
   "results.note": "Ṣàyẹ̀wò ojú-ìwé ọjà kọ̀ọ̀kan fún àwọn àṣàyàn ìrajà mìíràn. Iye àti ìfiránṣẹ́ wà fún {location}.",
   "results.filters": "Àwọn àsẹ́",
+  "results.closeFilters": "Pa àwọn àsẹ́ dé",
+  "results.showResults": "Fi àwọn èsì hàn",
   "results.delivery": "Ìfiránṣẹ́",
   "results.fulfilment": "Ìmúṣẹ",
   "results.soldBy": "Ẹni tó ń tà á",

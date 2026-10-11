@@ -10,6 +10,18 @@ import { useConsent } from '@/lib/consent/ConsentProvider';
 
 import styles from './Legal.module.css';
 
+/** Publishes the banner's height as --at-cookie-banner-h: the page pads its end by it, so nothing stays under the banner. */
+function publishHeight(el: HTMLElement | null) {
+  if (!el || typeof ResizeObserver === 'undefined') return;
+  const root = document.documentElement;
+  const ro = new ResizeObserver(() => root.style.setProperty('--at-cookie-banner-h', `${Math.ceil(el.getBoundingClientRect().height)}px`));
+  ro.observe(el);
+  return () => {
+    ro.disconnect();
+    root.style.removeProperty('--at-cookie-banner-h');
+  };
+}
+
 /**
  * First-visit cookie banner (design/AfroTransact Shop.dc.html): equal-weight "Accept all" and "Reject non-essential",
  * plus "Manage preferences" (the Cookie Notice). Shown until the visitor makes a choice; not on the Cookie Notice
@@ -21,7 +33,7 @@ export function CookieBanner() {
   const { decided, gpc, save } = useConsent();
   if (decided || pathname === legalHref('cookies')) return null;
   return (
-    <section aria-labelledby="cb-title" className={styles.banner} data-noprint>
+    <section ref={publishHeight} aria-labelledby="cb-title" className={styles.banner} data-noprint>
       <h2 id="cb-title" className={styles.bannerTitle}>
         {t('legal.cbTitle')}
       </h2>

@@ -12,7 +12,9 @@
 .chip[aria-pressed='true'] { background: var(--at-color-header-bg); border-color: var(--at-color-header-bg); color: var(--at-color-header-text); }
 .list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); }
 .listing { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: var(--at-space-4); align-items: center; padding: var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface); color: var(--at-color-text); text-decoration: none; }
-.listing:hover { background: var(--at-color-surface-hover); text-decoration: none; }
+@media (hover: hover) {
+  .listing:hover { background: var(--at-color-surface-hover); text-decoration: none; }
+}
 .cover { width: 96px; height: 96px; border-radius: var(--at-radius-md); background: linear-gradient(135deg, var(--at-color-placeholder-a), var(--at-color-placeholder-b)); }
 .info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .kind { font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); color: var(--at-color-text-muted); text-transform: uppercase; }
@@ -61,4 +63,10 @@
   .cover { width: 64px; height: 64px; }
   .price { grid-column: 2; text-align: left; }
   .booking { grid-template-columns: 1fr; }
+}
+
+/* Touch screens: 44px chips, days and time slots. */
+@media (pointer: coarse) {
+  .chip, .day, .slot { min-height: var(--at-size-touch); justify-content: center; }
+  .actions > a, .actions > button { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
 }

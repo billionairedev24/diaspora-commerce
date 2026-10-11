@@ -101,6 +101,8 @@
   "results.title": "النتائج",
   "results.note": "راجع صفحة كل منتج لخيارات شراء أخرى. السعر والتوصيل معروضان لـ {location}.",
   "results.filters": "عوامل التصفية",
+  "results.closeFilters": "إغلاق عوامل التصفية",
+  "results.showResults": "عرض النتائج",
   "results.delivery": "التوصيل",
   "results.fulfilment": "التنفيذ",
   "results.soldBy": "يبيعه",

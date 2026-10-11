@@ -19,13 +19,19 @@
   cursor: pointer;
   font-family: inherit;
 }
-.ribbon:hover { text-decoration: none; }
+@media (hover: hover) {
+  .ribbon:hover { text-decoration: none; }
+}
 .ribbon:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: -4px; }
 .ribbonOpen { background: var(--at-gold-100); color: var(--at-gold-900); }
-.ribbonOpen:hover { color: var(--at-gold-900); }
+@media (hover: hover) {
+  .ribbonOpen:hover { color: var(--at-gold-900); }
+}
 .ribbonUpcoming { background: var(--at-ink-50); color: var(--at-ink-800); }
 .ribbonClosed { background: var(--at-ink-100); color: var(--at-ink-800); }
-.ribbonUpcoming:hover, .ribbonClosed:hover { color: var(--at-ink-800); }
+@media (hover: hover) {
+  .ribbonUpcoming:hover, .ribbonClosed:hover { color: var(--at-ink-800); }
+}
 .ribbonIcon { font-size: 18px; flex: none; }
 .ribbonEnd { display: flex; align-items: center; gap: var(--at-space-2); }
 .ribbonView { font-weight: var(--at-weight-bold); text-decoration: underline; }
@@ -55,11 +61,20 @@
   font-size: var(--at-text-sm);
   text-decoration: none;
 }
-.family:hover { color: var(--at-ink-0); text-decoration: none; }
+@media (hover: hover) {
+  .family:hover { color: var(--at-ink-0); text-decoration: none; }
+}
 .family:focus-visible { outline: 2px solid var(--at-gold-500); outline-offset: -4px; }
 .familyIcon { font-size: 18px; color: var(--at-gold-500); }
 .familySub { color: var(--at-ink-300); }
 .familyCta { font-weight: var(--at-weight-bold); text-decoration: underline; color: var(--at-gold-500); }
+
+/* Phones: the ribbon and the send-to-family banner shrink to a line or two (the details are on /pre-orders). */
+@media (max-width: 599px) {
+  .ribbon, .family { justify-content: flex-start; gap: var(--at-space-1) var(--at-space-2); padding-block: var(--at-space-2); font-size: var(--at-text-xs); text-align: start; }
+  .familySub { display: none; }
+  .ribbonIcon, .familyIcon { font-size: var(--at-text-base); }
+}
 
 /* ── Home hero ────────────────────────────────────────────────── */
 .hero { position: relative; margin: var(--at-space-4) 0; border-radius: var(--at-radius-lg); overflow: hidden; background: var(--at-ink-1000); color: var(--at-ink-0); min-height: 320px; display: flex; }
@@ -104,7 +119,9 @@
   cursor: pointer;
   font-family: inherit;
 }
-.goldCta:hover { color: var(--at-ink-1000); text-decoration: none; filter: brightness(.96); }
+@media (hover: hover) {
+  .goldCta:hover { color: var(--at-ink-1000); text-decoration: none; filter: brightness(.96); }
+}
 .goldCta:focus-visible, .inkButton:focus-visible, .fulfil:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
 
 /* ── Off state card + waitlist ────────────────────────────────── */
@@ -171,7 +188,9 @@
 .rowThumb { width: 48px; height: 48px; flex: none; border-radius: var(--at-radius-sm); overflow: hidden; }
 .rowText { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .rowName { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-text); text-decoration: none; }
-.rowName:hover { color: var(--at-color-link); }
+@media (hover: hover) {
+  .rowName:hover { color: var(--at-color-link); }
+}
 .rowSeller { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .rowPrice { font-size: var(--at-text-sm); }
 
@@ -258,3 +277,8 @@
 .unsubscribeActions a { text-decoration: none; }
 .unsubscribeActions a:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
 .unsubscribeError { margin: 0; color: var(--at-color-danger); font-size: var(--at-text-sm); }
+
+/* Touch screens: the ribbon and the send-to-family banner are at least 44px tall. */
+@media (pointer: coarse) {
+  .ribbon, .family { min-height: var(--at-size-touch); }
+}

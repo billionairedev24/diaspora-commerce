@@ -16,7 +16,9 @@ ul.body, ol.body { padding-inline-start: var(--at-space-5); }
   background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md);
   color: var(--at-color-text); text-decoration: none;
 }
-.card:hover { background: var(--at-color-surface-hover); }
+@media (hover: hover) {
+  .card:hover { background: var(--at-color-surface-hover); }
+}
 .cardTopic { font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); letter-spacing: var(--at-tracking-caps); text-transform: uppercase; color: var(--at-color-text-muted); }
 .cardTitle { font-size: var(--at-text-lg); }
 .cardSummary { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }

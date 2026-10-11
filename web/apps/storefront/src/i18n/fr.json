@@ -101,6 +101,8 @@
   "results.title": "Résultats",
   "results.note": "Consultez chaque fiche produit pour d’autres options d’achat. Prix et livraison affichés pour {location}.",
   "results.filters": "Filtres",
+  "results.closeFilters": "Fermer les filtres",
+  "results.showResults": "Afficher les résultats",
   "results.delivery": "Livraison",
   "results.fulfilment": "Expédition",
   "results.soldBy": "Vendu par",

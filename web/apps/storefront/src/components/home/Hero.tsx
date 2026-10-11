@@ -3,13 +3,14 @@
 import { type HeroSlide } from '@afrotransact/api-client';
 import { CaretLeft, CaretRight, ImagePlaceholder, Pause, Play } from '@afrotransact/ui';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { type TouchEvent, useEffect, useRef, useState } from 'react';
 
 import { useT } from '@/i18n/t';
 
 import styles from './Home.module.css';
 
-/** Hero carousel from placements: auto-advances every 7 s, pauses on hover/focus, honours reduced motion. */
+/** Hero carousel from placements: auto-advances every 7 s, pauses on hover/focus, honours reduced motion; swipeable on
+    touch screens (the arrows hide on phones). */
 export function Hero({ slides }: { slides: HeroSlide[] }) {
   const t = useT();
   const [idx, setIdx] = useState(0);
@@ -17,6 +18,23 @@ export function Hero({ slides }: { slides: HeroSlide[] }) {
   // Explicit pause (WCAG 2.2.2): stays paused until the shopper presses play.
   const [stopped, setStopped] = useState(false);
   const n = slides.length;
+  // Swipe on touch screens: a mostly horizontal drag of 48px or more changes the slide (mirrored in right-to-left).
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (e: TouchEvent) => {
+    const p = e.touches[0];
+    touch.current = p ? { x: p.clientX, y: p.clientY } : null;
+  };
+  const onTouchEnd = (e: TouchEvent) => {
+    const start = touch.current;
+    const p = e.changedTouches[0];
+    touch.current = null;
+    if (!start || !p || n < 2) return;
+    const dx = p.clientX - start.x;
+    if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(p.clientY - start.y) * 1.5) return;
+    const rtl = getComputedStyle(e.currentTarget).direction === 'rtl';
+    const step = (dx < 0) !== rtl ? 1 : -1;
+    setIdx((i) => (i + step + n) % n);
+  };
   useEffect(() => {
     if (n < 2 || paused || stopped) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
@@ -34,6 +52,8 @@ export function Hero({ slides }: { slides: HeroSlide[] }) {
       onMouseLeave={() => setPaused(false)}
       onFocusCapture={() => setPaused(true)}
       onBlurCapture={() => setPaused(false)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
     >
       <div className={styles.heroInner} aria-roledescription="slide" aria-label={`${(idx % n) + 1} / ${n}`}>
         <div className={styles.heroText}>
