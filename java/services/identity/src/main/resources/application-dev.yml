@@ -9,6 +9,11 @@ at:
       accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:https://seller.dev.afrotransact.com}/invitations/accept}
     signing:
       generate-if-missing: false
+    # S276: the local test users on the shared dev cluster only when asked for (IDENTITY_TEST_USERS=true) and with a
+    # password of its own from the secret store (IDENTITY_TEST_USERS_PASSWORD; the local one is refused).
+    local-development:
+      test-users: ${IDENTITY_TEST_USERS:false}
+      test-users-password: ${IDENTITY_TEST_USERS_PASSWORD:}
     data-protection:
       # IDENTITY_DATA_KEY (secret store afrotransact/dev/identity): base64 AES-256 key-encryption key for MFA
       # secrets at rest, required with provider local. During a rotation the old key moves to

@@ -1,5 +1,6 @@
-# Local developer profile: docker compose stack from infra/local, ephemeral signing key, codes written to the log,
-# a bootstrap super admin and first-party clients for the apps on localhost.
+# Local developer profile: docker compose stack from infra/local, ephemeral signing key, one-time codes written to the
+# log and dropped in Mailpit (http://localhost:8025), a bootstrap super admin, the S276 test users (@afrotransact.test,
+# docs/engineering/local-development.md) and first-party clients for the apps on localhost.
 logging:
   level:
     com.afrotransact: DEBUG
@@ -9,7 +10,14 @@ at:
     signing:
       generate-if-missing: true
     verification:
-      sender: ${VERIFICATION_SENDER:log}
+      # mailpit: the log line plus a message in Mailpit (texted codes too, tagged sms); log: the log only. Both are
+      # refused at start-up on any other profile.
+      sender: ${VERIFICATION_SENDER:mailpit}
+    # S276: ready-made test users (TestPersonas) with one shared password; never on uat/prod (enforced in code).
+    local-development:
+      test-users: ${IDENTITY_TEST_USERS:true}
+      test-users-password: ${IDENTITY_TEST_USERS_PASSWORD:Test1234!Local}
+      mailpit-url: ${MAILPIT_URL:http://localhost:8025}
     mfa:
       secure-cookies: false
     data-protection:

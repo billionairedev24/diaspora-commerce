@@ -22,6 +22,7 @@ import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.events.InboxDeduplicator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,15 +39,18 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
     private final UserAccountRepository users;
     private final AccessChangeLog changeLog;
     private final DomainEventPublisher events;
+    private final ApplicationEventPublisher local;
     private final Clock clock;
 
     SellerOrgSyncServiceImpl(InboxDeduplicator inbox, OrganizationRepository orgs, UserAccountRepository users,
-                             AccessChangeLog changeLog, DomainEventPublisher events, Clock clock) {
+                             AccessChangeLog changeLog, DomainEventPublisher events, ApplicationEventPublisher local,
+                             Clock clock) {
         this.inbox = inbox;
         this.orgs = orgs;
         this.users = users;
         this.changeLog = changeLog;
         this.events = events;
+        this.local = local;
         this.clock = clock;
     }
 
@@ -104,6 +108,8 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
         Instant at = change.occurredAt() == null ? Instant.now(clock) : change.occurredAt();
         Organization saved = orgs.upsert(new Organization(change.orgId(), kind, name, status, market, at));
         changeLog.append(ACTOR, "org.upserted", null, null, change.orgId(), kind + " " + status);
+        // In-process only (after commit): local test users waiting for this organisation are linked to it (S276).
+        local.publishEvent(new OrganizationMirrored(saved.id()));
         return Optional.of(saved);
     }
 

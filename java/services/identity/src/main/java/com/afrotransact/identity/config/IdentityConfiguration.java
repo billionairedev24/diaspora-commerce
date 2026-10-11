@@ -9,6 +9,7 @@ import com.afrotransact.identity.adapter.in.web.LoginPageSettings;
 import com.afrotransact.identity.application.FirstPartySignInSettings;
 import com.afrotransact.identity.application.InvitationSettings;
 import com.afrotransact.identity.adapter.out.notification.LoggingVerificationCodeSender;
+import com.afrotransact.identity.adapter.out.notification.MailpitVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.OutboxVerificationCodeSender;
 import com.afrotransact.identity.domain.AccessPolicy;
 import com.afrotransact.identity.domain.AddressBookPolicy;
@@ -24,6 +25,7 @@ import com.afrotransact.identity.domain.DefaultTotpAuthenticator;
 import com.afrotransact.identity.domain.DefaultVerificationPolicy;
 import com.afrotransact.identity.domain.LandingPolicy;
 import com.afrotransact.identity.domain.LibPhoneNumberPolicy;
+import com.afrotransact.identity.domain.LocalDevelopmentPolicy;
 import com.afrotransact.identity.domain.MfaPolicy;
 import com.afrotransact.identity.domain.PasswordPolicy;
 import com.afrotransact.identity.domain.PhoneNumberPolicy;
@@ -32,11 +34,13 @@ import com.afrotransact.identity.domain.SignUpPolicy;
 import com.afrotransact.identity.domain.TeamPolicy;
 import com.afrotransact.identity.domain.TotpAuthenticator;
 import com.afrotransact.identity.domain.VerificationPolicy;
+import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.identity.port.VerificationCodeSender;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -90,12 +94,24 @@ class IdentityConfiguration {
         return new DefaultTotpAuthenticator();
     }
 
-    /** {@code outbox}: notifications service delivers codes; {@code log}: local development only. */
+    /**
+     * {@code outbox}: the notifications service delivers codes (every environment). Local profile only (start-up fails
+     * elsewhere, S276): {@code log} writes them to the log; {@code mailpit} also drops them in the local Mailpit inbox.
+     */
     @Bean
-    VerificationCodeSender verificationCodeSender(IdentityProperties props, DomainEventPublisher events,
+    VerificationCodeSender verificationCodeSender(IdentityProperties props, LocalDevelopmentProperties local,
+                                                  LocalDevelopmentPolicy policy, Environment env,
+                                                  DomainEventPublisher events, UserAccountRepository users,
                                                   Clock clock) {
-        return "log".equalsIgnoreCase(props.verification().sender()) ? new LoggingVerificationCodeSender()
-                : new OutboxVerificationCodeSender(events, clock);
+        String sender = LocalDevelopmentConfiguration.checkedSender(policy, props.verification().sender(),
+                LocalDevelopmentConfiguration.activeProfiles(env));
+        if ("log".equalsIgnoreCase(sender)) {
+            return new LoggingVerificationCodeSender();
+        }
+        if ("mailpit".equalsIgnoreCase(sender)) {
+            return new MailpitVerificationCodeSender(local.mailpitUrl(), users);
+        }
+        return new OutboxVerificationCodeSender(events, clock);
     }
 
     /** BCrypt by default; the delegating encoder keeps older hashes verifiable when the default changes. */
