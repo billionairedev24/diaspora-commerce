@@ -176,7 +176,7 @@ public final class OrdersEventPayloads {
      * @param taxJurisdiction      state jurisdiction of the tax (US-TX)
      * @param localTaxJurisdiction local jurisdiction from the tax quote (US-TX-770), null when none
      * @param shippingTaxMinor     part of taxMinor charged on the shipment's shipping
-     * @param imageUrl             product photo snapshotted at checkout (order emails, S277); null when none
+     * @param imageUrl             product photo snapshotted at checkout (order emails, S279); null when none
      */
     public record LineSummary(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                               long taxMinor, String productAtin, String productType, String category,
@@ -191,7 +191,7 @@ public final class OrdersEventPayloads {
     }
 
     /**
-     * A shipment's line as the customer's emails show it (S277): what it is, its photo, how many and the unit price.
+     * A shipment's line as the customer's emails show it (S279): what it is, its photo, how many and the unit price.
      * Carried by the shipment events so shipped, delivered, cancelled and missed-delivery emails list the items.
      */
     public record ItemSummary(String lineId, String variantAtin, String productAtin, String title, String imageUrl,
@@ -229,7 +229,7 @@ public final class OrdersEventPayloads {
     }
 
     /**
-     * orders.shipment.delivered — payments settlement, review requests, returns window start. S277 adds the
+     * orders.shipment.delivered — payments settlement, review requests, returns window start. S279 adds the
      * shipment's fulfilment type, seller, currency and items for the customer's delivered email.
      */
     public record ShipmentDelivered(String orderId, String orderNumber, String customerId, String shipmentId,

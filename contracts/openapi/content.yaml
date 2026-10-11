@@ -3044,7 +3044,7 @@ components:
           format: date-time
         whatsappCommunityUrl:
           type: string
-          description: WhatsApp community invite shown in email footers (S277)
+          description: WhatsApp community invite shown in email footers (S279)
     SiteContacts:
       type: object
       properties:

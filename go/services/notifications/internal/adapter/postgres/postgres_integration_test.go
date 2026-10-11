@@ -234,7 +234,7 @@ func TestPostgresIntegration(t *testing.T) {
 		if err != nil || len(a) != 1 || len(b) != 1 || a[0].ID != b[0].ID {
 			t.Fatalf("%v %v %v", a, b, err)
 		}
-		if a[0].Subject != "Order AT-1001 is confirmed" || a[0].TemplateVersion != 3 { // 0003, then 0011 (S277 layout), supersede the v1 seed
+		if a[0].Subject != "Order AT-1001 is confirmed" || a[0].TemplateVersion != 3 { // 0003, then 0011 (S279 layout), supersede the v1 seed
 			t.Fatalf("%+v", a[0])
 		}
 	})

@@ -78,7 +78,7 @@ type Config struct {
 		MaxTotalBytes    int64         `yaml:"maxTotalBytes" env:"ATTACHMENTS_MAX_TOTAL_BYTES"`
 		Timeout          time.Duration `yaml:"timeout" env:"ATTACHMENTS_TIMEOUT"`
 	} `yaml:"attachments"`
-	// Brand is what the shared email layout shows (S277). The footer's socials, WhatsApp community link, app links,
+	// Brand is what the shared email layout shows (S279). The footer's socials, WhatsApp community link, app links,
 	// phone, address and legal links come from the content service's site config (siteConfigUrl, refreshed every
 	// refresh); the values here are the defaults used until it answers and for fields it leaves empty.
 	Brand struct {

@@ -8,7 +8,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
 )
 
-// Order email view data (S277). The orders events carry the lines (title, image, quantity, unit price), the
+// Order email view data (S279). The orders events carry the lines (title, image, quantity, unit price), the
 // shipments (fulfilment type, seller, promise, pre-order block) and the ship-to address; these helpers turn them
 // into what the layout's components render:
 //

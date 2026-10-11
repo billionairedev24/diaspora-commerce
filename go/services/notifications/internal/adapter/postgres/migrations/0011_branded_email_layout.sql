@@ -1,4 +1,4 @@
--- S277: every email on the shared AfroTransact layout (internal/app/email/layout.html.tmpl): black header with the
+-- S279: every email on the shared AfroTransact layout (internal/app/email/layout.html.tmpl): black header with the
 -- logo, gold buttons, order packages with photos, totals and address, advertorials below the content, the WhatsApp
 -- community block and the footer with socials, app links, phone, address, preferences, unsubscribe and legal links.
 -- Bodies are content fragments (no <html>): the renderer wraps them; staff-created full documents still send as-is.

@@ -92,7 +92,7 @@ alerts for the SKU are claimed (`notified_event_id` = the event, so a redelivery
 prevents a second send) and `stock.back_in_stock` goes out by email (the alert's `email`, else identity's) and push.
 Table `stock_alert` (migration `0004`).
 
-## Email layout, brand and advertorials (S277)
+## Email layout, brand and advertorials (S279)
 
 Every email body is a **content fragment** rendered inside the shared layout `internal/app/email/layout.html.tmpl`
 (a body that is a complete HTML document is sent as-is). The layout is table-based with inline styles, 600 px max,

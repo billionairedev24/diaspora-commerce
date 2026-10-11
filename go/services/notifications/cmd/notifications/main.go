@@ -106,7 +106,7 @@ func run() error {
 		signingKey = "local-only-unsubscribe-key"
 	}
 	unsub := app.NewUnsubscriber(cfg.PublicBaseURL, cfg.Email.UnsubscribeMailto, []byte(signingKey))
-	// ---- email brand (site config) and advertorials (S277) ----
+	// ---- email brand (site config) and advertorials (S279) ----
 	links := app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub}
 	brand := sitecontent.New(cfg.Brand.SiteConfigURL, cfg.EmailBrand(), &http.Client{Timeout: 5 * time.Second}, log)
 	renderer := app.NewRenderer(app.WithBrand(brand))

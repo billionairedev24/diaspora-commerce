@@ -44,7 +44,7 @@ var (
 )
 
 // TestEveryEmailRendersOnTheBrandedLayout renders every seeded email template with its sample data and checks the
-// S277 rules: the shared layout (logo, footer, socials, WhatsApp community), alt text on every image, hosted PNGs
+// S279 rules: the shared layout (logo, footer, socials, WhatsApp community), alt text on every image, hosted PNGs
 // only, no external CSS or scripts, unsubscribe on promotional emails, no advertorials in security emails, under
 // Gmail's ~102 KB clipping limit, and the golden file (go test ./internal/app -run Branded -update rewrites them).
 func TestEveryEmailRendersOnTheBrandedLayout(t *testing.T) {

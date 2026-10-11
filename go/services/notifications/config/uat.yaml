@@ -112,7 +112,7 @@ providers:
   fcm: {projectId: ""}
   apns: {keyId: "", teamId: "", bundleId: com.afrotransact.customer, production: false}
   whatsapp: {phoneNumberId: "", apiVersion: v21.0}
-# Email layout (S277): logo, social icons and store badges are PNGs under assetBaseUrl (default
+# Email layout (S279): logo, social icons and store badges are PNGs under assetBaseUrl (default
 # <links.storefront>/email = web/apps/storefront/public/email). Footer socials, the WhatsApp community link, app links,
 # phone, address and legal links come from content's site config (siteConfigUrl, refreshed every refresh).
 brand:

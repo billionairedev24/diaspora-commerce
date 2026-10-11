@@ -112,7 +112,7 @@ final class SiteDtos {
                             List<IdentityProviderDto> identityProviders, List<LocaleDto> locales, MarketDto market,
                             AppLinksDto appLinks, List<String> paymentMethods, String smsProgramName,
                             Instant updatedAt,
-                            @Schema(description = "WhatsApp community invite shown in email footers (S277)")
+                            @Schema(description = "WhatsApp community invite shown in email footers (S279)")
                             String whatsappCommunityUrl) {
 
         static PublicSiteConfig of(PublishedSiteConfig p) {

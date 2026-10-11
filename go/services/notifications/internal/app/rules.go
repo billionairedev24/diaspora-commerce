@@ -492,7 +492,7 @@ func enrichBooking(d map[string]any, _ Links) {
 	if s := str(d, "startsAt"); s != "" {
 		d["startsAt"] = smsSafeDisplay(s)
 	}
-	// Booking card fields (S277): provider photo when the producer sends one, else the provider's initials.
+	// Booking card fields (S279): provider photo when the producer sends one, else the provider's initials.
 	nullable(d, "providerPhotoUrl", "location")
 	if !domain.SafeURL(str(d, "providerPhotoUrl")) {
 		d["providerPhotoUrl"] = ""
