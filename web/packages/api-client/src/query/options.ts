@@ -1,4 +1,4 @@
-import { keepPreviousData, queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type ApiClient } from '../client';
 import { type LegalDocumentKey } from '../schemas/legal';
@@ -34,6 +34,15 @@ export const productQueries = {
 export const searchQueries = {
   results: (api: ApiClient, query: SearchQuery) =>
     queryOptions({ queryKey: searchKeys.result(query), queryFn: ({ signal }) => api.search(query, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
+  /** The storefront's results list: page 0 first, the next page whenever the shopper nears the end (no page numbers). */
+  infiniteResults: (api: ApiClient, query: SearchQuery) =>
+    infiniteQueryOptions({
+      queryKey: searchKeys.infinite(query),
+      queryFn: ({ pageParam, signal }) => api.search({ ...query, page: pageParam }, signal),
+      initialPageParam: 0,
+      getNextPageParam: (last) => (last.page + 1 < last.pageCount ? last.page + 1 : undefined),
+      staleTime: 30_000
+    }),
   suggestions: (api: ApiClient, q: string) =>
     queryOptions({ queryKey: searchKeys.suggestions(q), queryFn: ({ signal }) => api.suggest(q, signal), placeholderData: keepPreviousData, staleTime: MINUTE, enabled: q.trim().length > 0 }),
   addresses: (api: ApiClient, q: string) =>

@@ -2,10 +2,10 @@
 
 import { type FacetBucket, parseSearchUrl, PRICE_BUCKETS, type ProductSummary, type SearchQuery, type SearchSort } from '@afrotransact/api-client';
 import { Button, Skeleton, Stars } from '@afrotransact/ui';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
 import { type MessageKey, useT } from '@/i18n/t';
@@ -18,7 +18,7 @@ const SORTS: SearchSort[] = ['relevance', 'price_asc', 'price_desc', 'rating', '
 
 const countOf = (buckets: FacetBucket[] | undefined, value: string) => buckets?.find((b) => b.value === value)?.count;
 
-/** Search results: URL-synced filters and sort, facet counts from the API, pagination with keepPreviousData. */
+/** Search results: URL-synced filters and sort, facet counts from the API; more results load as the shopper scrolls. */
 export function SearchResults() {
   const t = useT();
   const params = useSearchParams();
@@ -29,7 +29,22 @@ export function SearchResults() {
   const [optimistic, setOptimistic] = useState<SearchQuery | null>(null);
   useEffect(() => setOptimistic(null), [urlQuery]);
   const query = optimistic ?? urlQuery;
-  const { data, isFetching, isPlaceholderData, isError, refetch, isPending } = useQuery(searchQueries.results(api, urlQuery));
+  const results = useInfiniteQuery(searchQueries.infiniteResults(api, urlQuery));
+  const { isFetching, isError, refetch, isPending, hasNextPage, fetchNextPage, isFetchingNextPage, isFetchNextPageError } = results;
+  // Facets, totals and the search id come from the first page; the grid shows every page loaded so far.
+  const data = results.data?.pages[0];
+  const hits = useMemo(() => results.data?.pages.flatMap((pg) => pg.hits) ?? [], [results.data]);
+  const sentinel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !hasNextPage || isFetchNextPageError) return;
+    // Start loading well before the end of the grid so scrolling never hits a wall.
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
+    }, { rootMargin: '800px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
   const [filtersOpen, setFiltersOpen] = useState(false);
   // Result clicks feed search analytics and charge sponsored products (S240); fire and forget.
@@ -46,8 +61,8 @@ export function SearchResults() {
 
   const f = data?.facets;
   const total = data?.total ?? 0;
-  const from = total ? (data?.page ?? 0) * query.size + 1 : 0;
-  const to = Math.min(total, from + (data?.hits.length ?? 0) - 1);
+  const from = total ? 1 : 0;
+  const to = Math.min(total, hits.length);
   const resultsFor = query.q ? `"${query.q}"` : query.department ?? query.community ?? t('results.allProducts');
 
   const radio = (name: string, value: string | null, current: string | null, labelText: string, count: number | undefined, onPick: () => void) => (
@@ -174,13 +189,13 @@ export function SearchResults() {
               <strong>{t('results.empty')}</strong> {t('results.emptyHint')}
             </div>
           ) : (
-            <ul className={`${styles.grid} ${isPlaceholderData && isFetching ? styles.stale : ''}`} aria-busy={isFetching} data-testid="results-grid">
-              {data?.hits.map((p, i) => (
+            <ul className={`${styles.grid} ${isFetching && !isFetchingNextPage ? styles.stale : ''}`} aria-busy={isFetching} data-testid="results-grid">
+              {hits.map((p, i) => (
                 <li
                   key={p.atin}
                   style={{ display: 'grid' }}
                   onClickCapture={(e) => {
-                    if ((e.target as Element).closest('a')) reportClick(p, data.page * query.size + i + 1);
+                    if ((e.target as Element).closest('a')) reportClick(p, i + 1);
                   }}
                 >
                   <CartAwareProductCard product={p} />
@@ -188,21 +203,22 @@ export function SearchResults() {
               ))}
             </ul>
           )}
-          {data && data.pageCount > 1 && (
-            <nav className={styles.pager} aria-label={t('results.pagination')}>
-              <Link href={href({ page: Math.max(0, data.page - 1) })} className={`${styles.pageLink} ${data.page === 0 ? styles.pageDisabled : ''}`} aria-disabled={data.page === 0} scroll>
-                {t('results.previous')}
-              </Link>
-              {Array.from({ length: data.pageCount }, (_, i) => (
-                <Link key={i} href={href({ page: i })} className={styles.pageLink} aria-current={i === data.page ? 'page' : undefined} aria-label={t('results.page', { n: i + 1 })}>
-                  {i + 1}
-                </Link>
-              ))}
-              <Link href={href({ page: Math.min(data.pageCount - 1, data.page + 1) })} className={`${styles.pageLink} ${data.page >= data.pageCount - 1 ? styles.pageDisabled : ''}`} aria-disabled={data.page >= data.pageCount - 1}>
-                {t('results.next')}
-              </Link>
-            </nav>
-          )}
+          {hits.length > 0 && hasNextPage ? (
+            <div ref={sentinel} className={styles.more} aria-live="polite">
+              {isFetchNextPageError ? (
+                <>
+                  {t('results.moreError')}{' '}
+                  <button type="button" className="link-button" onClick={() => void fetchNextPage()}>
+                    {t('error.retry')}
+                  </button>
+                </>
+              ) : (
+                <span className={styles.moreLoading}>{t('results.loadingMore')}</span>
+              )}
+            </div>
+          ) : hits.length > 0 && total > query.size ? (
+            <p className={styles.more}>{t('results.end', { total })}</p>
+          ) : null}
         </div>
       </div>
     </div>

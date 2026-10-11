@@ -13,14 +13,14 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 export async function generateMetadata({ searchParams }: Props): Promise<Metadata> {
   const q = parseSearchUrl(await searchParams);
   const subject = q.q || q.department || q.community;
-  return { title: subject ? `${subject} — search` : 'Search', robots: q.page > 0 || q.sort !== 'relevance' ? { index: false } : undefined };
+  return { title: subject ? `${subject} — search` : 'Search', robots: q.sort !== 'relevance' ? { index: false } : undefined };
 }
 
-/** Search results — first page rendered on the server for SEO, then URL-driven on the client. */
+/** Search results: the first page rendered on the server for SEO, more loaded on the client as the shopper scrolls. */
 export default async function SearchPage({ searchParams }: Props) {
   const query = parseSearchUrl(await searchParams);
   const qc = getQueryClient();
-  await qc.prefetchQuery(searchQueries.results(await serverApi(), query));
+  await qc.prefetchInfiniteQuery(searchQueries.infiniteResults(await serverApi(), query));
   return (
     <HydrationBoundary state={dehydrate(qc)}>
       <Suspense>

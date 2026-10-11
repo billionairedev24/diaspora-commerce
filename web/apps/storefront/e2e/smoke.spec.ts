@@ -55,6 +55,24 @@ test('search results filter by fulfilment and sync to the URL', async ({ page })
   await expect(filters.getByRole('radio', { name: /Ships from seller/ })).toBeChecked();
 });
 
+test('search results load more as you scroll, without page numbers', async ({ page }) => {
+  await page.goto('/s');
+  const cards = page.getByTestId('results-grid').getByRole('article');
+  await expect(cards.first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /^Page \d+$/ })).toHaveCount(0);
+  const before = await cards.count();
+  await cards.last().scrollIntoViewIfNeeded();
+  await expect.poll(async () => cards.count()).toBeGreaterThan(before);
+  // Keep scrolling: the list ends with a "That's all" note once every result is loaded.
+  await expect
+    .poll(async () => {
+      await cards.last().scrollIntoViewIfNeeded();
+      return page.getByText(/That’s all \d+ results/).count();
+    }, { timeout: 30_000 })
+    .toBe(1);
+  await expect(page.getByText(/That’s all \d+ results/)).toContainText(String(await cards.count()));
+});
+
 test('PDP add to cart becomes a stepper and stops at stock', async ({ page }) => {
   await page.goto('/p/AT00000P18');
   const box = page.getByRole('complementary', { name: 'Buy box' });
