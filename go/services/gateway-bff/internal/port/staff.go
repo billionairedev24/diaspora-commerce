@@ -81,6 +81,20 @@ type ExportBlobStore interface {
 	SignedURL(ctx context.Context, bearer, ref, fileName string, expires time.Time) (string, error)
 }
 
+// ExportRenderer writes export files: CSV (data only), XLSX (a Data sheet plus a Summary sheet of native Excel charts)
+// and PDF (a summary page of charts and key totals, then the table in landscape with repeated headers).
+type ExportRenderer interface {
+	// Start begins a file of the format on out; add rows with Row and finish with Close.
+	Start(format string, meta domain.ExportMeta, out io.Writer) (ExportFileWriter, error)
+}
+
+// ExportFileWriter receives the rows of one export (cells in column order; money in currency units, dates as ISO
+// strings) and writes the rest of the file on Close.
+type ExportFileWriter interface {
+	Row(cells []any) error
+	Close() error
+}
+
 // LocalExportFiles is implemented by blob stores that serve files themselves (behind GET /v1/staff/export-files/{id}).
 type LocalExportFiles interface {
 	// Open checks the signature and expiry of a signed link and opens the file.

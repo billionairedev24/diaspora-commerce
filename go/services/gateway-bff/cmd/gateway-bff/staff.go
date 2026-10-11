@@ -27,8 +27,10 @@ type staffClients struct {
 // staffServices wires the staff console (contracts/openapi/gateway-bff-staff.yaml): shell, tables and sheets,
 // dashboard, exports, the support console, the fee-schedule editor, the seller pickups of dispatch and the
 // notification templates.
+// It also returns Seller Center's export stores (same job store, renderer and file directory; seller links are served by
+// /v1/seller/export-files/{id}).
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
-	cache port.Cache, log *slog.Logger) (httpapi.StaffServices, error) {
+	cache port.Cache, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
 	up := cfg.Upstreams
 	media := client("media", up.Media)
 	d := app.StaffDeps{
@@ -43,26 +45,35 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Media: upstreams.NewStaffUpstream(media), Geo: upstreams.NewStaffUpstream(client("geo", up.Geo)),
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
-		Jobs: valkey.NewExportJobs(rdb), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
+		Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
 	}
 	out := httpapi.StaffServices{}
+	seller := app.ExportDeps{Jobs: d.Jobs, Renderer: d.Renderer, BasePath: cfg.Web.BFFPath}
+	var sellerFiles port.LocalExportFiles
 	switch cfg.Staff.ExportStore {
 	case "media":
 		d.Blobs = upstreams.NewMediaExports(media, nil)
+		seller.Blobs = d.Blobs
 	case "", "local":
 		files, err := exportfiles.NewLocal(exportfiles.Options{Dir: cfg.Staff.ExportDir, SigningKey: cfg.Session.SigningKey, BasePath: cfg.Web.BFFPath})
 		if err != nil {
-			return out, fmt.Errorf("staff export store: %w", err)
+			return out, seller, nil, fmt.Errorf("staff export store: %w", err)
+		}
+		sf, err := exportfiles.NewLocal(exportfiles.Options{Dir: cfg.Staff.ExportDir, SigningKey: cfg.Session.SigningKey, BasePath: cfg.Web.BFFPath,
+			FilesPath: "/v1/seller/export-files/"})
+		if err != nil {
+			return out, seller, nil, fmt.Errorf("seller export store: %w", err)
 		}
 		d.Blobs, out.Files = files, files
+		seller.Blobs, sellerFiles = sf, sf
 	default:
-		return out, fmt.Errorf("staff export store %q: use local or media", cfg.Staff.ExportStore)
+		return out, seller, nil, fmt.Errorf("staff export store %q: use local or media", cfg.Staff.ExportStore)
 	}
 	out.Shell, out.Records, out.Dashboard = app.NewStaffShellService(d), app.NewStaffRecordsService(d), app.NewStaffDashboardService(d)
 	out.Exports, out.Support, out.Fees = app.NewStaffExportsService(d), app.NewStaffSupportService(d), app.NewStaffFeesService(d)
 	out.Dispatch, out.Notifications = app.NewStaffDispatchService(d), app.NewStaffNotificationsService(d)
 	out.Preorders = app.NewStaffPreordersService(d)
-	return out, nil
+	return out, seller, sellerFiles, nil
 }
 
 // serveStaffSpec publishes the staff contract next to /openapi.yaml.

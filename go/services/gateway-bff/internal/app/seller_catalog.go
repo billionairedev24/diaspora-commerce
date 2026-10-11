@@ -14,7 +14,8 @@ import (
 // SellerCatalogService serves the listings table, the 4-step product builder (category tree, product-type schema,
 // GTIN checks, category requests, uploads, submit) and stock (FBA positions, seller stock adjustments).
 type SellerCatalogService interface {
-	Listings(ctx context.Context, c *domain.Caller, status, q string, page, size int) (domain.ListingPage, error)
+	// Listings is the listings table: one search over every column, any sort, status (links), page and size.
+	Listings(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.ListingPage, error)
 	SetActive(ctx context.Context, c *domain.Caller, productID string, active bool) (domain.ListingRow, error)
 	Submit(ctx context.Context, c *domain.Caller, d domain.ProductDraft) (domain.ListingRow, error)
 	Categories(ctx context.Context, c *domain.Caller) ([]domain.CategoryNode, error)
@@ -28,13 +29,17 @@ type SellerCatalogService interface {
 	AdjustStock(ctx context.Context, c *domain.Caller, idempotencyKey, sku string, quantity int, reason string) (domain.StockAdjustment, error)
 }
 
-type sellerCatalogImpl struct{ r *orgResolver }
+type sellerCatalogImpl struct {
+	r     *orgResolver
+	cache *scanCache[domain.ListingRow]
+}
 
 var _ SellerCatalogService = (*sellerCatalogImpl)(nil)
 
 // NewSellerCatalogService returns the SellerCatalogService.
 func NewSellerCatalogService(d SellerDeps) SellerCatalogService {
-	return &sellerCatalogImpl{r: newResolver(d)}
+	r := newResolver(d)
+	return &sellerCatalogImpl{r: r, cache: newScanCache[domain.ListingRow](r.d.clock())}
 }
 
 func listingOf(p port.CatalogOwnProduct) domain.ListingRow {
@@ -59,38 +64,76 @@ func listingOf(p port.CatalogOwnProduct) domain.ListingRow {
 	return row
 }
 
-func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, status, q string, page, size int) (domain.ListingPage, error) {
+func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.ListingPage, error) {
 	errs := map[string]string{}
-	if status != "" && !domain.IsListingStatus(status) {
+	if q.Status != "" && !domain.IsListingStatus(q.Status) {
 		errs["status"] = "Unknown status"
 	}
-	if size == 0 {
-		size = 25
+	if q.Size == 0 {
+		q.Size = 25
 	}
-	if page < 0 {
+	if q.Page < 0 {
 		errs["page"] = "Must be 0 or more"
 	}
-	if size < 1 || size > 100 {
+	if q.Size < 1 || q.Size > 100 {
 		errs["size"] = "Between 1 and 100"
 	}
 	if len(errs) > 0 {
 		return domain.ListingPage{}, domain.ValidationProblem(errs)
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	sort, err := q.sort(SellerListingColumns)
+	if err != nil {
 		return domain.ListingPage{}, err
 	}
-	p, err := s.r.d.Catalog.Products(ctx, c.BearerToken, port.ProductQuery{Status: status, Q: strings.TrimSpace(q), Page: page, Size: size})
+	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView)
 	if err != nil {
-		return domain.ListingPage{}, mapErr("catalog", err)
+		return domain.ListingPage{}, err
 	}
-	out := domain.ListingPage{Items: []domain.ListingRow{}, Total: p.Total, Page: page, Size: size}
-	for _, it := range p.Items {
-		out.Items = append(out.Items, listingOf(it))
+	if strings.TrimSpace(q.Q) == "" && len(sort) == 0 {
+		p, err := s.r.d.Catalog.Products(ctx, c.BearerToken, port.ProductQuery{Status: q.Status, Page: q.Page, Size: q.Size})
+		if err != nil {
+			return domain.ListingPage{}, mapErr("catalog", err)
+		}
+		out := domain.ListingPage{Items: []domain.ListingRow{}, Total: p.Total, Page: q.Page, Size: q.Size, Sort: []string{}}
+		for _, it := range p.Items {
+			out.Items = append(out.Items, listingOf(it))
+		}
+		return out, nil
 	}
-	return out, nil
+	// Search over every column and any sort: the BFF reads the organisation's listings and pages them.
+	rows, partial, err := s.cache.load(sc.member.ID+"@"+sc.org.ID, "listings", q.Status, func() ([]domain.ListingRow, bool, error) {
+		return s.scanListings(ctx, c.BearerToken, q.Status, domain.TableScanMaxRows)
+	})
+	if err != nil {
+		return domain.ListingPage{}, err
+	}
+	picked := pickRows(rows, SellerListingColumns, sellerListingRowCells, q.Q, nil, sort)
+	items, _ := pageSlice(picked, q.Page*q.Size, q.Size)
+	return domain.ListingPage{Items: items, Total: int64(len(picked)), Page: q.Page, Size: q.Size, Sort: domain.SortStrings(sort), Partial: partial}, nil
+}
+
+// scanListings reads up to limit of the organisation's listings.
+func (s *sellerCatalogImpl) scanListings(ctx context.Context, bearer, status string, limit int) ([]domain.ListingRow, bool, error) {
+	out := []domain.ListingRow{}
+	for page := 0; ; page++ {
+		p, err := s.r.d.Catalog.Products(ctx, bearer, port.ProductQuery{Status: status, Page: page, Size: exportPageSize})
+		if err != nil {
+			return nil, false, mapErr("catalog", err)
+		}
+		for _, it := range p.Items {
+			if len(out) == limit {
+				return out, true, nil
+			}
+			out = append(out, listingOf(it))
+		}
+		if len(p.Items) == 0 || int64((page+1)*exportPageSize) >= p.Total {
+			return out, false, nil
+		}
+	}
 }
 
 func (s *sellerCatalogImpl) SetActive(ctx context.Context, c *domain.Caller, productID string, active bool) (domain.ListingRow, error) {
+	defer s.cache.drop("listings")
 	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
 		return domain.ListingRow{}, err
 	}
@@ -102,6 +145,7 @@ func (s *sellerCatalogImpl) SetActive(ctx context.Context, c *domain.Caller, pro
 }
 
 func (s *sellerCatalogImpl) Submit(ctx context.Context, c *domain.Caller, d domain.ProductDraft) (domain.ListingRow, error) {
+	defer s.cache.drop("listings")
 	if errs := d.Validate(); len(errs) > 0 {
 		return domain.ListingRow{}, domain.ValidationProblem(errs)
 	}

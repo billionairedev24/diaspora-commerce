@@ -4,10 +4,13 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/exportfiles"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/memcache"
@@ -150,6 +153,13 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 		SellerOffers:    app.NewSellerOffersService(sellerDeps),
+	}
+	// Seller Center exports: the BFF's own file store (signed links served by /v1/seller/export-files/{id}).
+	if files, err := exportfiles.NewLocal(exportfiles.Options{Dir: filepath.Join(os.TempDir(), "gateway-bff-testkit-exports"), SigningKey: "testkit",
+		BasePath: "/api/bff", FilesPath: "/v1/seller/export-files/", Now: clock.Now}); err == nil {
+		services.SellerExports = app.NewSellerExportsService(sellerDeps, app.ExportDeps{Jobs: exportfiles.NewMemoryJobs(), Blobs: files,
+			Renderer: exportfiles.NewRenderer(), BasePath: "/api/bff", Background: func(fn func()) { fn() }})
+		services.SellerExportFiles = files
 	}
 	services.Shopper = shopperServices(u, client, identity, services, clock, log)
 	mux := http.NewServeMux()

@@ -3,8 +3,10 @@ package httpapi
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
 
@@ -50,6 +52,14 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/uploads/{assetId}/complete", h.completeUpload)
 	route("GET /v1/seller/inventory", h.inventory)
 	route("POST /v1/seller/inventory/adjustments", h.adjustStock)
+	// Exports (every table: CSV, Excel with charts, PDF with charts)
+	if h.s.SellerExports != nil {
+		route("GET /v1/seller/exports", h.sellerExports)
+		route("POST /v1/seller/exports", h.sellerCreateExport)
+		route("GET /v1/seller/exports/{exportId}", h.sellerExport)
+		route("GET /v1/seller/exports/{exportId}/download", h.sellerDownload)
+		route("GET /v1/seller/export-files/{exportId}", h.sellerExportFile)
+	}
 	// Money
 	route("GET /v1/seller/payouts", h.payouts)
 	route("POST /v1/seller/payouts", h.requestPayout)
@@ -145,7 +155,8 @@ func (h *handlersImpl) sellerOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	v, err := h.s.SellerOrders.List(r.Context(), callerFrom(r.Context()), q.Get("status"), q.Get("cursor"), limit)
+	v, err := h.s.SellerOrders.List(r.Context(), callerFrom(r.Context()), app.SellerTableQuery{Q: strings.TrimSpace(q.Get("q")), Status: q.Get("status"),
+		Cursor: q.Get("cursor"), Sort: q["sort"], Size: limit})
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -209,7 +220,8 @@ func (h *handlersImpl) listings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	v, err := h.s.SellerCatalog.Listings(r.Context(), callerFrom(r.Context()), q.Get("status"), q.Get("q"), page, size)
+	v, err := h.s.SellerCatalog.Listings(r.Context(), callerFrom(r.Context()), app.SellerTableQuery{Q: strings.TrimSpace(q.Get("q")), Status: q.Get("status"),
+		Sort: q["sort"], Page: page, Size: size})
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -598,4 +610,47 @@ func (h *handlersImpl) offerFulfilment(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.SellerOffers.SetFulfilment(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- exports
+
+func (h *handlersImpl) sellerExports(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerExports.List(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) sellerCreateExport(w http.ResponseWriter, r *http.Request) {
+	var b app.ExportRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, ready, err := h.s.SellerExports.Create(r.Context(), callerFrom(r.Context()), b)
+	status := http.StatusAccepted
+	if ready {
+		status = http.StatusCreated
+	}
+	h.reply(w, r, status, v, err)
+}
+
+func (h *handlersImpl) sellerExport(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerExports.Get(r.Context(), callerFrom(r.Context()), r.PathValue("exportId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerDownload(w http.ResponseWriter, r *http.Request) {
+	u, err := h.s.SellerExports.Download(r.Context(), callerFrom(r.Context()), r.PathValue("exportId"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.finish(w, callerFrom(r.Context()))
+	w.Header().Set("Cache-Control", "no-store")
+	// The location is a link signed by the BFF's export store or media-service, never request input.
+	w.Header().Set("Location", u)
+	w.WriteHeader(http.StatusFound)
+}
+
+func (h *handlersImpl) sellerExportFile(w http.ResponseWriter, r *http.Request) {
+	h.serveExportFile(w, r, h.s.SellerExportFiles)
 }

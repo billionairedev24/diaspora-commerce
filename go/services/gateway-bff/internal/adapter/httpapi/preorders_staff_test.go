@@ -114,7 +114,10 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/preorders/win-7/publish":
 		problemDetail(w, 422, "delivery-runs.publish-checks-failed", "2 checks to fix")
 	case strings.HasSuffix(p, "/orders"):
-		writeJ(w, 200, []any{map[string]any{"number": "LBK-1001", "customer": "Amara Nwosu", "status": "PAID", "channel": "INSTAGRAM"}})
+		writeJ(w, 200, []any{map[string]any{"orderId": "ord-1", "number": "LBK-1001", "customerName": "Amara Nwosu", "status": "PAID", "channel": "INSTAGRAM",
+			"total": 2598, "placedAt": "2026-10-01T15:00:00Z"},
+			map[string]any{"orderId": "ord-2", "number": "LBK-1002", "customerName": "Bola Ade", "status": "LATE_ADD", "channel": "WHATSAPP", "total": 1299,
+				"placedAt": "2026-10-02T15:00:00Z"}})
 	case strings.HasSuffix(p, "/products"):
 		writeJ(w, 200, []any{map[string]any{"atin": "ATGARI0001", "name": "Gari 1kg", "price": 899, "sellerName": "AfroTransact Retail"}})
 	case strings.HasSuffix(p, "/summary"):
@@ -158,7 +161,7 @@ func preorderStaffBFF(t *testing.T) (*fakeDeliveryRuns, func(token, method, path
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), DeliveryRuns: up("delivery-runs"), Media: up("media"), Geo: up("geo")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
-		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Log: log, Background: func(fn func()) { fn() }}
+		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Renderer: exportfiles.NewRenderer(), Log: log, Background: func(fn func()) { fn() }}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
 		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Preorders: app.NewStaffPreordersService(d)}
 	mux := http.NewServeMux()
@@ -296,6 +299,25 @@ func TestStaffPreordersConformance(t *testing.T) {
 	if items := jsonOf(t, do("cs", "GET", "/v1/staff/preorders/win-7/orders?status=PAID&q=amara", nil, 200))["items"].([]any); len(items) != 1 {
 		t.Fatalf("orders = %v", items)
 	}
+	// One search over every column (channel, status label, total as text) and any sort; the BFF pages the result.
+	for q, want := range map[string]string{"whatsapp": "LBK-1002", "late+add": "LBK-1002", "25.98": "LBK-1001", "oct+1,+2026": "LBK-1001"} {
+		page := jsonOf(t, do("cs", "GET", "/v1/staff/preorders/win-7/orders?q="+q, nil, 200))
+		if items := page["items"].([]any); len(items) != 1 || items[0].(map[string]any)["number"] != want || page["total"].(float64) != 1 {
+			t.Fatalf("q=%s → %v", q, page)
+		}
+	}
+	if page := jsonOf(t, do("cs", "GET", "/v1/staff/preorders/win-7/orders?sort=total,asc", nil, 200)); page["items"].([]any)[0].(map[string]any)["number"] != "LBK-1002" {
+		t.Fatalf("sorted = %v", page)
+	}
+	do("cs", "GET", "/v1/staff/preorders/win-7/orders?sort=secret,asc", nil, 422)
+	// The orders table exports through the shared pipeline (pre-order export permission).
+	job := jsonOf(t, do("finance", "POST", "/v1/staff/exports", map[string]any{"table": "preorder-orders", "parent": "win-7", "format": "xlsx",
+		"q": "lbk", "sort": []string{"total,desc"}, "columns": []string{"number", "customerName", "total", "status"}}, 201))
+	if job["rows"].(float64) != 2 || job["resource"] != "preorder-orders" {
+		t.Fatalf("preorder orders export = %v", job)
+	}
+	do("cs", "POST", "/v1/staff/exports", map[string]any{"table": "preorder-orders", "parent": "win-7", "format": "csv"}, 403)
+	do("finance", "POST", "/v1/staff/exports", map[string]any{"table": "preorder-orders", "parent": "../x", "format": "csv"}, 422)
 	do("finance", "GET", "/v1/staff/preorders/win-7/summary", nil, 200)
 	csv := do("finance", "GET", "/v1/staff/preorders/win-7/exports/orders-filtered.csv?status=PAID", nil, 200)
 	if !strings.HasPrefix(csv.Header().Get("Content-Type"), "text/csv") || !strings.Contains(csv.Body.String(), "LBK-1001") ||

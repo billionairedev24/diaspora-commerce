@@ -39,6 +39,10 @@ type Services struct {
 	SellerShipFrom  app.SellerShipFromService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.
 	SellerOffers app.SellerOffersService
+	// SellerExports exports Seller Center tables; SellerExportFiles serves the files the BFF keeps itself (nil when
+	// exports live in media). Routes are registered when SellerExports is set.
+	SellerExports     app.SellerExportsService
+	SellerExportFiles port.LocalExportFiles
 	// Storefront account, checkout payment, services, Lola (handlers_shopper.go); routes are registered when set.
 	Shopper ShopperServices
 	// Staff console (handlers_staff.go, contracts/openapi/gateway-bff-staff.yaml); routes are registered when set.

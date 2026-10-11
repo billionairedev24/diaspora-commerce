@@ -141,6 +141,10 @@ type SellerOrderPage struct {
 	Items      []SellerOrderRow `json:"items"`
 	NextCursor *string          `json:"nextCursor"`
 	Total      int64            `json:"total"`
+	// Sort is the applied sort (`<column>,asc|desc`).
+	Sort []string `json:"sort"`
+	// Partial is true when the search or sort covered the first TableScanMaxRows rows only.
+	Partial bool `json:"partial"`
 }
 
 // SellerAddress is a postal address (ship-to, ship-from).
@@ -293,6 +297,10 @@ type ListingPage struct {
 	Total int64        `json:"total"`
 	Page  int          `json:"page"`
 	Size  int          `json:"size"`
+	// Sort is the applied sort (`<column>,asc|desc`).
+	Sort []string `json:"sort"`
+	// Partial is true when the search or sort covered the first TableScanMaxRows rows only.
+	Partial bool `json:"partial"`
 }
 
 // CategoryNode is a node of the nested category tree.

@@ -130,6 +130,55 @@ func TestSellerContractConformance(t *testing.T) {
 	// Listings and the product builder.
 	mustStatus(t, b.do("GET", "/v1/seller/listings?page=0&size=25", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/listings?status=NOPE", nil), 422)
+	// One search over every column (buyer, total as text, status label …) and any sort; the BFF pages the result.
+	for q, want := range map[string]int{"adaeze": 1, "54.37": 1, "you+ship": 1, "ofada+houston": 1, "zzz": 0} {
+		r := b.do("GET", "/v1/seller/orders?q="+q+"&limit=20", nil)
+		if r.status != 200 || len(r.json(t)["items"].([]any)) != want || num(r.json(t), "total") != want {
+			t.Fatalf("orders q=%s = %d %s", q, r.status, r.body)
+		}
+	}
+	if r := b.do("GET", "/v1/seller/orders?sort=totalMinor,desc&sort=placedAt&limit=20", nil); r.status != 200 ||
+		fmt.Sprint(r.json(t)["sort"]) != "[totalMinor,desc placedAt,asc]" || r.json(t)["partial"] != false {
+		t.Fatalf("sorted orders = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/orders?sort=nope,asc", nil), 422)
+	if r := b.do("GET", "/v1/seller/listings?q=ofada&sort=priceMinor,desc", nil); r.status != 200 || num(r.json(t), "total") != 1 {
+		t.Fatalf("listings q = %d %s", r.status, r.body)
+	}
+	// Exports of the active organisation: Excel with charts, PDF, CSV; client-side tables send their rows.
+	job := b.do("POST", "/v1/seller/exports", map[string]any{"table": "orders", "format": "xlsx", "q": "adaeze", "sort": []string{"totalMinor,desc"},
+		"columns": []string{"orderNumber", "buyerName", "totalMinor", "placedAt", "status"}})
+	if job.status != 201 || job.json(t)["status"] != "READY" || num(job.json(t), "rows") != 1 || job.json(t)["title"] != "Orders" {
+		t.Fatalf("orders export = %d %s", job.status, job.body)
+	}
+	exportID := job.json(t)["id"].(string)
+	mustStatus(t, b.do("GET", "/v1/seller/exports/"+exportID, nil), 200)
+	if r := b.do("GET", "/v1/seller/exports", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 1 {
+		t.Fatalf("seller exports = %d %s", r.status, r.body)
+	}
+	dl := b.do("GET", "/v1/seller/exports/"+exportID+"/download", nil)
+	if dl.status != 302 || !strings.HasPrefix(dl.header.Get("Location"), "/api/bff/v1/seller/export-files/"+exportID+"?") {
+		t.Fatalf("download = %d %v", dl.status, dl.header)
+	}
+	if f := b.do("GET", strings.TrimPrefix(dl.header.Get("Location"), "/api/bff"), nil); f.status != 200 || !bytes.HasPrefix(f.body, []byte("PK")) ||
+		!strings.Contains(f.header.Get("Content-Disposition"), "orders-") {
+		t.Fatalf("export file = %d %v", f.status, f.header)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/export-files/"+exportID+"?expires=9999999999&sig=bad", nil), 403)
+	mustStatus(t, b.do("GET", "/v1/seller/exports/exp_unknown", nil), 404)
+	if r := b.do("POST", "/v1/seller/exports", map[string]any{"table": "listings", "format": "pdf", "ids": []string{"prod-1"}}); r.status != 201 || num(r.json(t), "rows") != 1 {
+		t.Fatalf("listings pdf = %d %s", r.status, r.body)
+	}
+	inline := map[string]any{"format": "csv", "dataset": map[string]any{"table": "payouts", "title": "Payouts",
+		"columns": []map[string]any{{"key": "id", "label": "Payout", "kind": "mono"}, {"key": "amount", "label": "Amount", "kind": "money"}},
+		"rows":    [][]any{{"po-1", 120.5}, {"po-2", nil}}}}
+	if r := b.do("POST", "/v1/seller/exports", inline); r.status != 201 || num(r.json(t), "rows") != 2 || r.json(t)["resource"] != "payouts" {
+		t.Fatalf("dataset export = %d %s", r.status, r.body)
+	}
+	inline["format"] = "docx"
+	mustStatus(t, b.do("POST", "/v1/seller/exports", inline), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/exports", map[string]any{"table": "team", "format": "csv"}), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/exports", map[string]any{"table": "orders", "format": "csv", "sort": []string{"nope"}}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/listings/prod-1/status", map[string]any{"active": false}), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/categories", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/catalog/product-types/grocery", nil), 200)

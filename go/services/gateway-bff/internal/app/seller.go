@@ -37,6 +37,14 @@ type SellerDeps struct {
 	Log       *slog.Logger
 }
 
+// clock is the configured clock (time.Now by default).
+func (d SellerDeps) clock() Clock {
+	if d.Clock == nil {
+		return time.Now
+	}
+	return d.Clock
+}
+
 // sellerCtx is the member, the active organisation and the role's access in it.
 type sellerCtx struct {
 	member   port.Member

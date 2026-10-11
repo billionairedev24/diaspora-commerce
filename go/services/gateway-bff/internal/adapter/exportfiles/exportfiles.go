@@ -1,5 +1,7 @@
-// Package exportfiles stores the staff console's server-side exports: a file store on the BFF's disk (default) that
-// serves files behind HMAC-signed, expiring links, and an in-memory job store for tests and single-replica runs.
+// Package exportfiles builds and stores server-side table exports (staff console and Seller Center): the renderer
+// (CSV, XLSX with a Summary sheet of native Excel charts, PDF with a summary page of charts), a file store on the BFF's
+// disk (default) that serves files behind HMAC-signed, expiring links, and an in-memory job store for tests and
+// single-replica runs.
 package exportfiles
 
 import (
@@ -38,11 +40,12 @@ var (
 )
 
 type localImpl struct {
-	dir      string
-	key      []byte
-	basePath string
-	now      func() time.Time
-	mu       sync.Mutex
+	dir       string
+	key       []byte
+	basePath  string
+	filesPath string
+	now       func() time.Time
+	mu        sync.Mutex
 }
 
 var _ Store = (*localImpl)(nil)
@@ -53,9 +56,12 @@ type Options struct {
 	Dir string
 	// SigningKey signs download links (secret; the BFF session signing key is fine).
 	SigningKey string
-	// BasePath prefixes signed links as the browser sees them (the console's /api/bff proxy).
+	// BasePath prefixes signed links as the browser sees them (the app's /api/bff proxy).
 	BasePath string
-	Now      func() time.Time
+	// FilesPath is the BFF route that serves the files (default /v1/staff/export-files/; Seller Center uses
+	// /v1/seller/export-files/). Stores of both portals may share Dir and SigningKey.
+	FilesPath string
+	Now       func() time.Time
 }
 
 // NewLocal returns the disk-backed export store.
@@ -69,8 +75,11 @@ func NewLocal(o Options) (Store, error) {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
+	if o.FilesPath == "" {
+		o.FilesPath = "/v1/staff/export-files/"
+	}
 	key := sha256.Sum256([]byte("gateway-bff/staff-exports/v1:" + o.SigningKey))
-	return &localImpl{dir: o.Dir, key: key[:], basePath: strings.TrimSuffix(o.BasePath, "/"), now: o.Now}, nil
+	return &localImpl{dir: o.Dir, key: key[:], basePath: strings.TrimSuffix(o.BasePath, "/"), filesPath: "/" + strings.Trim(o.FilesPath, "/") + "/", now: o.Now}, nil
 }
 
 var safeID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
@@ -139,7 +148,7 @@ func (l *localImpl) sign(id string, expires int64) string {
 func (l *localImpl) SignedURL(_ context.Context, _, ref, _ string, expires time.Time) (string, error) {
 	exp := expires.Unix()
 	q := url.Values{"expires": {strconv.FormatInt(exp, 10)}, "sig": {l.sign(ref, exp)}}
-	return l.basePath + "/v1/staff/export-files/" + url.PathEscape(ref) + "?" + q.Encode(), nil
+	return l.basePath + l.filesPath + url.PathEscape(ref) + "?" + q.Encode(), nil
 }
 
 func (l *localImpl) Open(_ context.Context, id string, expires int64, sig string) (io.ReadCloser, string, error) {

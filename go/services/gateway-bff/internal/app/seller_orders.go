@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -13,20 +14,25 @@ import (
 // SellerOrdersService serves the orders table and sheet: the shipment queue, order detail, seller status updates
 // (confirm, pack, ready only) and shipping labels bought through carrier-gateway.
 type SellerOrdersService interface {
-	List(ctx context.Context, c *domain.Caller, status, cursor string, limit int) (domain.SellerOrderPage, error)
+	// List is the shipment queue: one search over every column, any sort, status (links), cursor and size (limit).
+	List(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.SellerOrderPage, error)
 	Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error)
 	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error)
 	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error)
 	BuyLabel(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error)
 }
 
-type sellerOrdersImpl struct{ r *orgResolver }
+type sellerOrdersImpl struct {
+	r     *orgResolver
+	cache *scanCache[domain.SellerOrderRow]
+}
 
 var _ SellerOrdersService = (*sellerOrdersImpl)(nil)
 
 // NewSellerOrdersService returns the SellerOrdersService.
 func NewSellerOrdersService(d SellerDeps) SellerOrdersService {
-	return &sellerOrdersImpl{r: newResolver(d)}
+	r := newResolver(d)
+	return &sellerOrdersImpl{r: r, cache: newScanCache[domain.SellerOrderRow](r.d.clock())}
 }
 
 func fulfilmentOf(t string) string {
@@ -102,43 +108,93 @@ func orderOf(o port.OrderView) domain.SellerOrderDetail {
 	return out
 }
 
-func (s *sellerOrdersImpl) List(ctx context.Context, c *domain.Caller, status, cursor string, limit int) (domain.SellerOrderPage, error) {
-	if status != "" && !domain.IsShipmentStatus(status) {
+func (s *sellerOrdersImpl) List(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.SellerOrderPage, error) {
+	if q.Status != "" && !domain.IsShipmentStatus(q.Status) {
 		return domain.SellerOrderPage{}, domain.ValidationProblem(map[string]string{"status": "Unknown status"})
 	}
-	if limit <= 0 {
-		limit = 20
+	if q.Size <= 0 {
+		q.Size = 20
 	}
-	if limit > 100 {
+	if q.Size > 100 {
 		return domain.SellerOrderPage{}, domain.ValidationProblem(map[string]string{"limit": "At most 100"})
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView); err != nil {
+	sort, err := q.sort(SellerOrderColumns)
+	if err != nil {
 		return domain.SellerOrderPage{}, err
 	}
-	q, err := s.r.d.Orders.Queue(ctx, c.BearerToken, strings.ToLower(status), cursor, limit)
+	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView)
 	if err != nil {
-		return domain.SellerOrderPage{}, mapErr("orders", err)
+		return domain.SellerOrderPage{}, err
 	}
-	out := domain.SellerOrderPage{Items: []domain.SellerOrderRow{}, NextCursor: q.NextCursor, Total: q.Total}
-	for _, it := range q.Items {
-		sh := shipmentOf(it.Shipment)
-		count := 0
-		for _, l := range sh.Lines {
-			count += l.Quantity
+	if strings.TrimSpace(q.Q) == "" && len(sort) == 0 {
+		// Upstream order (newest first) and cursors.
+		page, err := s.r.d.Orders.Queue(ctx, c.BearerToken, strings.ToLower(q.Status), q.Cursor, q.Size)
+		if err != nil {
+			return domain.SellerOrderPage{}, mapErr("orders", err)
 		}
-		row := domain.SellerOrderRow{OrderNumber: it.OrderNumber, ShipmentID: sh.ShipmentID, PlacedAt: it.PlacedAt, ItemsSummary: it.Shipment.Items,
-			ItemCount: max(count, 1), TotalMinor: sh.TotalMinor, Currency: domain.Currency, Fulfilment: sh.Fulfilment, Status: sh.Status,
-			StatusLabel: sh.StatusLabel, Carrier: sh.Carrier, TrackingNumber: sh.TrackingNumber, NextActions: sh.NextActions, CanBuyLabel: sh.CanBuyLabel}
-		if it.ShipTo != nil {
-			row.BuyerName = it.ShipTo.FullName
-			row.ShipTo = strings.TrimSuffix(it.ShipTo.City+", "+it.ShipTo.State, ", ")
+		out := domain.SellerOrderPage{Items: []domain.SellerOrderRow{}, NextCursor: page.NextCursor, Total: page.Total, Sort: []string{}}
+		for _, it := range page.Items {
+			out.Items = append(out.Items, sellerOrderRowOf(it))
 		}
-		if row.ItemsSummary == "" && len(sh.Lines) > 0 {
-			row.ItemsSummary = sh.Lines[0].Title
-		}
-		out.Items = append(out.Items, row)
+		return out, nil
+	}
+	// Search over every column and any sort: the BFF reads the queue and pages it (cursor = offset).
+	rows, partial, err := s.cache.load(sc.member.ID+"@"+sc.org.ID, "orders", q.Status, func() ([]domain.SellerOrderRow, bool, error) {
+		return s.scan(ctx, c.BearerToken, q.Status, domain.TableScanMaxRows)
+	})
+	if err != nil {
+		return domain.SellerOrderPage{}, err
+	}
+	picked := pickRows(rows, SellerOrderColumns, sellerOrderRowCells, q.Q, nil, sort)
+	offset := cursorOffset(q.Cursor)
+	pageItems, more := pageSlice(picked, offset, q.Size)
+	out := domain.SellerOrderPage{Items: pageItems, Total: int64(len(picked)), Sort: domain.SortStrings(sort), Partial: partial}
+	if more {
+		next := strconv.Itoa(offset + q.Size)
+		out.NextCursor = &next
 	}
 	return out, nil
+}
+
+// scan reads up to limit rows of the shipment queue.
+func (s *sellerOrdersImpl) scan(ctx context.Context, bearer, status string, limit int) ([]domain.SellerOrderRow, bool, error) {
+	out := []domain.SellerOrderRow{}
+	cursor := ""
+	for {
+		page, err := s.r.d.Orders.Queue(ctx, bearer, strings.ToLower(status), cursor, exportPageSize)
+		if err != nil {
+			return nil, false, mapErr("orders", err)
+		}
+		for _, it := range page.Items {
+			if len(out) == limit {
+				return out, true, nil
+			}
+			out = append(out, sellerOrderRowOf(it))
+		}
+		if page.NextCursor == nil || *page.NextCursor == "" || len(page.Items) == 0 {
+			return out, false, nil
+		}
+		cursor = *page.NextCursor
+	}
+}
+
+func sellerOrderRowOf(it port.SellerShipmentRow) domain.SellerOrderRow {
+	sh := shipmentOf(it.Shipment)
+	count := 0
+	for _, l := range sh.Lines {
+		count += l.Quantity
+	}
+	row := domain.SellerOrderRow{OrderNumber: it.OrderNumber, ShipmentID: sh.ShipmentID, PlacedAt: it.PlacedAt, ItemsSummary: it.Shipment.Items,
+		ItemCount: max(count, 1), TotalMinor: sh.TotalMinor, Currency: domain.Currency, Fulfilment: sh.Fulfilment, Status: sh.Status,
+		StatusLabel: sh.StatusLabel, Carrier: sh.Carrier, TrackingNumber: sh.TrackingNumber, NextActions: sh.NextActions, CanBuyLabel: sh.CanBuyLabel}
+	if it.ShipTo != nil {
+		row.BuyerName = it.ShipTo.FullName
+		row.ShipTo = strings.TrimSuffix(it.ShipTo.City+", "+it.ShipTo.State, ", ")
+	}
+	if row.ItemsSummary == "" && len(sh.Lines) > 0 {
+		row.ItemsSummary = sh.Lines[0].Title
+	}
+	return row
 }
 
 func (s *sellerOrdersImpl) Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error) {

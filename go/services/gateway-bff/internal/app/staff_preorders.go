@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -311,15 +312,89 @@ func (s *staffPreordersImpl) Orders(ctx context.Context, c *domain.Caller, id st
 	if err != nil {
 		return nil, err
 	}
+	sort, bad := domain.ParseSort(q["sort"], preorderOrderColumn)
+	if bad != nil {
+		return nil, bad
+	}
 	sc, _, err := s.need(ctx, c, poView)
 	if err != nil {
 		return nil, err
 	}
-	var out any
-	if err := sc.get(ctx, sc.up.DeliveryRuns, windowPath(id, "/orders"), pq, &out); err != nil {
+	search := strings.TrimSpace(q.Get("q"))
+	if search == "" && len(sort) == 0 {
+		var out any
+		if err := sc.get(ctx, sc.up.DeliveryRuns, windowPath(id, "/orders"), pq, &out); err != nil {
+			return nil, err
+		}
+		return items(out), nil
+	}
+	// delivery-runs searches order, customer, phone, address and ZIP only and sorts newest first: to match every
+	// column the table shows and sort by any of them, the BFF reads the window's orders and pages them itself.
+	objs, rows, partial, err := scanPreorderOrders(ctx, sc, id, pq.Get("status"), pq.Get("channel"), domain.TableScanMaxRows)
+	if err != nil {
 		return nil, err
 	}
-	return items(out), nil
+	rows = domain.FilterRows(rows, PreorderOrderColumns, domain.SearchTerms(search), nil)
+	domain.SortRows(rows, PreorderOrderColumns, sort)
+	page, _ := strconv.Atoi(pq.Get("page"))
+	size, _ := strconv.Atoi(pq.Get("size"))
+	if size <= 0 || size > 100 {
+		size = 25
+	}
+	pageRows, _ := domain.PageRows(rows, page, size)
+	out := make([]any, 0, len(pageRows))
+	for _, r := range pageRows {
+		out = append(out, objs[r.ID])
+	}
+	return map[string]any{"items": out, "total": len(rows), "page": page, "size": size, "sort": domain.SortStrings(sort), "partial": partial}, nil
+}
+
+// PreorderOrderColumns are what the pre-order orders table shows (and what its search, sort and export see).
+var PreorderOrderColumns = []domain.Column{
+	{Key: "number", Label: "Order", Kind: "mono"}, {Key: "customerName", Label: "Customer", Kind: "strong"}, {Key: "phone", Label: "Phone", Kind: "text"},
+	{Key: "email", Label: "Email", Kind: "text"}, {Key: "addressLine", Label: "Address", Kind: "text"}, {Key: "city", Label: "City", Kind: "text"},
+	{Key: "zip", Label: "ZIP", Kind: "mono"}, {Key: "deliveryNote", Label: "Delivery note", Kind: "text"}, {Key: "placedAt", Label: "Placed", Kind: "datetime"},
+	{Key: "channel", Label: "Channel", Kind: "status"}, {Key: "trackingTag", Label: "Tracking tag", Kind: "mono"}, {Key: "units", Label: "Units", Kind: "number"},
+	{Key: "fulfilment", Label: "Fulfil", Kind: "status"}, {Key: "total", Label: "Total", Kind: "money"}, {Key: "status", Label: "Status", Kind: "status"},
+}
+
+func preorderOrderColumn(k string) bool {
+	return slices.ContainsFunc(PreorderOrderColumns, func(c domain.Column) bool { return c.Key == k })
+}
+
+// scanPreorderOrders reads up to limit orders of a window (status and channel narrow them upstream).
+func scanPreorderOrders(ctx context.Context, sc staffCtx, id, status, channel string, limit int) (map[string]jobj, []domain.Row, bool, error) {
+	objsByID := map[string]jobj{}
+	rows := []domain.Row{}
+	for page := 0; ; page++ {
+		v := url.Values{"page": {strconv.Itoa(page)}, "size": {"100"}}
+		if status != "" {
+			v.Set("status", status)
+		}
+		if channel != "" {
+			v.Set("channel", channel)
+		}
+		var raw any
+		if err := sc.get(ctx, sc.up.DeliveryRuns, windowPath(id, "/orders"), v, &raw); err != nil {
+			return nil, nil, false, err
+		}
+		list := jpage(raw)
+		for _, o := range list.items {
+			if len(rows) == limit {
+				return objsByID, rows, true, nil
+			}
+			oid := firstNonEmpty(jstr(o, "orderId"), jstr(o, "number"))
+			cells := map[string]any{}
+			for _, c := range PreorderOrderColumns {
+				cells[c.Key] = cellValue(at(o, c.Key))
+			}
+			objsByID[oid] = o
+			rows = append(rows, domain.Row{ID: oid, Cells: cells})
+		}
+		if len(list.items) < 100 || (list.total != nil && int64((page+1)*100) >= *list.total) {
+			return objsByID, rows, false, nil
+		}
+	}
 }
 
 func (s *staffPreordersImpl) Summary(ctx context.Context, c *domain.Caller, id string) (any, error) {

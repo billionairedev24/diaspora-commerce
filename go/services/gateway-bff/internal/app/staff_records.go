@@ -37,22 +37,26 @@ type StaffRecordsService interface {
 // staffQueryInput is the table query as the HTTP adapter parsed it.
 type staffQueryInput = StaffQuery
 
-// StaffQuery is a table request (q, status facet, page or cursor, size).
+// StaffQuery is a table request: one search over every column, the sort (`<column>,asc|desc`, repeated), the status
+// facet (kept for links; the console no longer shows facet chips), page or cursor, size.
 type StaffQuery struct {
 	Q, Status, Cursor string
+	Sort              []string
 	Page, Size        int
 }
 
 type staffRecordsImpl struct {
-	r   *staffResolver
-	res map[string]*staffResource
+	r     *staffResolver
+	res   map[string]*staffResource
+	cache *scanCache[domain.Row]
 }
 
 var _ StaffRecordsService = (*staffRecordsImpl)(nil)
 
 // NewStaffRecordsService returns the tables and sheets use case.
 func NewStaffRecordsService(d StaffDeps) StaffRecordsService {
-	return &staffRecordsImpl{r: newStaffResolver(d), res: staffResources()}
+	r := newStaffResolver(d)
+	return &staffRecordsImpl{r: r, res: staffResources(), cache: newScanCache[domain.Row](r.d.Clock)}
 }
 
 func notFoundResource() *domain.Problem {
@@ -77,28 +81,60 @@ func (s *staffRecordsImpl) open(ctx context.Context, c *domain.Caller, name, lev
 }
 
 func (s *staffRecordsImpl) List(ctx context.Context, c *domain.Caller, name string, in staffQueryInput) (domain.ResourcePage, error) {
+	r, err := s.resource(name)
+	if err != nil {
+		return domain.ResourcePage{}, err
+	}
+	sort, bad := domain.ParseSort(in.Sort, r.hasColumn)
+	if bad != nil {
+		return domain.ResourcePage{}, bad
+	}
 	r, sc, err := s.open(ctx, c, name, domain.LevelView)
 	if err != nil {
 		return domain.ResourcePage{}, err
 	}
-	q := staffQuery(in)
+	q := staffQuery{Q: strings.TrimSpace(in.Q), Status: in.Status, Cursor: in.Cursor, Page: in.Page, Size: in.Size}
 	if q.Size <= 0 || q.Size > 100 {
 		q.Size = 25
 	}
 	if q.Status != "" && len(r.facets) > 0 && !slices.ContainsFunc(r.facets, func(f domain.Facet) bool { return f.Value == q.Status }) {
 		return domain.ResourcePage{}, domain.ValidationProblem(map[string]string{"status": "Choose one of the filters"})
 	}
-	list, err := r.list(ctx, sc, q)
+	if q.Q == "" && len(sort) == 0 {
+		// Upstream order and paging (page numbers or cursors).
+		list, err := r.list(ctx, sc, staffQuery{Status: q.Status, Cursor: q.Cursor, Page: q.Page, Size: q.Size})
+		if err != nil {
+			return domain.ResourcePage{}, err
+		}
+		return s.page(r, sc, q, list, nil, false), nil
+	}
+	// Search over every column and sort by any column: the BFF reads the table and pages it (page numbers).
+	rows, partial, err := s.cache.load(sc.me.ID, r.key, q.Status, func() ([]domain.Row, bool, error) {
+		return scanResource(ctx, sc, r, q.Status, domain.TableScanMaxRows)
+	})
 	if err != nil {
 		return domain.ResourcePage{}, err
 	}
-	return s.page(r, sc, q, list), nil
+	rows = domain.FilterRows(rows, r.columns, domain.SearchTerms(q.Q), nil)
+	domain.SortRows(rows, r.columns, sort)
+	total := int64(len(rows))
+	pageRows, _ := domain.PageRows(rows, q.Page, q.Size)
+	p := s.page(r, sc, q, staffList{total: &total}, sort, partial)
+	p.Rows = pageRows
+	return p, nil
 }
 
-func (s *staffRecordsImpl) page(r *staffResource, sc staffCtx, q staffQuery, list staffList) domain.ResourcePage {
-	p := domain.ResourcePage{Resource: r.key, Title: r.title, Columns: r.columns, Rows: make([]domain.Row, 0, len(list.items)),
-		Page: q.Page, Size: q.Size, Total: list.total, NextCursor: list.next, Facets: r.facets, Searchable: r.searchPlaceholder != "",
-		SearchPlaceholder: r.searchPlaceholder, Exportable: r.exportable}
+func (s *staffRecordsImpl) page(r *staffResource, sc staffCtx, q staffQuery, list staffList, sort []domain.SortKey, partial bool) domain.ResourcePage {
+	cols := make([]domain.Column, len(r.columns))
+	for i, c := range r.columns {
+		c.Sortable = true
+		cols[i] = c
+	}
+	// One search box matches every column the table shows.
+	placeholder := "Search " + strings.ToLower(r.title)
+	p := domain.ResourcePage{Resource: r.key, Title: r.title, Columns: cols, Rows: make([]domain.Row, 0, len(list.items)),
+		Page: q.Page, Size: q.Size, Total: list.total, NextCursor: list.next, Facets: r.facets, Searchable: true,
+		SearchPlaceholder: placeholder, Exportable: r.exportable, Sort: domain.SortStrings(sort), Partial: partial}
 	if p.Facets == nil {
 		p.Facets = []domain.Facet{}
 	}
@@ -228,6 +264,7 @@ func actionView(ctx context.Context, r *staffResource, sc staffCtx, a staffActio
 }
 
 func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, action string, values map[string]any, idem string) (domain.RecordDetail, error) {
+	defer s.cache.drop(name)
 	r, sc, err := s.open(ctx, c, name, domain.LevelView)
 	if err != nil {
 		return domain.RecordDetail{}, err
@@ -263,6 +300,7 @@ func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, 
 }
 
 func (s *staffRecordsImpl) Create(ctx context.Context, c *domain.Caller, name string, values map[string]any, idem string) (domain.RecordDetail, error) {
+	defer s.cache.drop(name)
 	r, sc, err := s.open(ctx, c, name, domain.LevelEdit)
 	if err != nil {
 		return domain.RecordDetail{}, err
@@ -288,6 +326,7 @@ func (s *staffRecordsImpl) Create(ctx context.Context, c *domain.Caller, name st
 }
 
 func (s *staffRecordsImpl) Update(ctx context.Context, c *domain.Caller, name, id string, values map[string]any, version string) (domain.RecordDetail, error) {
+	defer s.cache.drop(name)
 	r, sc, err := s.open(ctx, c, name, domain.LevelEdit)
 	if err != nil {
 		return domain.RecordDetail{}, err

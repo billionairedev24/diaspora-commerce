@@ -1,65 +1,10 @@
 package app
 
 import (
-	"archive/zip"
-	"bytes"
-	"io"
-	"strings"
 	"testing"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
-
-func TestExportWriters(t *testing.T) {
-	var csvBuf bytes.Buffer
-	w, err := newExportWriter("csv", &csvBuf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = w.Header([]string{"Name", "Amount"})
-	_ = w.Row([]any{"=HYPERLINK(\"x\")", 12.5})
-	_ = w.Row([]any{"-42", nil})
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	got := csvBuf.String()
-	if !strings.HasPrefix(got, "\ufeffName,Amount\r\n") || !strings.Contains(got, `"'=HYPERLINK(""x"")",12.5`) || !strings.Contains(got, "-42,\r\n") {
-		t.Fatalf("csv = %q", got)
-	}
-
-	var xBuf bytes.Buffer
-	x, err := newExportWriter("xlsx", &xBuf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = x.Header([]string{"A & B"})
-	_ = x.Row([]any{"<tag>\x01", 3.0})
-	if err := x.Close(); err != nil {
-		t.Fatal(err)
-	}
-	zr, err := zip.NewReader(bytes.NewReader(xBuf.Bytes()), int64(xBuf.Len()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var sheet string
-	for _, f := range zr.File {
-		if f.Name == "xl/worksheets/sheet1.xml" {
-			rc, _ := f.Open()
-			b, _ := io.ReadAll(rc)
-			_ = rc.Close()
-			sheet = string(b)
-		}
-	}
-	if !strings.Contains(sheet, "A &amp; B") || !strings.Contains(sheet, "&lt;tag&gt;</t>") || !strings.Contains(sheet, `<c r="B2"><v>3</v></c>`) {
-		t.Fatalf("sheet = %s", sheet)
-	}
-	if xlsxCol(0) != "A" || xlsxCol(25) != "Z" || xlsxCol(26) != "AA" || xlsxCol(701) != "ZZ" {
-		t.Fatal("column names")
-	}
-	if _, err := newExportWriter("pdf", io.Discard); err == nil {
-		t.Fatal("unknown format accepted")
-	}
-}
 
 func TestValidateForm(t *testing.T) {
 	f := domain.Form{Fields: []domain.FormField{

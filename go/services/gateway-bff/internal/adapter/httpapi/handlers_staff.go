@@ -142,12 +142,12 @@ func (h *handlersImpl) staffList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	if len(q.Get("q")) > 120 || len(q.Get("status")) > 60 || len(q.Get("cursor")) > 200 {
+	if len(q.Get("q")) > domain.MaxSearchLength || len(q.Get("status")) > 60 || len(q.Get("cursor")) > 200 {
 		h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"q": "Too long"}))
 		return
 	}
 	v, err := h.s.Staff.Records.List(r.Context(), callerFrom(r.Context()), name,
-		app.StaffQuery{Q: strings.TrimSpace(q.Get("q")), Status: q.Get("status"), Cursor: q.Get("cursor"), Page: page, Size: size})
+		app.StaffQuery{Q: strings.TrimSpace(q.Get("q")), Status: q.Get("status"), Cursor: q.Get("cursor"), Sort: q["sort"], Page: page, Size: size})
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -272,7 +272,12 @@ func (h *handlersImpl) staffDownload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) staffExportFile(w http.ResponseWriter, r *http.Request) {
-	if h.s.Staff.Files == nil {
+	h.serveExportFile(w, r, h.s.Staff.Files)
+}
+
+// serveExportFile serves an export file behind a signed, expiring link (no session needed).
+func (h *handlersImpl) serveExportFile(w http.ResponseWriter, r *http.Request, files port.LocalExportFiles) {
+	if files == nil {
 		h.reply(w, r, 0, nil, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "Exports are served by the media store."))
 		return
 	}
@@ -282,7 +287,7 @@ func (h *handlersImpl) staffExportFile(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", "This download link is not valid."))
 		return
 	}
-	f, contentType, err := h.s.Staff.Files.Open(r.Context(), r.PathValue("exportId"), expires, q.Get("sig"))
+	f, contentType, err := files.Open(r.Context(), r.PathValue("exportId"), expires, q.Get("sig"))
 	switch {
 	case errors.Is(err, exportfiles.ErrExpired):
 		h.reply(w, r, 0, nil, domain.NewProblem(http.StatusGone, domain.CodeExportExpired, "Link expired", "Download links last 24 hours. Export the table again."))

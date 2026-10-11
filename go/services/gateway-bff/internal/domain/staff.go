@@ -272,6 +272,8 @@ type Column struct {
 	Label string `json:"label"`
 	Kind  string `json:"kind"`
 	Width int    `json:"width"`
+	// Sortable columns accept sort=<key>,asc|desc (every column of a server-driven table).
+	Sortable bool `json:"sortable,omitempty"`
 }
 
 // Facet is one status filter chip.
@@ -333,6 +335,10 @@ type ResourcePage struct {
 	CanCreate         bool     `json:"canCreate"`
 	CreateForm        *Form    `json:"createForm"`
 	Exportable        bool     `json:"exportable"`
+	// Sort is the applied sort (`<column>,asc|desc`).
+	Sort []string `json:"sort"`
+	// Partial is true when the search or sort ran over the first TableScanMaxRows rows of a bigger table.
+	Partial bool `json:"partial"`
 }
 
 // DetailField is one label/value on a sheet.
@@ -567,14 +573,19 @@ const (
 	ExportSyncRows = 5000
 	// ExportMaxRows caps one export.
 	ExportMaxRows = 200_000
+	// ExportScanMaxRows caps the rows an export reads to search, sort or pick selected rows in the BFF.
+	ExportScanMaxRows = 50_000
 	// ExportLinkTTL is how long a download link works after the file is ready.
 	ExportLinkTTL = 24 * time.Hour
 )
 
 // ExportJob is one export (GET /v1/staff/exports/{id}).
 type ExportJob struct {
-	ID         string     `json:"id"`
-	Resource   string     `json:"resource"`
+	ID string `json:"id"`
+	// Resource is the table exported: a staff resource key, a Seller Center table or a client-side table's key.
+	Resource string `json:"resource"`
+	// Title is the table's name as people read it ("Lots", "Orders").
+	Title      string     `json:"title"`
 	Format     string     `json:"format"`
 	Status     string     `json:"status"`
 	Rows       int        `json:"rows"`
@@ -591,10 +602,13 @@ type ExportJob struct {
 // StoredExportJob is the persisted form of a job: the owner, the stored file reference and the filters stay server-side.
 type StoredExportJob struct {
 	ExportJob
-	Owner   string `json:"owner"`
-	Ref     string `json:"ref"`
-	Query   string `json:"q"`
-	StatusQ string `json:"statusQ"`
+	Owner string `json:"owner"`
+	Ref   string `json:"ref"`
+	// Portal is staff (default) or seller; OrgID is the Seller Center organisation the export belongs to.
+	Portal string `json:"portal,omitempty"`
+	OrgID  string `json:"orgId,omitempty"`
+	// Scope describes the rows in the file (search, sort, selection).
+	Scope string `json:"scope,omitempty"`
 }
 
 // ---------------------------------------------------------------- support console

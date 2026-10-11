@@ -25,6 +25,8 @@ type StaffDeps struct {
 	MatrixTTL time.Duration
 	Jobs      port.ExportJobStore
 	Blobs     port.ExportBlobStore
+	// Renderer writes export files (CSV, XLSX with native charts, PDF).
+	Renderer port.ExportRenderer
 	// ExportBasePath prefixes download links handed to the console (its same-origin BFF proxy, e.g. /api/bff).
 	ExportBasePath string
 	Clock          Clock

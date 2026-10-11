@@ -169,10 +169,13 @@ func run() error {
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
 		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
-	if services.Staff, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient, inventory: inventoryClient,
-		payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient}, rdb, cache, log); err != nil {
+	var exportDeps app.ExportDeps
+	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,
+		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient}, rdb, cache, log); err != nil {
 		return err
 	}
+	// Seller Center exports share the staff console's job store, renderer and file directory.
+	services.SellerExports = app.NewSellerExportsService(sellerDeps, exportDeps)
 
 	openapi, err := gatewaybff.Files.ReadFile("api/openapi.yaml")
 	if err != nil {

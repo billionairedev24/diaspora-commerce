@@ -519,7 +519,7 @@ func (staffSessions) Resolve(_ context.Context, in app.ResolveInput) (*domain.Ca
 	return &domain.Caller{App: true, BearerToken: in.BearerToken, Subject: "sub-" + in.BearerToken}, nil
 }
 
-func staffBFF(t *testing.T, f *fakePlatform) (http.Handler, func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder) {
+func staffBFF(t *testing.T, f *fakePlatform) func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
@@ -536,7 +536,7 @@ func staffBFF(t *testing.T, f *fakePlatform) (http.Handler, func(token, method, 
 		TaxReturns: up("tax-returns"), Payments: up("payments"), Inventory: up("inventory"), Retail: up("retail"), Fulfilment: up("fulfilment"),
 		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
-		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
+		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Renderer: exportfiles.NewRenderer(), ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
 		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Fees: app.NewStaffFeesService(d), Files: files,
 		Dispatch: app.NewStaffDispatchService(d), Notifications: app.NewStaffNotificationsService(d)}
@@ -562,7 +562,7 @@ func staffBFF(t *testing.T, f *fakePlatform) (http.Handler, func(token, method, 
 		mux.ServeHTTP(rec, req)
 		return rec
 	}
-	return mux, do
+	return do
 }
 
 func jsonOf(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
@@ -590,7 +590,7 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := &fakePlatform{payoutSt: "REQUESTED"}
-	_, raw := staffBFF(t, f)
+	raw := staffBFF(t, f)
 	validated := map[string]int{}
 	do := func(token, method, path string, body any, want int, headers ...string) map[string]any {
 		t.Helper()
