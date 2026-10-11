@@ -37,6 +37,8 @@ type StaffServices struct {
 	Markets app.StaffMarketsService
 	// Inventory serves the Inventory hub and AfroTransact Retail (1P) workspace (S281); routes are registered when it is set.
 	Inventory app.StaffInventoryService
+	// Plans serves Plans & billing (S292–S297); routes are registered when it is set.
+	Plans app.StaffPlansService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -47,6 +49,7 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		return
 	}
 	route("GET /v1/staff/session", h.staffSession)
+	h.registerStaffPlans(route)
 	route("GET /v1/staff/dashboard", h.staffDashboard)
 	route("GET /v1/staff/resources/{resource}", h.staffList)
 	route("POST /v1/staff/resources/{resource}", h.staffCreate)

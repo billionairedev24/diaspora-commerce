@@ -417,6 +417,10 @@ type SellerBilling struct {
 	} `json:"pendingChange"`
 	Dunning        string                `json:"dunning"`
 	PaymentMethods []SellerPaymentMethod `json:"paymentMethods"`
+	// S292–S297: the plan version paid, the Stripe credit balance and where the trial came from.
+	PlanVersion        int    `json:"planVersion"`
+	CreditBalanceCents int64  `json:"creditBalanceCents"`
+	TrialSource        string `json:"trialSource"`
 }
 
 // SellerInvoice is seller's Invoice.
@@ -509,6 +513,7 @@ type ShipFromClient interface {
 // addresses).
 type SellerServiceClient interface {
 	ShipFromClient
+	SellerBillingClient
 	Org(ctx context.Context, bearer, orgID string) (SellerOrg, error)
 	Application(ctx context.Context, bearer string) (SellerApplication, error)
 	// StartApplication starts (created=true) or resumes the caller's application (seller POST /v1/applications/me).

@@ -58,6 +58,11 @@ tags:
     description: Server-side CSV / XLSX exports with signed, expiring download links
   - name: Support
     description: Customer support console (Lola hand-offs, customer lookup, refunds, notifications, shipments)
+  - name: Plans & billing
+    description: >-
+      AfroTransact's plan catalogue (versions, publish with Stripe sync, migrations, invites), trial campaigns, reward
+      rules with a preview, the grants log and the per-seller billing panel with audited adjustments (S292–S297), over
+      the seller service. Stripe Billing only executes the charges.
   - name: Fees
     description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees, AfroTransact Delivery pricing) over payments' immutable versions
   - name: Dispatch
@@ -490,6 +495,544 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/SupportCancelRequest'}}}
       responses:
         '200': {description: Cancelled, content: {application/json: {schema: {$ref: '#/components/schemas/SupportActionResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── plans & billing (S292–S297)
+  /v1/staff/billing/plans:
+    get:
+      tags: [Plans & billing]
+      operationId: listStaffPlans
+      security: [{sessionCookie: []}]
+      summary: "Every plan with its versions, Stripe prices and subscribers"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StaffPlan'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Plans & billing]
+      operationId: createStaffPlan
+      security: [{sessionCookie: []}]
+      summary: "Create a plan (draft, version 1 as a draft; plans:manage)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffCreatePlanRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/plans/{code}:
+    get:
+      tags: [Plans & billing]
+      operationId: getStaffPlan
+      security: [{sessionCookie: []}]
+      summary: "One plan"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Plans & billing]
+      operationId: updateStaffPlan
+      security: [{sessionCookie: []}]
+      summary: "Edit name, tagline, features, limits, visibility and sort (no new version; expectedVersion = rowVersion)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffUpdatePlanRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/plans/{code}/draft:
+    put:
+      tags: [Plans & billing]
+      operationId: saveStaffPlanDraft
+      security: [{sessionCookie: []}]
+      summary: "Save the draft version's prices per cadence and default trial (a new version when they differ)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanPrices'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/plans/{code}/publish:
+    post:
+      tags: [Plans & billing]
+      operationId: publishStaffPlan
+      security: [{sessionCookie: []}]
+      summary: "Publish the draft version and sync Stripe (new Prices, old ones archived; never edited)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/plans/{code}/retire:
+    post:
+      tags: [Plans & billing]
+      operationId: retireStaffPlan
+      security: [{sessionCookie: []}]
+      summary: "Retire a plan: no new subscribers, existing ones keep it"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/plans/{code}/invites:
+    put:
+      tags: [Plans & billing]
+      operationId: setStaffPlanInvites
+      security: [{sessionCookie: []}]
+      summary: "Organisations invited to an invite-only plan"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanInvitesRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/plans/{code}/migration:
+    get:
+      tags: [Plans & billing]
+      operationId: previewStaffPlanMigration
+      security: [{sessionCookie: []}]
+      summary: "Subscribers on older versions and what the current version will charge them"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanMigrationPreview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Plans & billing]
+      operationId: migrateStaffPlan
+      security: [{sessionCookie: []}]
+      summary: "Move subscribers (all or orgIds) to the current version from their next renewal (no proration)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/PlanCode'}
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanMigrationRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanMigrationResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/stripe-sync:
+    get:
+      tags: [Plans & billing]
+      operationId: getStaffStripeSync
+      security: [{sessionCookie: []}]
+      summary: "Drift between our plan versions and Stripe (nothing changes)"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanSyncReport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Plans & billing]
+      operationId: syncStaffStripe
+      security: [{sessionCookie: []}]
+      summary: "Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanSyncReport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/trial-campaigns:
+    get:
+      tags: [Plans & billing]
+      operationId: listStaffTrialCampaigns
+      security: [{sessionCookie: []}]
+      summary: "Trial campaigns (promo codes and sign-up windows)"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StaffTrialCampaign'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Plans & billing]
+      operationId: createStaffTrialCampaign
+      security: [{sessionCookie: []}]
+      summary: "Create a trial campaign"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTrialCampaignRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTrialCampaign'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/trial-campaigns/{id}:
+    put:
+      tags: [Plans & billing]
+      operationId: updateStaffTrialCampaign
+      security: [{sessionCookie: []}]
+      summary: "Edit a trial campaign (expectedVersion)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffTrialCampaignRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTrialCampaign'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/trial-campaigns/{id}/status:
+    post:
+      tags: [Plans & billing]
+      operationId: setStaffTrialCampaignStatus
+      security: [{sessionCookie: []}]
+      summary: "Activate, pause or end a trial campaign"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingStatusRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffTrialCampaign'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/reward-rules:
+    get:
+      tags: [Plans & billing]
+      operationId: listStaffRewardRules
+      security: [{sessionCookie: []}]
+      summary: "Reward rules"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StaffRewardRule'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Plans & billing]
+      operationId: createStaffRewardRule
+      security: [{sessionCookie: []}]
+      summary: "Create a reward rule (DRAFT unless a status is given)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRewardRuleRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRewardRule'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/reward-rules/preview:
+    post:
+      tags: [Plans & billing]
+      operationId: previewStaffRewardRule
+      security: [{sessionCookie: []}]
+      summary: "Who qualifies now under a rule (unsaved or edited; nothing is granted)"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRewardRuleRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRewardPreview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/reward-rules/{id}:
+    put:
+      tags: [Plans & billing]
+      operationId: updateStaffRewardRule
+      security: [{sessionCookie: []}]
+      summary: "Edit a reward rule (expectedVersion)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRewardRuleRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRewardRule'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/reward-rules/{id}/status:
+    post:
+      tags: [Plans & billing]
+      operationId: setStaffRewardRuleStatus
+      security: [{sessionCookie: []}]
+      summary: "Activate, pause or end a reward rule"
+      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingStatusRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRewardRule'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/grants:
+    get:
+      tags: [Plans & billing]
+      operationId: listStaffBillingGrants
+      security: [{sessionCookie: []}]
+      summary: "Grants log: rewards and staff adjustments, newest first (server-paged)"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      parameters:
+        - {name: orgId, in: query, required: false, schema: {type: string, maxLength: 120}}
+        - {name: source, in: query, required: false, schema: {type: string, maxLength: 120}}
+        - {name: type, in: query, required: false, schema: {type: string, maxLength: 120}}
+        - {name: ruleId, in: query, required: false, schema: {type: string, maxLength: 120}}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, required: false, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrantPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/reason-codes:
+    get:
+      tags: [Plans & billing]
+      operationId: listStaffBillingReasonCodes
+      security: [{sessionCookie: []}]
+      summary: "Reason codes for adjustments"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StaffBillingReasonCode'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs:
+    get:
+      tags: [Plans & billing]
+      operationId: searchStaffBillingOrgs
+      security: [{sessionCookie: []}]
+      summary: "Find an organisation by name or id for its billing panel"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 120}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingOrgSearch'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}:
+    get:
+      tags: [Plans & billing]
+      operationId: getStaffBillingPanel
+      security: [{sessionCookie: []}]
+      summary: "Per-seller billing panel: plan, trial, credit balance, grants, invoices, collections from earnings"
+      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingPanel'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/credits:
+    post:
+      tags: [Plans & billing]
+      operationId: creditStaffBillingOrg
+      security: [{sessionCookie: []}]
+      summary: "Credit the organisation's Stripe balance (billing:adjust, reason code)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffCreditRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/free-days:
+    post:
+      tags: [Plans & billing]
+      operationId: giveStaffBillingFreeDays
+      security: [{sessionCookie: []}]
+      summary: "Give free days: the subscription's trial_end moves out (billing:adjust)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffDaysRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/trial:
+    post:
+      tags: [Plans & billing]
+      operationId: overrideStaffBillingTrial
+      security: [{sessionCookie: []}]
+      summary: "Override the trial: before activation its length, while trialing it ends N days after it started (billing:adjust)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffDaysRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/waive:
+    post:
+      tags: [Plans & billing]
+      operationId: waiveStaffBillingInvoice
+      security: [{sessionCookie: []}]
+      summary: "Waive (void) an open invoice (billing:adjust)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/BillingInvoiceId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffWaiveRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/earnings-collection:
+    put:
+      tags: [Plans & billing]
+      operationId: setStaffEarningsCollection
+      security: [{sessionCookie: []}]
+      summary: "Opt the organisation in or out of collecting plan fees from earnings (409 while the platform flag is off)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffEarningsCollectionRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingPanel'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
@@ -3538,6 +4081,10 @@ components:
     MarketCountryCode: {name: code, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
     MarketRegionCode: {name: region, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9]{1,10}$'}}
     IfMatch: {name: If-Match, in: header, required: false, schema: {type: string, maxLength: 40}, description: The version from the ETag (optimistic locking).}
+    PlanCode: {name: code, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9_]{1,39}$'}}
+    BillingId: {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    BillingOrgId: {name: orgId, in: path, required: true, schema: {type: string, maxLength: 120}}
+    BillingInvoiceId: {name: invoiceId, in: path, required: true, schema: {type: string, maxLength: 120}}
   responses:
     Problem:
       description: RFC 9457 problem
@@ -3550,6 +4097,418 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    # ── Plans & billing (S292–S297) ─────────────────────────────────────────
+    StaffPlanVersionPrice:
+      type: object
+      required: [cadence, amountCents, lookupKey]
+      properties:
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        amountCents: {type: integer, format: int64}
+        lookupKey: {type: string}
+        stripePriceId: {type: [string, 'null']}
+        syncedAt: {type: [string, 'null'], format: date-time}
+        syncError: {type: [string, 'null']}
+    StaffPlanVersion:
+      type: object
+      required: [version, status, trialDays, subscribers, prices]
+      properties:
+        version: {type: integer}
+        status: {type: string, enum: [DRAFT, PUBLISHED, SUPERSEDED]}
+        trialDays: {type: integer}
+        note: {type: [string, 'null']}
+        createdBy: {type: [string, 'null']}
+        createdAt: {type: [string, 'null'], format: date-time}
+        publishedAt: {type: [string, 'null'], format: date-time}
+        subscribers: {type: integer, format: int64}
+        prices: {type: array, items: {$ref: '#/components/schemas/StaffPlanVersionPrice'}}
+    StaffPlan:
+      type: object
+      description: A plan AfroTransact owns; prices are those of the current version (0 before the first publish).
+      required: [code, kind, name, features, visibility, status, currentVersion, monthlyCents, quarterlyCents, annualCents, trialDays, rowVersion, subscribers, invites, versions]
+      properties:
+        code: {type: string}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        name: {type: string}
+        tagline: {type: [string, 'null']}
+        features: {type: array, items: {type: string}}
+        limits: {type: object, additionalProperties: {type: string}}
+        visibility: {type: string, enum: [PUBLIC, HIDDEN, INVITE_ONLY]}
+        status: {type: string, enum: [DRAFT, ACTIVE, RETIRED]}
+        sortOrder: {type: integer}
+        currentVersion: {type: integer}
+        monthlyCents: {type: integer, format: int64}
+        quarterlyCents: {type: integer, format: int64}
+        annualCents: {type: integer, format: int64}
+        trialDays: {type: integer}
+        rowVersion: {type: integer, format: int64, description: 'Send back as expectedVersion to edit the metadata'}
+        stripeProductId: {type: [string, 'null']}
+        subscribers: {type: integer, format: int64}
+        invites: {type: array, items: {type: string}}
+        versions: {type: array, items: {$ref: '#/components/schemas/StaffPlanVersion'}}
+    StaffPlanPrices:
+      type: object
+      description: A version's price per cadence in cents and its default trial.
+      properties:
+        monthlyCents: {type: integer, format: int64, minimum: 0}
+        quarterlyCents: {type: integer, format: int64, minimum: 0}
+        annualCents: {type: integer, format: int64, minimum: 0}
+        trialDays: {type: integer, minimum: 0, maximum: 365}
+        note: {type: [string, 'null'], maxLength: 500}
+    StaffCreatePlanRequest:
+      type: object
+      required: [code, kind, name]
+      properties:
+        code: {type: string, pattern: '^[a-z][a-z0-9_]{2,39}$'}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        name: {type: string, maxLength: 80}
+        tagline: {type: [string, 'null'], maxLength: 120}
+        features: {type: array, items: {type: string, maxLength: 120}, maxItems: 12}
+        limits: {type: object, additionalProperties: {type: string}}
+        visibility: {type: string, enum: [PUBLIC, HIDDEN, INVITE_ONLY]}
+        sortOrder: {type: integer}
+        prices: {$ref: '#/components/schemas/StaffPlanPrices'}
+    StaffUpdatePlanRequest:
+      type: object
+      required: [name, expectedVersion]
+      properties:
+        name: {type: string, maxLength: 80}
+        tagline: {type: [string, 'null'], maxLength: 120}
+        features: {type: array, items: {type: string, maxLength: 120}, maxItems: 12}
+        limits: {type: object, additionalProperties: {type: string}}
+        visibility: {type: string, enum: [PUBLIC, HIDDEN, INVITE_ONLY]}
+        sortOrder: {type: integer}
+        expectedVersion: {type: integer, format: int64}
+    StaffPlanInvitesRequest:
+      type: object
+      required: [orgIds]
+      properties:
+        orgIds: {type: array, items: {type: string}}
+    StaffPlanMigrationRow:
+      type: object
+      required: [orgId, fromVersion, cadence, fromCents, toCents, status]
+      properties:
+        orgId: {type: string}
+        orgName: {type: [string, 'null']}
+        fromVersion: {type: integer}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        fromCents: {type: integer, format: int64}
+        toCents: {type: integer, format: int64}
+        status: {type: string}
+        effectiveAt: {type: [string, 'null'], format: date-time, description: 'Their next renewal, when the new price first applies'}
+    StaffPlanMigrationPreview:
+      type: object
+      required: [planCode, toVersion, rows]
+      properties:
+        planCode: {type: string}
+        toVersion: {type: integer}
+        rows: {type: array, items: {$ref: '#/components/schemas/StaffPlanMigrationRow'}}
+    StaffPlanMigrationRequest:
+      type: object
+      properties:
+        orgIds: {type: array, items: {type: string}, description: 'Empty or missing = every subscriber in the preview'}
+    StaffPlanMigrationResult:
+      type: object
+      required: [planCode, toVersion, migrated, failed]
+      properties:
+        planCode: {type: string}
+        toVersion: {type: integer}
+        migrated: {type: array, items: {type: string}}
+        failed:
+          type: array
+          items:
+            type: object
+            required: [orgId]
+            properties:
+              orgId: {type: string}
+              error: {type: [string, 'null']}
+    StaffPlanSyncLine:
+      type: object
+      required: [planCode, version, cadence, amountCents, state, action]
+      properties:
+        planCode: {type: string}
+        planName: {type: [string, 'null']}
+        version: {type: integer}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        amountCents: {type: integer, format: int64}
+        lookupKey: {type: [string, 'null']}
+        state: {type: string, enum: [IN_SYNC, FREE, ADOPTABLE, MISSING, DRIFT, SUPERSEDED]}
+        action: {type: string, enum: [NONE, ADOPTED, CREATED, REPLACED, FAILED]}
+        stripePriceId: {type: [string, 'null']}
+        stripeAmountCents: {type: [integer, 'null'], format: int64}
+        error: {type: [string, 'null']}
+    StaffPlanSyncReport:
+      type: object
+      required: [checkedAt, applied, drifted, lines]
+      properties:
+        checkedAt: {type: string, format: date-time}
+        applied: {type: boolean, description: 'false for the drift report, true after a sync'}
+        drifted: {type: integer, format: int64}
+        lines: {type: array, items: {$ref: '#/components/schemas/StaffPlanSyncLine'}}
+    StaffTrialCampaign:
+      type: object
+      required: [id, name, trialDays, eligiblePlans, redemptions, status, version]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        promoCode: {type: [string, 'null']}
+        trialDays: {type: integer}
+        signupFrom: {type: [string, 'null'], format: date-time}
+        signupTo: {type: [string, 'null'], format: date-time}
+        kind: {type: [string, 'null'], enum: [SELLER, PROVIDER, null]}
+        eligiblePlans: {type: array, items: {type: string}}
+        maxRedemptions: {type: [integer, 'null']}
+        redemptions: {type: integer}
+        status: {type: string, enum: [ACTIVE, PAUSED, ENDED]}
+        createdBy: {type: [string, 'null']}
+        createdAt: {type: [string, 'null'], format: date-time}
+        updatedBy: {type: [string, 'null']}
+        updatedAt: {type: [string, 'null'], format: date-time}
+        version: {type: integer, format: int64}
+    StaffTrialCampaignRequest:
+      type: object
+      description: A promo code, a sign-up window, or both.
+      required: [name, trialDays]
+      properties:
+        name: {type: string, maxLength: 120}
+        promoCode: {type: [string, 'null'], maxLength: 40}
+        trialDays: {type: integer, minimum: 1, maximum: 365}
+        signupFrom: {type: [string, 'null'], format: date-time}
+        signupTo: {type: [string, 'null'], format: date-time}
+        kind: {type: [string, 'null'], enum: [SELLER, PROVIDER, null]}
+        eligiblePlans: {type: array, items: {type: string}}
+        maxRedemptions: {type: [integer, 'null'], minimum: 1}
+        status: {type: [string, 'null'], enum: [ACTIVE, PAUSED, ENDED, null]}
+        expectedVersion: {type: [integer, 'null'], format: int64}
+    StaffBillingStatusRequest:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string}
+    StaffRewardRule:
+      type: object
+      required: [id, name, status, metric, threshold, rewardType, eligiblePlans, grantsCount, rewardLabel, conditionLabel, version]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        description: {type: [string, 'null']}
+        status: {type: string, enum: [DRAFT, ACTIVE, PAUSED, ENDED]}
+        kind: {type: [string, 'null'], enum: [SELLER, PROVIDER, null]}
+        metric: {type: string, enum: [GROSS_SALES, ACTIVE_LISTINGS, COMPLETED_ORDERS, COMPLETED_BOOKINGS, DAYS_SINCE_APPROVAL]}
+        threshold: {type: integer, format: int64, description: 'Cents for GROSS_SALES, a count otherwise'}
+        windowDays: {type: [integer, 'null']}
+        withinDaysOfApproval: {type: [integer, 'null']}
+        rewardType: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF]}
+        freeDays: {type: [integer, 'null']}
+        creditCents: {type: [integer, 'null'], format: int64}
+        percentOff: {type: [number, 'null']}
+        durationInvoices: {type: [integer, 'null']}
+        eligiblePlans: {type: array, items: {type: string}}
+        startsAt: {type: [string, 'null'], format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
+        maxGrants: {type: [integer, 'null']}
+        grantsCount: {type: integer}
+        rewardLabel: {type: string, examples: ['1 month free']}
+        conditionLabel: {type: string, examples: ['$1,000 in sales within 60 days of approval']}
+        createdBy: {type: [string, 'null']}
+        createdAt: {type: [string, 'null'], format: date-time}
+        updatedBy: {type: [string, 'null']}
+        updatedAt: {type: [string, 'null'], format: date-time}
+        version: {type: integer, format: int64}
+    StaffRewardRuleRequest:
+      type: object
+      required: [name, metric, threshold, rewardType]
+      properties:
+        name: {type: string, maxLength: 120}
+        description: {type: [string, 'null']}
+        kind: {type: [string, 'null'], enum: [SELLER, PROVIDER, null]}
+        metric: {type: string, enum: [GROSS_SALES, ACTIVE_LISTINGS, COMPLETED_ORDERS, COMPLETED_BOOKINGS, DAYS_SINCE_APPROVAL]}
+        threshold: {type: integer, format: int64, minimum: 1}
+        windowDays: {type: [integer, 'null'], minimum: 1}
+        withinDaysOfApproval: {type: [integer, 'null'], minimum: 1}
+        rewardType: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF]}
+        freeDays: {type: [integer, 'null'], minimum: 1, maximum: 365}
+        creditCents: {type: [integer, 'null'], format: int64, minimum: 1}
+        percentOff: {type: [number, 'null'], exclusiveMinimum: 0, maximum: 100}
+        durationInvoices: {type: [integer, 'null'], minimum: 1, maximum: 36}
+        eligiblePlans: {type: array, items: {type: string}}
+        startsAt: {type: [string, 'null'], format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
+        maxGrants: {type: [integer, 'null'], minimum: 1}
+        status: {type: [string, 'null'], enum: [DRAFT, ACTIVE, PAUSED, ENDED, null]}
+        expectedVersion: {type: [integer, 'null'], format: int64}
+        ruleId: {type: [string, 'null'], description: Preview only - marks who already got this rule}
+    StaffRewardPreviewRow:
+      type: object
+      required: [orgId, value, threshold, percent, qualifies, alreadyGranted]
+      properties:
+        orgId: {type: string}
+        orgName: {type: [string, 'null']}
+        planCode: {type: [string, 'null']}
+        value: {type: integer, format: int64}
+        threshold: {type: integer, format: int64}
+        percent: {type: integer, minimum: 0, maximum: 100}
+        qualifies: {type: boolean}
+        alreadyGranted: {type: boolean}
+        reason: {type: [string, 'null']}
+    StaffRewardPreview:
+      type: object
+      required: [evaluated, qualifying, rows]
+      properties:
+        evaluated: {type: integer}
+        qualifying: {type: integer}
+        rows: {type: array, items: {$ref: '#/components/schemas/StaffRewardPreviewRow'}}
+    StaffBillingGrant:
+      type: object
+      description: A reward or staff adjustment and the Stripe objects it produced.
+      required: [id, orgId, source, type, status, summary, actorId, attempts, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        orgId: {type: string}
+        source: {type: string, enum: [RULE, MANUAL]}
+        ruleId: {type: [string, 'null']}
+        type: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF, WAIVE_INVOICE, TRIAL_END]}
+        creditCents: {type: [integer, 'null'], format: int64}
+        freeDays: {type: [integer, 'null']}
+        percentOff: {type: [number, 'null']}
+        durationInvoices: {type: [integer, 'null']}
+        invoiceId: {type: [string, 'null']}
+        status: {type: string, enum: [PENDING, APPLIED, FAILED]}
+        reasonCode: {type: [string, 'null']}
+        note: {type: [string, 'null']}
+        summary: {type: string}
+        actorId: {type: string}
+        metric: {type: [string, 'null']}
+        metricValue: {type: [integer, 'null'], format: int64}
+        stripeCustomerId: {type: [string, 'null']}
+        stripeSubscriptionId: {type: [string, 'null']}
+        stripeBalanceTransactionId: {type: [string, 'null']}
+        stripeCouponId: {type: [string, 'null']}
+        previousTrialEnd: {type: [string, 'null'], format: date-time}
+        newTrialEnd: {type: [string, 'null'], format: date-time}
+        attempts: {type: integer}
+        lastError: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        appliedAt: {type: [string, 'null'], format: date-time}
+    StaffBillingGrantPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffBillingGrant'}}
+        page: {type: integer}
+        size: {type: integer}
+        total: {type: integer, format: int64}
+    StaffBillingReasonCode:
+      type: object
+      required: [code, label]
+      properties:
+        code: {type: string}
+        label: {type: string}
+    StaffBillingOrgSearch:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [orgId, name, kind, status]
+            properties:
+              orgId: {type: string}
+              name: {type: string}
+              kind: {type: string}
+              status: {type: string}
+    StaffBillingSubscription:
+      type: object
+      description: seller's Billing (cents).
+      required: [orgId, planCode, planName, cadence, status, nextChargeLabel, cancelAtPeriodEnd, planVersion, creditBalanceCents]
+      properties:
+        orgId: {type: string}
+        planCode: {type: string}
+        planName: {type: string}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        status: {type: string}
+        trialEndsAt: {type: [string, 'null'], format: date-time}
+        currentPeriodEnd: {type: [string, 'null'], format: date-time}
+        nextChargeAt: {type: [string, 'null'], format: date-time}
+        nextChargeCents: {type: integer, format: int64}
+        nextChargeLabel: {type: string}
+        cancelAtPeriodEnd: {type: boolean}
+        dunning: {type: [string, 'null']}
+        failedPaymentAttempts: {type: integer}
+        planVersion: {type: integer}
+        creditBalanceCents: {type: integer, format: int64}
+        trialSource: {type: [string, 'null'], enum: [PLAN, CAMPAIGN, OVERRIDE, NONE, null]}
+        trialDaysOverride: {type: [integer, 'null']}
+        collectFromEarnings: {type: boolean}
+    StaffBillingInvoice:
+      type: object
+      required: [id, amountDueCents, amountPaidCents, currency, createdAt]
+      properties:
+        id: {type: string}
+        number: {type: [string, 'null']}
+        periodStart: {type: [string, 'null'], format: date-time}
+        periodEnd: {type: [string, 'null'], format: date-time}
+        amountDueCents: {type: integer, format: int64}
+        amountPaidCents: {type: integer, format: int64}
+        currency: {type: string}
+        status: {type: [string, 'null']}
+        billingReason: {type: [string, 'null']}
+        hostedInvoiceUrl: {type: [string, 'null']}
+        invoicePdf: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+    StaffEarningsCollection:
+      type: object
+      required: [invoiceId, amountCents, status]
+      properties:
+        invoiceId: {type: string}
+        amountCents: {type: integer, format: int64}
+        status: {type: string, enum: [REQUESTED, WITHHELD, CREDITED, DECLINED, FAILED]}
+        paymentsReference: {type: [string, 'null']}
+        stripeBalanceTransactionId: {type: [string, 'null']}
+        reason: {type: [string, 'null']}
+        createdAt: {type: [string, 'null'], format: date-time}
+    StaffBillingPanel:
+      type: object
+      required: [orgId, orgName, kind, orgStatus, invoices, grants, collections, earningsCollectionEnabled]
+      properties:
+        orgId: {type: string}
+        orgName: {type: [string, 'null']}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        orgStatus: {type: string}
+        billing:
+          description: null before the organisation has a subscription
+          oneOf:
+            - {$ref: '#/components/schemas/StaffBillingSubscription'}
+            - {type: 'null'}
+        invoices: {type: array, items: {$ref: '#/components/schemas/StaffBillingInvoice'}}
+        grants: {type: array, items: {$ref: '#/components/schemas/StaffBillingGrant'}}
+        collections: {type: array, items: {$ref: '#/components/schemas/StaffEarningsCollection'}}
+        earningsCollectionEnabled: {type: boolean}
+    StaffCreditRequest:
+      type: object
+      required: [amountCents, reasonCode]
+      properties:
+        amountCents: {type: integer, format: int64, minimum: 1, maximum: 1000000}
+        reasonCode: {type: string}
+        note: {type: [string, 'null'], maxLength: 500}
+    StaffDaysRequest:
+      type: object
+      required: [days, reasonCode]
+      properties:
+        days: {type: integer, minimum: 0, maximum: 365}
+        reasonCode: {type: string}
+        note: {type: [string, 'null'], maxLength: 500}
+    StaffWaiveRequest:
+      type: object
+      required: [reasonCode]
+      properties:
+        reasonCode: {type: string}
+        note: {type: [string, 'null'], maxLength: 500}
+    StaffEarningsCollectionRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: {type: boolean}
     StaffPlaceStatus:
       type: string
       enum: [LIVE, PLANNED, OFF]
@@ -3672,7 +4631,7 @@ components:
     StaffModuleKey:
       type: string
       description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders]
+      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders, plans]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]

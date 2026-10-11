@@ -641,6 +641,13 @@ type Subscription struct {
 	CancelAtPeriodEnd bool               `json:"cancelAtPeriodEnd"`
 	PendingChange     *PendingPlanChange `json:"pendingChange"`
 	Dunning           *string            `json:"dunning"`
+	// PlanVersion is the plan version (prices) the organisation pays; it changes only by a plan change or a staff
+	// migration (S292).
+	PlanVersion int `json:"planVersion"`
+	// CreditBalanceMinor is the Stripe credit balance the next invoices use (rewards, staff credits).
+	CreditBalanceMinor int64 `json:"creditBalanceMinor"`
+	// TrialSource is PLAN, CAMPAIGN, OVERRIDE or NONE once the subscription started.
+	TrialSource *string `json:"trialSource"`
 }
 
 // BillingView is GET /v1/seller/billing.
@@ -650,6 +657,76 @@ type BillingView struct {
 	PaymentMethods []BillingPaymentMethod `json:"paymentMethods"`
 	Invoices       []Invoice              `json:"invoices"`
 	CanManage      bool                   `json:"canManage"`
+}
+
+// RewardProgress is a reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free".
+type RewardProgress struct {
+	RuleID         string     `json:"ruleId"`
+	Name           string     `json:"name"`
+	Description    *string    `json:"description"`
+	Metric         string     `json:"metric"`
+	Value          int64      `json:"value"`
+	Threshold      int64      `json:"threshold"`
+	Percent        int        `json:"percent"`
+	Qualifies      bool       `json:"qualifies"`
+	Label          string     `json:"label"`
+	RewardLabel    string     `json:"rewardLabel"`
+	ConditionLabel string     `json:"conditionLabel"`
+	EndsAt         *time.Time `json:"endsAt"`
+}
+
+// EarnedReward is a reward or credit the organisation received.
+type EarnedReward struct {
+	ID          string     `json:"id"`
+	Source      string     `json:"source"`
+	Type        string     `json:"type"`
+	Summary     string     `json:"summary"`
+	Reason      *string    `json:"reason"`
+	Status      string     `json:"status"`
+	CreditMinor *int64     `json:"creditMinor"`
+	FreeDays    *int       `json:"freeDays"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	AppliedAt   *time.Time `json:"appliedAt"`
+}
+
+// SellerRewardsView is GET /v1/seller/billing/rewards.
+type SellerRewardsView struct {
+	Available []RewardProgress `json:"available"`
+	Earned    []EarnedReward   `json:"earned"`
+}
+
+// PlanChangePreview is what a plan or cadence change would do (nothing changes).
+type PlanChangePreview struct {
+	Change            string     `json:"change"`
+	PlanCode          string     `json:"planCode"`
+	PlanName          string     `json:"planName"`
+	Cadence           string     `json:"cadence"`
+	EffectiveAt       *time.Time `json:"effectiveAt"`
+	AmountDueNowMinor int64      `json:"amountDueNowMinor"`
+	NextChargeMinor   int64      `json:"nextChargeMinor"`
+	NextChargeAt      *time.Time `json:"nextChargeAt"`
+	Trialing          bool       `json:"trialing"`
+}
+
+// BillingSetupIntent starts adding a card or bank account (Payment Element); LocalTest: no Stripe key locally.
+type BillingSetupIntent struct {
+	SetupIntentID  string `json:"setupIntentId"`
+	ClientSecret   string `json:"clientSecret"`
+	PublishableKey string `json:"publishableKey"`
+	LocalTest      bool   `json:"localTest"`
+}
+
+// AddBillingPaymentMethod registers a SetupIntent's confirmed payment method.
+type AddBillingPaymentMethod struct {
+	StripePaymentMethodID string `json:"stripePaymentMethodId"`
+	Kind                  string `json:"kind"`
+	Brand                 string `json:"brand"`
+	Last4                 string `json:"last4"`
+	ExpMonth              int    `json:"expMonth"`
+	ExpYear               int    `json:"expYear"`
+	BankName              string `json:"bankName"`
+	AccountType           string `json:"accountType"`
+	MakeDefault           bool   `json:"makeDefault"`
 }
 
 // ChangePlanResult is the plan change outcome.

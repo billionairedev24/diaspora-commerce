@@ -1013,8 +1013,8 @@ paths:
       tags: [Money]
       operationId: getBilling
       security: [{sessionCookie: []}]
-      summary: Plan, cadence, next charge, payment methods, invoices and the plan catalogue
-      description: seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/plans?kind=`.
+      summary: Plan, cadence, next charge, credit balance, payment methods, invoices and the plans this organisation may choose
+      description: seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/orgs/{orgId}/billing/plans` (public plans, invite-only plans it was invited to and its current plan; AfroTransact's own catalogue, S292).
       responses:
         '200': {description: Billing, content: {application/json: {schema: {$ref: '#/components/schemas/BillingView'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -1068,6 +1068,69 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/rewards:
+    get:
+      tags: [Money]
+      operationId: getBillingRewards
+      security: [{sessionCookie: []}]
+      summary: Rewards the organisation can earn (with progress) and the rewards and credits it received
+      description: seller `GET /v1/orgs/{orgId}/billing/rewards` (S296). Same access as the billing page.
+      responses:
+        '200': {description: Rewards, content: {application/json: {schema: {$ref: '#/components/schemas/SellerRewardsView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/plan/preview:
+    get:
+      tags: [Money]
+      operationId: previewPlanChange
+      security: [{sessionCookie: []}]
+      summary: What a plan or cadence change would do (upgrades show Stripe's proration now); nothing changes
+      description: seller `GET /v1/orgs/{orgId}/billing/plan/preview`.
+      parameters:
+        - {name: planCode, in: query, required: true, schema: {type: string, maxLength: 40}}
+        - {name: cadence, in: query, required: false, schema: {$ref: '#/components/schemas/Cadence'}}
+      responses:
+        '200': {description: Preview, content: {application/json: {schema: {$ref: '#/components/schemas/BillingPlanChangePreview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/setup-intents:
+    post:
+      tags: [Money]
+      operationId: createBillingSetupIntent
+      security: [{sessionCookie: []}]
+      summary: Start adding a card or bank account with the Payment Element (owner only)
+      description: seller `POST /v1/orgs/{orgId}/billing/setup-intents` (a SetupIntent on the organisation's Stripe customer, usage off_session).
+      responses:
+        '201': {description: SetupIntent, content: {application/json: {schema: {$ref: '#/components/schemas/BillingSetupIntent'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/payment-methods:
+    post:
+      tags: [Money]
+      operationId: addBillingPaymentMethod
+      security: [{sessionCookie: []}]
+      summary: Register the payment method the SetupIntent confirmed (owner only)
+      description: seller `POST /v1/orgs/{orgId}/billing/payment-methods`; only display fields are stored.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AddBillingPaymentMethod'}}}
+      responses:
+        '201': {description: Payment method, content: {application/json: {schema: {$ref: '#/components/schemas/BillingPaymentMethod'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── team
@@ -2957,6 +3020,81 @@ components:
             cadence: {$ref: '#/components/schemas/Cadence'}
             effectiveAt: {type: string, format: date-time}
         dunning: {type: [string, 'null']}
+        planVersion: {type: integer, description: 'Plan version (prices) the organisation pays; changes only by a plan change or a staff migration (S292)'}
+        creditBalanceMinor: {type: integer, format: int64, minimum: 0, description: 'Stripe credit balance the next invoices use (rewards, staff credits)'}
+        trialSource: {type: [string, 'null'], enum: [PLAN, CAMPAIGN, OVERRIDE, NONE, null]}
+    RewardProgress:
+      type: object
+      description: 'A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296).'
+      required: [ruleId, name, metric, value, threshold, percent, qualifies, label, rewardLabel, conditionLabel]
+      properties:
+        ruleId: {type: string}
+        name: {type: string}
+        description: {type: [string, 'null']}
+        metric: {type: string, enum: [GROSS_SALES, ACTIVE_LISTINGS, COMPLETED_ORDERS, COMPLETED_BOOKINGS, DAYS_SINCE_APPROVAL]}
+        value: {type: integer, format: int64, description: 'Cents for GROSS_SALES, a count otherwise'}
+        threshold: {type: integer, format: int64}
+        percent: {type: integer, minimum: 0, maximum: 100}
+        qualifies: {type: boolean}
+        label: {type: string}
+        rewardLabel: {type: string}
+        conditionLabel: {type: string}
+        endsAt: {type: [string, 'null'], format: date-time}
+    EarnedReward:
+      type: object
+      description: A reward or credit the organisation received (reward rules and staff adjustments).
+      required: [id, source, type, summary, status, createdAt]
+      properties:
+        id: {type: string}
+        source: {type: string, enum: [RULE, MANUAL]}
+        type: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF, WAIVE_INVOICE, TRIAL_END]}
+        summary: {type: string}
+        reason: {type: [string, 'null'], description: The reward rule's name}
+        status: {type: string, enum: [PENDING, APPLIED, FAILED]}
+        creditMinor: {type: [integer, 'null'], format: int64}
+        freeDays: {type: [integer, 'null']}
+        createdAt: {type: string, format: date-time}
+        appliedAt: {type: [string, 'null'], format: date-time}
+    SellerRewardsView:
+      type: object
+      required: [available, earned]
+      properties:
+        available: {type: array, items: {$ref: '#/components/schemas/RewardProgress'}}
+        earned: {type: array, items: {$ref: '#/components/schemas/EarnedReward'}}
+    BillingPlanChangePreview:
+      type: object
+      required: [change, planCode, planName, cadence, amountDueNowMinor, nextChargeMinor, trialing]
+      properties:
+        change: {type: string, enum: [IMMEDIATE_UPGRADE, AT_RENEWAL, NO_CHANGE]}
+        planCode: {type: string}
+        planName: {type: string}
+        cadence: {$ref: '#/components/schemas/Cadence'}
+        effectiveAt: {type: [string, 'null'], format: date-time}
+        amountDueNowMinor: {type: integer, format: int64, description: "Invoiced now: Stripe's proration of an upgrade (0 in a trial or for a change at renewal)"}
+        nextChargeMinor: {type: integer, format: int64}
+        nextChargeAt: {type: [string, 'null'], format: date-time}
+        trialing: {type: boolean}
+    BillingSetupIntent:
+      type: object
+      required: [setupIntentId, clientSecret, publishableKey, localTest]
+      properties:
+        setupIntentId: {type: string}
+        clientSecret: {type: string, description: 'Confirm with the Payment Element (stripe.confirmSetup)'}
+        publishableKey: {type: string}
+        localTest: {type: boolean, description: 'No Stripe key on this machine; the local stand-in accepted it'}
+    AddBillingPaymentMethod:
+      type: object
+      required: [stripePaymentMethodId, kind, last4]
+      properties:
+        stripePaymentMethodId: {type: string, pattern: '^pm_'}
+        kind: {type: string, enum: [CARD, US_BANK_ACCOUNT]}
+        brand: {type: string}
+        last4: {type: string, pattern: '^[0-9]{4}$'}
+        expMonth: {type: integer}
+        expYear: {type: integer}
+        bankName: {type: string}
+        accountType: {type: string}
+        makeDefault: {type: boolean}
     BillingView:
       type: object
       required: [subscription, plans, paymentMethods, invoices, canManage]

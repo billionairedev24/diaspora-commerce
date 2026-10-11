@@ -369,7 +369,8 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			"price": map[string]any{"cadence": "QUARTERLY", "months": 3, "totalCents": 11115, "perMonthCents": 3705, "savingCents": 585,
 				"perMonthLabel": "$37.05/mo", "billedLabel": "Billed $111.15 every 3 months", "savingLabel": "Save $5.85 vs monthly"},
 			"currentPeriodEnd": "2027-01-10T00:00:00Z", "nextChargeAt": "2027-01-10T00:00:00Z", "nextChargeCents": 11115, "nextChargeLabel": "$111.15 on Jan 10, 2027",
-			"cancelAtPeriodEnd": false, "paymentMethods": u.paymentMethodsJSON()}
+			"cancelAtPeriodEnd": false, "paymentMethods": u.paymentMethodsJSON(), "planVersion": 2, "creditBalanceCents": 2500,
+			"trialSource": "CAMPAIGN"}
 	}
 	mux.HandleFunc("GET /v1/orgs/{id}/billing", func(w http.ResponseWriter, _ *http.Request) {
 		u.mu.Lock()
@@ -392,6 +393,45 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			{"code": "seller_growth", "kind": "SELLER", "name": "Seller Growth", "tagline": "Most popular", "monthlyCents": 3900, "trialDays": 30,
 				"features": []string{"Up to 1,000 listings"}, "prices": []any{price("MONTHLY", 1, 3900, 3900, 0), price("QUARTERLY", 3, 11115, 3705, 585), price("ANNUAL", 12, 39000, 3250, 7800)}},
 		})
+	})
+	// S292–S297: the plans this organisation may choose, rewards, previews and adding a payment method.
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/plans", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []map[string]any{
+			{"code": "seller_growth", "kind": "SELLER", "name": "Seller Growth", "tagline": "Most popular", "monthlyCents": 3900, "trialDays": 60,
+				"features": []string{"Up to 1,000 listings"}, "version": 2, "visibility": "PUBLIC", "prices": []any{
+					map[string]any{"cadence": "QUARTERLY", "months": 3, "totalCents": 11115, "perMonthCents": 3705, "savingCents": 585,
+						"perMonthLabel": "$37.05/mo", "billedLabel": "Billed $111.15 every 3 months", "savingLabel": "Save $5.85 vs monthly"}}},
+			{"code": "seller_partner", "kind": "SELLER", "name": "Growth Partner", "tagline": "Invited", "monthlyCents": 2900, "trialDays": 30,
+				"features": []string{"Priority support"}, "version": 1, "visibility": "INVITE_ONLY", "prices": []any{}},
+		})
+	})
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/rewards", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]any{
+			"available": []any{map[string]any{"ruleId": "6d1c0b6a-0000-4000-8000-000000000001", "name": "First $1,000", "description": nil,
+				"metric": "GROSS_SALES", "value": 64000, "threshold": 100000, "percent": 64, "qualifies": false,
+				"label": "$640 of $1,000 in sales → 1 month free", "rewardLabel": "1 month free",
+				"conditionLabel": "$1,000 in sales within 60 days of approval", "endsAt": nil}},
+			"earned": []any{map[string]any{"id": "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "orgId": SellerOrgID, "source": "RULE",
+				"type": "CREDIT", "summary": "$25 credit", "note": "Two orders", "status": "APPLIED", "creditCents": 2500, "freeDays": nil,
+				"createdAt": "2026-10-01T10:00:00Z", "appliedAt": "2026-10-01T10:00:01Z"}},
+		})
+	})
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/plan/preview", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("planCode") == "nope" {
+			problem(w, 422, "seller.unknown-plan", "Plan nope is not available", map[string]any{"fieldErrors": map[string]string{"planCode": "Unknown"}})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"change": "IMMEDIATE_UPGRADE", "planCode": r.URL.Query().Get("planCode"), "planName": "Seller Pro",
+			"cadence": "QUARTERLY", "effectiveAt": "2026-10-10T00:00:00Z", "amountDueNowCents": 1734, "nextChargeCents": 36765,
+			"nextChargeAt": "2027-01-10T00:00:00Z", "trialing": false})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/billing/setup-intents", func(w http.ResponseWriter, _ *http.Request) {
+		//nolint:gosec // a test fixture, not a credential
+		writeJSON(w, 201, map[string]any{"customerId": "cus_1", "setupIntentId": "seti_1", "clientSecret": "seti_1_secret_test"})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/billing/payment-methods", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 201, map[string]any{"id": "aaaaaaaa-0000-0000-0000-000000000009", "kind": "CARD", "brand": "visa", "last4": "4242",
+			"expMonth": 12, "expYear": 2030, "verified": true, "receivesPayouts": false, "isDefault": false, "label": "Visa ••4242"})
 	})
 	mux.HandleFunc("POST /v1/orgs/{id}/billing/plan", func(w http.ResponseWriter, r *http.Request) {
 		var b struct {

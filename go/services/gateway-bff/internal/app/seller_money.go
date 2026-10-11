@@ -19,6 +19,14 @@ type SellerMoneyService interface {
 	ChangePlan(ctx context.Context, c *domain.Caller, planCode, cadence string) (domain.ChangePlanResult, error)
 	MakeDefaultPaymentMethod(ctx context.Context, c *domain.Caller, id string) ([]domain.BillingPaymentMethod, error)
 	RemovePaymentMethod(ctx context.Context, c *domain.Caller, id string) ([]domain.BillingPaymentMethod, error)
+	// Rewards lists the rewards the organisation can earn (with progress) and what it received (S296).
+	Rewards(ctx context.Context, c *domain.Caller) (domain.SellerRewardsView, error)
+	// PreviewPlanChange says what a plan or cadence change would do, with Stripe's proration (nothing changes).
+	PreviewPlanChange(ctx context.Context, c *domain.Caller, planCode, cadence string) (domain.PlanChangePreview, error)
+	// SetupIntent starts adding a card or bank account with the Payment Element (owner only).
+	SetupIntent(ctx context.Context, c *domain.Caller) (domain.BillingSetupIntent, error)
+	// AddPaymentMethod registers the payment method the SetupIntent confirmed (owner only).
+	AddPaymentMethod(ctx context.Context, c *domain.Caller, in domain.AddBillingPaymentMethod) (domain.BillingPaymentMethod, error)
 }
 
 type sellerMoneyImpl struct{ r *orgResolver }
@@ -138,7 +146,8 @@ func priceOf(p port.SellerPlanPrice) domain.PlanPrice {
 func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerPlan, invoices []port.SellerInvoice, role string) domain.BillingView {
 	sub := domain.Subscription{PlanCode: b.PlanCode, PlanName: b.PlanName, Cadence: cadenceOf(b.Cadence), Status: strings.ToUpper(b.Status),
 		TrialEndsAt: b.TrialEndsAt, CurrentPeriodEnd: b.CurrentPeriodEnd, NextChargeAt: b.NextChargeAt, NextChargeMinor: b.NextChargeCents,
-		NextChargeLabel: b.NextChargeLabel, CancelAtPeriodEnd: b.CancelAtPeriodEnd, Dunning: strPtr(b.Dunning)}
+		NextChargeLabel: b.NextChargeLabel, CancelAtPeriodEnd: b.CancelAtPeriodEnd, Dunning: strPtr(b.Dunning),
+		PlanVersion: max(1, b.PlanVersion), CreditBalanceMinor: max(0, b.CreditBalanceCents), TrialSource: strPtr(b.TrialSource)}
 	if b.Price != nil {
 		sub.PriceLabel, sub.BilledLabel = b.Price.PerMonthLabel, b.Price.BilledLabel
 	}
@@ -173,7 +182,8 @@ func (s *sellerMoneyImpl) load(ctx context.Context, c *domain.Caller, sc sellerC
 		invoices []port.SellerInvoice
 	)
 	wg.Go(func() { b, bErr = s.r.d.Sellers.Billing(ctx, c.BearerToken, sc.org.ID) })
-	wg.Go(func() { plans, _ = s.r.d.Sellers.Plans(ctx, strings.ToLower(sc.kind())) })
+	// The plans this organisation may choose: public, invited and its current plan (our catalogue, S292).
+	wg.Go(func() { plans, _ = s.r.d.Sellers.OrgPlans(ctx, c.BearerToken, sc.org.ID) })
 	wg.Go(func() { invoices, _ = s.r.d.Sellers.Invoices(ctx, c.BearerToken, sc.org.ID) })
 	wg.Wait()
 	if bErr != nil {
@@ -253,4 +263,101 @@ func (s *sellerMoneyImpl) RemovePaymentMethod(ctx context.Context, c *domain.Cal
 	return s.paymentMethodChange(ctx, c, func(bearer, orgID string) ([]port.SellerPaymentMethod, error) {
 		return s.r.d.Sellers.RemovePaymentMethod(ctx, bearer, orgID, id)
 	})
+}
+
+// ---------------------------------------------------------------- rewards, previews, payment methods (S292–S297)
+
+func (s *sellerMoneyImpl) Rewards(ctx context.Context, c *domain.Caller) (domain.SellerRewardsView, error) {
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.SellerRewardsView{}, err
+	}
+	rw, err := s.r.d.Sellers.Rewards(ctx, c.BearerToken, sc.org.ID)
+	if err != nil {
+		return domain.SellerRewardsView{}, mapErr("seller", err)
+	}
+	out := domain.SellerRewardsView{Available: []domain.RewardProgress{}, Earned: []domain.EarnedReward{}}
+	for _, p := range rw.Available {
+		out.Available = append(out.Available, domain.RewardProgress{RuleID: p.RuleID, Name: p.Name, Description: strPtr(p.Description),
+			Metric: p.Metric, Value: p.Value, Threshold: p.Threshold, Percent: min(100, max(0, p.Percent)), Qualifies: p.Qualifies,
+			Label: p.Label, RewardLabel: p.RewardLabel, ConditionLabel: p.ConditionLabel, EndsAt: p.EndsAt})
+	}
+	for _, g := range rw.Earned {
+		var reason *string
+		if g.Source == "RULE" {
+			reason = strPtr(g.Note)
+		}
+		out.Earned = append(out.Earned, domain.EarnedReward{ID: g.ID, Source: g.Source, Type: g.Type, Summary: g.Summary, Reason: reason,
+			Status: g.Status, CreditMinor: g.CreditCents, FreeDays: g.FreeDays, CreatedAt: g.CreatedAt, AppliedAt: g.AppliedAt})
+	}
+	return out, nil
+}
+
+func (s *sellerMoneyImpl) PreviewPlanChange(ctx context.Context, c *domain.Caller, planCode, cadence string) (domain.PlanChangePreview, error) {
+	if strings.TrimSpace(planCode) == "" {
+		return domain.PlanChangePreview{}, domain.ValidationProblem(map[string]string{"planCode": "Choose a plan"})
+	}
+	cadence = strings.ToUpper(strings.TrimSpace(cadence))
+	if cadence != "" && !slices.Contains(domain.Cadences, cadence) {
+		return domain.PlanChangePreview{}, domain.ValidationProblem(map[string]string{"cadence": "Choose monthly, quarterly or annual billing"})
+	}
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.PlanChangePreview{}, err
+	}
+	p, err := s.r.d.Sellers.PreviewPlanChange(ctx, c.BearerToken, sc.org.ID, planCode, cadence)
+	if err != nil {
+		return domain.PlanChangePreview{}, mapErr("seller", err)
+	}
+	return domain.PlanChangePreview{Change: firstNonEmpty(strings.ToUpper(p.Change), "AT_RENEWAL"), PlanCode: p.PlanCode, PlanName: p.PlanName,
+		Cadence: cadenceOf(p.Cadence), EffectiveAt: p.EffectiveAt, AmountDueNowMinor: p.AmountDueNowCents, NextChargeMinor: p.NextChargeCents,
+		NextChargeAt: p.NextChargeAt, Trialing: p.Trialing}, nil
+}
+
+func (s *sellerMoneyImpl) SetupIntent(ctx context.Context, c *domain.Caller) (domain.BillingSetupIntent, error) {
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.BillingSetupIntent{}, err
+	}
+	if !isOwner(sc.org.Role) {
+		return domain.BillingSetupIntent{}, ownerOnly()
+	}
+	si, err := s.r.d.Sellers.CreateSetupIntent(ctx, c.BearerToken, sc.org.ID)
+	if err != nil {
+		return domain.BillingSetupIntent{}, mapErr("seller", err)
+	}
+	local := strings.HasPrefix(si.SetupIntentID, "seti_local_")
+	return domain.BillingSetupIntent{SetupIntentID: si.SetupIntentID, ClientSecret: si.ClientSecret, PublishableKey: s.r.d.PublishableKey,
+		LocalTest: local}, nil
+}
+
+func (s *sellerMoneyImpl) AddPaymentMethod(ctx context.Context, c *domain.Caller, in domain.AddBillingPaymentMethod) (domain.BillingPaymentMethod, error) {
+	errs := map[string]string{}
+	if !strings.HasPrefix(in.StripePaymentMethodID, "pm_") {
+		errs["stripePaymentMethodId"] = "Confirm the card or bank account with Stripe first"
+	}
+	kind := strings.ToUpper(in.Kind)
+	if kind != "CARD" && kind != "US_BANK_ACCOUNT" {
+		errs["kind"] = "Card or bank account"
+	}
+	if len(in.Last4) != 4 {
+		errs["last4"] = "Last 4 digits"
+	}
+	if len(errs) > 0 {
+		return domain.BillingPaymentMethod{}, domain.ValidationProblem(errs)
+	}
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.BillingPaymentMethod{}, err
+	}
+	if !isOwner(sc.org.Role) {
+		return domain.BillingPaymentMethod{}, ownerOnly()
+	}
+	pm, err := s.r.d.Sellers.AddPaymentMethod(ctx, c.BearerToken, sc.org.ID, port.SellerPaymentMethodInput{
+		StripePaymentMethodID: in.StripePaymentMethodID, Kind: kind, Brand: strings.ToLower(in.Brand), Last4: in.Last4,
+		ExpMonth: in.ExpMonth, ExpYear: in.ExpYear, BankName: in.BankName, AccountType: in.AccountType, MakeDefault: in.MakeDefault})
+	if err != nil {
+		return domain.BillingPaymentMethod{}, mapErr("seller", err)
+	}
+	return paymentMethodOf(pm), nil
 }

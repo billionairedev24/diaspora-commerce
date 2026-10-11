@@ -62,6 +62,7 @@ var StaffNav = []StaffNavGroupDef{
 	{"finance", "Finance", []StaffModule{
 		{"payouts", "payouts", "Payouts & ledger", "Weekly Stripe Connect payouts. Holding or releasing money needs Approve."},
 		{"fees", "fees", "Fees, commissions & tax", "Fee schedule versions and marketplace-facilitator tax rates. Changes apply to new orders only."},
+		{"plans", "", "Plans & billing", "Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges."},
 	}},
 	{"growth", "Growth", []StaffModule{
 		{"marketing", "marketing", "Ads & announcements", "Announcement bar, hero carousel, display banners and sponsored placements."},
@@ -111,6 +112,16 @@ func (a StaffAccess) Level(module string) string {
 		case a.Can(PermNotificationsTemplatesWrite):
 			return LevelEdit
 		case a.Can(PermNotificationsRead):
+			return LevelView
+		default:
+			return LevelNone
+		}
+	case PlansModule:
+		// Derived from the seller service's own permissions (identity's matrix has no Plans & billing column).
+		switch {
+		case a.CanAny(PermPlansManage, PermBillingAdjust):
+			return LevelEdit
+		case a.CanAny(PermSellerBilling, "billing:usage"):
 			return LevelView
 		default:
 			return LevelNone

@@ -90,6 +90,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/billing/plan", h.changePlan)
 	route("POST /v1/seller/billing/payment-methods/{paymentMethodId}/default", h.defaultBillingMethod)
 	route("DELETE /v1/seller/billing/payment-methods/{paymentMethodId}", h.removeBillingMethod)
+	h.registerSellerBilling(route)
 	// Team
 	route("GET /v1/seller/team", h.team)
 	route("POST /v1/seller/team/invitations", h.invite)

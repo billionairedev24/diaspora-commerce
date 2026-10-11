@@ -269,6 +269,15 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("DELETE", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000001", nil), 409)
 	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000002/default", nil), 200)
 	mustStatus(t, b.do("DELETE", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000001", nil), 200)
+	// S292–S297: rewards, the proration preview and adding a payment method with a SetupIntent.
+	mustStatus(t, b.do("GET", "/v1/seller/billing/rewards", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=seller_pro&cadence=QUARTERLY", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=nope", nil), 422)
+	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=seller_pro&cadence=WEEKLY", nil), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/billing/setup-intents", nil), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods", map[string]any{"stripePaymentMethodId": "pm_card_visa", "kind": "CARD",
+		"brand": "Visa", "last4": "4242", "expMonth": 12, "expYear": 2030}), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods", map[string]any{"stripePaymentMethodId": "card_1", "kind": "CASH"}), 422)
 	// Team.
 	mustStatus(t, b.do("GET", "/v1/seller/team", nil), 200)
 	invited := b.do("POST", "/v1/seller/team/invitations", map[string]any{"email": "kemi@example.com", "roleKey": "seller.fulfilment"})
