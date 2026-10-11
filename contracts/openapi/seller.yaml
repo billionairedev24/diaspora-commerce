@@ -20,12 +20,15 @@ servers:
 security:
 - bearer: []
 tags:
-- name: Stripe compliance
-  description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
-    Stripe is the source of truth; answers are forwarded to Stripe and verified there.
+- name: Billing adjustments
+  description: Staff per-seller billing panel and audited adjustments (credits, free days, waived invoices, trial overrides)
+    with reason codes; billing:adjust to change. The Idempotency-Key header makes a retried request return the first grant.
 - name: Ship-from addresses
   description: Where a seller ships its own orders from (label purchase, rates, AfroTransact Delivery pickup). Members read;
     owner, admin and fulfilment members change them. Addresses are geocoded with geo-service when saved (position).
+- name: Plan catalogue
+  description: AfroTransact owns plans, versions (prices per cadence and the default trial) and trial campaigns; Stripe only
+    executes the charges. Staff with plans:manage change them; plans:manage, seller:billing or billing:adjust read them.
 - name: Onboarding
   description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
     Stripe verification, submit. No back-office access until final approval.'
@@ -39,12 +42,17 @@ tags:
 - name: Plans & billing
   description: Plan catalogue (public) and each organisation's Stripe Billing subscription. Owner and finance can view; only
     the owner changes billing.
+- name: Stripe compliance
+  description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
+    Stripe is the source of truth and collects every answer in its embedded components; Account health is read-only.
 - name: Organisations
   description: Seller and provider organisations
 - name: Metered usage
   description: FBA storage, sponsored-products spend and AI credits billed on Stripe Billing meters (S206)
 - name: Stripe webhooks
   description: Signature-verified (Stripe-Signature) and de-duplicated by event id
+- name: Rewards
+  description: Reward rules (staff with plans:manage), the grants log, and the rewards an organisation can earn (owner / finance)
 paths:
   /v1/applications:
     get:
@@ -103,8 +111,8 @@ paths:
       - Onboarding
       summary: Start or resume my application
       description: Creates a DRAFT organisation (caller = owner) and application; name, email and phone are prefilled from
-        the token's identity claims (phone, store name and business address from prefill when given) and listed in
-        prefilledFields. Returns 200 with the existing draft when one exists (resume).
+        the token's identity claims (phone, store name and business address from prefill when given) and listed in prefilledFields.
+        Returns 200 with the existing draft when one exists (resume).
       operationId: startApplication
       requestBody:
         content:
@@ -130,8 +138,8 @@ paths:
       tags:
       - Onboarding
       summary: Autosave one step
-      description: 'Steps: business, business-details, owners, plan, catalog-compliance, review. The body is the step''s
-        data; only the fields present are validated (submit validates everything). stripe-verification and payouts are completed
+      description: 'Steps: business, business-details, owners, plan, catalog-compliance, review. The body is the step''s data;
+        only the fields present are validated (submit validates everything). stripe-verification and payouts are completed
         in Stripe''s embedded components (Stripe collects the payout bank account); saving them answers 422 seller.step-managed-by-stripe.'
       operationId: saveStep
       parameters:
@@ -295,6 +303,517 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Application'
+  /v1/billing/grants:
+    get:
+      tags:
+      - Rewards
+      summary: 'Grants log: rewards and staff adjustments, newest first (staff)'
+      operationId: listGrants
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: ruleId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrantPage'
+  /v1/billing/plans:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Every plan with its versions, Stripe prices and subscribers (staff)
+      operationId: listAdminPlans
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanAdmin'
+    post:
+      tags:
+      - Plan catalogue
+      summary: Create a plan (draft, with version 1 as a draft)
+      operationId: createPlan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlanRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}:
+    get:
+      tags:
+      - Plan catalogue
+      summary: One plan (staff)
+      operationId: getAdminPlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+    put:
+      tags:
+      - Plan catalogue
+      summary: Edit a plan's name, tagline, features, limits, visibility and sort
+      description: No new version. 409 seller.concurrent-update when expectedVersion is stale.
+      operationId: updatePlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlanRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/draft:
+    put:
+      tags:
+      - Plan catalogue
+      summary: Save the draft version's prices and trial
+      description: Creates the next version when prices or trial differ from the current one; subscribers stay on their version
+        until migrated.
+      operationId: savePlanDraft
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanPrices'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/invites:
+    put:
+      tags:
+      - Plan catalogue
+      summary: Organisations invited to an invite-only plan
+      operationId: setPlanInvites
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanInvitesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/migration:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Subscribers on older versions and what the current version will charge them
+      operationId: previewPlanMigration
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanMigrationPreview'
+    post:
+      tags:
+      - Plan catalogue
+      summary: Migrate subscribers to the current version (from their next renewal, no proration)
+      operationId: migratePlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanMigrationRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanMigrationResult'
+  /v1/billing/plans/{code}/publish:
+    post:
+      tags:
+      - Plan catalogue
+      summary: Publish the draft version and sync it to Stripe (a new Price per cadence; the old one is archived)
+      operationId: publishPlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/plans/{code}/retire:
+    post:
+      tags:
+      - Plan catalogue
+      summary: 'Retire a plan: no new subscribers; existing ones keep it'
+      operationId: retirePlan
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanAdmin'
+  /v1/billing/reason-codes:
+    get:
+      tags:
+      - Rewards
+      summary: Reason codes for staff adjustments
+      operationId: listBillingReasonCodes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BillingReasonCode'
+  /v1/billing/reward-rules:
+    get:
+      tags:
+      - Rewards
+      summary: Reward rules (staff)
+      operationId: listRewardRules
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RewardRule'
+    post:
+      tags:
+      - Rewards
+      summary: Create a reward rule (DRAFT unless a status is given)
+      operationId: createRewardRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardRuleRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+  /v1/billing/reward-rules/preview:
+    post:
+      tags:
+      - Rewards
+      summary: Who qualifies now under a rule (unsaved or edited; nothing is granted)
+      operationId: previewRewardRule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardRuleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardPreview'
+  /v1/billing/reward-rules/{id}:
+    get:
+      tags:
+      - Rewards
+      summary: One reward rule (staff)
+      operationId: getRewardRule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+    put:
+      tags:
+      - Rewards
+      summary: Edit a reward rule (expectedVersion required)
+      operationId: updateRewardRule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardRuleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+  /v1/billing/reward-rules/{id}/status:
+    post:
+      tags:
+      - Rewards
+      summary: Activate, pause or end a reward rule
+      operationId: setRewardRuleStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RewardRule'
+  /v1/billing/stripe-sync:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Drift between our plan versions and Stripe (nothing changes)
+      operationId: planSyncReport
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanSyncReport'
+    post:
+      tags:
+      - Plan catalogue
+      summary: 'Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones'
+      operationId: syncPlans
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanSyncReport'
+  /v1/billing/trial-campaigns:
+    get:
+      tags:
+      - Plan catalogue
+      summary: Trial campaigns (promo codes and sign-up windows)
+      operationId: listTrialCampaigns
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrialCampaign'
+    post:
+      tags:
+      - Plan catalogue
+      summary: Create a trial campaign
+      operationId: createTrialCampaign
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrialCampaignRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TrialCampaign'
+  /v1/billing/trial-campaigns/{id}:
+    put:
+      tags:
+      - Plan catalogue
+      summary: Edit a trial campaign (expectedVersion required)
+      operationId: updateTrialCampaign
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrialCampaignRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TrialCampaign'
+  /v1/billing/trial-campaigns/{id}/status:
+    post:
+      tags:
+      - Plan catalogue
+      summary: Activate, pause or end a trial campaign
+      operationId: setTrialCampaignStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StatusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TrialCampaign'
   /v1/billing/usage/runs:
     get:
       tags:
@@ -617,28 +1136,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AccountHealth'
-  /v1/orgs/{orgId}/stripe/account-session:
-    post:
-      tags:
-      - Stripe compliance
-      summary: Account Session for Stripe's embedded components (owner / finance)
-      description: "Seller accounts are Stripe-collected: what Stripe needs (identity, tax ID, documents, terms) and the payout
-        bank account are entered in Stripe's embedded components — account onboarding, account management, notification banner
-        — never through AfroTransact. Returns client_secret for Connect.js. Staff can't open one."
-      operationId: orgAccountSession
-      parameters:
-      - name: orgId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/AccountSession'
   /v1/orgs/{orgId}/billing:
     get:
       tags:
@@ -677,6 +1174,92 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/billing/credits:
+    post:
+      tags:
+      - Billing adjustments
+      summary: Credit the organisation's Stripe balance (billing:adjust)
+      operationId: creditBalance
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
+  /v1/orgs/{orgId}/billing/earnings-collection:
+    put:
+      tags:
+      - Billing adjustments
+      summary: Opt the organisation in or out of collecting plan fees from earnings (billing:adjust)
+      description: 409 seller.earnings-collection-off while the platform flag is off.
+      operationId: setEarningsCollection
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EarningsCollectionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingPanel'
+  /v1/orgs/{orgId}/billing/free-days:
+    post:
+      tags:
+      - Billing adjustments
+      summary: 'Give free days: the subscription''s trial_end moves out (billing:adjust)'
+      operationId: giveFreeDays
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeDaysRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
   /v1/orgs/{orgId}/billing/invoices:
     get:
       tags:
@@ -720,6 +1303,60 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive:
+    post:
+      tags:
+      - Billing adjustments
+      summary: Waive (void) an open invoice (billing:adjust)
+      operationId: waiveInvoice
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: invoiceId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WaiveInvoiceRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
+  /v1/orgs/{orgId}/billing/panel:
+    get:
+      tags:
+      - Billing adjustments
+      summary: Per-seller billing panel (staff)
+      operationId: billingPanel
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingPanel'
   /v1/orgs/{orgId}/billing/payment-methods:
     get:
       tags:
@@ -877,6 +1514,27 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PlanChangePreview'
+  /v1/orgs/{orgId}/billing/plans:
+    get:
+      tags:
+      - Plans & billing
+      summary: Plans this organisation may choose (public, invited, and its current plan) (owner / finance)
+      operationId: listOrgPlans
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
   /v1/orgs/{orgId}/billing/resume:
     post:
       tags:
@@ -896,6 +1554,25 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/billing/rewards:
+    get:
+      tags:
+      - Rewards
+      summary: Rewards the organisation can earn (with progress) and what it received (owner / finance)
+      operationId: sellerRewards
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerRewards'
   /v1/orgs/{orgId}/billing/setup-intents:
     post:
       tags:
@@ -917,6 +1594,38 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/BillingSetupIntent'
+  /v1/orgs/{orgId}/billing/trial:
+    post:
+      tags:
+      - Billing adjustments
+      summary: Override the trial length for this organisation (billing:adjust)
+      description: 'Before activation: the subscription starts with this trial. While trialing: the trial ends this many days
+        after it started.'
+      operationId: overrideTrial
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreeDaysRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingGrant'
   /v1/orgs/{orgId}/billing/usage:
     get:
       tags:
@@ -1163,6 +1872,28 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ShipFromAddress'
+  /v1/orgs/{orgId}/stripe/account-session:
+    post:
+      tags:
+      - Stripe compliance
+      summary: Account Session for Stripe's embedded components (owner / finance)
+      description: 'Seller accounts are Stripe-collected: what Stripe needs (identity, tax ID, documents, terms) and the payout
+        bank account are entered in Stripe''s embedded components — account onboarding, account management, notification banner
+        — never through AfroTransact. Returns client_secret for Connect.js. Staff can''t open one.'
+      operationId: orgAccountSession
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountSession'
   /v1/orgs/{orgId}/suspend:
     post:
       tags:
@@ -1495,6 +2226,743 @@ components:
           description: Version being edited; 409 when it changed
       required:
       - enabled
+    EarningsCollectionRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+    Billing:
+      type: object
+      properties:
+        orgId:
+          type: string
+        planCode:
+          type: string
+        planName:
+          type: string
+        cadence:
+          type: string
+        status:
+          type: string
+        price:
+          $ref: '#/components/schemas/PlanPrice'
+        trialEndsAt:
+          type: string
+          format: date-time
+        currentPeriodEnd:
+          type: string
+          format: date-time
+        nextChargeAt:
+          type: string
+          format: date-time
+        nextChargeCents:
+          type: integer
+          format: int64
+        nextChargeLabel:
+          type: string
+        cancelAtPeriodEnd:
+          type: boolean
+        pendingChange:
+          $ref: '#/components/schemas/PendingPlanChange'
+        dunning:
+          type: string
+        failedPaymentAttempts:
+          type: integer
+          format: int32
+        paymentMethods:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethod'
+        planVersion:
+          type: integer
+          format: int32
+          description: Plan version (prices) the organisation is on
+        creditBalanceCents:
+          type: integer
+          format: int64
+          description: Stripe customer credit balance the next invoices use
+        trialSource:
+          type: string
+          enum:
+          - PLAN
+          - CAMPAIGN
+          - OVERRIDE
+          - NONE
+        trialDaysOverride:
+          type: integer
+          format: int32
+        collectFromEarnings:
+          type: boolean
+    BillingGrant:
+      type: object
+      description: A reward or staff adjustment and the Stripe objects it produced
+      properties:
+        id:
+          type: string
+        orgId:
+          type: string
+        source:
+          type: string
+          enum:
+          - RULE
+          - MANUAL
+        ruleId:
+          type: string
+        type:
+          type: string
+          enum:
+          - FREE_DAYS
+          - CREDIT
+          - PERCENT_OFF
+          - WAIVE_INVOICE
+          - TRIAL_END
+        creditCents:
+          type: integer
+          format: int64
+        freeDays:
+          type: integer
+          format: int32
+        percentOff:
+          type: number
+        durationInvoices:
+          type: integer
+          format: int32
+        invoiceId:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPLIED
+          - FAILED
+        reasonCode:
+          type: string
+        note:
+          type: string
+        summary:
+          type: string
+        actorId:
+          type: string
+        metric:
+          type: string
+        metricValue:
+          type: integer
+          format: int64
+        stripeCustomerId:
+          type: string
+        stripeSubscriptionId:
+          type: string
+        stripeBalanceTransactionId:
+          type: string
+        stripeCouponId:
+          type: string
+        previousTrialEnd:
+          type: string
+          format: date-time
+        newTrialEnd:
+          type: string
+          format: date-time
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        appliedAt:
+          type: string
+          format: date-time
+    BillingPanel:
+      type: object
+      description: Staff per-seller billing panel; billing is null before the organisation has a subscription
+      properties:
+        orgId:
+          type: string
+        orgName:
+          type: string
+        kind:
+          type: string
+        orgStatus:
+          type: string
+        billing:
+          $ref: '#/components/schemas/Billing'
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingGrant'
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/EarningsCollection'
+        earningsCollectionEnabled:
+          type: boolean
+    EarningsCollection:
+      type: object
+      properties:
+        invoiceId:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        status:
+          type: string
+          enum:
+          - REQUESTED
+          - WITHHELD
+          - CREDITED
+          - DECLINED
+          - FAILED
+        paymentsReference:
+          type: string
+        stripeBalanceTransactionId:
+          type: string
+        reason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    FirstCharge:
+      type: object
+      properties:
+        chargeOn:
+          type: string
+          format: date
+        amountCents:
+          type: integer
+          format: int64
+        sentence:
+          type: string
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        amountDueCents:
+          type: integer
+          format: int64
+        amountPaidCents:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+        billingReason:
+          type: string
+        hostedInvoiceUrl:
+          type: string
+        invoicePdf:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLine'
+        meteredAmountCents:
+          type: integer
+          format: int64
+          description: Sum of the metered usage lines
+    InvoiceLine:
+      type: object
+      description: Plan, proration or metered usage line (S206)
+      properties:
+        description:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+          format: int64
+        metered:
+          type: boolean
+        meter:
+          type: string
+          description: Usage meter of a metered line
+          enum:
+          - FBA_STORAGE
+          - ADS_SPEND
+          - AI_CREDITS
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+    PaymentMethod:
+      type: object
+      description: Card (brand, last 4, expiry) or bank (name, type, last 4)
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        brand:
+          type: string
+        last4:
+          type: string
+        expMonth:
+          type: integer
+          format: int32
+        expYear:
+          type: integer
+          format: int32
+        bankName:
+          type: string
+        accountType:
+          type: string
+        verified:
+          type: boolean
+        receivesPayouts:
+          type: boolean
+        isDefault:
+          type: boolean
+        label:
+          type: string
+    PendingPlanChange:
+      type: object
+      description: Downgrade or cadence change applied at renewal
+      properties:
+        planCode:
+          type: string
+        planName:
+          type: string
+        cadence:
+          type: string
+        effectiveAt:
+          type: string
+          format: date-time
+    PlanPrice:
+      type: object
+      description: Price of a plan for one cadence; amounts in cents (USD)
+      properties:
+        cadence:
+          type: string
+        months:
+          type: integer
+          format: int32
+        totalCents:
+          type: integer
+          format: int64
+        perMonthCents:
+          type: integer
+          format: int64
+        savingCents:
+          type: integer
+          format: int64
+        perMonthLabel:
+          type: string
+        billedLabel:
+          type: string
+        savingLabel:
+          type: string
+        firstCharge:
+          $ref: '#/components/schemas/FirstCharge'
+    TrialCampaignRequest:
+      type: object
+      description: A promo code, a sign-up window, or both
+      properties:
+        name:
+          type: string
+        promoCode:
+          type: string
+        trialDays:
+          type: integer
+          format: int32
+        signupFrom:
+          type: string
+          format: date-time
+        signupTo:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        maxRedemptions:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - ENDED
+        expectedVersion:
+          type: integer
+          format: int64
+    TrialCampaign:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        promoCode:
+          type: string
+        trialDays:
+          type: integer
+          format: int32
+        signupFrom:
+          type: string
+          format: date-time
+        signupTo:
+          type: string
+          format: date-time
+        kind:
+          type: string
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        maxRedemptions:
+          type: integer
+          format: int32
+        redemptions:
+          type: integer
+          format: int32
+        status:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    RewardRuleRequest:
+      type: object
+      description: Reach threshold of metric (optionally in the last windowDays days and/or within withinDaysOfApproval days
+        of approval) and get the reward, once per seller
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        metric:
+          type: string
+          enum:
+          - GROSS_SALES
+          - ACTIVE_LISTINGS
+          - COMPLETED_ORDERS
+          - COMPLETED_BOOKINGS
+          - DAYS_SINCE_APPROVAL
+        threshold:
+          type: integer
+          format: int64
+          description: Cents for GROSS_SALES, a count otherwise
+        windowDays:
+          type: integer
+          format: int32
+        withinDaysOfApproval:
+          type: integer
+          format: int32
+        rewardType:
+          type: string
+          enum:
+          - FREE_DAYS
+          - CREDIT
+          - PERCENT_OFF
+        freeDays:
+          type: integer
+          format: int32
+        creditCents:
+          type: integer
+          format: int64
+        percentOff:
+          type: number
+        durationInvoices:
+          type: integer
+          format: int32
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        maxGrants:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - PAUSED
+          - ENDED
+        expectedVersion:
+          type: integer
+          format: int64
+        ruleId:
+          type: string
+          description: 'Preview only: marks who already got this rule'
+    RewardRule:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+        kind:
+          type: string
+        metric:
+          type: string
+        threshold:
+          type: integer
+          format: int64
+        windowDays:
+          type: integer
+          format: int32
+        withinDaysOfApproval:
+          type: integer
+          format: int32
+        rewardType:
+          type: string
+        freeDays:
+          type: integer
+          format: int32
+        creditCents:
+          type: integer
+          format: int64
+        percentOff:
+          type: number
+        durationInvoices:
+          type: integer
+          format: int32
+        eligiblePlans:
+          type: array
+          items:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        maxGrants:
+          type: integer
+          format: int32
+        grantsCount:
+          type: integer
+          format: int32
+        rewardLabel:
+          type: string
+        conditionLabel:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    UpdatePlanRequest:
+      type: object
+      description: Metadata only; expectedVersion is the plan's rowVersion
+      properties:
+        name:
+          type: string
+        tagline:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        limits:
+          type: object
+          additionalProperties:
+            type: string
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - HIDDEN
+          - INVITE_ONLY
+        sortOrder:
+          type: integer
+          format: int32
+        expectedVersion:
+          type: integer
+          format: int64
+    PlanAdmin:
+      type: object
+      description: 'A plan for staff: metadata, versions with Stripe prices, invites'
+      properties:
+        code:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        tagline:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        limits:
+          type: object
+          additionalProperties:
+            type: string
+        visibility:
+          type: string
+        status:
+          type: string
+        sortOrder:
+          type: integer
+          format: int32
+        currentVersion:
+          type: integer
+          format: int32
+        monthlyCents:
+          type: integer
+          format: int64
+        quarterlyCents:
+          type: integer
+          format: int64
+        annualCents:
+          type: integer
+          format: int64
+        trialDays:
+          type: integer
+          format: int32
+        rowVersion:
+          type: integer
+          format: int64
+        stripeProductId:
+          type: string
+        subscribers:
+          type: integer
+          format: int64
+        invites:
+          type: array
+          items:
+            type: string
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanVersion'
+    PlanVersion:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+          - SUPERSEDED
+        trialDays:
+          type: integer
+          format: int32
+        note:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        publishedAt:
+          type: string
+          format: date-time
+        subscribers:
+          type: integer
+          format: int64
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanVersionPrice'
+    PlanVersionPrice:
+      type: object
+      description: One cadence of a version and its Stripe Price
+      properties:
+        cadence:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        lookupKey:
+          type: string
+        stripePriceId:
+          type: string
+        syncedAt:
+          type: string
+          format: date-time
+        syncError:
+          type: string
+    PlanInvitesRequest:
+      type: object
+      properties:
+        orgIds:
+          type: array
+          items:
+            type: string
+    PlanPrices:
+      type: object
+      description: A version's price per cadence (cents) and default trial
+      properties:
+        monthlyCents:
+          type: integer
+          format: int64
+        quarterlyCents:
+          type: integer
+          format: int64
+        annualCents:
+          type: integer
+          format: int64
+        trialDays:
+          type: integer
+          format: int32
+        note:
+          type: string
     BusinessStep:
       type: object
       description: Step 'business'. Non-live countries return 422 seller.country-not-live.
@@ -1572,8 +3040,8 @@ components:
           type: string
     Owner:
       type: object
-      description: A beneficial owner (25%+) or person with significant control, with their home address. Identity and
-        tax numbers are collected by Stripe's embedded onboarding, not here.
+      description: A beneficial owner (25%+) or person with significant control, with their home address. Identity and tax
+        numbers are collected by Stripe's embedded onboarding, not here.
       properties:
         firstName:
           type: string
@@ -1630,6 +3098,9 @@ components:
         cardExpYear:
           type: integer
           format: int32
+        promoCode:
+          type: string
+          description: Trial campaign promo code (optional)
     CatalogComplianceStep:
       type: object
       description: Step 'catalog-compliance'
@@ -1668,11 +3139,6 @@ components:
           type: string
         permitType:
           type: string
-          enum:
-          - FOOD_ESTABLISHMENT
-          - COTTAGE_FOOD
-          - FDA_FACILITY
-          - FOOD_HANDLER
     ServiceLicence:
       type: object
       description: A service offered; regulated services need licence number, issuing state, expiry (expired licences are
@@ -1875,6 +3341,21 @@ components:
           type: string
         reinstateNote:
           type: string
+    AccountSession:
+      type: object
+      description: 'client_secret for Stripe''s embedded Connect components. localTest is true only on the local profile without
+        a Stripe key (LocalTestStripePolicy): there is no Stripe to load and the client shows its labelled local verification
+        instead.'
+      properties:
+        accountId:
+          type: string
+        clientSecret:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        localTest:
+          type: boolean
     ReinstateOrgRequest:
       type: object
       properties:
@@ -1882,6 +3363,16 @@ components:
           type: string
           maxLength: 1000
           minLength: 0
+    FreeDaysRequest:
+      type: object
+      properties:
+        days:
+          type: integer
+          format: int32
+        reasonCode:
+          type: string
+        note:
+          type: string
     BillingSetupIntent:
       type: object
       properties:
@@ -1892,129 +3383,6 @@ components:
         clientSecret:
           type: string
           description: Confirm with Stripe.js / PaymentSheet
-    Billing:
-      type: object
-      properties:
-        orgId:
-          type: string
-        planCode:
-          type: string
-        planName:
-          type: string
-        cadence:
-          type: string
-        status:
-          type: string
-        price:
-          $ref: '#/components/schemas/PlanPrice'
-        trialEndsAt:
-          type: string
-          format: date-time
-        currentPeriodEnd:
-          type: string
-          format: date-time
-        nextChargeAt:
-          type: string
-          format: date-time
-        nextChargeCents:
-          type: integer
-          format: int64
-        nextChargeLabel:
-          type: string
-        cancelAtPeriodEnd:
-          type: boolean
-        pendingChange:
-          $ref: '#/components/schemas/PendingPlanChange'
-        dunning:
-          type: string
-        failedPaymentAttempts:
-          type: integer
-          format: int32
-        paymentMethods:
-          type: array
-          items:
-            $ref: '#/components/schemas/PaymentMethod'
-    FirstCharge:
-      type: object
-      properties:
-        chargeOn:
-          type: string
-          format: date
-        amountCents:
-          type: integer
-          format: int64
-        sentence:
-          type: string
-    PaymentMethod:
-      type: object
-      description: Card (brand, last 4, expiry) or bank (name, type, last 4)
-      properties:
-        id:
-          type: string
-          format: uuid
-        kind:
-          type: string
-        brand:
-          type: string
-        last4:
-          type: string
-        expMonth:
-          type: integer
-          format: int32
-        expYear:
-          type: integer
-          format: int32
-        bankName:
-          type: string
-        accountType:
-          type: string
-        verified:
-          type: boolean
-        receivesPayouts:
-          type: boolean
-        isDefault:
-          type: boolean
-        label:
-          type: string
-    PendingPlanChange:
-      type: object
-      description: Downgrade or cadence change applied at renewal
-      properties:
-        planCode:
-          type: string
-        planName:
-          type: string
-        cadence:
-          type: string
-        effectiveAt:
-          type: string
-          format: date-time
-    PlanPrice:
-      type: object
-      description: Price of a plan for one cadence; amounts in cents (USD)
-      properties:
-        cadence:
-          type: string
-        months:
-          type: integer
-          format: int32
-        totalCents:
-          type: integer
-          format: int64
-        perMonthCents:
-          type: integer
-          format: int64
-        savingCents:
-          type: integer
-          format: int64
-        perMonthLabel:
-          type: string
-        billedLabel:
-          type: string
-        savingLabel:
-          type: string
-        firstCharge:
-          $ref: '#/components/schemas/FirstCharge'
     ChangePlanRequest:
       type: object
       properties:
@@ -2069,6 +3437,48 @@ components:
       required:
       - kind
       - stripePaymentMethodId
+    WaiveInvoiceRequest:
+      type: object
+      properties:
+        reasonCode:
+          type: string
+        note:
+          type: string
+    CreditRequest:
+      type: object
+      properties:
+        amountCents:
+          type: integer
+          format: int64
+        reasonCode:
+          type: string
+        note:
+          type: string
+    LaunchListRequest:
+      type: object
+      properties:
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+        email:
+          type: string
+          format: email
+          minLength: 1
+        shoppingUpdates:
+          type: boolean
+      required:
+      - country
+      - email
+    LaunchListResponse:
+      type: object
+      properties:
+        country:
+          type: string
+        added:
+          type: boolean
+        message:
+          type: string
     AccountHealth:
       type: object
       properties:
@@ -2140,8 +3550,6 @@ components:
           format: date-time
     PayoutBank:
       type: object
-      description: The payout bank account Stripe holds (Stripe collects and changes it in its embedded components). Never the
-        numbers.
       properties:
         id:
           type: string
@@ -2151,7 +3559,6 @@ components:
           type: string
         status:
           type: string
-          description: Stripe's status (new, validated, verified, verification_failed, errored)
     RequirementError:
       type: object
       properties:
@@ -2187,8 +3594,6 @@ components:
           type: string
         component:
           type: string
-          description: The Stripe embedded component that collects it (account_management for the payout bank account,
-            account_onboarding for everything else). Nothing is answered through AfroTransact.
     RequirementItem:
       type: object
       properties:
@@ -2202,31 +3607,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RequirementError'
-    LaunchListRequest:
-      type: object
-      properties:
-        country:
-          type: string
-          maxLength: 2
-          minLength: 2
-        email:
-          type: string
-          format: email
-          minLength: 1
-        shoppingUpdates:
-          type: boolean
-      required:
-      - country
-      - email
-    LaunchListResponse:
-      type: object
-      properties:
-        country:
-          type: string
-        added:
-          type: boolean
-        message:
-          type: string
     ComplianceNote:
       type: object
       properties:
@@ -2292,6 +3672,170 @@ components:
         finishedAt:
           type: string
           format: date-time
+    StatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+    PlanSyncLine:
+      type: object
+      properties:
+        planCode:
+          type: string
+        planName:
+          type: string
+        version:
+          type: integer
+          format: int32
+        cadence:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        lookupKey:
+          type: string
+        state:
+          type: string
+          enum:
+          - IN_SYNC
+          - FREE
+          - ADOPTABLE
+          - MISSING
+          - DRIFT
+          - SUPERSEDED
+        action:
+          type: string
+          enum:
+          - NONE
+          - ADOPTED
+          - CREATED
+          - REPLACED
+          - FAILED
+        stripePriceId:
+          type: string
+        stripeAmountCents:
+          type: integer
+          format: int64
+        error:
+          type: string
+    PlanSyncReport:
+      type: object
+      description: Drift between our plan versions and Stripe; applied = the sync ran
+      properties:
+        checkedAt:
+          type: string
+          format: date-time
+        applied:
+          type: boolean
+        drifted:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanSyncLine'
+    RewardPreview:
+      type: object
+      description: Who qualifies now (best first, at most 500 rows)
+      properties:
+        evaluated:
+          type: integer
+          format: int32
+        qualifying:
+          type: integer
+          format: int32
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardPreviewRow'
+    RewardPreviewRow:
+      type: object
+      properties:
+        orgId:
+          type: string
+        orgName:
+          type: string
+        planCode:
+          type: string
+        value:
+          type: integer
+          format: int64
+        threshold:
+          type: integer
+          format: int64
+        percent:
+          type: integer
+          format: int32
+        qualifies:
+          type: boolean
+        alreadyGranted:
+          type: boolean
+        reason:
+          type: string
+    CreatePlanRequest:
+      type: object
+      properties:
+        code:
+          type: string
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        name:
+          type: string
+        tagline:
+          type: string
+        features:
+          type: array
+          items:
+            type: string
+        limits:
+          type: object
+          additionalProperties:
+            type: string
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - HIDDEN
+          - INVITE_ONLY
+        sortOrder:
+          type: integer
+          format: int32
+        prices:
+          $ref: '#/components/schemas/PlanPrices'
+    PlanMigrationRequest:
+      type: object
+      description: orgIds empty or missing = every subscriber in the preview
+      properties:
+        orgIds:
+          type: array
+          items:
+            type: string
+    PlanMigrationFailure:
+      type: object
+      properties:
+        orgId:
+          type: string
+        error:
+          type: string
+    PlanMigrationResult:
+      type: object
+      properties:
+        planCode:
+          type: string
+        toVersion:
+          type: integer
+          format: int32
+        migrated:
+          type: array
+          items:
+            type: string
+        failed:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanMigrationFailure'
     ReviewDecision:
       type: object
       properties:
@@ -2535,9 +4079,6 @@ components:
           $ref: '#/components/schemas/Address'
     PayoutSection:
       type: object
-      description: "Step 'payouts': the payout bank account Stripe holds for the connected account, mirrored read-only. Stripe
-        collects and changes it in its embedded components (the account is Stripe-collected, so the platform can't attach
-        one); only the bank name, last 4 digits and Stripe's status are kept."
       properties:
         accountHolderName:
           type: string
@@ -2551,10 +4092,8 @@ components:
           type: string
         externalAccountLinked:
           type: boolean
-          description: Stripe holds a usable payout account (not verification_failed or errored)
         bankStatus:
           type: string
-          description: Stripe's status (new, validated, verified, verification_failed, errored)
     PlanSelection:
       type: object
       properties:
@@ -2578,6 +4117,8 @@ components:
           format: int32
         firstCharge:
           $ref: '#/components/schemas/FirstCharge'
+        promoCode:
+          type: string
     StripeVerification:
       type: object
       properties:
@@ -2624,6 +4165,34 @@ components:
         occurredAt:
           type: string
           format: date-time
+    ApplicationPrefill:
+      type: object
+      description: 'What the caller''s account already knows (sent by gateway-bff from identity''s profile and address book).
+        Used only when the application is created, and only where the token''s claims have nothing: name, email, phone (verified
+        or not), the default address as the business address, and a store name.'
+      properties:
+        givenName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        familyName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        email:
+          type: string
+          maxLength: 254
+          minLength: 0
+        phone:
+          type: string
+          maxLength: 32
+          minLength: 0
+        storeName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        address:
+          $ref: '#/components/schemas/Address'
     StartApplicationRequest:
       type: object
       properties:
@@ -2637,44 +4206,6 @@ components:
           $ref: '#/components/schemas/ApplicationPrefill'
       required:
       - kind
-    ApplicationPrefill:
-      type: object
-      description: 'What the caller''s account already knows (sent by gateway-bff from identity''s profile and address
-        book). Used only when the application is created, and only where the token''s claims have nothing: name,
-        email, phone (verified or not), the default address as the business address, and a store name.'
-      properties:
-        givenName:
-          type: string
-          maxLength: 80
-        familyName:
-          type: string
-          maxLength: 80
-        email:
-          type: string
-          maxLength: 254
-        phone:
-          type: string
-          maxLength: 32
-        storeName:
-          type: string
-          maxLength: 120
-        address:
-          $ref: '#/components/schemas/Address'
-    AccountSession:
-      type: object
-      description: 'client_secret for Stripe''s embedded Connect components. localTest is true only on the local profile
-        without a Stripe key (LocalTestStripePolicy): there is no Stripe to load and the client shows its labelled local
-        verification instead.'
-      properties:
-        accountId:
-          type: string
-        clientSecret:
-          type: string
-        expiresAt:
-          type: string
-          format: date-time
-        localTest:
-          type: boolean
     RenameOrgRequest:
       type: object
       properties:
@@ -2709,6 +4240,7 @@ components:
         trialDays:
           type: integer
           format: int32
+          description: The trial a sign-up gets today (plan default or a running campaign)
         features:
           type: array
           items:
@@ -2717,6 +4249,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlanPrice'
+        version:
+          type: integer
+          format: int32
+          description: Current version (prices)
+        visibility:
+          type: string
+          enum:
+          - PUBLIC
+          - HIDDEN
+          - INVITE_ONLY
+        limits:
+          type: object
+          additionalProperties:
+            type: string
     UsageDayLine:
       type: object
       properties:
@@ -2790,6 +4336,50 @@ components:
         estimatedTotalCents:
           type: integer
           format: int64
+    RewardProgress:
+      type: object
+      description: A reward the organisation can still earn
+      properties:
+        ruleId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        metric:
+          type: string
+        value:
+          type: integer
+          format: int64
+        threshold:
+          type: integer
+          format: int64
+        percent:
+          type: integer
+          format: int32
+        qualifies:
+          type: boolean
+        label:
+          type: string
+        rewardLabel:
+          type: string
+        conditionLabel:
+          type: string
+        endsAt:
+          type: string
+          format: date-time
+    SellerRewards:
+      type: object
+      description: Rewards the organisation can still earn and what it received
+      properties:
+        available:
+          type: array
+          items:
+            $ref: '#/components/schemas/RewardProgress'
+        earned:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingGrant'
     PlanChangePreview:
       type: object
       properties:
@@ -2821,73 +4411,6 @@ components:
           format: date-time
         trialing:
           type: boolean
-    Invoice:
-      type: object
-      properties:
-        id:
-          type: string
-        number:
-          type: string
-        periodStart:
-          type: string
-          format: date-time
-        periodEnd:
-          type: string
-          format: date-time
-        amountDueCents:
-          type: integer
-          format: int64
-        amountPaidCents:
-          type: integer
-          format: int64
-        currency:
-          type: string
-        status:
-          type: string
-        billingReason:
-          type: string
-        hostedInvoiceUrl:
-          type: string
-        invoicePdf:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        lines:
-          type: array
-          items:
-            $ref: '#/components/schemas/InvoiceLine'
-        meteredAmountCents:
-          type: integer
-          format: int64
-          description: Sum of the metered usage lines
-    InvoiceLine:
-      type: object
-      description: Plan, proration or metered usage line (S206)
-      properties:
-        description:
-          type: string
-        amountCents:
-          type: integer
-          format: int64
-        quantity:
-          type: integer
-          format: int64
-        metered:
-          type: boolean
-        meter:
-          type: string
-          description: Usage meter of a metered line
-          enum:
-          - FBA_STORAGE
-          - ADS_SPEND
-          - AI_CREDITS
-        periodStart:
-          type: string
-          format: date-time
-        periodEnd:
-          type: string
-          format: date-time
     OrgPublicView:
       type: object
       properties:
@@ -2936,6 +4459,64 @@ components:
           type: array
           items:
             type: string
+    BillingReasonCode:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+    PlanMigrationPreview:
+      type: object
+      properties:
+        planCode:
+          type: string
+        toVersion:
+          type: integer
+          format: int32
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanMigrationRow'
+    PlanMigrationRow:
+      type: object
+      properties:
+        orgId:
+          type: string
+        orgName:
+          type: string
+        fromVersion:
+          type: integer
+          format: int32
+        cadence:
+          type: string
+        fromCents:
+          type: integer
+          format: int64
+        toCents:
+          type: integer
+          format: int64
+        status:
+          type: string
+        effectiveAt:
+          type: string
+          format: date-time
+    BillingGrantPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingGrant'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
     ApplicationQueue:
       type: object
       properties:
