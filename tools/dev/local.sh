@@ -8,10 +8,13 @@
 #   tools/dev/local.sh links                   # print every link again
 #   tools/dev/local.sh logs delivery-runs      # follow one log (web apps: web-storefront, web-staff-console, …)
 #   tools/dev/local.sh restart orders          # rebuild + restart one service
+#   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
 #
 # Make targets: make up (= dev-up), make down, make dev-status, make dev-links, make dev-logs SERVICE=x,
-# make dev-restart SERVICE=x. Works with macOS's bash 3.2.
+# make dev-restart SERVICE=x, make seed. Works with macOS's bash 3.2.
+#
+# `up` seeds the demo dataset when the catalog is empty (tools/seed/seed.py --if-empty; SEED=0 skips it).
 #
 # Only the infrastructure the apps need is started (no Grafana/Prometheus/Loki/Tempo/Kibana: `make up-infra` has
 # those, ~12 GB). Java services start one at a time (Flyway migrations). Connection pools are kept small (DB_POOL,
@@ -35,7 +38,7 @@ OVERRIDE="$STATE/compose.external-postgres.yml"
 INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal minio minio-init mailpit openfga-migrate openfga"
 
 # Everything the storefront, checkout, pre-orders and the staff console use. Order matters: identity first.
-DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops
+DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops seller
   geo media cart notifications search indexer promise gateway-bff"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns
@@ -290,6 +293,8 @@ start() {
   if running "$svc"; then echo "  · $svc already running (pid $(cat "$PIDS/$svc.pid"))"; return 0; fi
   telemetry_env
   pool_env "$svc"
+  # media signs uploads for this stack's MinIO (infra/local/docker-compose.yml root credentials).
+  export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
   : >"$LOGS/$svc.log"
   if [[ "$(runtime_of "$svc")" == java ]]; then
     jar=$( { ls "$ROOT"/java/services/"$svc"/target/"$svc"-service-*.jar 2>/dev/null || true; } | grep -v -- '-plain' | head -1 || true)
@@ -397,7 +402,18 @@ cmd_up() {
     echo "Started with problems:$failed — see: tools/dev/local.sh logs <service>" >&2
   fi
   web_up
+  seed_if_empty
   links
+}
+
+# Demo data on a fresh stack: sellers, ~75 products with photos, offers, stock, home content, pre-orders (tools/seed).
+seed_if_empty() {
+  if [[ "${SEED:-1}" == 0 ]]; then return 0; fi
+  command -v python3 >/dev/null || { echo "python3 not found: demo data skipped (make seed later)" >&2; return 0; }
+  echo "==> demo data (tools/seed; only when the catalog is empty, SEED=0 skips it; log: .local/logs/seed.log)"
+  mkdir -p "$LOGS"
+  python3 "$ROOT/tools/seed/seed.py" --if-empty 2>&1 | tee "$LOGS/seed.log" \
+    | grep -E '^(seed:|services up|image sources|  [✗!]|  [a-z ]{3,20} {2,}|  attribution)' || true
 }
 
 cmd_status() {
@@ -436,7 +452,8 @@ case "${1:-}" in
   status) cmd_status ;;
   links) links ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
+  seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
     stop "$2"; build "$2"; start "$2"; wait_healthy "$2" 240 ;;
-  *) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

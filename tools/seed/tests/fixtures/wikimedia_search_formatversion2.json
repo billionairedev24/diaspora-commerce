@@ -1,0 +1,18 @@
+{
+  "batchcomplete": true,
+  "query": {
+    "pages": [
+      {"pageid": 91002, "ns": 6, "title": "File:Kente cloth detail.jpg", "index": 2,
+       "imageinfo": [{"width": 3264, "height": 2448, "thumburl": "https://upload.wikimedia.org/y/1600px-Kente.jpg",
+         "thumbwidth": 1600, "thumbheight": 1200, "url": "https://upload.wikimedia.org/y/Kente.jpg",
+         "descriptionurl": "https://commons.wikimedia.org/wiki/File:Kente_cloth_detail.jpg", "mime": "image/jpeg",
+         "extmetadata": {"Artist": {"value": "Yaw Example"}, "LicenseShortName": {"value": "CC BY 2.0"},
+           "License": {"value": "cc-by-2.0"}, "LicenseUrl": {"value": "https://creativecommons.org/licenses/by/2.0"}}}]},
+      {"pageid": 91001, "ns": 6, "title": "File:Kente weaver at Bonwire.webp", "index": 1,
+       "imageinfo": [{"width": 1600, "height": 1600, "url": "https://upload.wikimedia.org/y/Kente_weaver.webp",
+         "descriptionurl": "https://commons.wikimedia.org/wiki/File:Kente_weaver_at_Bonwire.webp", "mime": "image/webp",
+         "extmetadata": {"Artist": {"value": "Efua Example"}, "LicenseShortName": {"value": "CC BY-SA 3.0"},
+           "License": {"value": "cc-by-sa-3.0"}}}]}
+    ]
+  }
+}

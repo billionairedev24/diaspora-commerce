@@ -1,0 +1,88 @@
+{
+  "batchcomplete": "",
+  "continue": {"gsroffset": 7, "continue": "gsroffset||"},
+  "query": {
+    "pages": {
+      "90001": {
+        "pageid": 90001, "ns": 6, "title": "File:Jollof rice with fried plantain.jpg", "index": 2,
+        "imagerepository": "local",
+        "imageinfo": [{
+          "size": 2457600, "width": 4000, "height": 3000,
+          "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/Jollof_rice_with_fried_plantain.jpg/1600px-Jollof_rice_with_fried_plantain.jpg",
+          "thumbwidth": 1600, "thumbheight": 1200,
+          "url": "https://upload.wikimedia.org/wikipedia/commons/a/a1/Jollof_rice_with_fried_plantain.jpg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jollof_rice_with_fried_plantain.jpg",
+          "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=90001",
+          "mime": "image/jpeg",
+          "extmetadata": {
+            "ObjectName": {"value": "Jollof rice with fried plantain", "source": "mediawiki-metadata", "hidden": ""},
+            "Artist": {"value": "<a href=\"//commons.wikimedia.org/wiki/User:Ada_Example\" title=\"User:Ada Example\">Ada Example</a>", "source": "commons-desc-page"},
+            "Credit": {"value": "<span class=\"int-own-work\" lang=\"en\">Own work</span>", "source": "commons-desc-page", "hidden": ""},
+            "LicenseShortName": {"value": "CC BY-SA 4.0", "source": "commons-desc-page", "hidden": ""},
+            "License": {"value": "cc-by-sa-4.0", "source": "commons-templates", "hidden": ""},
+            "LicenseUrl": {"value": "https://creativecommons.org/licenses/by-sa/4.0", "source": "commons-desc-page", "hidden": ""},
+            "AttributionRequired": {"value": "true", "source": "commons-desc-page", "hidden": ""},
+            "UsageTerms": {"value": "Creative Commons Attribution-Share Alike 4.0", "source": "commons-desc-page", "hidden": ""}
+          }
+        }]
+      },
+      "90002": {
+        "pageid": 90002, "ns": 6, "title": "File:Party jollof in a pot.jpg", "index": 1,
+        "imageinfo": [{
+          "size": 1800000, "width": 3000, "height": 3000,
+          "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b2/Party_jollof_in_a_pot.jpg/1600px-Party_jollof_in_a_pot.jpg",
+          "thumbwidth": 1600, "thumbheight": 1600,
+          "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Party_jollof_in_a_pot.jpg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Party_jollof_in_a_pot.jpg",
+          "mime": "image/jpeg",
+          "extmetadata": {
+            "Artist": {"value": "Kofi Example"},
+            "LicenseShortName": {"value": "CC0"},
+            "License": {"value": "cc0"},
+            "LicenseUrl": {"value": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"}
+          }
+        }]
+      },
+      "90003": {
+        "pageid": 90003, "ns": 6, "title": "File:Jollof rice restaurant.jpg", "index": 3,
+        "imageinfo": [{
+          "width": 2000, "height": 1500, "thumburl": "https://upload.wikimedia.org/x/1600px-Jollof_rice_restaurant.jpg",
+          "thumbwidth": 1600, "thumbheight": 1200, "url": "https://upload.wikimedia.org/x/Jollof_rice_restaurant.jpg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jollof_rice_restaurant.jpg", "mime": "image/jpeg",
+          "extmetadata": {"Artist": {"value": "Someone"}, "LicenseShortName": {"value": "CC BY-NC-SA 2.0"}, "License": {"value": "cc-by-nc-sa-2.0"}}
+        }]
+      },
+      "90004": {
+        "pageid": 90004, "ns": 6, "title": "File:Jollof map of West Africa.svg", "index": 4,
+        "imageinfo": [{"width": 800, "height": 600, "url": "https://upload.wikimedia.org/x/map.svg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jollof_map_of_West_Africa.svg", "mime": "image/svg+xml",
+          "extmetadata": {"LicenseShortName": {"value": "CC BY 3.0"}}}]
+      },
+      "90005": {
+        "pageid": 90005, "ns": 6, "title": "File:Jollof Festival logo.png", "index": 5,
+        "imageinfo": [{"width": 1200, "height": 1200, "url": "https://upload.wikimedia.org/x/logo.png",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jollof_Festival_logo.png", "mime": "image/png",
+          "extmetadata": {"LicenseShortName": {"value": "Public domain"}, "License": {"value": "pd"}}}]
+      },
+      "90006": {
+        "pageid": 90006, "ns": 6, "title": "File:Jollof rice, Accra.png", "index": 6,
+        "imageinfo": [{"width": 1400, "height": 1050, "url": "https://upload.wikimedia.org/x/Jollof_rice_Accra.png",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jollof_rice,_Accra.png", "mime": "image/png",
+          "extmetadata": {"Artist": {"value": "<span>Ama &amp; Kwame</span>"}, "LicenseShortName": {"value": "Public domain"},
+            "License": {"value": "pd"}}}]
+      },
+      "90007": {
+        "pageid": 90007, "ns": 6, "title": "File:Jollof no license.jpg", "index": 7,
+        "imageinfo": [{"width": 1600, "height": 1200, "url": "https://upload.wikimedia.org/x/nolicense.jpg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jollof_no_license.jpg", "mime": "image/jpeg",
+          "extmetadata": {"Artist": {"value": "Nobody"}}}]
+      },
+      "90008": {
+        "pageid": 90008, "ns": 6, "title": "File:Jollof GFDL.jpg", "index": 8,
+        "imageinfo": [{"width": 1600, "height": 1200, "url": "https://upload.wikimedia.org/x/gfdl.jpg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Jollof_GFDL.jpg", "mime": "image/jpeg",
+          "extmetadata": {"LicenseShortName": {"value": "GFDL"}, "License": {"value": "gfdl"}}}]
+      }
+    }
+  }
+}

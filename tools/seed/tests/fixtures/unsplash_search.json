@@ -1,0 +1,12 @@
+{
+  "total": 1, "total_pages": 1,
+  "results": [
+    {"id": "Ab12Cd34", "width": 5000, "height": 3333, "description": null, "alt_description": "a bowl of plantain chips",
+     "urls": {"raw": "https://images.unsplash.com/photo-1600000000000-abcdef?ixid=XYZ&ixlib=rb-4.0.3",
+              "full": "https://images.unsplash.com/photo-1600000000000-abcdef?ixid=XYZ&q=85",
+              "regular": "https://images.unsplash.com/photo-1600000000000-abcdef?ixid=XYZ&w=1080"},
+     "links": {"html": "https://unsplash.com/photos/Ab12Cd34", "download_location": "https://api.unsplash.com/photos/Ab12Cd34/download?ixid=XYZ"},
+     "user": {"name": "Chidi Example", "links": {"html": "https://unsplash.com/@chidi"}}},
+    {"id": "NoRaw", "width": 100, "height": 100, "urls": {}, "links": {}, "user": {}}
+  ]
+}

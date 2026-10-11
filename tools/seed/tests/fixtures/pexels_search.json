@@ -1,0 +1,15 @@
+{
+  "total_results": 2, "page": 1, "per_page": 15,
+  "photos": [
+    {"id": 1001, "width": 4000, "height": 6000, "url": "https://www.pexels.com/photo/shea-butter-1001/",
+     "photographer": "Abena Example", "photographer_url": "https://www.pexels.com/@abena-example", "photographer_id": 77,
+     "avg_color": "#C7A27A",
+     "src": {"original": "https://images.pexels.com/photos/1001/pexels-photo-1001.jpeg",
+             "large2x": "https://images.pexels.com/photos/1001/pexels-photo-1001.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+             "large": "https://images.pexels.com/photos/1001/pexels-photo-1001.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"},
+     "liked": false, "alt": "Shea butter in a wooden bowl"},
+    {"id": 1002, "width": 3000, "height": 2000, "url": "https://www.pexels.com/photo/market-1002/",
+     "photographer": "Musa Example", "photographer_url": "https://www.pexels.com/@musa", "src": {"original": "https://images.pexels.com/photos/1002/p.jpeg"},
+     "alt": ""}
+  ]
+}

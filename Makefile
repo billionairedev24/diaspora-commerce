@@ -22,7 +22,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links \
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers \
-        web-dev web-build backlog
+        web-dev web-build backlog seed seed-test
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -164,6 +164,12 @@ dev-restart: ## Rebuild and restart one service: make dev-restart SERVICE=delive
 
 dev-links: ## Print every local URL (apps, API docs, infra) of what dev-up started
 	tools/dev/local.sh links
+
+seed: ## Demo data via the services' APIs: sellers, products with real photos, offers, stock, home content, pre-orders (ARGS="--only products")
+	python3 tools/seed/seed.py $(ARGS)
+
+seed-test: ## Unit tests of the demo-data seeder (tools/seed/tests, Python stdlib unittest)
+	python3 -m unittest discover -s tools/seed/tests -t tools/seed
 
 web-dev: ## Web apps on mock data (no back end needed): storefront :3000, seller center :3001, staff console :3002
 	@command -v pnpm >/dev/null || { echo "pnpm not installed (corepack enable)"; exit 1; }
