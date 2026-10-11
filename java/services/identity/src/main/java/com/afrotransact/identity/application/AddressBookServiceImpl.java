@@ -16,6 +16,8 @@ import com.afrotransact.identity.domain.PhoneCheck;
 import com.afrotransact.identity.domain.PhoneNumberPolicy;
 import com.afrotransact.identity.domain.PostalAddress;
 import com.afrotransact.identity.port.AddressRepository;
+import com.afrotransact.platform.security.Actor;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +44,18 @@ class AddressBookServiceImpl implements AddressBookService {
     @Transactional(readOnly = true)
     public List<PostalAddress> list() {
         return sorted(addresses.findByUser(current.id()));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PostalAddress> listOf(UUID userId) {
+        Actor actor = current.actor();
+        if (!actor.can(IdentityPermissions.USERS_READ) && !actor.can(IdentityPermissions.ACCESS_READ)
+                && !actor.can(IdentityPermissions.ACCESS_ADMIN)) {
+            throw new ForbiddenActionException("auth.missing-permission",
+                    "Missing permission " + IdentityPermissions.USERS_READ);
+        }
+        return sorted(addresses.findByUser(userId));
     }
 
     @Override

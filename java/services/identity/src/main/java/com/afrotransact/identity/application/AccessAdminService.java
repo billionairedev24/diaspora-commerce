@@ -24,6 +24,7 @@ public interface AccessAdminService {
     /** Capabilities tab: add or remove a permission from a role. */
     Role setRolePermission(String roleKey, String permissionKey, boolean granted, String reason);
 
+    /** People search; also open to {@code users:read} (customer support's customer look-up). */
     PageView<UserAccessView> users(String query, int page, int size);
 
     UserAccessView user(UUID userId);

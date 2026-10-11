@@ -76,6 +76,12 @@ class AddressController {
         return book.list().stream().map(AddressResponse::of).toList();
     }
 
+    @Operation(summary = "A customer's saved addresses, default first (staff late adds and support; users:read)")
+    @GetMapping("/v1/admin/users/{userId}/addresses")
+    List<AddressResponse> listOf(@PathVariable UUID userId) {
+        return book.listOf(userId).stream().map(AddressResponse::of).toList();
+    }
+
     @Operation(summary = "Add an address; the first one becomes the default")
     @PostMapping("/v1/me/addresses")
     ResponseEntity<AddressResponse> add(@Valid @RequestBody AddressRequest body) {

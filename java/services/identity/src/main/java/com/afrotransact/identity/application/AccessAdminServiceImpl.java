@@ -135,7 +135,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Override
     @Transactional(readOnly = true)
     public PageView<UserAccessView> users(String query, int page, int size) {
-        requireRead();
+        requirePeopleRead();
         int s = Math.max(1, Math.min(size, MAX_PAGE));
         int p = Math.max(0, page);
         String q = query == null ? "" : query.trim();
@@ -146,7 +146,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Override
     @Transactional(readOnly = true)
     public UserAccessView user(UUID userId) {
-        requireRead();
+        requirePeopleRead();
         return view(find(userId));
     }
 
@@ -377,6 +377,16 @@ class AccessAdminServiceImpl implements AccessAdminService {
         if (!actor.can(IdentityPermissions.ACCESS_READ) && !actor.can(IdentityPermissions.ACCESS_ADMIN)) {
             throw new ForbiddenActionException("auth.missing-permission",
                     "Missing permission " + IdentityPermissions.ACCESS_READ);
+        }
+    }
+
+    /**
+     * People search and one person: access control viewers, and staff with {@code users:read} (customer support finds
+     * the customer for a support case or a pre-order late add).
+     */
+    private void requirePeopleRead() {
+        if (!current.actor().can(IdentityPermissions.USERS_READ)) {
+            requireRead();
         }
     }
 

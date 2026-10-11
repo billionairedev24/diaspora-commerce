@@ -11,6 +11,12 @@ public interface AddressBookService {
 
     List<PostalAddress> list();
 
+    /**
+     * A customer's saved addresses (default first) for staff and services: the staff console's late-add customer
+     * picker and support. Needs {@code users:read} (or {@code access:read} / {@code access:admin}).
+     */
+    List<PostalAddress> listOf(UUID userId);
+
     /** Adds an address; the first address becomes the default automatically. */
     PostalAddress add(AddressDraft draft, Coordinates coordinates, boolean verified, boolean makeDefault);
 

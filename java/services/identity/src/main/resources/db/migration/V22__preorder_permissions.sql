@@ -1,10 +1,10 @@
 -- Pre-orders (S270, S271): staff open, publish and pause pre-order windows, export orders and add late orders;
--- delivery-runs-service verifies creatives with media-service and places late orders on behalf of customers.
+-- delivery-runs-service verifies creatives with media-service (media:read). orders:on-behalf, which it needs to place
+-- late orders on behalf of customers, is created by V23.
 insert into permission (key, module, description) values
     ('preorders:manage', 'delivery-runs', 'Open, edit, publish and pause pre-orders; creatives, coverage and settings'),
     ('preorders:export', 'delivery-runs', 'Export pre-order orders, picking lists and advertorial reports (CSV)'),
     ('preorders:late-add', 'delivery-runs', 'Add a late pre-order for a customer after the window closed'),
-    ('orders:on-behalf', 'orders', 'Place orders on behalf of a customer (delivery-runs late pre-orders; service clients)'),
     ('media:read', 'media', 'Read media asset metadata (service clients)')
 on conflict (key) do nothing;
 
