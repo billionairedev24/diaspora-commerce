@@ -299,6 +299,11 @@ class PreorderIT {
                     Map.of("payment", Map.of("allowedMethods", List.of())), null);
             assertThat(noMethod.status()).isEqualTo(422);
             assertThat(noMethod.body().path("code").asString()).isEqualTo("delivery-runs.invalid-payment-settings");
+            Res longLink = call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("payment", Map.of("lateAdd",
+                    Map.of("savedCard", true, "paymentLink", true, "linkExpiryHours", 48))), null);
+            assertThat(longLink.status()).isEqualTo(400);
+            assertThat(longLink.body().path("errors").toString()).contains("payment.lateAdd.linkExpiryHours")
+                    .contains("at most 24 hours");
             assertThat(outboxTypes("preorder-settings")).contains("preorder.settings.changed");
         } finally {
             Map<String, Object> defaults = new LinkedHashMap<>();

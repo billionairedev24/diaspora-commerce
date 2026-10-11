@@ -2698,7 +2698,8 @@ components:
         linkExpiryHours:
           type: integer
           format: int32
-          maximum: 168
+          description: Payment link lifetime, 1–24 hours (orders-service's limit)
+          maximum: 24
           minimum: 1
     MissedDeliveryBody:
       type: object

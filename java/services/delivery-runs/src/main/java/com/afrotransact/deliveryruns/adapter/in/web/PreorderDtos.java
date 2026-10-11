@@ -387,7 +387,11 @@ final class PreorderDtos {
         }
     }
 
-    record LateAddBody(boolean savedCard, boolean paymentLink, @Min(1) @Max(168) int linkExpiryHours) {
+    record LateAddBody(boolean savedCard, boolean paymentLink,
+                       @Min(value = 1, message = "Payment links last at least 1 hour")
+                       @Max(value = 24, message = "Payment links expire after at most 24 hours (orders-service's limit)")
+                       @Schema(description = "Payment link lifetime, 1–24 hours (orders-service's limit)")
+                       int linkExpiryHours) {
     }
 
     record MissedDeliveryBody(boolean offerRefund, boolean offerNewDate) {

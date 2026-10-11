@@ -38,6 +38,9 @@ type PreorderClient interface {
 	Open(ctx context.Context) (json.RawMessage, error)
 	// Waitlist signs an email up for the area's next pre-order (always accepted).
 	Waitlist(ctx context.Context, w PreorderWaitlist) (json.RawMessage, error)
+	// LeaveWaitlist is POST /v1/public/preorders/waitlist/unsubscribe with the token of a waitlist email's link
+	// (204; 422 delivery-runs.invalid-token for an unknown token; leaving twice is fine).
+	LeaveWaitlist(ctx context.Context, token string) error
 }
 
 // StaffStream is a file an upstream streams back (CSV exports); the caller closes Body.

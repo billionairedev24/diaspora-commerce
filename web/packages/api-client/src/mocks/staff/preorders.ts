@@ -232,7 +232,7 @@ export function seedPreorders(now: Date): MockPreorderState {
   const shift = Math.round((base - DESIGN_TODAY) / DAY) * DAY;
   const windows: MockPreorderWindow[] = SEED.map((s) => ({
     id: s.id, code: s.id.toUpperCase(), name: s.name, targets: s.targets, opensAt: at(s.opens, shift), closesAt: at(s.closes, shift), deliversOn: dateShift(s.delivers, shift),
-    ribbon: s.ribbon, headline: s.headline, smsCopy: `AfroTransact: ${s.name.replace(/ #\d+$/, '')} is open. afrt.co/pre Reply STOP to opt out`, categories: s.cats,
+    ribbon: s.ribbon, headline: s.headline, smsCopy: `AfroTransact: ${s.name.replace(/ #\d+$/, '')} is open. {link} Reply STOP to opt out`, categories: s.cats,
     door: s.door, pickup: s.pickup, pickupPoint: s.pickup ? `${areaFromKey(s.targets[0] ?? '').city ?? ''} community hall, 10am–2pm` : null, doorFeeOverride: null, pickupFeeOverride: null,
     showCount: s.showCount, socialBudget: 20_000, comms: [...ALL_COMMS], draft: !!s.draft, active: s.active, version: 1, creatives: []
   }));
@@ -467,7 +467,7 @@ function directory(w: MockPreorderWindow) {
   return P0.map(([name, email], i) => {
     const f = fakeAddr(name, w.targets);
     const f2 = fakeAddr(`${name}#2`, w.targets);
-    const addr = (id: string, label: string, x: typeof f) => ({ id, label, line1: x.line1, city: x.city, region: x.region, zip: x.zip });
+    const addr = (id: string, label: string, x: typeof f) => ({ id, label, fullName: name, phone: x.phone, line1: x.line1, city: x.city, region: x.region, zip: x.zip, country, ...(x.note ? { instructions: x.note } : {}) });
     return { id: `c${i}`, name, email, phone: f.phone, city: f.city, region: f.region, country, addresses: [addr('a1', 'Home', f), ...(i % 2 ? [addr('a2', 'Work', f2)] : [])] };
   });
 }
@@ -853,6 +853,13 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
             customerId: z.string().min(1),
             addressId: z.string().optional(),
             newAddress: z.object({ line1: z.string().min(1), zip: z.string().min(3), placeId: z.string().min(1) }).optional(),
+            address: z
+              .object({
+                fullName: z.string().max(120), phone: z.string().max(40), line1: z.string().max(200), line2: z.string().max(200), city: z.string().max(120),
+                region: z.string().max(40), zip: z.string().max(20), country: z.string().length(2), instructions: z.string().max(240)
+              })
+              .partial()
+              .optional(),
             phoneConfirmed: z.literal(true),
             items: z.array(z.object({ atin: z.string(), qty: z.number().int().min(1).max(20) })).min(1),
             payment: LateAddPaymentSchema,
@@ -870,7 +877,11 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         if ((b.payment === 'SAVED_CARD' && !pay.savedCard) || (b.payment === 'PAYMENT_LINK' && !pay.paymentLink)) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'That payment option is switched off in settings.', { payment: 'Not allowed' });
         const cust = directory(w).find((c) => c.id === b.customerId);
         if (!cust) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Choose the customer.', { customerId: 'Unknown customer' });
-        const addr = b.newAddress ? { line1: b.newAddress.line1, city: cust.city, region: cust.region, zip: b.newAddress.zip } : cust.addresses.find((a) => a.id === b.addressId);
+        // Like the BFF: a saved address id is completed from the address book (fields sent win); a new one keeps its street.
+        const saved = b.addressId ? cust.addresses.find((a) => a.id === b.addressId) : undefined;
+        if (b.addressId && !saved) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'That saved address is not on the customer’s account.', { addressId: 'Choose another address or enter a new one' });
+        const base = b.newAddress ? { line1: b.newAddress.line1, city: cust.city, region: cust.region, zip: b.newAddress.zip } : saved;
+        const addr = base && { line1: b.address?.line1 || base.line1, city: b.address?.city || base.city, region: b.address?.region || base.region, zip: b.address?.zip || base.zip };
         if (!addr) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Choose a saved address or verify a new one.', { addressId: 'Choose an address' });
         const lines = b.items.map((i) => {
           const prod = BY_ATIN.get(i.atin);

@@ -111,6 +111,23 @@ describe('Pre-orders back office (S274)', () => {
     await waitFor(() => expect(screen.getAllByTestId('order-row').every((r) => r.textContent?.includes('Cancelled'))).toBe(true));
   });
 
+  it('counts the SMS with the tracked link and shows it as sent', async () => {
+    const user = userEvent.setup();
+    nav.set('/preorders/mid-2/edit');
+    await renderScreen(<PreordersView screen={{ kind: 'edit', id: 'mid-2' }} />);
+    expect(await screen.findByRole('heading', { name: 'Edit · Midland–Odessa Pre-order #2' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Comms/ }));
+    const preview = await screen.findByTestId('sms-preview');
+    await waitFor(() => expect(preview).toHaveTextContent(/\/pre-orders\?src=sms&po=[A-Z]{3}-\d+&cr=announce/));
+    expect(preview).not.toHaveTextContent('{link}');
+    const sent = preview.textContent ?? '';
+    expect(screen.getByTestId('sms-count')).toHaveTextContent(`${sent.length}/160`);
+    const box = screen.getByRole('textbox', { name: /SMS copy/ });
+    await user.clear(box);
+    await user.type(box, `${'x'.repeat(140)} {{link}`);
+    expect(screen.getByTestId('sms-count').className).toContain('text-red-600');
+  });
+
   it('blocks publishing until every check passes', async () => {
     const user = userEvent.setup();
     nav.set('/preorders/mid-2/edit');

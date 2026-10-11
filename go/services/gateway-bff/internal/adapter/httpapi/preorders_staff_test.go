@@ -59,8 +59,9 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if strings.HasPrefix(p, "/v1/admin/users/") && strings.HasSuffix(p, "/addresses") {
-		writeJ(w, 200, []any{map[string]any{"id": "adr-1", "label": "Home", "line1": "2401 Broadway", "city": "Lubbock", "state": "TX",
-			"postalCode": "79401", "country": "US", "isDefault": true}})
+		writeJ(w, 200, []any{map[string]any{"id": "adr-1", "label": "Home", "fullName": "Amara Nwosu", "phone": "+18065550101",
+			"line1": "2401 Broadway", "line2": "Apt 4", "city": "Lubbock", "state": "TX", "postalCode": "79401", "country": "US",
+			"instructions": "Gate 4", "isDefault": true}})
 		return
 	}
 	switch {
@@ -309,6 +310,32 @@ func TestStaffPreordersConformance(t *testing.T) {
 		"payment": "PAYMENT_LINK", "reason": "Customer called", "note": "Leave at the door"}
 	if v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", late, 201)); v["number"] != "LBK-L90" {
 		t.Fatalf("late order = %v", v)
+	}
+	// A saved address id goes to delivery-runs with its snapshot, filled from identity's address book.
+	sent := f.bodies["POST /v1/preorders/win-7/late-orders"]
+	if a, _ := sent["address"].(map[string]any); a["line1"] != "2401 Broadway" || a["line2"] != "Apt 4" || a["city"] != "Lubbock" ||
+		a["region"] != "TX" || a["zip"] != "79401" || a["country"] != "US" || a["fullName"] != "Amara Nwosu" || a["instructions"] != "Gate 4" {
+		t.Fatalf("late order snapshot = %v", sent)
+	}
+	// Fields the console sent win; blanks are filled.
+	withSnap := map[string]any{}
+	for k, v := range late {
+		withSnap[k] = v
+	}
+	withSnap["address"] = map[string]any{"line1": "2401 Broadway Unit B", "instructions": "Call on arrival"}
+	do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", withSnap, 201)
+	if a, _ := f.bodies["POST /v1/preorders/win-7/late-orders"]["address"].(map[string]any); a["line1"] != "2401 Broadway Unit B" ||
+		a["instructions"] != "Call on arrival" || a["zip"] != "79401" || a["region"] != "TX" {
+		t.Fatalf("merged snapshot = %v", a)
+	}
+	// A saved address that is not the customer's is refused before delivery-runs.
+	unknown := map[string]any{}
+	for k, v := range late {
+		unknown[k] = v
+	}
+	unknown["addressId"] = "adr-404"
+	if e := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", unknown, 422))["errors"].(map[string]any); e["addressId"] == nil {
+		t.Fatalf("unknown address errors = %v", e)
 	}
 	do("finance", "POST", "/v1/staff/preorders/win-7/late-orders", late, 403)
 	if e := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/win-7/late-orders", map[string]any{"customerId": "cus-1"}, 422))["errors"].(map[string]any); e["phoneConfirmed"] == nil || e["items"] == nil {

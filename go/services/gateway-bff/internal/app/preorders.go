@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/mail"
 	"strings"
 
@@ -19,6 +20,8 @@ type PreorderService interface {
 	Resolve(ctx context.Context, c *domain.Caller, country, region, city string) (map[string]any, error)
 	Open(ctx context.Context) (map[string]any, error)
 	Waitlist(ctx context.Context, c *domain.Caller, req PreorderWaitlistRequest) (map[string]any, error)
+	// LeaveWaitlist takes an email off a pre-order waitlist with the token of its unsubscribe link (no sign-in).
+	LeaveWaitlist(ctx context.Context, token string) (map[string]any, error)
 }
 
 // PreorderWaitlistRequest is POST /v1/preorders/waitlist; the place defaults to the session's delivery location.
@@ -158,4 +161,22 @@ func (s *preorderServiceImpl) Waitlist(ctx context.Context, c *domain.Caller, re
 	}
 	_ = raw // delivery-runs answers 202 whether or not the address was known (double opt-in follows)
 	return map[string]any{"status": "subscribed", "city": firstNonEmpty(p.City, p.Region), "area": p.Key()}, nil
+}
+
+// maxWaitlistToken is delivery-runs' TokenRequest limit.
+const maxWaitlistToken = 200
+
+func (s *preorderServiceImpl) LeaveWaitlist(ctx context.Context, token string) (map[string]any, error) {
+	token = strings.TrimSpace(token)
+	if token == "" || len(token) > maxWaitlistToken {
+		return nil, domain.ValidationProblem(map[string]string{"token": "This unsubscribe link is not valid"})
+	}
+	if err := s.up.LeaveWaitlist(ctx, token); err != nil {
+		if p, ok := port.AsUpstreamProblem(err); ok && (p.Status == http.StatusUnprocessableEntity || p.Status == http.StatusBadRequest ||
+			p.Status == http.StatusNotFound) {
+			return nil, domain.ValidationProblem(map[string]string{"token": "This unsubscribe link is not valid or was already replaced"}).WithCause(err)
+		}
+		return nil, mapErr("delivery-runs", err)
+	}
+	return map[string]any{"status": "unsubscribed"}, nil
 }

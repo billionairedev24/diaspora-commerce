@@ -258,3 +258,10 @@
   .timeline { grid-template-columns: 1fr; }
   .conf { padding: var(--at-space-5); }
 }
+
+/* ── Waitlist unsubscribe (/pre-orders/waitlist/unsubscribe) ──── */
+.unsubscribeCard { margin: var(--at-space-6) auto; max-width: 640px; background: var(--at-ink-0); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-lg); padding: var(--at-space-6); display: flex; flex-direction: column; gap: var(--at-space-3); }
+.unsubscribeActions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); margin-top: var(--at-space-2); }
+.unsubscribeActions a { text-decoration: none; }
+.unsubscribeActions a:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+.unsubscribeError { margin: 0; color: var(--at-color-danger); font-size: var(--at-text-sm); }

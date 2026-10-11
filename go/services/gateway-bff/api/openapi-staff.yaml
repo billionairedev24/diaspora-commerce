@@ -2324,7 +2324,7 @@ components:
               properties:
                 savedCard: {type: boolean}
                 paymentLink: {type: boolean}
-                linkExpiryHours: {type: integer}
+                linkExpiryHours: {type: integer, minimum: 1, maximum: 24, description: "Payment link lifetime in hours; orders-service creates links for at most 24 h"}
             missedDelivery:
               type: object
               properties:
@@ -2352,6 +2352,8 @@ components:
             line1: {type: string}
             zip: {type: string}
             placeId: {type: string}
+        address:
+          $ref: '#/components/schemas/StaffPreorderLateAddress'
         phoneConfirmed: {type: boolean, const: true}
         items:
           type: array
@@ -2366,16 +2368,38 @@ components:
         fulfilment: {type: string, enum: [DOOR, PICKUP]}
         reason: {type: string, maxLength: 120, examples: [Customer called]}
         note: {type: string, maxLength: 500}
+    StaffPreorderLateAddress:
+      type: object
+      description: |
+        Delivery address snapshot (delivery-runs PreorderLateAddress). With `addressId` the BFF fills every blank field
+        from the customer's saved address in identity (fields sent here win); delivery-runs answers 422
+        `delivery-runs.address-details-required` when street, city, state or postal code is still missing. A saved
+        address id that is not the customer's is a 422 on `addressId`.
+      properties:
+        fullName: {type: string, maxLength: 120}
+        phone: {type: string, maxLength: 40}
+        line1: {type: string, maxLength: 200}
+        line2: {type: string, maxLength: 200}
+        city: {type: string, maxLength: 120}
+        region: {type: string, maxLength: 40, description: State / region code}
+        zip: {type: string, maxLength: 20}
+        country: {type: string, minLength: 2, maxLength: 2}
+        instructions: {type: string, maxLength: 240}
     LateAddAddress:
       type: object
       required: [id, label, line1, city, region, zip]
       properties:
         id: {type: string}
         label: {type: string}
+        fullName: {type: string}
+        phone: {type: string}
         line1: {type: string}
+        line2: {type: string}
         city: {type: string}
         region: {type: string}
         zip: {type: string}
+        country: {type: string}
+        instructions: {type: string}
     LateAddCustomers:
       type: object
       required: [items]

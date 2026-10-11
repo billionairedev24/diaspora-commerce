@@ -264,13 +264,33 @@ export const PreorderSummarySchema = z.object({
 });
 export type PreorderSummary = z.infer<typeof PreorderSummarySchema>;
 
+/** A late add's payment link lasts 1–24 hours: orders-service creates links for at most 24 h (delivery-runs enforces it). */
+export const LINK_EXPIRY_MIN_HOURS = 1;
+export const LINK_EXPIRY_MAX_HOURS = 24;
+
+/** Why a payment-link lifetime cannot be saved (null = fine). */
+export function linkExpiryProblem(hours: number): string | null {
+  if (!Number.isInteger(hours)) return 'Enter whole hours';
+  if (hours < LINK_EXPIRY_MIN_HOURS) return `Payment links last at least ${LINK_EXPIRY_MIN_HOURS} hour`;
+  if (hours > LINK_EXPIRY_MAX_HOURS) return `Payment links expire after at most ${LINK_EXPIRY_MAX_HOURS} hours`;
+  return null;
+}
+
 export const PreorderPaymentSettingsSchema = z.object({
   /** Door delivery fee per currency, minor units (default USD 799). */
   doorFee: z.record(z.string(), z.number().int().min(0)),
   pickupFee: z.record(z.string(), z.number().int().min(0)),
   pickupWindow: z.string(),
   allowedMethods: z.array(PaymentMethodSchema),
-  lateAdd: z.object({ savedCard: z.boolean(), paymentLink: z.boolean(), linkExpiryHours: z.number().int().min(1).max(168) }),
+  lateAdd: z.object({
+    savedCard: z.boolean(),
+    paymentLink: z.boolean(),
+    linkExpiryHours: z
+      .number()
+      .int()
+      .min(LINK_EXPIRY_MIN_HOURS, `Payment links last at least ${LINK_EXPIRY_MIN_HOURS} hour`)
+      .max(LINK_EXPIRY_MAX_HOURS, `Payment links expire after at most ${LINK_EXPIRY_MAX_HOURS} hours`)
+  }),
   missedDelivery: z.object({ offerRefund: z.boolean(), offerNewDate: z.boolean() })
 });
 export type PreorderPaymentSettings = z.infer<typeof PreorderPaymentSettingsSchema>;
@@ -325,6 +345,21 @@ export type Place = z.infer<typeof PlaceSchema>;
 export const PlaceListSchema = z.object({ items: z.array(PlaceSchema), regionLabel: z.string() });
 export type PlaceList = z.infer<typeof PlaceListSchema>;
 
+export const LateAddSavedAddressSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  fullName: z.string().optional(),
+  phone: z.string().optional(),
+  line1: z.string(),
+  line2: z.string().optional(),
+  city: z.string(),
+  region: z.string(),
+  zip: z.string(),
+  country: z.string().optional(),
+  instructions: z.string().optional()
+});
+export type LateAddSavedAddress = z.infer<typeof LateAddSavedAddressSchema>;
+
 export const LateAddCustomerSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -333,9 +368,51 @@ export const LateAddCustomerSchema = z.object({
   city: z.string(),
   region: z.string(),
   country: z.string(),
-  addresses: z.array(z.object({ id: z.string(), label: z.string(), line1: z.string(), city: z.string(), region: z.string(), zip: z.string() }))
+  addresses: z.array(LateAddSavedAddressSchema),
+  /** identity could not list the customer's addresses (enter a new one). */
+  addressesUnavailable: z.boolean().optional()
 });
 export type LateAddCustomer = z.infer<typeof LateAddCustomerSchema>;
+
+/**
+ * The delivery address snapshot of a late order (delivery-runs `PreorderLateAddress`). With a saved `addressId`
+ * delivery-runs needs street, city, region and postal code (else 422 `delivery-runs.address-details-required`); the
+ * BFF fills blanks from identity, and the console sends what the customer picker already returned.
+ */
+export interface LateAddAddressSnapshot {
+  fullName?: string;
+  phone?: string;
+  line1?: string;
+  line2?: string;
+  city?: string;
+  region?: string;
+  zip?: string;
+  country?: string;
+  instructions?: string;
+}
+
+/** The snapshot of a customer's saved address (customer name / phone / country as fallbacks); undefined if unknown. */
+export function lateAddAddressSnapshot(customer: LateAddCustomer | null | undefined, addressId: string): LateAddAddressSnapshot | undefined {
+  const a = customer?.addresses.find((x) => x.id === addressId);
+  if (!customer || !a) return undefined;
+  const raw: LateAddAddressSnapshot = {
+    fullName: a.fullName || customer.name,
+    phone: a.phone || customer.phone,
+    line1: a.line1,
+    line2: a.line2,
+    city: a.city,
+    region: a.region,
+    zip: a.zip,
+    country: a.country || customer.country,
+    instructions: a.instructions
+  };
+  const out: LateAddAddressSnapshot = {};
+  (Object.keys(raw) as (keyof LateAddAddressSnapshot)[]).forEach((k) => {
+    const v = raw[k]?.trim();
+    if (v) out[k] = v;
+  });
+  return out;
+}
 export const LateAddCustomerListSchema = z.object({ items: z.array(LateAddCustomerSchema) });
 export type LateAddCustomerList = z.infer<typeof LateAddCustomerListSchema>;
 
@@ -350,6 +427,8 @@ export interface LateAddRequest {
   customerId: string;
   addressId?: string;
   newAddress?: { line1: string; zip: string; placeId: string };
+  /** Required in substance with `addressId` (see {@link lateAddAddressSnapshot}); recipient details with a new one. */
+  address?: LateAddAddressSnapshot;
   phoneConfirmed: true;
   items: { atin: string; qty: number }[];
   payment: LateAddPayment;
@@ -524,6 +603,68 @@ export function lateAddProblems(d: LateAddDraft, status: PreorderStatus): LateAd
   if (!d.phoneConfirmed) out.push('phone');
   if (!d.items.length) out.push('items');
   return out;
+}
+
+/* ── SMS copy (wizard › Comms) ─────────────────────────────── */
+
+/** Placeholder notifications replaces with the tracked SMS link (go/services/notifications rules_preorder.go). */
+export const SMS_LINK_TOKEN = '{link}';
+/** One SMS segment: 160 GSM-7 septets, or 70 characters when the text needs UCS-2 (delivery-runs Gsm7). */
+export const SMS_GSM7_LIMIT = 160;
+export const SMS_UCS2_LIMIT = 70;
+/** Window code used for the length estimate before the server assigns one (CITY-NN, e.g. LBK-7 → 3 letters, dash, 2 digits). */
+const ESTIMATE_CODE = 'XXX-00';
+
+const GSM7_BASIC = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
+const GSM7_EXTENDED = '^{}\\[~]|€\f';
+
+/** GSM-7 septets of a text (extension characters count 2), or null when it must go as UCS-2. */
+export function gsm7Septets(text: string): number | null {
+  let n = 0;
+  for (const c of text) {
+    if (GSM7_BASIC.includes(c)) n += 1;
+    else if (GSM7_EXTENDED.includes(c)) n += 2;
+    else return null;
+  }
+  return n;
+}
+
+/**
+ * The tracked SMS link notifications puts in place of `{link}`: `<PUBLIC_WEB_URL>/pre-orders?src=sms&po=<CODE>&cr=announce`
+ * (announce is the longest SMS slot; last call and out-for-delivery links are shorter).
+ */
+export function preorderSmsLink(storefrontUrl: string, code: string | null | undefined): string {
+  const base = storefrontUrl.replace(/\/+$/, '');
+  return `${base}/pre-orders?src=sms&po=${encodeURIComponent(code || ESTIMATE_CODE)}&cr=announce`;
+}
+
+/** What notifications does to SMS text before sending (smsSafeDisplay): typographic characters become GSM-7 ones. */
+export function smsSafeDisplay(text: string): string {
+  return text.replaceAll(' · ', ' at ').replaceAll('·', '-').replaceAll('–', '-').replaceAll('—', '-').replaceAll('‘', "'").replaceAll('’', "'").replaceAll('“', '"').replaceAll('”', '"').replaceAll('…', '...');
+}
+
+export interface SmsPreview {
+  /** The message as sent: `{link}` expanded, typography made SMS-safe. */
+  text: string;
+  /** Septets (GSM-7) or characters (UCS-2) of `text`. */
+  length: number;
+  limit: number;
+  encoding: 'GSM-7' | 'UCS-2';
+  fits: boolean;
+  /** Length the link adds for each `{link}` (0 without one). */
+  linkLength: number;
+  usesLink: boolean;
+}
+
+/** The SMS a window's copy turns into, counted the way carriers count it, so the 160 limit is honest. */
+export function smsPreview(copy: string, storefrontUrl: string, code?: string | null): SmsPreview {
+  const link = preorderSmsLink(storefrontUrl, code);
+  const usesLink = copy.includes(SMS_LINK_TOKEN);
+  const text = smsSafeDisplay(copy.trim().replaceAll(SMS_LINK_TOKEN, link));
+  const septets = gsm7Septets(text);
+  const length = septets ?? [...text].length;
+  const limit = septets === null ? SMS_UCS2_LIMIT : SMS_GSM7_LIMIT;
+  return { text, length, limit, encoding: septets === null ? 'UCS-2' : 'GSM-7', fits: length <= limit, linkLength: usesLink ? link.length : 0, usesLink };
 }
 
 /** RFC 4180 CSV text (Excel and Sheets open it). */

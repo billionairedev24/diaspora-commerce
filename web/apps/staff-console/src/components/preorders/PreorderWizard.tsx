@@ -11,7 +11,9 @@ import {
   preorderChecks,
   type PreorderPaymentSettings,
   type PreorderWindow,
-  type PreorderWindowInput
+  type PreorderWindowInput,
+  SMS_LINK_TOKEN,
+  smsPreview
 } from '@afrotransact/api-client/staff-preorders';
 import { useToast } from '@afrotransact/ui';
 import { CheckCircle, MapPin, X, XCircle } from '@phosphor-icons/react/ssr';
@@ -20,6 +22,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 
 import { AreaPicker } from './AreaPicker';
 import { CreativesPanel } from './CreativesPanel';
@@ -58,7 +61,7 @@ export function newForm(now = Date.now()): WizardForm {
   const day = 86_400_000;
   return {
     name: 'New pre-order', targets: [], opens: `${localDay(now + 10 * day)}T09:00`, closes: `${localDay(now + 22 * day)}T23:59`, delivers: localDay(now + 25 * day),
-    ribbon: 'Pre-order is open', headline: '', smsCopy: 'AfroTransact: pre-order open. afrt.co/pre Reply STOP to opt out', categories: ['Pantry', 'Spices'],
+    ribbon: 'Pre-order is open', headline: '', smsCopy: 'AfroTransact: pre-order open. {link} Reply STOP to opt out', categories: ['Pantry', 'Spices'],
     door: true, pickup: false, pickupPoint: '', doorFee: '', pickupFee: '', showCount: true, budget: '200', comms: COMMS.map((c) => c.kind)
   };
 }
@@ -221,8 +224,8 @@ function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partia
   );
 }
 
-function Comms({ f, set }: { f: WizardForm; set: (p: Partial<WizardForm>) => void }) {
-  const len = f.smsCopy.length;
+function Comms({ f, set, code }: { f: WizardForm; set: (p: Partial<WizardForm>) => void; code: string | null }) {
+  const sms = smsPreview(f.smsCopy, useStorefrontUrl(), code);
   return (
     <div className="flex flex-col gap-3">
       <span className="text-sm text-muted">Messages are timed against the opening and closing dates. SMS only goes to customers who have opted in (Twilio).</span>
@@ -247,12 +250,35 @@ function Comms({ f, set }: { f: WizardForm; set: (p: Partial<WizardForm>) => voi
         <label className={labelClass}>
           <span>
             SMS copy{' '}
-            <span className={`font-normal ${len > 160 ? 'text-red-600' : 'text-subtle'}`} data-testid="sms-count">
-              {`${len}/160`}
+            <span
+              className={`font-normal ${sms.fits ? 'text-subtle' : 'text-red-600'}`}
+              data-testid="sms-count"
+              title={sms.usesLink ? `${SMS_LINK_TOKEN} counts as the ${sms.linkLength}-character tracked link` : undefined}
+            >
+              {`${sms.length}/${sms.limit}`}
             </span>
           </span>
-          <textarea value={f.smsCopy} onChange={(e) => set({ smsCopy: e.currentTarget.value })} rows={3} className="resize-y rounded-sm border border-border-strong px-3 py-2 text-sm" />
+          <textarea
+            value={f.smsCopy}
+            onChange={(e) => set({ smsCopy: e.currentTarget.value })}
+            rows={3}
+            aria-describedby="po-sms-help po-sms-preview"
+            aria-invalid={sms.fits ? undefined : true}
+            className="resize-y rounded-sm border border-border-strong px-3 py-2 text-sm"
+          />
+          <span id="po-sms-help" className="text-xs font-normal text-muted">
+            {sms.usesLink
+              ? `${SMS_LINK_TOKEN} becomes the tracked link (${sms.linkLength} characters, counted).`
+              : `Add ${SMS_LINK_TOKEN} where the tracked pre-order link should go.`}
+            {sms.encoding === 'UCS-2' ? ` Emoji or special symbols make it a ${sms.limit}-character message.` : ''}
+          </span>
         </label>
+        <div className="flex flex-col gap-1 text-sm">
+          <span className="font-bold">As sent</span>
+          <p id="po-sms-preview" data-testid="sms-preview" className="m-0 rounded-md border border-border bg-surface-muted p-3 text-sm break-words whitespace-pre-wrap">
+            {sms.text}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -380,7 +406,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
       <div className="flex flex-col gap-5 p-5">
         {step === 0 ? <Details f={f} set={set} payment={payment} currency={currency} /> : null}
         {step === 1 ? w ? <CreativesPanel w={w} canEdit /> : <Spinner /> : null}
-        {step === 2 ? <Comms f={f} set={set} /> : null}
+        {step === 2 ? <Comms f={f} set={set} code={w?.code ?? null} /> : null}
         {step === 3 ? (
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,300px),1fr))] gap-5">
             <dl className="m-0 flex flex-col">

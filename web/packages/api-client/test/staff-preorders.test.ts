@@ -7,12 +7,18 @@ import {
   areaFromKey,
   areaOn,
   effectiveFees,
+  lateAddAddressSnapshot,
+  type LateAddCustomer,
   lateAddProblems,
+  LINK_EXPIRY_MAX_HOURS,
+  linkExpiryProblem,
   preorderChecks,
+  preorderSmsLink,
   preorderStatus,
   type PreorderWindow,
   type PreorderWindowInput,
   setAreasOn,
+  smsPreview,
   toCsvText,
   windowAreaOn
 } from '../src/staff-preorders';
@@ -75,6 +81,44 @@ describe('pre-order rules', () => {
     expect(lateAddProblems({ ...d, customerId: '', phoneConfirmed: false, items: [] }, 'DELIVERED')).toEqual(['status', 'customer', 'phone', 'items']);
   });
 
+  it('builds the saved-address snapshot delivery-runs needs with an addressId', () => {
+    const c: LateAddCustomer = {
+      id: 'c0', name: 'Ada Okafor', email: 'ada@example.com', phone: '+1 806 555 0101', city: 'Lubbock', region: 'TX', country: 'US',
+      addresses: [{ id: 'a1', label: 'Home', line1: '2401 Broadway ', line2: '', city: 'Lubbock', region: 'TX', zip: '79401', instructions: 'Gate 4' }]
+    };
+    expect(lateAddAddressSnapshot(c, 'a1')).toEqual({
+      fullName: 'Ada Okafor', phone: '+1 806 555 0101', line1: '2401 Broadway', city: 'Lubbock', region: 'TX', zip: '79401', country: 'US', instructions: 'Gate 4'
+    });
+    expect(lateAddAddressSnapshot(c, 'a9')).toBeUndefined();
+    expect(lateAddAddressSnapshot(null, 'a1')).toBeUndefined();
+  });
+
+  it('keeps payment links within orders-service’s 1–24 h', () => {
+    expect(LINK_EXPIRY_MAX_HOURS).toBe(24);
+    expect(linkExpiryProblem(1)).toBeNull();
+    expect(linkExpiryProblem(24)).toBeNull();
+    expect(linkExpiryProblem(25)).toContain('at most 24 hours');
+    expect(linkExpiryProblem(0)).toContain('at least 1 hour');
+    expect(linkExpiryProblem(Number.NaN)).toBe('Enter whole hours');
+  });
+
+  it('counts {link} as the tracked SMS link notifications sends', () => {
+    expect(preorderSmsLink('https://afrotransact.com/', 'LBK-7')).toBe('https://afrotransact.com/pre-orders?src=sms&po=LBK-7&cr=announce');
+    const link = preorderSmsLink('https://afrotransact.com', 'LBK-7');
+    const p = smsPreview('AfroTransact: Lubbock pre-order is open. {link} Reply STOP to opt out', 'https://afrotransact.com', 'LBK-7');
+    expect(p.text).toBe(`AfroTransact: Lubbock pre-order is open. ${link} Reply STOP to opt out`);
+    expect(p.linkLength).toBe(link.length);
+    expect(p.length).toBe(p.text.length);
+    expect(p).toMatchObject({ encoding: 'GSM-7', limit: 160, fits: true, usesLink: true });
+    // The raw copy fits 160 but the expanded link pushes it over: the counter is honest.
+    const long = `${'x'.repeat(150)} {link}`;
+    expect(long.length).toBeLessThanOrEqual(160);
+    expect(smsPreview(long, 'https://afrotransact.com', null).fits).toBe(false);
+    // Typography is made SMS-safe like notifications does; emoji switch to UCS-2 (70).
+    expect(smsPreview('Order by Thu · 6 PM – thanks…', 'https://a.b').text).toBe('Order by Thu at 6 PM - thanks...');
+    expect(smsPreview('Fresh egusi 🍲', 'https://a.b')).toMatchObject({ encoding: 'UCS-2', limit: 70, usesLink: false, linkLength: 0 });
+  });
+
   it('quotes CSV cells', () => expect(toCsvText([['a', 'b,c'], ['say "hi"', 1]])).toBe('a,"b,c"\n"say ""hi""",1'));
 
   it('keys hang off the staff family', () => expect(staffPreorderKeys.summary('lbk-7').slice(0, 2)).toEqual(['staff', 'preorders']));
@@ -134,6 +178,8 @@ describe('mock /v1/staff/preorders', () => {
     await expect(api('platform.customer_support').downloadCsv('lbk-7', 'orders')).rejects.toMatchObject({ status: 403 });
     const settings = await api('platform.operations_manager').getSettings();
     await expect(api('platform.operations_manager').updateSettings({ ...settings, enabled: false }, settings.version)).rejects.toMatchObject({ status: 403 });
+    const long = { ...settings, payment: { ...settings.payment, lateAdd: { ...settings.payment.lateAdd, linkExpiryHours: 48 } } };
+    await expect(api().updateSettings(long, settings.version)).rejects.toMatchObject({ status: 422 });
     await expect(api('platform.trust_safety').list({ status: 'all', page: 0 })).rejects.toMatchObject({ status: 403 });
   });
 
@@ -146,6 +192,9 @@ describe('mock /v1/staff/preorders', () => {
     const o = await cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'PAYMENT_LINK', reason: 'LIVE_CHAT', note: 'Gate 2' });
     expect(o).toMatchObject({ status: 'LATE_ADD', channel: 'AGENT_LATE', total: (products[0]?.price ?? 0) + 799 });
     expect(o.note).toContain('Live chat · payment link sent by SMS');
+    const snap = await cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', address: { line1: '9 Override Rd' }, phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' });
+    expect(snap).toMatchObject({ addressLine: '9 Override Rd', zip: c.addresses[0]?.zip, city: c.addresses[0]?.city });
+    await expect(cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'zz', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' })).rejects.toMatchObject({ status: 422 });
     await expect(cs.addLateOrder('lbk-6', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'GOODWILL', note: '' })).rejects.toMatchObject({ status: 409 });
   });
 

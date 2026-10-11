@@ -192,12 +192,17 @@ func ValidPreorderFulfilment(f string) (string, bool) {
 
 // LateAddAddress is a saved address of a customer in the late-add picker (default first).
 type LateAddAddress struct {
-	ID     string `json:"id"`
-	Label  string `json:"label"`
-	Line1  string `json:"line1"`
-	City   string `json:"city"`
-	Region string `json:"region"`
-	ZIP    string `json:"zip"`
+	ID           string `json:"id"`
+	Label        string `json:"label"`
+	FullName     string `json:"fullName,omitempty"`
+	Phone        string `json:"phone,omitempty"`
+	Line1        string `json:"line1"`
+	Line2        string `json:"line2,omitempty"`
+	City         string `json:"city"`
+	Region       string `json:"region"`
+	ZIP          string `json:"zip"`
+	Country      string `json:"country,omitempty"`
+	Instructions string `json:"instructions,omitempty"`
 }
 
 // LateAddCustomer is one customer search hit with their saved addresses; city, region and country are the default

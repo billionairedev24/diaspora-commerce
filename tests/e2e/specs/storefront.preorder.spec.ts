@@ -136,6 +136,17 @@ test.describe('storefront · pre-orders (S273)', () => {
     await expect(page.getByTestId('preorder-off-ribbon')).toContainText('Orders ship by UPS Ground in 3–5 days.');
   });
 
+  test('waitlist email unsubscribe link: asks, confirms, and explains a bad link', async ({ page }, testInfo) => {
+    await page.goto('/pre-orders/waitlist/unsubscribe?token=wl-3f9c2a7d');
+    await expect(page.getByRole('heading', { name: 'Leave the pre-order waitlist' })).toBeVisible();
+    await expectNoSeriousA11yViolations(page, testInfo);
+    await page.getByRole('button', { name: 'Leave the waitlist' }).click();
+    await expect(page.getByRole('heading', { name: "You're off the waitlist" })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'See pre-orders' }).first()).toHaveAttribute('href', '/pre-orders');
+    await page.goto('/pre-orders/waitlist/unsubscribe');
+    await expect(page.getByRole('heading', { name: "This link doesn't work" })).toBeVisible();
+  });
+
   test('the subheader nav stays on one row and scrolls sideways', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 800 });
     await page.goto('/');

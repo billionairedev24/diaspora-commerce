@@ -69,6 +69,12 @@ func (p *preordersImpl) Waitlist(ctx context.Context, w port.PreorderWaitlist) (
 	return out, err
 }
 
+func (p *preordersImpl) LeaveWaitlist(ctx context.Context, token string) error {
+	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/public/preorders/waitlist/unsubscribe",
+		JSON: map[string]string{"token": token}}, nil)
+	return err
+}
+
 // staffStreamTimeout bounds one relayed export (large CSVs stream for a while).
 const staffStreamTimeout = 2 * time.Minute
 

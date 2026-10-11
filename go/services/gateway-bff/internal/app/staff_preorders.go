@@ -411,8 +411,69 @@ func (s *staffPreordersImpl) LateOrder(ctx context.Context, c *domain.Caller, id
 	if err != nil {
 		return nil, err
 	}
+	if aid, _ := body["addressId"].(string); strings.TrimSpace(aid) != "" {
+		cid, _ := body["customerId"].(string)
+		if err := s.fillAddressSnapshot(ctx, sc, body, cid, aid); err != nil {
+			return nil, err
+		}
+	}
 	sc.idem = idem
 	return sc.send(ctx, http.MethodPost, windowPath(id, "/late-orders"), "", body)
+}
+
+// lateAddressFields maps delivery-runs' late-order address snapshot (PreorderLateAddress) to identity's saved
+// address (Address) field names.
+var lateAddressFields = [][2]string{
+	{"fullName", "fullName"}, {"phone", "phone"}, {"line1", "line1"}, {"line2", "line2"}, {"city", "city"},
+	{"region", "state"}, {"zip", "postalCode"}, {"country", "country"}, {"instructions", "instructions"},
+}
+
+// snapshotComplete is true when the console already sent what delivery-runs needs with a saved address id.
+func snapshotComplete(a jobj) bool {
+	for _, k := range []string{"line1", "city", "region", "zip"} {
+		if strings.TrimSpace(jstr(a, k)) == "" {
+			return false
+		}
+	}
+	return true
+}
+
+// fillAddressSnapshot completes body.address (street, city, state, postal code…) from the customer's saved address in
+// identity: delivery-runs answers 422 delivery-runs.address-details-required when a saved address id comes without
+// it. Fields the console sent win. A saved address that is not the customer's is a 422; identity being unavailable
+// leaves the body as it is (delivery-runs then names what is missing).
+func (s *staffPreordersImpl) fillAddressSnapshot(ctx context.Context, sc staffCtx, body map[string]any, customerID, addressID string) error {
+	snap, _ := body["address"].(map[string]any)
+	if snap == nil {
+		snap = map[string]any{}
+	}
+	if snapshotComplete(snap) {
+		return nil
+	}
+	saved, found, known := s.savedAddress(ctx, sc, customerID, addressID)
+	if !known {
+		return nil // identity unavailable: relay as is (delivery-runs names what is missing)
+	}
+	if !found {
+		return domain.ValidationProblem(map[string]string{"addressId": "That saved address is not on the customer's account; choose another or enter a new one"})
+	}
+	for _, f := range lateAddressFields {
+		if strings.TrimSpace(jstr(snap, f[0])) != "" {
+			continue
+		}
+		v := jstr(saved, f[1])
+		if f[0] == "region" {
+			v = firstNonEmpty(v, jstr(saved, "region"))
+		}
+		if f[0] == "zip" {
+			v = firstNonEmpty(v, jstr(saved, "zip"))
+		}
+		if v != "" {
+			snap[f[0]] = v
+		}
+	}
+	body["address"] = snap
+	return nil
 }
 
 func (s *staffPreordersImpl) Settings(ctx context.Context, c *domain.Caller) (any, error) {
@@ -724,12 +785,48 @@ func (s *staffPreordersImpl) Customers(ctx context.Context, c *domain.Caller, q,
 // default first, and the default's country; best effort: unavailable gives none and the flag.
 func (s *staffPreordersImpl) addresses(ctx context.Context, sc staffCtx, userID string) ([]domain.LateAddAddress, string, bool) {
 	out := []domain.LateAddAddress{}
-	if userID == "" {
+	list, err := s.savedAddresses(ctx, sc, userID)
+	if err != nil {
 		return out, "", true
+	}
+	country := ""
+	for _, a := range list {
+		addr := domain.LateAddAddress{ID: jstr(a, "id"), Label: firstNonEmpty(jstr(a, "label"), "Address"), FullName: jstr(a, "fullName"),
+			Phone: jstr(a, "phone"), Line1: jstr(a, "line1"), Line2: jstr(a, "line2"), City: jstr(a, "city"),
+			Region: firstNonEmpty(jstr(a, "state"), jstr(a, "region")), ZIP: firstNonEmpty(jstr(a, "postalCode"), jstr(a, "zip")),
+			Country: jstr(a, "country"), Instructions: jstr(a, "instructions")}
+		if boolean(a, "default") || boolean(a, "isDefault") {
+			out = append([]domain.LateAddAddress{addr}, out...)
+			country = jstr(a, "country")
+			continue
+		}
+		out = append(out, addr)
+	}
+	return out, country, false
+}
+
+// savedAddress finds one of the customer's saved addresses; known is false when identity could not list them.
+func (s *staffPreordersImpl) savedAddress(ctx context.Context, sc staffCtx, customerID, addressID string) (jobj, bool, bool) {
+	list, err := s.savedAddresses(ctx, sc, customerID)
+	if err != nil {
+		return nil, false, false
+	}
+	i := slices.IndexFunc(list, func(a jobj) bool { return jstr(a, "id") == addressID })
+	if i < 0 {
+		return nil, false, true
+	}
+	return list[i], true, true
+}
+
+// savedAddresses reads a customer's saved addresses from identity (GET /v1/admin/users/{id}/addresses, users:read)
+// as raw objects (array or {items}).
+func (s *staffPreordersImpl) savedAddresses(ctx context.Context, sc staffCtx, userID string) ([]jobj, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, domain.ValidationProblem(map[string]string{"customerId": "Choose the customer"})
 	}
 	var raw any
 	if err := sc.get(ctx, sc.up.Identity, "/v1/admin/users/"+url.PathEscape(userID)+"/addresses", nil, &raw); err != nil {
-		return out, "", true
+		return nil, err
 	}
 	var list []jobj
 	switch t := raw.(type) {
@@ -742,16 +839,5 @@ func (s *staffPreordersImpl) addresses(ctx context.Context, sc staffCtx, userID 
 	case map[string]any:
 		list = objs(t, "items")
 	}
-	country := ""
-	for _, a := range list {
-		addr := domain.LateAddAddress{ID: jstr(a, "id"), Label: firstNonEmpty(jstr(a, "label"), "Address"), Line1: jstr(a, "line1"),
-			City: jstr(a, "city"), Region: firstNonEmpty(jstr(a, "state"), jstr(a, "region")), ZIP: firstNonEmpty(jstr(a, "postalCode"), jstr(a, "zip"))}
-		if boolean(a, "default") || boolean(a, "isDefault") {
-			out = append([]domain.LateAddAddress{addr}, out...)
-			country = jstr(a, "country")
-			continue
-		}
-		out = append(out, addr)
-	}
-	return out, country, false
+	return list, nil
 }

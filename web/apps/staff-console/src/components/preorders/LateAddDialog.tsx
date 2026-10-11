@@ -3,6 +3,7 @@
 import { staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
 import {
   LATE_ADD_REASON_LABEL,
+  lateAddAddressSnapshot,
   type LateAddDraft,
   type LateAddPayment,
   lateAddProblems,
@@ -71,7 +72,12 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
     mutationFn: () => {
       const body: LateAddRequest = {
         customerId: d.customerId,
-        ...(d.newAddress?.placeId ? { newAddress: { line1: d.newAddress.line1.trim(), zip: d.newAddress.zip.trim(), placeId: d.newAddress.placeId } } : { addressId: d.addressId }),
+        ...(d.newAddress?.placeId
+          ? {
+              newAddress: { line1: d.newAddress.line1.trim(), zip: d.newAddress.zip.trim(), placeId: d.newAddress.placeId },
+              ...(cust ? { address: { fullName: cust.name, phone: cust.phone } } : {})
+            }
+          : { addressId: d.addressId, address: lateAddAddressSnapshot(cust, d.addressId) }),
         phoneConfirmed: true,
         items: d.items.map((atin) => ({ atin, qty: 1 })),
         payment,

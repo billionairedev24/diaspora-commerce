@@ -47,7 +47,8 @@ closes, it hands its orders to a **run** (the existing dispatch aggregate) for b
 - `payment` (back office › Pre-orders › Settings › Payment & fees, Full access only):
   `doorFee` per currency (default USD 7.99), `pickupFee` (default 0), `pickupWindow` ("10am–2pm"),
   `allowedMethods` {CARD, WALLET (Apple Pay / Google Pay / Link), ACH}, refund rule (cancel for a full refund incl.
-  the delivery fee until close), `lateAdd` {savedCard, paymentLink, linkExpiryHours = 24},
+  the delivery fee until close), `lateAdd` {savedCard, paymentLink, linkExpiryHours = 24 (1–24: orders-service creates payment links for at
+  most 24 h; delivery-runs rejects more, the console's input is capped)},
   `missedDelivery` {offerRefund, offerNewDate}. Windows may override `doorFee` / `pickupFee` and set a pickup point.
   Effective fees and methods flow through eligibility, resolve and the cart; nothing hard-codes $7.99.
 
@@ -124,7 +125,13 @@ Service (`delivery-runs:reserve`, orders-service):
   `POST /v1/preorders/waitlist` (email + area, uses delivery-runs subscriptions); cart responses gain
   `packages[].preorder{windowId,name,deliversOn,stage,closesAt,fulfilment,options[]}`; `PUT /v1/cart/preorder-fulfilment`.
 - Staff (`/v1/staff/preorders/**`) mirrors the delivery-runs staff API 1:1, plus `GET /v1/staff/customers/search`
-  for the late-add customer picker (identity + addresses) and CSV streaming passthrough.
+  for the late-add customer picker (identity + addresses: identity `GET /v1/admin/users/{id}/addresses`, `users:read`)
+  and CSV streaming passthrough. A late add with `addressId` goes to delivery-runs with its `address` snapshot
+  (`fullName, phone, line1, line2, city, region, zip, country, instructions`): what the console sends wins, the BFF
+  fills the blanks from the saved address (unknown address id → 422 on `addressId`).
+- `POST /v1/preorders/waitlist/unsubscribe {token}` → delivery-runs `POST /v1/public/preorders/waitlist/unsubscribe`;
+  the storefront page `/pre-orders/waitlist/unsubscribe?token=` asks once, then confirms (mail scanners that open
+  links do not unsubscribe anyone).
 
 ## 3. Events (`contracts/asyncapi/fragments/delivery-runs.yaml`, topic `at.delivery-runs.events`)
 `preorder.window.published|updated|paused|resumed|opened|closed|delivered`, `preorder.settings.changed`,
@@ -171,7 +178,9 @@ Every link carries `?src=<channel>&po=<CODE>&cr=<slot>`.
   where, ratio check, upload/replace/remove via media upload), **Analytics** (placement performance table + report export).
 - **Wizard** Details → Advertorials → Comms → Review: name, area picker (country → state/region → city or "Every city"
   with saved-area quick add), opens/closes/delivers, ribbon, headline, categories chips, door/pickup/showCount;
-  creatives; comms toggles (6) + SMS copy with 160 counter + social budget; review summary + the 7 checks; Save draft;
+  creatives; comms toggles (6) + SMS copy with 160 counter (GSM-7 septets of the message as sent: `{link}` counted as
+  the tracked link `<PUBLIC_WEB_URL>/pre-orders?src=sms&po=<CODE>&cr=announce`, typography made SMS-safe like
+  notifications does, 70 for UCS-2) and the expanded preview + social budget; review summary + the 7 checks; Save draft;
   Publish (blocked with "N checks to fix").
 - **Settings**: master switch; fallback (Ship by UPS Ground / Waitlist only); placements table (6 toggles with where
   and creative); coverage areas: add via country/region/city dropdowns (+ "City, ST" free entry), drill-down table
@@ -187,7 +196,10 @@ Every link carries `?src=<channel>&po=<CODE>&cr=<slot>`.
 `preorders:manage`, `preorders:export`, `preorders:late-add` (+ existing `delivery-runs:read`). Grants:
 super_admin, marketing (all); operations_manager (manage, export, late-add); customer_support (read, late-add);
 finance, auditor (read, export); product_owner, fulfilment_ops, retail (read). delivery-runs-service client gains
-`orders:on-behalf`, `media:read`; orders-service client already has `delivery-runs:reserve`.
+`orders:on-behalf` (created by V23), `media:read` (V22); orders-service client already has `delivery-runs:reserve`.
+media-service accepts delivery-runs-service's own client-credentials token for reads of public (storefront) assets
+when it carries `media:read` (never uploads). Customer support finds customers with `users:read` (identity people
+search and saved addresses).
 
 ## 7. Further ideas (proposed, not in the design)
 1. **Waitlist → demand map**: waitlist sign-ups and "not delivering here" searches per city in Settings, to decide

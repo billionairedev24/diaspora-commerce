@@ -1047,6 +1047,38 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/preorders/waitlist/unsubscribe:
+    post:
+      tags: [Pre-orders]
+      operationId: leavePreorderWaitlist
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Leave a pre-order waitlist (token from the waitlist email's unsubscribe link)
+      description: |
+        delivery-runs `POST /v1/public/preorders/waitlist/unsubscribe {token}` (no sign-in). The storefront page
+        `/pre-orders/waitlist/unsubscribe?token=` calls it. Leaving twice is fine (200 again); an unknown token is a 422
+        on `token`. Rate limited like other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Off the waitlist
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [unsubscribed]}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/checkout/orders:
     post:
       tags: [Checkout]

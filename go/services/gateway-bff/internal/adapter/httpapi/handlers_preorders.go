@@ -18,6 +18,7 @@ func (h *handlersImpl) registerPreorders(route func(pattern string, fn http.Hand
 	route("GET /v1/preorders/resolve", h.resolvePreorder)
 	route("GET /v1/preorders/open", h.openPreorders)
 	route("POST /v1/preorders/waitlist", lookup(h.joinPreorderWaitlist))
+	route("POST /v1/preorders/waitlist/unsubscribe", lookup(h.leavePreorderWaitlist))
 }
 
 func (h *handlersImpl) resolvePreorder(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +46,18 @@ func (h *handlersImpl) joinPreorderWaitlist(w http.ResponseWriter, r *http.Reque
 	}
 	v, err := h.s.Preorders.Waitlist(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusAccepted, v, err)
+}
+
+func (h *handlersImpl) leavePreorderWaitlist(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Token string `json:"token"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Preorders.LeaveWaitlist(r.Context(), b.Token)
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) setPreorderFulfilment(w http.ResponseWriter, r *http.Request) {

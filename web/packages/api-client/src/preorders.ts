@@ -158,6 +158,12 @@ export type PreorderWaitlistRequest = z.infer<typeof PreorderWaitlistRequestSche
 export const PreorderWaitlistResponseSchema = z.object({ status: z.enum(['subscribed']), city: z.string() });
 export type PreorderWaitlistResponse = z.infer<typeof PreorderWaitlistResponseSchema>;
 
+/** POST /v1/preorders/waitlist/unsubscribe: the token of a waitlist email's unsubscribe link (no sign-in). */
+export const PreorderWaitlistLeaveRequestSchema = z.object({ token: z.string().trim().min(1).max(200) });
+export type PreorderWaitlistLeaveRequest = z.infer<typeof PreorderWaitlistLeaveRequestSchema>;
+export const PreorderWaitlistLeaveResponseSchema = z.object({ status: z.enum(['unsubscribed']) });
+export type PreorderWaitlistLeaveResponse = z.infer<typeof PreorderWaitlistLeaveResponseSchema>;
+
 export const PreorderFulfilmentRequestSchema = z.object({ windowId: z.string().min(1), fulfilment: PreorderFulfilmentSchema });
 export type PreorderFulfilmentRequest = z.infer<typeof PreorderFulfilmentRequestSchema>;
 
@@ -182,7 +188,10 @@ export function preorderMethods(request: Requester) {
       request('/v1/preorders/resolve', PreorderResolutionSchema, { query: place ? { country: place.country, region: place.region, city: place.city } : undefined, signal }),
     getOpenPreorders: (signal?: AbortSignal): Promise<PreorderOpenList> => request('/v1/preorders/open', PreorderOpenListSchema, { signal }),
     joinPreorderWaitlist: (body: PreorderWaitlistRequest): Promise<PreorderWaitlistResponse> =>
-      request('/v1/preorders/waitlist', PreorderWaitlistResponseSchema, { method: 'POST', body })
+      request('/v1/preorders/waitlist', PreorderWaitlistResponseSchema, { method: 'POST', body }),
+    /** One-click leave from a waitlist email (`/pre-orders/waitlist/unsubscribe?token=`); leaving twice is fine. */
+    leavePreorderWaitlist: (token: string): Promise<PreorderWaitlistLeaveResponse> =>
+      request('/v1/preorders/waitlist/unsubscribe', PreorderWaitlistLeaveResponseSchema, { method: 'POST', body: { token } })
   };
 }
 

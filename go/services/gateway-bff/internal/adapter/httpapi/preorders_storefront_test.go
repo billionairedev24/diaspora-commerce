@@ -92,6 +92,19 @@ func TestPreorderStorefrontRoutes(t *testing.T) {
 		t.Fatalf("delivery-runs body = %v", w)
 	}
 
+	// Waitlist unsubscribe link (no sign-in): the token goes to delivery-runs; unknown or empty tokens are a 422 on token.
+	r = b.do("POST", "/v1/preorders/waitlist/unsubscribe", map[string]any{"token": "wl-token-1"})
+	mustStatus(t, r, 200)
+	if v := r.json(t); v["status"] != "unsubscribed" {
+		t.Fatalf("unsubscribe = %v", v)
+	}
+	r = b.do("POST", "/v1/preorders/waitlist/unsubscribe", map[string]any{"token": "stale"})
+	mustStatus(t, r, 422)
+	if e, _ := r.json(t)["errors"].(map[string]any); e["token"] == nil {
+		t.Fatalf("unsubscribe errors = %v", r.json(t))
+	}
+	mustStatus(t, b.do("POST", "/v1/preorders/waitlist/unsubscribe", map[string]any{"token": "  "}), 422)
+
 	// Cart: choose pickup for the pre-order package; the block is relayed and the package id marks it.
 	mustStatus(t, b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEA0001", "quantity": 1}), 200)
 	mustStatus(t, b.do("PUT", "/v1/cart/preorder-fulfilment", map[string]any{"windowId": "LBK-7", "fulfilment": "COURIER"}), 422)

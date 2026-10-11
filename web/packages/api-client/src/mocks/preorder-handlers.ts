@@ -3,7 +3,7 @@
 import { http } from 'msw';
 import { z } from 'zod';
 
-import { PreorderFallbackSchema, PreorderFulfilmentRequestSchema, PreorderPlaceSchema, PreorderStageSchema, PreorderWaitlistRequestSchema } from '../preorders';
+import { PreorderFallbackSchema, PreorderFulfilmentRequestSchema, PreorderPlaceSchema, PreorderStageSchema, PreorderWaitlistLeaveRequestSchema, PreorderWaitlistRequestSchema } from '../preorders';
 import { body, json, route } from './http-kit';
 import { openPreorders, placeOf, preorderState, resolvePreorder } from './preorders';
 import { buildCart, MockProblem } from './service';
@@ -32,6 +32,14 @@ export const preorderHandlers = [
     const st = preorderState(ctx.now.getTime());
     if (!st.waitlist.some((w) => w.email === req.email && w.key === key)) st.waitlist.push({ email: req.email, key });
     return json({ status: 'subscribed', city: place.city }, 201);
+  })),
+  /* Unsubscribe link of a waitlist email. Mock tokens: anything of 8+ characters works; `invalid…` acts like a token
+     delivery-runs does not know (422 on token), as the real BFF answers. */
+  http.post('*/v1/preorders/waitlist/unsubscribe', route(async (ctx) => {
+    const req = await body(ctx.request, PreorderWaitlistLeaveRequestSchema);
+    if (req.token.length < 8 || req.token.startsWith('invalid'))
+      throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'This unsubscribe link is not valid.', { errors: { token: 'This unsubscribe link is not valid or was already replaced' } });
+    return json({ status: 'unsubscribed' });
   })),
   http.put('*/v1/cart/preorder-fulfilment', route(async (ctx) => {
     const req = await body(ctx.request, PreorderFulfilmentRequestSchema);

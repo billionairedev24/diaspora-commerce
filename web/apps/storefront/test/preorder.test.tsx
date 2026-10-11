@@ -10,6 +10,7 @@ import { PreorderBanners } from '@/components/preorder/PreorderBanners';
 import { deliveryIcs } from '@/components/preorder/PreorderConfirmation';
 import { PreorderHome } from '@/components/preorder/PreorderHome';
 import { PreorderView } from '@/components/preorder/PreorderPage';
+import { WaitlistUnsubscribe } from '@/components/preorder/WaitlistUnsubscribe';
 import { tEn } from '@/i18n/t';
 import { ATTRIBUTION_COOKIE, captureAttribution, CONSENT_COOKIE, hasAttributionConsent, readAttribution, setAttribution } from '@/lib/preorder/attribution';
 import { deliveryTerms, familyCities, paymentMethodsText, payNotes, preorderDates, stageCopy } from '@/lib/preorder/copy';
@@ -290,5 +291,25 @@ describe('storefront pre-order states (mock BFF)', () => {
     expect(rules).toHaveTextContent(/Everything is delivered on \w{3}, \w{3} \d+, \$7\.99 flat\. There's no minimum order count\./);
     const steps = within(screen.getByTestId('preorder-timeline')).getAllByRole('listitem');
     expect(steps[2]).toHaveAttribute('aria-current', 'step');
+  });
+});
+
+describe('waitlist unsubscribe page', () => {
+  it('asks, then takes the email off the waitlist and confirms', async () => {
+    renderWithProviders(<WaitlistUnsubscribe token="wl-3f9c2a7d" />);
+    expect(screen.getByRole('heading', { name: tEn('preorder.unsubscribe.title') })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: tEn('preorder.unsubscribe.confirm') }));
+    expect(await screen.findByRole('heading', { name: tEn('preorder.unsubscribe.doneTitle') })).toBeInTheDocument();
+    expect(screen.getByTestId('waitlist-unsubscribe')).toHaveAttribute('data-state', 'done');
+    expect(screen.getByRole('link', { name: tEn('preorder.unsubscribe.browse') })).toHaveAttribute('href', '/pre-orders');
+  });
+
+  it('explains a missing or unknown token', async () => {
+    const { unmount } = renderWithProviders(<WaitlistUnsubscribe token={null} />);
+    expect(screen.getByRole('heading', { name: tEn('preorder.unsubscribe.invalidTitle') })).toBeInTheDocument();
+    unmount();
+    renderWithProviders(<WaitlistUnsubscribe token="invalid-token-1" />);
+    await userEvent.click(screen.getByRole('button', { name: tEn('preorder.unsubscribe.confirm') }));
+    expect(await screen.findByRole('heading', { name: tEn('preorder.unsubscribe.invalidTitle') })).toBeInTheDocument();
   });
 });

@@ -755,6 +755,15 @@ func (u *Upstreams) preorderRoutes(mux *http.ServeMux) {
 		u.mu.Unlock()
 		writeJSON(w, 202, map[string]any{"status": "CONFIRMATION_SENT"})
 	})
+	mux.HandleFunc("POST /v1/public/preorders/waitlist/unsubscribe", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b["token"] != "wl-token-1" {
+			problem(w, 422, "delivery-runs.invalid-token", "This link is not valid", nil)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 }
 
 // ---------------------------------------------------------------- identity (authorization server + REST)

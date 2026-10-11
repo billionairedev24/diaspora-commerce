@@ -2,6 +2,9 @@
 
 import { staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
 import {
+  LINK_EXPIRY_MAX_HOURS,
+  LINK_EXPIRY_MIN_HOURS,
+  linkExpiryProblem,
   type PaymentMethod,
   type PlacementKey,
   type PreorderAreaRow,
@@ -279,6 +282,8 @@ function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) 
     Object.fromEntries([...new Set([...Object.keys(s.payment.doorFee), ...Object.keys(s.payment.pickupFee)])].map((c) => [c, { door: amountText(s.payment.doorFee[c] ?? 0), pickup: amountText(s.payment.pickupFee[c] ?? 0) }]))
   );
   const [addCur, setAddCur] = useState('');
+  const [hours, setHours] = useState(String(s.payment.lateAdd.linkExpiryHours));
+  const hoursProblem = linkExpiryProblem(hours.trim() === '' ? Number.NaN : Number(hours));
   const [error, setError] = useState<string | null>(null);
   const currencies = Object.keys(text);
   const toggleMethod = (m: PaymentMethod) => setP((cur) => ({ ...cur, allowedMethods: cur.allowedMethods.includes(m) ? cur.allowedMethods.filter((x) => x !== m) : [...cur.allowedMethods, m] }));
@@ -298,8 +303,9 @@ function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) 
     if (!p.allowedMethods.length) return setError('Allow at least one payment method.');
     if (!p.lateAdd.savedCard && !p.lateAdd.paymentLink) return setError('Keep the saved card or the payment link on for late adds.');
     if (!p.missedDelivery.offerRefund && !p.missedDelivery.offerNewDate) return setError('Offer a refund or a new date when a delivery is missed.');
+    if (hoursProblem) return setError(`${hoursProblem} (${LINK_EXPIRY_MIN_HOURS}–${LINK_EXPIRY_MAX_HOURS}).`);
     setError(null);
-    save.mutate({ current: s, patch: { payment: { ...p, doorFee, pickupFee } }, message: 'Payment & fees saved' });
+    save.mutate({ current: s, patch: { payment: { ...p, doorFee, pickupFee, lateAdd: { ...p.lateAdd, linkExpiryHours: Number(hours) } } }, message: 'Payment & fees saved' });
   };
   const row = 'flex items-center gap-3 border-b border-border py-2';
   return (
@@ -393,14 +399,21 @@ function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) 
               Link expires after
               <input
                 type="number"
-                min={1}
-                max={168}
-                value={p.lateAdd.linkExpiryHours}
-                onChange={(e) => setP({ ...p, lateAdd: { ...p.lateAdd, linkExpiryHours: Math.max(1, Math.min(168, Number(e.currentTarget.value) || 24)) } })}
+                inputMode="numeric"
+                step={1}
+                min={LINK_EXPIRY_MIN_HOURS}
+                max={LINK_EXPIRY_MAX_HOURS}
+                value={hours}
+                aria-invalid={hoursProblem ? true : undefined}
+                aria-describedby="po-link-hours"
+                onChange={(e) => setHours(e.currentTarget.value)}
                 className={`${controlClass} h-8 w-20`}
               />
               hours
             </label>
+            <span id="po-link-hours" className={cx('w-full text-xs', hoursProblem ? 'text-red-700' : 'text-muted')}>
+              {hoursProblem ?? `Between ${LINK_EXPIRY_MIN_HOURS} and ${LINK_EXPIRY_MAX_HOURS} hours: payment links can’t last longer than a day.`}
+            </span>
           </div>
         </div>
         <div className="flex flex-col">

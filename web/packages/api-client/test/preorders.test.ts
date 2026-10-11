@@ -170,4 +170,13 @@ describe('pre-orders (mock BFF) — every storefront state', () => {
     const bad = await api.joinPreorderWaitlist({ email: 'nope' } as never).catch((e: unknown) => e);
     expect(bad).toBeInstanceOf(ApiError);
   });
+
+  it('leaves a waitlist from the email link; unknown tokens are refused on token', async () => {
+    const { api } = browserLikeClient();
+    expect(await api.leavePreorderWaitlist('wl-3f9c2a7d')).toEqual({ status: 'unsubscribed' });
+    const bad = await api.leavePreorderWaitlist('invalid-token').catch((e: unknown) => e);
+    expect(bad).toBeInstanceOf(ApiError);
+    expect((bad as ApiError).status).toBe(422);
+    expect((bad as ApiError).fieldErrors.token).toBeTruthy();
+  });
 });

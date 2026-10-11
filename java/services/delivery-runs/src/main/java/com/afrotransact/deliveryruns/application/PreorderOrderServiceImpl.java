@@ -44,7 +44,7 @@ class PreorderOrderServiceImpl implements PreorderOrderService {
 
     static final int LATE_NUMBER_START = 90;
     /** orders-service accepts payment links of at most 24 hours. */
-    static final int ORDERS_MAX_LINK_HOURS = 24;
+    static final int ORDERS_MAX_LINK_HOURS = LateAddSettings.MAX_LINK_EXPIRY_HOURS;
 
     private final PreorderOrderRepository orders;
     private final PreorderSettingsRepository settings;
