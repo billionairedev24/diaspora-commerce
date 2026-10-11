@@ -331,6 +331,19 @@ eas env:create --environment preview --name EXPO_PUBLIC_SENTRY_DSN --value https
 eas env:create --environment preview --name SENTRY_AUTH_TOKEN --value sntrys_… --visibility secret
 ```
 
+Push notifications need the platform credentials **in the app build** (the notifications service holds the sending
+side: `FCM_SERVICE_ACCOUNT_JSON`, `APNS_*` above). Expo Go cannot receive them (SDK 53+); use a development build
+(docs/engineering/mobile-on-your-phone.md):
+
+| EAS name | Kind | Used by | Where it comes from |
+|---|---|---|---|
+| `GOOGLE_SERVICES_JSON` | file variable (secret) | `app.config.ts` → `android.googleServicesFile` (FCM device tokens) | Firebase console → Project settings → *Your apps* → Android app with the build's package (`com.afrotransact.customer.dev`, `….driver.dev`, …) → download `google-services.json` |
+| APNs key | EAS credentials (not a variable) | iOS device tokens (`aps-environment` entitlement from expo-notifications) | `eas credentials --platform ios` → *Push Notifications* → upload or generate the `.p8` key (the same key as `APNS_KEY_P8`) |
+
+```bash
+eas env:create --environment development --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --visibility secret
+```
+
 `EXPO_PUBLIC_*` values are inlined into the bundle, so they are never secret (publishable keys and DSNs only).
 `EAS_PROJECT_ID` and `EAS_OWNER` (read by `app.config.ts`) come from `eas init` or the CI environment;
 `EXPO_PUBLIC_STRIPE_MERCHANT_ID` is the Apple Pay merchant id (developer.apple.com → Identifiers → Merchant IDs).
@@ -420,7 +433,7 @@ access uses OIDC federation: no cloud keys in GitHub.
 | `DHL_WEBHOOK_SECRET` | DHL Express | carrier-gateway | secret | optional | verifies DHL push notifications. Without: polling only |
 | `GS1_API_KEY` | GS1 | catalog | secret | optional | GTIN product data (Verified by GS1) when GS1_ENABLED=true. Without: Open Food Facts only (no key) |
 | `GS1_ENABLED` | GS1 | catalog | config | optional | turns the GS1 lookup on. Without: false |
-| `PEXELS_API_KEY` | Pexels | tools/seed | secret | optional | demo product photos for make seed. Without: Unsplash, then Wikimedia Commons (no key) |
+| `PEXELS_API_KEY` | Pexels | tools/seed | secret | optional | demo product photos for make seed; the mobile apps' welcome photo / clip (make mobile-hero). Without: Unsplash, then Wikimedia Commons (no key) |
 | `UNSPLASH_ACCESS_KEY` | Unsplash | tools/seed | secret | optional | demo product photos for make seed. Without: Wikimedia Commons (no key) |
 | `UPLOADTHING_TOKEN` | UploadThing | media | secret | deployed only | product and storefront images in dev/uat/prod (UploadThing v7 token). Without: local stores every file in MinIO |
 | `UPLOADTHING_API_KEY` | UploadThing | media | secret | deployed only | UploadThing secret key (sk_live_…; with UPLOADTHING_APP_ID) when no v7 token is set. Without: local stores every file in MinIO |

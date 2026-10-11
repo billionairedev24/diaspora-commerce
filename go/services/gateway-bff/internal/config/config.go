@@ -95,6 +95,10 @@ type Config struct {
 		PublicOrigin string `yaml:"publicOrigin" env:"WEB_PUBLIC_ORIGIN"`
 		// BFFPath is the path prefix under PublicOrigin that proxies to the BFF (the storefront's /api/bff).
 		BFFPath string `yaml:"bffPath" env:"WEB_BFF_PATH"`
+		// LANMediaURL (local LAN mode only, set by tools/dev/local.sh): image URLs stored with this stack's MinIO
+		// address (LocalMediaURL) are rewritten to it in JSON responses, so a phone on the Wi-Fi can load them.
+		// Ignored outside APP_ENV=local.
+		LANMediaURL string `yaml:"lanMediaUrl" env:"LAN_MEDIA_URL"`
 	} `yaml:"web"`
 
 	Session struct {
@@ -220,8 +224,23 @@ func (c *Config) Resolve() {
 		pkgconfig.JoinURL(c.Web.PublicOrigin, strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath))
 }
 
+// LocalMediaURL is the public base URL the local media service gives images (go/services/media/config/local.yaml).
+const LocalMediaURL = "http://localhost:9000/media/"
+
+// MediaRewrite is the local LAN-mode image URL rewrite (from, to); empty strings when off.
+func (c *Config) MediaRewrite() (string, string) {
+	to := strings.TrimRight(strings.TrimSpace(c.Web.LANMediaURL), "/")
+	if to == "" {
+		return "", ""
+	}
+	return LocalMediaURL, to + "/"
+}
+
 // Validate checks the settings the BFF cannot run without.
 func (c *Config) Validate(env string) error {
+	if env != "local" {
+		c.Web.LANMediaURL = "" // a development convenience only
+	}
 	if c.RedisURL == "" {
 		return fmt.Errorf("config: REDIS_URL is required")
 	}

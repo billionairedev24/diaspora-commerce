@@ -20,9 +20,23 @@ type Store struct {
 	// PublicBaseURLEnv names an env var that, when set, replaces PublicBaseURL: deployed public stores use
 	// MEDIA_PUBLIC_URL, the shared media CDN URL injected by the Helm library (docs/engineering/environments.md).
 	PublicBaseURLEnv string `yaml:"publicBaseUrlEnv"`
-	AccessKeyEnv     string `yaml:"accessKeyEnv"` // names of env vars holding credentials
-	SecretKeyEnv     string `yaml:"secretKeyEnv"`
-	Account          string `yaml:"account"` // azure
+	// EndpointEnv names an env var that, when set, replaces Endpoint. Local LAN mode (make up MOBILE_HOST=lan) points
+	// it at http://<LAN IP>:9000 so presigned upload and download links work from a phone on the Wi-Fi; the public
+	// URLs stored with assets keep PublicBaseURL (localhost), which gateway-bff rewrites for the phone.
+	EndpointEnv  string `yaml:"endpointEnv"`
+	AccessKeyEnv string `yaml:"accessKeyEnv"` // names of env vars holding credentials
+	SecretKeyEnv string `yaml:"secretKeyEnv"`
+	Account      string `yaml:"account"` // azure
+}
+
+// ResolvedEndpoint is the value of EndpointEnv when that variable is set and not blank, else Endpoint.
+func (s Store) ResolvedEndpoint(getenv func(string) string) string {
+	if s.EndpointEnv != "" {
+		if v := strings.TrimSpace(getenv(s.EndpointEnv)); v != "" {
+			return v
+		}
+	}
+	return s.Endpoint
 }
 
 // ResolvedPublicBaseURL is the value of PublicBaseURLEnv when that variable is set and not blank, else PublicBaseURL.

@@ -187,7 +187,9 @@ func run() error {
 		Name: "Gateway BFF API", Addr: ":" + strconv.Itoa(cfg.Port), OpenAPI: openapi, DocsOn: cfg.DocsEnabled,
 		Checks: []httpserver.ReadinessCheck{valkeyCheck{store: store}}, Logger: log, Registry: reg,
 	})
+	mediaFrom, mediaTo := cfg.MediaRewrite()
 	httpapi.New(services, store, httpapi.SecurityOptions{
+		MediaRewriteFrom: mediaFrom, MediaRewriteTo: mediaTo,
 		AllowedOrigins: cfg.Web.Origins, CookieName: cfg.Session.CookieName, CookieSecure: cfg.Session.CookieSecure,
 		CookieDomain: cfg.Session.CookieDomain, TrustForwarded: cfg.RateLimit.TrustForwarded, MaxBodyBytes: int64(cfg.RateLimit.MaxBodyBytes),
 		AuthPerMinute: cfg.RateLimit.AuthPerMinute, LookupPerMinute: cfg.RateLimit.LookupPerMinute,

@@ -80,6 +80,7 @@ func (h *handlersImpl) chain(next http.Handler) http.Handler {
 	next = identify(h.s.Sessions, h.o, h.log)(next)
 	next = csrf(h.o, h.log)(next)
 	next = bodyLimit(h.o.MaxBodyBytes)(next)
+	next = rewriteMedia(h.o)(next)
 	return cors(h.o)(next)
 }
 

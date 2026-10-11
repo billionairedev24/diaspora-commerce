@@ -25,6 +25,9 @@ type SecurityOptions struct {
 	MaxBodyBytes    int64
 	AuthPerMinute   int
 	LookupPerMinute int
+	// MediaRewriteFrom → MediaRewriteTo: local LAN mode only (media_rewrite.go); empty everywhere else.
+	MediaRewriteFrom string
+	MediaRewriteTo   string
 }
 
 type callerKey struct{}

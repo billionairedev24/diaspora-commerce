@@ -11,6 +11,7 @@
 //   docs/runbooks/*.md                 -> docs/runbooks/*.md
 //   docs/adr/**/*.md (if present)      -> docs/architecture/adr/**
 //   infra/local/PORTS.md, Makefile     -> docs/getting-started/{ports,make-targets}.md
+//   docs/engineering/mobile-on-your-phone.md -> docs/getting-started/mobile-on-your-phone.md (not under guides)
 //   docs/backlog/backlog.csv           -> src/generated/backlog.json
 //   mcp-server tool sources (or $MCP_TOOLS_URL/v1/tools) -> src/generated/mcp-tools.json
 //
@@ -76,6 +77,7 @@ const GENERATED = [
   'docs/architecture/adr',
   'docs/getting-started/ports.md',
   'docs/getting-started/make-targets.md',
+  'docs/getting-started/mobile-on-your-phone.md',
   'static/contracts',
   'static/fonts',
   'static/img/logo-mark.svg',
@@ -118,10 +120,16 @@ for (const svc of services.values()) {
 
 const engineeringSources = [];
 if (isFile(join(ROOT, 'CLAUDE.md'))) engineeringSources.push([join(ROOT, 'CLAUDE.md'), 'conventions']);
+// Getting-started pages that live with the engineering docs in the repo.
+const GETTING_STARTED_GUIDES = { 'mobile-on-your-phone': { title: 'Run the apps on your phone', sidebar_label: 'Mobile on your phone', sidebar_position: 4 } };
 for (const f of list(join(ROOT, 'docs/engineering'), (n) => n.endsWith('.md'))) {
+  if (GETTING_STARTED_GUIDES[basename(f, '.md')]) continue;
   engineeringSources.push([join(ROOT, 'docs/engineering', f), basename(f, '.md')]);
 }
 for (const [src, slug] of engineeringSources) docMap.set(rel(src), `engineering/guides/${slug}.md`);
+for (const slug of Object.keys(GETTING_STARTED_GUIDES)) {
+  if (isFile(join(ROOT, 'docs/engineering', `${slug}.md`))) docMap.set(`docs/engineering/${slug}.md`, `getting-started/${slug}.md`);
+}
 
 const runbookSources = list(join(ROOT, 'docs/runbooks'), (n) => n.endsWith('.md')).map((f) => [
   join(ROOT, 'docs/runbooks', f),
@@ -357,6 +365,10 @@ if (adrSources.length) {
 }
 if (isFile(portsPath)) {
   copyMarkdown(portsPath, 'getting-started/ports.md', { title: 'Service catalogue and local ports', sidebar_label: 'Ports', sidebar_position: 2 });
+}
+for (const [slug, meta] of Object.entries(GETTING_STARTED_GUIDES)) {
+  const src = join(ROOT, 'docs/engineering', `${slug}.md`);
+  if (isFile(src)) copyMarkdown(src, `getting-started/${slug}.md`, meta);
 }
 
 // Make targets (documented with "## " comments in the root Makefile).

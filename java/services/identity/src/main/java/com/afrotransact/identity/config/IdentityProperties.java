@@ -17,7 +17,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param verification      one-time code delivery
  * @param mfa               two-step verification settings
  * @param webauthn          passkey relying party
- * @param corsAllowedOrigins browser origins allowed to call /v1 and the token endpoint
+ * @param corsAllowedOrigins browser origins allowed to call /v1 and the token endpoint (entries may be
+ *                          comma-separated lists; blanks are dropped, see {@link #splitEntries})
  * @param social            social provider client credentials, keyed by provider id (google, apple, facebook)
  * @param bootstrapAdmin    first super administrator (created when missing; leave email blank to skip)
  * @param clients           OAuth clients seeded at start-up (upserted by client id)
@@ -53,7 +54,7 @@ public record IdentityProperties(
         verification = verification == null ? new Verification(null) : verification;
         mfa = mfa == null ? new Mfa(null, null) : mfa;
         webauthn = webauthn == null ? new WebAuthn(null, null, null, null) : webauthn;
-        corsAllowedOrigins = corsAllowedOrigins == null ? List.of() : List.copyOf(corsAllowedOrigins);
+        corsAllowedOrigins = splitEntries(corsAllowedOrigins);
         social = social == null ? Map.of() : Map.copyOf(social);
         bootstrapAdmin = bootstrapAdmin == null ? new BootstrapAdmin(null, null, null, null, null) : bootstrapAdmin;
         clients = clients == null ? List.of() : List.copyOf(clients);
@@ -62,6 +63,29 @@ public record IdentityProperties(
         invitations = invitations == null ? new Invitations(null) : invitations;
         dataProtection = dataProtection == null ? new DataProtection(null, null, null, null, null) : dataProtection;
         pages = pages == null ? new Pages(null, null, null, null, null, null, null, null) : pages;
+    }
+
+    /**
+     * List entries split on commas, trimmed, with blanks and duplicates dropped (order kept). Lets one placeholder
+     * such as {@code ${CUSTOMER_APP_DEV_REDIRECT_URIS:}} add zero or more values to a YAML list (local LAN mode).
+     */
+    static List<String> splitEntries(List<String> entries) {
+        if (entries == null) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (String entry : entries) {
+            if (entry == null) {
+                continue;
+            }
+            for (String part : entry.split(",")) {
+                String v = part.trim();
+                if (!v.isEmpty() && !out.contains(v)) {
+                    out.add(v);
+                }
+            }
+        }
+        return List.copyOf(out);
     }
 
     /**
@@ -227,6 +251,9 @@ public record IdentityProperties(
      * @param type                {@code public} (PKCE, no secret) or {@code confidential}
      * @param secret              raw secret for confidential clients (from env); hashed before storage
      * @param publicRefreshTokens allow refresh tokens for a public client (mobile apps), rotated on every use
+     * @param redirectUris        allowed redirect URIs; an entry may hold several, comma-separated, and blank entries
+     *                            are dropped, so a placeholder such as {@code ${CUSTOMER_APP_DEV_REDIRECT_URIS:}} can add
+     *                            zero or more (local LAN mode: Expo Go's {@code exp://<LAN IP>:8081/--/auth/callback})
      */
     public record Client(String clientId, String name, String type, String secret, List<String> grantTypes,
                          List<String> redirectUris, List<String> postLogoutRedirectUris, List<String> scopes,
@@ -237,8 +264,8 @@ public record IdentityProperties(
             name = name == null ? clientId : name;
             type = type == null ? "public" : type;
             grantTypes = grantTypes == null ? List.of() : List.copyOf(grantTypes);
-            redirectUris = redirectUris == null ? List.of() : List.copyOf(redirectUris);
-            postLogoutRedirectUris = postLogoutRedirectUris == null ? List.of() : List.copyOf(postLogoutRedirectUris);
+            redirectUris = splitEntries(redirectUris);
+            postLogoutRedirectUris = splitEntries(postLogoutRedirectUris);
             scopes = scopes == null ? List.of() : List.copyOf(scopes);
             accessTokenTtl = accessTokenTtl == null ? Duration.ofMinutes(5) : accessTokenTtl;
             refreshTokenTtl = refreshTokenTtl == null ? Duration.ofDays(30) : refreshTokenTtl;

@@ -191,3 +191,16 @@ func TestStripePublishableKeyPerEnvironment(t *testing.T) {
 		}
 	}
 }
+
+func TestLANMediaRewriteIsLocalOnly(t *testing.T) {
+	c := &config.Config{}
+	c.Web.LANMediaURL = "http://192.168.1.50:9000/media/"
+	from, to := c.MediaRewrite()
+	if from != "http://localhost:9000/media/" || to != "http://192.168.1.50:9000/media/" {
+		t.Fatalf("rewrite %q → %q", from, to)
+	}
+	_ = c.Validate("dev")
+	if from, to := c.MediaRewrite(); from != "" || to != "" {
+		t.Fatalf("dev keeps the rewrite: %q → %q", from, to)
+	}
+}

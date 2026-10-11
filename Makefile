@@ -22,13 +22,14 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links \
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers \
-        web-dev web-build backlog seed seed-test
+        web-dev web-build backlog seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
+        mobile-ios-device mobile-brand mobile-hero
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — PROD=1 runs the web apps as production builds
+up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — PROD=1 runs the web apps as production builds, MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone
 	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
 
 up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)
@@ -165,8 +166,30 @@ dev-logs: ## Follow one service's log: make dev-logs SERVICE=orders
 dev-restart: ## Rebuild and restart one service: make dev-restart SERVICE=delivery-runs
 	tools/dev/local.sh restart $(SERVICE)
 
-mobile: ## Only the Expo apps against the running stack: customer :8081, driver :8082 (MOBILE_HOST=<LAN IP> for a phone, 10.0.2.2 for the Android emulator; MOBILE_MOCKS=1 for in-app mocks)
+mobile: ## Only the Expo apps against the running stack: customer :8081, driver :8082 (MOBILE_MOCKS=1 for in-app mocks; a phone needs the stack in LAN mode: make mobile-lan)
 	tools/dev/local.sh mobile
+
+mobile-lan: ## LAN mode: everything (sign-in included) on this Mac's Wi-Fi address for a phone on the same network; prints exp:// links + QR codes (MOBILE_HOST=<ip> to pick the address)
+	MOBILE_HOST=$${MOBILE_HOST:-lan} PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+
+lan-env: ## Print the addresses the stack would advertise for MOBILE_HOST (dry run): make lan-env MOBILE_HOST=lan
+	tools/dev/local.sh lan-env
+
+mobile-adb-reverse: ## Android phone/emulator over USB in localhost mode: adb reverse the stack's ports
+	tools/dev/local.sh adb-reverse
+
+mobile-android-device: ## Build + install the development build on a USB Android phone: make mobile-android-device APP=customer|driver
+	tools/dev/local.sh device android $(or $(APP),customer)
+
+mobile-ios-device: ## Build + install the development build on a USB iPhone (Xcode, signing team): make mobile-ios-device APP=customer|driver
+	tools/dev/local.sh device ios $(or $(APP),customer)
+
+mobile-brand: ## Regenerate the apps' launcher icons, splash mark and favicon from design/assets/logo-mark.svg
+	pnpm --filter @afrotransact/customer-app brand
+	pnpm --filter @afrotransact/driver-app brand
+
+mobile-hero: ## Download free-licensed welcome photos (+ a driver clip) from Pexels (PEXELS_API_KEY; ARGS="--dry-run" / "--remove")
+	python3 tools/seed/mobile_hero.py $(ARGS)
 
 docs-up: ## Only the developer portal (Docusaurus :3100) and Storybook (:6006), next free port when taken
 	tools/dev/local.sh docs

@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   // Workspace packages ship TypeScript source.
   transpilePackages: ['@afrotransact/account', '@afrotransact/ui', '@afrotransact/data-table', '@afrotransact/api-client', '@afrotransact/tokens', '@afrotransact/i18n', '@afrotransact/telemetry'],
   distDir: process.env.NEXT_DIST_DIR || '.next',
+  // Local LAN mode (make up MOBILE_HOST=lan): the dev server is opened as http://<LAN IP>:<port> from a phone; Next.js
+  // only serves its dev assets and HMR to hosts listed here (comma-separated, set by tools/dev/local.sh).
+  allowedDevOrigins: (process.env.NEXT_ALLOWED_DEV_ORIGINS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
   experimental: { optimizePackageImports: ['@phosphor-icons/react', 'recharts'] },
   images: { unoptimized: true },
   async headers() {

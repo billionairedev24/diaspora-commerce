@@ -10,6 +10,10 @@ shows what is set, missing or malformed (values masked), and each provider switc
 the log) to the real one when its keys are present. Every variable, where to create it, and where it lives in
 dev/uat/prod: [secrets and configuration](secrets-and-configuration.md).
 
+**On your phone.** The customer and driver apps run on a real phone through Expo Go over Wi-Fi, a development build over
+USB, or an EAS build. A phone needs LAN mode, `make up MOBILE_HOST=lan`, which serves the whole stack (identity's
+issuer, the web apps, image links) on your Wi-Fi address: [mobile on your phone](mobile-on-your-phone.md).
+
 ## Demo data: `make seed`
 
 A fresh stack has an empty catalogue. `make seed` (`tools/seed/seed.py`, Python 3 standard library only) creates a demo

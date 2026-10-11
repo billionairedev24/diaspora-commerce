@@ -10,6 +10,9 @@
 #   tools/dev/local.sh logs delivery-runs      # follow one log (web apps: web-storefront, web-staff-console, …)
 #   tools/dev/local.sh restart orders          # rebuild + restart one service (re-reads .local/secrets.env)
 #   tools/dev/local.sh mobile                  # only the Expo apps (customer :8081, driver :8082)
+#   MOBILE_HOST=lan tools/dev/local.sh up      # LAN mode: the whole stack on this Mac's Wi-Fi address, for a phone
+#   MOBILE_HOST=192.168.1.50 tools/dev/local.sh lan-env   # print the addresses LAN mode would use (dry run)
+#   tools/dev/local.sh device android customer # build + install the development build on a USB phone
 #   tools/dev/local.sh docs                    # only the developer portal (:3100) and Storybook (:6006)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
@@ -222,9 +225,7 @@ resolve_web_ports() {
   local docs_line=""
   if [[ -f "$WEB_PORTS_FILE" ]]; then docs_line=$(grep -E '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true); fi
   printf '%s%s' "$after" "${docs_line:+$docs_line$'\n'}" >"$WEB_PORTS_FILE"
-  export PUBLIC_WEB_URL="http://localhost:$(web_port_of storefront)"
-  export SELLER_CENTER_URL="http://localhost:$(web_port_of seller-center)"
-  export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
+  platform_env
   # Services started with other addresses would send sign-in back to the old ports: restart them with the new ones.
   if [[ "$before" != "$(grep -vE '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true)" ]]; then
     # The web apps link to each other too (storefront "Sell on AfroTransact" → Seller Center).
@@ -467,21 +468,22 @@ free_port_for() {
 start() {
   local svc=$1 jar
   mkdir -p "$LOGS" "$PIDS"
+  platform_env
   if running "$svc"; then
-    if [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]]; then
+    if [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]] \
+      && [[ "$(cat "$PIDS/$svc.env" 2>/dev/null || echo localhost)" == "$(env_sig)" ]]; then
       echo "  · $svc already running (pid $(cat "$PIDS/$svc.pid"))"; return 0
     fi
-    echo "  · $svc was rebuilt since it started: restarting"
+    if [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]]; then
+      echo "  · $svc runs with the other addresses (localhost / LAN mode): restarting"
+    else
+      echo "  · $svc was rebuilt since it started: restarting"
+    fi
     stop "$svc"
   fi
   free_port_for "$svc" || return 1
   telemetry_env
   pool_env "$svc"
-  # Browser origins allowed to call services directly: the Expo web previews of the mobile apps (Java services read
-  # at.security.cors-allowed-origins; the BFF's list also keeps the three web apps).
-  local mobile_origins="http://localhost:$(mobile_port_of customer),http://localhost:$(mobile_port_of driver)"
-  export AT_SECURITY_CORS_ALLOWED_ORIGINS="$mobile_origins"
-  export WEB_ORIGINS="http://localhost:$(web_port_of storefront),http://localhost:$(web_port_of seller-center),http://localhost:$(web_port_of staff-console),$mobile_origins"
   # media signs uploads for this stack's MinIO (infra/local/docker-compose.yml root credentials).
   export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
   local vsender=""
@@ -509,6 +511,7 @@ start() {
       echo $! >"$PIDS/$svc.pid")
   fi
   build_sig "$svc" >"$PIDS/$svc.sig"
+  env_sig >"$PIDS/$svc.env"
 }
 
 stop() {
@@ -522,7 +525,7 @@ stop() {
     if running "$svc"; then kill -9 "$pid" 2>/dev/null || true; fi
     echo "  · stopped $svc"
   fi
-  rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode"
+  rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode" "$PIDS/$svc.env"
 }
 
 # PROD=1 (make up PROD=1): the web apps run as production builds (next build + next start, output in .next-prod so
@@ -540,11 +543,14 @@ web_up() {
   fi
   mode=$(web_mode)
   mkdir -p "$LOGS" "$PIDS"
-  # A running app in the other mode is replaced.
+  platform_env
+  # A running app in the other mode, or started with the other addresses (localhost / LAN mode), is replaced.
   for app in $WEB_APPS; do
     name="web-$app"
     if running "$name" && [[ "$(cat "$PIDS/$name.mode" 2>/dev/null || echo dev)" != "$mode" ]]; then
       echo "  · $app runs in the other mode: restarting it as $mode"; stop "$name"
+    elif running "$name" && [[ "$(cat "$PIDS/$name.env" 2>/dev/null || echo localhost)" != "$(env_sig)" ]]; then
+      echo "  · $app runs with the other addresses (localhost / LAN mode): restarting it"; stop "$name"
     fi
   done
   if [[ "$mode" == prod ]]; then
@@ -563,7 +569,7 @@ web_up() {
         NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_MOCKS=0 \
           BFF_ORIGIN=http://localhost:8200 nohup ./node_modules/.bin/next start --port "$port" >>"$LOGS/$name.log" 2>&1 &
         echo $! >"$PIDS/$name.pid")
-      echo prod >"$PIDS/$name.mode"
+      echo prod >"$PIDS/$name.mode"; env_sig >"$PIDS/$name.env"
     done
   else
     echo "==> starting web apps (Next.js dev against the local BFF on :8200; the first page load compiles for a minute)"
@@ -575,11 +581,11 @@ web_up() {
         NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 \
           nohup ./node_modules/.bin/next dev --port "$port" >>"$LOGS/$name.log" 2>&1 &
         echo $! >"$PIDS/$name.pid")
-      echo dev >"$PIDS/$name.mode"
+      echo dev >"$PIDS/$name.mode"; env_sig >"$PIDS/$name.env"
     done
   fi
   for app in $WEB_APPS; do
-    name="web-$app"; url="http://localhost:$(web_port_of "$app")"
+    name="web-$app"; url="http://$(public_host):$(web_port_of "$app")"
     [[ -f "$PIDS/$name.pid" ]] || continue
     for ((i = 0; i < 180; i += 3)); do
       if grep -qE "Ready in|ready started|Local:" "$LOGS/$name.log" 2>/dev/null; then echo "  ✓ $app  $url  ($mode)"; break; fi
@@ -622,28 +628,48 @@ admin@afrotransact.com|Bootstrap admin: LocalAdmin2026!|$st
 EOF
 }
 
+# The mobile part of `links`: in LAN mode the phone URLs, exp:// links and QR codes; otherwise how to get there.
+mobile_links() {
+  local h ip app port slug
+  h=$(public_host); ip=$(lan_ip)
+  echo "Mobile apps (Expo; logs: make dev-logs SERVICE=mobile-customer | mobile-driver; guide: docs/engineering/mobile-on-your-phone.md)"
+  if [[ "$h" == localhost ]]; then
+    printf '  %-20s %-30s %s\n' "Customer app" "http://localhost:$(mobile_port_of customer)" "web preview · simulator: xcrun simctl openurl booted exp://localhost:$(mobile_port_of customer)"
+    printf '  %-20s %-30s %s\n' "Driver app" "http://localhost:$(mobile_port_of driver)" "web preview"
+    echo "  Phone on your Wi-Fi  make up MOBILE_HOST=lan   (LAN mode: the whole stack on $ip, sign-in included)"
+    echo "  Android over USB     make mobile-adb-reverse, then open the app (localhost mode works through the cable)"
+    echo "  Development build    make mobile-android-device APP=customer | make mobile-ios-device APP=customer"
+  else
+    echo "  LAN mode: everything is served on $h — use these addresses on this Mac too (sign-in, cookies and tokens agree)."
+    printf '  %-20s %s\n' "Storefront (phone)" "http://$h:$(web_port_of storefront)"
+    for app in $MOBILE_APPS; do
+      port=$(mobile_port_of "$app"); slug="afrotransact-$app"
+      printf '  %-20s %-34s %s\n' "$app app · Expo Go" "exp://$h:$port" "scan with the Camera app (iOS) or Expo Go (Android)"
+      qr "exp://$h:$port"
+      printf '  %-20s %s\n' "$app · dev build" "exp+$slug://expo-development-client/?url=http%3A%2F%2F$h%3A$port"
+    done
+    echo "  Firewall (macOS)     allow incoming connections for node and java when asked (System Settings → Network → Firewall)"
+    echo "  Back to localhost    make up   (without MOBILE_HOST; only the services, web apps and Metro restart)"
+  fi
+  echo "  Sign in              customer.houston@afrotransact.test / driver@afrotransact.test (Test1234!Local)"
+}
+
 links() {
   local svc
   echo
   echo "──────────────────────────────── AfroTransact on this machine ────────────────────────────────"
   echo "Apps"
-  local sf sc st
-  sf="http://localhost:$(web_port_of storefront)"; sc="http://localhost:$(web_port_of seller-center)"
-  st="http://localhost:$(web_port_of staff-console)"
+  local sf sc st h
+  h=$(public_host)
+  sf="http://$h:$(web_port_of storefront)"; sc="http://$h:$(web_port_of seller-center)"
+  st="http://$h:$(web_port_of staff-console)"
   printf '  %-20s %-30s %s\n' "Storefront" "$sf" "pre-orders: $sf/pre-orders"
   printf '  %-20s %s\n' "Seller Center" "$sc"
   printf '  %-20s %-30s %s\n' "Staff console" "$st" "pre-orders: $st/preorders"
   test_users "$sf" "$sc" "$st"
   local dp; dp="http://localhost:$(docs_port)"
   if [[ -f "$PIDS/mobile-customer.pid" || -f "$PIDS/mobile-driver.pid" ]]; then
-    local ip; ip=$(lan_ip)
-    echo "Mobile apps (Expo; logs: make dev-logs SERVICE=mobile-customer | mobile-driver)"
-    printf '  %-20s %-30s %s\n' "Customer app" "http://localhost:$(mobile_port_of customer)" "web preview · Expo Go: exp://$ip:$(mobile_port_of customer)"
-    printf '  %-20s %-30s %s\n' "Driver app" "http://localhost:$(mobile_port_of driver)" "web preview · Expo Go: exp://$ip:$(mobile_port_of driver)"
-    echo "  iOS simulator        cd mobile/apps/customer && npx expo run:ios   (or open the exp:// URL in the simulator)"
-    echo "  Android emulator     MOBILE_HOST=10.0.2.2 make up   then: cd mobile/apps/customer && npx expo run:android"
-    echo "  Phone on your Wi-Fi  MOBILE_HOST=$ip make up   then open the exp:// URL in Expo Go"
-    echo "  Sign in              customer.houston@afrotransact.test / driver@afrotransact.test (Test1234!Local)"
+    mobile_links
   fi
   echo "Documentation"
   printf '  %-20s %-30s %s\n' "Developer portal" "$dp" "guides, architecture, runbooks, backlog"
@@ -754,44 +780,136 @@ storybook_up() {
 
 # Mobile apps (Expo, mobile/apps/{customer,driver}) against the local stack: one Metro server each (customer :8081,
 # driver :8082; identity's local OIDC clients redirect there for the web preview). MOBILE=0 skips them.
-# Open them in a browser (web preview), an iOS simulator / Android emulator, or Expo Go on a phone (exp://<LAN IP>:port).
-# EXPO_PUBLIC_DEV_HOST tells the apps where the stack is: localhost (browser, iOS simulator) by default; MOBILE_HOST=<ip>
-# for a phone on the same Wi-Fi, 10.0.2.2 for the Android emulator. MOBILE_MOCKS=1 runs them on the in-app mock backend.
+# Open them in a browser (web preview), an iOS simulator / Android emulator, Expo Go or a development build on a phone.
+# MOBILE_MOCKS=1 runs them on the in-app mock backend. docs/engineering/mobile-on-your-phone.md has every route.
 MOBILE_APPS="customer driver"
 
 mobile_port_of() {
   case "$1" in customer) echo "${CUSTOMER_APP_PORT:-8081}" ;; driver) echo "${DRIVER_APP_PORT:-8082}" ;; esac
 }
 
+# This machine's address on the local network: the interface of the default route (macOS: route + ipconfig; Linux:
+# ip route), then the usual Wi-Fi/Ethernet names, then hostname -I without Docker bridges. "localhost" when offline.
 lan_ip() {
-  local ip=""
-  if command -v ipconfig >/dev/null 2>&1; then ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true); fi
-  if [[ -z "$ip" ]] && command -v hostname >/dev/null 2>&1; then ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true); fi
+  local ip="" ifc=""
+  if command -v ipconfig >/dev/null 2>&1 && command -v route >/dev/null 2>&1; then
+    ifc=$(route -n get default 2>/dev/null | awk '/interface:/ {print $2; exit}' || true)
+    if [[ -n "$ifc" ]]; then ip=$(ipconfig getifaddr "$ifc" 2>/dev/null || true); fi
+  fi
+  if [[ -z "$ip" ]] && command -v ipconfig >/dev/null 2>&1; then
+    ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)
+  fi
+  if [[ -z "$ip" ]] && command -v ip >/dev/null 2>&1; then
+    ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i = 1; i < NF; i++) if ($i == "src") {print $(i + 1); exit}}' || true)
+  fi
+  if [[ -z "$ip" ]] && command -v hostname >/dev/null 2>&1; then
+    ip=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.' | grep -vE '^(127\.|172\.(1[7-9]|2[0-9]|3[01])\.)' | head -1 || true)
+  fi
   echo "${ip:-localhost}"
 }
 
+# LAN mode. The stack advertises one host everywhere a browser or phone sees an address: identity's issuer (and so
+# every service's token check), the web apps' URLs and sign-in callbacks, CORS origins, the Expo apps' API host,
+# image and upload links. localhost (default) suits this machine's browser and simulators; on a phone "localhost" is
+# the phone, so MOBILE_HOST=lan (this machine's Wi-Fi address) or MOBILE_HOST=<IPv4> switches the whole stack to that
+# address. MOBILE_HOST=10.0.2.2 (the Android emulator's alias for this machine) keeps localhost mode: the emulator
+# then reaches the stack through adb reverse (make mobile-adb-reverse) or uses LAN mode like a phone.
+public_host() {
+  local h="${MOBILE_HOST:-localhost}"
+  case "$h" in lan|LAN|auto) h=$(lan_ip) ;; esac
+  case "$h" in
+    ""|localhost|127.0.0.1|10.0.2.2) echo localhost ;;
+    *) echo "$h" ;;
+  esac
+}
+
+# What a process was started with (.local/pids/<name>.env): `up` restarts services, web apps and Metro whose
+# addresses differ, so switching LAN mode on or off restarts what depends on it and rebuilds nothing.
+env_sig() { public_host; }
+
+LAN_WARNED=0
+
+# Exports the addresses for the services, web apps and Expo apps started from here (see public_host).
+platform_env() {
+  local h cu dr sf sc st mobile_origins
+  h=$(public_host)
+  if [[ "${MOBILE_HOST:-}" =~ ^(lan|LAN|auto)$ && "$h" == localhost && "$LAN_WARNED" == 0 ]]; then
+    LAN_WARNED=1
+    echo "  ! MOBILE_HOST=lan: no LAN address found (Wi-Fi off?); staying on localhost" >&2
+  fi
+  sf="http://$h:$(web_port_of storefront)"; sc="http://$h:$(web_port_of seller-center)"; st="http://$h:$(web_port_of staff-console)"
+  cu="http://$h:$(mobile_port_of customer)"; dr="http://$h:$(mobile_port_of driver)"
+  export PUBLIC_WEB_URL="$sf" SELLER_CENTER_URL="$sc" STAFF_CONSOLE_URL="$st"
+  # Expo web previews may call the services directly (Java services: at.security.cors-allowed-origins).
+  mobile_origins="http://localhost:$(mobile_port_of customer),http://localhost:$(mobile_port_of driver)"
+  # Localhost mode: the apps use localhost, or 10.0.2.2 from the Android emulator (MOBILE_HOST=10.0.2.2).
+  export EXPO_PUBLIC_DEV_HOST=localhost
+  if [[ "${MOBILE_HOST:-}" == 10.0.2.2 ]]; then export EXPO_PUBLIC_DEV_HOST=10.0.2.2; fi
+  if [[ "$h" != localhost ]]; then
+    mobile_origins="$mobile_origins,$cu,$dr"
+    export EXPO_PUBLIC_DEV_HOST="$h"
+    # identity: issuer (iss claim, discovery, JWKS) — every service validates tokens against it.
+    export AUTH_ISSUER_URL="http://$h:8100"
+    # identity (application-local.yml): the LAN web previews' origins and Expo Go's redirect URIs
+    # (expo-auth-session makeRedirectUri in Expo Go: exp://<host>:<Metro port>/--/auth/callback).
+    export LAN_WEB_ORIGINS="$cu,$dr"
+    export CUSTOMER_APP_DEV_REDIRECT_URIS="exp://$h:$(mobile_port_of customer)/--/auth/callback,$cu/auth/callback"
+    export DRIVER_APP_DEV_REDIRECT_URIS="exp://$h:$(mobile_port_of driver)/--/auth/callback,$dr/auth/callback"
+    # Images: gateway-bff rewrites stored http://localhost:9000/media/… links; media presigns uploads for this host.
+    export LAN_MEDIA_URL="http://$h:9000/media" LAN_MINIO_ENDPOINT="http://$h:9000"
+    # Next.js dev servers serve their dev assets / HMR to this host.
+    export NEXT_ALLOWED_DEV_ORIGINS="$h"
+  else
+    unset AUTH_ISSUER_URL LAN_WEB_ORIGINS CUSTOMER_APP_DEV_REDIRECT_URIS DRIVER_APP_DEV_REDIRECT_URIS LAN_MEDIA_URL \
+      LAN_MINIO_ENDPOINT NEXT_ALLOWED_DEV_ORIGINS
+  fi
+  export AT_SECURITY_CORS_ALLOWED_ORIGINS="$mobile_origins"
+  export WEB_ORIGINS="$sf,$sc,$st,$mobile_origins"
+}
+
+# `lan-env`: the addresses the current MOBILE_HOST gives (no side effects; make lan-env MOBILE_HOST=…).
+cmd_lan_env() {
+  local v
+  platform_env
+  echo "mode: $(if [[ "$(public_host)" == localhost ]]; then echo localhost; else echo "LAN ($(public_host))"; fi)"
+  for v in PUBLIC_WEB_URL SELLER_CENTER_URL STAFF_CONSOLE_URL AUTH_ISSUER_URL WEB_ORIGINS AT_SECURITY_CORS_ALLOWED_ORIGINS \
+    LAN_WEB_ORIGINS CUSTOMER_APP_DEV_REDIRECT_URIS DRIVER_APP_DEV_REDIRECT_URIS LAN_MEDIA_URL LAN_MINIO_ENDPOINT \
+    NEXT_ALLOWED_DEV_ORIGINS EXPO_PUBLIC_DEV_HOST; do
+    printf '  %-32s %s\n' "$v" "${!v:-(unset: service default, localhost)}"
+  done
+}
+
 mobile_up() {
-  local app name port i mocks host
+  local app name port i mocks host clear
   if [[ "${MOBILE:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || return 0
   if [[ ! -x "$ROOT/mobile/apps/customer/node_modules/.bin/expo" ]]; then
     echo "==> installing mobile dependencies (pnpm install)"
     (cd "$ROOT" && pnpm install --frozen-lockfile)
   fi
+  platform_env
   mocks=0; if [[ "${MOBILE_MOCKS:-0}" == 1 ]]; then mocks=1; fi
-  host="${MOBILE_HOST:-localhost}"
+  host="$EXPO_PUBLIC_DEV_HOST"
   echo "==> starting the mobile apps (Expo/Metro; the first bundle builds when you open the app)"
   for app in $MOBILE_APPS; do
-    name="mobile-$app"; port=$(mobile_port_of "$app")
-    if running "$name"; then echo "  · $app app already running"; continue; fi
+    name="mobile-$app"; port=$(mobile_port_of "$app"); clear=""
+    if running "$name"; then
+      if [[ "$(cat "$PIDS/$name.env" 2>/dev/null || echo localhost)" == "$(env_sig)" ]]; then
+        echo "  · $app app already running"; continue
+      fi
+      # EXPO_PUBLIC_* values are inlined when Metro bundles: restart with a clean cache for the new host.
+      echo "  · $app app runs with the other addresses (localhost / LAN mode): restarting it"; stop "$name"; clear="--clear"
+    fi
     if port_open "$port"; then
       echo "  ! localhost:$port is in use: $app app skipped (set CUSTOMER_APP_PORT / DRIVER_APP_PORT)" >&2; continue
     fi
     : >"$LOGS/$name.log"
+    # --lan: Metro advertises this machine's network address (exp://<LAN IP>:port) to Expo Go and development builds.
     (cd "$ROOT/mobile/apps/$app" || exit 1
       CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=$mocks EXPO_PUBLIC_DEV_HOST="$host" \
-        nohup ./node_modules/.bin/expo start --port "$port" --lan >>"$LOGS/$name.log" 2>&1 &
+        nohup ./node_modules/.bin/expo start --port "$port" --lan $clear >>"$LOGS/$name.log" 2>&1 &
       echo $! >"$PIDS/$name.pid")
+    env_sig >"$PIDS/$name.env"
   done
   for app in $MOBILE_APPS; do
     name="mobile-$app"; port=$(mobile_port_of "$app")
@@ -802,6 +920,44 @@ mobile_up() {
       sleep 3
     done
   done
+}
+
+# A terminal QR code of a URL (qrencode, if installed: brew install qrencode / apt install qrencode).
+qr() {
+  if command -v qrencode >/dev/null 2>&1; then qrencode -t ANSIUTF8 -m 1 "$1" 2>/dev/null | sed 's/^/      /'; fi
+}
+
+# Ports the phone reaches over USB with `adb reverse` (localhost mode on an Android device or emulator): Metro, the
+# web apps, identity, gateway-bff, bookings, fulfilment, media and MinIO.
+ADB_PORTS="8081 8082 3000 3001 3002 8100 8200 8109 8108 8207 9000"
+
+cmd_adb_reverse() {
+  local p
+  command -v adb >/dev/null 2>&1 || { echo "adb not found: install Android Studio (or brew install --cask android-platform-tools)" >&2; exit 1; }
+  adb get-state >/dev/null 2>&1 || { echo "No Android device: plug it in, allow USB debugging, check adb devices" >&2; exit 1; }
+  for p in $ADB_PORTS; do adb reverse "tcp:$p" "tcp:$p" >/dev/null; done
+  echo "  ✓ adb reverse: the phone's localhost:{${ADB_PORTS// /,}} reach this machine (until it is unplugged)"
+}
+
+# `device android|ios <app>`: build the development build (expo-dev-client) and install it on a USB-connected phone.
+# The first build takes a while (Android: Android Studio SDK + JDK 17; iOS: Xcode + a signing team). Metro from
+# `make up` / `make mobile` keeps running: the build is installed with --no-bundler and connects to it.
+cmd_device() {
+  local platform="${1:-}" app="${2:-customer}" bundler=""
+  case "$platform" in android|ios) ;; *) echo "usage: $0 device android|ios [customer|driver]" >&2; exit 2 ;; esac
+  case "$app" in customer|driver) ;; *) echo "unknown app: $app (customer | driver)" >&2; exit 2 ;; esac
+  mkdir -p "$LOGS" "$PIDS"
+  load_secrets
+  platform_env
+  if port_open "$(mobile_port_of "$app")"; then bundler="--no-bundler"; fi
+  if [[ "$platform" == android ]]; then
+    command -v adb >/dev/null 2>&1 || { echo "adb not found: install Android Studio and add platform-tools to PATH (docs/engineering/mobile-on-your-phone.md)" >&2; exit 1; }
+    adb devices
+    if [[ "$(public_host)" == localhost ]]; then cmd_adb_reverse; fi
+  fi
+  echo "==> building and installing the $app development build on your $platform device (first build: several minutes)"
+  (cd "$ROOT/mobile/apps/$app" && EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_DEV_HOST="$EXPO_PUBLIC_DEV_HOST" \
+    ./node_modules/.bin/expo run:"$platform" --device --port "$(mobile_port_of "$app")" $bundler)
 }
 
 cmd_up() {
@@ -896,15 +1052,22 @@ case "${1:-}" in
   down) cmd_down ;;
   status) cmd_status ;;
   links) links ;;
-  mobile) mkdir -p "$LOGS" "$PIDS"; load_secrets; mobile_up; links ;;
+  mobile) mkdir -p "$LOGS" "$PIDS"; load_secrets
+    # identity's issuer must match the host the apps use: LAN mode is a whole-stack switch.
+    if running identity && [[ "$(cat "$PIDS/identity.env" 2>/dev/null || echo localhost)" != "$(env_sig)" ]]; then
+      echo "  ! the stack runs on $(cat "$PIDS/identity.env" 2>/dev/null || echo localhost), the apps would use $(public_host):" \
+        "sign-in would fail. Switch everything with: make up MOBILE_HOST=${MOBILE_HOST:-localhost}" >&2
+    fi
+    mobile_up; links ;;
   docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
     load_secrets
-    export PUBLIC_WEB_URL="http://localhost:$(web_port_of storefront)"
-    export SELLER_CENTER_URL="http://localhost:$(web_port_of seller-center)"
-    export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
+    platform_env
     stop "$2"; build "$2"; start "$2"; wait_healthy "$2" 240 ;;
-  *) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  lan-env) cmd_lan_env ;;
+  adb-reverse) cmd_adb_reverse ;;
+  device) shift; cmd_device "$@" ;;
+  *) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

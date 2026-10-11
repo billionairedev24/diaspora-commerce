@@ -9,6 +9,8 @@ stores:
     kind: s3
     name: minio
     endpoint: http://localhost:9000
+    # LAN mode (tools/dev/local.sh): http://<LAN IP>:9000, so presigned links work from a phone.
+    endpointEnv: LAN_MINIO_ENDPOINT
     region: us-east-1
     bucket: media
     pathStyle: true
@@ -19,6 +21,7 @@ stores:
     kind: s3
     name: minio
     endpoint: http://localhost:9000
+    endpointEnv: LAN_MINIO_ENDPOINT
     region: us-east-1
     bucket: kyc-evidence
     pathStyle: true

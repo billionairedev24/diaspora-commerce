@@ -82,3 +82,20 @@ func TestDeployedLinksForwardedTokensAndModeration(t *testing.T) {
 		t.Errorf("local: %q %+v", local.PublicBaseURL, local.Moderation.AI)
 	}
 }
+
+// Local LAN mode: the MinIO endpoint (presigned links) follows LAN_MINIO_ENDPOINT; stored public URLs do not change.
+func TestLocalStoresFollowTheLANMinioEndpoint(t *testing.T) {
+	s := config.Store{Endpoint: "http://localhost:9000", EndpointEnv: "LAN_MINIO_ENDPOINT", PublicBaseURL: "http://localhost:9000/media"}
+	env := map[string]string{}
+	getenv := func(k string) string { return env[k] }
+	if got := s.ResolvedEndpoint(getenv); got != "http://localhost:9000" {
+		t.Fatalf("localhost mode = %q", got)
+	}
+	env["LAN_MINIO_ENDPOINT"] = "http://192.168.1.50:9000"
+	if got := s.ResolvedEndpoint(getenv); got != "http://192.168.1.50:9000" {
+		t.Fatalf("LAN mode = %q", got)
+	}
+	if got := s.ResolvedPublicBaseURL(getenv); got != "http://localhost:9000/media" {
+		t.Fatalf("public URL changed: %q", got)
+	}
+}

@@ -44,6 +44,8 @@ at:
       # Expo web previews of the customer and driver apps (make up / make mobile): OIDC discovery and token calls.
       - http://localhost:8081
       - http://localhost:8082
+      # LAN mode (make up MOBILE_HOST=lan): the same apps on http://<LAN IP>:…, comma-separated; set by tools/dev/local.sh.
+      - ${LAN_WEB_ORIGINS:}
     bootstrap-admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:admin@afrotransact.com}
       password: ${BOOTSTRAP_ADMIN_PASSWORD:LocalAdmin2026!}
@@ -59,7 +61,10 @@ at:
         type: public
         grant-types: [authorization_code, refresh_token]
         public-refresh-tokens: true
-        redirect-uris: [com.afrotransact.customer:/oauth2redirect, http://localhost:8081/auth/callback]
+        # Native builds (dev client, store) use the app scheme, the web preview its callback, Expo Go
+        # exp://<Metro host>:<port>/--/auth/callback (expo-auth-session makeRedirectUri): localhost for simulators and
+        # USB (adb reverse); LAN mode (tools/dev/local.sh) adds the LAN IP variants through the placeholder.
+        redirect-uris: [com.afrotransact.customer:/oauth2redirect, http://localhost:8081/auth/callback, "exp://localhost:8081/--/auth/callback", "${CUSTOMER_APP_DEV_REDIRECT_URIS:}"]
         scopes: [openid, profile, email, phone, offline_access]
       - client-id: driver-app
         name: AfroTransact Driver
@@ -67,7 +72,7 @@ at:
         grant-types: [authorization_code, refresh_token]
         public-refresh-tokens: true
         refresh-token-ttl: 14h
-        redirect-uris: [com.afrotransact.driver:/oauth2redirect, http://localhost:8082/auth/callback]
+        redirect-uris: [com.afrotransact.driver:/oauth2redirect, http://localhost:8082/auth/callback, "exp://localhost:8082/--/auth/callback", "${DRIVER_APP_DEV_REDIRECT_URIS:}"]
         scopes: [openid, profile, email, offline_access]
       - client-id: gateway-bff
         name: Gateway BFF (storefront, Seller Center, staff console)
