@@ -23,6 +23,10 @@ on:
         description: Run CodeQL for this service (the scheduled security.yml covers the whole repo).
         type: boolean
         default: false
+      image-max-mb:
+        description: Image size budget in MB (uncompressed linux/amd64); per-service overrides live in tools/ci/gen_workflows.py.
+        type: string
+        default: "450"
     outputs:
       image:
         description: Image repository (ghcr.io/<owner>/<repo>/<service>).
@@ -215,6 +219,7 @@ jobs:
           build-args: SERVICE=${{ inputs.service }}
           push: ${{ inputs.publish }}
           # S010: layered jar on eclipse-temurin:25-jre, uid 1000, prod profile; the budget is a guard rail
-          # (JRE ~280 MB + the largest fat jar ~80 MB measured 2026-10-10).
-          max-size-mb: "450"
+          # (JRE ~280 MB + a typical fat jar ~80 MB measured 2026-10-10). orders (Temporal + Kafka + Redis, ~120 MB jar)
+          # has a higher budget set by the generator.
+          max-size-mb: ${{ inputs.image-max-mb }}
           required-env: SPRING_PROFILES_ACTIVE=prod
