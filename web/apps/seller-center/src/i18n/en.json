@@ -1,5 +1,8 @@
 {
-  "sc.header.openMenu": "Open menu",
+  "sc.header.accountMenu": "Account menu for {name}",
+  "sc.header.yourAccount": "Your account",
+  "sc.header.security": "Sign-in & security",
+  "sc.header.openStorefront": "Open the storefront",
   "sc.header.signOut": "Sign out",
   "sc.sidebar.organisations": "Organisations",
   "sc.sidebar.sellerCenter": "Seller Center",
@@ -8,7 +11,6 @@
   "sc.sidebar.backOffice": "Back office",
   "sc.sidebar.access": "Access:",
   "sc.portalShell.loadingYourBackOffice": "Loading your back office…",
-  "sc.portalShell.menu": "Menu",
   "sc.portalShell.signInToSellerCentral": "Sign in to Seller Central",
   "sc.portalShell.useTheSameAfrotransactAccount": "Use the same AfroTransact account you shop with. Seller Center and Provider Hub open after your application is approved.",
   "sc.portalShell.signIn": "Sign in",

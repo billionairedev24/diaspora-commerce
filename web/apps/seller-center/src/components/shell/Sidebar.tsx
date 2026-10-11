@@ -63,7 +63,7 @@ export function OrgSwitcher({ session, onSwitch, busy }: { session: SellerSessio
   );
 }
 
-function NavGroupSection({ group, active, single, onNavigate }: { group: NavGroup; active: ModuleKey | null; single: boolean; onNavigate?: () => void }) {
+function NavGroupSection({ group, active, single }: { group: NavGroup; active: ModuleKey | null; single: boolean }) {
   const t = useT();
   const holdsActive = group.modules.some((m) => m.key === active);
   // Collapsed by default except the group holding the current page; every group folds on click.
@@ -94,7 +94,6 @@ function NavGroupSection({ group, active, single, onNavigate }: { group: NavGrou
             <li key={m.key}>
               <Link
                 href={hrefOf(m.key)}
-                onClick={onNavigate}
                 aria-current={current ? 'page' : undefined}
                 className={cx(
                   'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline',
@@ -114,7 +113,7 @@ function NavGroupSection({ group, active, single, onNavigate }: { group: NavGrou
 }
 
 /** Grouped sidebar: collapsible groups, role-aware entries, org switcher on top, access note at the bottom. */
-export function Sidebar({ session, active, onSwitch, switching, onNavigate }: { session: SellerSession; active: ModuleKey | null; onSwitch: (orgId: string) => void; switching: boolean; onNavigate?: () => void }) {
+export function Sidebar({ session, active, onSwitch, switching }: { session: SellerSession; active: ModuleKey | null; onSwitch: (orgId: string) => void; switching: boolean }) {
   const t = useT();
   const single = session.navGroups.length === 1;
   return (
@@ -123,7 +122,7 @@ export function Sidebar({ session, active, onSwitch, switching, onNavigate }: { 
         <OrgSwitcher session={session} onSwitch={onSwitch} busy={switching} />
       </div>
       {session.navGroups.map((g) => (
-        <NavGroupSection key={`${session.activeOrg?.id}-${g.key}`} group={g} active={active} single={single} onNavigate={onNavigate} />
+        <NavGroupSection key={`${session.activeOrg?.id}-${g.key}`} group={g} active={active} single={single} />
       ))}
       <p className="mt-auto px-2 pt-3 text-2xs leading-normal text-subtle">
         {t('sc.sidebar.access')} <strong>{session.activeOrg?.roleLabel ?? '—'}</strong>

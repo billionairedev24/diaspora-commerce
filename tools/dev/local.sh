@@ -37,8 +37,8 @@ OVERRIDE="$STATE/compose.external-postgres.yml"
 
 INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal minio minio-init mailpit openfga-migrate openfga"
 
-# Everything the storefront, checkout, pre-orders and the staff console use. Order matters: identity first.
-DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops seller
+# Everything the storefront (incl. services/bookings), checkout, pre-orders and the staff console use. Identity first.
+DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops seller bookings
   geo media cart notifications search indexer promise gateway-bff"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns
@@ -146,7 +146,8 @@ resolve_web_ports() {
   export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
   # Services started with other addresses would send sign-in back to the old ports: restart them with the new ones.
   if [[ "$before" != "$(cat "$WEB_PORTS_FILE")" ]]; then
-    for svc in identity gateway-bff notifications; do
+    # The web apps link to each other too (storefront "Sell on AfroTransact" → Seller Center).
+    for svc in identity gateway-bff notifications web-storefront web-seller-center web-staff-console; do
       if running "$svc"; then echo "  · web app ports changed: restarting $svc"; stop "$svc"; fi
     done
   fi

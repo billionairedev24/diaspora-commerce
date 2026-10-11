@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { useT } from '@/i18n/t';
 import { hrefOf, MODULE_ICONS } from '@/lib/modules';
 
-function NavGroupSection({ group, active, onNavigate }: { group: StaffNavGroup; active: StaffModuleKey | null; onNavigate?: () => void }) {
+function NavGroupSection({ group, active }: { group: StaffNavGroup; active: StaffModuleKey | null }) {
   const t = useT();
   const holdsActive = group.modules.some((m) => m.key === active);
   // Collapsed by default except the group holding the current page (Overview with the dashboard); every group folds.
@@ -38,7 +38,6 @@ function NavGroupSection({ group, active, onNavigate }: { group: StaffNavGroup; 
             <li key={m.key}>
               <Link
                 href={hrefOf(m.key)}
-                onClick={onNavigate}
                 aria-current={current ? 'page' : undefined}
                 className={cx(
                   'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline',
@@ -58,7 +57,7 @@ function NavGroupSection({ group, active, onNavigate }: { group: StaffNavGroup; 
 }
 
 /** Grouped sidebar filtered by the staff member's roles (the BFF returns only the modules they may open). */
-export function Sidebar({ session, active, onNavigate }: { session: StaffSession; active: StaffModuleKey | null; onNavigate?: () => void }) {
+export function Sidebar({ session, active }: { session: StaffSession; active: StaffModuleKey | null }) {
   const t = useT();
   return (
     <nav aria-label={t('st.sidebar.staffConsole')} className="flex h-full flex-col gap-0.5 px-3 py-4">
@@ -67,7 +66,7 @@ export function Sidebar({ session, active, onNavigate }: { session: StaffSession
         <span className="text-xs text-muted">{t('st.sidebar.staffUsaMarket')}</span>
       </div>
       {session.navGroups.map((g) => (
-        <NavGroupSection key={g.key} group={g} active={active} onNavigate={onNavigate} />
+        <NavGroupSection key={g.key} group={g} active={active} />
       ))}
       <p className="mt-auto px-2 pt-3 text-2xs leading-normal text-subtle">
         {t('st.sidebar.access')} <strong>{session.roleLabel || '—'}</strong>

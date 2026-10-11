@@ -62,7 +62,8 @@
 
 /* Menu (dropdown) */
 .menu {
-  z-index: calc(var(--at-z-dropdown) + 1);
+  /* Above the sticky header, side sheets and dialogs: menus open from all of them. */
+  z-index: calc(var(--at-z-dialog) + 1);
   min-width: 220px;
   background: var(--at-color-surface);
   color: var(--at-color-text);

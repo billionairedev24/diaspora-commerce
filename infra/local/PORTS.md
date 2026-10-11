@@ -49,7 +49,7 @@ The web apps need none of this with `API_MOCKS=1` (storefront and staff console 
 
 `make up` seeds an empty stack once (`SEED=0` skips it); `make seed` re-runs it any time (idempotent). It calls
 seller :8106, catalog :8101, offers :8102, inventory :8103, media :8207 (→ MinIO :9000, bucket `media`), content :8112,
-delivery-runs :8115 and, when running, bookings :8109. Photos come from `SEED_IMAGES_DIR`, the download cache
+delivery-runs :8115 and bookings :8109. Photos come from `SEED_IMAGES_DIR`, the download cache
 `.local/seed/images`, Pexels (`PEXELS_API_KEY`), Unsplash (`UNSPLASH_ACCESS_KEY`) or Wikimedia Commons (CC0 / public
 domain / CC BY / CC BY-SA only); credits in `.local/seed/ATTRIBUTION.md`. Deliver-to **79401** shows the open Lubbock
 pre-order. Details: [docs/engineering/local-development.md](../../docs/engineering/local-development.md).

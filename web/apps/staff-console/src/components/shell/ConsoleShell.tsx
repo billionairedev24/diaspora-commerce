@@ -1,10 +1,10 @@
 'use client';
 
 import { isApiError, staffQueries,type StaffSession } from '@afrotransact/api-client';
-import { Button, Sheet } from '@afrotransact/ui';
+import { Button } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode } from 'react';
 
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -57,7 +57,6 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
   const q = useQuery({ ...staffQueries.session(staffApi()), retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2 });
   const session = q.data;
   const active = moduleOf(pathname);
@@ -89,16 +88,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       </>
     );
   }
-  const sidebar = (onNavigate?: () => void) => <Sidebar session={session} active={active} onNavigate={onNavigate} />;
+  const sidebar = <Sidebar session={session} active={active} />;
   const canOpen = allowed(session, active);
   return (
     <StaffSessionProvider session={session}>
-      <Header session={session} onMenu={() => setMenuOpen(true)} />
-      <div className="grid min-h-[calc(100vh-56px)] grid-cols-1 lg:grid-cols-[264px_minmax(0,1fr)]">
-        <aside className="sticky top-14 hidden h-[calc(100vh-56px)] self-start overflow-y-auto overscroll-contain border-r border-border bg-surface lg:block">{sidebar()}</aside>
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen} title={t('st.consoleShell.menu')} side="left">
-          {sidebar(() => setMenuOpen(false))}
-        </Sheet>
+      <Header session={session} />
+      <div className="grid min-h-[calc(100vh-56px)] grid-cols-1 md:grid-cols-[264px_minmax(0,1fr)]">
+        <aside className="border-b border-border bg-surface md:sticky md:top-14 md:h-[calc(100vh-56px)] md:self-start md:overflow-y-auto md:overscroll-contain md:border-r md:border-b-0">{sidebar}</aside>
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">
           {canOpen ? (
             children

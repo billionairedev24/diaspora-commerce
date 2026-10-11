@@ -125,6 +125,8 @@
   /* Keyboard focus and in-page links are never hidden under the sticky header (WCAG 2.4.11 Focus Not Obscured).
      Apps with a taller sticky header publish its live height as --at-sticky-header-h. */
   html { scroll-padding-top: calc(var(--at-sticky-header-h, var(--at-space-16)) + var(--at-space-2)); }
+  /* No rubber-band bounce or scroll chaining at the page edges (macOS / iOS overscroll). */
+  html, body { overscroll-behavior: none; }
   a { color: var(--at-color-link); text-decoration: none; }
   a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
   /* Links inside running text are underlined, not told apart by colour alone (WCAG 1.4.1). */

@@ -1,10 +1,10 @@
 'use client';
 
 import { isApiError, type ModuleKey, sellerKeys, sellerQueries, type SellerSession } from '@afrotransact/api-client';
-import { Button, Sheet, useToast } from '@afrotransact/ui';
+import { Button, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect } from 'react';
 
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -66,7 +66,6 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const toast = useToast();
-  const [menuOpen, setMenuOpen] = useState(false);
   const q = useQuery({ ...sellerQueries.session(api), retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2 });
   const session = q.data;
   const active = moduleOf(pathname);
@@ -76,7 +75,6 @@ export function PortalShell({ children }: { children: ReactNode }) {
     onSuccess: (s) => {
       qc.setQueryData(sellerKeys.session(), s);
       void qc.invalidateQueries({ queryKey: sellerKeys.all, predicate: (query) => query.queryKey[1] !== 'session' });
-      setMenuOpen(false);
       toast.show(t('sc.portalShell.switched', { org: s.activeOrg?.name ?? t('sc.portalShell.organisation') }));
       router.push(hrefOf(s.landing));
     },
@@ -127,20 +125,15 @@ export function PortalShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const sidebar = (onNavigate?: () => void) => (
-    <Sidebar session={session} active={active} onSwitch={(id) => switchOrg.mutate(id)} switching={switchOrg.isPending} onNavigate={onNavigate} />
-  );
+  const sidebar = <Sidebar session={session} active={active} onSwitch={(id) => switchOrg.mutate(id)} switching={switchOrg.isPending} />;
   const canOpen = allowed(session, active);
   return (
     <SellerSessionProvider session={session}>
-      <Header session={session} onMenu={() => setMenuOpen(true)} />
-      <div className="grid min-h-[calc(100vh-56px)] grid-cols-1 lg:grid-cols-[264px_minmax(0,1fr)]">
-        <aside className="sticky top-14 hidden h-[calc(100vh-56px)] self-start overflow-y-auto overscroll-contain border-r border-border bg-surface lg:block">
-          {sidebar()}
+      <Header session={session} />
+      <div className="grid min-h-[calc(100vh-56px)] grid-cols-1 md:grid-cols-[264px_minmax(0,1fr)]">
+        <aside className="border-b border-border bg-surface md:sticky md:top-14 md:h-[calc(100vh-56px)] md:self-start md:overflow-y-auto md:overscroll-contain md:border-r md:border-b-0">
+          {sidebar}
         </aside>
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen} title={t('sc.portalShell.menu')} side="left">
-          {sidebar(() => setMenuOpen(false))}
-        </Sheet>
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">
           {session.approved ? <PayoutsPausedBanner /> : null}
           {session.approved ? <ComplianceBanner onAccountHealth={active === 'account-health'} /> : null}

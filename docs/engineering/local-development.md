@@ -17,7 +17,7 @@ Elasticsearch, offers buy boxes, inventory availability, content placements, pre
 | `content` | content placements | Hero carousel, home tiles (communities, departments), display banners, product rails (deals, AfroTransact Brand, spices, fashion, beauty) and category banners, all with images. They replace the image-less placements of content's V2 migration. |
 | `ads` | content ads campaigns | Sponsored-product campaigns for three sellers. |
 | `preorders` | delivery-runs | Coverage for Lubbock and El Paso, an **open** Lubbock window and an **upcoming** El Paso one, with hero and PDP creatives. Set *Deliver to* **79401** to see the pre-order ribbon, hero and `/pre-orders` page. |
-| `bookings` | bookings | Settings, a team member and services for the providers — only when bookings is running (`tools/dev/local.sh restart bookings`), skipped otherwise. |
+| `bookings` | bookings | Settings, a team member and services for the providers (bookings runs by default with `make up`; skipped when it is not running). |
 | `users` | identity | Checks that every [test user](#test-users) signs in (and that the seller, provider and retail personas act for their organisation), then prints the table. |
 
 `make up` runs it automatically when the catalogue is empty (`--if-empty`; `SEED=0 make up` skips it, the log is
