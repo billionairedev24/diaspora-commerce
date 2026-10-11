@@ -48,6 +48,16 @@ public final class DefaultAuditClassifier implements AuditClassifier {
                     s(p, "tool"), s(p, "orgId"), "MCP " + s(p, "toolset") + " tool " + s(p, "tool") + " via "
                     + s(p, "clientId") + ": " + s(p, "outcome")));
             case "orders.shipment.status_changed", "orders.shipment.cancelled" -> override(eventType, p);
+            case "preorder.window.paused", "preorder.window.resumed" -> Optional.of(new AuditFacts(
+                    first(s(p, "actorId"), "system"), "STAFF", eventType, "PREORDER_WINDOW", first(s(p, "windowId"), key),
+                    null, ("preorder.window.paused".equals(eventType) ? "Switched off " : "Switched on ")
+                    + s(p, "name") + " (" + s(p, "code") + ")"));
+            case "preorder.settings.changed" -> Optional.of(new AuditFacts(first(s(p, "actorId"), s(p, "actor")),
+                    "STAFF", eventType, "PREORDER_SETTINGS", key, null,
+                    "Pre-order settings changed (master switch " + (Boolean.TRUE.equals(p.get("enabled")) ? "on" : "off")
+                    + ")"));
+            case "preorder.areas.changed" -> Optional.of(new AuditFacts(s(p, "actorId"), "STAFF", eventType,
+                    "PREORDER_AREAS", s(p, "region"), null, "Pre-order coverage of " + s(p, "region") + " edited"));
             default -> Optional.of(new AuditFacts(first(s(p, "actorId"), s(p, "subject")), null, eventType, "EVENT",
                     key, s(p, "orgId"), eventType));
         };

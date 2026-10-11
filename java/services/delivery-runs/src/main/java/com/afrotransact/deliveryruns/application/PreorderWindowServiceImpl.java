@@ -2,11 +2,14 @@ package com.afrotransact.deliveryruns.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -14,7 +17,9 @@ import java.util.function.Predicate;
 import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.Coverage;
 import com.afrotransact.deliveryruns.domain.CreativeRef;
+import com.afrotransact.deliveryruns.application.WindowSwitchResult.Outcome;
 import com.afrotransact.deliveryruns.domain.CreativeSlot;
+import com.afrotransact.deliveryruns.domain.InvalidTransitionException;
 import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
@@ -27,6 +32,7 @@ import com.afrotransact.deliveryruns.port.PreorderOrderRepository.WindowTotals;
 import com.afrotransact.deliveryruns.port.PreorderSequences;
 import com.afrotransact.deliveryruns.port.PreorderSettingsRepository;
 import com.afrotransact.deliveryruns.port.PreorderWindowRepository;
+import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +48,9 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
             "closed", EnumSet.of(PreorderStatus.CLOSED, PreorderStatus.DELIVERED),
             "draft", EnumSet.of(PreorderStatus.DRAFT),
             "drafts", EnumSet.of(PreorderStatus.DRAFT));
+
+    /** Most windows one bulk switch may name. */
+    static final int MAX_BULK = 100;
 
     private final PreorderWindowRepository windows;
     private final PreorderOrderRepository orders;
@@ -144,20 +153,79 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
     @Override
     @Transactional
     public WindowView pause(UUID id, Long expectedVersion) {
-        permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
         Instant now = Instant.now(clock);
         PreorderWindow saved = windows.update(support.lock(id, expectedVersion).pause(now));
-        events.window(DeliveryRunsEvents.PREORDER_WINDOW_PAUSED, saved, support.coverage().settings().payment(), now);
+        events.window(DeliveryRunsEvents.PREORDER_WINDOW_PAUSED, saved, support.coverage().settings().payment(), now,
+                actor.subject());
         return support.view(saved, now);
     }
 
     @Override
     @Transactional
     public WindowView resume(UUID id, Long expectedVersion) {
-        permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
         Instant now = Instant.now(clock);
-        PreorderWindow saved = windows.update(support.lock(id, expectedVersion).resume(now));
-        events.window(DeliveryRunsEvents.PREORDER_WINDOW_RESUMED, saved, support.coverage().settings().payment(), now);
+        PaymentSettings payment = support.coverage().settings().payment();
+        PreorderWindow saved = windows.update(support.lock(id, expectedVersion)
+                .resume(payment, support.pageUrl(), now));
+        events.window(DeliveryRunsEvents.PREORDER_WINDOW_RESUMED, saved, payment, now, actor.subject());
+        return support.view(saved, now);
+    }
+
+    @Override
+    @Transactional
+    public WindowView setActive(UUID id, boolean active, Long expectedVersion) {
+        Actor actor = permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
+        Instant now = Instant.now(clock);
+        return switchOne(support.lock(id, expectedVersion), active, actor, now);
+    }
+
+    @Override
+    @Transactional
+    public WindowSwitchResult setActive(List<UUID> ids, boolean active) {
+        Actor actor = permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
+        if (ids == null || ids.isEmpty() || ids.size() > MAX_BULK) {
+            throw new RuleViolation("delivery-runs.invalid-selection",
+                    "Choose between 1 and " + MAX_BULK + " pre-orders");
+        }
+        Instant now = Instant.now(clock);
+        List<WindowSwitchResult.Item> items = new ArrayList<>();
+        for (UUID id : new LinkedHashSet<>(ids)) {
+            Optional<PreorderWindow> found = windows.lockById(id);
+            if (found.isEmpty()) {
+                items.add(new WindowSwitchResult.Item(id, Outcome.SKIPPED, null, "delivery-runs.preorder-not-found",
+                        "Pre-order not found"));
+                continue;
+            }
+            PreorderWindow w = found.get();
+            try {
+                boolean flips = w.active() != active;
+                WindowView v = switchOne(w, active, actor, now);
+                items.add(new WindowSwitchResult.Item(id, flips ? Outcome.SWITCHED : Outcome.UNCHANGED, v, null,
+                        null));
+            } catch (InvalidTransitionException e) {
+                items.add(new WindowSwitchResult.Item(id, Outcome.SKIPPED, support.view(w, now),
+                        "delivery-runs.invalid-transition", w.draft() ? "A draft has no switch; publish it first"
+                        : "A delivered pre-order cannot be switched"));
+            } catch (RuleViolation e) {
+                items.add(new WindowSwitchResult.Item(id, Outcome.SKIPPED, support.view(w, now), e.code(),
+                        e.getMessage()));
+            }
+        }
+        return new WindowSwitchResult(items);
+    }
+
+    /** Flips the window's own switch when it differs (never the master switch) and records who did it. */
+    private WindowView switchOne(PreorderWindow w, boolean active, Actor actor, Instant now) {
+        PaymentSettings payment = support.coverage().settings().payment();
+        PreorderWindow next = w.switchTo(active, payment, support.pageUrl(), now);
+        if (next == w) {
+            return support.view(w, now);
+        }
+        PreorderWindow saved = windows.update(next);
+        events.window(active ? DeliveryRunsEvents.PREORDER_WINDOW_RESUMED : DeliveryRunsEvents.PREORDER_WINDOW_PAUSED,
+                saved, payment, now, actor.subject());
         return support.view(saved, now);
     }
 

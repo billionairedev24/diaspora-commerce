@@ -2,11 +2,13 @@ package com.afrotransact.deliveryruns.adapter.in.web;
 
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.AreaRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.AreaToggleRequest;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.RegionCoverageRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.SettingsRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.SettingsResponse;
 import com.afrotransact.deliveryruns.application.AreaPage;
 import com.afrotransact.deliveryruns.application.PreorderSettingsService;
 import com.afrotransact.deliveryruns.application.PreorderSettingsService.PlaceList;
+import com.afrotransact.deliveryruns.application.RegionCoverageView;
 import com.afrotransact.deliveryruns.domain.PreorderSettings;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -87,7 +89,8 @@ class PreorderSettingsController {
 
     @Operation(summary = "Remove a coverage area (preorders:manage)",
             description = "The key is the rest of the path (DELETE /v1/preorder-areas/US/TX/El%20Paso; an encoded "
-                    + "US%2FTX%2FEl%20Paso works too). Returns the page of the area's region.")
+                    + "US%2FTX%2FEl%20Paso works too). Returns the page of the area's region. 409 "
+                    + "delivery-runs.area-in-use when a live pre-order sells there and nothing else covers it.")
     @DeleteMapping("/v1/preorder-areas/{*key}")
     AreaPage remove(@PathVariable String key) {
         return settings.removeArea(key.startsWith("/") ? key.substring(1) : key);
@@ -99,10 +102,35 @@ class PreorderSettingsController {
         return settings.removeArea(key);
     }
 
+    @Operation(summary = "One region's coverage for the in-place editor (delivery-runs:read)",
+            description = "The \"Every city\" row (or null) and every listed city with its switch, row version and the "
+                    + "live pre-orders selling there. ETag = the region's version (send it back as If-Match).")
+    @GetMapping("/v1/preorder-areas/regions/{country}/{region}")
+    ResponseEntity<RegionCoverageView> region(@PathVariable String country, @PathVariable String region) {
+        RegionCoverageView v = settings.region(country, region);
+        return Versions.tagged(v, v.version());
+    }
+
+    @Operation(summary = "Edit one region's coverage in place (preorders:manage)",
+            description = "Full replacement of the region's rows: cities listed are added or switched, cities left out "
+                    + "are removed, everyCity adds, switches or (null) removes the \"Every city\" row. If-Match with "
+                    + "the region's ETag: 412 delivery-runs.version-mismatch when anyone changed the region since. "
+                    + "409 delivery-runs.area-in-use when a removal would leave a live pre-order's place uncovered "
+                    + "(switch it off instead). Publishes preorder.areas.changed with the actor.")
+    @PutMapping("/v1/preorder-areas/regions/{country}/{region}")
+    ResponseEntity<RegionCoverageView> updateRegion(@PathVariable String country, @PathVariable String region,
+                                                    @Valid @RequestBody RegionCoverageRequest body,
+                                                    @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
+                                                    String ifMatch) {
+        RegionCoverageView v = settings.updateRegion(body.toCoverage(country, region), Versions.expected(ifMatch));
+        return Versions.tagged(v, v.version());
+    }
+
     @Operation(summary = "Places for the area pickers (delivery-runs:read)",
             description = "q (2+ characters): search countries, regions and cities (8 best). Otherwise browse: every "
-                    + "country, a country's regions (country) or a region's cities (country + region). regionLabel is "
-                    + "what the country calls regions.")
+                    + "country, a country's regions (country) or every city of a region (country + region), from "
+                    + "geo-service's world gazetteer (built-in list when geo is down). regionLabel is what the country "
+                    + "calls regions.")
     @GetMapping("/v1/places/search")
     PlaceList places(@RequestParam(required = false) String country, @RequestParam(required = false) String region,
                      @RequestParam(required = false) String q) {

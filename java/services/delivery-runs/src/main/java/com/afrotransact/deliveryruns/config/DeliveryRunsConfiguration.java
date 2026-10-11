@@ -7,6 +7,7 @@ import com.afrotransact.deliveryruns.adapter.out.http.HttpCatalogClient;
 import com.afrotransact.deliveryruns.adapter.out.http.HttpMediaClient;
 import com.afrotransact.deliveryruns.adapter.out.http.HttpOrdersClient;
 import com.afrotransact.deliveryruns.adapter.out.http.HttpProductSearch;
+import com.afrotransact.deliveryruns.adapter.out.places.GeoPlaceDirectory;
 import com.afrotransact.deliveryruns.application.DeliveryRunsSettings;
 import com.afrotransact.deliveryruns.application.PreorderOptions;
 import com.afrotransact.deliveryruns.domain.AreaKey;
@@ -55,6 +56,11 @@ class DeliveryRunsConfiguration {
         DeliveryRunsProperties.Geo g = p.geo();
         return new HttpGeoClient(g.baseUrl(), g.timeout(), g.zoneType(), g.tokenUri(), g.clientId(), g.clientSecret(),
                 clock);
+    }
+
+    @Bean
+    GeoPlaceDirectory placeDirectory(DeliveryRunsProperties p) {
+        return new GeoPlaceDirectory(p.geo().baseUrl(), p.geo().timeout());
     }
 
     @Bean

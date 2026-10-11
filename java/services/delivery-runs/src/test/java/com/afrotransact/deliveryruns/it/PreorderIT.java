@@ -25,6 +25,7 @@ import com.afrotransact.deliveryruns.application.PreorderSchedulerService;
 import com.afrotransact.deliveryruns.application.PreorderSettingsService;
 import com.afrotransact.deliveryruns.application.PreorderWindowService;
 import com.afrotransact.deliveryruns.application.RunService;
+import com.afrotransact.deliveryruns.application.SettingsCommand;
 import com.afrotransact.deliveryruns.application.SubscriptionService;
 import com.afrotransact.deliveryruns.application.WindowCommand;
 import com.afrotransact.deliveryruns.application.WindowView;
@@ -252,10 +253,14 @@ class PreorderIT {
         assertThat(cities.body().path("rows").get(0).path("on").asInt()).isZero();
         assertThat(cities.body().path("rows").get(0).path("leaf").asBoolean()).isTrue();
 
-        Res removed = callRaw(HttpMethod.DELETE, "/v1/preorder-areas/US%2FTX%2FLubbock");
+        Res inUse = callRaw(HttpMethod.DELETE, "/v1/preorder-areas/US%2FTX%2FLubbock");
+        assertThat(inUse.status()).as("an open pre-order sells there; switch it off instead").isEqualTo(409);
+        assertThat(inUse.body().path("code").asString()).isEqualTo("delivery-runs.area-in-use");
+        settings.addArea("US/TX/Plainview");
+        Res removed = callRaw(HttpMethod.DELETE, "/v1/preorder-areas/US%2FTX%2FPlainview");
         assertThat(removed.status()).isEqualTo(200);
         assertThat(removed.body().path("level").asString()).isEqualTo("AREA");
-        assertThat(call(HttpMethod.DELETE, "/v1/preorder-areas?key=US/TX/Lubbock", null, null).status())
+        assertThat(call(HttpMethod.DELETE, "/v1/preorder-areas?key=US/TX/Plainview", null, null).status())
                 .isEqualTo(404);
 
         Res places = call(HttpMethod.GET, "/v1/places/search?q=lubb", null, null);
@@ -570,7 +575,163 @@ class PreorderIT {
         assertThatThrownBy(() -> windows.pause(w.id(), null)).isInstanceOf(ForbiddenActionException.class);
     }
 
+    @Test
+    void eachPreorderSwitchesOnAndOffOnItsOwnUnderTheMasterSwitch() {
+        settings.addArea("US/NM/Las Cruces");
+        settings.addArea("US/NM/Roswell");
+        Instant now = clock.instant();
+        PreorderWindow cruces = publish("Las Cruces Pre-order #1", "US/NM/Las Cruces", now.minus(Duration.ofHours(2)),
+                now.plus(Duration.ofDays(6)));
+        PreorderWindow roswell = publish("Roswell Pre-order #1", "US/NM/Roswell", now.minus(Duration.ofHours(2)),
+                now.plus(Duration.ofDays(6)));
+        String a = cruces.id().toString();
+        String b = roswell.id().toString();
+        try {
+            Res off = call(HttpMethod.PATCH, "/v1/preorders/" + a, Map.of("active", false), "\"" + cruces.version()
+                    + "\"");
+            assertThat(off.status()).isEqualTo(200);
+            assertThat(off.body().path("active").asBoolean()).isFalse();
+            assertThat(off.body().path("switchState").asString()).isEqualTo("PAUSED");
+            assertThat(off.body().path("statusLabel").asString()).isEqualTo("Paused");
+            assertThat(off.body().path("live").asBoolean()).isFalse();
+            assertThat(call(HttpMethod.GET, "/v1/preorders/" + b, null, null).body().path("switchState").asString())
+                    .as("the other pre-order stays on").isEqualTo("ON");
+            assertThat(resolve("Las Cruces").path("on").asBoolean()).isFalse();
+            assertThat(resolve("Las Cruces").path("window").isMissingNode() || resolve("Las Cruces").path("window")
+                    .isNull()).as("no banner for a paused pre-order").isTrue();
+            assertThat(resolve("Roswell").path("on").asBoolean()).isTrue();
+            assertThat(resolve("Roswell").path("window").path("name").asString()).isEqualTo("Roswell Pre-order #1");
+            assertThat(call(HttpMethod.GET, "/v1/public/preorders/open", null, null).body().toString())
+                    .contains("Roswell Pre-order #1").doesNotContain("Las Cruces Pre-order #1");
+            assertThat(outboxPayloads("preorder.window.paused", a)).singleElement().asString()
+                    .contains("\"actorId\": \"local-dev\"");
+
+            Res again = call(HttpMethod.PATCH, "/v1/preorders/" + a, Map.of("active", false), null);
+            assertThat(again.status()).as("idempotent").isEqualTo(200);
+            assertThat(again.etag()).isEqualTo(off.etag());
+            assertThat(call(HttpMethod.PATCH, "/v1/preorders/" + a, Map.of("active", true), "\"0\"").status())
+                    .isEqualTo(412);
+
+            // The master switch is a global kill switch: it never rewrites a window's own switch.
+            assertThat(call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("enabled", false), null).status())
+                    .isEqualTo(200);
+            JsonNode list = call(HttpMethod.GET, "/v1/preorders?size=100", null, null).body();
+            assertThat(row(list, a).path("switchState").asString()).isEqualTo("PAUSED");
+            assertThat(row(list, b).path("switchState").asString()).isEqualTo("GLOBAL_OFF");
+            assertThat(row(list, b).path("statusLabel").asString()).isEqualTo("Off (global switch)");
+            assertThat(row(list, b).path("active").asBoolean()).isTrue();
+            assertThat(resolve("Roswell").path("on").asBoolean()).isFalse();
+            assertThat(call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("enabled", true), null).status())
+                    .isEqualTo(200);
+            list = call(HttpMethod.GET, "/v1/preorders?size=100", null, null).body();
+            assertThat(row(list, a).path("switchState").asString()).isEqualTo("PAUSED");
+            assertThat(row(list, b).path("switchState").asString()).isEqualTo("ON");
+
+            // Bulk: each window on its own.
+            WindowView draft = windows.create(new WindowCommand("Draft #9", List.of("US/NM/Roswell"), now,
+                    now.plus(Duration.ofDays(3)), LocalDate.now(clock).plusDays(5), "America/Chicago", "", "", "",
+                    Set.of("Pantry"), true, false, null, null, true, 0L, Set.of(), null, null, null));
+            Res bulk = call(HttpMethod.PATCH, "/v1/preorders",
+                    Map.of("ids", List.of(a, b, draft.window().id().toString()), "active", true), null);
+            assertThat(bulk.status()).isEqualTo(200);
+            assertThat(bulk.body().path("items")).extracting(i -> i.path("outcome").asString())
+                    .containsExactly("SWITCHED", "UNCHANGED", "SKIPPED");
+            assertThat(bulk.body().path("switched").asLong()).isEqualTo(1);
+            assertThat(bulk.body().path("items").get(2).path("reason").asString()).contains("draft");
+            assertThat(resolve("Las Cruces").path("on").asBoolean()).as("resumed").isTrue();
+            assertThat(resolve("Las Cruces").path("stage").asString()).isEqualTo("OPEN");
+            assertThat(call(HttpMethod.PATCH, "/v1/preorders", Map.of("ids", List.of(), "active", true), null)
+                    .status()).isEqualTo(400);
+            assertThat(call(HttpMethod.PATCH, "/v1/preorders/" + draft.window().id(), Map.of("active", false), null)
+                    .status()).as("a draft has no switch").isEqualTo(409);
+
+            ItSupport.as(new Actor("viewer", PrincipalType.STAFF, Optional.empty(), Set.of(),
+                    Set.of("delivery-runs:read")));
+            assertThatThrownBy(() -> windows.setActive(cruces.id(), false, null))
+                    .isInstanceOf(ForbiddenActionException.class);
+        } finally {
+            ItSupport.reset();
+            settings.update(new SettingsCommand(true, null, null, null), null);
+        }
+    }
+
+    @Test
+    void staffEditARegionsCitiesInPlaceWithOptimisticLocking() {
+        Res empty = call(HttpMethod.GET, "/v1/preorder-areas/regions/US/OK", null, null);
+        assertThat(empty.status()).isEqualTo(200);
+        assertThat(empty.body().path("cities")).isEmpty();
+        assertThat(empty.body().path("wholeRegion").isNull()).isTrue();
+
+        Res saved = call(HttpMethod.PUT, "/v1/preorder-areas/regions/US/OK", Map.of("cities", List.of(
+                Map.of("city", "Tulsa", "on", true), Map.of("city", "Norman", "on", true),
+                Map.of("city", "Lawton", "on", false))), empty.etag());
+        assertThat(saved.status()).isEqualTo(200);
+        assertThat(saved.body().path("cities")).extracting(c -> c.path("name").asString())
+                .containsExactly("Lawton", "Norman", "Tulsa");
+        assertThat(saved.etag()).isNotEqualTo(empty.etag());
+        assertThat(outboxPayloads("preorder.areas.changed", "preorder-settings")).last().asString()
+                .contains("US/OK/Tulsa").contains("\"actorId\": \"local-dev\"");
+
+        Res stale = call(HttpMethod.PUT, "/v1/preorder-areas/regions/US/OK", Map.of("cities", List.of()),
+                empty.etag());
+        assertThat(stale.status()).as("someone changed the region since").isEqualTo(412);
+        assertThat(stale.body().path("code").asString()).isEqualTo("delivery-runs.version-mismatch");
+
+        Instant now = clock.instant();
+        publish("Tulsa Pre-order #1", "US/OK/Tulsa", now.minus(Duration.ofHours(1)), now.plus(Duration.ofDays(4)));
+        Res current = call(HttpMethod.GET, "/v1/preorder-areas/regions/US/OK", null, null);
+        assertThat(current.etag()).isEqualTo(saved.etag());
+        assertThat(current.body().path("cities").get(2).path("windows")).extracting(JsonNode::asString)
+                .containsExactly("Tulsa Pre-order #1");
+
+        Res inUse = call(HttpMethod.PUT, "/v1/preorder-areas/regions/US/OK", Map.of("cities", List.of(
+                Map.of("city", "Norman", "on", true))), current.etag());
+        assertThat(inUse.status()).isEqualTo(409);
+        assertThat(inUse.body().path("code").asString()).isEqualTo("delivery-runs.area-in-use");
+        assertThat(inUse.body().path("detail").asString()).contains("Tulsa").contains("Tulsa Pre-order #1");
+        assertThat(callRaw(HttpMethod.DELETE, "/v1/preorder-areas/US/OK/Tulsa").status()).isEqualTo(409);
+
+        Map<String, Object> next = new LinkedHashMap<>();
+        next.put("everyCity", true);
+        next.put("cities", List.of(Map.of("city", "Tulsa", "on", false), Map.of("city", "Norman", "on", true),
+                Map.of("city", "Stillwater", "on", true)));
+        Res edited = call(HttpMethod.PUT, "/v1/preorder-areas/regions/US/OK", next, current.etag());
+        assertThat(edited.status()).isEqualTo(200);
+        assertThat(edited.body().path("wholeRegion").path("on").asBoolean()).isTrue();
+        assertThat(edited.body().path("cities")).extracting(c -> c.path("name").asString() + ":"
+                + c.path("on").asBoolean()).containsExactly("Norman:true", "Stillwater:true", "Tulsa:false");
+        assertThat(resolve("Tulsa", "OK").path("on").asBoolean()).as("switched off, window kept").isFalse();
+        assertThat(call(HttpMethod.GET, "/v1/preorder-areas?country=US&region=OK", null, null).body().path("rows"))
+                .hasSize(4);
+
+        Res back = call(HttpMethod.PUT, "/v1/preorder-areas/regions/US/OK", Map.of("everyCity", true, "cities",
+                List.of(Map.of("city", "Tulsa", "on", true), Map.of("city", "Norman", "on", true))), edited.etag());
+        assertThat(back.status()).isEqualTo(200);
+        assertThat(resolve("Tulsa", "OK").path("on").asBoolean()).isTrue();
+        assertThat(call(HttpMethod.PUT, "/v1/preorder-areas/regions/US/OK", Map.of("cities", List.of(
+                Map.of("city", "Bad/Name", "on", true))), null).status()).isEqualTo(422);
+        assertThat(callRaw(HttpMethod.DELETE, "/v1/preorder-areas/US/OK/Norman").status()).isEqualTo(200);
+    }
+
     // ---- helpers -------------------------------------------------------------------------------------------------
+
+    private JsonNode resolve(String city) {
+        return resolve(city, "NM");
+    }
+
+    private JsonNode resolve(String city, String region) {
+        return call(HttpMethod.GET, "/v1/public/preorders/resolve?country=US&region=" + region + "&city="
+                + city, null, null).body();
+    }
+
+    private static JsonNode row(JsonNode list, String id) {
+        for (JsonNode r : list.path("items")) {
+            if (r.path("id").asString().equals(id)) {
+                return r;
+            }
+        }
+        throw new AssertionError("no row " + id + " in " + list);
+    }
 
     private PreorderWindow publish(String name, String target, Instant opens, Instant closes) {
         LocalDate delivers = closes.plus(Duration.ofDays(2)).atZone(CHICAGO).toLocalDate();

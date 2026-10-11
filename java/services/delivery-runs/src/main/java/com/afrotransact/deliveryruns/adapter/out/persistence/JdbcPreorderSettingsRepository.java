@@ -7,6 +7,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
+import com.afrotransact.deliveryruns.domain.AreaChanges;
 import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.CoverageArea;
 import com.afrotransact.deliveryruns.domain.Fallback;
@@ -101,7 +102,8 @@ class JdbcPreorderSettingsRepository implements PreorderSettingsRepository {
         int changed = 0;
         Instant now = Instant.now();
         for (AreaKey k : keys) {
-            changed += jdbc.sql("update preorder_area set enabled = :on, updated_at = :now where " + AREA_MATCH)
+            changed += jdbc.sql("update preorder_area set enabled = :on, updated_at = :now, version = version + 1 "
+                            + "where enabled <> :on and " + AREA_MATCH)
                     .param("on", on).param("now", Sql.ts(now)).param("country", k.country())
                     .param("region", k.region()).param("city", k.city()).update();
         }
@@ -114,6 +116,43 @@ class JdbcPreorderSettingsRepository implements PreorderSettingsRepository {
                 .param("region", key.region()).param("city", key.city()).update() > 0;
     }
 
+    @Override
+    public void lockRegion(AreaKey region) {
+        jdbc.sql("select pg_advisory_xact_lock(hashtext(:k))")
+                .param("k", "preorder_area:" + region.country() + "/" + region.region()).query().singleRow();
+    }
+
+    @Override
+    public void apply(AreaChanges changes) {
+        Instant now = Instant.now();
+        for (CoverageArea a : changes.removed()) {
+            AreaKey k = a.key();
+            int n = jdbc.sql("delete from preorder_area where version = :version and " + AREA_MATCH)
+                    .param("version", a.version()).param("country", k.country()).param("region", k.region())
+                    .param("city", k.city()).update();
+            if (n == 0) {
+                throw new ConcurrentUpdateException(k.key() + " changed since it was loaded; reload and retry");
+            }
+        }
+        for (CoverageArea a : changes.switched()) {
+            AreaKey k = a.key();
+            int n = jdbc.sql("update preorder_area set enabled = :on, updated_at = :now, version = version + 1 "
+                            + "where version = :version and " + AREA_MATCH)
+                    .param("on", a.on()).param("now", Sql.ts(now)).param("version", a.version())
+                    .param("country", k.country()).param("region", k.region()).param("city", k.city()).update();
+            if (n == 0) {
+                throw new ConcurrentUpdateException(k.key() + " changed since it was loaded; reload and retry");
+            }
+        }
+        for (CoverageArea a : changes.added()) {
+            try {
+                insertArea(a.key(), a.on());
+            } catch (DuplicateEntryException e) {
+                throw new ConcurrentUpdateException(a.key().key() + " was added meanwhile; reload and retry");
+            }
+        }
+    }
+
     private PreorderSettings map(ResultSet rs, int rowNum) throws SQLException {
         return new PreorderSettings(rs.getBoolean("enabled"), Fallback.valueOf(rs.getString("fallback")),
                 json.read(rs.getString("placements"), PLACEMENTS),
@@ -123,6 +162,6 @@ class JdbcPreorderSettingsRepository implements PreorderSettingsRepository {
 
     private static CoverageArea area(ResultSet rs) throws SQLException {
         return new CoverageArea(new AreaKey(rs.getString("country"), rs.getString("region"), rs.getString("city")),
-                rs.getBoolean("enabled"));
+                rs.getBoolean("enabled"), rs.getLong("version"));
     }
 }

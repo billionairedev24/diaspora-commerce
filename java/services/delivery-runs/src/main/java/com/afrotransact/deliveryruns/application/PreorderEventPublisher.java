@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.afrotransact.deliveryruns.domain.AreaChanges;
 import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.CommKind;
 import com.afrotransact.deliveryruns.domain.CreativeRef;
@@ -42,8 +43,13 @@ class PreorderEventPublisher {
     }
 
     void window(String type, PreorderWindow w, PaymentSettings payment, Instant now) {
+        window(type, w, payment, now, null);
+    }
+
+    /** A staff change of the window; {@code actorId} lands in the audit log. */
+    void window(String type, PreorderWindow w, PaymentSettings payment, Instant now, String actorId) {
         events.publish(type, DeliveryRunsEvents.AGGREGATE, w.id().toString(),
-                payload(w, payment, null, null, now, null));
+                payload(w, payment, null, null, now, null, actorId));
     }
 
     /** {@code orders} (paid) are attached to CLOSED. */
@@ -53,7 +59,7 @@ class PreorderEventPublisher {
                 .map(o -> new PreorderEventPayload.OrderRef(o.orderId(), o.customerId(), o.fulfilment().name()))
                 .toList();
         events.publish(DeliveryRunsEvents.PREORDER_COMMS_DUE, DeliveryRunsEvents.AGGREGATE, w.id().toString(),
-                payload(w, payment, kind.name(), dueAt, now, refs));
+                payload(w, payment, kind.name(), dueAt, now, refs, null));
     }
 
     void settingsChanged(PreorderSettings s, String actor) {
@@ -63,8 +69,21 @@ class PreorderEventPublisher {
         p.put("placements", s.placements().stream().sorted().map(Enum::name).toList());
         p.put("payment", s.payment());
         p.put("actor", actor);
+        p.put("actorId", actor);
         p.put("changedAt", s.updatedAt());
         events.publish(DeliveryRunsEvents.PREORDER_SETTINGS_CHANGED, DeliveryRunsEvents.AGGREGATE, SETTINGS_KEY, p);
+    }
+
+    /** One region's coverage was edited: what was added, removed and switched on or off. */
+    void areasChanged(AreaKey region, AreaChanges c, String actor, Instant at) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("region", region.key());
+        p.put("added", c.added().stream().map(a -> Map.of("key", a.key().key(), "on", a.on())).toList());
+        p.put("removed", c.removed().stream().map(a -> a.key().key()).toList());
+        p.put("switched", c.switched().stream().map(a -> Map.of("key", a.key().key(), "on", a.on())).toList());
+        p.put("actorId", actor);
+        p.put("changedAt", at);
+        events.publish(DeliveryRunsEvents.PREORDER_AREAS_CHANGED, DeliveryRunsEvents.AGGREGATE, SETTINGS_KEY, p);
     }
 
     void lateOrderAdded(PreorderWindow w, PreorderOrder o, String paymentMethod, String paymentLinkUrl,
@@ -125,7 +144,8 @@ class PreorderEventPublisher {
     }
 
     private PreorderEventPayload payload(PreorderWindow w, PaymentSettings payment, String kind, Instant dueAt,
-                                         Instant now, List<PreorderEventPayload.OrderRef> orders) {
+                                         Instant now, List<PreorderEventPayload.OrderRef> orders,
+                                         String actorId) {
         WindowDetails d = w.details();
         Long door = d.door() ? w.doorFee(payment).map(Money::minor).orElse(null) : null;
         Long pickup = d.pickup() ? w.pickupFee(payment).minor() : null;
@@ -140,6 +160,6 @@ class PreorderEventPublisher {
                 d.comms().stream().sorted().map(Enum::name).toList(), hero == null ? null : hero.url(),
                 email == null ? null : email.url(), w.runId(), pageUrl(w), links(w), options.supportPhone(),
                 DATE_TIME.format(d.opensAt().atZone(d.timeZone())), DATE_TIME.format(d.closesAt().atZone(d.timeZone())),
-                DATE.format(d.deliversOn()), orders);
+                DATE.format(d.deliversOn()), orders, actorId);
     }
 }

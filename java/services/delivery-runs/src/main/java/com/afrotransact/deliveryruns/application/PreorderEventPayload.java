@@ -45,6 +45,7 @@ import java.util.UUID;
  * @param closesDisplay market-local, e.g. "Thu, Oct 22 11:59 PM"
  * @param deliversDisplay e.g. "Sun, Oct 25"
  * @param orders        comms.due CLOSED only: the window's paid orders (notifications resolves contacts)
+ * @param actorId       staff subject who made the change (paused / resumed / updated; null for scheduler events)
  */
 public record PreorderEventPayload(UUID windowId, String code, String name, String status, String kind,
                                    Instant dueAt, List<String> targets, String where, Instant opensAt,
@@ -54,7 +55,7 @@ public record PreorderEventPayload(UUID windowId, String code, String name, Stri
                                    String pickupWindow, String pickupAddress, List<String> comms, String heroUrl,
                                    String emailImageUrl, UUID runId, String pageUrl, Map<String, String> links,
                                    String supportPhone, String opensDisplay, String closesDisplay,
-                                   String deliversDisplay, List<OrderRef> orders) {
+                                   String deliversDisplay, List<OrderRef> orders, String actorId) {
 
     /**
      * A paid order of the window.

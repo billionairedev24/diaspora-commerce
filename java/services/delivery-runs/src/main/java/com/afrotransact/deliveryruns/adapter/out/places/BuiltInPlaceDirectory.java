@@ -9,13 +9,12 @@ import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.deliveryruns.port.PlaceDirectory;
-import org.springframework.stereotype.Component;
 
 /**
  * The design's built-in place list ({@code at-preorder.js} GEO): countries, regions and main cities of the markets
- * pre-orders run in. Used for the area pickers' search; ranking as in the design (prefix matches first).
+ * pre-orders run in. The offline fallback of {@link GeoPlaceDirectory}; ranking as in the design (prefix matches
+ * first).
  */
-@Component
 class BuiltInPlaceDirectory implements PlaceDirectory {
 
     /** country|name|region label ; region code=name=city|city… ; … */

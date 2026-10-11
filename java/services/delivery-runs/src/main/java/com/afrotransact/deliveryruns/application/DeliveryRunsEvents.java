@@ -31,6 +31,8 @@ public final class DeliveryRunsEvents {
     public static final String PREORDER_WINDOW_CLOSED = "preorder.window.closed";
     public static final String PREORDER_WINDOW_DELIVERED = "preorder.window.delivered";
     public static final String PREORDER_SETTINGS_CHANGED = "preorder.settings.changed";
+    /** Coverage of one region edited in place (rows added, removed or switched), with the actor. */
+    public static final String PREORDER_AREAS_CHANGED = "preorder.areas.changed";
     public static final String PREORDER_COMMS_DUE = "preorder.comms.due";
     public static final String PREORDER_LATE_ORDER_ADDED = "preorder.late_order.added";
     public static final String PREORDER_EXPORT_CREATED = "preorder.export.created";

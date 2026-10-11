@@ -5,12 +5,15 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.BulkSwitchRequest;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.BulkSwitchResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.CreativeRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.LateOrderRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.OrderPageResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.OrderResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.ProductListResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.SummaryResponse;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.SwitchRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.WindowPageResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.WindowRequest;
 import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.WindowResponse;
@@ -36,6 +39,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -116,12 +120,35 @@ class PreorderController {
         return tagged(windows.pause(id, Versions.expected(ifMatch)));
     }
 
-    @Operation(summary = "Resume a paused pre-order (preorders:manage)")
+    @Operation(summary = "Resume a paused pre-order (preorders:manage)",
+            description = "The publish checks must still pass (422 delivery-runs.preorder-checks-failed).")
     @PostMapping("/v1/preorders/{id}/resume")
     ResponseEntity<WindowResponse> resume(@PathVariable UUID id,
                                           @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
                                           String ifMatch) {
         return tagged(windows.resume(id, Versions.expected(ifMatch)));
+    }
+
+    @Operation(summary = "Switch one pre-order on or off (preorders:manage)",
+            description = "Sets this window's own switch only; the master switch is never touched. The window is live "
+                    + "when the master switch AND its own switch AND one of its areas are on (switchState says which "
+                    + "holds it). Off stops resolution, banners, eligibility and the cart's pre-order packages; orders "
+                    + "already placed are kept. On re-runs the publish checks (422 delivery-runs.preorder-checks-failed). "
+                    + "Idempotent; drafts and delivered windows answer 409. If-Match optional; publishes "
+                    + "preorder.window.paused / resumed with the actor when it flips.")
+    @PatchMapping("/v1/preorders/{id}")
+    ResponseEntity<WindowResponse> setActive(@PathVariable UUID id, @Valid @RequestBody SwitchRequest body,
+                                             @RequestHeader(name = HttpHeaders.IF_MATCH, required = false)
+                                             String ifMatch) {
+        return tagged(windows.setActive(id, body.active(), Versions.expected(ifMatch)));
+    }
+
+    @Operation(summary = "Switch several pre-orders on or off (preorders:manage)",
+            description = "1–100 ids, each switched on its own as PATCH /v1/preorders/{id}: SWITCHED, UNCHANGED or "
+                    + "SKIPPED (draft, delivered, unknown or failing its publish checks, with the reason).")
+    @PatchMapping("/v1/preorders")
+    BulkSwitchResponse setActive(@Valid @RequestBody BulkSwitchRequest body) {
+        return BulkSwitchResponse.of(windows.setActive(body.ids(), body.active()));
     }
 
     @Operation(summary = "Attach an uploaded image to a creative slot (preorders:manage)",

@@ -3,6 +3,7 @@ package com.afrotransact.deliveryruns.application;
 import java.util.List;
 
 import com.afrotransact.deliveryruns.domain.PreorderSettings;
+import com.afrotransact.deliveryruns.domain.RegionCoverage;
 import com.afrotransact.deliveryruns.port.PlaceDirectory.Place;
 
 /**
@@ -28,8 +29,23 @@ public interface PreorderSettingsService {
      */
     AreaPage toggle(List<String> keys, boolean on);
 
-    /** Removes an area (404 when unknown); returns the page of its region. */
+    /**
+     * Removes an area (404 when unknown; 409 {@code delivery-runs.area-in-use} when a live pre-order sells there and
+     * nothing else covers it); returns the page of its region.
+     */
     AreaPage removeArea(String key);
+
+    /** One region's coverage for the in-place editor (rows may be none: a region not covered yet). */
+    RegionCoverageView region(String country, String region);
+
+    /**
+     * Replaces one region's coverage in place: adds and removes cities, adds or removes the "Every city" row and
+     * switches each on or off, in one step. {@code expectedVersion} is the region's version the editor loaded (null =
+     * any; 412 when anyone changed the region since). Removing a place an open, scheduled or closed pre-order sells
+     * to is refused (409 {@code delivery-runs.area-in-use}); switching it off is allowed. Publishes
+     * preorder.areas.changed with the actor.
+     */
+    RegionCoverageView updateRegion(RegionCoverage desired, Long expectedVersion);
 
     /** Search with {@code q} (2+ characters), else browse countries, a country's regions or a region's cities. */
     PlaceList places(String country, String region, String q);

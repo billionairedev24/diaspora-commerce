@@ -15,6 +15,7 @@ import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.WindowDetails;
+import com.afrotransact.deliveryruns.domain.WindowSwitch;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository.WindowTotals;
 import com.afrotransact.deliveryruns.port.PreorderSettingsRepository;
@@ -75,7 +76,7 @@ class PreorderSupport {
         boolean areaOff = !coverage.settings().enabled() || coverage.allTargetsOff(w.details().targets());
         return new WindowView(w, w.status(now), w.publishChecks(payment, pageUrl), w.doorFee(payment).orElse(null),
                 w.pickupFee(payment), payment.pickupWindow(), t.orders(),
-                t.revenueMinor(), areaOff);
+                t.revenueMinor(), areaOff, WindowSwitch.of(w, coverage, now));
     }
 
     WindowView view(PreorderWindow w, Instant now) {

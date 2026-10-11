@@ -316,7 +316,8 @@ paths:
       - Pre-order settings
       summary: Places for the area pickers (delivery-runs:read)
       description: 'q (2+ characters): search countries, regions and cities (8 best). Otherwise browse: every country, a country''s
-        regions (country) or a region''s cities (country + region). regionLabel is what the country calls regions.'
+        regions (country) or every city of a region (country + region), from geo-service''s world gazetteer (built-in list
+        when geo is down). regionLabel is what the country calls regions.'
       operationId: places
       parameters:
       - name: country
@@ -474,13 +475,90 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/preorder-areas/regions/{country}/{region}:
+    get:
+      tags:
+      - Pre-order settings
+      summary: One region's coverage for the in-place editor (delivery-runs:read)
+      description: The "Every city" row (or null) and every listed city with its switch, row version and the live pre-orders
+        selling there. ETag = the region's version (send it back as If-Match).
+      operationId: region
+      parameters:
+      - name: country
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RegionCoverageView'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - Pre-order settings
+      summary: Edit one region's coverage in place (preorders:manage)
+      description: 'Full replacement of the region''s rows: cities listed are added or switched, cities left out are removed,
+        everyCity adds, switches or (null) removes the "Every city" row. If-Match with the region''s ETag: 412 delivery-runs.version-mismatch
+        when anyone changed the region since. 409 delivery-runs.area-in-use when a removal would leave a live pre-order''s
+        place uncovered (switch it off instead). Publishes preorder.areas.changed with the actor.'
+      operationId: updateRegion
+      parameters:
+      - name: country
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderRegionCoverageRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RegionCoverageView'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/preorder-areas/{key}:
     delete:
       tags:
       - Pre-order settings
       summary: Remove a coverage area (preorders:manage)
       description: The key is the rest of the path (DELETE /v1/preorder-areas/US/TX/El%20Paso; an encoded US%2FTX%2FEl%20Paso
-        works too). Returns the page of the area's region.
+        works too). Returns the page of the area's region. 409 delivery-runs.area-in-use when a live pre-order sells there
+        and nothing else covers it.
       operationId: remove
       parameters:
       - name: key
@@ -624,6 +702,32 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+    patch:
+      tags:
+      - Pre-orders
+      summary: Switch several pre-orders on or off (preorders:manage)
+      description: '1–100 ids, each switched on its own as PATCH /v1/preorders/{id}: SWITCHED, UNCHANGED or SKIPPED (draft,
+        delivered, unknown or failing its publish checks, with the reason).'
+      operationId: setActive_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderBulkSwitchRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderBulkSwitchResult'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/preorders/{id}:
     get:
       tags:
@@ -675,6 +779,47 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/PreorderWindowRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    patch:
+      tags:
+      - Pre-orders
+      summary: Switch one pre-order on or off (preorders:manage)
+      description: Sets this window's own switch only; the master switch is never touched. The window is live when the master
+        switch AND its own switch AND one of its areas are on (switchState says which holds it). Off stops resolution, banners,
+        eligibility and the cart's pre-order packages; orders already placed are kept. On re-runs the publish checks (422
+        delivery-runs.preorder-checks-failed). Idempotent; drafts and delivered windows answer 409. If-Match optional; publishes
+        preorder.window.paused / resumed with the actor when it flips.
+      operationId: setActive
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderSwitchRequest'
         required: true
       responses:
         '200':
@@ -1058,6 +1203,7 @@ paths:
       tags:
       - Pre-orders
       summary: Resume a paused pre-order (preorders:manage)
+      description: The publish checks must still pass (422 delivery-runs.preorder-checks-failed).
       operationId: resume
       parameters:
       - name: id
@@ -2638,7 +2784,7 @@ components:
           format: int64
         statusLabel:
           type: string
-          description: Open, Scheduled, Closed · delivering, Delivered, Draft, Paused or Area off
+          description: Open, Scheduled, Closed · delivering, Delivered, Draft, Paused, Off (global switch) or Area off
         timeZone:
           type: string
         smsSeptets:
@@ -2672,6 +2818,22 @@ components:
         updatedAt:
           type: string
           format: date-time
+        switchable:
+          type: boolean
+          description: 'Published and not delivered: the window has its own on/off switch'
+        switchState:
+          type: string
+          description: 'ON when live (master AND window AND an area on); else which switch holds it: PAUSED (this window),
+            GLOBAL_OFF (master switch), AREA_OFF; NOT_LIVE for drafts and delivered windows'
+          enum:
+          - 'ON'
+          - PAUSED
+          - GLOBAL_OFF
+          - AREA_OFF
+          - NOT_LIVE
+        live:
+          type: boolean
+          description: switchState is ON
     TargetResponse:
       type: object
       properties:
@@ -2792,6 +2954,73 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PreorderRegionCityRequest:
+      type: object
+      properties:
+        city:
+          type: string
+          maxLength: 80
+          minLength: 0
+        'on':
+          type: boolean
+      required:
+      - city
+      - 'on'
+    PreorderRegionCoverageRequest:
+      type: object
+      description: 'The region''s coverage as it should be: everyCity null = no "Every city" row (true / false = the row on
+        /
+
+        off); cities = every city listed, each on or off. Cities left out are removed.'
+      properties:
+        everyCity:
+          type: boolean
+        cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderRegionCityRequest'
+          maxItems: 2000
+          minItems: 0
+      required:
+      - cities
+    RegionCoverageView:
+      type: object
+      properties:
+        country:
+          type: string
+        region:
+          type: string
+        countryName:
+          type: string
+        regionName:
+          type: string
+        regionLabel:
+          type: string
+        wholeRegion:
+          $ref: '#/components/schemas/RegionRow'
+        cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegionRow'
+        version:
+          type: integer
+          format: int64
+    RegionRow:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        'on':
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        windows:
+          type: array
+          items:
+            type: string
     LocationRequest:
       type: object
       description: 'A town or area. areaKind RADIUS needs radiusMiles; POLYGON needs geoZoneId (an existing geo-service zone)
@@ -3666,6 +3895,126 @@ components:
       required:
       - channels
       - locationId
+    PreorderBulkSwitchRequest:
+      type: object
+      description: Switch several windows on or off; each on its own
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          maxItems: 100
+          minItems: 0
+        active:
+          type: boolean
+      required:
+      - active
+      - ids
+    PreorderBulkSwitchResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderSwitchOutcome'
+        switched:
+          type: integer
+          format: int64
+        unchanged:
+          type: integer
+          format: int64
+        skipped:
+          type: integer
+          format: int64
+    PreorderSwitchOutcome:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        outcome:
+          type: string
+          enum:
+          - SWITCHED
+          - UNCHANGED
+          - SKIPPED
+        window:
+          $ref: '#/components/schemas/PreorderWindowRow'
+          description: The window now (absent when unknown)
+        code:
+          type: string
+        reason:
+          type: string
+    PreorderWindowRow:
+      type: object
+      description: A row of the staff list
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        where:
+          type: string
+        opensAt:
+          type: string
+          format: date-time
+        closesAt:
+          type: string
+          format: date-time
+        deliversOn:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+        areaOff:
+          type: boolean
+        orderCount:
+          type: integer
+          format: int32
+        revenue:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        statusLabel:
+          type: string
+        version:
+          type: integer
+          format: int64
+        active:
+          type: boolean
+          description: The window's own switch
+        switchable:
+          type: boolean
+        switchState:
+          type: string
+          enum:
+          - 'ON'
+          - PAUSED
+          - GLOBAL_OFF
+          - AREA_OFF
+          - NOT_LIVE
+        live:
+          type: boolean
+    PreorderSwitchRequest:
+      type: object
+      description: The window's own on/off switch (true = on)
+      properties:
+        active:
+          type: boolean
+      required:
+      - active
     PreorderAreaToggleRequest:
       type: object
       description: 'Keys: a country (US), a region (US/TX) or an area'
@@ -4265,52 +4614,6 @@ components:
         enabled:
           type: boolean
           description: The pre-order master switch
-    PreorderWindowRow:
-      type: object
-      description: A row of the staff list
-      properties:
-        id:
-          type: string
-          format: uuid
-        code:
-          type: string
-        name:
-          type: string
-        where:
-          type: string
-        opensAt:
-          type: string
-          format: date-time
-        closesAt:
-          type: string
-          format: date-time
-        deliversOn:
-          type: string
-          format: date
-        status:
-          type: string
-          enum:
-          - DRAFT
-          - PAUSED
-          - UPCOMING
-          - OPEN
-          - CLOSED
-          - DELIVERED
-        areaOff:
-          type: boolean
-        orderCount:
-          type: integer
-          format: int32
-        revenue:
-          type: integer
-          format: int64
-        currency:
-          type: string
-        statusLabel:
-          type: string
-        version:
-          type: integer
-          format: int64
     ChannelResponse:
       type: object
       properties:

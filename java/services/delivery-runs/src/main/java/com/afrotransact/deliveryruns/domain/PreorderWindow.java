@@ -215,6 +215,41 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         return new PreorderWindow(id, code, details, creatives, false, true, runId, createdAt, now, version);
     }
 
+    /**
+     * Resume, re-running the publish checks first: a window only goes back on the storefront when it would still be
+     * allowed to publish (e.g. its currency still has a door fee).
+     */
+    public PreorderWindow resume(PaymentSettings payment, String pageUrl, Instant now) {
+        PreorderStatus s = status(now);
+        if (draft || active || timeStatus(now) == PreorderStatus.DELIVERED) {
+            throw new InvalidTransitionException(s.name(), "ACTIVE");
+        }
+        List<RuleViolation> failed = publishChecks(payment, pageUrl);
+        if (!failed.isEmpty()) {
+            throw new PublishBlockedException(failed);
+        }
+        return new PreorderWindow(id, code, details, creatives, false, true, runId, createdAt, now, version);
+    }
+
+    /** A published window that is not delivered yet has its own on/off switch (drafts and delivered ones do not). */
+    public boolean switchable(Instant now) {
+        return !draft && timeStatus(now) != PreorderStatus.DELIVERED;
+    }
+
+    /**
+     * Sets this window's own switch (idempotent: the same state returns this window unchanged). Switching on runs the
+     * publish checks ({@link #resume(PaymentSettings, String, Instant)}); drafts and delivered windows refuse.
+     */
+    public PreorderWindow switchTo(boolean on, PaymentSettings payment, String pageUrl, Instant now) {
+        if (!switchable(now)) {
+            throw new InvalidTransitionException(status(now).name(), on ? "ACTIVE" : PreorderStatus.PAUSED.name());
+        }
+        if (on == active) {
+            return this;
+        }
+        return on ? resume(payment, pageUrl, now) : pause(now);
+    }
+
     /** Changes the details; a published window must still pass its checks, a delivered one is read-only. */
     public PreorderWindow edit(WindowDetails changed, PaymentSettings payment, Instant now) {
         return edit(changed, payment, null, now);

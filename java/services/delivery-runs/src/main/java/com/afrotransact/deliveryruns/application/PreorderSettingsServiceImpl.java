@@ -13,10 +13,13 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
+import com.afrotransact.deliveryruns.domain.AreaChanges;
 import com.afrotransact.deliveryruns.domain.AreaKey;
+import com.afrotransact.deliveryruns.domain.Coverage;
 import com.afrotransact.deliveryruns.domain.CoverageArea;
 import com.afrotransact.deliveryruns.domain.PreorderSettings;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
+import com.afrotransact.deliveryruns.domain.RegionCoverage;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
 import com.afrotransact.deliveryruns.port.PlaceDirectory;
@@ -145,11 +148,44 @@ class PreorderSettingsServiceImpl implements PreorderSettingsService {
     public AreaPage removeArea(String key) {
         Actor actor = permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
         AreaKey k = AreaKey.parse(key);
+        settings.lockRegion(k.regionKey());
+        Coverage before = coverage();
+        CoverageArea row = before.find(k).orElseThrow(() -> new NotFoundException("delivery-runs.area-not-found",
+                label(k) + " is not a pre-order area"));
+        AreaChanges change = new AreaChanges(List.of(), List.of(row), List.of());
+        refuseStranding(before, before.apply(change), Instant.now(clock));
         if (!settings.deleteArea(k)) {
             throw new NotFoundException("delivery-runs.area-not-found", label(k) + " is not a pre-order area");
         }
         events.settingsChanged(settings.settings(), actor.subject());
         return page(k.country(), k.region(), null, 0, PAGE);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RegionCoverageView region(String country, String region) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        return regionView(new AreaKey(country, region, null), coverage(), Instant.now(clock));
+    }
+
+    @Override
+    @Transactional
+    public RegionCoverageView updateRegion(RegionCoverage desired, Long expectedVersion) {
+        Actor actor = permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);
+        Instant now = Instant.now(clock);
+        AreaKey region = desired.region();
+        settings.lockRegion(region);
+        Coverage before = coverage();
+        PreorderSupport.requireVersion(before.regionVersion(region), expectedVersion,
+                "Coverage of " + places.regionName(region.country(), region.region()));
+        AreaChanges changes = before.changes(desired);
+        if (changes.empty()) {
+            return regionView(region, before, now);
+        }
+        refuseStranding(before, before.apply(changes), now);
+        settings.apply(changes);
+        events.areasChanged(region, changes, actor.subject(), now);
+        return regionView(region, coverage(), now);
     }
 
     @Override
@@ -173,6 +209,55 @@ class PreorderSettingsServiceImpl implements PreorderSettingsService {
             added += settings.insertAreaIfMissing(AreaKey.parse(k), false) ? 1 : 0;
         }
         return added;
+    }
+
+    private Coverage coverage() {
+        return new Coverage(settings.settings(), settings.areas());
+    }
+
+    /** Published windows that are not delivered yet: they still sell (or will sell, or deliver) to their targets. */
+    private List<PreorderWindow> liveWindows(Instant now) {
+        return windows.findPublished().stream().filter(w -> w.switchable(now)).toList();
+    }
+
+    /** 409 when the change would leave a live window's target uncovered (removed, not just switched off). */
+    private void refuseStranding(Coverage before, Coverage after, Instant now) {
+        List<PreorderWindow> live = liveWindows(now);
+        List<AreaKey> stranded = before.stranded(after,
+                live.stream().flatMap(w -> w.details().targets().stream()).toList());
+        if (stranded.isEmpty()) {
+            return;
+        }
+        String places = stranded.stream().map(this::label).distinct().sorted().reduce((a, b) -> a + ", " + b)
+                .orElse("");
+        String names = live.stream().filter(w -> w.details().targets().stream().anyMatch(
+                t -> stranded.stream().anyMatch(t::sameAs))).map(w -> w.details().name()).distinct().sorted()
+                .reduce((a, b) -> a + ", " + b).orElse("");
+        throw new ConflictException("delivery-runs.area-in-use", places + " can't be removed while " + names
+                + (names.contains(", ") ? " sell" : " sells") + " there. Switch it off instead, or change those "
+                + "pre-orders first.");
+    }
+
+    private RegionCoverageView regionView(AreaKey region, Coverage coverage, Instant now) {
+        AreaKey r = region.regionKey();
+        List<PreorderWindow> live = liveWindows(now);
+        RegionCoverageView.RegionRow whole = null;
+        List<RegionCoverageView.RegionRow> cities = new ArrayList<>();
+        String regionName = places.regionName(r.country(), r.region());
+        for (CoverageArea a : coverage.region(r)) {
+            List<String> sellers = live.stream()
+                    .filter(w -> w.details().targets().stream().anyMatch(t -> t.overlaps(a.key())))
+                    .map(w -> w.details().name()).toList();
+            RegionCoverageView.RegionRow row = new RegionCoverageView.RegionRow(a.key().key(),
+                    a.key().isCity() ? a.key().city() : "Every city in " + regionName, a.on(), a.version(), sellers);
+            if (a.key().isCity()) {
+                cities.add(row);
+            } else {
+                whole = row;
+            }
+        }
+        return new RegionCoverageView(r.country(), r.region(), places.countryName(r.country()), regionName,
+                places.regionLabel(r.country()), whole, cities, coverage.regionVersion(r));
     }
 
     /** {@code areaLabel} of the design: "Lubbock, TX", "All of Texas", with the country outside the US. */

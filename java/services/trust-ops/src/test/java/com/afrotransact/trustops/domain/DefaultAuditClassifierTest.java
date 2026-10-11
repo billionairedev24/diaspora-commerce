@@ -72,4 +72,21 @@ class DefaultAuditClassifierTest {
         assertThat(f.entityId()).isEqualTo("flag-9");
         assertThat(classifier.classify("", Map.of(), "k")).isEmpty();
     }
+
+    @Test
+    void preorderSwitchesAndCoverageEditsNameTheStaffMember() {
+        AuditFacts paused = classifier.classify("preorder.window.paused", Map.of("windowId", "w-1", "code", "LUB-7",
+                "name", "Lubbock Pre-order #7", "actorId", "staff-3"), "w-1").orElseThrow();
+        assertThat(paused.actorId()).isEqualTo("staff-3");
+        assertThat(paused.entityType()).isEqualTo("PREORDER_WINDOW");
+        assertThat(paused.summary()).isEqualTo("Switched off Lubbock Pre-order #7 (LUB-7)");
+        assertThat(classifier.classify("preorder.window.resumed", Map.of("windowId", "w-1", "code", "LUB-7",
+                "name", "Lubbock Pre-order #7", "actorId", "staff-3"), "w-1").orElseThrow().summary())
+                .startsWith("Switched on");
+        AuditFacts areas = classifier.classify("preorder.areas.changed", Map.of("region", "US/TX", "actorId",
+                "staff-3"), "preorder-settings").orElseThrow();
+        assertThat(areas.entityId()).isEqualTo("US/TX");
+        assertThat(classifier.classify("preorder.settings.changed", Map.of("enabled", false, "actor", "staff-4"),
+                "preorder-settings").orElseThrow().summary()).contains("master switch off");
+    }
 }

@@ -21,6 +21,7 @@ import com.afrotransact.deliveryruns.application.PreorderPublicService.OpenWindo
 import com.afrotransact.deliveryruns.application.SettingsCommand;
 import com.afrotransact.deliveryruns.application.WindowCommand;
 import com.afrotransact.deliveryruns.application.WindowPage;
+import com.afrotransact.deliveryruns.application.WindowSwitchResult;
 import com.afrotransact.deliveryruns.application.WindowView;
 import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.AttributionChannel;
@@ -47,9 +48,11 @@ import com.afrotransact.deliveryruns.domain.PreorderSettings;
 import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderSummary;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
+import com.afrotransact.deliveryruns.domain.RegionCoverage;
 import com.afrotransact.deliveryruns.domain.Resolution;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.WindowDetails;
+import com.afrotransact.deliveryruns.domain.WindowSwitch;
 import com.afrotransact.deliveryruns.port.OrdersGateway.Address;
 import com.afrotransact.deliveryruns.port.OrdersGateway.Item;
 import com.afrotransact.deliveryruns.port.OrdersGateway.NewAddress;
@@ -141,14 +144,20 @@ final class PreorderDtos {
                           long socialBudget, List<CommKind> comms, boolean draft, boolean active,
                           PreorderStatus status, boolean areaOff, List<CreativeResponse> creatives, int orderCount,
                           long revenue, long version,
-                          @Schema(description = "Open, Scheduled, Closed · delivering, Delivered, Draft, Paused or "
-                                  + "Area off") String statusLabel, String timeZone,
+                          @Schema(description = "Open, Scheduled, Closed · delivering, Delivered, Draft, Paused, "
+                                  + "Off (global switch) or Area off") String statusLabel, String timeZone,
                           @Schema(description = "GSM-7 septets (-1 = needs UCS-2)") int smsSeptets,
                           String pickupPointId, String pickupWindow, UUID locationId, UUID runId,
                           @Schema(description = "Failed publish checks") List<CheckResponse> checks,
                           boolean publishable,
                           @Schema(description = "Open windows: share of the ordering time elapsed (0–100)")
-                          Integer timeProgressPct, Instant createdAt, Instant updatedAt) {
+                          Integer timeProgressPct, Instant createdAt, Instant updatedAt,
+                          @Schema(description = "Published and not delivered: the window has its own on/off switch")
+                          boolean switchable,
+                          @Schema(description = "ON when live (master AND window AND an area on); else which switch "
+                                  + "holds it: PAUSED (this window), GLOBAL_OFF (master switch), AREA_OFF; NOT_LIVE "
+                                  + "for drafts and delivered windows") WindowSwitch switchState,
+                          @Schema(description = "switchState is ON") boolean live) {
 
         static WindowResponse of(WindowView v) {
             PreorderWindow w = v.window();
@@ -172,24 +181,54 @@ final class PreorderDtos {
                     minor(d.doorFeeOverride()), minor(d.pickupFeeOverride()), d.currency(), orZero(v.doorFee()),
                     orZero(v.pickupFee()), d.showCount(), d.socialBudget().minor(),
                     d.comms().stream().sorted().toList(), w.draft(), w.active(), v.status(), v.areaOff(), creatives,
-                    v.count(), v.revenueMinor(), w.version(), statusLabelOf(v.status(), v.areaOff()),
+                    v.count(), v.revenueMinor(), w.version(), statusLabelOf(v.status(), v.switchState()),
                     d.timeZone().getId(), Gsm7.septets(d.smsCopy()), d.pickupPointId(), v.pickupWindow(),
                     d.locationId(), w.runId(),
                     v.checks().stream().map(c -> new CheckResponse(c.code(), c.getMessage())).toList(),
-                    v.checks().isEmpty(), progress, w.createdAt(), w.updatedAt());
+                    v.checks().isEmpty(), progress, w.createdAt(), w.updatedAt(),
+                    v.switchState() != WindowSwitch.NOT_LIVE, v.switchState(), v.switchState().live());
         }
     }
 
     @Schema(name = "PreorderWindowRow", description = "A row of the staff list")
     record WindowRowResponse(UUID id, String code, String name, String where, Instant opensAt, Instant closesAt,
                              LocalDate deliversOn, PreorderStatus status, boolean areaOff, int orderCount, long revenue,
-                             String currency, String statusLabel, long version) {
+                             String currency, String statusLabel, long version,
+                             @Schema(description = "The window's own switch") boolean active,
+                             boolean switchable, WindowSwitch switchState, boolean live) {
 
         static WindowRowResponse of(WindowView v) {
             WindowDetails d = v.window().details();
             return new WindowRowResponse(v.window().id(), v.window().code(), d.name(), whereOf(d.targets()),
                     d.opensAt(), d.closesAt(), d.deliversOn(), v.status(), v.areaOff(), v.count(), v.revenueMinor(),
-                    d.currency(), statusLabelOf(v.status(), v.areaOff()), v.window().version());
+                    d.currency(), statusLabelOf(v.status(), v.switchState()), v.window().version(),
+                    v.window().active(), v.switchState() != WindowSwitch.NOT_LIVE, v.switchState(),
+                    v.switchState().live());
+        }
+    }
+
+    @Schema(name = "PreorderSwitchRequest", description = "The window's own on/off switch (true = on)")
+    record SwitchRequest(@NotNull Boolean active) {
+    }
+
+    @Schema(name = "PreorderBulkSwitchRequest", description = "Switch several windows on or off; each on its own")
+    record BulkSwitchRequest(@NotEmpty @Size(max = 100) List<@NotNull UUID> ids, @NotNull Boolean active) {
+    }
+
+    @Schema(name = "PreorderSwitchOutcome")
+    record SwitchOutcomeResponse(UUID id, WindowSwitchResult.Outcome outcome,
+                                 @Schema(description = "The window now (absent when unknown)") WindowRowResponse window,
+                                 String code, String reason) {
+    }
+
+    @Schema(name = "PreorderBulkSwitchResult")
+    record BulkSwitchResponse(List<SwitchOutcomeResponse> items, long switched, long unchanged, long skipped) {
+
+        static BulkSwitchResponse of(WindowSwitchResult r) {
+            return new BulkSwitchResponse(r.items().stream().map(i -> new SwitchOutcomeResponse(i.id(), i.outcome(),
+                    i.view() == null ? null : WindowRowResponse.of(i.view()), i.code(), i.reason())).toList(),
+                    r.count(WindowSwitchResult.Outcome.SWITCHED), r.count(WindowSwitchResult.Outcome.UNCHANGED),
+                    r.count(WindowSwitchResult.Outcome.SKIPPED));
         }
     }
 
@@ -440,6 +479,22 @@ final class PreorderDtos {
     record AreaToggleRequest(@NotEmpty @Size(max = 500) List<String> keys, @NotNull Boolean on) {
     }
 
+    @Schema(name = "PreorderRegionCityRequest")
+    record RegionCityRequest(@NotBlank @Size(max = 80) String city, @NotNull Boolean on) {
+    }
+
+    @Schema(name = "PreorderRegionCoverageRequest", description = """
+            The region's coverage as it should be: everyCity null = no "Every city" row (true / false = the row on /
+            off); cities = every city listed, each on or off. Cities left out are removed.""")
+    record RegionCoverageRequest(Boolean everyCity, @NotNull @Size(max = RegionCoverage.MAX_CITIES)
+                                 List<@Valid @NotNull RegionCityRequest> cities) {
+
+        RegionCoverage toCoverage(String country, String region) {
+            return new RegionCoverage(new AreaKey(country, region, null), everyCity,
+                    cities.stream().map(c -> new RegionCoverage.CityCoverage(c.city(), c.on())).toList());
+        }
+    }
+
     // ---- public and service ------------------------------------------------------------------------------------
 
     @Schema(name = "PreorderPublicWindow", description = "What shoppers see of a window (no PII)")
@@ -558,8 +613,12 @@ final class PreorderDtos {
 
     // ---- helpers -----------------------------------------------------------------------------------------------
 
-    static String statusLabelOf(PreorderStatus s, boolean areaOff) {
-        if (areaOff && s != PreorderStatus.DELIVERED && s != PreorderStatus.DRAFT) {
+    /** The window's own Pause reads "Paused"; a window held off by the master switch "Off (global switch)". */
+    static String statusLabelOf(PreorderStatus s, WindowSwitch sw) {
+        if (sw == WindowSwitch.GLOBAL_OFF) {
+            return "Off (global switch)";
+        }
+        if (sw == WindowSwitch.AREA_OFF) {
             return "Area off";
         }
         return switch (s) {
