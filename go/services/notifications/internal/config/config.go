@@ -134,13 +134,7 @@ type Config struct {
 		BackoffBase  time.Duration `yaml:"backoffBase" env:"DISPATCHER_BACKOFF_BASE"`
 		BackoffMax   time.Duration `yaml:"backoffMax" env:"DISPATCHER_BACKOFF_MAX"`
 	} `yaml:"dispatcher"`
-	Routing struct {
-		SendTimeout time.Duration `yaml:"sendTimeout" env:"SEND_TIMEOUT"`
-		Email       Routes        `yaml:"email"`
-		SMS         Routes        `yaml:"sms"`
-		Push        Routes        `yaml:"push"`
-		Chat        Routes        `yaml:"chat"`
-	} `yaml:"routing"`
+	Routing Routing `yaml:"routing"`
 	Breaker struct {
 		FailureThreshold int           `yaml:"failureThreshold" env:"BREAKER_FAILURE_THRESHOLD"`
 		CoolDown         time.Duration `yaml:"coolDown" env:"BREAKER_COOL_DOWN"`
@@ -174,6 +168,109 @@ type Config struct {
 		LocalPhone string `yaml:"localPhone"`
 	} `yaml:"testSend"`
 	Providers Providers `yaml:"providers"`
+}
+
+// Routing is the ordered provider list per channel and market.
+type Routing struct {
+	SendTimeout time.Duration `yaml:"sendTimeout" env:"SEND_TIMEOUT"`
+	// PreferConfigured (config/local.yaml only) puts a real provider whose credentials are set in front of the
+	// channel's local fallback (Mailpit for email, the log for SMS, push and WhatsApp): see EffectiveRouting.
+	// ROUTING_PREFER_CONFIGURED=false keeps the local fallbacks even when keys are set.
+	PreferConfigured bool   `yaml:"preferConfigured" env:"ROUTING_PREFER_CONFIGURED"`
+	Email            Routes `yaml:"email"`
+	SMS              Routes `yaml:"sms"`
+	Push             Routes `yaml:"push"`
+	Chat             Routes `yaml:"chat"`
+}
+
+// ProviderChoice says which provider a channel uses after EffectiveRouting, for the start-up log.
+type ProviderChoice struct {
+	Channel string
+	// Real is the provider put in front because its credentials are set ("" = the local fallback only).
+	Real string
+	// Providers is the resulting order for the default market.
+	Providers []string
+	// Reason is the variable that decided it: set, or what to set for the real provider.
+	Reason string
+}
+
+// EffectiveRouting returns the routes to build. Unless PreferConfigured is on (the local profile), they are the
+// configured routes unchanged. With it, each channel's first provider whose credentials are complete is put in
+// front of every market's list (which keeps the local fallback behind it):
+//
+//	email  resend (RESEND_API_KEY), else sendgrid (SENDGRID_API_KEY)                          → then smtp (Mailpit)
+//	sms    twilio (TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM or TWILIO_MESSAGING_SERVICE_SID),
+//	       else vonage (VONAGE_API_KEY + VONAGE_API_SECRET)                                   → then log
+//	push   fcm (FCM_SERVICE_ACCOUNT_JSON), apns (APNS_KEY_P8 + APNS_KEY_ID + APNS_TEAM_ID)    → then log
+//	chat   whatsapp (WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID)                               → then log
+//
+// The returned maps are copies; the receiver is not changed.
+func (c Config) EffectiveRouting() (Routing, []ProviderChoice) {
+	out := c.Routing
+	out.Email, out.SMS, out.Push, out.Chat = cloneRoutes(c.Routing.Email), cloneRoutes(c.Routing.SMS),
+		cloneRoutes(c.Routing.Push), cloneRoutes(c.Routing.Chat)
+	if !c.Routing.PreferConfigured {
+		return out, nil
+	}
+	p := c.Providers
+	twilioSender := p.Twilio.From != "" || p.Twilio.MessagingServiceSID != ""
+	channels := []struct {
+		name   string
+		routes Routes
+		cands  []candidate
+	}{
+		{"email", out.Email, []candidate{
+			{"resend", p.Resend.APIKey != "", "RESEND_API_KEY"},
+			{"sendgrid", p.SendGrid.APIKey != "", "SENDGRID_API_KEY"},
+		}},
+		{"sms", out.SMS, []candidate{
+			{"twilio", p.Twilio.AccountSID != "" && p.Twilio.AuthToken != "" && twilioSender,
+				"TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM (or TWILIO_MESSAGING_SERVICE_SID)"},
+			{"vonage", p.Vonage.APIKey != "" && p.Vonage.APISecret != "", "VONAGE_API_KEY + VONAGE_API_SECRET"},
+		}},
+		{"push", out.Push, []candidate{
+			{"fcm", p.FCM.ServiceAccountJSON != "", "FCM_SERVICE_ACCOUNT_JSON"},
+			{"apns", p.APNs.KeyP8 != "" && p.APNs.KeyID != "" && p.APNs.TeamID != "", "APNS_KEY_P8 + APNS_KEY_ID + APNS_TEAM_ID"},
+		}},
+		{"chat", out.Chat, []candidate{
+			{"whatsapp", p.WhatsApp.Token != "" && p.WhatsApp.PhoneNumberID != "", "WHATSAPP_TOKEN + WHATSAPP_PHONE_NUMBER_ID"},
+		}},
+	}
+	choices := make([]ProviderChoice, 0, len(channels))
+	for _, ch := range channels {
+		choice := ProviderChoice{Channel: ch.name}
+		for _, cand := range ch.cands {
+			if cand.ready {
+				choice.Real, choice.Reason = cand.name, cand.vars+" set"
+				break
+			}
+		}
+		if choice.Real == "" {
+			choice.Reason = "set " + ch.cands[0].vars + " to use " + ch.cands[0].name
+		} else {
+			for market, names := range ch.routes {
+				ch.routes[market] = append([]string{choice.Real}, slices.DeleteFunc(slices.Clone(names),
+					func(n string) bool { return n == choice.Real })...)
+			}
+		}
+		choice.Providers = slices.Clone(ch.routes["default"])
+		choices = append(choices, choice)
+	}
+	return out, choices
+}
+
+type candidate struct {
+	name  string
+	ready bool
+	vars  string
+}
+
+func cloneRoutes(r Routes) Routes {
+	out := make(Routes, len(r))
+	for market, names := range r {
+		out[market] = slices.Clone(names)
+	}
+	return out
 }
 
 // Providers configure each adapter. Only providers named in a route are constructed.

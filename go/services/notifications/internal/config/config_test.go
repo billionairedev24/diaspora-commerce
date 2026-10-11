@@ -115,3 +115,83 @@ func TestSharedPlatformURLsDriveLinks(t *testing.T) {
 		t.Fatalf("explicit settings must win: %q %q", o.PublicBaseURL, o.Links.ProviderHub)
 	}
 }
+
+// Local: a real provider whose credentials are set goes in front of the Mailpit / log fallback; nothing else changes.
+func TestLocalPrefersConfiguredProviders(t *testing.T) {
+	load := func(t *testing.T, env string, vars map[string]string) config.Config {
+		t.Helper()
+		lookup := func(k string) (string, bool) { v, ok := vars[k]; return v, ok }
+		var c config.Config
+		if err := pkgconfig.NewLoaderFor(notifications.Files, env, lookup).Load(&c); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	choice := func(cs []config.ProviderChoice, ch string) config.ProviderChoice {
+		for _, c := range cs {
+			if c.Channel == ch {
+				return c
+			}
+		}
+		t.Fatalf("no choice for %s", ch)
+		return config.ProviderChoice{}
+	}
+
+	t.Run("no keys: fallbacks", func(t *testing.T) {
+		c := load(t, pkgconfig.EnvLocal, nil)
+		r, cs := c.EffectiveRouting()
+		if !r.PreferConfigured || len(cs) != 4 {
+			t.Fatalf("local must prefer configured providers: %+v", cs)
+		}
+		if !slices.Equal(r.Email["default"], []string{"smtp"}) || !slices.Equal(r.SMS["default"], []string{"log"}) {
+			t.Fatalf("routes: %+v", r)
+		}
+		if e := choice(cs, "email"); e.Real != "" || e.Reason != "set RESEND_API_KEY to use resend" {
+			t.Fatalf("email: %+v", e)
+		}
+	})
+
+	t.Run("resend and twilio set", func(t *testing.T) {
+		c := load(t, pkgconfig.EnvLocal, map[string]string{"RESEND_API_KEY": "re_x", "TWILIO_ACCOUNT_SID": "AC1",
+			"TWILIO_AUTH_TOKEN": "tok", "TWILIO_FROM": "+15005550006"})
+		r, cs := c.EffectiveRouting()
+		if !slices.Equal(r.Email["default"], []string{"resend", "smtp"}) || !slices.Equal(r.SMS["default"], []string{"twilio", "log"}) {
+			t.Fatalf("routes: email %v sms %v", r.Email["default"], r.SMS["default"])
+		}
+		if e := choice(cs, "email"); e.Real != "resend" || e.Reason != "RESEND_API_KEY set" {
+			t.Fatalf("email: %+v", e)
+		}
+		if !slices.Equal(c.Routing.Email["default"], []string{"smtp"}) {
+			t.Fatal("EffectiveRouting must not change the configured routes")
+		}
+		if p := choice(cs, "push"); p.Real != "" || !slices.Equal(r.Push["default"], []string{"log"}) {
+			t.Fatalf("push stays on the log: %+v", p)
+		}
+	})
+
+	t.Run("twilio without a sender stays on the log", func(t *testing.T) {
+		c := load(t, pkgconfig.EnvLocal, map[string]string{"TWILIO_ACCOUNT_SID": "AC1", "TWILIO_AUTH_TOKEN": "tok"})
+		r, _ := c.EffectiveRouting()
+		if !slices.Equal(r.SMS["default"], []string{"log"}) {
+			t.Fatalf("sms: %v", r.SMS["default"])
+		}
+	})
+
+	t.Run("opt out", func(t *testing.T) {
+		c := load(t, pkgconfig.EnvLocal, map[string]string{"RESEND_API_KEY": "re_x", "ROUTING_PREFER_CONFIGURED": "false"})
+		r, cs := c.EffectiveRouting()
+		if cs != nil || !slices.Equal(r.Email["default"], []string{"smtp"}) {
+			t.Fatalf("opted out: %v %v", cs, r.Email)
+		}
+	})
+
+	t.Run("deployed environments are unchanged", func(t *testing.T) {
+		for _, env := range []string{pkgconfig.EnvDev, pkgconfig.EnvUAT, pkgconfig.EnvProd} {
+			c := load(t, env, map[string]string{"RESEND_API_KEY": "re_x", "SENDGRID_API_KEY": "SG.x"})
+			r, cs := c.EffectiveRouting()
+			if cs != nil || !slices.Equal(r.Email["us"], c.Routing.Email["us"]) || r.PreferConfigured {
+				t.Fatalf("%s: routing must be the configured one: %v", env, r.Email)
+			}
+		}
+	})
+}
