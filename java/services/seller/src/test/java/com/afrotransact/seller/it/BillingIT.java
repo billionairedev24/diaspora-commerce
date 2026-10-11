@@ -40,7 +40,9 @@ class BillingIT extends SellerIntegrationTest {
         assertThat(quarterly.path("billedLabel").asString()).isEqualTo("Billed $139.65 every 3 months");
         assertThat(quarterly.path("savingLabel").asString()).isEqualTo("Save $7.35 vs monthly");
         assertThat(studio.path("prices").get(2).path("totalCents").asLong()).isEqualTo(49000);
-        assertThat(get("/v1/plans").body().size()).isEqualTo(6);
+        assertThat(get("/v1/plans").body().valueStream().map(p -> p.path("code").asString()))
+                .contains("seller_essentials", "seller_growth", "seller_pro", "provider_solo", "provider_studio",
+                        "provider_business");
         assertThat(get("/v1/plans?kind=SELLER").body().get(0).at("/prices/0/perMonthLabel").asString())
                 .isEqualTo("Free");
     }
@@ -90,8 +92,9 @@ class BillingIT extends SellerIntegrationTest {
         assertThat(upgrade.text("/applied")).isEqualTo("IMMEDIATE_UPGRADE");
         assertThat(upgrade.text("/billing/planCode")).isEqualTo("seller_pro");
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/subscriptions/" + sub)).anySatisfy(b -> assertThat(b)
-                .contains("proration_behavior=always_invoice", "metadata[plan_lookup_key]=seller_pro_monthly",
-                        "items[0][id]=si_"));
+                .contains("proration_behavior=always_invoice", "metadata[plan_code]=seller_pro",
+                        "metadata[cadence]=MONTHLY", "items[0][id]=si_", "items[0][price]=" + price("seller_pro",
+                                "MONTHLY")));
         assertThat(lastEvent(SellerEvents.SUBSCRIPTION_CHANGED, org).path("change").asString()).isEqualTo("UPGRADED");
         int stripeUpdates = StripeStub.requests(STRIPE, "POST", "/v1/subscriptions/" + sub).size();
 
@@ -121,7 +124,8 @@ class BillingIT extends SellerIntegrationTest {
         assertThat(column(org, "plan_code")).isEqualTo("seller_growth");
         assertThat(column(org, "pending_plan_code")).isNull();
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/subscriptions/" + sub)).anySatisfy(b -> assertThat(b)
-                .contains("proration_behavior=none", "metadata[plan_lookup_key]=seller_growth_monthly"));
+                .contains("proration_behavior=none", "metadata[plan_code]=seller_growth",
+                        "items[0][price]=" + price("seller_growth", "MONTHLY")));
         assertThat(lastEvent(SellerEvents.SUBSCRIPTION_CHANGED, org).path("change").asString())
                 .isEqualTo("CHANGE_APPLIED");
 
@@ -201,6 +205,12 @@ class BillingIT extends SellerIntegrationTest {
         assertThat(invoices.body().get(0).path("status").asString()).isEqualTo("paid");
         assertThat(invoices.body().get(0).path("amountPaidCents").asLong()).isEqualTo(36765);
         assertThat(invoices.body().get(0).path("invoicePdf").asString()).endsWith("/pdf");
+    }
+
+    private String price(String plan, String cadence) {
+        return jdbc.sql("select stripe_price_id from plan_version_price where plan_code = :p and cadence = :c "
+                + "and version = (select current_version from plan where code = :p)").param("p", plan)
+                .param("c", cadence).query(String.class).single();
     }
 
     private String column(String org, String column) {

@@ -267,6 +267,7 @@ class OnboardingServiceImpl implements OnboardingService {
                 if (in.plan() == null) {
                     throw missing("plan");
                 }
+                views.checkPlanChoice(app, in.plan());
                 Optional<Plan> plan = in.plan().planCode() == null ? Optional.empty()
                         : views.plan(data.withPlan(in.plan()));
                 yield data.withPlan(valid(rules.plan(in.plan(), plan, data, ctx, false)));

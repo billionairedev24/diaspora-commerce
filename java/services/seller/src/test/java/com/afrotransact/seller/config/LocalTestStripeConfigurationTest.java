@@ -34,7 +34,7 @@ class LocalTestStripeConfigurationTest {
     }
 
     private static SellerProperties props(String mode, String key) {
-        return new SellerProperties(List.of("US"), stripe(mode, key), null, null, null, null, null, null);
+        return new SellerProperties(List.of("US"), stripe(mode, key), null, null, null, null, null, null, null);
     }
 
     private static MockEnvironment env(String... profiles) {

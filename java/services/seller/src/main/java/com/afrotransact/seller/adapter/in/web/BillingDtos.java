@@ -3,6 +3,7 @@ package com.afrotransact.seller.adapter.in.web;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.seller.application.BillingOverview;
@@ -38,8 +39,12 @@ final class BillingDtos {
     }
 
     @Schema(name = "Plan")
-    record PlanResponse(String code, String kind, String name, String tagline, long monthlyCents, int trialDays,
-                        List<String> features, List<PriceView> prices) {
+    record PlanResponse(String code, String kind, String name, String tagline, long monthlyCents,
+                        @Schema(description = "The trial a sign-up gets today (plan default or a running campaign)")
+                        int trialDays, List<String> features, List<PriceView> prices,
+                        @Schema(description = "Current version (prices)") int version,
+                        @Schema(allowableValues = {"PUBLIC", "HIDDEN", "INVITE_ONLY"}) String visibility,
+                        Map<String, String> limits) {
 
         static PlanResponse of(PlanOffer o) {
             var p = o.plan();
@@ -47,8 +52,8 @@ final class BillingDtos {
             for (int i = 0; i < o.quotes().size(); i++) {
                 prices.add(PriceView.of(o.quotes().get(i), o.firstCharges().get(i), p.isFree()));
             }
-            return new PlanResponse(p.code(), p.kind().name(), p.name(), p.tagline(), p.monthlyCents(), p.trialDays(),
-                    p.features(), prices);
+            return new PlanResponse(p.code(), p.kind().name(), p.name(), p.tagline(), p.monthlyCents(), o.trialDays(),
+                    p.features(), prices, p.version(), p.visibility().name(), p.limits());
         }
     }
 
@@ -73,7 +78,12 @@ final class BillingDtos {
                            PriceView price, Instant trialEndsAt, Instant currentPeriodEnd, Instant nextChargeAt,
                            long nextChargeCents, String nextChargeLabel, boolean cancelAtPeriodEnd,
                            PendingChange pendingChange, String dunning, int failedPaymentAttempts,
-                           List<PaymentMethodResponse> paymentMethods) {
+                           List<PaymentMethodResponse> paymentMethods,
+                           @Schema(description = "Plan version (prices) the organisation is on") int planVersion,
+                           @Schema(description = "Stripe customer credit balance the next invoices use")
+                           long creditBalanceCents,
+                           @Schema(allowableValues = {"PLAN", "CAMPAIGN", "OVERRIDE", "NONE"}) String trialSource,
+                           Integer trialDaysOverride, boolean collectFromEarnings) {
 
         static BillingResponse of(BillingOverview b) {
             Subscription s = b.subscription();
@@ -84,7 +94,10 @@ final class BillingDtos {
                     PriceView.of(b.quote(), null, b.plan().isFree()), s.trialEndsAt(), s.currentPeriodEnd(),
                     b.nextChargeAt(), b.nextChargeCents(), b.nextChargeLabel(), s.cancelAtPeriodEnd(), pending,
                     s.dunning().name(), s.failedPaymentAttempts(),
-                    b.paymentMethods().stream().map(PaymentMethodResponse::of).toList());
+                    b.paymentMethods().stream().map(PaymentMethodResponse::of).toList(), s.planVersion(),
+                    b.terms().creditBalanceCents(), b.terms().trialSource() == null ? null
+                            : b.terms().trialSource().name(), b.terms().trialDaysOverride(),
+                    b.terms().collectFromEarnings());
         }
     }
 

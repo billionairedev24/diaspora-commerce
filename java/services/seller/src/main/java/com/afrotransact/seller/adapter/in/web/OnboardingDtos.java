@@ -130,11 +130,12 @@ final class OnboardingDtos {
     record PlanStep(String planCode, @Schema(allowableValues = {"MONTHLY", "QUARTERLY", "ANNUAL"}) String cadence,
                     @Schema(allowableValues = {"CARD", "US_BANK_ACCOUNT"}) String paymentMethodKind,
                     String stripePaymentMethodId, String cardBrand, String cardLast4, Integer cardExpMonth,
-                    Integer cardExpYear) {
+                    Integer cardExpYear,
+                    @Schema(description = "Trial campaign promo code (optional)") String promoCode) {
 
         PlanSection toSection() {
             return new PlanSection(planCode, Inputs.cadence(cadence), Inputs.paymentMethodKind(paymentMethodKind),
-                    stripePaymentMethodId, cardBrand, cardLast4, cardExpMonth, cardExpYear);
+                    stripePaymentMethodId, cardBrand, cardLast4, cardExpMonth, cardExpYear, promoCode);
         }
     }
 
@@ -178,7 +179,8 @@ final class OnboardingDtos {
 
     @Schema(name = "PlanSelection")
     record PlanView(String planCode, String planName, String cadence, String paymentMethodKind, String cardBrand,
-                    String cardLast4, Integer cardExpMonth, Integer cardExpYear, FirstCharge firstCharge) {
+                    String cardLast4, Integer cardExpMonth, Integer cardExpYear, FirstCharge firstCharge,
+                    String promoCode) {
     }
 
     @Schema(name = "TimelineEntry")
@@ -229,7 +231,7 @@ final class OnboardingDtos {
             PlanView plan = p == null ? null : new PlanView(p.planCode(), v.planName(),
                     p.cadence() == null ? null : p.cadence().name(),
                     p.paymentMethodKind() == null ? null : p.paymentMethodKind().name(), p.cardBrand(), p.cardLast4(),
-                    p.cardExpMonth(), p.cardExpYear(), v.firstCharge());
+                    p.cardExpMonth(), p.cardExpYear(), v.firstCharge(), p.promoCode());
             return new ApplicationResponse(a.id(), a.reference(), a.orgId(), a.kind().name(), a.status().name(),
                     a.currentStep().key(), v.steps().stream().map(OnboardingStep::key).toList(),
                     v.completedSteps().stream().map(OnboardingStep::key).toList(),

@@ -49,6 +49,9 @@ public interface BillingService {
     /** Job: pending downgrades / cadence changes whose renewal has come. Returns how many were applied. */
     int applyDueChanges();
 
-    /** invoice.paid, invoice.payment_failed, customer.subscription.updated / deleted (inside the webhook tx). */
+    /** Staff per-seller billing panel (seller:billing, billing:adjust or plans:manage). */
+    BillingPanel panel(String orgId);
+
+    /** invoice.created / paid / payment_failed, customer.subscription.updated / deleted (inside the webhook tx). */
     String handle(StripeEvent event);
 }

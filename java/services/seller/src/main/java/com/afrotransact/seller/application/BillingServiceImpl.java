@@ -29,11 +29,15 @@ import com.afrotransact.seller.domain.PlanChange;
 import com.afrotransact.seller.domain.PlanPricing;
 import com.afrotransact.seller.domain.PlanQuote;
 import com.afrotransact.seller.domain.PlanSection;
+import com.afrotransact.seller.domain.PlanVisibility;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.domain.SubscriptionStatus;
+import com.afrotransact.seller.domain.TrialDecision;
 import com.afrotransact.seller.port.ApplicationRepository;
+import com.afrotransact.seller.port.BillingGrantRepository;
+import com.afrotransact.seller.port.EarningsCollectionRepository;
 import com.afrotransact.seller.port.InvoiceRepository;
 import com.afrotransact.seller.port.InvoiceSnapshot;
 import com.afrotransact.seller.port.OrganisationRepository;
@@ -71,12 +75,19 @@ class BillingServiceImpl implements BillingService {
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
     private final SellerSettings settings;
+    private final PlanSyncService sync;
+    private final TrialService trials;
+    private final EarningsCollectionService earnings;
+    private final BillingGrantRepository grants;
+    private final EarningsCollectionRepository collections;
     private final Clock clock;
 
     BillingServiceImpl(SubscriptionRepository subs, PaymentMethodRepository methods, InvoiceRepository invoices,
                        PlanRepository plans, ApplicationRepository apps, OrganisationRepository orgs,
                        StripeBillingGateway stripe, UsageRepository usage, AccessGuard access,
-                       DomainEventPublisher events, TransactionOperations tx, SellerSettings settings, Clock clock) {
+                       DomainEventPublisher events, TransactionOperations tx, SellerSettings settings,
+                       PlanSyncService sync, TrialService trials, EarningsCollectionService earnings,
+                       BillingGrantRepository grants, EarningsCollectionRepository collections, Clock clock) {
         this.subs = subs;
         this.methods = methods;
         this.invoices = invoices;
@@ -89,6 +100,11 @@ class BillingServiceImpl implements BillingService {
         this.events = events;
         this.tx = tx;
         this.settings = settings;
+        this.sync = sync;
+        this.trials = trials;
+        this.earnings = earnings;
+        this.grants = grants;
+        this.collections = collections;
         this.clock = clock;
     }
 
@@ -100,6 +116,18 @@ class BillingServiceImpl implements BillingService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public BillingPanel panel(String orgId) {
+        access.staffAny(SellerPermissions.BILLING, SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
+        Organisation org = orgs.findById(orgId).orElseThrow(() -> new NotFoundException("seller.org-not-found",
+                "Organisation " + orgId + " not found"));
+        BillingOverview overview = subs.find(orgId).map(this::build).orElse(null);
+        return new BillingPanel(orgId, org.displayName() == null ? org.legalName() : org.displayName(), org.kind(),
+                org.status().name(), overview, invoices.list(orgId, 100), grants.forOrg(orgId, 100),
+                collections.forOrg(orgId, 50), earnings.enabled());
+    }
+
+    @Override
     @Transactional
     public PlanChangeResult changePlan(String orgId, String planCode, Cadence cadence) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
@@ -107,11 +135,9 @@ class BillingServiceImpl implements BillingService {
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         requireActive(sub);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        Plan target = plans.find(planCode).filter(p -> p.kind() == org.kind()).orElseThrow(() ->
-                new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode + " isn't available",
-                        Map.of("planCode", "Unknown")));
+        Plan target = selectable(org, sub, planCode);
         Cadence targetCadence = cadence == null ? sub.cadence() : cadence;
-        Plan current = plan(sub.planCode());
+        Plan current = plan(sub);
         PlanChange decision = current.isFree() && !target.isFree() ? PlanChange.IMMEDIATE_UPGRADE
                 : PlanChange.decide(current, sub.cadence(), target, targetCadence);
         Instant now = Instant.now(clock);
@@ -126,7 +152,7 @@ class BillingServiceImpl implements BillingService {
                 change = "CHANGE_CANCELLED";
             }
             case IMMEDIATE_UPGRADE -> {
-                String lookup = plans.stripeLookupKey(target.code(), targetCadence);
+                StripeBillingGateway.PlanPrice price = price(target, targetCadence);
                 SubscriptionSnapshot snap;
                 if (sub.stripeSubscriptionId() == null) {
                     String customer = ensureCustomer(sub, org);
@@ -134,15 +160,16 @@ class BillingServiceImpl implements BillingService {
                         throw new SellerRuleViolation("seller.payment-method-required",
                                 "Add a card or bank account before choosing a paid plan");
                     }
-                    snap = stripe.createSubscription(customer, lookup, target.trialDays(),
+                    snap = stripe.createSubscription(customer, price, trialEnd(target.trialDays(), now),
                             "subscription-" + orgId + "-" + target.code() + "-" + targetCadence.name());
                 } else {
-                    snap = stripe.changePrice(sub.stripeSubscriptionId(), sub.stripeItemId(), lookup,
+                    snap = stripe.changePrice(sub.stripeSubscriptionId(), sub.stripeItemId(), price,
                             sub.status() != SubscriptionStatus.TRIALING,
                             "upgrade-" + orgId + "-" + target.code() + "-" + sub.version());
                 }
                 Subscription base = subs.find(orgId).orElse(sub);
-                saved = subs.update(applySnapshot(base.withPlan(target.code(), targetCadence, now), snap, now));
+                saved = subs.update(applySnapshot(base.withPlan(target.code(), target.version(), targetCadence, now),
+                        snap, now));
                 change = "UPGRADED";
             }
             default -> {
@@ -249,11 +276,9 @@ class BillingServiceImpl implements BillingService {
         Subscription sub = subscription(orgId);
         requireActive(sub);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        Plan target = plans.find(planCode).filter(p -> p.kind() == org.kind()).orElseThrow(() ->
-                new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode + " isn't available",
-                        Map.of("planCode", "Unknown")));
+        Plan target = selectable(org, sub, planCode);
         Cadence targetCadence = cadence == null ? sub.cadence() : cadence;
-        Plan current = plan(sub.planCode());
+        Plan current = plan(sub);
         PlanChange decision = current.isFree() && !target.isFree() ? PlanChange.IMMEDIATE_UPGRADE
                 : PlanChange.decide(current, sub.cadence(), target, targetCadence);
         Instant now = Instant.now(clock);
@@ -274,7 +299,7 @@ class BillingServiceImpl implements BillingService {
                     next = sub.renewalAt();
                 } else {
                     dueNow = stripe.previewProratedChange(sub.stripeCustomerId(), sub.stripeSubscriptionId(),
-                            sub.stripeItemId(), plans.stripeLookupKey(target.code(), targetCadence));
+                            sub.stripeItemId(), sync.ensurePrice(target.code(), target.version(), targetCadence));
                     next = sub.currentPeriodEnd();
                 }
                 yield new PlanChangePreview(decision, target.code(), target.name(), targetCadence, now, dueNow,
@@ -311,7 +336,7 @@ class BillingServiceImpl implements BillingService {
         if (sub == null || sub.status() != SubscriptionStatus.PENDING_ACTIVATION) {
             return;
         }
-        Plan plan = plan(sub.planCode());
+        Plan plan = plan(sub);
         if (plan.isFree()) {
             tx.executeWithoutResult(s -> subs.lock(orgId).filter(x -> x.status() == SubscriptionStatus.PENDING_ACTIVATION)
                     .ifPresent(x -> {
@@ -328,12 +353,18 @@ class BillingServiceImpl implements BillingService {
             stripe.attachPaymentMethod(customer, pm.stripePaymentMethodId());
             stripe.setDefaultPaymentMethod(customer, pm.stripePaymentMethodId());
         });
-        SubscriptionSnapshot snap = stripe.createSubscription(customer,
-                plans.stripeLookupKey(sub.planCode(), sub.cadence()), plan.trialDays(), "subscription-" + orgId);
+        TrialDecision trial = tx.execute(s -> trialFor(orgId, plan, org));
+        Instant start = Instant.now(clock);
+        SubscriptionSnapshot snap = stripe.createSubscription(customer, price(plan, sub.cadence()),
+                trialEnd(trial.days(), start), "subscription-" + orgId);
         tx.executeWithoutResult(s -> subs.lock(orgId).filter(x -> x.status() == SubscriptionStatus.PENDING_ACTIVATION)
                 .ifPresent(x -> {
                     Instant now = Instant.now(clock);
                     Subscription saved = subs.update(applySnapshot(x, snap, now));
+                    subs.setTrialSource(orgId, trial.source(), trial.campaignId());
+                    if (trial.campaignId() != null && !trialsRedeem(trial)) {
+                        LOG.info("Campaign {} reached its redemptions while {} activated", trial.campaignId(), orgId);
+                    }
                     publish(saved, "ACTIVATED", null, null, now);
                 }));
     }
@@ -378,6 +409,14 @@ class BillingServiceImpl implements BillingService {
                 return "ignored-unknown-customer";
             }
             String orgId = found.get().orgId();
+            if (inv.endingBalance() != null) {
+                subs.setCreditBalance(orgId, Math.max(0, -inv.endingBalance()));
+            }
+            if ("invoice.created".equals(e.type())) {
+                String outcome = earnings.onInvoiceCreated(orgId, inv);
+                upsertInvoice(inv, orgId, now);
+                return outcome.startsWith("earnings-") ? outcome : "applied";
+            }
             invoices.upsert(new Invoice(inv.id(), orgId, inv.number(), inv.periodStart(), inv.periodEnd(),
                     inv.amountDue(), inv.amountPaid(), inv.currency(), inv.status(), inv.billingReason(),
                     inv.hostedInvoiceUrl(), inv.invoicePdf(), inv.created() == null ? now : inv.created(),
@@ -412,10 +451,11 @@ class BillingServiceImpl implements BillingService {
                         SubscriptionStatus.CANCELED, next.trialEndsAt(), next.currentPeriodStart(),
                         next.currentPeriodEnd(), false, now);
             }
-            Optional<PlanRepository.PriceRef> ref = plans.byLookupKey(snap.lookupKey());
+            Optional<PlanRepository.PriceRef> ref = plans.byStripePrice(snap.priceId())
+                    .or(() -> plans.byLookupKey(snap.lookupKey()));
             if (ref.isPresent() && (!ref.get().planCode().equals(sub.planCode())
                     || ref.get().cadence() != sub.cadence())) {
-                next = next.withPlan(ref.get().planCode(), ref.get().cadence(), now);
+                next = next.withPlan(ref.get().planCode(), ref.get().version(), ref.get().cadence(), now);
             }
             boolean changed = next.status() != sub.status() || !Objects.equals(next.planCode(), sub.planCode())
                     || next.cadence() != sub.cadence() || next.cancelAtPeriodEnd() != sub.cancelAtPeriodEnd();
@@ -444,24 +484,25 @@ class BillingServiceImpl implements BillingService {
         }
         Plan target = plan(sub.pendingPlanCode());
         Cadence cadence = sub.pendingCadence();
+        int targetVersion = target.version();
         Subscription next;
         if (target.isFree()) {
             if (sub.stripeSubscriptionId() != null) {
                 stripe.cancelNow(sub.stripeSubscriptionId());
             }
             next = sub.withStripe(sub.stripeCustomerId(), null, null, SubscriptionStatus.ACTIVE, null, now, null,
-                    false, now).withPlan(target.code(), cadence, now);
+                    false, now).withPlan(target.code(), targetVersion, cadence, now);
         } else if (sub.stripeSubscriptionId() == null) {
             Organisation org = orgs.findById(orgId).orElseThrow();
-            SubscriptionSnapshot snap = stripe.createSubscription(ensureCustomer(sub, org),
-                    plans.stripeLookupKey(target.code(), cadence), 0, "renewal-" + orgId + "-"
-                            + sub.pendingEffectiveAt().getEpochSecond());
-            next = applySnapshot(subs.find(orgId).orElse(sub), snap, now).withPlan(target.code(), cadence, now);
+            SubscriptionSnapshot snap = stripe.createSubscription(ensureCustomer(sub, org), price(target, cadence),
+                    null, "renewal-" + orgId + "-" + sub.pendingEffectiveAt().getEpochSecond());
+            next = applySnapshot(subs.find(orgId).orElse(sub), snap, now).withPlan(target.code(), targetVersion,
+                    cadence, now);
         } else {
             SubscriptionSnapshot snap = stripe.changePrice(sub.stripeSubscriptionId(), sub.stripeItemId(),
-                    plans.stripeLookupKey(target.code(), cadence), false,
+                    price(target, cadence), false,
                     "renewal-" + orgId + "-" + sub.pendingEffectiveAt().getEpochSecond());
-            next = applySnapshot(sub, snap, now).withPlan(target.code(), cadence, now);
+            next = applySnapshot(sub, snap, now).withPlan(target.code(), targetVersion, cadence, now);
         }
         Subscription saved = subs.update(next);
         publish(saved, "CHANGE_APPLIED", sub.planCode(), sub.cadence(), now);
@@ -482,7 +523,9 @@ class BillingServiceImpl implements BillingService {
         }
         Instant now = Instant.now(clock);
         Cadence cadence = p.cadence() == null ? Cadence.MONTHLY : p.cadence();
-        subs.insert(Subscription.selected(orgId, p.planCode(), cadence, p.paymentMethodKind(), now));
+        Plan chosen = plans.find(p.planCode()).filter(Plan::isOpen).orElseThrow(() -> new SellerStateConflict(
+                "seller.plan-not-available", "Plan " + p.planCode() + " is not published"));
+        subs.insert(Subscription.selected(orgId, p.planCode(), chosen.version(), cadence, p.paymentMethodKind(), now));
         if (p.stripePaymentMethodId() != null) {
             PayoutSection bank = app.data().payouts();
             PaymentMethod pm = p.paymentMethodKind() == PaymentMethodKind.CARD
@@ -546,7 +589,7 @@ class BillingServiceImpl implements BillingService {
     }
 
     private BillingOverview build(Subscription sub) {
-        Plan plan = plan(sub.planCode());
+        Plan plan = plan(sub);
         PlanQuote quote = PlanPricing.quote(plan, sub.cadence());
         Plan pending = sub.pendingPlanCode() == null ? null : plan(sub.pendingPlanCode());
         List<PaymentMethod> pms = methods.list(sub.orgId());
@@ -568,7 +611,7 @@ class BillingServiceImpl implements BillingService {
                     ? "Free trial ends " + day(sub.trialEndsAt()) + " · first charge " + PlanPricing.usd(amount) + to
                     : "Next charge " + PlanPricing.usd(amount) + (nextAt == null ? "" : " on " + day(nextAt)) + to;
         }
-        return new BillingOverview(sub, plan, quote, pending, nextAt, amount, label, pms);
+        return new BillingOverview(sub, plan, quote, pending, nextAt, amount, label, pms, subs.terms(sub.orgId()));
     }
 
     private void validate(AddPaymentMethodCommand cmd) {
@@ -620,6 +663,54 @@ class BillingServiceImpl implements BillingService {
     private PaymentMethod method(String orgId, UUID id) {
         return methods.find(orgId, id).orElseThrow(() -> new NotFoundException("seller.payment-method-not-found",
                 "Payment method " + id + " not found"));
+    }
+
+    /** The plan priced at the subscription's own version (older versions keep their prices until migrated). */
+    private Plan plan(Subscription sub) {
+        return plans.find(sub.planCode(), sub.planVersion()).filter(p -> p.version() > 0)
+                .orElseGet(() -> plan(sub.planCode()));
+    }
+
+    /**
+     * A plan the organisation may move to: published, of its kind, and public, invite-only with an invitation, or its
+     * current plan.
+     */
+    private Plan selectable(Organisation org, Subscription sub, String planCode) {
+        return plans.find(planCode).filter(p -> p.kind() == org.kind() && p.isOpen())
+                .filter(p -> p.visibility() == PlanVisibility.PUBLIC || p.code().equals(sub.planCode())
+                        || (p.visibility() == PlanVisibility.INVITE_ONLY
+                        && plans.invitedPlans(org.id()).contains(p.code())))
+                .orElseThrow(() -> new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode
+                        + " isn't available", Map.of("planCode", "Unknown")));
+    }
+
+    /** The Stripe Price of a plan's version and cadence (created or adopted on first use). */
+    private StripeBillingGateway.PlanPrice price(Plan plan, Cadence cadence) {
+        return new StripeBillingGateway.PlanPrice(sync.ensurePrice(plan.code(), plan.version(), cadence), plan.code(),
+                plan.version(), cadence);
+    }
+
+    /** The trial: staff override, else the longest of the plan's and the matching campaigns' (promo code, window). */
+    private TrialDecision trialFor(String orgId, Plan plan, Organisation org) {
+        Application app = apps.findByOrg(orgId).orElse(null);
+        String promo = app == null || app.data().plan() == null ? null : app.data().plan().promoCode();
+        Instant signup = app == null || app.submittedAt() == null ? Instant.now(clock) : app.submittedAt();
+        return trials.decide(plan, org.kind(), signup, promo, subs.terms(orgId).trialDaysOverride());
+    }
+
+    private boolean trialsRedeem(TrialDecision trial) {
+        return trials.redeem(trial.campaignId());
+    }
+
+    private Instant trialEnd(int days, Instant now) {
+        return days > 0 ? now.plus(Duration.ofDays(days)) : null;
+    }
+
+    private void upsertInvoice(InvoiceSnapshot inv, String orgId, Instant now) {
+        invoices.upsert(new Invoice(inv.id(), orgId, inv.number(), inv.periodStart(), inv.periodEnd(),
+                inv.amountDue(), inv.amountPaid(), inv.currency(), inv.status(), inv.billingReason(),
+                inv.hostedInvoiceUrl(), inv.invoicePdf(), inv.created() == null ? now : inv.created(),
+                inv.lines().stream().map(this::resolveMeter).toList()));
     }
 
     private Plan plan(String code) {

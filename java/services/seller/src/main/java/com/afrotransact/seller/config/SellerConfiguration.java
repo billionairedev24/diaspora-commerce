@@ -8,6 +8,8 @@ import com.afrotransact.seller.adapter.out.geo.HttpGeoClient;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeBilling;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeConnect;
 import com.afrotransact.seller.adapter.out.media.HttpMediaClient;
+import com.afrotransact.seller.adapter.out.payments.DisabledEarningsWithholding;
+import com.afrotransact.seller.adapter.out.payments.HttpEarningsWithholding;
 import com.afrotransact.seller.adapter.out.phone.LibPhoneNumbers;
 import com.afrotransact.seller.adapter.out.stripe.StripeBillingAdapter;
 import com.afrotransact.seller.adapter.out.stripe.StripeConnectAdapter;
@@ -24,6 +26,7 @@ import com.afrotransact.seller.domain.LocalTestStripePolicy;
 import com.afrotransact.seller.domain.PhoneNumbers;
 import com.afrotransact.seller.port.AdSpendSource;
 import com.afrotransact.seller.port.AiUsageSource;
+import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.MediaClient;
 import com.afrotransact.seller.port.StorageUsageSource;
@@ -169,6 +172,17 @@ class SellerConfiguration {
     @Bean
     AiUsageSource aiUsageSource(SellerProperties props, ServiceTokens tokens) {
         return new HttpAiUsageSource(props.metering().aiUrl(), props.metering().timeout(), tokens);
+    }
+
+    /** Collection of plan fees from earnings: off by default (at.seller.billing.collect-from-earnings). */
+    @Bean
+    EarningsWithholdingGateway earningsWithholding(SellerProperties props, ServiceTokens tokens) {
+        SellerProperties.Billing b = props.billing();
+        if (!b.collectFromEarnings()) {
+            return new DisabledEarningsWithholding();
+        }
+        LOG.info("Plan fees may be collected from earnings (payments at {})", b.paymentsUrl());
+        return new HttpEarningsWithholding(b.paymentsUrl(), b.timeout(), tokens);
     }
 
     @Bean

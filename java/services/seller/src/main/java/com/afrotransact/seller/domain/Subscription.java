@@ -5,9 +5,10 @@ import java.util.Objects;
 
 /**
  * An organisation's plan subscription. Downgrades and cadence changes are recorded as a pending change applied at
- * {@code pendingEffectiveAt} (the renewal); upgrades prorate immediately.
+ * {@code pendingEffectiveAt} (the renewal); upgrades prorate immediately. {@code planVersion} is the plan version
+ * (prices) the organisation subscribed to; it changes only by a plan change or a staff migration.
  */
-public record Subscription(String orgId, String planCode, Cadence cadence, SubscriptionStatus status,
+public record Subscription(String orgId, String planCode, int planVersion, Cadence cadence, SubscriptionStatus status,
                            PaymentMethodKind paymentMethodKind, String stripeCustomerId,
                            String stripeSubscriptionId, String stripeItemId, Instant trialEndsAt,
                            Instant currentPeriodStart, Instant currentPeriodEnd, boolean cancelAtPeriodEnd,
@@ -20,10 +21,10 @@ public record Subscription(String orgId, String planCode, Cadence cadence, Subsc
         dunning = dunning == null ? DunningState.NONE : dunning;
     }
 
-    public static Subscription selected(String orgId, String planCode, Cadence cadence, PaymentMethodKind pm,
-                                        Instant now) {
-        return new Subscription(orgId, planCode, cadence, SubscriptionStatus.PENDING_ACTIVATION, pm, null, null, null,
-                null, null, null, false, null, null, null, DunningState.NONE, 0, null, now, 0);
+    public static Subscription selected(String orgId, String planCode, int planVersion, Cadence cadence,
+                                        PaymentMethodKind pm, Instant now) {
+        return new Subscription(orgId, planCode, planVersion, cadence, SubscriptionStatus.PENDING_ACTIVATION, pm,
+                null, null, null, null, null, null, false, null, null, null, DunningState.NONE, 0, null, now, 0);
     }
 
     public boolean hasPendingChange() {
@@ -41,26 +42,26 @@ public record Subscription(String orgId, String planCode, Cadence cadence, Subsc
     public Subscription withStripe(String customerId, String subscriptionId, String itemId, SubscriptionStatus s,
                                    Instant trialEnd, Instant periodStart, Instant periodEnd, boolean cancelAtEnd,
                                    Instant now) {
-        return new Subscription(orgId, planCode, cadence, s, paymentMethodKind, customerId, subscriptionId, itemId,
-                trialEnd, periodStart, periodEnd, cancelAtEnd, pendingPlanCode, pendingCadence, pendingEffectiveAt,
+        return new Subscription(orgId, planCode, planVersion, cadence, s, paymentMethodKind, customerId,
+                subscriptionId, itemId, trialEnd, periodStart, periodEnd, cancelAtEnd, pendingPlanCode, pendingCadence, pendingEffectiveAt,
                 dunning, failedPaymentAttempts, nextPaymentAttemptAt, now, version);
     }
 
-    public Subscription withPlan(String code, Cadence c, Instant now) {
-        return new Subscription(orgId, code, c, status, paymentMethodKind, stripeCustomerId, stripeSubscriptionId,
+    public Subscription withPlan(String code, int v, Cadence c, Instant now) {
+        return new Subscription(orgId, code, v, c, status, paymentMethodKind, stripeCustomerId, stripeSubscriptionId,
                 stripeItemId, trialEndsAt, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd, null, null, null,
                 dunning, failedPaymentAttempts, nextPaymentAttemptAt, now, version);
     }
 
     public Subscription withPending(String code, Cadence c, Instant effectiveAt, Instant now) {
-        return new Subscription(orgId, planCode, cadence, status, paymentMethodKind, stripeCustomerId,
+        return new Subscription(orgId, planCode, planVersion, cadence, status, paymentMethodKind, stripeCustomerId,
                 stripeSubscriptionId, stripeItemId, trialEndsAt, currentPeriodStart, currentPeriodEnd,
                 cancelAtPeriodEnd, code, c, effectiveAt, dunning, failedPaymentAttempts, nextPaymentAttemptAt, now,
                 version);
     }
 
     public Subscription withCancelAtPeriodEnd(boolean cancel, Instant now) {
-        return new Subscription(orgId, planCode, cadence, status, paymentMethodKind, stripeCustomerId,
+        return new Subscription(orgId, planCode, planVersion, cadence, status, paymentMethodKind, stripeCustomerId,
                 stripeSubscriptionId, stripeItemId, trialEndsAt, currentPeriodStart, currentPeriodEnd, cancel,
                 pendingPlanCode, pendingCadence, pendingEffectiveAt, dunning, failedPaymentAttempts,
                 nextPaymentAttemptAt, now, version);
@@ -68,7 +69,7 @@ public record Subscription(String orgId, String planCode, Cadence cadence, Subsc
 
     public Subscription withDunning(DunningState d, SubscriptionStatus s, int attempts, Instant nextAttempt,
                                     Instant now) {
-        return new Subscription(orgId, planCode, cadence, s, paymentMethodKind, stripeCustomerId,
+        return new Subscription(orgId, planCode, planVersion, cadence, s, paymentMethodKind, stripeCustomerId,
                 stripeSubscriptionId, stripeItemId, trialEndsAt, currentPeriodStart, currentPeriodEnd,
                 cancelAtPeriodEnd, pendingPlanCode, pendingCadence, pendingEffectiveAt, d, attempts, nextAttempt, now,
                 version);

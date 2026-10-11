@@ -115,6 +115,18 @@ at:
       # identity.role.granted / revoked (S236: org_member mirrors identity). Off in tests without a broker.
       enabled: ${SELLER_CONSUMERS_ENABLED:true}
       identity-topic: ${IDENTITY_EVENTS_TOPIC:at.identity.events}
+      # S296 reward metrics: delivered shipments (sales, orders), completed bookings, live offers (listings).
+      orders-topic: ${ORDER_EVENTS_TOPIC:at.order.events}
+      bookings-topic: ${BOOKINGS_EVENTS_TOPIC:at.bookings.events}
+      offers-topic: ${OFFERS_EVENTS_TOPIC:at.offers.events}
+    # S292–S297: plans, trials, credits and rewards are ours; Stripe Billing executes the charges.
+    billing:
+      # Reconcile the plan catalogue with Stripe at startup (adopt make stripe-setup prices, create missing ones).
+      sync-on-startup: ${PLAN_SYNC_ON_STARTUP:true}
+      # Feature flag: withhold plan fees from settlement transfers (payments) for opted-in organisations.
+      collect-from-earnings: ${COLLECT_PLAN_FEES_FROM_EARNINGS:false}
+      payments-url: ${PAYMENTS_URL:http://localhost:8105}
+      timeout: ${PAYMENTS_TIMEOUT:10s}
     # S206 metered billing: usage sources (service token of the seller-service client, scopes
     # inventory:storage.read ads:spend.read ai:usage.read) and the daily metering run.
     metering:
@@ -133,4 +145,8 @@ at:
       activation-retry-interval: ${ACTIVATION_RETRY_INTERVAL:10m}
       # Daily: meters the two previous UTC days (late usage is picked up; re-runs only send differences).
       metering-cron: ${METERING_CRON:0 20 1 * * *}
+      # Daily: every live reward rule for every organisation (days since approval, windows without events).
+      rewards-cron: ${REWARDS_CRON:0 40 2 * * *}
+      grant-retry-interval: ${GRANT_RETRY_INTERVAL:15m}
+      earnings-interval: ${EARNINGS_COLLECTION_INTERVAL:5m}
       zone: ${JOBS_ZONE:UTC}

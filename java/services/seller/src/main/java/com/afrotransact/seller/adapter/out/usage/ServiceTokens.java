@@ -38,12 +38,12 @@ public class ServiceTokens {
         this.clock = clock;
     }
 
-    boolean enabled() {
+    public boolean enabled() {
         return clientSecret != null && !clientSecret.isBlank();
     }
 
     /** A valid bearer token, fetching a new one when needed. */
-    String token() {
+    public String token() {
         lock.lock();
         try {
             Instant now = clock.instant();

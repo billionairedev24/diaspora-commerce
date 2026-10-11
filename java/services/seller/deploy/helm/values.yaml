@@ -48,6 +48,9 @@ workloadIdentity:
 extraEnv:
   MEDIA_BASE_URL: http://media:8080
   GEO_URL: http://geo:8080
+  # Plan fees collected from settlement earnings (S297): off until payments implements the withholding (S298).
+  PAYMENTS_URL: http://payments:8080
+  COLLECT_PLAN_FEES_FROM_EARNINGS: "false"
   SELLER_LIVE_COUNTRIES: US
 nodeSelector: {}
 tolerations: []

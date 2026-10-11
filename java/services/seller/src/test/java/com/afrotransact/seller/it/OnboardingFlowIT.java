@@ -297,9 +297,16 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(customer).startsWith("cus_");
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/customers")).anySatisfy(b -> assertThat(b)
                 .contains("metadata[org_id]=" + orgId));
+        // The Price comes from our catalogue (seller_growth v1, created or adopted on first use), the trial from the
+        // plan version: trial_end = activation + 30 days.
+        String price = jdbc.sql("select stripe_price_id from plan_version_price where plan_code = 'seller_growth' "
+                + "and version = 1 and cadence = 'QUARTERLY'").query(String.class).single();
+        assertThat(price).startsWith("price_");
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/subscriptions")).anySatisfy(b -> assertThat(b)
-                .contains("customer=" + customer, "trial_period_days=30",
-                        "metadata[plan_lookup_key]=seller_growth_quarterly"));
+                .contains("customer=" + customer, "items[0][price]=" + price, "trial_end=",
+                        "metadata[plan_code]=seller_growth", "metadata[plan_version]=1",
+                        "metadata[cadence]=QUARTERLY")
+                .doesNotContain("trial_period_days"));
         assertThat(StripeStub.requests(STRIPE, "POST", "/v1/payment_methods/pm_card_visa/attach")).isNotEmpty();
         assertThat(events(SellerEvents.SUBSCRIPTION_CHANGED, orgId)).isEqualTo(1);
         assertThat(lastEvent(SellerEvents.SUBSCRIPTION_CHANGED, orgId).path("change").asString())

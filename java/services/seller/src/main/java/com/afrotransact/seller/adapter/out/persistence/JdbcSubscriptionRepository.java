@@ -5,13 +5,16 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.DunningState;
 import com.afrotransact.seller.domain.PaymentMethodKind;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.domain.SubscriptionStatus;
+import com.afrotransact.seller.domain.TrialSource;
 import com.afrotransact.seller.port.SubscriptionRepository;
+import com.afrotransact.seller.port.SubscriptionTerms;
 import com.afrotransact.platform.web.error.ConflictException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -28,12 +31,13 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
     @Override
     public boolean insert(Subscription s) {
         return jdbc.sql("""
-                insert into subscription (org_id, plan_code, cadence, status, payment_method_kind, updated_at, version)
-                values (:org, :plan, :cadence, :status, :pm, :at, 0)
+                insert into subscription (org_id, plan_code, plan_version, cadence, status, payment_method_kind,
+                                          updated_at, version)
+                values (:org, :plan, :planVersion, :cadence, :status, :pm, :at, 0)
                 on conflict (org_id) do nothing
                 """)
                 .param("org", s.orgId()).param("plan", s.planCode()).param("cadence", s.cadence().name())
-                .param("status", s.status().name())
+                .param("planVersion", s.planVersion()).param("status", s.status().name())
                 .param("pm", s.paymentMethodKind() == null ? null : s.paymentMethodKind().name())
                 .param("at", Sql.ts(s.updatedAt()))
                 .update() == 1;
@@ -42,7 +46,7 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
     @Override
     public Subscription update(Subscription s) {
         int rows = jdbc.sql("""
-                update subscription set plan_code = :plan, cadence = :cadence, status = :status,
+                update subscription set plan_code = :plan, plan_version = :planVersion, cadence = :cadence, status = :status,
                        payment_method_kind = :pm, stripe_customer_id = :customer, stripe_subscription_id = :sub,
                        stripe_item_id = :item, trial_ends_at = :trial, current_period_start = :start,
                        current_period_end = :end, cancel_at_period_end = :cancel, pending_plan_code = :pendingPlan,
@@ -51,7 +55,8 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                        updated_at = :at, version = version + 1
                 where org_id = :org and version = :version
                 """)
-                .param("plan", s.planCode()).param("cadence", s.cadence().name()).param("status", s.status().name())
+                .param("plan", s.planCode()).param("planVersion", s.planVersion()).param("cadence", s.cadence().name())
+                .param("status", s.status().name())
                 .param("pm", s.paymentMethodKind() == null ? null : s.paymentMethodKind().name())
                 .param("customer", s.stripeCustomerId()).param("sub", s.stripeSubscriptionId())
                 .param("item", s.stripeItemId()).param("trial", Sql.ts(s.trialEndsAt()))
@@ -106,10 +111,62 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                 """).param("now", Sql.ts(now)).param("limit", limit).query(this::map).list();
     }
 
+    @Override
+    public SubscriptionTerms terms(String orgId) {
+        return jdbc.sql("select * from subscription where org_id = :o").param("o", orgId).query((rs, n) -> {
+            String source = rs.getString("trial_source");
+            String campaign = rs.getString("campaign_id");
+            return new SubscriptionTerms(orgId, Sql.integer(rs, "trial_days_override"),
+                    rs.getString("trial_override_reason"), rs.getString("trial_override_note"),
+                    rs.getString("trial_override_by"), campaign == null ? null : UUID.fromString(campaign),
+                    source == null ? null : TrialSource.valueOf(source), rs.getLong("credit_balance_cents"),
+                    rs.getBoolean("collect_from_earnings"));
+        }).optional().orElse(SubscriptionTerms.none(orgId));
+    }
+
+    @Override
+    public void setTrialOverride(String orgId, Integer days, String reason, String note, String actor) {
+        jdbc.sql("update subscription set trial_days_override = :d, trial_override_reason = :r, "
+                + "trial_override_note = :n, trial_override_by = :a where org_id = :o").param("d", days)
+                .param("r", reason).param("n", note).param("a", actor).param("o", orgId).update();
+    }
+
+    @Override
+    public void setTrialSource(String orgId, TrialSource source, UUID campaignId) {
+        jdbc.sql("update subscription set trial_source = :s, campaign_id = :c where org_id = :o")
+                .param("s", source == null ? null : source.name()).param("c", campaignId).param("o", orgId)
+                .update();
+    }
+
+    @Override
+    public void setCreditBalance(String orgId, long creditCents) {
+        jdbc.sql("update subscription set credit_balance_cents = :c where org_id = :o").param("c", creditCents)
+                .param("o", orgId).update();
+    }
+
+    @Override
+    public void setCollectFromEarnings(String orgId, boolean on) {
+        jdbc.sql("update subscription set collect_from_earnings = :on where org_id = :o").param("on", on)
+                .param("o", orgId).update();
+    }
+
+    @Override
+    public List<Subscription> onOtherVersions(String planCode, int version) {
+        return jdbc.sql("select * from subscription where plan_code = :p and plan_version <> :v "
+                + "and status <> 'CANCELED' order by org_id").param("p", planCode).param("v", version)
+                .query(this::map).list();
+    }
+
+    @Override
+    public List<Subscription> page(String afterOrgId, int limit) {
+        return jdbc.sql("select * from subscription where org_id > :after order by org_id limit :limit")
+                .param("after", afterOrgId == null ? "" : afterOrgId).param("limit", limit).query(this::map).list();
+    }
+
     private Subscription map(ResultSet rs, int n) throws SQLException {
         String pm = rs.getString("payment_method_kind");
         String pendingCadence = rs.getString("pending_cadence");
-        return new Subscription(rs.getString("org_id"), rs.getString("plan_code"),
+        return new Subscription(rs.getString("org_id"), rs.getString("plan_code"), rs.getInt("plan_version"),
                 Cadence.valueOf(rs.getString("cadence")), SubscriptionStatus.valueOf(rs.getString("status")),
                 pm == null ? null : PaymentMethodKind.valueOf(pm), rs.getString("stripe_customer_id"),
                 rs.getString("stripe_subscription_id"), rs.getString("stripe_item_id"),

@@ -9,6 +9,7 @@ import java.util.TreeMap;
 import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.RequirementError;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
+import com.afrotransact.seller.domain.StripePriceFacts;
 import com.afrotransact.seller.port.InvoiceSnapshot;
 import com.afrotransact.seller.port.SubscriptionSnapshot;
 import tools.jackson.databind.JsonNode;
@@ -57,9 +58,10 @@ final class StripeJson {
         if (end == null) {
             end = epoch(item.path("current_period_end"));
         }
+        JsonNode price = item.path("price");
         return new SubscriptionSnapshot(text(s, "id"), idOf(s.path("customer")), text(s, "status"), text(item, "id"),
-                item.path("price").path("lookup_key").asString(null), epoch(s.path("trial_end")), start, end,
-                s.path("cancel_at_period_end").asBoolean(false));
+                idOf(price), price.isObject() ? text(price, "lookup_key") : null, epoch(s.path("trial_end")), start,
+                end, s.path("cancel_at_period_end").asBoolean(false));
     }
 
     InvoiceSnapshot invoice(JsonNode i) {
@@ -71,7 +73,8 @@ final class StripeJson {
                 text(i, "billing_reason"), i.path("amount_due").asLong(0), i.path("amount_paid").asLong(0),
                 i.path("currency").asString("usd"), epoch(i.path("period_start")), epoch(i.path("period_end")),
                 text(i, "hosted_invoice_url"), text(i, "invoice_pdf"), i.path("attempt_count").asInt(0),
-                epoch(i.path("next_payment_attempt")), epoch(i.path("created")), lines(i.path("lines").path("data")));
+                epoch(i.path("next_payment_attempt")), epoch(i.path("created")), lines(i.path("lines").path("data")),
+                i.path("ending_balance").isNumber() ? i.path("ending_balance").asLong() : null);
     }
 
     /**
@@ -102,6 +105,20 @@ final class StripeJson {
                     epoch(l.path("period").path("start")), epoch(l.path("period").path("end"))));
         }
         return out;
+    }
+
+    /** A Price object (Stripe's JSON) as the facts the catalogue sync compares. */
+    StripePriceFacts price(JsonNode p) {
+        JsonNode r = p.path("recurring");
+        String interval = r.path("interval").asString("month");
+        int count = r.path("interval_count").asInt(1);
+        int months = switch (interval) {
+            case "year" -> 12 * count;
+            case "month" -> count;
+            default -> 0;
+        };
+        return new StripePriceFacts(text(p, "id"), idOf(p.path("product")), p.path("unit_amount").asLong(0),
+                p.path("currency").asString("usd"), months, p.path("active").asBoolean(false), text(p, "lookup_key"));
     }
 
     static String text(JsonNode n, String field) {

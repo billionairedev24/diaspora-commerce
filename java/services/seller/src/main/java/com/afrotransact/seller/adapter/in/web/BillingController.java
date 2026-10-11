@@ -53,6 +53,12 @@ class BillingController {
         return plans.list(kind == null ? null : Inputs.kind(kind)).stream().map(PlanResponse::of).toList();
     }
 
+    @Operation(summary = "Plans this organisation may choose (public, invited, and its current plan) (owner / finance)")
+    @GetMapping("/v1/orgs/{orgId}/billing/plans")
+    List<PlanResponse> listOrgPlans(@PathVariable String orgId) {
+        return plans.listFor(orgId).stream().map(PlanResponse::of).toList();
+    }
+
     @Operation(summary = "Billing page: plan, next charge or trial end, pending change, payment methods")
     @GetMapping("/v1/orgs/{orgId}/billing")
     BillingResponse billingOverview(@PathVariable String orgId) {

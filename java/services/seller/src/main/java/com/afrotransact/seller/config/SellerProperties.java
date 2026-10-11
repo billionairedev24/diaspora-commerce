@@ -17,10 +17,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param metering      usage sources of metered billing (S206) and the seller-service client credentials
  * @param retailOrgId   AfroTransact Retail (1P merchant of record): no plan, no metered billing, no suspension
  * @param geo           geo-service (geocoding ship-from addresses, delivery zones for AfroTransact pickup, S255)
+ * @param billing       plan catalogue sync and the optional collection of plan fees from earnings
  */
 @ConfigurationProperties(prefix = "at.seller")
 public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto crypto, Media media, Jobs jobs,
-                               Metering metering, String retailOrgId, Geo geo) {
+                               Metering metering, String retailOrgId, Geo geo, Billing billing) {
 
     public SellerProperties {
         liveCountries = liveCountries == null || liveCountries.isEmpty() ? List.of("US") : List.copyOf(liveCountries);
@@ -31,6 +32,25 @@ public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto
         metering = metering == null ? new Metering(null, null, null, null, null, null, null) : metering;
         retailOrgId = retailOrgId == null || retailOrgId.isBlank() ? "org_afrotransact_retail" : retailOrgId.trim();
         geo = geo == null ? new Geo(null, null, null) : geo;
+        billing = billing == null ? new Billing(null, null, null, null) : billing;
+    }
+
+    /**
+     * Plan billing switches.
+     *
+     * @param syncOnStartup        reconcile the plan catalogue with Stripe when the service starts (default true)
+     * @param collectFromEarnings  feature flag (default false): plan fees may be withheld from settlement transfers
+     *                             (payments) and posted as a Stripe balance credit, for opted-in organisations
+     * @param paymentsUrl          payments-service base URL (only called when the flag is on)
+     */
+    public record Billing(Boolean syncOnStartup, Boolean collectFromEarnings, String paymentsUrl, Duration timeout) {
+
+        public Billing {
+            syncOnStartup = syncOnStartup == null ? Boolean.TRUE : syncOnStartup;
+            collectFromEarnings = collectFromEarnings == null ? Boolean.FALSE : collectFromEarnings;
+            paymentsUrl = paymentsUrl == null ? "http://localhost:8105" : paymentsUrl;
+            timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
+        }
     }
 
     /**

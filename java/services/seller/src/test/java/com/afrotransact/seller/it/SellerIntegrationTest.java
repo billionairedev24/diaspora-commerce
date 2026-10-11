@@ -64,7 +64,8 @@ import tools.jackson.databind.json.JsonMapper;
     "at.seller.stripe.secret-key=sk_test_seller_it",
     "at.seller.stripe.connect-webhook-secret=" + SellerIntegrationTest.CONNECT_SECRET,
     "at.seller.stripe.billing-webhook-secret=" + SellerIntegrationTest.BILLING_SECRET,
-    "at.seller.stripe.max-network-retries=0"
+    "at.seller.stripe.max-network-retries=0",
+    "at.seller.billing.sync-on-startup=false"
 })
 @ActiveProfiles("local")
 @Import(TestActors.class)
@@ -144,6 +145,11 @@ abstract class SellerIntegrationTest {
 
     /** Same, offering products or products and services (S215: BOTH). */
     String approvedSeller(String user, String planCode, Cadence cadence, Offering offering) {
+        return approvedSeller(user, planCode, cadence, offering, null);
+    }
+
+    /** Same, with a trial campaign's promo code on the plan step (S295). */
+    String approvedSeller(String user, String planCode, Cadence cadence, Offering offering, String promoCode) {
         TestActors.as(TestActors.applicant(user));
         onboarding.start(OrgKind.SELLER);
         onboarding.saveStep(OnboardingStep.BUSINESS, StepInput.business(new BusinessSection(offering,
@@ -158,7 +164,7 @@ abstract class SellerIntegrationTest {
         onboarding.saveStep(OnboardingStep.PAYOUTS, StepInput.payouts(new PayoutInput("Store LLC", "checking",
                 "Chase", "021000021", "000123456789", "000123456789", null)));
         onboarding.saveStep(OnboardingStep.PLAN, StepInput.plan(new PlanSection(planCode, cadence,
-                PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030)));
+                PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030, promoCode)));
         List<ComplianceSection.ServiceLicence> services = offering.includesServices()
                 ? List.of(new ComplianceSection.ServiceLicence("Gele tying", false, null, null, null, null))
                 : List.of();

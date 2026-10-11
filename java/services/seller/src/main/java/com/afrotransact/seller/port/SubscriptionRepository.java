@@ -3,8 +3,10 @@ package com.afrotransact.seller.port;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.afrotransact.seller.domain.Subscription;
+import com.afrotransact.seller.domain.TrialSource;
 
 /** One subscription per organisation. */
 public interface SubscriptionRepository {
@@ -25,4 +27,21 @@ public interface SubscriptionRepository {
 
     /** Subscriptions whose pending plan / cadence change is due at {@code now}. */
     List<Subscription> dueChanges(Instant now, int limit);
+
+    /** Trial override, campaign, credit balance and earnings opt-in (none when there is no subscription row). */
+    SubscriptionTerms terms(String orgId);
+
+    void setTrialOverride(String orgId, Integer days, String reason, String note, String actor);
+
+    void setTrialSource(String orgId, TrialSource source, UUID campaignId);
+
+    void setCreditBalance(String orgId, long creditCents);
+
+    void setCollectFromEarnings(String orgId, boolean on);
+
+    /** Subscriptions on {@code planCode} at a version other than {@code version}. */
+    List<Subscription> onOtherVersions(String planCode, int version);
+
+    /** Every subscription (daily reward evaluation), in pages ordered by org id. */
+    List<Subscription> page(String afterOrgId, int limit);
 }

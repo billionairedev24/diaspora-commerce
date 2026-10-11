@@ -144,7 +144,7 @@ class DefaultApplicationRulesTest {
 
     @Test
     void planNeedsMatchingKindAndAValidCardForPaidPlans() {
-        Plan growth = new Plan("seller_growth", OrgKind.SELLER, "Seller Growth", null, 3900, 30, List.of(), 1);
+        Plan growth = Plan.standard("seller_growth", OrgKind.SELLER, "Seller Growth", null, 3900, 30, List.of(), 1);
         PlanSection expired = new PlanSection("seller_growth", Cadence.QUARTERLY, PaymentMethodKind.CARD, "pm_1",
                 "visa", "4242", 9, 2026);
         assertThat(rules.plan(expired, Optional.of(growth), ApplicationData.empty(), SELLER, true).errors())
