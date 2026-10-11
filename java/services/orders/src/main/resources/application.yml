@@ -41,7 +41,7 @@ spring:
   temporal:
     connection:
       target: ${TEMPORAL_TARGET:localhost:7233}
-    namespace: ${TEMPORAL_NAMESPACE:default}
+    namespace: ${TEMPORAL_NAMESPACE:afrotransact}   # local docker-compose namespace (DEFAULT_NAMESPACE); dev/uat/prod override
     start-workers: ${TEMPORAL_START_WORKERS:true}
     workers-auto-discovery:
       packages:
