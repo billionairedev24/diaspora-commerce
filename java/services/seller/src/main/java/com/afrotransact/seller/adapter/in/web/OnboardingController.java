@@ -8,6 +8,7 @@ import com.afrotransact.seller.adapter.in.web.OnboardingDtos.LaunchListRequest;
 import com.afrotransact.seller.adapter.in.web.OnboardingDtos.LaunchListResponse;
 import com.afrotransact.seller.adapter.in.web.OnboardingDtos.MarketsResponse;
 import com.afrotransact.seller.adapter.in.web.OnboardingDtos.StartRequest;
+import com.afrotransact.seller.application.ApplicationPrefill;
 import com.afrotransact.seller.application.OnboardingService;
 import com.afrotransact.seller.application.StartResult;
 import com.afrotransact.seller.application.StripeOnboardingService;
@@ -38,13 +39,15 @@ class OnboardingController {
 
     @Operation(summary = "Start or resume my application",
             description = "Creates a DRAFT organisation (caller = owner) and application; name, email and phone are "
-                    + "prefilled from the token's identity claims and listed in prefilledFields. Returns 200 with the "
-                    + "existing draft when one exists (resume).")
+                    + "prefilled from the token's identity claims (phone, store name and business address from prefill "
+                    + "when given) and listed in prefilledFields. Returns 200 with the existing draft when one exists "
+                    + "(resume).")
     @ApiResponse(responseCode = "201", description = "Created")
     @ApiResponse(responseCode = "200", description = "Existing application resumed")
     @PostMapping("/v1/applications/me")
     ResponseEntity<ApplicationResponse> startApplication(@Valid @RequestBody StartRequest body) {
-        StartResult r = onboarding.start(Inputs.kind(body.kind()));
+        StartResult r = onboarding.start(Inputs.kind(body.kind()),
+                body.prefill() == null ? ApplicationPrefill.none() : body.prefill().toPrefill());
         return ResponseEntity.status(r.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(ApplicationResponse.of(r.application()));
     }

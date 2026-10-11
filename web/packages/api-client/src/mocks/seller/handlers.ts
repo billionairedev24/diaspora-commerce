@@ -23,7 +23,9 @@ import {
   FulfilmentKindSchema,
   type ListingRow,
   type ModuleKey,
+  type OnboardingForm,
   type OnboardingStatus,
+  type OrgKind,
   type OrgSummary,
   ParcelSchema,
   PickupWindowSchema,
@@ -558,9 +560,159 @@ const fbaGate: HubGate = (request, _area, level) => {
   }
 };
 
+/* ── Start selling (S286): the application's first two steps, prefilled from the account ── */
+
+const ACCOUNT_ADDRESS = { line1: '4410 Bellaire Blvd', line2: null, city: 'Houston', state: 'TX', postalCode: '77025', country: 'US' };
+
+function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
+  return {
+    business: { offering: kind === 'PROVIDER' ? 'SERVICES' : null, entityType: null, country: null, storeName: null, contactEmail: db.user.email, phone: '+17132490142', website: null },
+    details: { legalFirstName: db.user.firstName, legalLastName: db.user.lastName, legalName: null, address: { ...ACCOUNT_ADDRESS } },
+    prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],
+    editable: true
+  };
+}
+
+function onboardingOf(db: MockSellerDb, org: MockOrg): OnboardingForm {
+  const form = db.onboarding[org.id] ?? accountForm(db, org.kind);
+  return { ...form, editable: org.status === 'DRAFT' || org.status === 'INFO_REQUESTED' };
+}
+
+function onboardingStatus(db: MockSellerDb, org: MockOrg): OnboardingStatus {
+  const steps: [string, string][] = [
+    ['ACCOUNT', 'Account & email verified'], ['BUSINESS', 'Business details & TIN'], ['OWNERS', 'Owners'], ['STRIPE', 'Stripe verification'],
+    ['PAYOUTS', 'Payouts'], ['PLAN', 'Plan'], ['COMPLIANCE', 'Catalog, permits & licences']
+  ];
+  const info = org.status === 'INFO_REQUESTED';
+  const draft = org.status === 'DRAFT';
+  return {
+    orgId: org.id, kind: org.kind, status: org.status, reference: draft ? 'APP-40001' : 'APP-30131',
+    steps: [
+      ...steps.map(([key, label]) => ({ key, label, state: draft ? ('TODO' as const) : key === 'COMPLIANCE' && info ? ('ACTION' as const) : ('DONE' as const) })),
+      { key: 'REVIEW', label: 'AfroTransact staff review', state: draft ? 'TODO' : info ? 'ACTION' : org.status === 'APPROVED' ? 'DONE' : 'WAITING' }
+    ],
+    requestedItems: info ? ['Harris County food establishment permit (current)'] : [],
+    canResume: info || draft,
+    form: onboardingOf(db, org)
+  };
+}
+
+/** Keeps a prefilled marker only while the answer is unchanged. */
+function keepPrefilled(before: OnboardingForm, after: OnboardingForm): string[] {
+  const value = (f: OnboardingForm, key: string): string => {
+    const [section, field] = key.split('.') as ['business' | 'details', string];
+    return JSON.stringify((f[section] as Record<string, unknown>)[field] ?? null);
+  };
+  return before.prefilled.filter((k) => value(before, k) === value(after, k));
+}
+
+const StartBody = z.object({ kind: z.enum(['SELLER', 'PROVIDER']) });
+const BusinessBody = z.object({
+  offering: z.enum(['PRODUCTS', 'SERVICES', 'BOTH']).optional(),
+  entityType: z.enum(['SOLE_PROPRIETOR', 'SINGLE_MEMBER_LLC', 'MULTI_MEMBER_LLC', 'CORPORATION', 'PARTNERSHIP', 'NONPROFIT']).optional(),
+  country: z.string().optional(),
+  storeName: z.string().optional(),
+  contactEmail: z.string().optional(),
+  phone: z.string().optional(),
+  website: z.string().optional()
+});
+const DetailsBody = z.object({
+  legalFirstName: z.string().optional(),
+  legalLastName: z.string().optional(),
+  legalName: z.string().optional(),
+  address: z.object({ line1: z.string(), line2: z.string().optional(), city: z.string(), state: z.string(), postalCode: z.string(), country: z.string().optional() }).optional()
+});
+const blankToNull = (v: string | undefined): string | null => (v && v.trim() ? v.trim() : null);
+
+/** The applicant's DRAFT organisation (or the active one), for the wizard's autosave. */
+function applicantOrg(db: MockSellerDb): MockOrg {
+  const org = db.orgs.find((o) => o.id === db.activeOrgId) ?? db.orgs[0];
+  if (!org) throw new SellerProblem(404, 'NOT_FOUND', 'Not found', 'You haven’t started an application yet.');
+  if (org.status !== 'DRAFT' && org.status !== 'INFO_REQUESTED') throw new SellerProblem(409, 'CONFLICT', 'Conflict', 'This application can’t be edited.');
+  return org;
+}
+
+function plain(fn: (db: MockSellerDb, request: Request) => unknown | Promise<unknown>, status = 200) {
+  return async ({ request }: { request: Request }) => {
+    try {
+      return HttpResponse.json((await fn(getSellerDb(), request)) as JsonBodyType, { status });
+    } catch (e) {
+      if (e instanceof SellerProblem) return problemResponse(e);
+      throw e;
+    }
+  };
+}
+
 export const sellerHandlers = [
   /* ── Shell ── */
-  http.get(`${W}/session`, route((ctx) => session(ctx))),
+  http.get(
+    `${W}/session`,
+    plain((db, request): SellerSession => {
+      if (db.orgs.length > 0) return session(context(request));
+      // A customer who has not applied: no organisation, no navigation (Seller Center starts the application).
+      return {
+        user: { ...db.user, initials: (db.user.firstName[0] ?? '') + (db.user.lastName[0] ?? '') },
+        orgs: [], activeOrg: null, portal: null, approved: false, navGroups: [], landing: 'onboarding', accessNote: 'Least-privilege by role · enforced server-side'
+      };
+    })
+  ),
+  http.post(
+    `${W}/onboarding`,
+    async ({ request }: { request: Request }) => {
+      try {
+        const db = getSellerDb();
+        const { kind } = await body(request, StartBody);
+        const approved = db.orgs.find((o) => o.kind === kind && o.status === 'APPROVED');
+        if (approved) throw new SellerProblem(409, 'ALREADY_APPROVED', 'Already approved', `${approved.name} is already approved. Open ${kind === 'PROVIDER' ? 'Provider Hub' : 'Seller Center'} instead.`);
+        const existing = db.orgs.find((o) => o.status !== 'APPROVED' && o.status !== 'REJECTED');
+        if (existing && existing.kind !== kind) throw new SellerProblem(409, 'APPLICATION_EXISTS', 'Application in progress', `You already have a ${existing.kind.toLowerCase()} application; continue that one.`);
+        if (existing) {
+          db.activeOrgId = existing.id;
+          return HttpResponse.json(onboardingStatus(db, existing) as JsonBodyType, { status: 200 });
+        }
+        const org: MockOrg = { id: 'org_new', kind, name: kind === 'PROVIDER' ? 'Your provider application' : 'Your seller application', status: 'DRAFT', role: kind === 'PROVIDER' ? 'provider.owner' : 'seller.owner' };
+        db.orgs.push(org);
+        db.activeOrgId = org.id;
+        db.onboarding[org.id] = accountForm(db, kind);
+        return HttpResponse.json(onboardingStatus(db, org) as JsonBodyType, { status: 201 });
+      } catch (e) {
+        if (e instanceof SellerProblem) return problemResponse(e);
+        throw e;
+      }
+    }
+  ),
+  http.put(
+    `${W}/onboarding/business`,
+    plain(async (db, request) => {
+      const b = await body(request, BusinessBody);
+      if (b.storeName !== undefined && b.storeName.trim().length === 1) throw invalid({ storeName: '2 to 80 characters' });
+      const org = applicantOrg(db);
+      const before = onboardingOf(db, org);
+      const after: OnboardingForm = {
+        ...before,
+        business: { offering: b.offering ?? null, entityType: b.entityType ?? null, country: blankToNull(b.country)?.toUpperCase() ?? null, storeName: blankToNull(b.storeName),
+          contactEmail: blankToNull(b.contactEmail), phone: blankToNull(b.phone), website: blankToNull(b.website) }
+      };
+      db.onboarding[org.id] = { ...after, prefilled: keepPrefilled(before, after) };
+      return onboardingStatus(db, org);
+    })
+  ),
+  http.put(
+    `${W}/onboarding/business-details`,
+    plain(async (db, request) => {
+      const d = await body(request, DetailsBody);
+      const org = applicantOrg(db);
+      const before = onboardingOf(db, org);
+      const a = d.address;
+      const after: OnboardingForm = {
+        ...before,
+        details: { legalFirstName: blankToNull(d.legalFirstName), legalLastName: blankToNull(d.legalLastName), legalName: blankToNull(d.legalName),
+          address: a ? { line1: a.line1, line2: blankToNull(a.line2), city: a.city, state: a.state.toUpperCase(), postalCode: a.postalCode, country: a.country ?? 'US' } : null }
+      };
+      db.onboarding[org.id] = { ...after, prefilled: keepPrefilled(before, after) };
+      return onboardingStatus(db, org);
+    })
+  ),
   http.put(
     `${W}/session/active-org`,
     route(async (ctx) => {
@@ -573,23 +725,7 @@ export const sellerHandlers = [
   ),
   http.get(
     `${W}/onboarding`,
-    route((ctx): OnboardingStatus => {
-      const org = ctx.org;
-      const steps: [string, string][] = [
-        ['ACCOUNT', 'Account & email verified'], ['BUSINESS', 'Business details & TIN'], ['OWNERS', 'Owners'], ['STRIPE', 'Stripe verification'],
-        ['PAYOUTS', 'Payouts'], ['PLAN', 'Plan'], ['COMPLIANCE', 'Catalog, permits & licences']
-      ];
-      const info = org.status === 'INFO_REQUESTED';
-      return {
-        orgId: org.id, kind: org.kind, status: org.status, reference: 'APP-30131',
-        steps: [
-          ...steps.map(([key, label]) => ({ key, label, state: key === 'COMPLIANCE' && info ? ('ACTION' as const) : ('DONE' as const) })),
-          { key: 'REVIEW', label: 'AfroTransact staff review', state: info ? 'ACTION' : org.status === 'APPROVED' ? 'DONE' : 'WAITING' }
-        ],
-        requestedItems: info ? ['Harris County food establishment permit (current)'] : [],
-        canResume: info || org.status === 'DRAFT'
-      };
-    })
+    route((ctx): OnboardingStatus => onboardingStatus(ctx.db, ctx.org))
   ),
   http.get(
     `${W}/compliance`,

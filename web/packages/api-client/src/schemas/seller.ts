@@ -52,6 +52,43 @@ export const SellerSessionSchema = z.object({
 });
 export type SellerSession = z.infer<typeof SellerSessionSchema>;
 
+export const OnboardingOfferingSchema = z.enum(['PRODUCTS', 'SERVICES', 'BOTH']);
+export type OnboardingOffering = z.infer<typeof OnboardingOfferingSchema>;
+export const OnboardingEntityTypeSchema = z.enum(['SOLE_PROPRIETOR', 'SINGLE_MEMBER_LLC', 'MULTI_MEMBER_LLC', 'CORPORATION', 'PARTNERSHIP', 'NONPROFIT']);
+export type OnboardingEntityType = z.infer<typeof OnboardingEntityTypeSchema>;
+
+export const OnboardingAddressSchema = z.object({
+  line1: nullableString,
+  line2: nullableString,
+  city: nullableString,
+  state: nullableString,
+  postalCode: nullableString,
+  country: nullableString
+});
+export type OnboardingAddress = z.infer<typeof OnboardingAddressSchema>;
+
+/** The wizard's first two steps (S286); `prefilled` names the answers taken from the account and still unchanged. */
+export const OnboardingFormSchema = z.object({
+  business: z.object({
+    offering: OnboardingOfferingSchema.nullable(),
+    entityType: OnboardingEntityTypeSchema.nullable(),
+    country: nullableString,
+    storeName: nullableString,
+    contactEmail: nullableString,
+    phone: nullableString,
+    website: nullableString
+  }),
+  details: z.object({
+    legalFirstName: nullableString,
+    legalLastName: nullableString,
+    legalName: nullableString,
+    address: OnboardingAddressSchema.nullable()
+  }),
+  prefilled: z.array(z.string()),
+  editable: z.boolean()
+});
+export type OnboardingForm = z.infer<typeof OnboardingFormSchema>;
+
 export const OnboardingStatusSchema = z.object({
   orgId: z.string(),
   kind: OrgKindSchema,
@@ -59,9 +96,29 @@ export const OnboardingStatusSchema = z.object({
   reference: nullableString,
   steps: z.array(z.object({ key: z.string(), label: z.string(), state: z.enum(['DONE', 'TODO', 'ACTION', 'WAITING', 'BLOCKED']) })),
   requestedItems: z.array(z.string()),
-  canResume: z.boolean()
+  canResume: z.boolean(),
+  form: OnboardingFormSchema
 });
 export type OnboardingStatus = z.infer<typeof OnboardingStatusSchema>;
+
+/** PUT /v1/seller/onboarding/business. */
+export interface OnboardingBusinessInput {
+  offering?: OnboardingOffering;
+  entityType?: OnboardingEntityType;
+  country?: string;
+  storeName?: string;
+  contactEmail?: string;
+  phone?: string;
+  website?: string;
+}
+
+/** PUT /v1/seller/onboarding/business-details. */
+export interface OnboardingDetailsInput {
+  legalFirstName?: string;
+  legalLastName?: string;
+  legalName?: string;
+  address?: { line1: string; line2?: string; city: string; state: string; postalCode: string; country?: string };
+}
 
 export const ComplianceStatusSchema = z.enum(['COMPLIANT', 'ACTION_NEEDED', 'RESTRICTED_SOON', 'RESTRICTED', 'VERIFYING']);
 export const ComplianceSummarySchema = z.object({

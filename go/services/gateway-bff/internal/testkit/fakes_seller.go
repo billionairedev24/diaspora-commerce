@@ -135,8 +135,87 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			"members": []map[string]any{{"userId": "user-1", "roleKey": o.Role, "createdAt": "2026-04-10T12:00:00Z"},
 				{"userId": "user-2-abcdef", "roleKey": strings.Split(o.Role, ".")[0] + ".finance", "createdAt": "2026-05-01T12:00:00Z"}}})
 	})
+	mux.HandleFunc("POST /v1/me/roles/{role}", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		u.mu.Lock()
+		u.ApplicantRoles = append(u.ApplicantRoles, r.PathValue("role"))
+		u.mu.Unlock()
+		writeJSON(w, 200, map[string]any{"id": subjectOf(r)})
+	})
+	mux.HandleFunc("POST /v1/applications/me", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if u.Application != nil {
+			if u.Application["kind"] != b["kind"] {
+				problem(w, 409, "seller.application-exists", "You already have a "+strings.ToLower(fmt.Sprint(u.Application["kind"]))+" application; continue that one", nil)
+				return
+			}
+			writeJSON(w, 200, u.Application)
+			return
+		}
+		pre, _ := b["prefill"].(map[string]any)
+		u.LastPrefill = pre
+		prefilled := []string{"business.contactEmail", "businessDetails.legalFirstName", "businessDetails.legalLastName", "payouts.accountHolderName"}
+		business := map[string]any{"contactEmail": "adaeze@example.com"}
+		details := map[string]any{"legalFirstName": "Adaeze", "legalLastName": "Nwosu"}
+		if pre["phone"] != nil {
+			business["phone"], prefilled = pre["phone"], append(prefilled, "business.phone")
+		}
+		if pre["storeName"] != nil {
+			business["storeName"], prefilled = pre["storeName"], append(prefilled, "business.storeName")
+		}
+		if pre["address"] != nil {
+			details["address"], prefilled = pre["address"], append(prefilled, "businessDetails.address")
+		}
+		u.Application = map[string]any{"id": "app-new", "reference": "APP-40001", "orgId": "org_new", "kind": b["kind"], "status": "DRAFT",
+			"currentStep": "business", "steps": []string{"business", "business-details", "owners", "stripe-verification", "payouts", "plan", "catalog-compliance"},
+			"completedSteps": []string{}, "requestedItems": []string{}, "prefilledFields": prefilled, "business": business, "businessDetails": details}
+		writeJSON(w, 201, u.Application)
+	})
+	mux.HandleFunc("PUT /v1/applications/me/steps/{step}", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if u.Application == nil {
+			problem(w, 404, "seller.no-application", "You haven't started an application yet", nil)
+			return
+		}
+		switch r.PathValue("step") {
+		case "business":
+			if s, _ := b["storeName"].(string); len(s) == 1 {
+				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"storeName": "2 to 80 characters"}})
+				return
+			}
+			u.Application["business"] = b
+		case "business-details":
+			u.Application["businessDetails"] = b
+		}
+		writeJSON(w, 200, u.Application)
+	})
 	mux.HandleFunc("GET /v1/applications/me", func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		u.mu.Lock()
+		app, none := u.Application, u.NoApplication
+		u.mu.Unlock()
+		if app != nil {
+			writeJSON(w, 200, app)
+			return
+		}
+		if none {
+			problem(w, 404, "seller.no-application", "You haven't started an application yet", nil)
 			return
 		}
 		writeJSON(w, 200, map[string]any{"id": "app-1", "reference": "APP-30131", "orgId": PendingOrgID, "kind": "SELLER", "status": "INFO_REQUESTED",

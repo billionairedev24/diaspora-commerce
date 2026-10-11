@@ -4211,6 +4211,12 @@ export interface operations {
                 login_hint?: string;
                 /** @description Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code. */
                 invitation?: string;
+                /**
+                 * @description Entry point the person came from (S286). `sell` ("Start selling") and `provide` ("Offer your services")
+                 *     brand identity's sign-up page for it ("Create your account to start selling") and add the seller or
+                 *     provider applicant role to the account it creates. Other values are dropped.
+                 */
+                intent?: "sell" | "provide";
             };
             header?: never;
             path?: never;

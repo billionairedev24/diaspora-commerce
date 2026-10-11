@@ -18,13 +18,15 @@ import (
 type SellerDeps struct {
 	Orgs    port.OrgAccessClient
 	Sellers port.SellerServiceClient
-	Catalog port.SellerCatalogClient
-	Stock   port.StockClient
-	Offers  port.OffersClient
-	Media   port.MediaClient
-	Orders  port.SellerOrdersClient
-	Carrier port.CarrierClient
-	Payouts port.PayoutsClient
+	// Addresses is the identity address book: its default address prefills the business address (S286). Optional.
+	Addresses port.AddressBook
+	Catalog   port.SellerCatalogClient
+	Stock     port.StockClient
+	Offers    port.OffersClient
+	Media     port.MediaClient
+	Orders    port.SellerOrdersClient
+	Carrier   port.CarrierClient
+	Payouts   port.PayoutsClient
 	// Fees reads payments' fee schedules with the BFF's service token (nil: the Fees page answers 503).
 	Fees       port.FeesClient
 	Storefront port.StorefrontClient
@@ -214,6 +216,11 @@ type SellerShellService interface {
 	Session(ctx context.Context, c *domain.Caller) (domain.SellerSession, error)
 	SetActiveOrg(ctx context.Context, c *domain.Caller, orgID string) (domain.SellerSession, error)
 	Onboarding(ctx context.Context, c *domain.Caller) (domain.OnboardingStatus, error)
+	// StartOnboarding is "Start selling" / "Offer your services" for a signed-in account: idempotent, created is
+	// false when an existing application was resumed.
+	StartOnboarding(ctx context.Context, c *domain.Caller, kind string) (st domain.OnboardingStatus, created bool, err error)
+	SaveOnboardingBusiness(ctx context.Context, c *domain.Caller, in domain.OnboardingBusinessInput) (domain.OnboardingStatus, error)
+	SaveOnboardingDetails(ctx context.Context, c *domain.Caller, in domain.OnboardingDetailsInput) (domain.OnboardingStatus, error)
 	Compliance(ctx context.Context, c *domain.Caller) (domain.ComplianceSummary, error)
 }
 
@@ -288,7 +295,9 @@ func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.
 	sc, err := s.r.contextFor(ctx, c, m)
 	if err != nil {
 		if p, ok := domain.AsProblem(err); ok && p.Code == domain.CodeNoOrganisation {
-			return out, nil // a customer who has not applied yet: no organisation, no navigation
+			// An applicant whose DRAFT organisation identity does not know yet, or a customer who has not applied.
+			out, _ = s.applicantSession(ctx, c, out)
+			return out, nil
 		}
 		return out, err
 	}
@@ -357,6 +366,17 @@ var onboardingSteps = []struct{ key, label string }{
 	{"REVIEW", "AfroTransact staff review"},
 }
 
+// sellerStepLabels names the seller service's wizard steps (business, business-details, …; normalised to upper case
+// with underscores). "review" is not listed: the staff review row is always appended last.
+var sellerStepLabels = map[string]string{
+	"BUSINESS": "Your business", "BUSINESS_DETAILS": "Business details & TIN", "STRIPE_VERIFICATION": "Stripe verification",
+	"CATALOG_COMPLIANCE": "Catalog, permits & licences",
+}
+
+func stepKey(k string) string {
+	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(k), "-", "_"))
+}
+
 func (s *sellerShellImpl) Onboarding(ctx context.Context, c *domain.Caller) (domain.OnboardingStatus, error) {
 	if err := requireCustomer(c); err != nil {
 		return domain.OnboardingStatus{}, err
@@ -365,10 +385,21 @@ func (s *sellerShellImpl) Onboarding(ctx context.Context, c *domain.Caller) (dom
 	if err != nil {
 		return domain.OnboardingStatus{}, mapErr("seller", err)
 	}
+	return onboardingStatus(a), nil
+}
+
+// onboardingStatus is the checklist and the wizard form of an application.
+func onboardingStatus(a port.SellerApplication) domain.OnboardingStatus {
 	status := orgStatus(a.Status)
 	labels := map[string]string{}
 	for _, st := range onboardingSteps {
 		labels[st.key] = st.label
+	}
+	// The seller service's own step keys (business-details, …) take their labels when it sends them.
+	if len(a.Steps) > 0 {
+		for k, v := range sellerStepLabels {
+			labels[k] = v
+		}
 	}
 	keys := a.Steps
 	if len(keys) == 0 {
@@ -378,16 +409,19 @@ func (s *sellerShellImpl) Onboarding(ctx context.Context, c *domain.Caller) (dom
 	}
 	done := map[string]bool{}
 	for _, k := range a.CompletedSteps {
-		done[strings.ToUpper(k)] = true
+		done[stepKey(k)] = true
 	}
 	out := domain.OnboardingStatus{OrgID: a.OrgID, Kind: normalizeKind(a.Kind), Status: status, Reference: strPtr(a.Reference),
 		Steps: []domain.OnboardingStep{}, RequestedItems: append([]string{}, a.RequestedItems...),
-		CanResume: status == "DRAFT" || status == "INFO_REQUESTED"}
+		CanResume: status == "DRAFT" || status == "INFO_REQUESTED", Form: onboardingForm(a, status)}
 	if out.Kind == "" {
 		out.Kind = domain.OrgKindSeller
 	}
 	for _, k := range keys {
-		ku := strings.ToUpper(k)
+		ku := stepKey(k)
+		if ku == "REVIEW" {
+			continue // appended below
+		}
 		label := labels[ku]
 		if label == "" {
 			label = strings.ToUpper(ku[:1]) + strings.ToLower(strings.ReplaceAll(ku[1:], "_", " "))
@@ -413,7 +447,7 @@ func (s *sellerShellImpl) Onboarding(ctx context.Context, c *domain.Caller) (dom
 		review = "ACTION"
 	}
 	out.Steps = append(out.Steps, domain.OnboardingStep{Key: "REVIEW", Label: labels["REVIEW"], State: review})
-	return out, nil
+	return out
 }
 
 func (s *sellerShellImpl) Compliance(ctx context.Context, c *domain.Caller) (domain.ComplianceSummary, error) {

@@ -51,10 +51,67 @@ export interface paths {
         };
         /**
          * Onboarding application status (the only screen before approval)
-         * @description seller `GET /v1/applications/me`.
+         * @description seller `GET /v1/applications/me`, with the first two steps' answers (`form`) for the wizard.
          */
         get: operations["getOnboarding"];
         put?: never;
+        /**
+         * Start selling / offer services — start or resume the application (idempotent, S286)
+         * @description "Start selling" and "Offer your services" for a signed-in account, with no second sign-up. Adds the seller
+         *     (or provider) applicant role to the account (identity `POST /v1/me/roles/{seller|provider}-applicant`,
+         *     idempotent), then starts the application (seller `POST /v1/applications/me`), which creates the DRAFT
+         *     organisation with the caller as owner. A second call resumes the same application (200).
+         *
+         *     The application is prefilled from what the account already has: name and email (identity profile),
+         *     phone (verified or not), the default address-book address (business address) and, when the person
+         *     already belongs to an organisation, its name as the store name. Prefilled fields are listed in
+         *     `form.prefilled`.
+         *
+         *     403 `STAFF_CANNOT_APPLY`: staff accounts (platform roles) cannot apply; they use a personal account.
+         *     409 `ALREADY_APPROVED`: the account already has an approved organisation of that kind (open Seller Center
+         *     or Provider Hub instead). 409 `APPLICATION_EXISTS`: the account already has an application of the other
+         *     kind.
+         */
+        post: operations["startOnboarding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/business": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Autosave the wizard's "Your business" step
+         * @description seller `PUT /v1/applications/me/steps/business`; only the fields present are validated.
+         */
+        put: operations["saveOnboardingBusiness"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/business-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Autosave the wizard's "About you" step (legal name and address)
+         * @description seller `PUT /v1/applications/me/steps/business-details`; only the fields present are validated.
+         */
+        put: operations["saveOnboardingDetails"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1363,7 +1420,8 @@ export interface components {
              *     EXPORT_EXPIRED; team: LAST_OWNER, INVALID_ROLE,
              *     OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
              *     INVITATION_EMAIL_MISMATCH; AfroTransact pickup (S255): PICKUP_ORG_NOT_APPROVED, PICKUP_INVALID_HOURS,
-             *     PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA.
+             *     PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA; start selling (S286): STAFF_CANNOT_APPLY,
+             *     ALREADY_APPROVED, APPLICATION_EXISTS.
              */
             code?: string;
             errors?: {
@@ -1439,6 +1497,75 @@ export interface components {
             }[];
             requestedItems: string[];
             canResume: boolean;
+            form: components["schemas"]["OnboardingForm"];
+        };
+        StartOnboardingRequest: {
+            kind: components["schemas"]["OrgKind"];
+        };
+        /** @enum {string|null} */
+        OnboardingOffering: "PRODUCTS" | "SERVICES" | "BOTH" | null;
+        /** @enum {string|null} */
+        OnboardingEntityType: "SOLE_PROPRIETOR" | "SINGLE_MEMBER_LLC" | "MULTI_MEMBER_LLC" | "CORPORATION" | "PARTNERSHIP" | "NONPROFIT" | null;
+        OnboardingAddress: {
+            line1: string | null;
+            line2: string | null;
+            city: string | null;
+            /** @description Two-letter state code */
+            state: string | null;
+            postalCode: string | null;
+            /** @description ISO 3166-1 alpha-2 */
+            country: string | null;
+        };
+        /**
+         * @description The answers to the wizard's first two steps (S286). `prefilled` lists the fields filled in from the account
+         *     and still unchanged: business.contactEmail, business.phone, business.storeName, details.legalFirstName,
+         *     details.legalLastName, details.address.
+         */
+        OnboardingForm: {
+            business: {
+                offering: components["schemas"]["OnboardingOffering"];
+                entityType: components["schemas"]["OnboardingEntityType"];
+                country: string | null;
+                storeName: string | null;
+                contactEmail: string | null;
+                /** @description E.164 */
+                phone: string | null;
+                website: string | null;
+            };
+            details: {
+                legalFirstName: string | null;
+                legalLastName: string | null;
+                /** @description Registered business name (not for sole proprietors) */
+                legalName: string | null;
+                address: components["schemas"]["OnboardingAddress"] | null;
+            };
+            prefilled: string[];
+            /** @description Whether the applicant can still change answers (DRAFT or INFO_REQUESTED) */
+            editable: boolean;
+        };
+        OnboardingBusinessInput: {
+            /** @enum {string} */
+            offering?: "PRODUCTS" | "SERVICES" | "BOTH";
+            /** @enum {string} */
+            entityType?: "SOLE_PROPRIETOR" | "SINGLE_MEMBER_LLC" | "MULTI_MEMBER_LLC" | "CORPORATION" | "PARTNERSHIP" | "NONPROFIT";
+            country?: string;
+            storeName?: string;
+            contactEmail?: string;
+            phone?: string;
+            website?: string;
+        };
+        OnboardingDetailsInput: {
+            legalFirstName?: string;
+            legalLastName?: string;
+            legalName?: string;
+            address?: {
+                line1: string;
+                line2?: string;
+                city: string;
+                state: string;
+                postalCode: string;
+                country?: string;
+            };
         };
         /** @enum {string} */
         ComplianceStatus: "COMPLIANT" | "ACTION_NEEDED" | "RESTRICTED_SOON" | "RESTRICTED" | "VERIFYING";
@@ -2798,6 +2925,105 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    startOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartOnboardingRequest"];
+            };
+        };
+        responses: {
+            /** @description Existing application resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            /** @description Application started */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveOnboardingBusiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingBusinessInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveOnboardingDetails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingDetailsInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

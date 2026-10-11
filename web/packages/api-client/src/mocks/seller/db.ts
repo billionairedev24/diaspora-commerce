@@ -12,6 +12,7 @@ import {
   type EarningsRow,
   type Invoice,
   type ListingRow,
+  type OnboardingForm,
   type OrgKind,
   type OrgStatus,
   type Payout,
@@ -58,6 +59,8 @@ export interface MockSellerDb {
   policy: Required<CancellationPolicyInput>;
   earnings: EarningsRow[];
   pages: Record<string, PublicPage>;
+  /** Answers of the onboarding wizard's first two steps per organisation (S286); prefilled from the account on start. */
+  onboarding: Record<string, OnboardingForm>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
   shipFrom: Record<string, ShipFromAddress[]>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
@@ -366,6 +369,7 @@ function freshDb(now: Date): MockSellerDb {
       { id: PENDING_ORG, kind: 'SELLER', name: 'Bonwire Weavers', status: 'INFO_REQUESTED', role: 'seller.owner' }
     ],
     activeOrgId: SELLER_ORG,
+    onboarding: {},
     orders: seedOrders(now),
     labels: {},
     exports: [],

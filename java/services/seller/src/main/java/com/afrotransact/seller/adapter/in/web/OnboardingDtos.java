@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.afrotransact.seller.application.ApplicationPrefill;
 import com.afrotransact.seller.application.ApplicationView;
 import com.afrotransact.seller.application.DocumentRef;
 import com.afrotransact.seller.application.PiiLevel;
@@ -25,6 +26,7 @@ import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.StripeVerification;
 import com.afrotransact.seller.domain.TimelineEntry;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -36,7 +38,21 @@ final class OnboardingDtos {
     }
 
     @Schema(name = "StartApplicationRequest")
-    record StartRequest(@Schema(allowableValues = {"SELLER", "PROVIDER"}) @NotBlank String kind) {
+    record StartRequest(@Schema(allowableValues = {"SELLER", "PROVIDER"}) @NotBlank String kind,
+                        @Valid PrefillRequest prefill) {
+    }
+
+    @Schema(name = "ApplicationPrefill", description = "What the caller's account already knows (sent by "
+            + "gateway-bff from identity's profile and address book). Used only when the application is created, and "
+            + "only where the token's claims have nothing: name, email, phone (verified or not), the default address "
+            + "as the business address, and a store name.")
+    record PrefillRequest(@Size(max = 80) String givenName, @Size(max = 80) String familyName,
+                          @Size(max = 254) String email, @Size(max = 32) String phone,
+                          @Size(max = 120) String storeName, Address address) {
+
+        ApplicationPrefill toPrefill() {
+            return new ApplicationPrefill(givenName, familyName, email, phone, storeName, address);
+        }
     }
 
     @Schema(name = "LaunchListRequest")

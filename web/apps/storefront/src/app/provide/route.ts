@@ -1,8 +1,8 @@
-import { redirect } from 'next/navigation';
+import { startSelling } from '@/lib/sell/route';
 
-import { sellerCenterUrl } from '@/lib/config';
+export const dynamic = 'force-dynamic';
 
-/** "provide" entry point → Seller Center onboarding (signed-in shoppers get the provider role added there). */
-export function GET(): never {
-  redirect(`${sellerCenterUrl()}/onboarding?role=provider`);
+/** "Offer your services": Provider Hub onboarding, signed in (single sign-on), or identity's create-account page first. */
+export function GET(): Promise<never> {
+  return startSelling('provider');
 }

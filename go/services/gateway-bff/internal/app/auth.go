@@ -42,6 +42,9 @@ type LoginRequest struct {
 	LoginHint string
 	// Invitation is an organisation invitation token: the account created on identity's sign-up page joins it.
 	Invitation string
+	// Intent is the Seller Center entry point: "sell" (Start selling) or "provide" (Offer your services). Identity
+	// brands its pages for it and adds the applicant role to an account created there; other values are dropped.
+	Intent string
 }
 
 // AuthOptions configure sign-in.
@@ -188,6 +191,9 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, in
 	}
 	if inv := strings.TrimSpace(in.Invitation); inv != "" && len(inv) <= maxInvitation {
 		q.Set("invitation", inv)
+	}
+	if in.Intent == "sell" || in.Intent == "provide" {
+		q.Set("intent", in.Intent)
 	}
 	return strings.TrimSuffix(a.o.IdentityPublicURL, "/") + "/oauth2/authorize?" + q.Encode(), nil
 }

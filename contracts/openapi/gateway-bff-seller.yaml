@@ -103,11 +103,79 @@ paths:
       operationId: getOnboarding
       security: [{sessionCookie: []}]
       summary: Onboarding application status (the only screen before approval)
-      description: seller `GET /v1/applications/me`.
+      description: seller `GET /v1/applications/me`, with the first two steps' answers (`form`) for the wizard.
       responses:
         '200': {description: Application status, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Shell]
+      operationId: startOnboarding
+      security: [{sessionCookie: []}]
+      summary: Start selling / offer services — start or resume the application (idempotent, S286)
+      description: |
+        "Start selling" and "Offer your services" for a signed-in account, with no second sign-up. Adds the seller
+        (or provider) applicant role to the account (identity `POST /v1/me/roles/{seller|provider}-applicant`,
+        idempotent), then starts the application (seller `POST /v1/applications/me`), which creates the DRAFT
+        organisation with the caller as owner. A second call resumes the same application (200).
+
+        The application is prefilled from what the account already has: name and email (identity profile),
+        phone (verified or not), the default address-book address (business address) and, when the person
+        already belongs to an organisation, its name as the store name. Prefilled fields are listed in
+        `form.prefilled`.
+
+        403 `STAFF_CANNOT_APPLY`: staff accounts (platform roles) cannot apply; they use a personal account.
+        409 `ALREADY_APPROVED`: the account already has an approved organisation of that kind (open Seller Center
+        or Provider Hub instead). 409 `APPLICATION_EXISTS`: the account already has an application of the other
+        kind.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StartOnboardingRequest'}}}
+      responses:
+        '200': {description: Existing application resumed, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '201': {description: Application started, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/business:
+    put:
+      tags: [Shell]
+      operationId: saveOnboardingBusiness
+      security: [{sessionCookie: []}]
+      summary: Autosave the wizard's "Your business" step
+      description: seller `PUT /v1/applications/me/steps/business`; only the fields present are validated.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingBusinessInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/business-details:
+    put:
+      tags: [Shell]
+      operationId: saveOnboardingDetails
+      security: [{sessionCookie: []}]
+      summary: Autosave the wizard's "About you" step (legal name and address)
+      description: seller `PUT /v1/applications/me/steps/business-details`; only the fields present are validated.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingDetailsInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/compliance:
@@ -1471,7 +1539,8 @@ components:
             EXPORT_EXPIRED; team: LAST_OWNER, INVALID_ROLE,
             OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
             INVITATION_EMAIL_MISMATCH; AfroTransact pickup (S255): PICKUP_ORG_NOT_APPROVED, PICKUP_INVALID_HOURS,
-            PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA.
+            PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA; start selling (S286): STAFF_CANNOT_APPLY,
+            ALREADY_APPROVED, APPLICATION_EXISTS.
         errors:
           type: object
           additionalProperties: {type: string}
@@ -1550,7 +1619,7 @@ components:
     OnboardingStepState: {type: string, enum: [DONE, TODO, ACTION, WAITING, BLOCKED]}
     OnboardingStatus:
       type: object
-      required: [orgId, kind, status, reference, steps, requestedItems, canResume]
+      required: [orgId, kind, status, reference, steps, requestedItems, canResume, form]
       properties:
         orgId: {type: string}
         kind: {$ref: '#/components/schemas/OrgKind'}
@@ -1567,6 +1636,84 @@ components:
               state: {$ref: '#/components/schemas/OnboardingStepState'}
         requestedItems: {type: array, items: {type: string}}
         canResume: {type: boolean}
+        form: {$ref: '#/components/schemas/OnboardingForm'}
+    StartOnboardingRequest:
+      type: object
+      required: [kind]
+      properties:
+        kind: {$ref: '#/components/schemas/OrgKind'}
+    OnboardingOffering: {type: [string, 'null'], enum: [PRODUCTS, SERVICES, BOTH, null]}
+    OnboardingEntityType:
+      type: [string, 'null']
+      enum: [SOLE_PROPRIETOR, SINGLE_MEMBER_LLC, MULTI_MEMBER_LLC, CORPORATION, PARTNERSHIP, NONPROFIT, null]
+    OnboardingAddress:
+      type: object
+      required: [line1, line2, city, state, postalCode, country]
+      properties:
+        line1: {type: [string, 'null']}
+        line2: {type: [string, 'null']}
+        city: {type: [string, 'null']}
+        state: {type: [string, 'null'], description: Two-letter state code}
+        postalCode: {type: [string, 'null']}
+        country: {type: [string, 'null'], description: ISO 3166-1 alpha-2}
+    OnboardingForm:
+      type: object
+      description: |
+        The answers to the wizard's first two steps (S286). `prefilled` lists the fields filled in from the account
+        and still unchanged: business.contactEmail, business.phone, business.storeName, details.legalFirstName,
+        details.legalLastName, details.address.
+      required: [business, details, prefilled, editable]
+      properties:
+        business:
+          type: object
+          required: [offering, entityType, country, storeName, contactEmail, phone, website]
+          properties:
+            offering: {$ref: '#/components/schemas/OnboardingOffering'}
+            entityType: {$ref: '#/components/schemas/OnboardingEntityType'}
+            country: {type: [string, 'null']}
+            storeName: {type: [string, 'null']}
+            contactEmail: {type: [string, 'null']}
+            phone: {type: [string, 'null'], description: E.164}
+            website: {type: [string, 'null']}
+        details:
+          type: object
+          required: [legalFirstName, legalLastName, legalName, address]
+          properties:
+            legalFirstName: {type: [string, 'null']}
+            legalLastName: {type: [string, 'null']}
+            legalName: {type: [string, 'null'], description: Registered business name (not for sole proprietors)}
+            address:
+              oneOf:
+                - {$ref: '#/components/schemas/OnboardingAddress'}
+                - {type: 'null'}
+        prefilled: {type: array, items: {type: string}}
+        editable: {type: boolean, description: 'Whether the applicant can still change answers (DRAFT or INFO_REQUESTED)'}
+    OnboardingBusinessInput:
+      type: object
+      properties:
+        offering: {type: string, enum: [PRODUCTS, SERVICES, BOTH]}
+        entityType: {type: string, enum: [SOLE_PROPRIETOR, SINGLE_MEMBER_LLC, MULTI_MEMBER_LLC, CORPORATION, PARTNERSHIP, NONPROFIT]}
+        country: {type: string, minLength: 2, maxLength: 2}
+        storeName: {type: string, maxLength: 120}
+        contactEmail: {type: string, maxLength: 254}
+        phone: {type: string, maxLength: 32}
+        website: {type: string, maxLength: 200}
+    OnboardingDetailsInput:
+      type: object
+      properties:
+        legalFirstName: {type: string, maxLength: 80}
+        legalLastName: {type: string, maxLength: 80}
+        legalName: {type: string, maxLength: 160}
+        address:
+          type: object
+          required: [line1, city, state, postalCode]
+          properties:
+            line1: {type: string, maxLength: 120}
+            line2: {type: string, maxLength: 120}
+            city: {type: string, maxLength: 80}
+            state: {type: string, maxLength: 2}
+            postalCode: {type: string, maxLength: 10}
+            country: {type: string, minLength: 2, maxLength: 2}
     ComplianceStatus: {type: string, enum: [COMPLIANT, ACTION_NEEDED, RESTRICTED_SOON, RESTRICTED, VERIFYING]}
     ComplianceSummary:
       type: object

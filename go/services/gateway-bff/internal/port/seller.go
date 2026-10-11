@@ -34,6 +34,8 @@ type Member struct {
 	Permissions []string    `json:"permissions"`
 	Orgs        []MemberOrg `json:"orgs"`
 	Landing     string      `json:"landing"`
+	// Phone is the account's mobile number (E.164), verified or not.
+	Phone string `json:"phone"`
 }
 
 // Invitation is identity's OrgInvitation (also the body of POST /v1/orgs/{orgId}/invitations).
@@ -100,6 +102,9 @@ type OrgAccessClient interface {
 	// LookupInvitation is public (no bearer); the token travels in the body.
 	LookupInvitation(ctx context.Context, token string) (InvitationPreview, error)
 	AcceptInvitation(ctx context.Context, bearer, token string) (AcceptedInvitation, error)
+	// BecomeApplicant adds the seller or provider applicant role to the caller's account (identity
+	// POST /v1/me/roles/{seller|provider}-applicant, idempotent). kind is SELLER or PROVIDER.
+	BecomeApplicant(ctx context.Context, bearer, kind string) error
 }
 
 // ---------------------------------------------------------------- seller service
@@ -133,6 +138,61 @@ type SellerApplication struct {
 	Steps          []string `json:"steps"`
 	CompletedSteps []string `json:"completedSteps"`
 	RequestedItems []string `json:"requestedItems"`
+	// PrefilledFields lists answers taken from the account and still unchanged (business.phone, …).
+	PrefilledFields []string                  `json:"prefilledFields"`
+	Business        *SellerApplicationBiz     `json:"business"`
+	BusinessDetails *SellerApplicationDetails `json:"businessDetails"`
+}
+
+// SellerApplicationBiz is seller's BusinessSection (step "business").
+type SellerApplicationBiz struct {
+	Offering     string `json:"offering,omitempty"`
+	EntityType   string `json:"entityType,omitempty"`
+	Country      string `json:"country,omitempty"`
+	StoreName    string `json:"storeName,omitempty"`
+	ContactEmail string `json:"contactEmail,omitempty"`
+	Phone        string `json:"phone,omitempty"`
+	Website      string `json:"website,omitempty"`
+}
+
+// SellerApplicationDetails is the part of seller's BusinessDetails the wizard edits, plus the fields it carries over
+// unchanged when saving (the step replaces the whole section).
+type SellerApplicationDetails struct {
+	LegalFirstName                string        `json:"legalFirstName,omitempty"`
+	LegalLastName                 string        `json:"legalLastName,omitempty"`
+	LegalName                     string        `json:"legalName,omitempty"`
+	DBA                           string        `json:"dba,omitempty"`
+	DateOfBirth                   string        `json:"dateOfBirth,omitempty"`
+	StateOfFormation              string        `json:"stateOfFormation,omitempty"`
+	DateOfFormation               string        `json:"dateOfFormation,omitempty"`
+	Address                       *SellerPostal `json:"address,omitempty"`
+	FormationDocumentAssetID      string        `json:"formationDocumentAssetId,omitempty"`
+	IRSDeterminationLetterAssetID string        `json:"irsDeterminationLetterAssetId,omitempty"`
+}
+
+// SellerPostal is seller's Address.
+type SellerPostal struct {
+	Line1      string `json:"line1,omitempty"`
+	Line2      string `json:"line2,omitempty"`
+	City       string `json:"city,omitempty"`
+	State      string `json:"state,omitempty"`
+	PostalCode string `json:"postalCode,omitempty"`
+	Country    string `json:"country,omitempty"`
+}
+
+// ApplicationPrefill is seller's ApplicationPrefill: what the account knows beyond the token's claims.
+type ApplicationPrefill struct {
+	GivenName  string        `json:"givenName,omitempty"`
+	FamilyName string        `json:"familyName,omitempty"`
+	Email      string        `json:"email,omitempty"`
+	Phone      string        `json:"phone,omitempty"`
+	StoreName  string        `json:"storeName,omitempty"`
+	Address    *SellerPostal `json:"address,omitempty"`
+}
+
+// AddressBook reads the signed-in person's saved addresses (identity GET /v1/me/addresses).
+type AddressBook interface {
+	Addresses(ctx context.Context, bearer string) ([]IdentityAddress, error)
 }
 
 // AccountHealthRequirement is one open Stripe requirement.
@@ -309,6 +369,10 @@ type SellerServiceClient interface {
 	ShipFromClient
 	Org(ctx context.Context, bearer, orgID string) (SellerOrg, error)
 	Application(ctx context.Context, bearer string) (SellerApplication, error)
+	// StartApplication starts (created=true) or resumes the caller's application (seller POST /v1/applications/me).
+	StartApplication(ctx context.Context, bearer, kind string, prefill ApplicationPrefill) (a SellerApplication, created bool, err error)
+	// SaveApplicationStep autosaves one wizard step (seller PUT /v1/applications/me/steps/{step}).
+	SaveApplicationStep(ctx context.Context, bearer, step string, body any) (SellerApplication, error)
 	AccountHealth(ctx context.Context, bearer, orgID string) (AccountHealth, error)
 	Billing(ctx context.Context, bearer, orgID string) (SellerBilling, error)
 	Invoices(ctx context.Context, bearer, orgID string) ([]SellerInvoice, error)

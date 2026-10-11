@@ -11,6 +11,8 @@ export interface LoginOptions {
   loginHint?: string;
   /** Organisation invitation token: the account created on identity's sign-up page joins the organisation. */
   invitation?: string;
+  /** "Start selling" / "Offer your services": identity's pages use the seller or provider copy. */
+  intent?: 'sell' | 'provide';
 }
 
 /** Hosted sign-in start; `returnTo` is an absolute URL on this app (where the browser lands signed in). */
@@ -19,6 +21,7 @@ export function loginHref(returnTo: string, opts: LoginOptions = {}): string {
   if (opts.prompt) q.set('prompt', opts.prompt);
   if (opts.loginHint) q.set('login_hint', opts.loginHint);
   if (opts.invitation) q.set('invitation', opts.invitation);
+  if (opts.intent) q.set('intent', opts.intent);
   return `${BFF_BASE_PATH}/v1/auth/login?${q.toString()}`;
 }
 

@@ -147,6 +147,40 @@ class HostedPagesIT {
     }
 
     @Test
+    void startSellingSignUpIsBrandedForSellersAndAddsTheApplicantRole() {
+        BrowserSession s = new BrowserSession(base());
+        String email = "kofi." + UUID.randomUUID() + "@example.com";
+        String verifier = BrowserSession.randomVerifier();
+        HttpResponse<String> start = s.get(authorizeUrl(SELLER_CALLBACK, "&prompt=create&intent=sell", verifier));
+        assertThat(BrowserSession.location(start)).endsWith("/signup");
+        HttpResponse<String> page = s.get(base() + "/signup");
+        assertThat(page.body()).contains("Create your account to start selling", "Already have an account? Sign in",
+                "We’ll take you straight to your seller application", "Seller Center");
+
+        HttpResponse<String> created = s.form("/signup", signUpForm(BrowserSession.csrfOf(page.body()), email));
+        assertThat(BrowserSession.location(created)).endsWith("/signup/verify");
+        HttpResponse<String> verified = s.form("/signup/verify", Map.of("code", latestCode(email),
+                "_csrf", BrowserSession.csrfOf(s.get(base() + "/signup/verify").body())));
+        String resumed = BrowserSession.location(verified);
+        HttpResponse<String> issued = s.get(resumed.startsWith("http") ? resumed : base() + resumed);
+        assertThat(BrowserSession.location(issued)).startsWith(SELLER_CALLBACK + "?code=");
+        assertThat(jdbc.sql("""
+                select r.role_key from user_role r join user_account u on u.id = r.user_id where u.email = :e
+                """).param("e", email).query(String.class).list())
+                .containsExactlyInAnyOrder("account.customer", "account.seller_applicant");
+
+        // "Offer your services" has its own copy; an unknown intent (or one from another app) is ignored.
+        BrowserSession provider = new BrowserSession(base());
+        provider.get(authorizeUrl(SELLER_CALLBACK, "&prompt=create&intent=provide", BrowserSession.randomVerifier()));
+        assertThat(provider.get(base() + "/signup").body()).contains("Create your account to offer your services",
+                "Grow your bookings with the diaspora near you.");
+        BrowserSession shopper = new BrowserSession(base());
+        shopper.get(authorizeUrl(STOREFRONT_CALLBACK, "&prompt=create&intent=sell", BrowserSession.randomVerifier()));
+        assertThat(shopper.get(base() + "/signup").body()).contains("Create your AfroTransact account")
+                .doesNotContain("start selling");
+    }
+
+    @Test
     void signingInOnceSignsInEveryAppUntilRpInitiatedLogout() {
         BrowserSession s = new BrowserSession(base());
         String email = verifiedAccount();

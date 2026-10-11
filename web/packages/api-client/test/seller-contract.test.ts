@@ -18,6 +18,8 @@ import {
   type LabelPurchase,
   type ListingPage,
   type ListingRow,
+  type OnboardingBusinessInput,
+  type OnboardingDetailsInput,
   type OnboardingStatus,
   type PayoutsView,
   type ProductTypeSchema,
@@ -33,7 +35,7 @@ import {
   type TeamView
 } from '../src';
 import { type components } from '../src/generated/gateway-bff-seller';
-import { MOCK_ROLE_COOKIE, PENDING_ORG, PROVIDER_ORG, resetSellerDb, SELLER_ORG } from '../src/mocks/seller';
+import { getSellerDb, MOCK_ROLE_COOKIE, PENDING_ORG, PROVIDER_ORG, resetSellerDb, SELLER_ORG } from '../src/mocks/seller';
 import { handleSellerMockRequest } from '../src/mocks/seller-runtime';
 
 type S = components['schemas'];
@@ -48,6 +50,8 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<SellerSession>().toExtend<S['SellerSession']>();
     expectTypeOf<ComplianceSummary>().toExtend<S['ComplianceSummary']>();
     expectTypeOf<OnboardingStatus>().toExtend<S['OnboardingStatus']>();
+    expectTypeOf<OnboardingBusinessInput>().toExtend<S['OnboardingBusinessInput']>();
+    expectTypeOf<OnboardingDetailsInput>().toExtend<S['OnboardingDetailsInput']>();
     expectTypeOf<Dashboard>().toExtend<S['Dashboard']>();
     expectTypeOf<SellerOrderPage>().toExtend<S['SellerOrderPage']>();
     expectTypeOf<SellerOrderDetail>().toExtend<S['SellerOrderDetail']>();
@@ -170,6 +174,26 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     await expect(api.listListings({ page: 0, size: 25 })).rejects.toSatisfy((e) => isApiError(e) && e.code === 'NOT_APPROVED');
     await expect(api.getOnboarding()).resolves.toMatchObject({ status: 'INFO_REQUESTED', canResume: true });
     await api.setActiveOrg(SELLER_ORG);
+  });
+
+  it('starts selling once for a customer, prefilled from the account, and autosaves the first steps (S286)', async () => {
+    const api = client();
+    await expect(api.startOnboarding('SELLER')).rejects.toSatisfy((e) => isApiError(e) && e.code === 'ALREADY_APPROVED');
+    getSellerDb().orgs = [];
+    const none = await api.getSession();
+    expect(none.activeOrg).toBeNull();
+    const started = await api.startOnboarding('SELLER');
+    expect(started).toMatchObject({ status: 'DRAFT', form: { details: { legalFirstName: 'Titilayo', address: { city: 'Houston' } } } });
+    expect(started.form.prefilled).toContain('details.address');
+    await expect(api.startOnboarding('SELLER')).resolves.toMatchObject({ orgId: started.orgId });
+    await expect(api.startOnboarding('PROVIDER')).rejects.toSatisfy((e) => isApiError(e) && e.code === 'APPLICATION_EXISTS');
+    expect(keysOf(await api.getSession())).toEqual(['onboarding']);
+    await expect(api.saveOnboardingBusiness({ storeName: 'x' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+    const saved = await api.saveOnboardingBusiness({ offering: 'PRODUCTS', entityType: 'SOLE_PROPRIETOR', country: 'US', storeName: 'Titi Foods', contactEmail: 'titilayo@adeskitchen.com', phone: '+17132490142' });
+    expect(saved.form.prefilled).toEqual(['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName']);
+    const details = await api.saveOnboardingDetails({ legalFirstName: 'Titi', legalLastName: 'Adebayo', address: { line1: '1 Main St', city: 'Houston', state: 'tx', postalCode: '77002' } });
+    expect(details.form.details.address?.state).toBe('TX');
+    expect(details.form.prefilled).toEqual(['business.contactEmail', 'business.phone', 'details.legalLastName']);
   });
 
   it('turns AfroTransact pickup on per address and lets offers use it (S255)', async () => {

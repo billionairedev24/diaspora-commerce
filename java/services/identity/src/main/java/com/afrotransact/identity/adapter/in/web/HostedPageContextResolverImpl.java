@@ -12,7 +12,8 @@ import org.springframework.stereotype.Component;
 /**
  * Branding comes from the saved authorization request: the client id for the apps' own clients, and for the web BFF
  * ({@code gateway-bff}, one client for the three web apps) the origin of its registered redirect URI, which is the
- * app's own origin ({@code <app>/api/bff/v1/auth/oidc/callback}).
+ * app's own origin ({@code <app>/api/bff/v1/auth/oidc/callback}). Seller Center requests may add {@code intent}
+ * ({@code sell} or {@code provide}) for the "Start selling" / "Offer your services" copy.
  */
 @Component
 class HostedPageContextResolverImpl implements HostedPageContextResolver {
@@ -40,7 +41,17 @@ class HostedPageContextResolverImpl implements HostedPageContextResolver {
         };
         String hint = cut(param(saved, "login_hint"), MAX_HINT);
         String invitation = cut(param(saved, "invitation"), MAX_INVITATION);
-        return new HostedPageContext(app, clientId, appUrl, hint, invitation, saved != null);
+        return new HostedPageContext(app, clientId, appUrl, hint, invitation, saved != null,
+                intent(app, param(saved, "intent")));
+    }
+
+    /** "Start selling" / "Offer your services": only for Seller Center requests, other values are dropped. */
+    private static String intent(HostedApp app, String raw) {
+        if (app != HostedApp.SELLER || raw == null) {
+            return null;
+        }
+        String v = raw.toLowerCase(Locale.ROOT);
+        return HostedPageContext.SELL.equals(v) || HostedPageContext.PROVIDE.equals(v) ? v : null;
     }
 
     private HostedApp app(String clientId, String redirectUri) {

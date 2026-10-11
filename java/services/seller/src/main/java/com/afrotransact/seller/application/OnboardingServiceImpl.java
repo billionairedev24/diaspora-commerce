@@ -13,6 +13,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
+import com.afrotransact.seller.domain.Address;
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.ApplicationData;
 import com.afrotransact.seller.domain.ApplicationRules;
@@ -60,13 +61,19 @@ class OnboardingServiceImpl implements OnboardingService {
     static final String PREFILL_FIRST = "businessDetails.legalFirstName";
     static final String PREFILL_LAST = "businessDetails.legalLastName";
     static final String PREFILL_HOLDER = "payouts.accountHolderName";
+    static final String PREFILL_STORE = "business.storeName";
+    static final String PREFILL_ADDRESS = "businessDetails.address";
 
+    private static final int MAX_STORE_NAME = 120;
     private static final Pattern EMAIL = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]{2,}$");
     private static final Map<String, Function<ApplicationData, String>> PREFILLABLE = Map.of(
             PREFILL_EMAIL, d -> d.business() == null ? null : d.business().contactEmail(),
             PREFILL_PHONE, d -> d.business() == null ? null : d.business().phone(),
+            PREFILL_STORE, d -> d.business() == null ? null : d.business().storeName(),
             PREFILL_FIRST, d -> d.businessDetails() == null ? null : d.businessDetails().legalFirstName(),
             PREFILL_LAST, d -> d.businessDetails() == null ? null : d.businessDetails().legalLastName(),
+            PREFILL_ADDRESS, d -> d.businessDetails() == null || d.businessDetails().address() == null ? null
+                    : d.businessDetails().address().toString(),
             PREFILL_HOLDER, d -> d.payouts() == null ? null : d.payouts().accountHolderName());
 
     private final ApplicationRepository apps;
@@ -104,47 +111,22 @@ class OnboardingServiceImpl implements OnboardingService {
 
     @Override
     @Transactional
-    public StartResult start(OrgKind kind) {
+    public StartResult start(OrgKind kind, ApplicationPrefill prefill) {
         Actor actor = access.applicant();
-        Optional<Application> existing = apps.findByApplicant(actor.subject());
+        Known known = known(profiles.current(), prefill == null ? ApplicationPrefill.none() : prefill);
+        Optional<Application> existing = apps.lockByApplicant(actor.subject());
         if (existing.isPresent()) {
-            if (existing.get().kind() != kind) {
+            Application app = existing.get();
+            if (app.kind() != kind) {
                 throw new SellerStateConflict("seller.application-exists",
-                        "You already have a " + existing.get().kind().name().toLowerCase(Locale.ROOT)
+                        "You already have a " + app.kind().name().toLowerCase(Locale.ROOT)
                                 + " application; continue that one");
             }
-            return new StartResult(applicantView(existing.get()), false);
+            return new StartResult(applicantView(resumeFilled(app, known)), false);
         }
         Instant now = Instant.now(clock);
-        CallerProfile profile = profiles.current();
         Set<String> prefilled = new HashSet<>();
-        String email = clean(profile.email());
-        if (email != null && !EMAIL.matcher(email).matches()) {
-            email = null;
-        }
-        String phone = clean(profile.phone()) == null ? null
-                : phones.toE164Mobile(profile.phone(), "US").orElse(null);
-        String first = clean(profile.givenName());
-        String last = clean(profile.familyName());
-        String full = clean(profile.fullName()) != null ? clean(profile.fullName())
-                : first != null && last != null ? first + " " + last : null;
-        mark(prefilled, PREFILL_EMAIL, email);
-        mark(prefilled, PREFILL_PHONE, phone);
-        mark(prefilled, PREFILL_FIRST, first);
-        mark(prefilled, PREFILL_LAST, last);
-        mark(prefilled, PREFILL_HOLDER, full);
-        ApplicationData data = ApplicationData.empty();
-        if (email != null || phone != null) {
-            data = data.withBusiness(new BusinessSection(null, null, null, null,
-                    email == null ? null : email.toLowerCase(Locale.ROOT), phone, null));
-        }
-        if (first != null || last != null) {
-            data = data.withBusinessDetails(new BusinessDetailsSection(first, last, null, null, null, null, null, null,
-                    null, null, null, null, null));
-        }
-        if (full != null) {
-            data = data.withPayouts(new PayoutSection(full, null, null, null, null, false));
-        }
+        ApplicationData data = fillBlanks(ApplicationData.empty(), known, prefilled);
         Organisation org = orgs.insert(Organisation.draft(Ids.org(), kind, null, now));
         orgs.addMember(new OrgMember(org.id(), actor.subject(), kind.ownerRole(), now));
         Application app = Application.start(Ids.application(), apps.nextReference(), org.id(), actor.subject(), kind,
@@ -158,6 +140,100 @@ class OnboardingServiceImpl implements OnboardingService {
                 : "Prefilled from the customer account: " + String.join(", ", prefilled.stream().sorted().toList()),
                 List.of(), now));
         return new StartResult(applicantView(app), true);
+    }
+
+    /** What the account knows: the token's claims first, then the prefill gateway-bff read from identity. */
+    private record Known(String email, String phone, String first, String last, String full, String store,
+                         Address address) {
+    }
+
+    private Known known(CallerProfile profile, ApplicationPrefill extra) {
+        String email = clean(profile.email()) != null ? clean(profile.email()) : clean(extra.email());
+        if (email != null && !EMAIL.matcher(email).matches()) {
+            email = null;
+        }
+        String phone = e164(profile.phone());
+        if (phone == null) {
+            phone = e164(extra.phone());
+        }
+        String store = clean(extra.storeName());
+        if (store != null && store.length() > MAX_STORE_NAME) {
+            store = null;
+        }
+        String first = clean(profile.givenName()) != null ? clean(profile.givenName()) : clean(extra.givenName());
+        String last = clean(profile.familyName()) != null ? clean(profile.familyName()) : clean(extra.familyName());
+        String full = clean(profile.fullName()) != null ? clean(profile.fullName())
+                : first != null && last != null ? first + " " + last : null;
+        return new Known(email == null ? null : email.toLowerCase(Locale.ROOT), phone, first, last, full, store,
+                usable(extra.address()));
+    }
+
+    /**
+     * A resumed draft gets what the account knows in answers that are still empty (for example an application
+     * started before the address was saved); answers the applicant gave are never replaced.
+     */
+    private Application resumeFilled(Application app, Known known) {
+        if (!app.status().editableByApplicant()) {
+            return app;
+        }
+        Set<String> prefilled = new HashSet<>(app.prefilledFields());
+        ApplicationData next = fillBlanks(app.data(), known, prefilled);
+        if (next.equals(app.data())) {
+            return app;
+        }
+        return apps.update(app.edit(next, app.currentStep(), prefilled, Instant.now(clock)));
+    }
+
+    /** Fills the empty prefillable answers from {@code known}, marking each one filled in {@code prefilled}. */
+    private static ApplicationData fillBlanks(ApplicationData data, Known k, Set<String> prefilled) {
+        BusinessSection b = data.business() == null ? new BusinessSection(null, null, null, null, null, null, null)
+                : data.business();
+        String email = fill(prefilled, PREFILL_EMAIL, b.contactEmail(), k.email());
+        String phone = fill(prefilled, PREFILL_PHONE, b.phone(), k.phone());
+        String store = fill(prefilled, PREFILL_STORE, b.storeName(), k.store());
+        BusinessSection nb = new BusinessSection(b.offering(), b.entityType(), b.country(), store, email, phone,
+                b.website());
+        ApplicationData next = data;
+        if (!nb.equals(b) || data.business() != null) {
+            next = next.withBusiness(nb);
+        }
+        BusinessDetailsSection d = data.businessDetails();
+        String first = fill(prefilled, PREFILL_FIRST, d == null ? null : d.legalFirstName(), k.first());
+        String last = fill(prefilled, PREFILL_LAST, d == null ? null : d.legalLastName(), k.last());
+        Address address = d != null && d.address() != null ? d.address() : k.address();
+        if (address != null && (d == null || d.address() == null)) {
+            prefilled.add(PREFILL_ADDRESS);
+        }
+        if (d == null) {
+            if (first != null || last != null || address != null) {
+                next = next.withBusinessDetails(new BusinessDetailsSection(first, last, null, null, null, null, null,
+                        null, null, null, address, null, null));
+            }
+        } else {
+            next = next.withBusinessDetails(new BusinessDetailsSection(first, last, d.legalName(), d.dba(),
+                    d.taxIdType(), d.taxIdLast4(), d.taxIdCipher(), d.dateOfBirth(), d.stateOfFormation(),
+                    d.dateOfFormation(), address, d.formationDocumentAssetId(), d.irsDeterminationLetterAssetId()));
+        }
+        PayoutSection p = data.payouts();
+        String holder = fill(prefilled, PREFILL_HOLDER, p == null ? null : p.accountHolderName(), k.full());
+        if (p == null) {
+            if (holder != null) {
+                next = next.withPayouts(new PayoutSection(holder, null, null, null, null, false));
+            }
+        } else {
+            next = next.withPayouts(new PayoutSection(holder, p.accountType(), p.bankName(), p.routingLast4(),
+                    p.accountLast4(), p.externalAccountLinked()));
+        }
+        return next;
+    }
+
+    /** The current answer, or the known value (marked as prefilled) when there is none. */
+    private static String fill(Set<String> prefilled, String field, String current, String known) {
+        if (clean(current) != null || known == null) {
+            return current;
+        }
+        prefilled.add(field);
+        return known;
     }
 
     @Override
@@ -358,10 +434,19 @@ class OnboardingServiceImpl implements OnboardingService {
         return v.value();
     }
 
-    private static void mark(Set<String> prefilled, String field, String value) {
-        if (value != null) {
-            prefilled.add(field);
+    private String e164(String raw) {
+        return clean(raw) == null ? null : phones.toE164Mobile(raw, "US").orElse(null);
+    }
+
+    /** An address-book address usable as a business address (street, city, state and ZIP present). */
+    private static Address usable(Address a) {
+        if (a == null || clean(a.line1()) == null || clean(a.city()) == null || clean(a.state()) == null
+                || clean(a.postalCode()) == null) {
+            return null;
         }
+        String country = clean(a.country()) == null ? "US" : clean(a.country()).toUpperCase(Locale.ROOT);
+        return new Address(clean(a.line1()), clean(a.line2()), clean(a.city()),
+                clean(a.state()).toUpperCase(Locale.ROOT), clean(a.postalCode()), country);
     }
 
     private static String clean(String s) {

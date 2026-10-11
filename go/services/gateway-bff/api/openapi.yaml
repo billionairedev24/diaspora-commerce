@@ -566,6 +566,13 @@ paths:
           in: query
           description: Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code.
           schema: {type: string, maxLength: 200}
+        - name: intent
+          in: query
+          description: |
+            Entry point the person came from (S286). `sell` ("Start selling") and `provide` ("Offer your services")
+            brand identity's sign-up page for it ("Create your account to start selling") and add the seller or
+            provider applicant role to the account it creates. Other values are dropped.
+          schema: {type: string, enum: [sell, provide]}
       responses:
         '302': {$ref: '#/components/responses/AuthorizeRedirect'}
   /v1/auth/oidc/{provider}/authorize:

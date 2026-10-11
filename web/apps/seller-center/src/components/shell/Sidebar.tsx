@@ -12,7 +12,7 @@ import { hrefOf } from '@/lib/routes';
 
 function orgSub(o: OrgSummary): string {
   const kind = o.kind === 'PROVIDER' ? 'Service provider' : 'Seller';
-  return o.approved ? `${kind} · ${o.roleLabel}` : `${kind} · application ${o.status === 'INFO_REQUESTED' ? 'needs info' : 'in review'}`;
+  return o.approved ? `${kind} · ${o.roleLabel}` : `${kind} · application ${o.status === 'INFO_REQUESTED' ? 'needs info' : o.status === 'DRAFT' ? 'in progress' : 'in review'}`;
 }
 
 /** Org switcher: every seller and provider organisation of the member (sellers vs providers vs both). */

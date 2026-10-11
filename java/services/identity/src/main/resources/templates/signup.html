@@ -117,7 +117,7 @@
           <button type="submit" class="btn btn-primary" th:text="#{auth.createAccount}">Create account</button>
         </form>
         <th:block th:replace="~{layout :: social('auth.signUpWith')}"></th:block>
-        <a class="toggle" th:href="@{/login}" th:text="#{auth.toSignin}">Have an account? Sign in</a>
+        <a class="toggle" th:href="@{/login}" th:text="${brand.toSignin}">Have an account? Sign in</a>
       </div>
     </main>
   </div>

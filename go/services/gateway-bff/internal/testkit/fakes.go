@@ -126,7 +126,18 @@ type Upstreams struct {
 	AccessDeniedMatrix bool
 	// AccountHealthForbidden makes seller-service's account health answer 403 (members other than owner and finance).
 	AccountHealthForbidden bool
-	seller             *sellerState
+	seller                 *sellerState
+	// MemberRoles are identity's roles for every member (default account.customer); ApplicantRoles records
+	// POST /v1/me/roles/{seller|provider}-applicant; Application is the seller service's application of the caller
+	// (nil: the fixed INFO_REQUESTED application); LastPrefill is the last start-application prefill.
+	MemberRoles []string
+	// NoApplication makes GET /v1/applications/me answer 404 until an application is started.
+	NoApplication bool
+	// DefaultAddresses is the address book of members who saved none themselves.
+	DefaultAddresses []map[string]any
+	ApplicantRoles   []string
+	Application      map[string]any
+	LastPrefill      map[string]any
 	// PhoneVerified is identity's phoneVerified for every account; LastSignUp is the last POST /v1/accounts body.
 	PhoneVerified bool
 	LastSignUp    map[string]any
@@ -876,7 +887,13 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 		u.mu.Lock()
 		verified := u.PhoneVerified
 		u.mu.Unlock()
-		writeJSON(w, 200, map[string]any{"id": sub, "firstName": "Adaeze", "lastName": "Nwosu", "email": "adaeze@example.com", "roles": []string{"account.customer"},
+		u.mu.Lock()
+		roles := u.MemberRoles
+		u.mu.Unlock()
+		if roles == nil {
+			roles = []string{"account.customer"}
+		}
+		writeJSON(w, 200, map[string]any{"id": sub, "firstName": "Adaeze", "lastName": "Nwosu", "email": "adaeze@example.com", "roles": roles,
 			"landing": "shop", "orgId": active, "orgs": orgs, "phone": "+17135550142", "phoneVerified": verified})
 	})
 	mux.HandleFunc("GET /v1/identity-providers", func(w http.ResponseWriter, _ *http.Request) {
@@ -910,6 +927,9 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
 		list := u.addresses[subjectOf(r)]
+		if list == nil {
+			list = u.DefaultAddresses
+		}
 		if list == nil {
 			list = []map[string]any{}
 		}

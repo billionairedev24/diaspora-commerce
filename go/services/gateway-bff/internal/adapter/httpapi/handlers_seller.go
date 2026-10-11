@@ -21,6 +21,9 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/session", h.sellerSession)
 	route("PUT /v1/seller/session/active-org", h.setActiveOrg)
 	route("GET /v1/seller/onboarding", h.sellerOnboarding)
+	route("POST /v1/seller/onboarding", h.startOnboarding)
+	route("PUT /v1/seller/onboarding/business", h.saveOnboardingBusiness)
+	route("PUT /v1/seller/onboarding/business-details", h.saveOnboardingDetails)
 	route("GET /v1/seller/compliance", h.sellerCompliance)
 	route("GET /v1/seller/dashboard", h.sellerDashboard)
 	// Orders
@@ -133,6 +136,42 @@ func (h *handlersImpl) setActiveOrg(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) sellerOnboarding(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerShell.Onboarding(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) startOnboarding(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Kind string `json:"kind"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, created, err := h.s.SellerShell.StartOnboarding(r.Context(), callerFrom(r.Context()), b.Kind)
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	h.reply(w, r, status, v, err)
+}
+
+func (h *handlersImpl) saveOnboardingBusiness(w http.ResponseWriter, r *http.Request) {
+	var b domain.OnboardingBusinessInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShell.SaveOnboardingBusiness(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) saveOnboardingDetails(w http.ResponseWriter, r *http.Request) {
+	var b domain.OnboardingDetailsInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShell.SaveOnboardingDetails(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

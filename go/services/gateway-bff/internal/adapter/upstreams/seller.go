@@ -28,6 +28,15 @@ func (o *orgAccessImpl) Member(ctx context.Context, bearer string) (port.Member,
 	return m, err
 }
 
+func (o *orgAccessImpl) BecomeApplicant(ctx context.Context, bearer, kind string) error {
+	path := "/v1/me/roles/seller-applicant"
+	if kind == "PROVIDER" {
+		path = "/v1/me/roles/provider-applicant"
+	}
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: path, Bearer: bearer, RetryUnsafe: true}, nil)
+	return err
+}
+
 func (o *orgAccessImpl) SelectOrg(ctx context.Context, bearer, orgID string) (port.Member, error) {
 	var m port.Member
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/me/active-org", Bearer: bearer,
@@ -130,6 +139,23 @@ func (s *sellerServiceImpl) Org(ctx context.Context, bearer, orgID string) (port
 func (s *sellerServiceImpl) Application(ctx context.Context, bearer string) (port.SellerApplication, error) {
 	var a port.SellerApplication
 	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/applications/me", Bearer: bearer}, &a)
+	return a, err
+}
+
+func (s *sellerServiceImpl) StartApplication(ctx context.Context, bearer, kind string, prefill port.ApplicationPrefill) (port.SellerApplication, bool, error) {
+	var a port.SellerApplication
+	res, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me", Bearer: bearer,
+		JSON: map[string]any{"kind": kind, "prefill": prefill}}, &a)
+	if err != nil {
+		return a, false, err
+	}
+	return a, res.Status == http.StatusCreated, nil
+}
+
+func (s *sellerServiceImpl) SaveApplicationStep(ctx context.Context, bearer, step string, body any) (port.SellerApplication, error) {
+	var a port.SellerApplication
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/applications/me/steps/" + url.PathEscape(step),
+		Bearer: bearer, JSON: body}, &a)
 	return a, err
 }
 

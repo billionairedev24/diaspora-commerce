@@ -12,8 +12,10 @@ import java.util.List;
  * @param head   brand panel headline
  * @param sub    brand panel sub-heading
  * @param points three benefits (icon name, title, text)
+ * @param toSignin the sign-up page's link to sign in instead
  */
-record HostedBrand(String app, String badge, String title, String tag, String head, String sub, List<Point> points) {
+record HostedBrand(String app, String badge, String title, String tag, String head, String sub, List<Point> points,
+                   String toSignin) {
 
     record Point(String icon, String title, String text) {
     }

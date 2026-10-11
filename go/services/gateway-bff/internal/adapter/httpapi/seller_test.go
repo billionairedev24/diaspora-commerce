@@ -112,6 +112,20 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/compliance", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/onboarding", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/dashboard?rangeDays=30", nil), 200)
+	// Start selling (S286): an approved seller opens Seller Center instead; a customer starts, resumes and autosaves.
+	mustStatus(t, b.do("POST", "/v1/seller/onboarding", map[string]any{"kind": "SELLER"}), 409)
+	mustStatus(t, b.do("PUT", "/v1/seller/onboarding/business", map[string]any{"storeName": "Ade's"}), 404)
+	memberOrgs := bff.Upstreams.MemberOrgs
+	bff.Upstreams.MemberOrgs = nil
+	mustStatus(t, b.do("POST", "/v1/seller/onboarding", map[string]any{"kind": "SELLER"}), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/onboarding", map[string]any{"kind": "SELLER"}), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/onboarding", map[string]any{"kind": ""}), 422)
+	mustStatus(t, b.do("PUT", "/v1/seller/onboarding/business", map[string]any{"offering": "PRODUCTS", "entityType": "SOLE_PROPRIETOR", "storeName": "Ade's"}), 200)
+	mustStatus(t, b.do("PUT", "/v1/seller/onboarding/business", map[string]any{"storeName": "A"}), 422)
+	mustStatus(t, b.do("PUT", "/v1/seller/onboarding/business-details", map[string]any{"legalFirstName": "Adaeze", "legalLastName": "Nwosu",
+		"address": map[string]any{"line1": "1 Main St", "city": "Houston", "state": "TX", "postalCode": "77002"}}), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/session", nil), 200)
+	bff.Upstreams.MemberOrgs, bff.Upstreams.Application = memberOrgs, nil
 	// Orders: queue, sheet, status flow, rates and label.
 	mustStatus(t, b.do("GET", "/v1/seller/orders?limit=20", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/orders?status=SHIPPED_NOPE", nil), 422)

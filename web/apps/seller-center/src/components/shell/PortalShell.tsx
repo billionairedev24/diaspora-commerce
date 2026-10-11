@@ -1,17 +1,18 @@
 'use client';
 
 import { AccountFormatPreferences, accountSectionOf } from '@afrotransact/account';
-import { isApiError, type ModuleKey, sellerKeys, sellerQueries, type SellerSession } from '@afrotransact/api-client';
+import { isApiError, type ModuleKey, type OnboardingStatus, sellerKeys, sellerQueries, type SellerSession } from '@afrotransact/api-client';
 import { Button, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { loginHref } from '@/lib/auth';
 import { setFormatPreferences } from '@/lib/format';
+import { type ApplyRole, applyRoleOf, entryDecision, kindOf } from '@/lib/onboarding-entry';
 import { hrefOf, moduleOf } from '@/lib/routes';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { SellerSessionProvider } from '@/lib/session';
@@ -24,32 +25,110 @@ function Centered({ children }: { children: ReactNode }) {
   return <div className="mx-auto flex w-[min(560px,100%)] flex-col items-center gap-4 px-4 py-16 text-center">{children}</div>;
 }
 
-function SignInPrompt() {
+const PILL = 'rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline';
+
+/**
+ * Signed out: there is no Seller Center sign-in page of its own — credentials are entered on identity's hosted
+ * pages, so the browser goes straight there and comes back to the page it asked for (with the seller or provider
+ * copy when it came from "Start selling" / "Offer your services").
+ */
+function AutoSignIn({ role }: { role: ApplyRole | null }) {
   const t = useT();
-  const returnTo = typeof window !== 'undefined' ? window.location.href : '/';
+  useEffect(() => {
+    window.location.assign(loginHref(window.location.href, role ? { intent: role === 'provider' ? 'provide' : 'sell' } : {}));
+  }, [role]);
   return (
-    <Centered>
-      <h1 className="m-0 text-2xl font-bold">{t('sc.portalShell.signInToSellerCentral')}</h1>
-      <p className="m-0 text-muted">{t('sc.portalShell.useTheSameAfrotransactAccount')}</p>
-      <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={loginHref(returnTo)}>
-        {t('sc.portalShell.signIn')}
-      </a>
-    </Centered>
+    <div className="p-8">
+      <Spinner label={t('sc.portalShell.takingYouToSignIn')} />
+    </div>
   );
 }
 
 function NoOrganisation() {
-  const storefrontUrl = useStorefrontUrl();
   const t = useT();
   return (
     <Centered>
       <h1 className="m-0 text-2xl font-bold">{t('sc.portalShell.startSellingOnAfrotransact')}</h1>
       <p className="m-0 text-muted">{t('sc.portalShell.youDonTBelongTo')}</p>
-      <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl}/sell`}>
-        {t('sc.portalShell.startSelling')}
+      <div className="flex flex-wrap justify-center gap-3">
+        <a className={PILL} href="/onboarding?role=seller">
+          {t('sc.portalShell.startSelling')}
+        </a>
+        <a className="rounded-pill border border-border px-6 py-2.5 font-bold text-text no-underline hover:no-underline" href="/onboarding?role=provider">
+          {t('sc.portalShell.offerYourServices')}
+        </a>
+      </div>
+    </Centered>
+  );
+}
+
+/** "Start selling" could not continue (a staff account, or an application of the other kind in progress). */
+function CannotApply({ message }: { message: string }) {
+  const storefrontUrl = useStorefrontUrl();
+  const t = useT();
+  return (
+    <Centered>
+      <h1 className="m-0 text-2xl font-bold">{t('sc.portalShell.cannotStartApplication')}</h1>
+      <p className="m-0 text-muted">{message}</p>
+      <a className={PILL} href={storefrontUrl}>
+        {t('sc.portalShell.backToTheStorefront')}
       </a>
     </Centered>
   );
+}
+
+type EntryState = { phase: 'idle' | 'working' } | { phase: 'failed'; message: string };
+
+/**
+ * Arrival from "Start selling" / "Offer your services" (/onboarding?role=…): approved sellers go to their back
+ * office, an application in progress is resumed, otherwise it is started (applicant role added, prefilled from the
+ * account) — no questions, no extra page.
+ */
+function useOnboardingEntry(session: SellerSession | undefined, role: ApplyRole | null, done: () => void): EntryState {
+  const api = sellerApi();
+  const qc = useQueryClient();
+  const router = useRouter();
+  const t = useT();
+  const started = useRef(false);
+  const [state, setState] = useState<EntryState>({ phase: role ? 'working' : 'idle' });
+  useEffect(() => {
+    if (!session || !role || started.current) return;
+    started.current = true;
+    const decision = entryDecision(session, role);
+    const run = async () => {
+      let next = session;
+      if (decision.action !== 'start' && decision.switchTo) {
+        next = await api.setActiveOrg(decision.switchTo);
+        qc.setQueryData(sellerKeys.session(), next);
+      }
+      if (decision.action === 'home') {
+        router.replace(hrefOf(next.landing));
+        return;
+      }
+      // Start, or resume: the same idempotent call (a resumed draft gets what the account knows in empty answers).
+      const st: OnboardingStatus = await api.startOnboarding(kindOf(role));
+      qc.setQueryData(sellerKeys.onboarding(st.orgId), st);
+      await qc.invalidateQueries({ queryKey: sellerKeys.session() });
+      router.replace('/onboarding');
+    };
+    run()
+      .then(() => {
+        setState({ phase: 'idle' });
+        done();
+      })
+      .catch((e: unknown) => {
+        if (isApiError(e) && e.code === 'ALREADY_APPROVED') {
+          // Approved in the meantime (identity had not listed the organisation yet): open the back office.
+          void qc.invalidateQueries({ queryKey: sellerKeys.session() });
+          router.replace('/');
+          setState({ phase: 'idle' });
+          done();
+          return;
+        }
+        setState({ phase: 'failed', message: (isApiError(e) && e.problem.detail) || t('sc.portalShell.couldNotStartApplication') });
+      });
+  }, [session, role, api, qc, router, t, done]);
+  return role ? state : { phase: 'idle' };
 }
 
 function allowed(session: SellerSession, key: ModuleKey | null): boolean {
@@ -73,6 +152,12 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const active = moduleOf(pathname);
   // My account (/account/…) belongs to the person, not an organisation: open before approval and without one.
   const accountPage = accountSectionOf(pathname) !== null;
+  // Read once on arrival (no useSearchParams: the shell renders on every page, statically).
+  const [applyRole, setApplyRole] = useState<ApplyRole | null>(() =>
+    typeof window === 'undefined' || moduleOf(window.location.pathname) !== 'onboarding' ? null : applyRoleOf(window.location.search)
+  );
+  const entry = useOnboardingEntry(q.data, applyRole, () => setApplyRole(null));
+  const entering = applyRole !== null || entry.phase === 'working';
 
   const switchOrg = useMutation({
     mutationFn: (orgId: string) => api.setActiveOrg(orgId),
@@ -85,8 +170,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
     onError: () => toast.show(t('sc.portalShell.switchFailed'), 'error')
   });
 
-  const needsOnboarding = !!session?.activeOrg && !session.approved && active !== 'onboarding' && !accountPage;
-  const leaveOnboarding = !!session?.approved && active === 'onboarding';
+  const needsOnboarding = !entering && !!session?.activeOrg && !session.approved && active !== 'onboarding' && !accountPage;
+  const leaveOnboarding = !entering && !!session?.approved && active === 'onboarding';
   useEffect(() => {
     if (needsOnboarding) router.replace('/onboarding');
     else if (leaveOnboarding && session) router.replace(hrefOf(session.landing));
@@ -107,7 +192,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       return (
         <>
           <Header session={null} />
-          <SignInPrompt />
+          <AutoSignIn role={applyRole} />
         </>
       );
     }
@@ -116,6 +201,24 @@ export function PortalShell({ children }: { children: ReactNode }) {
         <Header session={null} />
         <div className="p-8">
           <ErrorState error={q.error} onRetry={() => void q.refetch()} />
+        </div>
+      </>
+    );
+  }
+  if (entry.phase === 'failed') {
+    return (
+      <>
+        <Header session={session} />
+        <CannotApply message={entry.message} />
+      </>
+    );
+  }
+  if (entering) {
+    return (
+      <>
+        <Header session={session} />
+        <div className="p-8">
+          <Spinner label={t('sc.portalShell.settingUpYourApplication')} />
         </div>
       </>
     );

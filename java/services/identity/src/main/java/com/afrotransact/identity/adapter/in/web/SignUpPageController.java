@@ -27,7 +27,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 /**
  * Hosted account creation: the sign-up form, the emailed 6-digit code, and then the same authorization request the
  * app started continues signed in. OIDC {@code prompt=create} lands here; an organisation invitation
- * ({@code invitation} authorize parameter) skips the email code.
+ * ({@code invitation} authorize parameter) skips the email code. From Seller Center's "Start selling" /
+ * "Offer your services" ({@code intent=sell|provide}) the new account also gets the seller or provider applicant role.
  */
 @Hidden
 @Controller
@@ -92,7 +93,8 @@ class SignUpPageController {
         SignUpResult result;
         try {
             result = accounts.signUp(new SignUpCommand(firstName, lastName, email, phone, region, password,
-                    confirmPassword, termsAccepted, smsConsent, SHOP, ctx.invitation()));
+                    confirmPassword, termsAccepted, smsConsent, ctx.intent() == null ? SHOP : ctx.intent(),
+                    ctx.invitation()));
         } catch (IdentityRuleViolation ex) {
             return render(model, values, ordered(ex.fieldErrors()), ex.fieldErrors().isEmpty() ? ex.getMessage() : null);
         } catch (ConflictException ex) {

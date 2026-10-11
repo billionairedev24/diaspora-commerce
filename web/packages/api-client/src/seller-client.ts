@@ -51,8 +51,11 @@ import {
   ListingRowSchema,
   type ListingStatus,
   type OfferFulfilmentRequest,
+  type OnboardingBusinessInput,
+  type OnboardingDetailsInput,
   type OnboardingStatus,
   OnboardingStatusSchema,
+  type OrgKind,
   type Parcel,
   type Payout,
   PayoutSchema,
@@ -140,6 +143,12 @@ export function createSellerApiClient(options: ApiClientOptions) {
     getSession: (signal?: AbortSignal): Promise<SellerSession> => request('/v1/seller/session', SellerSessionSchema, { signal }),
     setActiveOrg: (orgId: string): Promise<SellerSession> => request('/v1/seller/session/active-org', SellerSessionSchema, { method: 'PUT', body: { orgId } }),
     getOnboarding: (signal?: AbortSignal): Promise<OnboardingStatus> => request('/v1/seller/onboarding', OnboardingStatusSchema, { signal }),
+    /** Start selling / offer services: starts or resumes the application (idempotent), prefilled from the account. */
+    startOnboarding: (kind: OrgKind): Promise<OnboardingStatus> => request('/v1/seller/onboarding', OnboardingStatusSchema, { method: 'POST', body: { kind } }),
+    saveOnboardingBusiness: (body: OnboardingBusinessInput): Promise<OnboardingStatus> =>
+      request('/v1/seller/onboarding/business', OnboardingStatusSchema, { method: 'PUT', body }),
+    saveOnboardingDetails: (body: OnboardingDetailsInput): Promise<OnboardingStatus> =>
+      request('/v1/seller/onboarding/business-details', OnboardingStatusSchema, { method: 'PUT', body }),
     getCompliance: (signal?: AbortSignal): Promise<ComplianceSummary> => request('/v1/seller/compliance', ComplianceSummarySchema, { signal }),
     getDashboard: (rangeDays: number, signal?: AbortSignal): Promise<Dashboard> =>
       request('/v1/seller/dashboard', DashboardSchema, { query: { rangeDays: String(rangeDays) }, signal }),

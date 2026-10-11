@@ -12,7 +12,15 @@ public interface OnboardingService {
      * Starts (or resumes) the caller's application, creating a DRAFT organisation with the caller as owner. Fields
      * known from the caller's account (name, email, phone) are prefilled and marked as such.
      */
-    StartResult start(OrgKind kind);
+    default StartResult start(OrgKind kind) {
+        return start(kind, ApplicationPrefill.none());
+    }
+
+    /**
+     * Same, also prefilling what {@code prefill} carries where the token's claims have nothing (phone, store name,
+     * business address). A resumed application is returned unchanged: the prefill only applies on creation.
+     */
+    StartResult start(OrgKind kind, ApplicationPrefill prefill);
 
     /** The caller's draft with its current step and progress. */
     ApplicationView mine();

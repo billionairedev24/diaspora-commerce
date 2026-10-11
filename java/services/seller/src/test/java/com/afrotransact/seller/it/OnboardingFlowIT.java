@@ -288,6 +288,63 @@ class OnboardingFlowIT extends SellerIntegrationTest {
     }
 
     @Test
+    void startPrefillsPhoneStoreNameAndAddressFromTheAccountOnlyOnCreation() {
+        String user = unique("bisi");
+        TestActors.as(TestActors.applicant(user));
+        // The token carries no phone_number (unverified phone): the BFF sends the account's phone instead.
+        TestActors.profile(new CallerProfile("Bisi", "Adeyemi", "Bisi Adeyemi", "bisi@example.com", null));
+        Map<String, Object> prefill = Map.of("phone", "(713) 249-0188", "storeName", "Bisi's Kitchen",
+                "address", Map.of("line1", "4410 Bellaire Blvd", "city", "Houston", "state", "tx",
+                        "postalCode", "77025"));
+
+        Response started = post("/v1/applications/me", Map.of("kind", "PROVIDER", "prefill", prefill));
+        assertThat(started.status()).isEqualTo(201);
+        assertThat(started.text("/business/phone")).isEqualTo("+17132490188");
+        assertThat(started.text("/business/storeName")).isEqualTo("Bisi's Kitchen");
+        assertThat(started.text("/businessDetails/address/line1")).isEqualTo("4410 Bellaire Blvd");
+        assertThat(started.text("/businessDetails/address/state")).isEqualTo("TX");
+        assertThat(started.text("/businessDetails/address/country")).isEqualTo("US");
+        assertThat(strings(started.body().path("prefilledFields"))).containsExactlyInAnyOrder("business.contactEmail",
+                "business.phone", "business.storeName", "businessDetails.legalFirstName",
+                "businessDetails.legalLastName", "businessDetails.address", "payouts.accountHolderName");
+
+        // Idempotent: the second click resumes the same application and ignores a different prefill.
+        Response again = post("/v1/applications/me", Map.of("kind", "PROVIDER",
+                "prefill", Map.of("storeName", "Something else")));
+        assertThat(again.status()).isEqualTo(200);
+        assertThat(again.text("/id")).isEqualTo(started.text("/id"));
+        assertThat(again.text("/business/storeName")).isEqualTo("Bisi's Kitchen");
+
+        // Changing a prefilled answer drops its marker; an incomplete address is not prefilled at all.
+        assertThat(put("/v1/applications/me/steps/business", Map.of("offering", "SERVICES",
+                "entityType", "sole_proprietor", "country", "US", "storeName", "Bisi Braids",
+                "contactEmail", "bisi@example.com", "phone", "+17132490188")).status()).isEqualTo(200);
+        assertThat(strings(get("/v1/applications/me").body().path("prefilledFields")))
+                .contains("business.phone").doesNotContain("business.storeName");
+
+        // Access tokens without profile claims: name and email come from the prefill too.
+        TestActors.as(TestActors.applicant(unique("tolu")));
+        TestActors.profile(CallerProfile.empty());
+        Response partial = post("/v1/applications/me", Map.of("kind", "SELLER",
+                "prefill", Map.of("givenName", "Tolu", "familyName", "Bello", "email", "Tolu@Example.com",
+                        "address", Map.of("line1", "1 Main St"))));
+        assertThat(partial.status()).isEqualTo(201);
+        assertThat(partial.text("/businessDetails/legalFirstName")).isEqualTo("Tolu");
+        assertThat(partial.text("/business/contactEmail")).isEqualTo("tolu@example.com");
+        assertThat(partial.text("/payouts/accountHolderName")).isEqualTo("Tolu Bello");
+        assertThat(strings(partial.body().path("prefilledFields"))).containsExactlyInAnyOrder("business.contactEmail",
+                "businessDetails.legalFirstName", "businessDetails.legalLastName", "payouts.accountHolderName");
+
+        // Resuming fills answers that are still empty (the address saved since), never the ones given.
+        Response resumed = post("/v1/applications/me", Map.of("kind", "SELLER", "prefill", Map.of("givenName", "Other",
+                "address", Map.of("line1", "1 Main St", "city", "Houston", "state", "TX", "postalCode", "77002"))));
+        assertThat(resumed.status()).isEqualTo(200);
+        assertThat(resumed.text("/businessDetails/legalFirstName")).isEqualTo("Tolu");
+        assertThat(resumed.text("/businessDetails/address/postalCode")).isEqualTo("77002");
+        assertThat(strings(resumed.body().path("prefilledFields"))).contains("businessDetails.address");
+    }
+
+    @Test
     void entityAwareDetailsOwnersAndRejection() {
         String user = unique("kwik");
         TestActors.as(TestActors.applicant(user));

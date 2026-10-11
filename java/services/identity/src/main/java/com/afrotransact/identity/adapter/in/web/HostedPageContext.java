@@ -10,7 +10,14 @@ package com.afrotransact.identity.adapter.in.web;
  * @param loginHint  OIDC {@code login_hint}: prefilled email
  * @param invitation organisation invitation token from an invite link ({@code invitation} parameter)
  * @param pending    whether an authorization request is waiting (signing in continues it)
+ * @param intent     Seller Center entry point ({@code intent} parameter): {@code sell} ("Start selling") or
+ *                   {@code provide} ("Offer your services"); null otherwise. Brands the pages and decides which
+ *                   applicant role an account created here gets.
  */
 record HostedPageContext(HostedApp app, String clientId, String appUrl, String loginHint, String invitation,
-                         boolean pending) {
+                         boolean pending, String intent) {
+
+    /** Accepted {@code intent} values. */
+    static final String SELL = "sell";
+    static final String PROVIDE = "provide";
 }
