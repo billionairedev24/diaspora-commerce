@@ -555,7 +555,8 @@ paths:
       tags:
       - Payments
       summary: Capture one shipment and post its journal
-      description: Stripe amount_to_capture = the lines' items + shipping + tax (multicapture; final_capture releases the
+      description: >-
+        Stripe amount_to_capture = the lines' items + shipping + tax (multicapture; final_capture releases the
         rest). A single-capture payment (multicapture false) is captured once: an order's (capture_plan=per_shipment)
         first shipment captures every line not captured yet (the response's lineIds), and a later shipment whose lines
         were taken by it gets that capture back (replayed); other payments capture the lines asked for and Stripe
