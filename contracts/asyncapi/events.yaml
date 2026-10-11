@@ -751,10 +751,12 @@ channels:
         $ref: '#/components/messages/sellerListingsRestored'
   sellerSubscriptionEvents:
     address: at.seller-subscription.events
-    description: Plan subscriptions on Stripe Billing (key = org id).
+    description: Plan subscriptions on Stripe Billing, and the rewards and staff adjustments applied to them (key = org id).
     messages:
       sellerSubscriptionChanged:
         $ref: '#/components/messages/sellerSubscriptionChanged'
+      sellerBillingGrantApplied:
+        $ref: '#/components/messages/sellerBillingGrantApplied'
   taxReturnsEvents:
     address: at.taxreturns.events
     description: 'Returns (RMAs), refunds and the tax ledger from tax-returns-service, written to its transactional outbox
@@ -2438,6 +2440,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/SellerSubscriptionChanged'
+    sellerBillingGrantApplied:
+      name: seller.billing.grant_applied
+      title: A reward or staff billing adjustment was applied at Stripe
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerBillingGrantApplied'
     returnsRmaRequested:
       name: returns.rma.requested
       title: A customer started a return (or reported a problem with a perishable item)
@@ -9264,6 +9273,7 @@ components:
           - STATUS_CHANGED
           - PAYMENT_FAILED
           - PAYMENT_SUCCEEDED
+          - MIGRATED
         planCode:
           type: string
           examples:
@@ -9324,6 +9334,71 @@ components:
           - NONE
           - RETRYING
           - FINAL_ATTEMPT_FAILED
+        occurredAt:
+          type: string
+          format: date-time
+    SellerBillingGrantApplied:
+      type: object
+      required:
+      - orgId
+      - grantId
+      - source
+      - type
+      - summary
+      - occurredAt
+      properties:
+        orgId:
+          type: string
+        grantId:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - RULE
+          - MANUAL
+        type:
+          type: string
+          enum:
+          - FREE_DAYS
+          - CREDIT
+          - PERCENT_OFF
+          - WAIVE_INVOICE
+          - TRIAL_END
+        summary:
+          type: string
+          examples:
+          - 1 month free
+          - $25 credit
+          - 20% off your next 3 invoices
+        reason:
+          type:
+          - string
+          - 'null'
+          description: The reward rule's name (RULE grants)
+        creditCents:
+          type:
+          - integer
+          - 'null'
+          format: int64
+        freeDays:
+          type:
+          - integer
+          - 'null'
+        percentOff:
+          type:
+          - number
+          - 'null'
+        durationInvoices:
+          type:
+          - integer
+          - 'null'
+        trialEndsAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: The subscription's trial end afterwards
         occurredAt:
           type: string
           format: date-time
@@ -10634,7 +10709,28 @@ operations:
     action: send
     channel:
       $ref: '#/channels/sellerSubscriptionEvents'
-    summary: Plan changes, trials and dunning; identity / feature limits and finance consume them.
+    summary: 'Plan changes, trials, dunning and staff migrations to a new plan version (change MIGRATED); identity / feature
+      limits and finance consume them. seller.billing.grant_applied (S296-S297): a reward rule or a staff adjustment (credit,
+      free days, discount, waived invoice, trial change) was applied at Stripe; notifications-service emails the organisation''s
+      owners (seller.billing.reward_earned / seller.billing.credit_granted).'
+  receiveSellerRewardMetrics:
+    action: receive
+    channel:
+      $ref: '#/channels/ordersOrderEvents'
+    summary: 'S296: seller-service (consumer group seller-service, inbox consumer seller.reward-metrics) counts orders.shipment.delivered
+      per sellerOrgId (gross sales in USD cents, completed orders) for reward rules, then evaluates the organisation''s live
+      rules on those metrics.'
+  receiveSellerRewardBookings:
+    action: receive
+    channel:
+      $ref: '#/channels/bookingsEvents'
+    summary: S296 reward rules count booking.completed per orgId (completed bookings, providers).
+  receiveSellerRewardListings:
+    action: receive
+    channel:
+      $ref: '#/channels/offersEvents'
+    summary: 'S296 reward rules track offers.offer.created / updated / withdrawn per sellerOrgId: a listing is active while
+      the offer is ACTIVE and its product live.'
   publishTaxReturnsEvents:
     action: send
     channel:

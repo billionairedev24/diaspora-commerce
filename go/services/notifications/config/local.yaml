@@ -16,6 +16,7 @@ kafka:
     orders: at.order.events
     sellerApplications: at.seller-application.events
     sellerCompliance: at.seller-compliance.events
+    sellerSubscription: at.seller-subscription.events
     payouts: at.payout.events
     bookings: at.bookings.events
     content: at.content.events

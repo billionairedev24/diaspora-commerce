@@ -151,7 +151,7 @@ smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARR
 dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
 	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
 
-stripe-setup: ## Prepare your Stripe TEST account: checks the keys and Connect, creates the plan prices (idempotent)
+stripe-setup: ## Check your Stripe TEST account: keys, Connect and the seller account settings (plans are synced by the seller service)
 	python3 tools/dev/stripe_setup.py
 
 secrets-check: ## Which secrets/provider keys each app needs and which you set in .local/secrets.env (masked; fails only on required-but-missing)

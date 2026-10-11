@@ -2,10 +2,12 @@
 """Prepares a Stripe TEST account for the local stack (make stripe-setup).
 
 - Checks the keys in .local/secrets.env (or the environment): test-mode secret key, matching publishable key.
-- Checks Connect is enabled (seller onboarding creates connected accounts).
-- Creates the plan Prices the seller service looks up by lookup key (<plan>_monthly | _quarterly | _annual), with
-  amounts from PlanPricing: monthly = list price, quarterly = 3 months less 5 %, annual = 10 months. Free plans have
-  no Price. Existing lookup keys are left alone, so it can run any number of times.
+- Checks Connect is enabled (seller onboarding creates connected accounts) and that Stripe accepts the seller
+  account settings (a throwaway test account, deleted).
+- Lists the plan Prices the account already has. It does not create any: plans are AfroTransact's own catalogue
+  (seller service, staff console > Plans & billing). The seller service creates a Product per plan and a Price per
+  plan version and cadence when a plan is published or when it starts, and adopts Prices an older version of this
+  script made (lookup keys <plan>_monthly | _quarterly | _annual) when amount, currency and interval match.
 
 Refuses live keys. Standard library only.
 """
@@ -21,21 +23,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 SECRETS = os.path.join(ROOT, ".local", "secrets.env")
 API = "https://api.stripe.com/v1"
 
-# Mirrors java/services/seller/src/main/resources/db/migration/V2__seed_plans_and_reason_codes.sql.
-PLANS = [
-    ("seller_essentials", "Seller Essentials", 0),
-    ("seller_growth", "Seller Growth", 3900),
-    ("seller_pro", "Seller Pro", 12900),
-    ("provider_solo", "Provider Solo", 1900),
-    ("provider_studio", "Provider Studio", 4900),
-    ("provider_business", "Provider Business", 9900),
-]
-# cadence -> (months per period, total for the period from the monthly list price)
-CADENCES = {
-    "monthly": (1, lambda m: m),
-    "quarterly": (3, lambda m: int((m * 3 * 95 + 50) // 100)),
-    "annual": (12, lambda m: m * 10),
-}
+# Lookup keys of the seeded catalogue (java/services/seller/.../V70__plan_catalog_trials_rewards.sql), for the report.
+PLAN_CODES = ["seller_growth", "seller_pro", "provider_solo", "provider_studio", "provider_business"]
 
 
 def secrets():
@@ -119,29 +108,10 @@ def main():
 
     probe_connect(sk)
 
-    created = 0
-    for code, name, monthly in PLANS:
-        if monthly == 0:
-            continue
-        product = None
-        for cadence, (months, total) in CADENCES.items():
-            lookup = f"{code}_{cadence}"
-            existing = call(sk, "GET", "/prices", {"lookup_keys[]": lookup, "active": "true", "limit": 1})["data"]
-            if existing:
-                print(f"  · {lookup} exists ({existing[0]['unit_amount'] / 100:.2f} USD)")
-                continue
-            if product is None:
-                product = call(sk, "POST", "/products", {"name": f"AfroTransact {name}", "metadata[plan_code]": code},
-                               idempotency_key=f"at-plan-product-{code}")
-            amount = total(monthly)
-            call(sk, "POST", "/prices", {
-                "product": product["id"], "currency": "usd", "unit_amount": amount, "lookup_key": lookup,
-                "recurring[interval]": "month", "recurring[interval_count]": months,
-                "metadata[plan_code]": code, "metadata[cadence]": cadence.upper(),
-            }, idempotency_key=f"at-plan-price-{lookup}-{amount}")
-            created += 1
-            print(f"  ✓ {lookup} created ({amount / 100:.2f} USD every {months} month(s))")
-    print(f"Plans: {created} price(s) created.")
+    keys = [f"{code}_{cadence}" for code in PLAN_CODES for cadence in ("monthly", "quarterly", "annual")]
+    found = call(sk, "GET", "/prices", {"lookup_keys[]": keys, "active": "true", "limit": 100})["data"]
+    print(f"  · Plans: {len(found)} existing plan Price(s) under the catalogue's lookup keys; the seller service adopts "
+          "matching ones and creates the rest on startup (staff console > Plans & billing > Sync with Stripe).")
     print("Next: run the webhook listeners (docs/engineering/secrets-and-configuration.md → Stripe) and restart "
           "payments and seller: tools/dev/local.sh restart payments seller")
 

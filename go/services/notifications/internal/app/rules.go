@@ -21,6 +21,7 @@ const (
 	TopicOrders             = "orders"
 	TopicSellerApplications = "sellerApplications"
 	TopicSellerCompliance   = "sellerCompliance"
+	TopicSellerSubscription = "sellerSubscription"
 	TopicPayouts            = "payouts"
 	TopicBookings           = "bookings"
 	TopicContent            = "content"
@@ -37,6 +38,7 @@ var DefaultTopics = map[string]string{
 	TopicOrders:             "at.order.events",
 	TopicSellerApplications: "at.seller-application.events",
 	TopicSellerCompliance:   "at.seller-compliance.events",
+	TopicSellerSubscription: "at.seller-subscription.events",
 	TopicPayouts:            "at.payout.events",
 	TopicBookings:           "at.bookings.events",
 	TopicContent:            "at.content.events",
@@ -270,6 +272,14 @@ var DefaultEventRules = map[string][]EventRule{
 			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("reason", "REINSTATED"), Enrich: enrichSuspensionHold},
 	},
 
+	// ---- seller plans (at.seller-subscription.events), S296–S297: rewards and staff adjustments ----
+	"seller.billing.grant_applied": {
+		{Topic: TopicSellerSubscription, Template: "seller.billing.reward_earned", Channels: chEmailPush,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("source", "RULE"), Enrich: enrichGrant},
+		{Topic: TopicSellerSubscription, Template: "seller.billing.credit_granted", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("source", "MANUAL"), Enrich: enrichGrant},
+	},
+
 	// ---- payouts (at.payout.events) ----
 	"payments.payout.paid": {{Topic: TopicPayouts, Template: "payout.paid", Channels: chEmailPush,
 		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichPayout}},
@@ -481,6 +491,21 @@ func enrichEnforcement(d map[string]any, l Links) {
 	d["itemsText"] = humanList(stringList(d, "pastDue"))
 	setDefault(d, "itemsText", "your Stripe account details")
 	d["actionUrl"] = join(l.SellerCenter, "/payouts")
+}
+
+// enrichGrant words a reward or adjustment: the trial end it moved to and, for credits, that the next invoices use it.
+func enrichGrant(d map[string]any, l Links) {
+	setDefault(d, "summary", "a billing update")
+	setDefault(d, "reason", "a milestone")
+	d["trialLine"] = ""
+	if f := friendlyDate(str(d, "trialEndsAt")); f != "" && (str(d, "type") == "FREE_DAYS" || str(d, "type") == "TRIAL_END") {
+		d["trialLine"] = "Your next plan charge is now on " + f + "."
+	}
+	d["creditLine"] = ""
+	if str(d, "type") == "CREDIT" {
+		d["creditLine"] = "Your next invoices use the credit first."
+	}
+	d["actionUrl"] = join(l.SellerCenter, "/billing")
 }
 
 func enrichPayout(d map[string]any, l Links) {

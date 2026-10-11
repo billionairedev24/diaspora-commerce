@@ -219,7 +219,7 @@ Stripe's test redirect pages. Orders are authorised (manual capture) and capture
 1. **Stripe Dashboard, test mode:** API keys → `.local/secrets.env` (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`);
    **Connect → Get started** (enables connected accounts; no platform profile is needed: sellers' accounts are
    Stripe-liable, see `payments-idempotency.md` → Seller accounts and liability).
-2. `make stripe-setup`: checks the keys and Connect and creates the plan Prices (`seller_growth_monthly`, …).
+2. `make stripe-setup`: checks the keys, Connect and the seller account settings. It creates no plan Prices: the seller service owns the plan catalogue and syncs a Product per plan and a Price per plan version and cadence to Stripe when it starts or a plan is published (staff console › Plans & billing › Sync with Stripe); Prices an older `make stripe-setup` made are adopted.
 3. Webhooks, three terminals (each prints a `whsec_…`; on one machine it is usually the same secret for all three):
    ```bash
    stripe listen --forward-to localhost:8105/v1/webhooks/stripe                   # STRIPE_WEBHOOK_SECRET
