@@ -1849,6 +1849,9 @@ components:
             $ref: '#/components/schemas/SiteLocale'
         market:
           $ref: '#/components/schemas/SiteMarket'
+        whatsappCommunityUrl:
+          type: string
+          description: WhatsApp community invite; empty removes it
       required:
       - expectedRevision
     SiteConfigSettings:
@@ -1887,6 +1890,9 @@ components:
           format: date-time
         updatedBy:
           type: string
+        whatsappCommunityUrl:
+          type: string
+          description: WhatsApp community invite (chat.whatsapp.com or a channel link)
     FrequencyCap:
       type: object
       description: impressions 0 = uncapped
@@ -3036,6 +3042,9 @@ components:
         updatedAt:
           type: string
           format: date-time
+        whatsappCommunityUrl:
+          type: string
+          description: WhatsApp community invite shown in email footers (S277)
     SiteContacts:
       type: object
       properties:

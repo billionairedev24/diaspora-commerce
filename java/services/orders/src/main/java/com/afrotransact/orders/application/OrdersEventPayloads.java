@@ -98,14 +98,14 @@ public final class OrdersEventPayloads {
                                          LocalDate deliversOn, LocalDate newDate, boolean offerRefund,
                                          boolean offerNewDate, String refundUrl, String newDateUrl, long totalMinor,
                                          String currency, String reason, PreorderSummary preorder,
-                                         List<String> choices, Instant missedAt) {
+                                         List<String> choices, Instant missedAt, List<ItemSummary> items) {
 
         static PreorderDeliveryMissed of(Order o, Shipment s, Instant at) {
             PreorderPackage p = s.preorder();
             return new PreorderDeliveryMissed(o.id(), o.number(), o.customerId(), s.id(), s.sellerOrgId(),
                     p.windowId(), p.windowCode(), p.windowName(), p.deliversOn(), null, true, true, null, null,
                     s.totalMinor(), o.currency(), "Not delivered on the pre-order date", PreorderSummary.of(o, p),
-                    List.of("REFUND", "WAIT"), at);
+                    List.of("REFUND", "WAIT"), at, ItemSummary.of(s));
         }
     }
 
@@ -176,16 +176,34 @@ public final class OrdersEventPayloads {
      * @param taxJurisdiction      state jurisdiction of the tax (US-TX)
      * @param localTaxJurisdiction local jurisdiction from the tax quote (US-TX-770), null when none
      * @param shippingTaxMinor     part of taxMinor charged on the shipment's shipping
+     * @param imageUrl             product photo snapshotted at checkout (order emails, S277); null when none
      */
     public record LineSummary(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                               long taxMinor, String productAtin, String productType, String category,
                               boolean perishable, long discountMinor, String taxJurisdiction,
-                              String localTaxJurisdiction, long shippingTaxMinor, int lineNo) {
+                              String localTaxJurisdiction, long shippingTaxMinor, int lineNo, String imageUrl) {
 
         static LineSummary of(OrderLine l) {
             return new LineSummary(l.id(), l.variantAtin(), l.title(), l.quantity(), l.unitPriceMinor(),
                     l.taxMinor(), l.productAtin(), l.productType(), l.category(), l.perishable(), l.discountMinor(),
-                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo());
+                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo(), l.imageUrl());
+        }
+    }
+
+    /**
+     * A shipment's line as the customer's emails show it (S277): what it is, its photo, how many and the unit price.
+     * Carried by the shipment events so shipped, delivered, cancelled and missed-delivery emails list the items.
+     */
+    public record ItemSummary(String lineId, String variantAtin, String productAtin, String title, String imageUrl,
+                              int quantity, long unitPriceMinor) {
+
+        static ItemSummary of(OrderLine l) {
+            return new ItemSummary(l.id(), l.variantAtin(), l.productAtin(), l.title(), l.imageUrl(), l.quantity(),
+                    l.unitPriceMinor());
+        }
+
+        static List<ItemSummary> of(Shipment s) {
+            return s.lines().stream().map(ItemSummary::of).toList();
         }
     }
 
@@ -199,37 +217,44 @@ public final class OrdersEventPayloads {
                                         String sellerOrgId, String fulfilmentType, String deliveryMethod,
                                         String from, String to, String actorType, String actorId, String source,
                                         String reason, Instant occurredAt, String carrier, String trackingNumber,
-                                        LocalDate promisedBy) {
+                                        LocalDate promisedBy, String sellerName, String currency,
+                                        List<ItemSummary> items) {
 
         static ShipmentStatusChanged of(Order o, Shipment s, StatusChange c) {
             return new ShipmentStatusChanged(o.id(), o.number(), o.customerId(), s.id(), s.sellerOrgId(),
                     s.fulfilmentType().name(), s.deliveryMethod().name(), c.from().wire(), c.to().wire(),
                     c.actorKind().name(), c.actorId(), c.source().wire(), c.reason(), c.occurredAt(), s.carrier(),
-                    s.trackingNumber(), s.promisedBy());
+                    s.trackingNumber(), s.promisedBy(), s.sellerName(), o.currency(), ItemSummary.of(s));
         }
     }
 
-    /** orders.shipment.delivered — payments settlement, review requests, returns window start. */
+    /**
+     * orders.shipment.delivered — payments settlement, review requests, returns window start. S277 adds the
+     * shipment's fulfilment type, seller, currency and items for the customer's delivered email.
+     */
     public record ShipmentDelivered(String orderId, String orderNumber, String customerId, String shipmentId,
                                     String sellerOrgId, Instant deliveredAt, long totalMinor, List<String> lineIds,
-                                    String source) {
+                                    String source, String fulfilmentType, String sellerName, String currency,
+                                    List<ItemSummary> items) {
 
         static ShipmentDelivered of(Order o, Shipment s, StatusChange c) {
             return new ShipmentDelivered(o.id(), o.number(), o.customerId(), s.id(), s.sellerOrgId(),
                     s.deliveredAt(), s.totalMinor(), s.lines().stream().map(OrderLine::id).toList(),
-                    c.source().wire());
+                    c.source().wire(), s.fulfilmentType().name(), s.sellerName(), o.currency(), ItemSummary.of(s));
         }
     }
 
     /** orders.shipment.cancelled — refunds / releases, seller and customer notifications. */
     public record ShipmentCancelled(String orderId, String orderNumber, String customerId, String shipmentId,
                                     String sellerOrgId, String actorType, String reason, boolean captured,
-                                    long totalMinor, Instant cancelledAt, String fulfilmentType, String windowId) {
+                                    long totalMinor, Instant cancelledAt, String fulfilmentType, String windowId,
+                                    String sellerName, String currency, List<ItemSummary> items) {
 
         static ShipmentCancelled of(Order o, Shipment s, StatusChange c) {
             return new ShipmentCancelled(o.id(), o.number(), o.customerId(), s.id(), s.sellerOrgId(),
                     c.actorKind().name(), c.reason(), s.captured(), s.totalMinor(), c.occurredAt(),
-                    s.fulfilmentType().name(), s.preorder() == null ? null : s.preorder().windowId());
+                    s.fulfilmentType().name(), s.preorder() == null ? null : s.preorder().windowId(), s.sellerName(),
+                    o.currency(), ItemSummary.of(s));
         }
     }
 }

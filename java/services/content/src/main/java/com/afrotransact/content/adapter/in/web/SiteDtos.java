@@ -111,7 +111,9 @@ final class SiteDtos {
     record PublicSiteConfig(int revision, List<SocialDto> socials, ContactsDto contacts, List<LegalDto> legal,
                             List<IdentityProviderDto> identityProviders, List<LocaleDto> locales, MarketDto market,
                             AppLinksDto appLinks, List<String> paymentMethods, String smsProgramName,
-                            Instant updatedAt) {
+                            Instant updatedAt,
+                            @Schema(description = "WhatsApp community invite shown in email footers (S277)")
+                            String whatsappCommunityUrl) {
 
         static PublicSiteConfig of(PublishedSiteConfig p) {
             SiteConfig c = p.config();
@@ -121,7 +123,8 @@ final class SiteDtos {
                     ContactsDto.of(c.contacts()), p.legal().stream().map(LegalDto::of).toList(),
                     c.identityProviders().stream().map(IdentityProviderDto::of).toList(),
                     c.locales().stream().map(LocaleDto::of).toList(), MarketDto.of(c.market()),
-                    AppLinksDto.of(c.appLinks()), c.paymentMethods(), c.smsProgramName(), c.updatedAt());
+                    AppLinksDto.of(c.appLinks()), c.paymentMethods(), c.smsProgramName(), c.updatedAt(),
+                    c.whatsappCommunityUrl());
         }
     }
 
@@ -158,14 +161,16 @@ final class SiteDtos {
     record SiteConfigSettings(int revision, List<SocialLinkDto> socials, ContactSettingsDto contacts,
                               AppLinksDto appLinks, List<String> paymentMethods, String smsProgramName,
                               List<IdentityProviderDto> identityProviders, List<LocaleDto> locales, MarketDto market,
-                              Instant updatedAt, String updatedBy) {
+                              Instant updatedAt, String updatedBy,
+                              @Schema(description = "WhatsApp community invite (chat.whatsapp.com or a channel link)")
+                              String whatsappCommunityUrl) {
 
         static SiteConfigSettings of(SiteConfig c) {
             return new SiteConfigSettings(c.revision(), c.socials().stream().map(SocialLinkDto::of).toList(),
                     ContactSettingsDto.of(c.contacts()), AppLinksDto.of(c.appLinks()), c.paymentMethods(),
                     c.smsProgramName(), c.identityProviders().stream().map(IdentityProviderDto::of).toList(),
                     c.locales().stream().map(LocaleDto::of).toList(), MarketDto.of(c.market()), c.updatedAt(),
-                    c.updatedBy());
+                    c.updatedBy(), c.whatsappCommunityUrl());
         }
     }
 
@@ -174,7 +179,9 @@ final class SiteDtos {
                                    String summary, List<SocialLinkDto> socials, ContactSettingsDto contacts,
                                    AppLinksDto appLinks, List<String> paymentMethods, String smsProgramName,
                                    List<IdentityProviderDto> identityProviders, List<LocaleDto> locales,
-                                   MarketDto market) {
+                                   MarketDto market,
+                                   @Schema(description = "WhatsApp community invite; empty removes it")
+                                   String whatsappCommunityUrl) {
 
         SiteConfig toDomain() {
             return new SiteConfig(0, socials == null ? List.of() : socials.stream().map(SocialLinkDto::toDomain).toList(),
@@ -184,7 +191,7 @@ final class SiteDtos {
                     identityProviders == null ? List.of()
                             : identityProviders.stream().map(IdentityProviderDto::toDomain).toList(),
                     locales == null ? List.of() : locales.stream().map(LocaleDto::toDomain).toList(),
-                    market == null ? null : market.toDomain(), null, null);
+                    market == null ? null : market.toDomain(), null, null, blankToNull(whatsappCommunityUrl));
         }
 
         private static String blankToNull(String s) {

@@ -21,6 +21,8 @@ public class DefaultSiteConfigPolicy implements SiteConfigPolicy {
     private static final Pattern ANDROID = Pattern.compile("^https://play\\.google\\.com/store/apps/details\\?id=[\\w.]+.*$");
     private static final Pattern ISO2 = Pattern.compile("^[A-Z]{2}$");
     private static final Pattern ISO3 = Pattern.compile("^[A-Z]{3}$");
+    private static final Pattern WHATSAPP_COMMUNITY = Pattern.compile(
+            "^https://(chat\\.whatsapp\\.com/(invite/)?[A-Za-z0-9]{6,}|(www\\.)?whatsapp\\.com/channel/[A-Za-z0-9]+)/?$");
 
     @Override
     public void validate(SiteConfig c) {
@@ -40,6 +42,10 @@ public class DefaultSiteConfigPolicy implements SiteConfigPolicy {
         String sms = c.smsProgramName();
         if (sms == null || sms.trim().length() < 3 || sms.length() > 60) {
             errors.put("smsProgramName", "Give the SMS program a name of 3 to 60 characters");
+        }
+        if (c.whatsappCommunityUrl() != null && !WHATSAPP_COMMUNITY.matcher(c.whatsappCommunityUrl()).matches()) {
+            errors.put("whatsappCommunityUrl", "Use the community's invite link, like https://chat.whatsapp.com/AbCdEf123456,"
+                    + " or a https://whatsapp.com/channel/… link");
         }
         providers(c.identityProviders(), errors);
         locales(c.locales(), errors);

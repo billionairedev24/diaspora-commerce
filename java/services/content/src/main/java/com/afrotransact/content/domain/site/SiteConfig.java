@@ -20,13 +20,26 @@ import java.util.Objects;
  * @param market            default market
  * @param updatedAt         when this revision was saved
  * @param updatedBy         who saved it
+ * @param whatsappCommunityUrl invitation to the WhatsApp community (chat.whatsapp.com invite or whatsapp.com
+ *                          channel), shown in every email footer and on the site; null when there is none
  */
 public record SiteConfig(int revision, List<SocialLink> socials, Contacts contacts, AppLinks appLinks,
                          List<String> paymentMethods, String smsProgramName,
                          List<IdentityProviderEntry> identityProviders, List<LocaleOption> locales,
-                         MarketDefault market, Instant updatedAt, String updatedBy) {
+                         MarketDefault market, Instant updatedAt, String updatedBy, String whatsappCommunityUrl) {
+
+    /** A configuration without a WhatsApp community link. */
+    public SiteConfig(int revision, List<SocialLink> socials, Contacts contacts, AppLinks appLinks,
+                      List<String> paymentMethods, String smsProgramName,
+                      List<IdentityProviderEntry> identityProviders, List<LocaleOption> locales,
+                      MarketDefault market, Instant updatedAt, String updatedBy) {
+        this(revision, socials, contacts, appLinks, paymentMethods, smsProgramName, identityProviders, locales, market,
+                updatedAt, updatedBy, null);
+    }
 
     public SiteConfig {
+        whatsappCommunityUrl = whatsappCommunityUrl == null || whatsappCommunityUrl.isBlank() ? null
+                : whatsappCommunityUrl.trim();
         socials = socials == null ? List.of() : socials.stream().sorted(Comparator.comparingInt(SocialLink::order)).toList();
         paymentMethods = paymentMethods == null ? List.of() : List.copyOf(paymentMethods);
         identityProviders = identityProviders == null ? List.of()
@@ -43,7 +56,7 @@ public record SiteConfig(int revision, List<SocialLink> socials, Contacts contac
     /** The same content as a new revision. */
     public SiteConfig asRevision(int next, String actor, Instant now) {
         return new SiteConfig(next, socials, contacts, appLinks, paymentMethods, smsProgramName, identityProviders,
-                locales, market, now, actor);
+                locales, market, now, actor, whatsappCommunityUrl);
     }
 
     /** Names of the sections that differ from {@code previous} (for audit and the change event). */
@@ -51,7 +64,7 @@ public record SiteConfig(int revision, List<SocialLink> socials, Contacts contac
         List<String> out = new ArrayList<>();
         if (previous == null) {
             return List.of("socials", "contacts", "appLinks", "paymentMethods", "smsProgramName", "identityProviders",
-                    "locales", "market");
+                    "locales", "market", "whatsappCommunityUrl");
         }
         add(out, "socials", socials, previous.socials);
         add(out, "contacts", contacts, previous.contacts);
@@ -61,6 +74,7 @@ public record SiteConfig(int revision, List<SocialLink> socials, Contacts contac
         add(out, "identityProviders", identityProviders, previous.identityProviders);
         add(out, "locales", locales, previous.locales);
         add(out, "market", market, previous.market);
+        add(out, "whatsappCommunityUrl", whatsappCommunityUrl, previous.whatsappCommunityUrl);
         return out;
     }
 

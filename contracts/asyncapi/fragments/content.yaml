@@ -149,7 +149,7 @@ components:
         revision: {type: integer}
         changedSections:
           type: array
-          items: {type: string, enum: [socials, contacts, appLinks, paymentMethods, smsProgramName, identityProviders, locales, market]}
+          items: {type: string, enum: [socials, contacts, appLinks, paymentMethods, smsProgramName, identityProviders, locales, market, whatsappCommunityUrl]}
         updatedBy: {type: string}
     ContentLegalVersionChanged:
       type: object

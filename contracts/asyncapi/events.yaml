@@ -3580,6 +3580,7 @@ components:
             - identityProviders
             - locales
             - market
+            - whatsappCommunityUrl
         updatedBy:
           type: string
     ContentLegalVersionChanged:
@@ -6718,6 +6719,45 @@ components:
         missedAt:
           type: string
           format: date-time
+        items:
+          type: array
+          description: 'S277: the package''s items (emails)'
+          items:
+            $ref: '#/components/schemas/OrdersShipmentItem'
+    OrdersShipmentItem:
+      type: object
+      description: 'S277: a shipment''s line as the customer''s emails show it. Optional and additive: consumers ignore it
+        when absent.'
+      required:
+      - lineId
+      - variantAtin
+      - quantity
+      - unitPriceMinor
+      properties:
+        lineId:
+          type: string
+          format: uuid
+        variantAtin:
+          type: string
+        productAtin:
+          type:
+          - string
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        imageUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: Product photo snapshotted at checkout
+        quantity:
+          type: integer
+        unitPriceMinor:
+          type: integer
+          format: int64
     OrdersPreorderMissedDeliveryAnswered:
       type: object
       required:
@@ -7206,6 +7246,12 @@ components:
                       type: integer
                       format: int64
                       description: Part of taxMinor on shipping
+                    imageUrl:
+                      type:
+                      - string
+                      - 'null'
+                      format: uri
+                      description: 'S277: product photo snapshotted at checkout (order emails)'
     OrdersOrderCancelled:
       type: object
       required:
@@ -7322,6 +7368,20 @@ components:
           - string
           - 'null'
           format: date
+        sellerName:
+          type:
+          - string
+          - 'null'
+          description: 'S277: seller shown on the package (emails)'
+        currency:
+          type:
+          - string
+          - 'null'
+        items:
+          type: array
+          description: 'S277: the shipment''s items (emails)'
+          items:
+            $ref: '#/components/schemas/OrdersShipmentItem'
     OrdersShipmentDelivered:
       type: object
       required:
@@ -7365,6 +7425,32 @@ components:
           - carrier
           - driver
           - system
+        fulfilmentType:
+          type:
+          - string
+          - 'null'
+          enum:
+          - SELLER_FULFILLED
+          - FBA_AFROTRANSACT
+          - RETAIL_1P
+          - PREORDER
+          - null
+          description: S277
+        sellerName:
+          type:
+          - string
+          - 'null'
+          description: S277
+        currency:
+          type:
+          - string
+          - 'null'
+          description: S277
+        items:
+          type: array
+          description: 'S277: the shipment''s items (emails)'
+          items:
+            $ref: '#/components/schemas/OrdersShipmentItem'
     OrdersShipmentCancelled:
       type: object
       required:
@@ -7422,6 +7508,21 @@ components:
           - string
           - 'null'
           description: S272 pre-order window of a PREORDER shipment
+        sellerName:
+          type:
+          - string
+          - 'null'
+          description: S277
+        currency:
+          type:
+          - string
+          - 'null'
+          description: S277
+        items:
+          type: array
+          description: 'S277: the shipment''s items (emails)'
+          items:
+            $ref: '#/components/schemas/OrdersShipmentItem'
     PaymentsIntentEvent:
       type: object
       required:

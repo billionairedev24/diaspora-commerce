@@ -14,15 +14,15 @@ import com.afrotransact.content.domain.site.SocialLink;
 /** JSON document stored per site-config revision (revision metadata lives in columns). */
 record SiteDocument(List<SocialLink> socials, Contacts contacts, AppLinks appLinks, List<String> paymentMethods,
                     String smsProgramName, List<IdentityProviderEntry> identityProviders, List<LocaleOption> locales,
-                    MarketDefault market) {
+                    MarketDefault market, String whatsappCommunityUrl) {
 
     static SiteDocument of(SiteConfig c) {
         return new SiteDocument(c.socials(), c.contacts(), c.appLinks(), c.paymentMethods(), c.smsProgramName(),
-                c.identityProviders(), c.locales(), c.market());
+                c.identityProviders(), c.locales(), c.market(), c.whatsappCommunityUrl());
     }
 
     SiteConfig toConfig(int revision, Instant at, String by) {
         return new SiteConfig(revision, socials, contacts, appLinks, paymentMethods, smsProgramName, identityProviders,
-                locales, market, at, by);
+                locales, market, at, by, whatsappCommunityUrl);
     }
 }
