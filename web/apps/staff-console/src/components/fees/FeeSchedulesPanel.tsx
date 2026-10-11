@@ -1,9 +1,12 @@
 'use client';
 
 import { type FeeScheduleStatus, type FeeScheduleView, formatBps, type RecordTone, staffKeys, staffQueries, tariffSummary } from '@afrotransact/api-client';
+import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, Field, fieldStyles, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
+import { type FormEvent, useMemo, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Notice';
@@ -12,13 +15,12 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, money } from '@/lib/format';
+import { exportDataset } from '@/lib/table-export';
 
 import { FeeEditor } from './FeeEditor';
 
 const TONE: Record<FeeScheduleStatus, RecordTone> = { ACTIVE: 'good', SCHEDULED: 'info', SUPERSEDED: 'brand', CANCELLED: 'bad' };
 const LABEL: Record<FeeScheduleStatus, string> = { ACTIVE: 'Active', SCHEDULED: 'Scheduled', SUPERSEDED: 'Past', CANCELLED: 'Cancelled' };
-const th = 'px-3 py-2 text-left text-xs font-semibold text-muted';
-const td = 'px-3 py-2 align-top text-sm';
 
 function CancelDialog({ schedule, onOpenChange }: { schedule: FeeScheduleView | null; onOpenChange: (open: boolean) => void }) {
   const qc = useQueryClient();
@@ -112,9 +114,74 @@ function CurrentSchedule({ s }: { s: FeeScheduleView }) {
 
 /** Fee schedules: the version in force, the history (active, scheduled, past, cancelled) and the editor. */
 export function FeeSchedulesPanel() {
+  const qc = useQueryClient();
   const q = useQuery(staffQueries.fees(staffApi()));
+  const state = useTableState({ searchParams: useSearchParams(), prefix: 'versions', defaultSort: [{ id: 'version', desc: true }] });
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState<FeeScheduleView | null>(null);
+  const columns = useMemo<ColumnDef<FeeScheduleView>[]>(
+    () => [
+      { id: 'version', accessorFn: (s) => s.version, header: 'Version', size: 90, meta: { kind: 'number' }, cell: ({ row }) => <strong>v{row.original.version}</strong> },
+      {
+        id: 'status',
+        accessorFn: (s) => LABEL[s.status],
+        header: 'Status',
+        size: 120,
+        meta: { kind: 'status' },
+        cell: ({ row }) => <StatusPill tone={TONE[row.original.status]}>{LABEL[row.original.status]}</StatusPill>
+      },
+      { id: 'effectiveFrom', accessorFn: (s) => s.effectiveFrom, header: 'Effective from', size: 160, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.effectiveFrom) },
+      {
+        id: 'commission',
+        accessorFn: (s) => `${formatBps(s.defaultCommissionBps)} default · ${s.categoryRates.length} categories · ${s.overrides.length} overrides`,
+        header: 'Commission',
+        size: 260
+      },
+      {
+        id: 'note',
+        accessorFn: (s) => [s.note, s.status === 'CANCELLED' ? `Cancelled by ${s.cancelledBy ?? '—'}: ${s.cancelReason ?? ''}` : ''].filter(Boolean).join(' · ') || undefined,
+        header: 'Note',
+        size: 260,
+        cell: ({ row }) => (
+          <>
+            {row.original.note ?? '—'}
+            {row.original.status === 'CANCELLED' ? (
+              <span className="block text-xs text-muted">
+                Cancelled by {row.original.cancelledBy ?? '—'} {dateTime(row.original.cancelledAt)}: {row.original.cancelReason}
+              </span>
+            ) : null}
+          </>
+        )
+      },
+      {
+        id: 'createdAt',
+        accessorFn: (s) => s.createdAt,
+        header: 'Created',
+        size: 170,
+        meta: { kind: 'datetime', exportValue: (s) => `${s.createdBy} · ${s.createdAt}` },
+        cell: ({ row }) => (
+          <>
+            {row.original.createdBy}
+            <span className="block text-xs text-muted">{dateTime(row.original.createdAt)}</span>
+          </>
+        )
+      },
+      {
+        id: 'actions',
+        header: () => <span className="at-visually-hidden">Actions</span>,
+        size: 100,
+        enableSorting: false,
+        meta: { export: false, label: 'Actions' },
+        cell: ({ row }) =>
+          row.original.cancellable ? (
+            <Button size="sm" variant="neutral" onClick={() => setCancelling(row.original)} aria-label={`Cancel v${row.original.version}`}>
+              Cancel
+            </Button>
+          ) : null
+      }
+    ],
+    []
+  );
   if (q.isPending) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const o = q.data;
@@ -137,54 +204,20 @@ export function FeeSchedulesPanel() {
           )
         }
       >
-                  <table className="w-full border-collapse" aria-label="Fee schedule versions">
-            <thead>
-              <tr className="border-b border-border">
-                <th className={th}>Version</th>
-                <th className={th}>Status</th>
-                <th className={th}>Effective from</th>
-                <th className={th}>Commission</th>
-                <th className={th}>Note</th>
-                <th className={th}>Created</th>
-                <th className={th}>
-                  <span className="at-visually-hidden">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {o.schedules.map((s) => (
-                <tr key={s.id} className="border-b border-border">
-                  <td className={`${td} font-semibold`}>v{s.version}</td>
-                  <td className={td}>
-                    <StatusPill tone={TONE[s.status]}>{LABEL[s.status]}</StatusPill>
-                  </td>
-                  <td className={td}>{dateTime(s.effectiveFrom)}</td>
-                  <td className={td}>
-                    {formatBps(s.defaultCommissionBps)} default · {s.categoryRates.length} categories · {s.overrides.length} overrides
-                  </td>
-                  <td className={td}>
-                    {s.note ?? '—'}
-                    {s.status === 'CANCELLED' ? (
-                      <span className="block text-xs text-muted">
-                        Cancelled by {s.cancelledBy ?? '—'} {dateTime(s.cancelledAt)}: {s.cancelReason}
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className={td}>
-                    {s.createdBy}
-                    <span className="block text-xs text-muted">{dateTime(s.createdAt)}</span>
-                  </td>
-                  <td className={td}>
-                    {s.cancellable ? (
-                      <Button size="sm" variant="neutral" onClick={() => setCancelling(s)} aria-label={`Cancel v${s.version}`}>
-                        Cancel
-                      </Button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <DataTable<FeeScheduleView>
+          id="staff.fee-schedule-versions"
+          label="Fee schedule versions"
+          columns={columns}
+          data={o.schedules}
+          getRowId={(s) => s.id}
+          rowLabel={(s) => `v${s.version}`}
+          state={state}
+          mode="client"
+          fetching={q.isFetching}
+          empty="No versions yet."
+          onExport={(req) => exportDataset(qc, req)}
+          exportsHref="/exports"
+        />
       </Card>
       <CancelDialog schedule={cancelling} onOpenChange={(open) => !open && setCancelling(null)} />
     </div>

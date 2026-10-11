@@ -1,9 +1,12 @@
 'use client';
 
 import { type DriverSuggestion, isApiError, type PickupAssignment, type PickupRow, staffKeys, staffQueries } from '@afrotransact/api-client';
+import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Field, fieldStyles, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useState } from 'react';
+import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
+import { type FormEvent, useMemo, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Notice';
@@ -12,6 +15,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, shortDate } from '@/lib/format';
+import { exportDataset } from '@/lib/table-export';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold text-muted';
 const td = 'px-3 py-2 align-top text-sm';
@@ -172,58 +176,81 @@ function Suggestions({ shipmentId, onAssigned }: { shipmentId: string; onAssigne
 /** Seller pickups waiting for a route, the nearest drivers for one, a reasoned override and the assignment history. */
 export function PickupsPanel() {
   const t = useT();
+  const qc = useQueryClient();
+  const state = useTableState({ searchParams: useSearchParams(), prefix: 'pickups' });
   const q = useQuery(staffQueries.pickups(staffApi()));
   const [selected, setSelected] = useState<string | null>(null);
   const [lookup, setLookup] = useState('');
-  if (q.isPending) return <Spinner />;
-  if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
-  const items: PickupRow[] = q.data.items;
+  const columns = useMemo<ColumnDef<PickupRow>[]>(
+    () => [
+      {
+        id: 'orderNumber',
+        accessorFn: (p) => p.orderNumber,
+        header: t('st.pickups.order'),
+        size: 170,
+        meta: { kind: 'mono' },
+        cell: ({ row }) => (
+          <span className="font-semibold">
+            {row.original.orderNumber}
+            <span className="block text-xs font-normal text-muted">{row.original.shipmentId}</span>
+          </span>
+        )
+      },
+      { id: 'sellerName', accessorFn: (p) => p.sellerName, header: t('st.pickups.seller'), size: 180, meta: { kind: 'strong' } },
+      { id: 'dropOff', accessorFn: (p) => `${p.city}, ${p.state} ${p.postalCode}`, header: t('st.pickups.dropOff'), size: 200 },
+      {
+        id: 'units',
+        accessorFn: (p) => p.units,
+        header: t('st.pickups.units'),
+        size: 100,
+        meta: { kind: 'number', align: 'end' },
+        cell: ({ row }) => (
+          <>
+            {row.original.units}
+            {row.original.perishable ? <span className="block text-xs text-muted">{t('st.pickups.perishable')}</span> : null}
+          </>
+        )
+      },
+      { id: 'promisedBy', accessorFn: (p) => p.promisedBy, header: t('st.pickups.promisedBy'), size: 130, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.promisedBy) },
+      {
+        id: 'actions',
+        header: () => <span className="at-visually-hidden">{t('st.pickups.actions')}</span>,
+        size: 120,
+        enableSorting: false,
+        meta: { export: false, label: t('st.pickups.actions') },
+        cell: ({ row }) => (
+          <Button size="sm" variant={selected === row.original.shipmentId ? 'primary' : 'neutral'} onClick={() => setSelected(row.original.shipmentId)} aria-label={t('st.pickups.driversFor', { order: row.original.orderNumber })}>
+            {t('st.pickups.drivers')}
+          </Button>
+        )
+      }
+    ],
+    [t, selected]
+  );
+  const items: PickupRow[] = q.data?.items ?? [];
   return (
     <div className="flex flex-col gap-4">
       <p className="m-0 text-sm text-muted">{t('st.pickups.intro')}</p>
       <Card title={t('st.pickups.waiting', { n: items.length })}>
-        {items.length ? (
-          <table className="w-full border-collapse" aria-label={t('st.pickups.waitingTable')}>
-            <thead>
-              <tr className="border-b border-border">
-                <th className={th}>{t('st.pickups.order')}</th>
-                <th className={th}>{t('st.pickups.seller')}</th>
-                <th className={th}>{t('st.pickups.dropOff')}</th>
-                <th className={th}>{t('st.pickups.units')}</th>
-                <th className={th}>{t('st.pickups.promisedBy')}</th>
-                <th className={th}>
-                  <span className="at-visually-hidden">{t('st.pickups.actions')}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((p) => (
-                <tr key={p.shipmentId} className={`border-b border-border ${selected === p.shipmentId ? 'bg-surface-hover' : ''}`} data-testid="pickup-row">
-                  <td className={`${td} font-semibold`}>
-                    {p.orderNumber}
-                    <span className="block text-xs text-muted">{p.shipmentId}</span>
-                  </td>
-                  <td className={td}>{p.sellerName}</td>
-                  <td className={td}>
-                    {p.city}, {p.state} {p.postalCode}
-                  </td>
-                  <td className={td}>
-                    {p.units}
-                    {p.perishable ? <span className="block text-xs text-muted">{t('st.pickups.perishable')}</span> : null}
-                  </td>
-                  <td className={td}>{shortDate(p.promisedBy)}</td>
-                  <td className={td}>
-                    <Button size="sm" variant={selected === p.shipmentId ? 'primary' : 'neutral'} onClick={() => setSelected(p.shipmentId)} aria-label={t('st.pickups.driversFor', { order: p.orderNumber })}>
-                      {t('st.pickups.drivers')}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="m-0 text-sm text-muted">{t('st.pickups.none')}</p>
-        )}
+        <DataTable<PickupRow>
+          id="staff.pickups"
+          label={t('st.pickups.waitingTable')}
+          columns={columns}
+          data={items}
+          getRowId={(p) => p.shipmentId}
+          rowLabel={(p) => p.orderNumber}
+          rowTestId="pickup-row"
+          state={state}
+          mode="client"
+          loading={q.isPending}
+          fetching={q.isFetching}
+          error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
+          onRowClick={(p) => setSelected(p.shipmentId)}
+          activeRowId={selected}
+          empty={t('st.pickups.none')}
+          onExport={(req) => exportDataset(qc, req)}
+          exportsHref="/exports"
+        />
         <form
           className="flex flex-wrap items-end gap-2"
           onSubmit={(e) => {
