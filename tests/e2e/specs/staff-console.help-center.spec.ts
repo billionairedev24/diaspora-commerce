@@ -10,6 +10,6 @@ test.describe('staff console · help center pages', () => {
     await expect(row).toBeVisible();
     await expect(page.getByRole('row', { name: /Press/ })).toBeVisible();
     await row.getByText('Shipping & delivery').click();
-    await expect(page.getByText('Orders & delivery · /help/shipping')).toBeVisible();
+    await expect(page.getByText('Orders & delivery · /help/shipping').first()).toBeVisible();
   });
 });
