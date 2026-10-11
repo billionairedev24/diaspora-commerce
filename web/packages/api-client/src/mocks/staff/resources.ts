@@ -458,6 +458,19 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       apply: (r, v) => { r.fields.effectiveDate = str(v.effectiveDate); r.fields.draftBanner = v.draftBanner === true; }
     }
   },
+  'privacy-requests': {
+    title: 'Privacy requests',
+    columns: [col('reference', 'Reference', 'mono', 14), col('type', 'Request', 'strong', 14), col('email', 'Email', 'text', 26), col('state', 'State', 'text', 8), col('dueAt', 'Due', 'date', 14), col('submittedAt', 'Received', 'datetime', 14), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('RECEIVED', 'COMPLETED', 'DENIED'),
+    exportable: false,
+    titleOf: (r) => `${str(r.fields.reference)} · ${humanize(str(r.fields.type))}`,
+    subtitleOf: (r) => `${str(r.fields.email)} · ${str(r.fields.state)} · due ${str(r.fields.dueAt).slice(0, 10)}`,
+    actions: [
+      { key: 'complete', label: 'Mark completed', tone: 'primary', permission: 'content:legal.edit', form: noteForm('What was done (kept with the request)', 'Mark completed', false), when: (r) => stateReason(r, 'RECEIVED'), apply: (r, v, ctx) => { r.fields.status = 'COMPLETED'; r.fields.resolutionNote = str(v.note) || null; log(r, ctx, 'Completed'); } },
+      { key: 'deny', label: 'Deny', tone: 'danger', permission: 'content:legal.edit', form: noteForm('Why the request is denied (the requester can appeal)', 'Deny request'), when: (r) => stateReason(r, 'RECEIVED'), apply: (r, v, ctx) => { r.fields.status = 'DENIED'; r.fields.resolutionNote = str(v.note); log(r, ctx, `Denied — ${str(v.note)}`); } }
+    ]
+  },
   announcements: placementsDef('Announcements', true),
   placements: placementsDef('Placements & ads', false),
   'identity-providers': {

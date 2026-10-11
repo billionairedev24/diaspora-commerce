@@ -1,8 +1,9 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type ApiClient } from '../client';
+import { type LegalDocumentKey } from '../schemas/legal';
 import { type SearchQuery } from '../schemas/search';
-import { accountKeys, careersKeys, cartKeys, productKeys, searchKeys, siteKeys } from './keys';
+import { accountKeys, careersKeys, cartKeys, legalKeys, productKeys, searchKeys, siteKeys } from './keys';
 
 /* queryOptions shared by server prefetch (RSC + HydrationBoundary) and client hooks, so both sides
    always use identical keys, fetchers and stale times. */
@@ -14,6 +15,16 @@ export const siteQueries = {
   home: (api: ApiClient) => queryOptions({ queryKey: siteKeys.home(), queryFn: ({ signal }) => api.getHome(signal), staleTime: MINUTE }),
   deliveryLocation: (api: ApiClient) =>
     queryOptions({ queryKey: siteKeys.deliveryLocation(), queryFn: ({ signal }) => api.getDeliveryLocation(signal), staleTime: 10 * MINUTE })
+};
+
+export const legalQueries = {
+  document: (api: ApiClient, key: LegalDocumentKey, locale: string, version?: string) =>
+    queryOptions({
+      queryKey: legalKeys.document(key, locale, version),
+      queryFn: ({ signal }) => api.getLegalDocument(key, { locale, version }, signal),
+      staleTime: 5 * MINUTE
+    }),
+  cookiePolicy: (api: ApiClient) => queryOptions({ queryKey: legalKeys.cookiePolicy(), queryFn: ({ signal }) => api.getCookiePolicy(signal), staleTime: 10 * MINUTE })
 };
 
 export const productQueries = {

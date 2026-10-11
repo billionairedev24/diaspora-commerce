@@ -49,6 +49,7 @@ export {
   Phone,
   Play,
   Plus,
+  Printer,
   QrCode,
   SealCheck,
   ShieldCheck,

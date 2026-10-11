@@ -10,6 +10,13 @@ export const siteKeys = {
   deliveryLocation: () => [...siteKeys.all, 'delivery-location'] as const
 };
 
+export const legalKeys = {
+  all: ['legal'] as const,
+  documents: () => [...legalKeys.all, 'document'] as const,
+  document: (key: string, locale: string, version?: string) => [...legalKeys.documents(), key, locale, version ?? 'current'] as const,
+  cookiePolicy: () => [...legalKeys.all, 'cookie-policy'] as const
+};
+
 export const productKeys = {
   all: ['product'] as const,
   details: () => [...productKeys.all, 'detail'] as const,

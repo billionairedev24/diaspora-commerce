@@ -73,13 +73,15 @@ export const SITE_CONFIG: SiteConfig = {
     address: 'AfroTransact, Inc. · 1001 Texas Ave, Suite 1400 · Houston, TX 77002'
   },
   legal: [
-    { key: 'terms', title: 'Conditions of Use', version: '3.2', effective: '2026-09-01', href: '/legal/terms' },
+    { key: 'conditions-of-use', title: 'Conditions of Use', version: '3.2', effective: '2026-09-01', href: '/legal/conditions-of-use' },
     { key: 'privacy', title: 'Privacy Notice', version: '4.0', effective: '2026-09-01', href: '/legal/privacy' },
-    { key: 'cookies', title: 'Cookie preferences', version: '2.1', effective: '2026-09-01', href: '/legal/cookies' },
-    { key: 'choices', title: 'Your Privacy Choices', version: '1.3', effective: '2026-09-01', href: '/legal/choices' },
-    { key: 'sms', title: 'SMS & Notification Terms', version: '1.0', effective: '2026-10-10', href: '/legal/sms' },
+    { key: 'cookies', title: 'Cookie Notice', version: '2.1', effective: '2026-09-01', href: '/legal/cookies' },
+    { key: 'privacy-choices', title: 'Your Privacy Choices', version: '1.3', effective: '2026-09-01', href: '/legal/privacy-choices' },
     { key: 'returns', title: 'Returns & Refunds', version: '2.0', effective: '2026-06-01', href: '/legal/returns' },
-    { key: 'accessibility', title: 'Accessibility Statement', version: '1.2', effective: '2026-08-20', href: '/legal/accessibility' }
+    { key: 'seller-terms', title: 'Seller & Provider Terms', version: '2.4', effective: '2026-09-01', href: '/legal/seller-terms' },
+    { key: 'prohibited-items', title: 'Prohibited & Restricted Items', version: '1.6', effective: '2026-07-15', href: '/legal/prohibited-items' },
+    { key: 'accessibility', title: 'Accessibility Statement', version: '1.2', effective: '2026-08-20', href: '/legal/accessibility' },
+    { key: 'sms-terms', title: 'SMS & Notification Terms', version: '1.0', effective: '2026-10-10', href: '/legal/sms-terms' }
   ],
   identityProviders: [
     { id: 'google', name: 'Google', enabled: true },

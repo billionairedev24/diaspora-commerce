@@ -52,7 +52,7 @@ export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKe
 export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   users: 'rbac', roles: 'rbac', applications: 'apps', orders: 'orders', products: 'catalog', moderation: 'catalog', claims: 'disputes', returns: 'disputes',
   payouts: 'payouts', inventory: 'inventory', 'purchase-orders': 'retail', routes: 'dispatch', 'support-cases': 'support', audit: 'audit', markets: 'markets',
-  'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
+  'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
   'fee-schedules': 'fees', 'tax-rates': 'fees'
 };
 

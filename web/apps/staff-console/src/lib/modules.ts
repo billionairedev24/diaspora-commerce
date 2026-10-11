@@ -78,7 +78,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
   markets: [{ resource: 'markets', label: 'Countries' }],
   siteCfg: [
     { resource: 'site-settings', label: 'Contacts & social links' },
-    { resource: 'legal-documents', label: 'Legal documents' }
+    { resource: 'legal-documents', label: 'Legal documents' },
+    { resource: 'privacy-requests', label: 'Privacy requests' }
   ],
   dev: [{ resource: 'identity-providers', label: 'Identity providers' }]
 };

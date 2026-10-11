@@ -18,6 +18,19 @@ import {
 import { type AddToCartRequest, type Cart, CartSchema, type UpdateCartLineRequest } from './schemas/cart';
 import { type ProductDetail, ProductDetailSchema, type StockAlert, StockAlertSchema } from './schemas/catalog';
 import { type Home, HomeSchema } from './schemas/home';
+import {
+  type ConsentRecord,
+  ConsentRecordSchema,
+  type ConsentRequest,
+  type CookiePolicy,
+  CookiePolicySchema,
+  type LegalDocumentKey,
+  type LegalPage,
+  LegalPageSchema,
+  type PrivacyRequestInput,
+  type PrivacyRequestReceipt,
+  PrivacyRequestReceiptSchema
+} from './schemas/legal';
 import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema } from './schemas/location';
 import { type SearchPage, SearchPageSchema, type SearchQuery, type Suggestions, SuggestionsSchema } from './schemas/search';
 import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './schemas/site';
@@ -38,6 +51,17 @@ export function createApiClient(options: ApiClientOptions) {
     getSiteConfig: (signal?: AbortSignal): Promise<SiteConfig> => request('/v1/site-config', SiteConfigSchema, { signal }),
     getHome: (signal?: AbortSignal): Promise<Home> => request('/v1/home', HomeSchema, { signal }),
     subscribeNewsletter: (email: string) => request('/v1/newsletter/subscriptions', NewsletterResponseSchema, { method: 'POST', body: { email } }),
+
+    /* Legal & privacy center */
+    /** A legal document: the current version, or an archived one with `version`. English is binding. */
+    getLegalDocument: (key: LegalDocumentKey, opts: { version?: string; locale?: string } = {}, signal?: AbortSignal): Promise<LegalPage> =>
+      request(`/v1/legal/${encodeURIComponent(key)}`, LegalPageSchema, { query: { version: opts.version, locale: opts.locale }, signal }),
+    getCookiePolicy: (signal?: AbortSignal): Promise<CookiePolicy> => request('/v1/consent/cookie-policy', CookiePolicySchema, { signal }),
+    /** Store a cookie choice (auditable). `gpc` also sends `Sec-GPC: 1`. */
+    recordConsent: (input: ConsentRequest): Promise<ConsentRecord> =>
+      request('/v1/consent/records', ConsentRecordSchema, { method: 'POST', body: input, headers: input.gpc ? { 'Sec-GPC': '1' } : undefined }),
+    submitPrivacyRequest: (input: PrivacyRequestInput): Promise<PrivacyRequestReceipt> =>
+      request('/v1/privacy/requests', PrivacyRequestReceiptSchema, { method: 'POST', body: input }),
 
     /* Location */
     getDeliveryLocation: (signal?: AbortSignal): Promise<DeliveryLocation> => request('/v1/delivery-location', DeliveryLocationSchema, { signal }),

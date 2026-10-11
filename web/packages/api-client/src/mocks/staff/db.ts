@@ -348,12 +348,27 @@ function seed(now: Date): MockStaffDb {
   ];
 
   const legal = [
-    ['terms', 'Conditions of Use', '3.2', day(40)],
+    ['conditions-of-use', 'Conditions of Use', '3.2', day(40)],
     ['privacy', 'Privacy Notice', '4.0', day(12)],
-    ['seller-agreement', 'Seller Agreement', '2.1', day(80)],
-    ['cookies', 'Cookie Policy', '1.4', day(120)],
-    ['returns', 'Returns Policy', '2.0', day(60)]
-  ].map(([key, title, version, effective]) => rec(key as string, { key: key as string, title: title as string, version: version as string, effectiveDate: effective as string, draftBanner: false }));
+    ['cookies', 'Cookie Notice', '2.1', day(40)],
+    ['privacy-choices', 'Your Privacy Choices', '1.3', day(40)],
+    ['returns', 'Returns & Refunds', '2.0', day(130)],
+    ['seller-terms', 'Seller & Provider Terms', '2.4', day(40)],
+    ['prohibited-items', 'Prohibited & Restricted Items', '1.6', day(88)],
+    ['accessibility', 'Accessibility Statement', '1.2', day(52)],
+    ['sms-terms', 'SMS & Notification Terms', '1.0', day(1)]
+  ].map(([key, title, version, effective]) => rec(key as string, { key: key as string, title: title as string, version: version as string, effectiveDate: effective as string, draftBanner: true, href: `/legal/${key as string}` }));
+
+  const privacyRequests = [
+    ['PR-100004', 'delete', 'adaeze.n@example.com', 'TX', 'RECEIVED', 2, 'Please close my account and delete my order history where allowed.'],
+    ['PR-100003', 'optout', 'kwame.m@example.com', 'CA', 'RECEIVED', 5, null],
+    ['PR-100002', 'access', 'tigist.a@example.com', 'NJ', 'COMPLETED', 20, 'Copy of all orders and messages'],
+    ['PR-100001', 'correct', 'olumide@example.com', 'GA', 'DENIED', 50, 'Change the name on order AT-1001']
+  ].map(([ref, type, email, state, status, daysAgo, details]) => rec(ref as string, {
+    reference: ref as string, type: type as string, email: email as string, state: state as string, status: status as string, details: details as string | null,
+    submittedAt: ago(daysAgo as number), dueAt: ahead(45 - (daysAgo as number)), overdue: false, locale: 'en',
+    resolutionNote: status === 'DENIED' ? 'We could not verify the request from the account email.' : status === 'COMPLETED' ? 'Export emailed to the account address.' : null
+  }));
 
   const placement = (id: string, slot: string, name: string, status: string, paid: boolean, advertiser: string | null, text: string, daysLeft: number) =>
     rec(id, { name, slot, status, paid, advertiser, text, priority: 10, startsAt: ago(3), endsAt: ahead(daysLeft), version: 1 }, [act(ago(4), 'Marketing', 'Draft created')]);
@@ -396,7 +411,7 @@ function seed(now: Date): MockStaffDb {
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
       users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
-      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, announcements, placements,
+      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates
     },
     notifications,
