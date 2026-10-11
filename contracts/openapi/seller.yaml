@@ -476,6 +476,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/MarketsResponse'
+  /v1/orgs:
+    post:
+      tags:
+      - Organisations
+      summary: Provision an approved organisation without an application (staff, sellers:provision)
+      description: 'Local and dev demo data and migrations only: 404 seller.provisioning-off unless at.seller.provisioning-enabled
+        is true. Publishes seller.org.approved and seller.org.updated. Idempotent on id: 201 when created, 200 with the existing
+        organisation (unchanged) otherwise.'
+      operationId: provision
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProvisionOrgRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Organisation'
   /v1/orgs/directory:
     get:
       tags:
@@ -1721,6 +1743,80 @@ components:
           type: boolean
         outcome:
           type: string
+    ProvisionOrgRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: org_… id to make the call idempotent; generated when omitted
+          example: org_mama_put_pantry
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        offering:
+          type: string
+          description: Defaults to PRODUCTS for sellers and SERVICES for providers
+          enum:
+          - PRODUCTS
+          - SERVICES
+          - BOTH
+        legalName:
+          type: string
+        displayName:
+          type: string
+        country:
+          type: string
+          example: US
+      required:
+      - kind
+    OrgMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        roleKey:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Organisation:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          description: Onboarding portal (role prefix)
+          enum:
+          - SELLER
+          - PROVIDER
+        offering:
+          type: string
+          description: What the organisation sells; null until approved
+          enum:
+          - PRODUCTS
+          - SERVICES
+          - BOTH
+        legalName:
+          type: string
+        displayName:
+          type: string
+        country:
+          type: string
+        status:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgMember'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
     SuspendOrgRequest:
       type: object
       description: Reason code required; note required for OTHER
@@ -2581,52 +2677,6 @@ components:
           minLength: 1
       required:
       - displayName
-    OrgMember:
-      type: object
-      properties:
-        userId:
-          type: string
-        roleKey:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-    Organisation:
-      type: object
-      properties:
-        id:
-          type: string
-        kind:
-          type: string
-          description: Onboarding portal (role prefix)
-          enum:
-          - SELLER
-          - PROVIDER
-        offering:
-          type: string
-          description: What the organisation sells; null until approved
-          enum:
-          - PRODUCTS
-          - SERVICES
-          - BOTH
-        legalName:
-          type: string
-        displayName:
-          type: string
-        country:
-          type: string
-        status:
-          type: string
-        members:
-          type: array
-          items:
-            $ref: '#/components/schemas/OrgMember'
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
     ReasonCode:
       type: object
       properties:

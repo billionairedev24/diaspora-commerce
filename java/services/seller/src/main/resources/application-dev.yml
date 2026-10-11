@@ -2,6 +2,9 @@
 at:
   api-docs:
     enabled: true
+  seller:
+    # POST /v1/orgs: staff provision approved demo organisations (tools/seed). Never on in uat or prod.
+    provisioning-enabled: true
 management:
   tracing:
     sampling:

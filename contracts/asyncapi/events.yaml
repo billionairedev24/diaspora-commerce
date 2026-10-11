@@ -3282,6 +3282,21 @@ components:
         shipsNow:
           type: boolean
           description: Always ships now by carrier, never as a pre-order (delivery-runs eligibility excludes it)
+        imageUrl:
+          type:
+          - string
+          - 'null'
+          description: Public URL of the main (first) product image; the search indexer shows it on product cards
+        brand:
+          type:
+          - string
+          - 'null'
+          description: The product's brand attribute
+        communities:
+          type: array
+          items:
+            type: string
+          description: Diaspora communities from the community / communities attribute (comma-separated there)
         variants:
           type: array
           items:

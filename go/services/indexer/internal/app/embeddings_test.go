@@ -31,7 +31,7 @@ func TestProductDocumentsCarryAnEmbeddingOfTheirText(t *testing.T) {
 	if err := p.Handle(context.Background(), productEnvelope(t)); err != nil {
 		t.Fatal(err)
 	}
-	if len(emb.texts) != 1 || emb.texts[0] != "Jollof Seasoning Blend. Groceries / Pantry / Spices & seasonings" {
+	if len(emb.texts) != 1 || emb.texts[0] != "Jollof Seasoning Blend. AfroTransact Brand. Groceries / Pantry / Spices & seasonings" {
 		t.Fatalf("embedded text %q", emb.texts)
 	}
 	if len(idx.docs) != 1 || len(idx.docs[0].Embedding) != 2 {

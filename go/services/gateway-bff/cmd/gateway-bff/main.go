@@ -151,7 +151,8 @@ func run() error {
 		Checkout: app.NewCheckoutService(carts, identity, payments, orders),
 		Careers:  app.NewCareersService(media, serviceTokens),
 		// Pre-orders (delivery-runs public routes; resolution and open list cached for 30 s).
-		Preorders: app.NewPreorderService(upstreams.NewPreorders(deliveryRunsClient, cache, 30*time.Second), location, cfg.Market),
+		Preorders: app.NewPreorderService(upstreams.NewPreorders(deliveryRunsClient, cache, 30*time.Second), location, cfg.Market,
+			app.WithPreorderCatalog(catalog)),
 		// Seller Center & Provider Hub
 		SellerShell:     app.NewSellerShellService(sellerDeps),
 		SellerDashboard: app.NewSellerDashboardService(sellerDeps),

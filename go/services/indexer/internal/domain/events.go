@@ -37,6 +37,12 @@ type ProductEvent struct {
 	Variants        []VariantPayload `json:"variants"`
 	// SellerHidden is set while the owner's listings are hidden by seller-service compliance enforcement.
 	SellerHidden bool `json:"sellerHidden"`
+	// ImageURL is the public URL of the main product image (product cards in search and home rails).
+	ImageURL string `json:"imageUrl"`
+	// Brand is the product's brand attribute.
+	Brand string `json:"brand"`
+	// Communities are the diaspora communities the product is tagged with.
+	Communities []string `json:"communities"`
 }
 
 // SellerOrgEvent mirrors seller-service's seller.org.approved / seller.org.updated payload (fields the indexer uses).

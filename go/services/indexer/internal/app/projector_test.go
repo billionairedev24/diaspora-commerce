@@ -103,7 +103,8 @@ func productEnvelope(t *testing.T) events.Envelope {
 	t.Helper()
 	payload, _ := json.Marshal(domain.ProductEvent{
 		ProductID: "p1", ATIN: "AT00000001", OwnerKind: "PLATFORM", OwnerOrgID: "org_afrotransact_retail",
-		Status: "LIVE", Title: "Jollof Seasoning Blend", CategoryID: "c1",
+		Status: "LIVE", Title: "Jollof Seasoning Blend", CategoryID: "c1", Brand: "AfroTransact Brand",
+		ImageURL: "http://localhost:9000/media/product-image/jollof.jpg", Communities: []string{"Nigerian", "Ghanaian"},
 		Variants: []domain.VariantPayload{
 			{ATIN: "AT0000000A", PriceMinor: 1299, Currency: "usd"},
 			{ATIN: "AT0000000B", PriceMinor: 899, Currency: "usd"},
@@ -122,6 +123,10 @@ func TestProductEventBecomesDocument(t *testing.T) {
 	if d.Department != "Groceries" || d.Fulfilment != searchindex.FulfilledByAfroTransact || d.PriceMinor != 899 ||
 		d.Currency != "USD" || len(d.VariantATINs) != 2 || d.Status != "LIVE" {
 		t.Fatalf("unexpected doc %+v", d)
+	}
+	if d.ImageURL != "http://localhost:9000/media/product-image/jollof.jpg" || d.Brand != "AfroTransact Brand" ||
+		len(d.Communities) != 2 || d.Communities[0] != "Nigerian" {
+		t.Fatalf("product card fields not projected: %+v", d)
 	}
 }
 

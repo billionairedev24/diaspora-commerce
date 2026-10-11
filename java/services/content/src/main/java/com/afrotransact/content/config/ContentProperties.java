@@ -25,7 +25,7 @@ public record ContentProperties(List<String> publicPostPaths, Flags flags, Marke
         publicPostPaths = publicPostPaths == null ? List.of() : List.copyOf(publicPostPaths);
         flags = flags == null ? new Flags(null) : flags;
         markets = markets == null ? new Markets(null) : markets;
-        placements = placements == null ? new Placements(null, null, null, null) : placements;
+        placements = placements == null ? new Placements(null, null, null, null, null) : placements;
         site = site == null ? new Site(null, null) : site;
         newsletter = newsletter == null ? new Newsletter(null, null, null, null) : newsletter;
         jobs = jobs == null ? new Jobs(null) : jobs;
@@ -55,11 +55,14 @@ public record ContentProperties(List<String> publicPostPaths, Flags flags, Marke
      * @param resolveMaxAge      resolve Cache-Control max-age
      * @param bundleMaxAge       bundle browser max-age
      * @param bundleSharedMaxAge bundle CDN s-maxage
+     * @param localImageOrigins  plain-http origins accepted for placement images as if they were https (local
+     *                           profile only: MinIO on http://localhost:9000); empty everywhere else
      */
     public record Placements(Duration cacheTtl, Duration resolveMaxAge, Duration bundleMaxAge,
-                             Duration bundleSharedMaxAge) {
+                             Duration bundleSharedMaxAge, List<String> localImageOrigins) {
 
         public Placements {
+            localImageOrigins = localImageOrigins == null ? List.of() : List.copyOf(localImageOrigins);
             cacheTtl = cacheTtl == null ? Duration.ofSeconds(10) : cacheTtl;
             resolveMaxAge = resolveMaxAge == null ? Duration.ofSeconds(30) : resolveMaxAge;
             bundleMaxAge = bundleMaxAge == null ? Duration.ofSeconds(60) : bundleMaxAge;

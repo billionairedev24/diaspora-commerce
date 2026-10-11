@@ -1,6 +1,8 @@
 import { withTelemetryConfig } from '@afrotransact/telemetry/next/config';
 import { type NextConfig } from 'next';
 
+import { LOCAL_MEDIA_PUBLIC_URL, mediaRemotePatterns } from './src/lib/media-remote-patterns';
+
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
@@ -16,7 +18,13 @@ const nextConfig: NextConfig = {
   // Allows a separate build output (e.g. NEXT_DIST_DIR=.next-e2e) without clobbering .next.
   distDir: process.env.NEXT_DIST_DIR || '.next',
   experimental: { optimizePackageImports: ['@phosphor-icons/react'] },
-  images: { unoptimized: true },
+  // Product, campaign and tile images come from the media service's public URL: this stack's MinIO bucket locally
+  // (http://localhost:9000/media), each environment's media CDN otherwise (MEDIA_PUBLIC_URL, docs/engineering/environments.md).
+  // They render as plain <img> (unoptimized); the patterns matter once Next.js image optimisation is switched on.
+  images: {
+    unoptimized: true,
+    remotePatterns: mediaRemotePatterns([process.env.MEDIA_PUBLIC_URL || LOCAL_MEDIA_PUBLIC_URL, process.env.NEXT_PUBLIC_MEDIA_PUBLIC_URL])
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },

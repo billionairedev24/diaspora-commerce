@@ -6,6 +6,10 @@ at:
     # Fixed dev-only key so confirmation links survive restarts; every other environment reads NEWSLETTER_TOKEN_KEY.
     newsletter:
       token-key: ${NEWSLETTER_TOKEN_KEY:local-dev-newsletter-token-key-change-me-0123456789}
+    # Local media is MinIO over plain http (media's stores.public.publicBaseUrl): accept its URLs for placement
+    # images, which every other environment requires to be https.
+    placements:
+      local-image-origins: http://localhost:9000
 logging:
   level:
     com.afrotransact: DEBUG

@@ -4,6 +4,8 @@ at:
   security:
     enabled: false
   seller:
+    # POST /v1/orgs: staff provision approved demo organisations (make seed). Never on in uat or prod.
+    provisioning-enabled: true
     crypto:
       keys:
         k1: ${FIELD_ENCRYPTION_KEY:ZGV2LW9ubHktZmllbGQta2V5LTMyLWJ5dGVzLWxvbiE=}

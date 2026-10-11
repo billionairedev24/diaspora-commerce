@@ -92,6 +92,11 @@ func TestLookupZip(t *testing.T) {
 	if a.City != "Edison" || a.State != "NJ" {
 		t.Fatalf("got %+v", a)
 	}
+	// The demo pre-order cities resolve offline (deliver-to 79401 shows the Lubbock window).
+	a, err = svc(fixture.New()).LookupZip(context.Background(), "79401")
+	if err != nil || a.City != "Lubbock" || a.State != "TX" {
+		t.Fatalf("got %+v, %v", a, err)
+	}
 }
 
 // S139: suggestions from the first character; the service issues a session token when the client has none; ZIP and

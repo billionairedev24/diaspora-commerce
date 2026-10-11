@@ -41,13 +41,27 @@ type preorderServiceImpl struct {
 	up       port.PreorderClient
 	location LocationService
 	market   string
+	catalog  port.CatalogClient
 }
 
 var _ PreorderService = (*preorderServiceImpl)(nil)
 
+// PreorderOption configures optional collaborators of the PreorderService.
+type PreorderOption func(*preorderServiceImpl)
+
+// WithPreorderCatalog lets the service name the catalogue departments of a window's categories (the window page
+// lists products of its first department).
+func WithPreorderCatalog(c port.CatalogClient) PreorderOption {
+	return func(s *preorderServiceImpl) { s.catalog = c }
+}
+
 // NewPreorderService returns the storefront pre-order use case; market is the BFF's market ("us").
-func NewPreorderService(up port.PreorderClient, location LocationService, market string) PreorderService {
-	return &preorderServiceImpl{up: up, location: location, market: market}
+func NewPreorderService(up port.PreorderClient, location LocationService, market string, opts ...PreorderOption) PreorderService {
+	s := &preorderServiceImpl{up: up, location: location, market: market}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // place picks the explicit place or the session's delivery location.
@@ -97,6 +111,7 @@ func (s *preorderServiceImpl) Resolve(ctx context.Context, c *domain.Caller, cou
 	}
 	out := object(raw)
 	out["place"] = p
+	s.storefrontResolution(ctx, out)
 	// Defaults for members an older delivery-runs omits (the storefront schema requires them).
 	for k, v := range map[string]any{"on": false, "metro": false, "covered": out["window"] != nil, "stage": nil, "countdownTo": nil,
 		"window": nil, "supportPhone": ""} {
@@ -124,16 +139,125 @@ func (s *preorderServiceImpl) Open(ctx context.Context) (map[string]any, error) 
 		if windows == nil {
 			windows = []any{}
 		}
+		storefrontListItems(windows)
 		return map[string]any{"windows": windows, "placements": preorderPlacementDefaults()}, nil
 	}
 	out := object(raw)
 	if _, ok := out["windows"].([]any); !ok {
 		out["windows"] = []any{}
 	}
+	storefrontListItems(out["windows"].([]any))
 	if _, ok := out["placements"].(map[string]any); !ok {
 		out["placements"] = preorderPlacementDefaults()
 	}
 	return out, nil
+}
+
+// defaultPreorderTimeZone is the market's zone for windows that do not name one (delivery-runs' own default).
+const defaultPreorderTimeZone = "America/Chicago"
+
+func setDefault(m map[string]any, key string, value any) {
+	if v, ok := m[key]; !ok || v == nil && value != nil {
+		m[key] = value
+	}
+}
+
+// storefrontResolution maps delivery-runs' public resolution (GET /v1/public/preorders/resolve: countdownTarget,
+// top-level fees, paymentMethods and count) onto the storefront's PreorderResolution, whose window carries its own
+// terms (fees, currency, pickup window, payment methods), count, showCount, departments and both creative slots.
+// Members already in the storefront shape are kept.
+func (s *preorderServiceImpl) storefrontResolution(ctx context.Context, out map[string]any) {
+	setDefault(out, "countdownTo", out["countdownTarget"])
+	w, ok := out["window"].(map[string]any)
+	if !ok {
+		return
+	}
+	fees, _ := out["fees"].(map[string]any)
+	for _, k := range []string{"doorFeeMinor", "pickupFeeMinor"} {
+		if v, ok := fees[k]; ok {
+			setDefault(w, k, v)
+		}
+		setDefault(w, k, 0)
+	}
+	setDefault(w, "currency", fees["currency"])
+	setDefault(w, "currency", domain.Currency)
+	setDefault(w, "pickupWindow", fees["pickupWindow"])
+	setDefault(w, "pickupWindow", "")
+	if methods, ok := out["paymentMethods"].([]any); ok && len(methods) > 0 {
+		setDefault(w, "allowedMethods", methods)
+	}
+	setDefault(w, "allowedMethods", []any{"CARD"})
+	count, hasCount := out["count"]
+	if _, ok := w["count"]; !ok {
+		w["count"] = count
+	}
+	setDefault(w, "showCount", hasCount && count != nil)
+	setDefault(w, "timeZone", defaultPreorderTimeZone)
+	setDefault(w, "ribbon", "")
+	setDefault(w, "headline", "")
+	setDefault(w, "categories", []any{})
+	if _, ok := w["departments"]; !ok {
+		w["departments"] = s.departments(ctx, w["categories"])
+	}
+	creatives, _ := w["creatives"].(map[string]any)
+	if creatives == nil {
+		creatives = map[string]any{}
+	}
+	setDefault(creatives, "hero", nil)
+	setDefault(creatives, "pdp", nil)
+	w["creatives"] = creatives
+}
+
+// departments names the catalogue departments of a window's categories ("Spices & seasonings" → "Groceries"), in
+// category order; empty without a catalogue.
+func (s *preorderServiceImpl) departments(ctx context.Context, raw any) []string {
+	out := []string{}
+	cats, _ := raw.([]any)
+	if s.catalog == nil || len(cats) == 0 {
+		return out
+	}
+	tree, err := s.catalog.Categories(ctx)
+	if err != nil {
+		return out
+	}
+	byName := map[string]string{}
+	for _, c := range tree {
+		dept, _, _ := strings.Cut(c.Path, " › ")
+		if _, seen := byName[strings.ToLower(c.Name)]; !seen && dept != "" {
+			byName[strings.ToLower(c.Name)] = strings.TrimSpace(dept)
+		}
+	}
+	seen := map[string]bool{}
+	for _, c := range cats {
+		name, _ := c.(string)
+		if d := byName[strings.ToLower(strings.TrimSpace(name))]; d != "" && !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// storefrontListItems maps delivery-runs' open-window list items (flat country / region / city) onto the storefront's
+// PreorderListItem (place object, zip, time zone).
+func storefrontListItems(windows []any) {
+	for _, item := range windows {
+		w, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, ok := w["place"].(map[string]any); !ok {
+			country, _ := w["country"].(string)
+			region, _ := w["region"].(string)
+			city, _ := w["city"].(string)
+			w["place"] = map[string]any{"country": country, "region": region, "city": city}
+		}
+		setDefault(w, "zip", nil)
+		setDefault(w, "heroUrl", nil)
+		setDefault(w, "timeZone", defaultPreorderTimeZone)
+		setDefault(w, "doorFeeMinor", 0)
+		setDefault(w, "currency", domain.Currency)
+	}
 }
 
 // preorderPlacementDefaults are the Settings placements' defaults (all on), used when delivery-runs omits them.

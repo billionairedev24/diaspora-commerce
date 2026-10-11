@@ -176,4 +176,11 @@ var seed = []domain.Address{
 	{Line1: "2300 S King Dr", City: "Chicago", State: "IL", PostalCode: "60616", Country: "US", Lat: 41.8502, Lon: -87.6167},
 	{Line1: "1500 Market St", City: "Philadelphia", State: "PA", PostalCode: "19102", Country: "US", Lat: 39.9526, Lon: -75.1652},
 	{Line1: "400 Main St", City: "Dallas", State: "TX", PostalCode: "75202", Country: "US", Lat: 32.7810, Lon: -96.7970},
+	// Pre-order cities of the design (design/at-preorder.js zipOf): deliver-to works offline for the demo windows.
+	{Line1: "1314 Avenue K", City: "Lubbock", State: "TX", PostalCode: "79401", Country: "US", Lat: 33.5846, Lon: -101.8456},
+	{Line1: "509 S Taylor St", City: "Amarillo", State: "TX", PostalCode: "79101", Country: "US", Lat: 35.2083, Lon: -101.8338},
+	{Line1: "300 N Campbell St", City: "El Paso", State: "TX", PostalCode: "79901", Country: "US", Lat: 31.7596, Lon: -106.4870},
+	{Line1: "300 N Loraine St", City: "Midland", State: "TX", PostalCode: "79701", Country: "US", Lat: 31.9993, Lon: -102.0767},
+	{Line1: "411 W 8th St", City: "Odessa", State: "TX", PostalCode: "79761", Country: "US", Lat: 31.8487, Lon: -102.3712},
+	{Line1: "1110 Houston St", City: "Laredo", State: "TX", PostalCode: "78040", Country: "US", Lat: 27.5064, Lon: -99.5075},
 }

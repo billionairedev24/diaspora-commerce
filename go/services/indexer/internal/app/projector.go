@@ -119,6 +119,9 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 	doc := searchindex.ProductDocument{
 		ATIN:         pe.ATIN,
 		Title:        pe.Title,
+		Brand:        pe.Brand,
+		Communities:  pe.Communities,
+		ImageURL:     pe.ImageURL,
 		Department:   cat.Department,
 		CategoryPath: cat.Path,
 		SellerID:     pe.OwnerOrgID,
