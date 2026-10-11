@@ -18,7 +18,7 @@ ENV          ?= dev
 TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
-.PHONY: help up up-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check \
+.PHONY: help up up-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links \
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers \
@@ -150,6 +150,9 @@ smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARR
 # ------------------------------------------------------------------------------------------------ web / misc
 dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
 	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+
+stripe-setup: ## Prepare your Stripe TEST account: checks the keys and Connect, creates the plan prices (idempotent)
+	python3 tools/dev/stripe_setup.py
 
 secrets-check: ## Which secrets/provider keys each app needs and which you set in .local/secrets.env (masked; fails only on required-but-missing)
 	python3 tools/dev/secrets_check.py $(if $(SERVICE),--app $(SERVICE),) $(if $(SECRETS_FILE),--file $(SECRETS_FILE),)

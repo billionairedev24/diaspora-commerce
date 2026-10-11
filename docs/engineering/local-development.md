@@ -170,8 +170,8 @@ refused), and dev codes always go through the notifications service. `IDENTITY_T
 
 ## Payments: Stripe test mode and Stripe Elements
 
-Checkout pays with **Stripe Elements** (S282): the Express Checkout Element (Apple Pay, Google Pay, Link) at the top of
-the payment step, the shopper's saved methods, and "Use a new payment method" with the **Payment Element inline**. It
+Checkout pays with **Stripe Elements** (S282): the shopper's saved methods and, always visible below them, the
+**Payment Element** (cards, Link, Apple Pay / Google Pay, Klarna, Cash App Pay, Amazon Pay inside it). It
 uses Stripe's deferred-intent flow: the Elements are created from the cart total (`mode: 'payment'`, currency,
 `captureMethod: 'manual'`, `setupFutureUsage: 'off_session'` when "Save for future purchases" is ticked, the pre-order
 windows' `paymentMethodTypes` when they restrict methods) and updated as delivery choices change. **Place order** runs
@@ -210,8 +210,44 @@ make up                                                        # or restart paym
 
 Then check out as `customer.houston@afrotransact.test` / `Test1234!Local` with Stripe's test cards: `4242 4242 4242 4242`
 (authorised), `4000 0027 6000 3184` (3-D Secure), `4000 0000 0000 9995` (declined); Cash App Pay and Affirm show
-Stripe's test redirect pages. Orders are authorised (manual capture) and captured per shipment, so the dashboard shows
-"Uncaptured" until a shipment ships. `stripe trigger payment_intent.succeeded` exercises the webhook path.
+Stripe's test redirect pages. Orders are authorised (manual capture) and captured once, when the first shipment ships
+(per shipment only with `STRIPE_MULTICAPTURE=true` on an account with flexible payments), so the dashboard shows
+"Uncaptured" until then. `stripe trigger payment_intent.succeeded` exercises the webhook path.
+
+### Test the whole money flow with your Stripe test account
+
+1. **Stripe Dashboard, test mode:** API keys → `.local/secrets.env` (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`);
+   **Connect → Get started** (enables connected accounts; no platform profile is needed: sellers' accounts are
+   Stripe-liable, see `payments-idempotency.md` → Seller accounts and liability).
+2. `make stripe-setup`: checks the keys and Connect and creates the plan Prices (`seller_growth_monthly`, …).
+3. Webhooks, three terminals (each prints a `whsec_…`; on one machine it is usually the same secret for all three):
+   ```bash
+   stripe listen --forward-to localhost:8105/v1/webhooks/stripe                   # STRIPE_WEBHOOK_SECRET
+   stripe listen --forward-connect-to localhost:8106/v1/webhooks/stripe-connect   # STRIPE_CONNECT_WEBHOOK_SECRET
+   stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.finalized,invoice.paid,invoice.payment_failed \
+     --forward-to localhost:8106/v1/webhooks/stripe-billing                       # STRIPE_BILLING_WEBHOOK_SECRET
+   ```
+   Put them in `.local/secrets.env`; `make secrets-check`; then `make up` (or `tools/dev/local.sh restart payments seller gateway-bff`).
+   For a quick run add `SETTLEMENT_HOLD=2m` to `.local/secrets.env` so sellers' money is transferred minutes after
+   delivery instead of 7 days.
+4. **Seller onboarding** (Sell on AfroTransact → Seller Center wizard → Stripe verification → Start verification). In
+   Stripe's embedded form use its test values: phone `000 000 0000` and SMS code `000000`, date of birth
+   `01/01/1901` (verifies), SSN last 4 / full SSN `0000` / `000-00-0000`, address line 1 `address_full_match`,
+   EIN `000000000`, website any `https://…`; bank: routing `110000000`, account `000123456789`. Then Plan (a card
+   below), Review & submit, and approve the application in the staff console (Applications; two staff members).
+   The Dashboard shows the account under **Connect → Connected accounts** with charges and payouts enabled.
+5. **Buy something** from that seller as `customer.houston@afrotransact.test` / `Test1234!Local`. Use card
+   `4000 0000 0000 0077` (or `4000 0000 0000 0010`): its funds are **available immediately** in test mode, so the
+   platform balance can pay the seller's transfer. With `4242…` the money stays *pending* for days and the transfer
+   waits with "insufficient available balance".
+6. **Ship and deliver** the order (Seller Center → Orders → buy a label / mark shipped; staff console → Delivery
+   dispatch or the shipment's status). Shipping captures the payment (Dashboard → Payments: Succeeded). Delivery starts
+   the hold; when it ends the job (every 15 min, `SETTLEMENT_CRON`) creates the transfer: Dashboard → Connect → the
+   account → Transfers, `transfer_group` = the order id.
+7. **Payout:** in Seller Center → Payouts, request a payout (at least $25); payments sends it from the connected
+   account to the test bank. Disputes: pay with `4000 0000 0000 0259` (disputed as fraudulent after capture) and
+   watch the dispute arrive in the staff console and the seller's notifications.
+
 
 **Without keys** (the local default) the storefront shows a labelled stand-in, *"Stripe test mode is not configured: set
 STRIPE_PUBLISHABLE_KEY and STRIPE_SECRET_KEY"*, above its own card form; payments still cannot create PaymentIntents, so
