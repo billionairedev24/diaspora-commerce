@@ -52,7 +52,7 @@ func marketsResource() *staffResource {
 			}
 			return []domain.DetailTable{tableOf("States and provinces", rows, []domain.Column{col("code", "Code", "mono", 12), col("name", "Name", "strong", 28), col("kind", "Kind", "text", 15), col("switchedOn", "Switched on", "text", 45)}, "code")}
 		},
-		actions: []staffAction{
+		actions: append(marketStateActions(), []staffAction{
 			{key: "publish", label: "Publish markets", tone: "primary", permission: "content:markets.edit", form: noteForm("Publish the draft as a new version", "Publish", false),
 				run: func(ctx context.Context, sc staffCtx, _ jobj, v jobj) error {
 					return sc.post(ctx, sc.up.Content, "/v1/markets/publications", omitEmpty(jobj{"note": vs(v, "note")}), nil)
@@ -65,7 +65,7 @@ func marketsResource() *staffResource {
 				run: func(ctx context.Context, sc staffCtx, o jobj, _ jobj) error {
 					return sc.post(ctx, sc.up.Content, "/v1/markets/draft/countries/"+url.PathEscape(jstr(o, "code"))+"/deactivate-all", jobj{}, nil)
 				}},
-		},
+		}...),
 		edit: &staffEdit{permission: "content:markets.edit",
 			form: func(o jobj) domain.Form {
 				return domain.Form{Title: "Edit country (draft)", SubmitLabel: "Save draft", Fields: []domain.FormField{
