@@ -30,6 +30,7 @@ make down              # stop (keeps volumes) — `make reset` also deletes them
 
 Every service has a fixed local port so the whole stack runs side by side, see [ports](./ports.md). The
 [make targets](./make-targets.md) page lists every target of the root `Makefile`.
+To test with real providers (Stripe, Twilio, Resend, …) see [secrets and provider keys](./secrets.md).
 
 Each service also builds, tests and runs on its own:
 

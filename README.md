@@ -30,6 +30,10 @@ make go-verify         # all Go services: vet + lint + tests
 make web-dev           # storefront on http://localhost:3000
 ```
 
+Provider keys (Stripe test mode, Twilio, Resend, …) for a real local test go in `.local/secrets.env` (template
+`infra/local/secrets.env.example`); `make secrets-check` shows what is set. Every secret and where it lives locally
+and in dev/uat/prod: **[docs/engineering/secrets-and-configuration.md](docs/engineering/secrets-and-configuration.md)**.
+
 Each service is also built, tested, containerised and deployed on its own, for example:
 
 ```bash

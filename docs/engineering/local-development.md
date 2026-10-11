@@ -4,6 +4,12 @@
 their fixed ports ([infra/local/PORTS.md](../../infra/local/PORTS.md)) and the three web apps, then prints every link.
 `make dev-status`, `make dev-logs SERVICE=x`, `make dev-restart SERVICE=x` and `make down` manage what it started.
 
+**Provider keys.** Your own Stripe test, Twilio, Resend, OpenRouter, … credentials go in `.local/secrets.env`
+(gitignored; template `infra/local/secrets.env.example`). `make up`, `restart` and `mobile` load it, `make secrets-check`
+shows what is set, missing or malformed (values masked), and each provider switches from its local fallback (Mailpit,
+the log) to the real one when its keys are present. Every variable, where to create it, and where it lives in
+dev/uat/prod: [secrets and configuration](secrets-and-configuration.md).
+
 ## Demo data: `make seed`
 
 A fresh stack has an empty catalogue. `make seed` (`tools/seed/seed.py`, Python 3 standard library only) creates a demo

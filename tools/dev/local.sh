@@ -7,7 +7,7 @@
 #   tools/dev/local.sh status                  # what is running and healthy
 #   tools/dev/local.sh links                   # print every link again (apps, docs portal, MCP, API docs)
 #   tools/dev/local.sh logs delivery-runs      # follow one log (web apps: web-storefront, web-staff-console, …)
-#   tools/dev/local.sh restart orders          # rebuild + restart one service
+#   tools/dev/local.sh restart orders          # rebuild + restart one service (re-reads .local/secrets.env)
 #   tools/dev/local.sh mobile                  # only the Expo apps (customer :8081, driver :8082)
 #   tools/dev/local.sh docs                    # only the developer portal (:3100) and Storybook (:6006)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
@@ -71,6 +71,64 @@ WEB_APPS="storefront seller-center staff-console"
 # by something else (your Grafana, another dev server), `up` picks the next free one from 3010 and passes the apps'
 # addresses to identity (sign-in return URLs), gateway-bff and notifications. The choice is kept in .local/web-ports.
 WEB_PORTS_FILE="$STATE/web-ports"
+
+# Your provider credentials: .local/secrets.env (gitignored; template infra/local/secrets.env.example; reference
+# docs/engineering/secrets-and-configuration.md). `up`, `restart` and `mobile` source it and export every value to the
+# services, web apps (NEXT_PUBLIC_* at dev-server start) and Expo apps (EXPO_PUBLIC_*, inlined when Metro bundles)
+# started from here. Values are never printed. Names the file leaves empty are unset (or keep your shell's value), so a
+# blank line keeps the service's local default (Spring and the Go loader treat an empty variable as set). SECRETS_FILE=<path> uses another.
+SECRETS_FILE="${SECRETS_FILE:-$STATE/secrets.env}"
+SECRETS_LOADED=0
+
+load_secrets() {
+  local name names keep count=0
+  if [[ "$SECRETS_LOADED" == 1 ]]; then return 0; fi
+  SECRETS_LOADED=1
+  if [[ ! -f "$SECRETS_FILE" ]]; then
+    echo "==> no ${SECRETS_FILE#"$ROOT"/}: local fallbacks only (Mailpit for email and codes, logged texts; checkout"
+    echo "    needs Stripe test keys). Start one: mkdir -p .local && cp infra/local/secrets.env.example .local/secrets.env"
+    return 0
+  fi
+  names=$(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' "$SECRETS_FILE")
+  # A value already in your shell survives an empty line in the file (a non-empty line in the file wins).
+  for name in $names; do
+    if [[ -n "${!name:-}" ]]; then printf -v "AT_SHELL_$name" '%s' "${!name}"; fi
+  done
+  set -a
+  # shellcheck disable=SC1090 # the developer's own file
+  if ! . "$SECRETS_FILE"; then
+    set +a
+    echo "  ✗ ${SECRETS_FILE#"$ROOT"/} is not valid shell (quote values with spaces in single quotes)" >&2; exit 1
+  fi
+  set +a
+  for name in $names; do
+    keep="AT_SHELL_$name"
+    if [[ -z "${!name:-}" && -n "${!keep:-}" ]]; then export "$name=${!keep}"
+    elif [[ -z "${!name:-}" ]]; then unset "$name"
+    else count=$((count + 1)); fi
+    unset "$keep"
+  done
+  # The customer app's PaymentSheet uses the storefront's publishable key unless the file sets its own.
+  if [[ -z "${EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY:-}" && -n "${STRIPE_PUBLISHABLE_KEY:-}" ]]; then
+    export EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY="$STRIPE_PUBLISHABLE_KEY"
+  fi
+  echo "==> ${SECRETS_FILE#"$ROOT"/}: $count values loaded (not shown; make secrets-check for the details)"
+}
+
+# One line per provider: real provider or local fallback (tools/dev/secrets_check.py --summary).
+secrets_summary() {
+  command -v python3 >/dev/null || return 0
+  echo "  $(SECRETS_FILE="$SECRETS_FILE" python3 "$ROOT/tools/dev/secrets_check.py" --summary --file "$SECRETS_FILE" 2>/dev/null || true)"
+}
+
+# identity's one-time codes: straight to Mailpit by default; through notifications (Twilio for SMS, Resend or Mailpit
+# for email; test users' codes still land in Mailpit) once Twilio is set. Your own VERIFICATION_SENDER wins.
+verification_sender() {
+  if [[ -n "${VERIFICATION_SENDER:-}" ]]; then echo "$VERIFICATION_SENDER"
+  elif [[ -n "${TWILIO_ACCOUNT_SID:-}" && -n "${TWILIO_AUTH_TOKEN:-}" && -n "${TWILIO_FROM:-}${TWILIO_MESSAGING_SERVICE_SID:-}" ]]; then
+    echo outbox
+  else echo mailpit; fi
+}
 
 port_of() {
   case "$1" in
@@ -377,6 +435,12 @@ start() {
   export WEB_ORIGINS="http://localhost:$(web_port_of storefront),http://localhost:$(web_port_of seller-center),http://localhost:$(web_port_of staff-console),$mobile_origins"
   # media signs uploads for this stack's MinIO (infra/local/docker-compose.yml root credentials).
   export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
+  local vsender=""
+  if [[ "$svc" == identity ]]; then
+    vsender=$(verification_sender)
+    if [[ "$vsender" == outbox ]]; then echo "  · identity: one-time codes via notifications → Twilio / Resend (test users' codes: Mailpit)"
+    else echo "  · identity: one-time codes → $vsender (http://localhost:8025)"; fi
+  fi
   : >"$LOGS/$svc.log"
   if [[ "$(runtime_of "$svc")" == java ]]; then
     jar=$( { ls "$ROOT"/java/services/"$svc"/target/"$svc"-service-*.jar 2>/dev/null || true; } | grep -v -- '-plain' | head -1 || true)
@@ -387,6 +451,7 @@ start() {
     mkdir -p "$BIN"
     cp "$jar" "$BIN/$svc.jar"
     (cd "$ROOT/java/services/$svc" || exit 1
+      if [[ -n "$vsender" ]]; then export VERIFICATION_SENDER="$vsender"; fi
       SPRING_PROFILES_ACTIVE=local nohup java -XX:TieredStopAtLevel=1 -Xmx512m -jar "$BIN/$svc.jar" >>"$LOGS/$svc.log" 2>&1 &
       echo $! >"$PIDS/$svc.pid")
   else
@@ -502,9 +567,11 @@ links() {
   printf '  %-20s %-30s %s\n' "Storybook" "http://localhost:$(storybook_port)" "design tokens, components, app screens (a11y checks)"
   echo "MCP server (Model Context Protocol, Streamable HTTP, JSON-RPC 2.0)"
   echo "  Endpoint             POST http://localhost:8114/mcp   (local: security off, runs as the local super admin)"
+  echo "                       POST only: a GET (browser, curl without -X POST, the Inspector's \"SSE\" transport) gets 405"
   echo "  Tool catalogue       http://localhost:8114/v1/tools   (JSON schemas per tool; ?mine=true for the caller's own)"
   echo "  OAuth metadata       http://localhost:8114/.well-known/oauth-protected-resource"
-  echo "  Try it               npx @modelcontextprotocol/inspector  → Streamable HTTP, URL http://localhost:8114/mcp"
+  echo "  Try it               npx @modelcontextprotocol/inspector  → Transport Type \"Streamable HTTP\" (not SSE), URL http://localhost:8114/mcp"
+  echo "  CLI check            npx @modelcontextprotocol/inspector --cli http://localhost:8114/mcp --transport http --method tools/list"
   echo "  Claude Code          claude mcp add --transport http afrotransact http://localhost:8114/mcp"
   echo "API docs per service (Scalar at /docs; also /swagger-ui.html, /redoc and /v3/api-docs or /openapi.yaml)"
   for svc in $ALL_SERVICES; do
@@ -519,8 +586,10 @@ links() {
   echo "  Postgres             localhost:5432                 Valkey   localhost:6379"
   echo "Manage"
   echo "  make dev-status | make dev-logs SERVICE=orders (or web-storefront) | make dev-links | make down"
-  echo "  Checkout needs a Stripe test key: export STRIPE_SECRET_KEY=sk_test_... before make up, then"
-  echo "  stripe listen --forward-to localhost:8105/v1/webhooks/stripe"
+  echo "Secrets (.local/secrets.env; make secrets-check; docs/engineering/secrets-and-configuration.md)"
+  secrets_summary
+  echo "  Checkout needs Stripe test keys in .local/secrets.env, and for webhooks:"
+  echo "  stripe listen --forward-to localhost:8105/v1/webhooks/stripe   (its whsec_… → STRIPE_WEBHOOK_SECRET)"
   echo "──────────────────────────────────────────────────────────────────────────────────────────────"
 }
 
@@ -653,6 +722,8 @@ cmd_up() {
   local services="$DEFAULT_SERVICES" svc failed=""
   if [[ $# -gt 0 ]]; then services="$*"; fi
   for svc in $services; do runtime_of "$svc" >/dev/null; done
+  load_secrets
+  secrets_summary
   if [[ "${WEB:-1}" != 0 ]]; then resolve_web_ports; fi
   infra_up
   # shellcheck disable=SC2086
@@ -736,11 +807,12 @@ case "${1:-}" in
   down) cmd_down ;;
   status) cmd_status ;;
   links) links ;;
-  mobile) mkdir -p "$LOGS" "$PIDS"; mobile_up; links ;;
+  mobile) mkdir -p "$LOGS" "$PIDS"; load_secrets; mobile_up; links ;;
   docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
+    load_secrets
     export PUBLIC_WEB_URL="http://localhost:$(web_port_of storefront)"
     export SELLER_CENTER_URL="http://localhost:$(web_port_of seller-center)"
     export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
