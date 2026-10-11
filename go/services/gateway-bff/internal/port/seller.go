@@ -905,6 +905,10 @@ type CarrierLabel struct {
 type CarrierClient interface {
 	Rates(ctx context.Context, bearer string, s CarrierShipment) (CarrierRates, error)
 	BuyLabel(ctx context.Context, bearer, idempotencyKey, carrier, service string, s CarrierShipment) (CarrierLabel, error)
+	// ManagedPickupLocations lists the org's own pickup locations, inactive ones too (GET /v1/pickup-locations?includeInactive=true).
+	ManagedPickupLocations(ctx context.Context, bearer, ownerOrg string) ([]PickupLocation, error)
+	// SavePickupLocation creates or replaces a pickup location (PUT /v1/pickup-locations/{id}).
+	SavePickupLocation(ctx context.Context, bearer string, l PickupLocation) (PickupLocation, error)
 }
 
 // ---------------------------------------------------------------- payments (payouts)

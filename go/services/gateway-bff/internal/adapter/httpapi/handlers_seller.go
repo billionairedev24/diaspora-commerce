@@ -49,6 +49,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/ship-from-addresses/{addressId}/default", h.shipFromDefault)
 	route("DELETE /v1/seller/ship-from-addresses/{addressId}", h.shipFromDelete)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}/afrotransact-pickup", h.shipFromPickup)
+	route("PUT /v1/seller/ship-from-addresses/{addressId}/customer-pickup", h.shipFromCustomerPickup)
 	if h.s.SellerOffers != nil {
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
@@ -699,6 +700,16 @@ func (h *handlersImpl) shipFromPickup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.s.SellerShipFrom.SetPickup(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) shipFromCustomerPickup(w http.ResponseWriter, r *http.Request) {
+	var b domain.CustomerPickupRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShipFrom.SetCustomerPickup(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

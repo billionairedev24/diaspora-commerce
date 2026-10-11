@@ -29,6 +29,8 @@ import { sellerApi } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
+import { CustomerPickupSettings } from './CustomerPickupSettings';
+
 type AddressForm = ShipFromForm & { label: string; company: string };
 const EMPTY: AddressForm = { label: '', name: '', company: '', phone: '', line1: '', line2: '', city: '', state: '', postalCode: '' };
 
@@ -246,7 +248,8 @@ function AddressDialog({ open, address, onClose }: { open: boolean; address: Shi
   );
 }
 
-/** Orders → Ship-from & AfroTransact pickup (S231, S255): addresses, where geo placed them, and pickup with its hours. */
+/** Orders → Ship-from & pickup (S231, S255): addresses, where geo placed them, AfroTransact driver pickup with its hours,
+    and customer pickup (checkout offers the address as a free pickup point for the seller's items). */
 export function ShipFromView() {
   const t = useT();
   const qc = useQueryClient();
@@ -315,7 +318,10 @@ export function ShipFromView() {
                 </address>
                 <Position a={a} />
               </div>
-              <PickupSettings key={`${a.id}-${a.version}`} a={a} editable={editable} />
+              <div className="flex flex-col gap-4">
+                <PickupSettings key={`${a.id}-${a.version}`} a={a} editable={editable} />
+                <CustomerPickupSettings key={`${a.id}-cp-${a.customerPickup?.enabled ? 'on' : 'off'}`} a={a} editable={editable} />
+              </div>
             </div>
           </Card>
         ))}

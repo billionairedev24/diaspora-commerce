@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -709,6 +710,32 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, map[string]any{"quotes": []map[string]any{
 			{"carrier": "ups", "service": "03", "serviceName": "UPS Ground", "amountMinor": 1189, "currency": "USD", "transitDays": 3},
 			{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "serviceName": "USPS Ground Advantage", "amountMinor": 845, "currency": "USD", "transitDays": 4}}, "partial": false})
+	})
+	// Customer pickup locations (sellers' own, kind SELLER): kept per id for the test run.
+	pickups := map[string]map[string]any{}
+	var pickupMu sync.Mutex
+	mux.HandleFunc("GET /v1/pickup-locations", func(w http.ResponseWriter, r *http.Request) {
+		pickupMu.Lock()
+		defer pickupMu.Unlock()
+		items := []map[string]any{}
+		for _, l := range pickups {
+			if owner := r.URL.Query().Get("ownerOrg"); owner == "" || l["ownerOrg"] == owner {
+				items = append(items, l)
+			}
+		}
+		writeJSON(w, 200, map[string]any{"items": items})
+	})
+	mux.HandleFunc("PUT /v1/pickup-locations/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var l map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&l); err != nil || l["kind"] != "SELLER" || l["ownerOrg"] == "" {
+			problem(w, 400, "carrier-gateway.invalid-request", "Invalid pickup location", nil)
+			return
+		}
+		l["id"] = r.PathValue("id")
+		pickupMu.Lock()
+		pickups[r.PathValue("id")] = l
+		pickupMu.Unlock()
+		writeJSON(w, 200, l)
 	})
 	mux.HandleFunc("POST /v1/labels", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Idempotency-Key") == "" {

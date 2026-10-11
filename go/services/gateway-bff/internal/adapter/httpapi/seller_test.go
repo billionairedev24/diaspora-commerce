@@ -323,6 +323,24 @@ func TestSellerContractConformance(t *testing.T) {
 		return r.json(t)
 	}
 	hours := []map[string]any{{"day": "MONDAY", "opens": "09:00", "closes": "17:00"}, {"day": "SATURDAY", "opens": "10:00", "closes": "14:00"}}
+	// Customer pickup at the store: a carrier-gateway SELLER pickup location with the address's id.
+	if r := b.do("PUT", "/v1/seller/ship-from-addresses/"+firstID+"/customer-pickup", map[string]any{"enabled": true, "hours": []any{}}); r.status != 422 ||
+		r.json(t)["code"] != domain.CodePickupInvalidHours {
+		t.Fatalf("customer pickup without hours = %d %s", r.status, r.body)
+	}
+	cp := b.do("PUT", "/v1/seller/ship-from-addresses/"+firstID+"/customer-pickup", map[string]any{"enabled": true, "hours": hours, "readyHours": 3})
+	mustStatus(t, cp, 200)
+	if c := cp.json(t)["customerPickup"].(map[string]any); c["enabled"] != true || c["readyHours"] != float64(3) || len(c["hours"].([]any)) != 2 {
+		t.Fatalf("customer pickup on = %s", cp.body)
+	}
+	listed := b.do("GET", "/v1/seller/ship-from-addresses", nil).json(t)["items"].([]any)
+	for _, it := range listed {
+		a := it.(map[string]any)
+		if want := a["id"] == firstID; a["customerPickup"].(map[string]any)["enabled"] != want {
+			t.Fatalf("listed customer pickup of %v = %v", a["id"], a["customerPickup"])
+		}
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/ship-from-addresses/nope/customer-pickup", map[string]any{"enabled": false, "hours": []any{}}), 404)
 	if p := pickup(firstID, map[string]any{"enabled": true, "hours": []any{}}, 422); p["code"] != domain.CodePickupInvalidHours {
 		t.Fatalf("no hours = %v", p)
 	}

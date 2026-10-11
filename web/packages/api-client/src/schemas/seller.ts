@@ -553,6 +553,15 @@ export interface AfrotransactPickupRequest {
   version?: number | null;
 }
 
+/** "Customers can pick up their orders here" (a carrier-gateway SELLER pickup location with the address's id). */
+export const CustomerPickupSchema = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema), readyHours: z.number().int().min(0).max(168) });
+export type CustomerPickup = z.infer<typeof CustomerPickupSchema>;
+export interface CustomerPickupRequest {
+  enabled: boolean;
+  hours: PickupWindow[];
+  readyHours: number;
+}
+
 /** A saved ship-from address of the organisation (seller service; the label form preselects the default). */
 export const ShipFromAddressSchema = z.object({
   id: z.string(),
@@ -578,7 +587,9 @@ export const ShipFromAddressSchema = z.object({
     hours: z.array(PickupWindowSchema),
     zoneName: nullableString,
     enabledAt: nullableString
-  })
+  }),
+  /** Customers can collect their orders here (checkout pickup). */
+  customerPickup: CustomerPickupSchema.optional()
 });
 export type ShipFromAddress = z.infer<typeof ShipFromAddressSchema>;
 

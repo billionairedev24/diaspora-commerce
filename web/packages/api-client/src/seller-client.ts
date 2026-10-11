@@ -34,6 +34,7 @@ import {
   ChangePlanResultSchema,
   type ComplianceSummary,
   ComplianceSummarySchema,
+  type CustomerPickupRequest,
   type Dashboard,
   DashboardSchema,
   type Earnings,
@@ -215,6 +216,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** "AfroTransact picks up from my store" on or off, with the pickup hours (S255). */
     setAfrotransactPickup: (id: string, body: AfrotransactPickupRequest): Promise<ShipFromAddress> =>
       request(`/v1/seller/ship-from-addresses/${enc(id)}/afrotransact-pickup`, ShipFromAddressSchema, { method: 'PUT', body }),
+    /** "Customers can pick up their orders here" on or off, with the hours and how long orders take to be ready. */
+    setCustomerPickup: (id: string, body: CustomerPickupRequest): Promise<ShipFromAddress> =>
+      request(`/v1/seller/ship-from-addresses/${enc(id)}/customer-pickup`, ShipFromAddressSchema, { method: 'PUT', body }),
     listOffers: (productId: string, signal?: AbortSignal): Promise<SellerOfferList> =>
       request('/v1/seller/offers', SellerOfferListSchema, { query: { productId }, signal }),
     setOfferFulfilment: (offerId: string, body: OfferFulfilmentRequest): Promise<SellerOffer> =>

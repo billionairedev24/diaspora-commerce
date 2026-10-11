@@ -284,6 +284,21 @@ func (k *carrierImpl) BuyLabel(ctx context.Context, bearer, key, carrier, servic
 	return out, err
 }
 
+func (k *carrierImpl) ManagedPickupLocations(ctx context.Context, bearer, ownerOrg string) ([]port.PickupLocation, error) {
+	var out struct {
+		Items []port.PickupLocation `json:"items"`
+	}
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/pickup-locations", Bearer: bearer,
+		Query: url.Values{"includeInactive": {"true"}, "ownerOrg": {ownerOrg}}}, &out)
+	return out.Items, err
+}
+
+func (k *carrierImpl) SavePickupLocation(ctx context.Context, bearer string, l port.PickupLocation) (port.PickupLocation, error) {
+	var out port.PickupLocation
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/pickup-locations/" + esc(l.ID), Bearer: bearer, RetryUnsafe: true, JSON: l}, &out)
+	return out, err
+}
+
 // ---------------------------------------------------------------- payments: payouts (contracts/openapi/payments.yaml)
 
 type payoutsImpl struct{ c httpclient.Client }

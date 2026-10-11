@@ -738,6 +738,8 @@ type ShipFromAddress struct {
 	// Position is where geo-service located the address (nil when geocoding failed or geo was down); S255.
 	Position           *GeoPosition       `json:"position"`
 	AfrotransactPickup AfrotransactPickup `json:"afrotransactPickup"`
+	// CustomerPickup is whether customers can collect their orders here (checkout pickup).
+	CustomerPickup CustomerPickup `json:"customerPickup"`
 }
 
 // GeoPosition is a geocoded position: ADDRESS (street level), ZIP (centroid) or POINT.
@@ -754,6 +756,31 @@ type AfrotransactPickup struct {
 	Hours     []PickupWindow `json:"hours"`
 	ZoneName  *string        `json:"zoneName"`
 	EnabledAt *time.Time     `json:"enabledAt"`
+}
+
+// CustomerPickup is "customers can pick up here": the carrier-gateway pickup location (kind SELLER, same id as the
+// address) checkout offers for the seller's packages.
+type CustomerPickup struct {
+	Enabled    bool           `json:"enabled"`
+	Hours      []PickupWindow `json:"hours"`
+	ReadyHours int            `json:"readyHours"`
+}
+
+// CustomerPickupRequest is PUT /v1/seller/ship-from-addresses/{id}/customer-pickup.
+type CustomerPickupRequest struct {
+	Enabled    bool           `json:"enabled"`
+	Hours      []PickupWindow `json:"hours"`
+	ReadyHours int            `json:"readyHours"`
+}
+
+// Validate applies the same hours rules as AfroTransact pickup (1–14 windows to enable, no overlap) and a ready time
+// of 0–168 hours.
+func (r CustomerPickupRequest) Validate() map[string]string {
+	errs := AfrotransactPickupRequest{Enabled: r.Enabled, Hours: r.Hours}.Validate()
+	if r.ReadyHours < 0 || r.ReadyHours > 168 {
+		errs["readyHours"] = "Between 0 and 168 hours"
+	}
+	return errs
 }
 
 // AfrotransactPickupRequest is PUT /v1/seller/ship-from-addresses/{id}/afrotransact-pickup.

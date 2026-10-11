@@ -563,6 +563,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/ship-from-addresses/{addressId}/customer-pickup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Turn "customers can pick up their orders here" on or off for a ship-from address (store or pickup place)
+         * @description carrier-gateway `PUT /v1/pickup-locations/{addressId}` with the seller's token (Orders edit; carrier-gateway checks
+         *     shipping:label and the organisation): a SELLER pickup location with the address's id, name (company · label),
+         *     address, position, the state's time zone, the opening hours and how long orders take to be ready. Checkout lists
+         *     it (with address, hours, ready time and distance) for this seller's packages; pickup has no shipping charge.
+         *     Enabling needs 1–14 non-overlapping windows (422 `PICKUP_INVALID_HOURS`, `errors.hours`). Disabling keeps the
+         *     hours. Unknown address → 404. carrier-gateway down → 503 `UPSTREAM_UNAVAILABLE`.
+         */
+        put: operations["setCustomerPickup"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/offers": {
         parameters: {
             query?: never;
@@ -2144,6 +2169,20 @@ export interface components {
             /** @description Where geo-service located the address; null until it could (geocoding failed or geo was down) */
             position: components["schemas"]["GeoPosition"] | null;
             afrotransactPickup: components["schemas"]["AfrotransactPickup"];
+            customerPickup?: components["schemas"]["CustomerPickup"];
+        };
+        /** @description Customers can collect their orders at this address (a carrier-gateway SELLER pickup location with the same id) */
+        CustomerPickup: {
+            enabled: boolean;
+            hours: components["schemas"]["PickupWindow"][];
+            /** @description Typical hours from order to ready for pickup */
+            readyHours: number;
+        };
+        CustomerPickupRequest: {
+            enabled: boolean;
+            /** @description At least one window to enable */
+            hours: components["schemas"]["PickupWindow"][];
+            readyHours?: number;
         };
         GeoPosition: {
             lat: number;
@@ -4140,6 +4179,37 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setCustomerPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                addressId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomerPickupRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipFromAddress"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };

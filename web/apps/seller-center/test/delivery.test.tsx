@@ -24,7 +24,8 @@ describe('AfroTransact pickup and delivery fee', () => {
     const cards = await screen.findAllByTestId('ship-from-address');
     expect(cards).toHaveLength(2);
     expect(within(cards[0] as HTMLElement).getByTestId('ship-from-position')).toHaveTextContent('29.6713, -95.5559');
-    const katy = cards[1] as HTMLElement;
+    // The AfroTransact (driver) pickup form of the Katy address; customer pickup has its own form next to it.
+    const katy = within(cards[1] as HTMLElement).getByRole('form', { name: 'AfroTransact pickup' });
     const toggle = within(katy).getByLabelText(/AfroTransact picks up here/);
     expect(toggle).not.toBeChecked();
     await user.click(toggle);
@@ -38,6 +39,25 @@ describe('AfroTransact pickup and delivery fee', () => {
     await user.click(within(katy).getByRole('button', { name: 'Remove window 2' }));
     await user.click(within(katy).getByRole('button', { name: 'Save pickup settings' }));
     await waitFor(async () => expect((await mockApi().listShipFrom())[1]?.afrotransactPickup.enabled).toBe(true));
+  });
+
+  it('lets customers pick up at a store address: hours and ready time, offered at checkout', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<ShipFromView />);
+    const cards = await screen.findAllByTestId('ship-from-address');
+    expect(within(cards[0] as HTMLElement).getByTestId('customer-pickup')).toHaveTextContent('Customers can pick up');
+    const katy = within(cards[1] as HTMLElement).getByTestId('customer-pickup');
+    await user.click(within(katy).getByLabelText(/Customers can pick up their orders here/));
+    expect(within(katy).getAllByTestId('customer-pickup-window')).toHaveLength(1);
+    const ready = within(katy).getByLabelText('Ready after (hours)');
+    await user.clear(ready);
+    await user.type(ready, '999');
+    await user.click(within(katy).getByRole('button', { name: 'Save customer pickup' }));
+    expect(await within(katy).findByText('Enter 0 to 168 hours')).toBeInTheDocument();
+    await user.clear(ready);
+    await user.type(ready, '4');
+    await user.click(within(katy).getByRole('button', { name: 'Save customer pickup' }));
+    await waitFor(async () => expect((await mockApi().listShipFrom())[1]?.customerPickup).toMatchObject({ enabled: true, readyHours: 4 }));
   });
 
   it('explains why pickup can’t be turned on: outside the area, not geocoded', async () => {

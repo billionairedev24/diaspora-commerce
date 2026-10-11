@@ -478,6 +478,7 @@ const ShipFromBody = z.object({
   version: z.number().int().nullable().optional()
 });
 
+const CustomerPickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), readyHours: z.number().int().min(0).max(168).optional() });
 const PickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), version: z.number().int().nullable().optional() });
 const OfferFulfilmentBody = z.object({ fulfilment: FulfilmentKindSchema, shipFromLocationId: z.string().max(64).nullable().optional() });
 
@@ -523,7 +524,8 @@ function saveShipFrom(ctx: Ctx, input: z.infer<typeof ShipFromBody>, existing?: 
       input.postalCode === '00000'
         ? null
         : { lat: 29.76 + (Number(input.postalCode.slice(-2)) || 0) / 1000, lng: -95.37, precision: input.postalCode === '99999' ? 'ZIP' : 'ADDRESS', geocodedAt: ctx.now.toISOString() },
-    afrotransactPickup: existing?.afrotransactPickup ?? { enabled: false, hours: [], zoneName: null, enabledAt: null }
+    afrotransactPickup: existing?.afrotransactPickup ?? { enabled: false, hours: [], zoneName: null, enabledAt: null },
+    customerPickup: existing?.customerPickup ?? { enabled: false, hours: [], readyHours: 0 }
   };
   // Moving an enabled pickup location out of the delivery area turns it off (seller re-checks every move).
   if (next.afrotransactPickup.enabled && !next.postalCode.startsWith('77')) next.afrotransactPickup = { ...next.afrotransactPickup, enabled: false, enabledAt: null };
@@ -1501,6 +1503,19 @@ export const sellerHandlers = [
       const first = list[0];
       if (target.isDefault && first) first.isDefault = true;
       return { items: list };
+    })
+  ),
+  http.put(
+    `${W}/ship-from-addresses/:id/customer-pickup`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, CustomerPickupBody);
+      const hourErrors = validatePickupHours(b.enabled, b.hours);
+      if (Object.keys(hourErrors).length)
+        throw new SellerProblem(422, 'PICKUP_INVALID_HOURS', 'Check the pickup hours', 'Add 1 to 14 pickup windows that don’t overlap, each opening before it closes.', hourErrors);
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      const a = findShipFrom(ctx, p.id);
+      a.customerPickup = { enabled: b.enabled, hours: b.hours, readyHours: b.readyHours ?? 0 };
+      return a;
     })
   ),
   http.put(

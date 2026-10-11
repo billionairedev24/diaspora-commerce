@@ -604,6 +604,31 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/ship-from-addresses/{addressId}/customer-pickup:
+    put:
+      tags: [Orders]
+      operationId: setCustomerPickup
+      security: [{sessionCookie: []}]
+      summary: Turn "customers can pick up their orders here" on or off for a ship-from address (store or pickup place)
+      description: |
+        carrier-gateway `PUT /v1/pickup-locations/{addressId}` with the seller's token (Orders edit; carrier-gateway checks
+        shipping:label and the organisation): a SELLER pickup location with the address's id, name (company · label),
+        address, position, the state's time zone, the opening hours and how long orders take to be ready. Checkout lists
+        it (with address, hours, ready time and distance) for this seller's packages; pickup has no shipping charge.
+        Enabling needs 1–14 non-overlapping windows (422 `PICKUP_INVALID_HOURS`, `errors.hours`). Disabling keeps the
+        hours. Unknown address → 404. carrier-gateway down → 503 `UPSTREAM_UNAVAILABLE`.
+      parameters:
+        - {name: addressId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CustomerPickupRequest'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/ShipFromAddress'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── offers (fulfilment choice, S255)
   /v1/seller/offers:
     get:
@@ -2275,6 +2300,22 @@ components:
           oneOf: [{$ref: '#/components/schemas/GeoPosition'}, {type: 'null'}]
           description: Where geo-service located the address; null until it could (geocoding failed or geo was down)
         afrotransactPickup: {$ref: '#/components/schemas/AfrotransactPickup'}
+        customerPickup: {$ref: '#/components/schemas/CustomerPickup'}
+    CustomerPickup:
+      type: object
+      description: Customers can collect their orders at this address (a carrier-gateway SELLER pickup location with the same id)
+      required: [enabled, hours, readyHours]
+      properties:
+        enabled: {type: boolean}
+        hours: {type: array, items: {$ref: '#/components/schemas/PickupWindow'}}
+        readyHours: {type: integer, minimum: 0, maximum: 168, description: Typical hours from order to ready for pickup}
+    CustomerPickupRequest:
+      type: object
+      required: [enabled, hours]
+      properties:
+        enabled: {type: boolean}
+        hours: {type: array, maxItems: 14, items: {$ref: '#/components/schemas/PickupWindow'}, description: At least one window to enable}
+        readyHours: {type: integer, minimum: 0, maximum: 168}
     GeoPosition:
       type: object
       required: [lat, lng, precision, geocodedAt]
