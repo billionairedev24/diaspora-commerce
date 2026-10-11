@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 import { ErrorState, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { fieldId } from '@/lib/onboarding-form';
 import { useSeller } from '@/lib/session';
@@ -201,9 +202,12 @@ const priceOf = (p: OnboardingPlanOffer, c: Cadence) => p.prices.find((x) => x.c
 
 /** Step 6 "Plan": choose a subscription (Stripe Billing, free trial) and how it is paid; the fee summary as designed. */
 export function PlanStep({ status, ref }: StepProps) {
+  const t = useT();
   const { orgId } = useSeller();
   const api = sellerApi();
   const plans = useQuery(sellerQueries.onboardingPlans(api, orgId));
+  // A trial campaign's promo code (S295): validated by the seller service for the plan when the step is saved.
+  const [promo, setPromo] = useState('');
   const form = status.form;
   const disabled = !form.editable;
   const saved = form.plan;
@@ -217,7 +221,7 @@ export function PlanStep({ status, ref }: StepProps) {
   const paid = !!plan && plan.monthlyCents > 0;
   // The saved card belongs to the saved plan: re-saving would drop its payment method, so it is kept by not saving.
   const unchanged = saved.planCode === f.values.planCode && saved.cadence === f.values.cadence;
-  const cardKept = !newCard && !!saved.cardLast4 && unchanged;
+  const cardKept = !newCard && !!saved.cardLast4 && unchanged && !promo.trim();
   const holder = form.details.legalName ?? [form.details.legalFirstName, form.details.legalLastName].filter(Boolean).join(' ');
 
   useImperativeHandle(ref, () => ({
@@ -231,7 +235,8 @@ export function PlanStep({ status, ref }: StepProps) {
       }
       let body: OnboardingPlanInput = {
         planCode: v.planCode,
-        cadence: v.cadence
+        cadence: v.cadence,
+        ...(promo.trim() ? { promoCode: promo.trim().toUpperCase() } : {})
       };
       if (paid && cardKept) return true;
       if (paid) {
@@ -367,6 +372,18 @@ export function PlanStep({ status, ref }: StepProps) {
           ) : (
             <LocalTestCard ref={card} />
           )}
+          <TextField
+            id={fieldId('promoCode')}
+            className="max-w-xs"
+            label={t('sc.planStep.promoCode')}
+            autoComplete="off"
+            maxLength={40}
+            value={promo}
+            disabled={disabled}
+            onChange={(e) => setPromo(e.target.value.replace(/\s/g, '').toUpperCase())}
+            error={f.errors.promoCode}
+            help={promo.trim() && saved.cardLast4 && !newCard ? t('sc.planStep.promoCardAgain') : t('sc.planStep.promoHelp')}
+          />
           <p className="m-0 inline-flex items-center gap-1 text-xs text-muted">
             <LockSimple size={12} aria-hidden /> The subscription starts when your application is approved; you’re not charged before the trial ends.
           </p>

@@ -7,7 +7,8 @@
      account onboarding (identity, tax ID and the payout bank account), account management ("Change bank account")
      and the notification banner (what Stripe needs later, in Account health);
    - Stripe.js (js.stripe.com): the Card Element that tokenises a paid plan's card into a pm_… (only brand, last 4
-     and expiry reach AfroTransact).
+     and expiry reach AfroTransact), and the Payment Element that adds a card or US bank account on Plan & billing
+     (a SetupIntent confirmed in the browser; S292–S297).
    Without a publishable key (local stack without Stripe, mock BFF) the wizard shows its labelled local stand-ins. */
 
 const CONNECT_JS = 'https://connect-js.stripe.com/v1.0/connect.js';
@@ -61,6 +62,41 @@ export interface StripeCardInstance {
   createPaymentMethod(options: { type: 'card'; card: CardElement; billing_details?: { name?: string } }): Promise<PaymentMethodResult>;
 }
 
+/** The Payment Element (Plan & billing › Add payment method). */
+export interface PaymentElement {
+  mount(target: HTMLElement): void;
+  destroy(): void;
+  on(event: 'change', handler: (e: { complete?: boolean }) => void): void;
+}
+
+export interface StripePaymentElements {
+  create(type: 'payment', options?: Record<string, unknown>): PaymentElement;
+  submit(): Promise<{ error?: { message?: string } }>;
+}
+
+/** A payment method created from the Payment Element: a card or a US bank account. */
+export interface ElementsPaymentMethodResult {
+  error?: { message?: string };
+  paymentMethod?: {
+    id: string;
+    type: string;
+    card?: { brand?: string; last4?: string; exp_month?: number; exp_year?: number };
+    us_bank_account?: { bank_name?: string; last4?: string; account_type?: string };
+  };
+}
+
+export interface SetupConfirmation {
+  error?: { message?: string };
+  setupIntent?: { id: string; status: string };
+}
+
+/** The Stripe.js surface the Payment Element flow uses (deferred intent: the SetupIntent is confirmed with the method). */
+export interface StripePaymentInstance {
+  elements(options: { mode: 'setup'; currency: string; paymentMethodCreation: 'manual'; appearance?: { variables: Record<string, string> } }): StripePaymentElements;
+  createPaymentMethod(options: { elements: StripePaymentElements }): Promise<ElementsPaymentMethodResult>;
+  confirmSetup(options: { clientSecret: string; confirmParams: { payment_method: string; return_url: string }; redirect: 'if_required' }): Promise<SetupConfirmation>;
+}
+
 declare global {
   interface Window {
     StripeConnect?: { init(params: ConnectInitParams): ConnectInstance };
@@ -93,7 +129,7 @@ function loadScript(src: string, ready: () => boolean): Promise<void> {
 }
 
 /** Brand appearance for the embedded component, from the design tokens (resolved at runtime, no raw colours here). */
-function appearance(): { variables: Record<string, string> } {
+export function appearance(): { variables: Record<string, string> } {
   const css = getComputedStyle(document.documentElement);
   const v = (name: string) => css.getPropertyValue(name).trim();
   const vars: Record<string, string> = {
@@ -126,4 +162,12 @@ export async function getStripe(publishableKey: string): Promise<StripeCardInsta
   const factory = window.Stripe;
   if (!factory) throw new Error('Stripe.js did not load');
   return factory(publishableKey);
+}
+
+/** Stripe.js for the Payment Element (same script and instance as the Card Element; a wider typed surface). */
+export async function getStripePayments(publishableKey: string): Promise<StripePaymentInstance> {
+  await loadScript(STRIPE_JS, () => !!window.Stripe);
+  const factory = window.Stripe as ((key: string) => unknown) | undefined;
+  if (!factory) throw new Error('Stripe.js did not load');
+  return factory(publishableKey) as StripePaymentInstance;
 }

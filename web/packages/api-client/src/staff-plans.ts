@@ -427,7 +427,9 @@ export const staffPlanKeys = {
   sync: () => [...staffPlanKeys.all, 'stripe-sync'] as const,
   campaigns: () => [...staffPlanKeys.all, 'trial-campaigns'] as const,
   rules: () => [...staffPlanKeys.all, 'reward-rules'] as const,
-  grants: (q: StaffGrantQuery) => [...staffPlanKeys.all, 'grants', q] as const,
+  rulePreview: (input: StaffRewardRuleInput | null) => [...staffPlanKeys.rules(), 'preview', input] as const,
+  grantLists: () => [...staffPlanKeys.all, 'grants'] as const,
+  grants: (q: StaffGrantQuery) => [...staffPlanKeys.grantLists(), q] as const,
   reasonCodes: () => [...staffPlanKeys.all, 'reason-codes'] as const,
   orgs: (q: string) => [...staffPlanKeys.all, 'orgs', q] as const,
   panel: (orgId: string) => [...staffPlanKeys.all, 'panel', orgId] as const
@@ -440,6 +442,13 @@ export const staffPlanQueries = {
   sync: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.sync(), queryFn: ({ signal }) => api.stripeSync(signal), staleTime: 30_000 }),
   campaigns: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.campaigns(), queryFn: ({ signal }) => api.campaigns(signal), staleTime: 15_000 }),
   rules: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.rules(), queryFn: ({ signal }) => api.rules(signal), staleTime: 15_000 }),
+  /** Who qualifies now for an unsaved rule (nothing is granted). */
+  rulePreview: (api: StaffPlansApi, input: StaffRewardRuleInput | null) =>
+    queryOptions({
+      queryKey: staffPlanKeys.rulePreview(input),
+      queryFn: ({ signal }) => (input ? api.previewRule(input, signal) : Promise.reject(new Error('no rule'))),
+      enabled: input !== null
+    }),
   grants: (api: StaffPlansApi, q: StaffGrantQuery) =>
     queryOptions({ queryKey: staffPlanKeys.grants(q), queryFn: ({ signal }) => api.grants(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   reasonCodes: (api: StaffPlansApi) =>
