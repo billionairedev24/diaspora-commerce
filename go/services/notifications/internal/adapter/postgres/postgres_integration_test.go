@@ -189,6 +189,39 @@ func TestPostgresIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("due times use the app clock, not the database's (clock drift)", func(t *testing.T) {
+		e := newEnv(t, pool)
+		ns, err := e.notifier.Submit(ctx, domain.Request{TemplateKey: "order.confirmed", IdempotencyKey: "drift:1",
+			Channels: []domain.Channel{domain.ChannelEmail}, Recipient: domain.Recipient{ID: "u-drift", Email: "drift@example.com"},
+			Data: orderData()})
+		if err != nil || len(ns) != 1 {
+			t.Fatalf("%v %v", ns, err)
+		}
+		// The app wrote a due time 5 minutes ahead of the database clock, as when the database's clock runs behind
+		// (Docker Desktop's VM after sleep). With the database's now() it would never look due.
+		if _, err := pool.Exec(ctx, `UPDATE notification SET next_attempt_at = now() + interval '5 minutes' WHERE id = $1`,
+			ns[0].ID); err != nil {
+			t.Fatal(err)
+		}
+		appClock := func() time.Time { return time.Now().Add(10 * time.Minute) }
+		claimed, err := postgres.NewNotificationStoreWithClock(pool, appClock).Claim(ctx, 100, time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, c := range claimed {
+			if c.ID == ns[0].ID {
+				found = true
+				if !c.NextAttemptAt.After(appClock().Add(30 * time.Second)) {
+					t.Errorf("lease not taken from the app clock: %v", c.NextAttemptAt)
+				}
+			}
+		}
+		if !found {
+			t.Fatal("a notification due by the app clock was not claimed")
+		}
+	})
+
 	t.Run("submit is idempotent", func(t *testing.T) {
 		e := newEnv(t, pool)
 		req := domain.Request{TemplateKey: "order.confirmed", IdempotencyKey: "orders:AT-1001", Channels: []domain.Channel{domain.ChannelEmail},

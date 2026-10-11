@@ -18,7 +18,13 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/port"
 )
 
-type notificationStoreImpl struct{ pool *pgxpool.Pool }
+// notificationStoreImpl compares due times with its own clock, the same clock that wrote them (the app's), never the
+// database's now(): app and database clocks drift (Docker Desktop's VM after sleep, separate hosts in prod), and a
+// database clock behind the app's would leave fresh notifications "not yet due".
+type notificationStoreImpl struct {
+	pool *pgxpool.Pool
+	now  func() time.Time
+}
 
 type inboxImpl struct{ pool *pgxpool.Pool }
 
@@ -29,7 +35,12 @@ var (
 
 // NewNotificationStore returns the Postgres NotificationStore.
 func NewNotificationStore(pool *pgxpool.Pool) port.NotificationStore {
-	return &notificationStoreImpl{pool: pool}
+	return NewNotificationStoreWithClock(pool, time.Now)
+}
+
+// NewNotificationStoreWithClock is NewNotificationStore with the clock due times are compared against.
+func NewNotificationStoreWithClock(pool *pgxpool.Pool, now func() time.Time) port.NotificationStore {
+	return &notificationStoreImpl{pool: pool, now: now}
 }
 
 // NewInbox returns the Postgres events.Inbox (consumer, event id) de-duplicator.
@@ -200,13 +211,13 @@ func (s *notificationStoreImpl) EnqueueForEvent(ctx context.Context, consumer, e
 func (s *notificationStoreImpl) Claim(ctx context.Context, limit int, lease time.Duration) ([]domain.Notification, error) {
 	rows, err := s.pool.Query(ctx, `WITH due AS (
 			SELECT id FROM notification
-			WHERE status = 'queued' AND next_attempt_at <= now()
+			WHERE status = 'queued' AND next_attempt_at <= $3
 			ORDER BY next_attempt_at
 			LIMIT $1
 			FOR UPDATE SKIP LOCKED)
-		UPDATE notification n SET next_attempt_at = now() + make_interval(secs => $2), updated_at = now()
+		UPDATE notification n SET next_attempt_at = $3::timestamptz + make_interval(secs => $2), updated_at = now()
 		FROM due WHERE n.id = due.id
-		RETURNING `+cols("n"), limit, lease.Seconds())
+		RETURNING `+cols("n"), limit, lease.Seconds(), s.now())
 	if err != nil {
 		return nil, fmt.Errorf("claim: %w", err)
 	}
@@ -382,9 +393,9 @@ func (s *notificationStoreImpl) Replay(ctx context.Context, deadLetterID string)
 		if err != nil {
 			return fmt.Errorf("dead letter: %w", err)
 		}
-		n, err = scan(tx.QueryRow(ctx, `UPDATE notification n SET status = 'queued', attempts = 0, next_attempt_at = now(),
+		n, err = scan(tx.QueryRow(ctx, `UPDATE notification n SET status = 'queued', attempts = 0, next_attempt_at = $2,
 			last_error = NULL, status_detail = 'replayed from dead letter', updated_at = now()
-			WHERE n.id = $1 RETURNING `+cols("n"), nid))
+			WHERE n.id = $1 RETURNING `+cols("n"), nid, s.now()))
 		return err
 	})
 	if err != nil {
