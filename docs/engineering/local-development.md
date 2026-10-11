@@ -24,10 +24,11 @@ Elasticsearch, offers buy boxes, inventory availability, content placements, pre
 | `ads` | content ads campaigns | Sponsored-product campaigns for three sellers. |
 | `preorders` | delivery-runs | Coverage for Lubbock and El Paso, an **open** Lubbock window and an **upcoming** El Paso one, with hero and PDP creatives. Set *Deliver to* **79401** to see the pre-order ribbon, hero and `/pre-orders` page. |
 | `bookings` | bookings | Settings, a team member and services for the providers (bookings runs by default with `make up`; skipped when it is not running). |
+| `ops` | retail, inventory, cart, orders, payments, fulfilment, tax-returns, trust-ops, geo, seller | Operations data: AfroTransact Retail suppliers, items and purchase orders in every state (with shipments, receipts and three-way matched invoices), FBA inbound shipments in every stage, short-dated, held and damaged lots, cycle counts and a transfer, 14 orders of the two test customers in every shipment state, routes for the test driver (an SOS, a vehicle defect, a seller pickup waiting), returns, an A-to-z claim and a payout request. What lands on which screen: [tools/seed/README.md](../../tools/seed/README.md#operations-data-ops); how the flow works: [Orders and shipments](../portal/docs/architecture/orders-and-shipments.md). |
 | `users` | identity | Checks that every [test user](#test-users) signs in (and that the seller, provider and retail personas act for their organisation), then prints the table. |
 
-`make up` runs it automatically when the catalogue is empty (`--if-empty`; `SEED=0 make up` skips it, the log is
-`.local/logs/seed.log`). Every step is idempotent: records are looked up by a stable key (org id, product title,
+`make up` runs what is missing automatically (`--if-empty`: everything when the catalogue is empty, else the `ops` step
+when its data is missing; `SEED=0 make up` skips it, the log is `.local/logs/seed.log`). Every step is idempotent: records are looked up by a stable key (org id, product title,
 placement / campaign / window name) before anything is created, so `make seed` can be re-run any time; a changed
 placement is replaced (the old one ended), never duplicated. `make seed ARGS="--only products,content"` runs a subset;
 `make seed-test` runs the seeder's unit tests.
@@ -41,7 +42,10 @@ access token) or `SEED_CLIENT_ID` / `SEED_CLIENT_SECRET` (client credentials at 
 Known local limits: the catalogue owner of every seeded product is AfroTransact Retail (local security off means the
 catalog sees a staff caller; sellers sell them through their offers, which is what cards, buy boxes and PDPs show,
 but the search facet "Sold by" counts the catalogue owner); Stripe Connect accounts are not created (payouts need a
-Stripe test key and onboarding in Seller Center); products have no ratings (there is no product-review service yet).
+Stripe test key and onboarding in Seller Center; on the local test payments `ops` registers a test account for Mama Put
+Pantry only); products have no ratings (there is no product-review service yet); carrier labels and tracking need
+carrier-gateway with carrier sandbox credentials, so drop-off returns wait for their label and carrier parcels are moved
+by staff (Orders › Update shipment status).
 
 ### Photos: where they come from
 
@@ -121,8 +125,14 @@ no public API creates a password account without an emailed code, so the account
 bootstrap admin. Organisations come from the seller service: the seller, provider and retail personas are linked as
 soon as `make seed` creates their organisation (identity mirrors `seller.org.approved` and links the waiting personas);
 AfroTransact Retail exists from identity's migrations. The seeder's `users` step then signs every account in through the
-first-party API to prove it (`make seed ARGS="--only users"`). There is no seeded cart or past order: locally the cart
-service runs without authentication (every cart is a guest cart) and checkout needs a Stripe test key.
+first-party API to prove it (`make seed ARGS="--only users"`). The `ops` step then places their orders.
+
+**Who a call acts as locally.** Services run with security off, so a call without a token (the seeder, curl) acts as the
+local super admin. A call that carries the token of a customer, a driver or a seller / provider member acts as that
+person and organisation, with the token's own permissions (platform-security `LocalActorResolver`, go/pkg/auth
+`LocalActor`): each customer has their own cart and order history, the driver sees their routes, and a seller packs
+its own shipments and sees only its organisation's orders, as in every other environment. Staff tokens keep the super
+admin. The claims are read without checking the signature, which can only lower what a caller may do.
 
 **No second step for customers, sellers, providers and the driver**: they have no two-step method enrolled, so email +
 password is the whole sign-in. **Staff keep the two-step policy** (it is mandatory for staff roles): the code is a text
@@ -151,6 +161,14 @@ Card 3-D Secure opens in Stripe's modal; redirect methods (Cash App Pay, Affirm,
 payments, refreshed from Stripe) before showing the order. Your Payments and booking deposits use the same Payment
 Element and Appearance on a SetupIntent. The Appearance is read from the design tokens at runtime (gold primary,
 Figtree, radius, colours).
+
+**Without a key (local only).** When `STRIPE_SECRET_KEY` is not set, the local profile's payments use a stand-in for
+Stripe (`at.payments.stripe.mode=auto`, `LocalTestStripeGateway`): every PaymentIntent is authorised like test card
+4242 4242 4242 4242 once the shopper confirms (the storefront shows its labelled test card form, as without
+`STRIPE_PUBLISHABLE_KEY`), captures, refunds and transfers succeed at once, ids start with `pi_localtest_`, and no money
+moves. `STRIPE_MODE=stripe` turns it off, `STRIPE_MODE=local-test` forces it. It is refused everywhere else:
+`LocalTestPaymentsPolicy` allows it on the `local` profile only, and payments does not start on `dev`, `uat` or `prod`
+when it is asked for (`LocalTestPaymentsConfigurationTest`).
 
 **Keys.** Three variables, one Stripe account in test mode ([dashboard.stripe.com/test/apikeys](https://dashboard.stripe.com/test/apikeys)):
 

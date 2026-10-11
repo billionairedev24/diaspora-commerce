@@ -27,3 +27,10 @@ export function storefrontUrl(): string {
 
 /** Path the browser uses for every BFF call (same origin; the route handler proxies or mocks). */
 export const BFF_BASE_PATH = '/api/bff';
+
+/** Developer portal (Docusaurus, docs/portal): DOCS_PORTAL_URL; locally the portal on :3100 (tools/dev/local.sh docs), in
+    production builds https://developers.afrotransact.com. Read per request on the server like storefrontUrl(). */
+export function docsPortalUrl(): string {
+  const fallback = process.env.NODE_ENV === 'production' ? 'https://developers.afrotransact.com' : 'http://localhost:3100';
+  return (env('DOCS_PORTAL_URL') ?? fallback).replace(/\/+$/, '');
+}

@@ -12,7 +12,7 @@ import { type ReactNode } from 'react';
 
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
-import { storefrontUrl } from '@/lib/config';
+import { docsPortalUrl, storefrontUrl } from '@/lib/config';
 import { Providers } from '@/lib/query/Providers';
 import { RuntimeConfigProvider } from '@/lib/runtime-config';
 
@@ -40,7 +40,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         </a>
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
           <WebVitalsReporter />
-          <RuntimeConfigProvider value={{ storefrontUrl: storefrontUrl() }}>
+          <RuntimeConfigProvider value={{ storefrontUrl: storefrontUrl(), docsUrl: docsPortalUrl() }}>
             <Providers>{children}</Providers>
           </RuntimeConfigProvider>
         </I18nProvider>

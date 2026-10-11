@@ -20,14 +20,16 @@ from .images.library import ImageLibrary
 from .images.model import ImageFile
 from .images.sources import PexelsSource, UnsplashSource, WikimediaSource
 from .media import MediaUploader
+from .ops import OpsSeeder
 from .state import State
-from .users import TestUsers
+from .users import SignedIn, TestUsers
 
 MAIN_MIN_EDGE = 1000  # catalog: the main product image must be at least 1000 x 1000
 FOOD_TYPES = {"grocery", "perishable"}
 FC_NODES = ("HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC")
 PREORDER_TIME_ZONE = "America/Chicago"
-STEPS = ("sellers", "products", "content", "ads", "preorders", "bookings", "users")
+STEPS = ("sellers", "products", "content", "ads", "preorders", "bookings", "ops", "users")
+OPS_REQUIRED = ("identity", "catalog", "offers", "inventory", "retail", "orders", "payments", "fulfilment", "cart")
 
 SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
     "identity": ("IDENTITY_URL", "http://localhost:8100", "/actuator/health"),
@@ -40,6 +42,15 @@ SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
     "delivery-runs": ("DELIVERY_RUNS_URL", "http://localhost:8115", "/actuator/health"),
     "media": ("MEDIA_URL", "http://localhost:8207", "/readyz"),
     "search": ("SEARCH_URL", "http://localhost:8201", "/readyz"),
+    # ops step (operations demo data)
+    "orders": ("ORDERS_URL", "http://localhost:8104", "/actuator/health"),
+    "payments": ("PAYMENTS_URL", "http://localhost:8105", "/actuator/health"),
+    "retail": ("RETAIL_URL", "http://localhost:8107", "/actuator/health"),
+    "fulfilment": ("FULFILMENT_URL", "http://localhost:8108", "/actuator/health"),
+    "trust-ops": ("TRUST_OPS_URL", "http://localhost:8110", "/actuator/health"),
+    "tax-returns": ("TAX_RETURNS_URL", "http://localhost:8111", "/actuator/health"),
+    "cart": ("CART_URL", "http://localhost:8203", "/readyz"),
+    "geo": ("GEO_URL", "http://localhost:8205", "/readyz"),
 }
 REQUIRED = ("catalog", "offers", "inventory", "media")
 
@@ -182,6 +193,15 @@ class Seeder:
     def catalog_is_empty(self) -> bool:
         page = self.svc["catalog"].get("/v1/products", params={"size": 1})
         return int((page or {}).get("total", 0)) == 0
+
+    def ops_missing(self) -> bool:
+        """True when the operations data (`ops` step) is not there: no seeded suppliers, or no orders at all."""
+        return self._ops().missing()
+
+    def _ops(self) -> OpsSeeder:
+        signed_in = SignedIn(TestUsers(self.svc["identity"], self.env, self.log))
+        return OpsSeeder(self.svc, signed_in, self._find_product, self.log, self.report.add, self._problem,
+                         up=self.up)
 
     def _preflight(self) -> None:
         for name, http in self.svc.items():
@@ -651,6 +671,16 @@ class Seeder:
                 self.log(f"  ✓ {prov.name}: {len(prov.services)} services")
             except ApiError as e:
                 self._problem(f"provider {prov.name}: {e}")
+
+    # ------------------------------------------------------------------------------------------------ ops
+    def step_ops(self) -> None:
+        self.log("== operations (ops): AfroTransact Retail, inventory, orders and their fulfilment, dispatch, returns, "
+                 "claims, a payout")
+        down = [n for n in OPS_REQUIRED if not self.up.get(n)]
+        if down:
+            self._problem(f"ops skipped: {', '.join(down)} not running (make up / tools/dev/local.sh status)")
+            return
+        self._ops().run()
 
     # ------------------------------------------------------------------------------------------------ users
     def step_users(self) -> None:

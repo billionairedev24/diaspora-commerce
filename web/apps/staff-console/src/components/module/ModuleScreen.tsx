@@ -9,6 +9,7 @@ import { FeesView } from '@/components/fees/FeesView';
 import { InventoryHubView } from '@/components/inventory/InventoryHubView';
 import { MarketsView } from '@/components/markets/MarketsView';
 import { NotificationsView } from '@/components/notifications/NotificationsView';
+import { OrdersView } from '@/components/orders/OrdersView';
 import { PreordersView } from '@/components/preorders/PreordersView';
 import { RetailView } from '@/components/retail/RetailView';
 import { SupportView } from '@/components/support/SupportView';
@@ -33,6 +34,8 @@ export function ModuleScreen({ module }: { module: StaffModuleKey }) {
       return <NotificationsView />;
     case 'preorders':
       return <PreordersView screen={{ kind: 'list' }} />;
+    case 'orders':
+      return <OrdersView />;
     case 'inventory':
       return <InventoryHubView />;
     case 'retail':

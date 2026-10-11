@@ -84,6 +84,10 @@ class TestUsers:
 
     def access_claims(self, ticket: str) -> dict[str, Any]:
         """Redeems a login ticket like gateway-bff: authorization code + PKCE, then the token endpoint."""
+        return jwt_claims(self.access_token(ticket))
+
+    def access_token(self, ticket: str) -> str:
+        """The access token of a login ticket (authorization code + PKCE, then the token endpoint)."""
         verifier, challenge = pkce()
         res = self.no_redirect.request("GET", "/oauth2/authorize", ok=(302, 303), authenticate=False, params={
             "response_type": "code", "client_id": FIRST_PARTY_CLIENT, "redirect_uri": REDIRECT, "scope": "openid",
@@ -97,7 +101,7 @@ class TestUsers:
             "grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT,
             "code_verifier": verifier}).encode(), headers={"Authorization": "Basic " + basic,
                                                            "Content-Type": "application/x-www-form-urlencoded"})
-        return jwt_claims(tok.body["access_token"])
+        return tok.body["access_token"]
 
     def check(self, token: str, user: tuple[str, str, str, Union[str, None], bool]) -> UserCheck:
         email, persona, app, org, mfa = user
@@ -134,3 +138,44 @@ class TestUsers:
     def table(rows: list[tuple[str, str, str]]) -> list[str]:
         width = max(len(r[0]) for r in rows)
         return [f"  {email:<{width}}  {app:<14} {persona}" for email, persona, app in rows]
+
+
+class SignedIn:
+    """Access tokens of local test users, as the web apps get them (password sign-in, then the login ticket), cached
+    until shortly before they expire. Locally the services act as the customer, driver or organisation member whose
+    token a call carries (platform-security LocalActorResolver), so the `ops` step places orders as the test customers,
+    packs as the seller and drives as the driver. Staff work runs without a token (the local super admin)."""
+
+    def __init__(self, users: TestUsers, clock: Callable[[], float] = time.time):
+        self.users = users
+        self.clock = clock
+        self._client: tuple[str, float] | None = None
+        self._tokens: dict[str, tuple[str, float, dict[str, Any]]] = {}
+
+    def _client_token(self) -> str:
+        if self._client is None or self.clock() > self._client[1]:
+            self._client = (self.users.client_token(), self.clock() + 240)
+        return self._client[0]
+
+    def token(self, email: str) -> str:
+        """A fresh access token; ValueError when the user cannot sign in with the password alone (e.g. an
+        authenticator app was turned on for the account)."""
+        cached = self._tokens.get(email)
+        if cached and self.clock() < cached[1]:
+            return cached[0]
+        step = self.users.sign_in(self._client_token(), email)
+        if step.get("status") == "MFA_REQUIRED" or not step.get("loginTicket"):
+            raise ValueError(f"{email} needs a two-step code to sign in (turn its authenticator off in "
+                             "Account › Security, or run make reset)")
+        token = self.users.access_token(step["loginTicket"])
+        claims = jwt_claims(token)
+        ttl = float(claims.get("exp", self.clock() + 300)) - float(claims.get("iat", self.clock()))
+        self._tokens[email] = (token, self.clock() + max(30.0, ttl - 60), claims)
+        return token
+
+    def claims(self, email: str) -> dict[str, Any]:
+        self.token(email)
+        return self._tokens[email][2]
+
+    def headers(self, email: str) -> dict[str, str]:
+        return {"Authorization": "Bearer " + self.token(email)}

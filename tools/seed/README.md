@@ -2,19 +2,45 @@
 
 `make seed` (`python3 tools/seed/seed.py`, Python 3 standard library only) fills a local (or dev) stack through the
 services' public APIs: sellers and providers, ~75 products with real photos, offers, stock, home content, sponsored
-products, pre-order windows, the providers' services, and a check of the test users. Every step is idempotent, so
-re-run it any time; `make up` runs it by itself when the catalogue is empty. Full guide:
-[docs/engineering/local-development.md](../../docs/engineering/local-development.md).
+products, pre-order windows, the providers' services, the operations data (below), and a check of the test users. Every
+step is idempotent, so re-run it any time; `make up` runs what is missing by itself (everything on an empty catalogue,
+else the operations data). Full guide: [docs/engineering/local-development.md](../../docs/engineering/local-development.md).
 
 ```
 python3 tools/seed/seed.py                      # every step
+python3 tools/seed/seed.py --only ops           # just the operations data (make seed ARGS="--only ops")
 python3 tools/seed/seed.py --only users         # just check the test users
 python3 tools/seed/seed.py --skip products      # everything else
 make seed-test                                  # the seeder's unit tests
 ```
 
-Steps: `sellers`, `products`, `content`, `ads`, `preorders`, `bookings`, `users`. The dataset is
-`seedlib/dataset.py`; photo sources, attribution and service URLs are described in `seed.py` and the guide.
+Steps: `sellers`, `products`, `content`, `ads`, `preorders`, `bookings`, `ops`, `users`. The datasets are
+`seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
+`seed.py` and the guide.
+
+## Operations data (`ops`)
+
+Needs the catalogue (the `products` step) and, besides the catalogue services, retail, orders, payments, fulfilment,
+cart, geo, seller, tax-returns and trust-ops (`make up` starts them all). It goes through the APIs the apps use: the
+test customers check out with their own tokens, Mama Put's owner packs as the seller and the driver drives with the
+driver's token (locally the services act as the customer, driver or organisation member whose token a call carries;
+staff work runs without a token, as the local super admin). Payments are authorised by the payments service's local
+test stand-in for Stripe (only allowed on the local profile), or by Stripe test mode when `.local/secrets.env` has a key.
+
+| Screen | What `ops` puts there |
+|---|---|
+| Staff › AfroTransact Retail | 4 suppliers (Lagos, Kumasi, Addis Ababa, Kingston; one on watch), 8 items linked to AfroTransact Brand ATINs with costs and case packs, purchase orders in every state (draft, pending approval in the Finance tier, approved, sent and in the air, confirmed and at the dock, partially received, received with a matched invoice, received with a 4 % price exception, closed with the supplier payment released, cancelled), their shipments, customs documents and goods receipts |
+| Staff › Inventory | FBA inbound shipments of Mama Put, Lagos Larder and Accra Market in every stage (draft, shipped in transit, arrived awaiting receiving, receiving, closed) with lot, made-on and expiry dates; short-dated lots released for markdown (31–60 days), a QC hold, damaged units, a lot that expires tomorrow (EXPIRED after the nightly run; receiving refuses expired lots), a cycle count waiting for review and a posted one, a transfer HOU-FC → ATL-FC |
+| Staff › Orders & shipments | 14 orders of `customer.houston` and `customer.lubbock`: placed, picking, packed, shipped with UPS tracking, out for delivery, delivered (carrier and AfroTransact Delivery), cancelled, a Lubbock pre-order, a two-package order (AfroTransact + Bonwire Weavers), seller-fulfilled orders (Diaspora Books waiting, Mama Put's kitchen packed for pickup). Seeded orders carry the attribution `src=demo-seed` |
+| Staff › Delivery dispatch | Houston FC as the depot and a Houston delivery zone; a completed returns run, today's route in progress for `driver@afrotransact.test` (one stop delivered with a photo, one out for delivery, an open SOS), tomorrow's route blocked by a vehicle defect, Mama Put's seller pickup waiting for a route |
+| Staff › Disputes & returns | a driver-pickup return collected, inspected and refunded; two drop-off returns approved (their carrier labels need carrier-gateway with carrier sandbox credentials, not in the local stack); an A-to-z claim waiting for Tamale Naturals |
+| Staff › Payouts | Mama Put Pantry's payout request: its sale's settlement hold is started as matured and a test Connect account (`acct_1LocalTest…`) is registered, on the local stand-in only. The settlement job runs every minute locally; the step waits up to two minutes for the balance |
+| Seller Center (seller.owner) | Mama Put's orders (FBA and its own), inbound shipments, lots and expiry |
+| Storefront (the two customers) | Your orders, with tracking, returns and the claim |
+
+Every record is found by a stable key before anything is created (suppliers by code, items by ATIN, purchase orders by
+supplier and lines, inbound shipments by name, orders by attribution, routes by name), so a re-run creates nothing; a
+scenario an interrupted run left half-way is taken on to its target state.
 
 ## Test users
 

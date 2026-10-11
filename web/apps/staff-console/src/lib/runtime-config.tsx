@@ -7,6 +7,8 @@ import { DEFAULT_STOREFRONT_URL } from './config';
 /** Per-environment values the server resolves at request time (src/lib/config.ts) for client components. */
 export interface RuntimeConfig {
   storefrontUrl: string;
+  /** Developer portal origin (operator guides), e.g. http://localhost:3100. */
+  docsUrl?: string;
 }
 
 const RuntimeConfigContext = createContext<RuntimeConfig>({ storefrontUrl: DEFAULT_STOREFRONT_URL });
@@ -19,4 +21,9 @@ export function RuntimeConfigProvider({ value, children }: { value: RuntimeConfi
 /** Storefront origin of this environment (PUBLIC_WEB_URL; http://localhost:3000 locally). */
 export function useStorefrontUrl(): string {
   return useContext(RuntimeConfigContext).storefrontUrl;
+}
+
+/** Developer portal origin of this environment (DOCS_PORTAL_URL; http://localhost:3100 locally). */
+export function useDocsUrl(): string {
+  return useContext(RuntimeConfigContext).docsUrl ?? 'https://developers.afrotransact.com';
 }
