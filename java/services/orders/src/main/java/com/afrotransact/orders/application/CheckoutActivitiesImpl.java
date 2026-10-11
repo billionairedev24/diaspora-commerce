@@ -612,7 +612,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             PaymentsClient.Intent intent = payments.createIntent(new PaymentsClient.NewIntent(order.id(),
                     order.totals().grandTotalMinor(), order.currency(), Instant.now(clock),
                     Map.of("order_number", order.number(), "customer_id", order.customerId()),
-                    PaymentLines.of(order), order.customerId(), draft.paymentMethodTypes(), false, null,
+                    PaymentLines.of(order), order.customerId(), draft.paymentMethodTypes(), false,
                     draft.savePaymentMethod()));
             return new PaymentRef(intent.paymentId(), intent.clientSecret(), intent.status());
         });

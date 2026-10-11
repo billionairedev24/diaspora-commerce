@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -40,9 +41,14 @@ import org.springframework.transaction.support.TransactionOperations;
 /**
  * Late pre-order adds run synchronously (no saga): the checkout activities price, tax and split the window's lines
  * exactly like a shopper's checkout (the window may be CLOSED), then payments either confirms the intent off-session
- * on the customer's default saved card or creates a hosted payment link. Idempotency reuses the checkout request
- * claim ({@code workflowId = late-preorder-<orderId>}); payment events of a link are routed here by
- * {@link PaymentEventService}.
+ * on the customer's default saved card, or creates an ordinary manual-capture PaymentIntent that the customer confirms
+ * on AfroTransact's pay page (the pay-now link sent by SMS, {@link PayLinkService}); never a Stripe-hosted page.
+ *
+ * <p>Double-charge guards: the Idempotency-Key is required and claims (customer, key) first, fixing the order id, so a
+ * replay returns the same order and payments' Stripe key {@code <orderId>:create-intent} charges the card once.
+ * Independently of keys, a second live late add of the same items for the same customer and window within
+ * {@link PreorderSettings#lateAddDuplicateWindow()} is refused (409 orders.late-add-duplicate). Payment events are
+ * routed here by {@link PaymentEventService}.
  */
 @Service
 class LatePreorderServiceImpl implements LatePreorderService {
@@ -54,6 +60,7 @@ class LatePreorderServiceImpl implements LatePreorderService {
     private static final int MAX_LINK_HOURS = 24;
     /** A late add waiting for the customer to authenticate the saved card is voided after this long. */
     private static final Duration AUTHENTICATION_WAIT = Duration.ofHours(48);
+    /** The pay page refuses an expired link at once; the job voids the order (and cancels its intent) after this. */
     private static final Duration LINK_GRACE = Duration.ofMinutes(10);
 
     private final OrdersAccess access;
@@ -68,13 +75,14 @@ class LatePreorderServiceImpl implements LatePreorderService {
     private final TransactionOperations tx;
     private final PreorderSettings preorderSettings;
     private final OrdersSettings settings;
+    private final PayLinkService payLinks;
     private final Clock clock;
 
     LatePreorderServiceImpl(OrdersAccess access, CheckoutRequestRepository requests, OrderRepository orders,
                             CheckoutActivities steps, ProductFactsClient catalog, PaymentsClient payments,
                             OrderPlacementService placement, OrderNumberGenerator numbers,
                             DomainEventPublisher events, TransactionOperations tx, PreorderSettings preorderSettings,
-                            OrdersSettings settings, Clock clock) {
+                            OrdersSettings settings, PayLinkService payLinks, Clock clock) {
         this.access = access;
         this.requests = requests;
         this.orders = orders;
@@ -87,6 +95,7 @@ class LatePreorderServiceImpl implements LatePreorderService {
         this.tx = tx;
         this.preorderSettings = preorderSettings;
         this.settings = settings;
+        this.payLinks = payLinks;
         this.clock = clock;
     }
 
@@ -97,7 +106,7 @@ class LatePreorderServiceImpl implements LatePreorderService {
         String key = cmd.idempotencyKey().trim();
         String fingerprint = Fingerprint.of(cmd.customerId() + "|" + cmd.windowId() + "|" + cmd.items() + "|"
                 + cmd.fulfilment() + "|" + cmd.payment() + "|" + cmd.shipTo());
-        CheckoutRequest request = claim(cmd.customerId().trim(), key, fingerprint);
+        CheckoutRequest request = claim(cmd.customerId().trim(), key, fingerprint, guard(cmd));
         if (!"STARTED".equals(request.status()) || orders.findById(request.orderId()).isPresent()) {
             return view(request, true);
         }
@@ -108,13 +117,13 @@ class LatePreorderServiceImpl implements LatePreorderService {
             requests.release(request.customerId(), request.idempotencyKey());
             throw e;
         }
+        boolean link = cmd.payment() == LatePreorderCommand.Payment.PAYMENT_LINK;
         PaymentsClient.Intent intent;
         try {
-            boolean link = cmd.payment() == LatePreorderCommand.Payment.PAYMENT_LINK;
             intent = payments.createIntent(new PaymentsClient.NewIntent(order.id(), order.totals().grandTotalMinor(),
                     order.currency(), Instant.now(clock), Map.of("order_number", order.number(), "customer_id",
                     order.customerId(), "channel", "AGENT_LATE"), PaymentLines.of(order), order.customerId(),
-                    List.of(), !link, link ? linkHours(cmd) : null));
+                    List.of(), !link));
         } catch (UpstreamFailure f) {
             placement.abandon(order.id(), CheckoutCodes.PAYMENT_FAILED, f.getMessage());
             if (f.retryable()) {
@@ -123,8 +132,9 @@ class LatePreorderServiceImpl implements LatePreorderService {
             throw new CheckoutFailed(CheckoutCodes.PAYMENT_FAILED, "payments refused the payment (" + f.code()
                     + "): " + f.getMessage(), order.number(), List.of());
         }
-        Order pending = intent.paymentLinkUrl() == null ? order : withOrigin(order,
-                order.origin().withPaymentLink(intent.paymentLinkUrl(), intent.paymentLinkExpiresAt()));
+        Instant linkExpiresAt = link ? Instant.now(clock).plus(Duration.ofHours(linkHours(cmd))) : null;
+        Order pending = !link ? order : withOrigin(order,
+                order.origin().withPaymentLink(payLinks.page(order.number()), linkExpiresAt));
         Order withPayment = new Order(pending.id(), pending.number(), pending.customerId(), pending.currency(),
                 pending.status(), pending.totals(), pending.shipTo(), intent.paymentId(), pending.workflowId(), null,
                 null, pending.createdAt(), pending.shipments(), 0, pending.origin());
@@ -135,8 +145,8 @@ class LatePreorderServiceImpl implements LatePreorderService {
             String message = intent.failureMessage() == null ? "The saved card was declined" : intent.failureMessage();
             placement.abandon(withPayment.id(), CheckoutCodes.PAYMENT_FAILED, message);
             throw new CheckoutFailed(CheckoutCodes.PAYMENT_FAILED, message, withPayment.number(), List.of());
-        } else if (intent.paymentLinkUrl() != null) {
-            publishLink(withPayment, intent);
+        } else if (link) {
+            publishLink(withPayment);
         }
         return view(requests.findByOrderId(withPayment.id()).orElseThrow(), false);
     }
@@ -196,15 +206,16 @@ class LatePreorderServiceImpl implements LatePreorderService {
                 o.version(), origin);
     }
 
-    private void publishLink(Order order, PaymentsClient.Intent intent) {
+    private void publishLink(Order order) {
         ShipTo to = order.shipTo();
+        Instant expiresAt = order.origin().paymentLinkExpiresAt();
         String windowId = order.preorderShipments().stream().map(s -> s.preorder().windowId()).findFirst()
                 .orElse(null);
         tx.executeWithoutResult(status -> events.publish(OrdersEvents.PREORDER_PAYMENT_LINK_CREATED,
                 OrdersEvents.AGGREGATE, order.id(), new OrdersEventPayloads.PreorderPaymentLinkCreated(order.id(),
                         order.number(), order.customerId(), windowId, order.origin().attribution() == null ? null
-                        : order.origin().attribution().po(), intent.paymentLinkUrl(),
-                        intent.paymentLinkExpiresAt(), order.totals().grandTotalMinor(), order.currency(),
+                        : order.origin().attribution().po(), payLinks.link(order.id(), order.number(), expiresAt),
+                        expiresAt, order.totals().grandTotalMinor(), order.currency(),
                         to == null ? null : to.fullName(), to == null ? null : to.phone())));
     }
 
@@ -223,7 +234,8 @@ class LatePreorderServiceImpl implements LatePreorderService {
         if (authorized) {
             placement.place(orderId);
         } else if (cancelled || order.get().origin().paymentLinkUrl() == null) {
-            // A link stays payable after a failed attempt (Stripe Checkout retries); a declined saved card does not.
+            // A pay-now link stays payable after a declined attempt (the customer tries again on the pay page, same
+            // PaymentIntent); a declined saved card does not.
             placement.abandon(orderId, CheckoutCodes.PAYMENT_FAILED, failureMessage == null ? "The payment failed"
                     : failureMessage);
         }
@@ -258,7 +270,7 @@ class LatePreorderServiceImpl implements LatePreorderService {
                 }
             }
             placement.abandon(o.id(), CheckoutCodes.PAYMENT_TIMEOUT, expiresAt != null
-                    ? "The payment link expired unpaid" : "The customer did not authenticate the saved card");
+                    ? "The pay-now link expired unpaid" : "The customer did not authenticate the saved card");
             voided++;
         }
         return voided;
@@ -300,7 +312,7 @@ class LatePreorderServiceImpl implements LatePreorderService {
         }
         if (s != null && cmd.payment() == LatePreorderCommand.Payment.PAYMENT_LINK
                 && Boolean.FALSE.equals(s.paymentLink())) {
-            throw new OrdersRuleViolation("orders.late-add-payment-disabled", "Payment links are switched off for "
+            throw new OrdersRuleViolation("orders.late-add-payment-disabled", "Pay-now links are switched off for "
                     + "late adds of this pre-order");
         }
     }
@@ -310,26 +322,57 @@ class LatePreorderServiceImpl implements LatePreorderService {
         return Math.clamp(hours == null ? preorderSettings.linkExpiryHours() : hours, 1, MAX_LINK_HOURS);
     }
 
-    private CheckoutRequest claim(String customerId, String key, String fingerprint) {
-        int year = Instant.now(clock).atZone(ZoneId.of(settings.zone())).getYear();
-        for (int attempt = 0; attempt < 5; attempt++) {
-            String orderId = UUID.randomUUID().toString();
-            CheckoutRequest candidate = new CheckoutRequest(customerId, key, fingerprint, orderId,
-                    numbers.next(year), WORKFLOW_PREFIX + orderId, "STARTED", null, null, null, null,
-                    Instant.now(clock));
-            CheckoutRequestRepository.Claim result = requests.claim(candidate);
-            if (result.claimed()) {
-                return candidate;
-            }
-            if (result.existing() != null) {
-                if (!result.existing().fingerprint().equals(fingerprint)) {
-                    throw new ConflictException("orders.idempotency-key-reused", "Idempotency-Key " + key
-                            + " was already used for a different order");
-                }
-                return result.existing();
-            }
+    /** sha-256 of the window and the item set (sorted ATIN × quantity): what makes two late adds the same order. */
+    private static String guard(LatePreorderCommand cmd) {
+        Map<String, Integer> items = new TreeMap<>();
+        cmd.items().forEach(i -> items.merge(i.variantAtin().trim(), i.quantity(), Integer::sum));
+        return Fingerprint.of(cmd.windowId().trim() + "|" + items);
+    }
+
+    /**
+     * Claims (customer, key). A replay of the key returns its request. A new key first checks, under a per-customer
+     * advisory lock (so two concurrent new keys cannot both pass), that no live late add of the same window and items
+     * was created within the duplicate window.
+     */
+    private CheckoutRequest claim(String customerId, String key, String fingerprint, String guard) {
+        Optional<CheckoutRequest> replay = requests.find(customerId, key);
+        if (replay.isPresent()) {
+            return sameRequest(replay.get(), key, fingerprint);
         }
-        throw new IllegalStateException("Could not allocate an order number");
+        return tx.execute(status -> {
+            requests.lockLateAdds(customerId);
+            Instant since = Instant.now(clock).minus(preorderSettings.lateAddDuplicateWindow());
+            Optional<CheckoutRequest> recent = requests.recentLateAdd(customerId, guard, since);
+            if (recent.isPresent() && !recent.get().idempotencyKey().equals(key)) {
+                throw new ConflictException(CheckoutCodes.LATE_ADD_DUPLICATE, "The same late add (order "
+                        + recent.get().orderNumber() + ") was created for this customer a moment ago; check the "
+                        + "window's orders before adding it again");
+            }
+            int year = Instant.now(clock).atZone(ZoneId.of(settings.zone())).getYear();
+            for (int attempt = 0; attempt < 5; attempt++) {
+                String orderId = UUID.randomUUID().toString();
+                CheckoutRequest candidate = new CheckoutRequest(customerId, key, fingerprint, orderId,
+                        numbers.next(year), WORKFLOW_PREFIX + orderId, "STARTED", null, null, null, null,
+                        Instant.now(clock));
+                CheckoutRequestRepository.Claim result = requests.claim(candidate);
+                if (result.claimed()) {
+                    requests.markLateAddGuard(orderId, guard);
+                    return candidate;
+                }
+                if (result.existing() != null) {
+                    return sameRequest(result.existing(), key, fingerprint);
+                }
+            }
+            throw new IllegalStateException("Could not allocate an order number");
+        });
+    }
+
+    private static CheckoutRequest sameRequest(CheckoutRequest existing, String key, String fingerprint) {
+        if (!existing.fingerprint().equals(fingerprint)) {
+            throw new ConflictException("orders.idempotency-key-reused", "Idempotency-Key " + key
+                    + " was already used for a different order");
+        }
+        return existing;
     }
 
     private LatePreorderView view(CheckoutRequest r, boolean replayed) {
@@ -342,9 +385,12 @@ class LatePreorderServiceImpl implements LatePreorderService {
         Map<String, String> windows = new LinkedHashMap<>();
         pre.forEach(s -> windows.putIfAbsent(s.preorder().windowId(), s.preorder().fulfilment().name()));
         String windowId = windows.keySet().stream().findFirst().orElse(null);
+        Instant linkExpiresAt = o.origin().paymentLinkExpiresAt();
+        boolean link = o.origin().paymentLinkUrl() != null;
         return new LatePreorderView(o.id(), o.number(), o.status() == OrderStatus.PENDING_PAYMENT ? "AWAITING_PAYMENT"
-                : o.status().name(), o.origin().paymentLinkUrl() != null ? "PAYMENT_LINK" : "SAVED_CARD",
-                o.origin().paymentLinkUrl(), o.origin().paymentLinkExpiresAt(), o.totals().grandTotalMinor(),
+                : o.status().name(), link ? "PAYMENT_LINK" : "SAVED_CARD",
+                link && linkExpiresAt != null ? payLinks.link(o.id(), o.number(), linkExpiresAt) : null,
+                linkExpiresAt, o.totals().grandTotalMinor(),
                 pre.stream().mapToLong(Shipment::shippingMinor).sum(), o.currency(), windowId,
                 windowId == null ? null : windows.get(windowId), o.origin().channel().name(), o.origin().tags(),
                 o.shipments().stream().map(Shipment::id).toList(), replayed);

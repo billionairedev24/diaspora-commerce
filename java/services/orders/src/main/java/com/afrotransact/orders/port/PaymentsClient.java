@@ -9,9 +9,9 @@ import java.util.Optional;
 public interface PaymentsClient {
 
     /**
-     * {@code POST /v1/payments}: PaymentIntent with manual capture; Idempotency-Key = order id. S272 late adds:
-     * {@code offSession} confirms it now on the customer's default saved card, {@code paymentLinkHours} creates a
-     * hosted payment link instead.
+     * {@code POST /v1/payments}: PaymentIntent with manual capture; Idempotency-Key = order id (payments keys the Stripe
+     * call {@code <orderId>:create-intent}). S272 late adds: {@code offSession} confirms it now on the customer's
+     * default saved card; a pay-now late add is an ordinary intent the customer confirms on the storefront pay page.
      */
     Intent createIntent(NewIntent request);
 
@@ -65,8 +65,7 @@ public interface PaymentsClient {
      */
     record NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
                      Map<String, String> metadata, List<Line> lines, String shopperId,
-                     List<String> paymentMethodTypes, boolean offSession, Integer paymentLinkHours,
-                     boolean saveForOffSession) {
+                     List<String> paymentMethodTypes, boolean offSession, boolean saveForOffSession) {
 
         public NewIntent {
             paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
@@ -75,14 +74,14 @@ public interface PaymentsClient {
         /** An intent that does not save the payment method. */
         public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
                          Map<String, String> metadata, List<Line> lines, String shopperId,
-                         List<String> paymentMethodTypes, boolean offSession, Integer paymentLinkHours) {
+                         List<String> paymentMethodTypes, boolean offSession) {
             this(orderId, amountMinor, currency, placedAt, metadata, lines, shopperId, paymentMethodTypes, offSession,
-                    paymentLinkHours, false);
+                    false);
         }
 
         public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
                          Map<String, String> metadata, List<Line> lines, String shopperId) {
-            this(orderId, amountMinor, currency, placedAt, metadata, lines, shopperId, List.of(), false, null);
+            this(orderId, amountMinor, currency, placedAt, metadata, lines, shopperId, List.of(), false);
         }
 
         public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
@@ -116,19 +115,8 @@ public interface PaymentsClient {
         }
     }
 
-    /**
-     * Payment as returned by payments (status AUTHORIZED once the shopper confirmed).
-     *
-     * @param paymentLinkUrl       hosted payment link (created with {@code paymentLinkHours}); null otherwise
-     * @param paymentLinkExpiresAt when the link expires
-     */
-    record Intent(String paymentId, String status, String clientSecret, long amountMinor, String failureMessage,
-                  String paymentLinkUrl, Instant paymentLinkExpiresAt) {
-
-        public Intent(String paymentId, String status, String clientSecret, long amountMinor,
-                      String failureMessage) {
-            this(paymentId, status, clientSecret, amountMinor, failureMessage, null, null);
-        }
+    /** Payment as returned by payments (status AUTHORIZED once the shopper confirmed). */
+    record Intent(String paymentId, String status, String clientSecret, long amountMinor, String failureMessage) {
     }
 
     /** Capture of one shipment. */

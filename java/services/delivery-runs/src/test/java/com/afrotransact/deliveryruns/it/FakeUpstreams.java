@@ -3,6 +3,7 @@ package com.afrotransact.deliveryruns.it;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -27,8 +28,11 @@ public class FakeUpstreams implements MediaGateway, CatalogGateway, OrdersGatewa
     private final Map<UUID, MediaAsset> assets = new ConcurrentHashMap<>();
     private final Map<String, ProductFacts> products = new ConcurrentHashMap<>();
     private final List<LatePreorderRequest> lateRequests = new ArrayList<>();
+    /** Like orders-service: (customer, Idempotency-Key) → the order it created; a replay charges nothing. */
+    private final Map<String, LatePreorderResult> lateByKey = new HashMap<>();
     private final AtomicInteger orderSeq = new AtomicInteger(5000);
     private volatile String rejectCode;
+    private volatile int rejectStatus = 402;
 
     /** A READY image of the given size. */
     UUID image(int width, int height) {
@@ -48,9 +52,15 @@ public class FakeUpstreams implements MediaGateway, CatalogGateway, OrdersGatewa
     }
 
     void rejectLateOrders(String code) {
-        rejectCode = code;
+        rejectLateOrders(code, 402);
     }
 
+    void rejectLateOrders(String code, int status) {
+        rejectCode = code;
+        rejectStatus = status;
+    }
+
+    /** Every late order orders-service created (one charge or one pay-now link each). */
     synchronized List<LatePreorderRequest> lateRequests() {
         return List.copyOf(lateRequests);
     }
@@ -74,19 +84,25 @@ public class FakeUpstreams implements MediaGateway, CatalogGateway, OrdersGatewa
     @Override
     public synchronized LatePreorderResult placeLatePreorder(LatePreorderRequest r) {
         if (rejectCode != null) {
-            throw new UpstreamRejectedException(rejectCode, "Card declined", 402);
+            throw new UpstreamRejectedException(rejectCode, "Card declined", rejectStatus);
+        }
+        LatePreorderResult prior = lateByKey.get(r.customerId() + "|" + r.idempotencyKey());
+        if (prior != null) {
+            return prior;
         }
         lateRequests.add(r);
         long items = r.items().stream().mapToLong(i -> 1000L * i.qty()).sum();
         String orderId = UUID.randomUUID().toString();
         List<PreorderLine> lines = r.items().stream()
                 .map(i -> new PreorderLine(i.atin(), "Product " + i.atin(), "seller-1", i.qty())).toList();
-        return new LatePreorderResult(orderId, "AT-" + orderSeq.incrementAndGet(),
+        LatePreorderResult created = new LatePreorderResult(orderId, "AT-" + orderSeq.incrementAndGet(),
                 r.payment().name().equals("PAYMENT_LINK") ? "AWAITING_PAYMENT" : "PLACED",
                 items + 799, "USD",
-                r.payment().name().equals("PAYMENT_LINK") ? "https://pay.test/l/" + orderId : null, null,
+                r.payment().name().equals("PAYMENT_LINK") ? "https://shop.test/orders/" + orderId + "/pay?token=t" : null, null,
                 UUID.randomUUID().toString(), "Ada Okafor", "+1 806 555 0101", "ada@example.test", "1902 19th St",
                 "Lubbock", "TX", "79401", lines);
+        lateByKey.put(r.customerId() + "|" + r.idempotencyKey(), created);
+        return created;
     }
 
     @Override

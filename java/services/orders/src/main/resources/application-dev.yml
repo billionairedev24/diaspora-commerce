@@ -21,6 +21,8 @@ at:
   orders:
     handover:
       key: ${HANDOVER_CODE_KEY}
+    pay-links:
+      key: ${PAY_LINK_KEY}
     upstreams:
       cart-url: ${CART_URL:http://cart}
       identity-url: ${IDENTITY_URL:http://identity}

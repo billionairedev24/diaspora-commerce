@@ -219,9 +219,12 @@ class PreorderController {
 
     @Operation(summary = "Add a late order for a customer (preorders:late-add)",
             description = "OPEN (assisted) or CLOSED pre-orders; 422 once delivered. Placed through orders-service "
-                    + "(saved card off-session or SMS payment link); recorded as LATE_ADD with channel AGENT_LATE "
-                    + "and returned as the projected order (with paymentLinkUrl / ordersStatus). Idempotency-Key "
-                    + "makes retries safe.")
+                    + "(saved card off-session, or an SMS pay-now link to AfroTransact's own pay page where the "
+                    + "customer pays with Stripe Elements); recorded as LATE_ADD with channel AGENT_LATE and "
+                    + "returned as the projected order (with paymentLinkUrl / ordersStatus). Idempotency-Key is "
+                    + "required (422 delivery-runs.idempotency-key-required): the same key returns the same order "
+                    + "and charges once. 409 orders.late-add-duplicate when the same items were just added for the "
+                    + "customer under another key.")
     @PostMapping("/v1/preorders/{id}/late-orders")
     ResponseEntity<OrderResponse> addLateOrder(@PathVariable UUID id, @Valid @RequestBody LateOrderRequest body,
                                                    @RequestHeader(name = "Idempotency-Key", required = false)

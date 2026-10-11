@@ -115,7 +115,10 @@ public final class OrdersEventPayloads {
                                                  Instant answeredAt) {
     }
 
-    /** orders.preorder.payment_link_created (S272): notifications texts the link (preorder.late_order.payment_link). */
+    /**
+     * orders.preorder.payment_link_created (S272): a pay-now late add; {@code url} is AfroTransact's pay page with its
+     * signed token (never a Stripe page). The SMS itself is sent from delivery-runs' preorder.late_order.added.
+     */
     public record PreorderPaymentLinkCreated(String orderId, String orderNumber, String customerId, String windowId,
                                              String windowCode, String url, Instant expiresAt, long amountMinor,
                                              String currency, String shipToName, String shipToPhone) {

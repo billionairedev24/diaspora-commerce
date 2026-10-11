@@ -43,6 +43,8 @@ import org.springframework.transaction.support.TransactionOperations;
 class PreorderOrderServiceImpl implements PreorderOrderService {
 
     static final int LATE_NUMBER_START = 90;
+    /** Same limit as orders-service's Idempotency-Key. */
+    static final int MAX_KEY = 160;
     /** orders-service accepts payment links of at most 24 hours. */
     static final int ORDERS_MAX_LINK_HOURS = LateAddSettings.MAX_LINK_EXPIRY_HOURS;
 
@@ -152,23 +154,28 @@ class PreorderOrderServiceImpl implements PreorderOrderService {
                 ? w.doorFee(payment).orElseThrow(() -> new RuleViolation("delivery-runs.preorder-fee-missing",
                         "No door delivery fee is set for " + w.details().currency()))
                 : w.pickupFee(payment);
-        String key = c.idempotencyKey() == null || c.idempotencyKey().isBlank() ? UUID.randomUUID().toString()
-                : c.idempotencyKey().trim();
+        // Never invented here: a key generated per request would make every retry a new order and a new charge.
+        String key = c.idempotencyKey() == null ? "" : c.idempotencyKey().trim();
         Address address = address(w, c);
         int linkHours = Math.min(late.linkExpiryHours(), ORDERS_MAX_LINK_HOURS);
         LatePreorderResult r = ordersService.placeLatePreorder(new LatePreorderRequest(key, w.id(),
                 c.customerId().trim(), address, true, c.items(), fulfilment.name(), c.payment(), c.reason().label(),
                 c.note(), actor.subject(), new LateAddTerms(late.savedCard(), late.paymentLink(), linkHours)));
         String note = c.reason().label() + (c.payment() == LatePaymentMethod.PAYMENT_LINK
-                ? " · payment link sent by SMS (expires in " + linkHours + " h)" : " · saved card charged")
+                ? " · pay-now link sent by SMS (expires in " + linkHours + " h)" : " · saved card charged")
                 + " · by " + actor.subject() + (c.note() == null || c.note().isBlank() ? "" : " · " + c.note().trim());
         PreorderOrder saved = tx.execute(s -> {
+            boolean replay = orders.findById(r.orderId()).filter(o -> o.status() == PreorderOrderStatus.LATE_ADD)
+                    .isPresent();
             PreorderOrder o = record(w, c, r, address, fulfilment, fee, note, now);
-            Instant expires = c.payment() != LatePaymentMethod.PAYMENT_LINK ? null
-                    : r.paymentLinkExpiresAt() != null ? r.paymentLinkExpiresAt()
-                    : now.plus(Duration.ofHours(linkHours));
-            events.lateOrderAdded(w, o, c.payment().name(), r.paymentLinkUrl(), expires, c.reason().label(),
-                    actor.subject());
+            if (!replay) {
+                // Once per order: a replayed key (staff retry after a timeout) must not text the link twice.
+                Instant expires = c.payment() != LatePaymentMethod.PAYMENT_LINK ? null
+                        : r.paymentLinkExpiresAt() != null ? r.paymentLinkExpiresAt()
+                        : now.plus(Duration.ofHours(linkHours));
+                events.lateOrderAdded(w, o, c.payment().name(), r.paymentLinkUrl(), expires, c.reason().label(),
+                        actor.subject());
+            }
             return o;
         });
         return new LateOrderResult(saved, r.status(), r.paymentLinkUrl());
@@ -228,6 +235,11 @@ class PreorderOrderServiceImpl implements PreorderOrderService {
     }
 
     private static void validate(LateOrderCommand c) {
+        String key = c.idempotencyKey() == null ? "" : c.idempotencyKey().trim();
+        if (key.isEmpty() || key.length() > MAX_KEY) {
+            throw new RuleViolation("delivery-runs.idempotency-key-required", "Send an Idempotency-Key header (1-"
+                    + MAX_KEY + " characters), the same one on every retry of this late order");
+        }
         if (c.customerId() == null || c.customerId().isBlank()) {
             throw new RuleViolation("delivery-runs.customer-required", "Choose the customer");
         }
@@ -254,7 +266,7 @@ class PreorderOrderServiceImpl implements PreorderOrderService {
             }
         }
         if (c.payment() == null) {
-            throw new RuleViolation("delivery-runs.payment-required", "Choose saved card or payment link");
+            throw new RuleViolation("delivery-runs.payment-required", "Choose saved card or pay-now link");
         }
         if (c.reason() == null) {
             throw new RuleViolation("delivery-runs.reason-required", "Choose why the order is late");

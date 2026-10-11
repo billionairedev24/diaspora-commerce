@@ -117,6 +117,8 @@ at:
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
     # How long checkout waits for the payment authorisation; matches inventory's reservation TTL.
     payment-timeout: ${CHECKOUT_PAYMENT_TIMEOUT:15m}
+    # gateway-bff's orders.slowTimeout (25s, POST /v1/checkout and /confirm) must stay above this, so the BFF never
+    # gives up while the saga still answers (tools/ci/check_env_config.py checks it).
     checkout-response-timeout: ${CHECKOUT_RESPONSE_TIMEOUT:20s}
     zone: ${ORDERS_ZONE:America/Chicago}
     perishable-types: [perishable]
@@ -175,6 +177,11 @@ at:
     handover:
       # AES key material for sealing customer handover codes (HANDOVER_CODE_KEY in cloud).
       key: ${HANDOVER_CODE_KEY:local-only-handover-code-key-change-me}
+    # Pay-now links of late pre-order adds: <base-url>/orders/<number>/pay?token=<HMAC token>. The customer pays the
+    # order's PaymentIntent with Stripe Elements on the storefront (never a Stripe-hosted page). PAY_LINK_KEY in cloud.
+    pay-links:
+      base-url: ${PUBLIC_WEB_URL:http://localhost:3000}
+      key: ${PAY_LINK_KEY:local-only-pay-link-key-change-me}
     oauth:
       issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
       token-path: /oauth2/token
@@ -206,11 +213,14 @@ at:
     consumers:
       enabled: ${ORDERS_CONSUMERS_ENABLED:true}
     # S272 community pre-orders: cart lines in an open window become a PREORDER package (door or pickup, charged at
-    # checkout); off = every line ships now. Jobs flag missed delivery dates and void unpaid late-add payment links.
+    # checkout); off = every line ships now. Jobs flag missed delivery dates and void unpaid late-add pay-now links
+    # (cancelling their PaymentIntent). A second late add of the same items for the same customer and window within
+    # late-add-duplicate-window is refused even with another Idempotency-Key.
     preorders:
       enabled: ${PREORDERS_ENABLED:true}
       job-batch: 100
       link-expiry-hours: 24
+      late-add-duplicate-window: 10m
       missed-delivery-interval: ${PREORDER_MISSED_DELIVERY_INTERVAL:15m}
       link-expiry-interval: ${PREORDER_LINK_EXPIRY_INTERVAL:5m}
     jobs:

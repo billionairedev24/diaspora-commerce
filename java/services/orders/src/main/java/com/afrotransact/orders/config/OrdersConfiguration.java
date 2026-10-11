@@ -1,5 +1,6 @@
 package com.afrotransact.orders.config;
 
+import java.time.Duration;
 import java.util.Set;
 
 import com.afrotransact.orders.application.OrdersSettings;
@@ -70,8 +71,11 @@ class OrdersConfiguration {
     @Bean
     PreorderSettings preorderSettings(@Value("${at.orders.preorders.enabled:true}") boolean enabled,
                                       @Value("${at.orders.preorders.job-batch:100}") int jobBatch,
-                                      @Value("${at.orders.preorders.link-expiry-hours:24}") int linkExpiryHours) {
-        return new PreorderSettings(enabled, jobBatch, linkExpiryHours);
+                                      @Value("${at.orders.preorders.link-expiry-hours:24}") int linkExpiryHours,
+                                      @Value("${at.orders.pay-links.base-url:http://localhost:3000}") String payPage,
+                                      @Value("${at.orders.preorders.late-add-duplicate-window:10m}")
+                                      Duration duplicateWindow) {
+        return new PreorderSettings(enabled, jobBatch, linkExpiryHours, payPage, duplicateWindow);
     }
 
     @Bean

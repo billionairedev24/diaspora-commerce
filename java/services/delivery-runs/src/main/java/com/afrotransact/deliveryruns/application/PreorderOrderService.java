@@ -42,8 +42,8 @@ public interface PreorderOrderService {
 
     /**
      * @param order          the projected late add
-     * @param ordersStatus   orders-service status (e.g. AWAITING_PAYMENT for payment links)
-     * @param paymentLinkUrl payment link sent by SMS (payment links only)
+     * @param ordersStatus   orders-service status (e.g. AWAITING_PAYMENT for pay-now links)
+     * @param paymentLinkUrl pay-now link sent by SMS: AfroTransact's pay page with its signed token
      */
     record LateOrderResult(PreorderOrder order, String ordersStatus, String paymentLinkUrl) {
     }

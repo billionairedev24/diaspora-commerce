@@ -2,6 +2,9 @@ package com.afrotransact.orders.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.net.URLDecoder;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
@@ -35,6 +38,9 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
 
     private static final Actor DELIVERY_RUNS = new Actor("svc-delivery-runs", PrincipalType.SERVICE,
             Optional.empty(), Set.of(), Set.of("orders:on-behalf"));
+    /** gateway-bff resolving pay-now links for the storefront pay page. */
+    private static final Actor BFF = new Actor("svc-gateway-bff", PrincipalType.SERVICE, Optional.empty(), Set.of(),
+            Set.of("orders:pay-link"));
 
     private PaymentEventService paymentEvents;
     private FollowUpService followUps;
@@ -377,8 +383,19 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
                 "{\"choice\":\"WAIT\"}"), 409, "orders.missed-delivery-answered");
     }
 
+    private static String token(String payUrl) {
+        return URLDecoder.decode(payUrl.substring(payUrl.indexOf("?token=") + 7), StandardCharsets.UTF_8);
+    }
+
+    private HttpResponse<String> payLink(String number, String action, String token) {
+        TestSupport.as(BFF);
+        return send("POST", "/v1/service/pay-links/" + number + "/" + action,
+                "{\"token\":\"" + token + "\"}");
+    }
+
+    /** A pay-now late add: an ordinary PaymentIntent and a link to AfroTransact's pay page, never a Stripe page. */
     @Test
-    void lateAddPaymentLinkWaitsForPaymentAndExpiresUnpaid() {
+    void lateAddPayNowLinkOpensOurPayPageAndExpiresUnpaid() {
         String customer = id("cust");
         String atin = id("ATK");
         String org = id("org-k");
@@ -388,11 +405,9 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
         eligibility(atin, open(atin, window, "OPEN", Instant.now().plus(1, ChronoUnit.DAYS),
                 LocalDate.now().plusDays(3), ""));
         UPSTREAMS.json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments"))
-                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer)))
-                .withRequestBody(WireMock.matchingJsonPath("$.paymentLinkHours", WireMock.equalTo("12"))), 201,
+                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer))), 201,
                 "{\"id\":\"" + paymentId + "\",\"status\":\"REQUIRES_PAYMENT_METHOD\",\"amountMinor\":1,"
-                        + "\"paymentLinkUrl\":\"https://checkout.stripe.com/c/pay/cs_test_1\","
-                        + "\"paymentLinkExpiresAt\":\"" + Instant.now().plus(12, ChronoUnit.HOURS) + "\"}");
+                        + "\"clientSecret\":\"pi_" + paymentId + "_secret\"}");
         UPSTREAMS.json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments/" + paymentId + "/cancel")), 200,
                 "{\"id\":\"" + paymentId + "\",\"status\":\"CANCELED\"}");
 
@@ -401,32 +416,57 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
                 lateAdd(customer, window, atin, "PAYMENT_LINK"), "Idempotency-Key", "late-" + customer), 201);
         assertThat(created.path("status").asString()).isEqualTo("AWAITING_PAYMENT");
         assertThat(created.path("payment").asString()).isEqualTo("PAYMENT_LINK");
-        assertThat(created.path("paymentLinkUrl").asString()).isEqualTo("https://checkout.stripe.com/c/pay/cs_test_1");
+        String number = created.path("orderNumber").asString();
+        String payUrl = created.path("paymentLinkUrl").asString();
+        assertThat(payUrl).startsWith("http://localhost:3000/orders/" + number + "/pay?token=").doesNotContain("stripe");
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
+                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer)))
+                .withRequestBody(WireMock.notContaining("paymentLinkHours"))
+                .withRequestBody(WireMock.notContaining("offSession")));
         String orderId = created.path("orderId").asString();
         JsonNode link = JSON.readTree(payload("orders.preorder.payment_link_created", orderId));
-        assertThat(link.path("url").asString()).startsWith("https://checkout.stripe.com/");
+        assertThat(link.path("url").asString()).isEqualTo(payUrl);
         assertThat(link.path("shipToPhone").asString()).isEqualTo("+18065550101");
         assertThat(link.path("windowCode").asString()).isEqualTo("LBK-7");
+        // A replay (delivery-runs retrying) answers the same link.
+        assertThat(ok(send("POST", "/v1/service/orders/late-preorder", lateAdd(customer, window, atin,
+                "PAYMENT_LINK"), "Idempotency-Key", "late-" + customer), 200).path("paymentLinkUrl").asString())
+                .isEqualTo(payUrl);
 
-        // A failed attempt on the link page leaves it payable; nothing is voided yet.
+        // The pay page: the order's own PaymentIntent, confirmed with Stripe Elements.
+        String token = token(payUrl);
+        JsonNode page = ok(payLink(number, "lookup", token));
+        assertThat(page.path("status").asString()).isEqualTo("AWAITING_PAYMENT");
+        assertThat(page.path("clientSecret").asString()).isEqualTo("pi_" + paymentId + "_secret");
+        assertThat(page.path("totalMinor").asLong()).isEqualTo(created.path("totalMinor").asLong());
+        assertThat(page.path("lines")).hasSize(1);
+        problem(payLink(number, "lookup", token.substring(0, token.length() - 2) + "xx"), 404,
+                "orders.pay-link-not-found");
+        problem(payLink("AT-2026-NOPE22", "lookup", token), 404, "orders.pay-link-not-found");
+        TestSupport.as(DELIVERY_RUNS);
+        assertThat(send("POST", "/v1/service/pay-links/" + number + "/lookup", "{\"token\":\"" + token + "\"}")
+                .statusCode()).isEqualTo(403);
+
+        // A declined attempt on the pay page leaves it payable; nothing is voided yet.
         assertThat(paymentEvents.onIntentEvent(UUID.randomUUID(), "payments.intent.failed", orderId, "declined"))
                 .isTrue();
         assertThat(lateAdds.expireUnpaid()).isZero();
-        assertThat(jdbc.sql("select status from customer_order where id = :id").param("id", UUID.fromString(orderId))
-                .query(String.class).single()).isEqualTo("PENDING_PAYMENT");
+        assertThat(ok(payLink(number, "lookup", token)).path("status").asString()).isEqualTo("AWAITING_PAYMENT");
 
-        // Unpaid past its expiry: the payment is cancelled and the order voided.
+        // Past its expiry the page refuses it; the job cancels the PaymentIntent and voids the order.
         jdbc.sql("update customer_order set origin = jsonb_set(origin, '{paymentLinkExpiresAt}', "
                 + "'\"2020-01-01T00:00:00Z\"') where id = :id").param("id", UUID.fromString(orderId)).update();
+        problem(payLink(number, "lookup", token), 410, "orders.pay-link-expired");
         assertThat(lateAdds.expireUnpaid()).isGreaterThanOrEqualTo(1);
         assertThat(jdbc.sql("select status from customer_order where id = :id").param("id", UUID.fromString(orderId))
                 .query(String.class).single()).isEqualTo("CANCELLED");
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments/" + paymentId
                 + "/cancel")));
+        problem(payLink(number, "confirm", token), 410, "orders.pay-link-expired");
     }
 
     @Test
-    void aPaidLinkPlacesTheLateAdd() {
+    void aPayNowLinkPaidOnThePayPagePlacesTheLateAddOnceAndIsThenRefused() {
         String customer = id("cust");
         String atin = id("ATM");
         String org = id("org-m");
@@ -438,8 +478,9 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
         UPSTREAMS.json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments"))
                 .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer))), 201,
                 "{\"id\":\"" + paymentId + "\",\"status\":\"REQUIRES_PAYMENT_METHOD\",\"amountMinor\":1,"
-                        + "\"paymentLinkUrl\":\"https://checkout.stripe.com/c/pay/cs_test_2\","
-                        + "\"paymentLinkExpiresAt\":\"" + Instant.now().plus(24, ChronoUnit.HOURS) + "\"}");
+                        + "\"clientSecret\":\"pi_" + paymentId + "_secret\"}");
+        UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/payments/" + paymentId)), 200,
+                "{\"id\":\"" + paymentId + "\",\"status\":\"AUTHORIZED\",\"amountMinor\":1}");
         UPSTREAMS.capture(paymentId);
         TestSupport.as(DELIVERY_RUNS);
         String body = lateAdd(customer, window, atin, "PAYMENT_LINK").replace(",\"lateAdd\":{\"linkExpiryHours\":12}",
@@ -447,15 +488,58 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
         JsonNode created = ok(send("POST", "/v1/service/orders/late-preorder", body, "Idempotency-Key",
                 "late-" + customer), 201);
         String orderId = created.path("orderId").asString();
-        WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
-                .withRequestBody(WireMock.matchingJsonPath("$.paymentLinkHours", WireMock.equalTo("24")))
-                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer))));
+        String number = created.path("orderNumber").asString();
+        assertThat(Instant.parse(created.path("paymentLinkExpiresAt").asString()))
+                .isAfter(Instant.now().plus(23, ChronoUnit.HOURS));
+        String token = token(created.path("paymentLinkUrl").asString());
 
-        assertThat(paymentEvents.onIntentEvent(UUID.randomUUID(), "payments.intent.succeeded", orderId, null))
-                .isTrue();
+        // stripe.confirmPayment succeeded on the page: confirm reads the intent and places the order.
+        JsonNode paid = ok(payLink(number, "confirm", token));
+        assertThat(paid.path("status").asString()).isEqualTo("PAID");
+        assertThat(paid.path("clientSecret").isNull()).isTrue();
         assertThat(jdbc.sql("select status from customer_order where id = :id").param("id", UUID.fromString(orderId))
                 .query(String.class).single()).isEqualTo("PLACED");
+        // The webhook-driven event arrives too: still placed once.
+        assertThat(paymentEvents.onIntentEvent(UUID.randomUUID(), "payments.intent.succeeded", orderId, null))
+                .isTrue();
         assertThat(outbox("orders.order.placed", orderId)).isEqualTo(1);
+        // The link is single-use: the page shows it as paid and offers nothing to pay.
+        JsonNode again = ok(payLink(number, "lookup", token));
+        assertThat(again.path("status").asString()).isEqualTo("PAID");
+        assertThat(again.path("clientSecret").isNull()).isTrue();
+    }
+
+    /** Gap 1: the same key charges once; another key for the same items is refused for a while. */
+    @Test
+    void lateAddKeysReplayOnceAndADuplicateUnderAnotherKeyIsRefused() {
+        String customer = id("cust");
+        String atin = id("ATD");
+        String window = "win-" + UUID.randomUUID();
+        String paymentId = UUID.randomUUID().toString();
+        listing(atin, id("org-d"), 900);
+        eligibility(atin, open(atin, window, "CLOSED", Instant.now().minus(1, ChronoUnit.HOURS),
+                LocalDate.now().plusDays(1), ""));
+        UPSTREAMS.json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments"))
+                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer))), 201,
+                "{\"id\":\"" + paymentId + "\",\"status\":\"AUTHORIZED\",\"amountMinor\":1}");
+        UPSTREAMS.capture(paymentId);
+        TestSupport.as(DELIVERY_RUNS);
+        String request = lateAdd(customer, window, atin, "SAVED_CARD");
+
+        JsonNode first = ok(send("POST", "/v1/service/orders/late-preorder", request, "Idempotency-Key",
+                "dialog-1-" + customer), 201);
+        JsonNode replay = ok(send("POST", "/v1/service/orders/late-preorder", request, "Idempotency-Key",
+                "dialog-1-" + customer), 200);
+        assertThat(replay.path("orderId").asString()).isEqualTo(first.path("orderId").asString());
+        problem(send("POST", "/v1/service/orders/late-preorder", request, "Idempotency-Key", "dialog-2-" + customer),
+                409, "orders.late-add-duplicate");
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
+                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer))));
+        // Other items for the same customer and window are a different order.
+        ok(send("POST", "/v1/service/orders/late-preorder", request.replace("\"qty\":2", "\"qty\":3"),
+                "Idempotency-Key", "dialog-3-" + customer), 201);
+        // Without a key nothing is created.
+        problem(send("POST", "/v1/service/orders/late-preorder", request), 400, "orders.idempotency-key-required");
     }
 
     @Test

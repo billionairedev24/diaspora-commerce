@@ -493,6 +493,85 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrderPageSellerShipmentView'
+  /v1/service/pay-links/{orderNumber}/lookup:
+    post:
+      tags:
+      - Pre-orders
+      summary: Resolve a late add's pay-now link (gateway-bff, orders:pay-link)
+      description: The storefront pay page (/orders/{orderNumber}/pay?token=…) shows the order and, while it awaits payment,
+        the client secret of its existing manual-capture PaymentIntent, which the customer confirms with Stripe Elements.
+        The token is sent in the body. A paid order answers status PAID without a client secret.
+      operationId: lookupPayLink
+      parameters:
+      - name: orderNumber
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayLinkToken'
+        required: true
+      responses:
+        '200':
+          description: AWAITING_PAYMENT (with clientSecret) or PAID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayLinkView'
+        '404':
+          description: 'orders.pay-link-not-found: unknown order or wrong token'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '410':
+          description: 'orders.pay-link-expired: the link expired or the order was voided'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /v1/service/pay-links/{orderNumber}/confirm:
+    post:
+      tags:
+      - Pre-orders
+      summary: 'After stripe.confirmPayment on the pay page: place the order once authorised'
+      description: Reads the PaymentIntent from Stripe (through payments) and places the order when it is authorised;
+        idempotent. Answers like lookup (PAID once placed; failureMessage after a decline).
+      operationId: confirmPayLink
+      parameters:
+      - name: orderNumber
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayLinkToken'
+        required: true
+      responses:
+        '200':
+          description: AWAITING_PAYMENT or PAID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayLinkView'
+        '404':
+          description: orders.pay-link-not-found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '410':
+          description: orders.pay-link-expired
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /v1/service/orders/late-preorder:
     post:
       tags:
@@ -501,10 +580,13 @@ paths:
       description: Customer service adds an order to a pre-order window that is OPEN (assisted order) or CLOSED and not delivered.
         Items are priced from the catalog and must be pre-orders of the window at the address. SAVED_CARD charges the customer's
         default saved card off-session (status PLACED, or AWAITING_PAYMENT when the bank asks the customer to authenticate);
-        PAYMENT_LINK creates a hosted Stripe payment link (status AWAITING_PAYMENT, orders.preorder.payment_link_created
-        for the SMS; voided when the link expires unpaid). lateAdd carries the window's back-office late-add settings
+        PAYMENT_LINK creates the order's manual-capture PaymentIntent and answers a pay-now link to AfroTransact's own pay
+        page (paymentLinkUrl = <storefront>/orders/<number>/pay?token=<signed token>; status AWAITING_PAYMENT,
+        orders.preorder.payment_link_created), where the customer pays with Stripe Elements; never a Stripe-hosted page.
+        Voided, its intent cancelled, when the link expires unpaid. lateAdd carries the window's back-office late-add settings
         (savedCard / paymentLink switches, linkExpiryHours, default 24). The order has channel AGENT_LATE and tag LATE_ADD
-        and records the staff actor, reason and note. The same Idempotency-Key returns the same order.
+        and records the staff actor, reason and note. The same Idempotency-Key returns the same order (one charge);
+        another key for the same customer, window and items within 10 minutes is 409 orders.late-add-duplicate.
       operationId: create
       parameters:
       - name: Idempotency-Key
@@ -669,6 +751,39 @@ paths:
                 $ref: '#/components/schemas/ShipmentActionResult'
 components:
   schemas:
+    PayLinkToken:
+      type: object
+      description: The token of the pay-now link
+      properties:
+        token:
+          type: string
+          maxLength: 200
+          minLength: 1
+      required:
+      - token
+    PayLinkView:
+      type: object
+      description: The pay page of a late pre-order add
+      properties:
+        orderNumber: {type: string}
+        status: {type: string, enum: [AWAITING_PAYMENT, PAID]}
+        totalMinor: {type: integer, format: int64}
+        deliveryFeeMinor: {type: integer, format: int64}
+        currency: {type: string}
+        clientSecret: {type: string, description: Client secret of the order's PaymentIntent; only while AWAITING_PAYMENT}
+        failureMessage: {type: string, description: The last decline; the customer may try again}
+        expiresAt: {type: string, format: date-time}
+        windowName: {type: string}
+        deliversOn: {type: string, format: date}
+        fulfilment: {type: string}
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              title: {type: string}
+              quantity: {type: integer, format: int32}
+              totalMinor: {type: integer, format: int64}
     TransitionRequest:
       type: object
       description: Move a shipment to the next status

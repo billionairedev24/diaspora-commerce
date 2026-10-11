@@ -33,6 +33,18 @@ import org.springframework.stereotype.Service;
  * Idempotency: (customer, Idempotency-Key) is claimed first and fixes the order id, order number and workflow id, so
  * a retry — even a concurrent one — attaches to the same saga. The claim is released when the saga could not be
  * started (cart or address unreachable), so the shopper can retry with the same key.
+ *
+ * <p>One open checkout per customer (unique index on the open-checkout slot): a checkout under another key while one
+ * is still started or awaiting payment
+ * <ul>
+ *   <li>with the same cart fingerprint resumes the open one (same order, same PaymentIntent and client secret);</li>
+ *   <li>with another cart supersedes it first: its PaymentIntent is cancelled at Stripe (payments' deterministic key
+ *       {@code <orderId>:cancel}, so it can never be confirmed or captured afterwards), its saga is told the payment
+ *       failed and releases the stock and voids the order, and only then the new checkout claims the slot. If the
+ *       open checkout turns out to be paid it is placed instead and the new attempt is refused (409
+ *       orders.previous-checkout-paid); a payment still processing is 409 orders.checkout-in-progress.</li>
+ * </ul>
+ * So a customer never has two payable PaymentIntents for checkouts, whatever keys the clients send.
  */
 @Service
 class CheckoutServiceImpl implements CheckoutService {
@@ -40,6 +52,7 @@ class CheckoutServiceImpl implements CheckoutService {
     private static final int MAX_KEY = 160;
     private static final Set<String> AUTHORIZED = Set.of("AUTHORIZED", "PARTIALLY_CAPTURED", "CAPTURED");
     private static final Set<String> FAILED = Set.of("FAILED", "CANCELED");
+    private static final String SUPERSEDED = "Replaced by a newer checkout";
 
     private final OrdersAccess access;
     private final CheckoutRequestRepository requests;
@@ -50,12 +63,14 @@ class CheckoutServiceImpl implements CheckoutService {
     private final PaymentsClient payments;
     private final OrderNumberGenerator numbers;
     private final HandoverCodeVault vault;
+    private final OrderPlacementService placement;
     private final OrdersSettings settings;
     private final Clock clock;
 
     CheckoutServiceImpl(OrdersAccess access, CheckoutRequestRepository requests, OrderRepository orders,
                         CartClient cart, AddressBook addresses, CheckoutWorkflows workflows, PaymentsClient payments,
-                        OrderNumberGenerator numbers, HandoverCodeVault vault, OrdersSettings settings, Clock clock) {
+                        OrderNumberGenerator numbers, HandoverCodeVault vault, OrderPlacementService placement,
+                        OrdersSettings settings, Clock clock) {
         this.access = access;
         this.requests = requests;
         this.orders = orders;
@@ -65,6 +80,7 @@ class CheckoutServiceImpl implements CheckoutService {
         this.payments = payments;
         this.numbers = numbers;
         this.vault = vault;
+        this.placement = placement;
         this.settings = settings;
         this.clock = clock;
     }
@@ -124,11 +140,12 @@ class CheckoutServiceImpl implements CheckoutService {
 
     private Claimed claim(String customerId, String key, String fingerprint) {
         int year = Instant.now(clock).atZone(ZoneId.of(settings.zone())).getYear();
+        boolean superseded = false;
         for (int attempt = 0; attempt < 5; attempt++) {
             String orderId = UUID.randomUUID().toString();
             CheckoutRequest candidate = new CheckoutRequest(customerId, key, fingerprint, orderId,
                     numbers.next(year), "checkout-" + orderId, "STARTED", null, null, null, null, Instant.now(clock));
-            CheckoutRequestRepository.Claim result = requests.claim(candidate);
+            CheckoutRequestRepository.Claim result = requests.claimCheckout(candidate);
             if (result.claimed()) {
                 return new Claimed(candidate, true);
             }
@@ -139,8 +156,58 @@ class CheckoutServiceImpl implements CheckoutService {
                 }
                 return new Claimed(result.existing(), false);
             }
+            CheckoutRequest open = result.open();
+            if (open != null) {
+                if (open.fingerprint().equals(fingerprint)) {
+                    return new Claimed(open, false);
+                }
+                if (superseded) {
+                    throw inProgress(open);
+                }
+                supersede(open);
+                superseded = true;
+            }
         }
         throw new IllegalStateException("Could not allocate an order number");
+    }
+
+    /**
+     * Cancels the customer's open checkout before a different one may start: the PaymentIntent first (so it can never
+     * be confirmed or captured), then the saga (stock released, order voided). Waits a bounded time for the slot.
+     */
+    private void supersede(CheckoutRequest open) {
+        if (open.paymentId() != null) {
+            PaymentsClient.Intent intent = payments.get(open.paymentId(), true);
+            if (AUTHORIZED.contains(intent.status())) {
+                workflows.signalPayment(open.workflowId(), true, null);
+                throw new ConflictException(CheckoutCodes.PREVIOUS_CHECKOUT_PAID, "Your previous checkout "
+                        + open.orderNumber() + " is paid and is being placed; check your orders before buying again");
+            }
+            if ("PROCESSING".equals(intent.status())) {
+                throw inProgress(open);
+            }
+            if (!"CANCELED".equals(intent.status())) {
+                payments.cancel(open.paymentId(), SUPERSEDED);
+            }
+        }
+        workflows.signalPayment(open.workflowId(), false, SUPERSEDED);
+        long deadline = System.nanoTime() + settings.checkoutResponseTimeout().toNanos() / 2;
+        while (requests.findOpen(open.customerId()).filter(r -> r.orderId().equals(open.orderId())).isPresent()) {
+            if (System.nanoTime() >= deadline) {
+                if (!workflows.exists(open.workflowId())) {
+                    // No saga left to compensate (history gone): void it here; its intent is already cancelled.
+                    placement.abandon(open.orderId(), CheckoutCodes.CHECKOUT_SUPERSEDED, SUPERSEDED);
+                    return;
+                }
+                throw inProgress(open);
+            }
+            pause();
+        }
+    }
+
+    private static ConflictException inProgress(CheckoutRequest open) {
+        return new ConflictException(CheckoutCodes.CHECKOUT_IN_PROGRESS, "Your previous checkout "
+                + open.orderNumber() + " is still being closed; try again in a moment");
     }
 
     private CheckoutInput input(CheckoutRequest request, CheckoutCommand cmd) {

@@ -28,21 +28,70 @@ class JdbcCheckoutRequestRepository implements CheckoutRequestRepository {
 
     @Override
     public Claim claim(CheckoutRequest r) {
-        int inserted = jdbc.sql("""
+        if (insert(r, false)) {
+            return new Claim(true, null);
+        }
+        return new Claim(false, find(r.customerId(), r.idempotencyKey()).orElse(null));
+    }
+
+    /**
+     * {@code ON CONFLICT DO NOTHING} also covers the partial unique index on the open-checkout slot: a concurrent
+     * second checkout of the customer waits for the first to commit, then finds it as {@code open}.
+     */
+    @Override
+    public Claim claimCheckout(CheckoutRequest r) {
+        if (insert(r, true)) {
+            return new Claim(true, null);
+        }
+        Optional<CheckoutRequest> same = find(r.customerId(), r.idempotencyKey());
+        if (same.isPresent()) {
+            return new Claim(false, same.get());
+        }
+        return new Claim(false, null, findOpen(r.customerId()).orElse(null));
+    }
+
+    private boolean insert(CheckoutRequest r, boolean open) {
+        return jdbc.sql("""
                 insert into checkout_request (customer_id, idem_key, fingerprint, order_id, order_number, workflow_id,
-                    status, created_at, updated_at)
-                values (:customer, :key, :fp, :orderId, :number, :workflow, :status, :now, :now)
+                    status, open_checkout, created_at, updated_at)
+                values (:customer, :key, :fp, :orderId, :number, :workflow, :status, :open, :now, :now)
                 on conflict do nothing
                 """)
                 .param("customer", r.customerId()).param("key", r.idempotencyKey()).param("fp", r.fingerprint())
                 .param("orderId", Sql.uuid(r.orderId())).param("number", r.orderNumber())
-                .param("workflow", r.workflowId()).param("status", r.status())
+                .param("workflow", r.workflowId()).param("status", r.status()).param("open", open)
                 .param("now", Sql.ts(r.createdAt() == null ? Instant.now() : r.createdAt()))
-                .update();
-        if (inserted == 1) {
-            return new Claim(true, null);
-        }
-        return new Claim(false, find(r.customerId(), r.idempotencyKey()).orElse(null));
+                .update() == 1;
+    }
+
+    @Override
+    public Optional<CheckoutRequest> findOpen(String customerId) {
+        return jdbc.sql("select " + COLUMNS + " from checkout_request where customer_id = :c and open_checkout")
+                .param("c", customerId).query((rs, n) -> map(rs)).optional();
+    }
+
+    @Override
+    public void lockLateAdds(String customerId) {
+        jdbc.sql("select pg_advisory_xact_lock(hashtextextended(:k, 0))").param("k", "late-add|" + customerId)
+                .query((rs, n) -> 1).list();
+    }
+
+    @Override
+    public void markLateAddGuard(String orderId, String guard) {
+        jdbc.sql("update checkout_request set late_add_guard = :g where order_id = :o")
+                .param("g", guard).param("o", Sql.uuid(orderId)).update();
+    }
+
+    @Override
+    public Optional<CheckoutRequest> recentLateAdd(String customerId, String guard, Instant since) {
+        return jdbc.sql("select " + COLUMNS + """
+                 from checkout_request
+                where customer_id = :c and late_add_guard = :g and created_at >= :since
+                  and status in ('STARTED', 'AWAITING_PAYMENT', 'PLACED')
+                order by created_at desc limit 1
+                """)
+                .param("c", customerId).param("g", guard).param("since", Sql.ts(since))
+                .query((rs, n) -> map(rs)).optional();
     }
 
     @Override
@@ -78,7 +127,7 @@ class JdbcCheckoutRequestRepository implements CheckoutRequestRepository {
     public void markOutcome(String orderId, String status, String failureCode, String failureMessage) {
         jdbc.sql("""
                 update checkout_request set status = :status, failure_code = :code, failure_message = :message,
-                    updated_at = now()
+                    open_checkout = false, updated_at = now()
                 where order_id = :o
                 """)
                 .param("status", status).param("code", failureCode).param("message", failureMessage)

@@ -28,6 +28,15 @@ public final class CheckoutCodes {
     public static final String PREORDER_NOT_ELIGIBLE = "orders.preorder-not-eligible";
     /** S255: geo could not locate the delivery address to measure the distance. */
     public static final String DELIVERY_ADDRESS_NOT_LOCATED = "orders.delivery-address-not-located";
+    /** The customer's previous checkout is still being settled (payment processing or compensations running): 409,
+     *  retry with the same Idempotency-Key. */
+    public static final String CHECKOUT_IN_PROGRESS = "orders.checkout-in-progress";
+    /** The customer's previous open checkout turned out to be paid: it is placed, the new attempt is refused (409). */
+    public static final String PREVIOUS_CHECKOUT_PAID = "orders.previous-checkout-paid";
+    /** Failure code of a checkout replaced by a newer one with a different cart (its intent cancelled). */
+    public static final String CHECKOUT_SUPERSEDED = "orders.checkout-superseded";
+    /** A second identical late pre-order add (same customer, window, items) within the duplicate window (409). */
+    public static final String LATE_ADD_DUPLICATE = "orders.late-add-duplicate";
 
     private CheckoutCodes() {
     }

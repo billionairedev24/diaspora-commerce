@@ -4,8 +4,8 @@ package com.afrotransact.deliveryruns.domain;
  * How customer service may take payment for a late order.
  *
  * @param savedCard       charge the customer's saved default card off-session
- * @param paymentLink     send a payment link by SMS
- * @param linkExpiryHours lifetime of the payment link, 1–24 hours (orders-service accepts at most 24)
+ * @param paymentLink     send a pay-now link by SMS (opens AfroTransact's pay page; never a Stripe-hosted page)
+ * @param linkExpiryHours lifetime of the pay-now link, 1–24 hours (orders-service accepts at most 24)
  */
 public record LateAddSettings(boolean savedCard, boolean paymentLink, int linkExpiryHours) {
 

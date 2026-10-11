@@ -6,11 +6,12 @@ import java.util.List;
 /**
  * Answer of {@code POST /v1/service/orders/late-preorder}.
  *
- * @param status               PLACED (saved card charged) or AWAITING_PAYMENT (payment link sent, or the bank asks
+ * @param status               PLACED (saved card charged) or AWAITING_PAYMENT (pay-now link sent, or the bank asks
  *                             the customer to authenticate the saved card)
  * @param payment              SAVED_CARD | PAYMENT_LINK
- * @param paymentLinkUrl       the hosted payment page (PAYMENT_LINK)
- * @param paymentLinkExpiresAt when the link expires; the order is voided if unpaid by then
+ * @param paymentLinkUrl       PAYMENT_LINK: the pay-now link texted to the customer, AfroTransact's pay page with its
+ *                             signed token ({@code <storefront>/orders/<number>/pay?token=…}); never a Stripe page
+ * @param paymentLinkExpiresAt when the link expires; the order is voided (intent cancelled) if unpaid by then
  * @param channel              AGENT_LATE
  * @param tags                 LATE_ADD
  */

@@ -37,6 +37,7 @@ monitoring:
 #   - TEMPORAL_TLS_CERT
 #   - TEMPORAL_TLS_KEY
 #   - HANDOVER_CODE_KEY
+#   - PAY_LINK_KEY             (HMAC key of late pre-order pay-now link tokens)
 #   - FGA_API_TOKEN            (one of OpenFGA's pre-shared keys, afrotransact/openfga preshared-keys; S248)
 secrets:
   enabled: true

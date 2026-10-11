@@ -121,6 +121,19 @@ class OrdersAccess {
                 + "by delivery-runs-service (orders:on-behalf)");
     }
 
+    /**
+     * Pay-now links of late pre-order adds: gateway-bff (SERVICE principal with orders:pay-link) on behalf of whoever
+     * holds the signed link token; the token itself is checked by the use case.
+     */
+    Actor payLinkCaller() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(OrdersPermissions.PAY_LINK)) {
+            return actor;
+        }
+        throw new ForbiddenActionException("orders.pay-link-forbidden", "Pay-now links are resolved by gateway-bff "
+                + "(orders:pay-link)");
+    }
+
     /** The order lookup: SERVICE principals with orders:lookup, or staff with orders:read. */
     Actor lookupCaller() {
         Actor actor = actors.current();

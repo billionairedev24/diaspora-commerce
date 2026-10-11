@@ -997,8 +997,8 @@ paths:
       - Pre-orders
       summary: Add a late order for a customer (preorders:late-add)
       description: OPEN (assisted) or CLOSED pre-orders; 422 once delivered. Placed through orders-service (saved card off-session
-        or SMS payment link); recorded as LATE_ADD with channel AGENT_LATE and returned as the projected order (with paymentLinkUrl
-        / ordersStatus). Idempotency-Key makes retries safe.
+        or an SMS pay-now link to AfroTransact's own pay page); recorded as LATE_ADD with channel AGENT_LATE and returned as the projected order (with paymentLinkUrl
+        / ordersStatus). Idempotency-Key is required; the same key returns the same order and charges once.
       operationId: addLateOrder
       parameters:
       - name: id
@@ -1009,7 +1009,9 @@ paths:
           format: uuid
       - name: Idempotency-Key
         in: header
-        required: false
+        description: Required (422 delivery-runs.idempotency-key-required); the same key on every retry returns the same
+          order and charges once
+        required: true
         schema:
           type: string
       requestBody:

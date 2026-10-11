@@ -31,8 +31,11 @@ class OrdersErrorAdvice {
 
     @ExceptionHandler(OrdersStateConflict.class)
     ProblemDetail state(OrdersStateConflict ex) {
-        HttpStatus status = "orders.checkout-unavailable".equals(ex.code()) ? HttpStatus.SERVICE_UNAVAILABLE
-                : HttpStatus.CONFLICT;
+        HttpStatus status = switch (ex.code() == null ? "" : ex.code()) {
+            case "orders.checkout-unavailable" -> HttpStatus.SERVICE_UNAVAILABLE;
+            case "orders.pay-link-expired" -> HttpStatus.GONE;
+            default -> HttpStatus.CONFLICT;
+        };
         return problem(status, ex.code(), "Invalid state", ex.getMessage());
     }
 

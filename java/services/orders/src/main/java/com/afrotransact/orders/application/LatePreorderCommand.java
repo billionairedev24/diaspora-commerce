@@ -8,13 +8,14 @@ import com.afrotransact.orders.domain.ShipTo;
  * {@code POST /v1/service/orders/late-preorder} (S272): delivery-runs creates an order on a customer's behalf for a
  * pre-order window after customer service took it by phone, chat or a driver report.
  *
- * @param idempotencyKey  required; the same key returns the same order
+ * @param idempotencyKey  required; the same key returns the same order (and charges once)
  * @param customerId      the customer (identity subject) the order belongs to
  * @param windowId        the pre-order window (OPEN, or CLOSED and not delivered)
  * @param shipTo          delivery address snapshot (saved or new, verified by delivery-runs)
  * @param items           variant ATINs and quantities (priced from the catalog)
  * @param fulfilment      DOOR | PICKUP; null = door when the window offers it
- * @param payment         SAVED_CARD (off-session on the default saved card) or PAYMENT_LINK (sent by SMS)
+ * @param payment         SAVED_CARD (off-session on the default saved card) or PAYMENT_LINK (pay-now link to
+ *                        AfroTransact's pay page, sent by SMS)
  * @param reason          Customer called, Chat, Driver report, Other
  * @param note            staff note
  * @param actorId         staff subject who took the order

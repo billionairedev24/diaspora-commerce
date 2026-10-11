@@ -2,7 +2,8 @@ package com.afrotransact.orders.application;
 
 /**
  * Customer-service late pre-order adds (S272): orders created on a customer's behalf by delivery-runs-service
- * (scope {@code orders:on-behalf}), charged off-session on the saved card or paid through an SMS payment link.
+ * (scope {@code orders:on-behalf}), charged off-session on the saved card or paid on AfroTransact's pay page through
+ * an SMS pay-now link.
  */
 public interface LatePreorderService {
 
@@ -15,13 +16,16 @@ public interface LatePreorderService {
     LatePreorderView create(LatePreorderCommand command);
 
     /**
-     * A payment event of a late add: authorised → placed; failed or cancelled → voided (a payment link stays open
-     * after a failed attempt until it expires).
+     * A payment event of a late add: authorised → placed; failed or cancelled → voided (a pay-now link stays open
+     * after a declined attempt until it expires).
      *
      * @return false when the order is not a late add
      */
     boolean onPayment(String orderId, boolean authorized, boolean cancelled, String failureMessage);
 
-    /** Voids late adds whose payment link expired unpaid. Returns how many were voided. */
+    /**
+     * Voids late adds whose pay-now link expired unpaid, cancelling their PaymentIntent first (payments' key
+     * {@code <orderId>:cancel}). Returns how many were voided.
+     */
     int expireUnpaid();
 }

@@ -51,9 +51,6 @@ class HttpPaymentsClient implements PaymentsClient {
         if (r.saveForOffSession()) {
             body.put("saveForOffSession", true);
         }
-        if (r.paymentLinkHours() != null) {
-            body.put("paymentLinkHours", r.paymentLinkHours());
-        }
         body.put("lines", r.lines().stream().map(l -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("lineId", l.lineId());
@@ -203,11 +200,9 @@ class HttpPaymentsClient implements PaymentsClient {
             throw new UpstreamFailure("payments", 0, "payments.invalid-response", "payments returned no body", true,
                     null, null);
         }
-        String linkExpires = p.path("paymentLinkExpiresAt").asString(null);
         return new Intent(p.path("id").asString(), p.path("status").asString(null),
                 p.path("clientSecret").asString(null), p.path("amountMinor").asLong(),
-                p.path("failureMessage").asString(null), p.path("paymentLinkUrl").asString(null),
-                linkExpires == null ? null : Instant.parse(linkExpires));
+                p.path("failureMessage").asString(null));
     }
 
     private static String truncate(String s) {

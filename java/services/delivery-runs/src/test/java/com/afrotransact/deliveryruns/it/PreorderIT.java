@@ -391,16 +391,23 @@ class PreorderIT {
         late.put("payment", "PAYMENT_LINK");
         late.put("reason", "CUSTOMER_CALLED");
         late.put("note", "Called at 9am");
-        Res added = call(HttpMethod.POST, "/v1/preorders/" + w.id() + "/late-orders", late, null);
+        // No Idempotency-Key, no order: a key invented per request would make every retry a second charge.
+        Res keyless = call(HttpMethod.POST, "/v1/preorders/" + w.id() + "/late-orders", late, null);
+        assertThat(keyless.status()).isEqualTo(422);
+        assertThat(keyless.body().path("code").asString()).isEqualTo("delivery-runs.idempotency-key-required");
+        assertThat(upstreams.lateRequests()).isEmpty();
+
+        Res added = lateOrder(w.id(), late, "dialog-1");
         assertThat(added.status()).isEqualTo(201);
         assertThat(added.body().path("number").asString()).isEqualTo(w.code() + "-L90");
         assertThat(added.body().path("status").asString()).isEqualTo("LATE_ADD");
         assertThat(added.body().path("channel").asString()).isEqualTo("AGENT_LATE");
         assertThat(added.body().path("lines").get(0).path("sellerName").asString()).isEqualTo("seller-1");
         assertThat(added.body().path("ordersStatus").asString()).isEqualTo("AWAITING_PAYMENT");
-        assertThat(added.body().path("paymentLinkUrl").asString()).startsWith("https://pay.test/");
+        assertThat(added.body().path("paymentLinkUrl").asString()).startsWith("https://shop.test/orders/")
+                .doesNotContain("stripe");
         assertThat(added.body().path("note").asString())
-                .startsWith("Customer called · payment link sent by SMS (expires in 24 h) · by local-dev");
+                .startsWith("Customer called · pay-now link sent by SMS (expires in 24 h) · by local-dev");
         assertThat(upstreams.lateRequests()).last().satisfies(r -> {
             assertThat(r.windowId()).isEqualTo(w.id());
             assertThat(r.address().addressId()).isEqualTo("addr-1");
@@ -414,9 +421,17 @@ class PreorderIT {
         });
         assertThat(outboxTypes(w.id().toString())).contains("preorder.late_order.added");
         JsonNode lateEvent = json.readTree(outboxPayloads("preorder.late_order.added", w.id().toString()).get(0));
-        assertThat(lateEvent.path("paymentUrl").asString()).startsWith("https://pay.test/");
+        assertThat(lateEvent.path("paymentUrl").asString()).startsWith("https://shop.test/orders/");
         assertThat(lateEvent.path("expiresAt").asString()).isNotBlank();
         assertThat(lateEvent.path("reason").asString()).isEqualTo("Customer called");
+
+        // The staff console retries with the same key (its answer timed out): one order, one charge, one SMS.
+        Res replay = lateOrder(w.id(), late, "dialog-1");
+        assertThat(replay.status()).isEqualTo(201);
+        assertThat(replay.body().path("orderId").asString()).isEqualTo(added.body().path("orderId").asString());
+        assertThat(replay.body().path("number").asString()).isEqualTo(w.code() + "-L90");
+        assertThat(upstreams.lateRequests()).hasSize(1);
+        assertThat(outboxPayloads("preorder.late_order.added", w.id().toString())).hasSize(1);
 
         // The order's placed event completes the late add without changing its number or status.
         String lateId = added.body().path("orderId").asString();
@@ -427,15 +442,24 @@ class PreorderIT {
         assertThat(lateRow.body().path("items").get(0).path("phone").asString()).isEqualTo("+1 806 555 0100");
 
         late.put("phoneConfirmed", false);
-        Res unconfirmed = call(HttpMethod.POST, "/v1/preorders/" + w.id() + "/late-orders", late, null);
+        Res unconfirmed = lateOrder(w.id(), late, "dialog-2");
         assertThat(unconfirmed.status()).isEqualTo(422);
         assertThat(unconfirmed.body().path("code").asString()).isEqualTo("delivery-runs.phone-not-confirmed");
         late.put("phoneConfirmed", true);
         upstreams.rejectLateOrders("orders.payment-failed");
         try {
-            Res declined = call(HttpMethod.POST, "/v1/preorders/" + w.id() + "/late-orders", late, null);
+            Res declined = lateOrder(w.id(), late, "dialog-3");
             assertThat(declined.status()).isEqualTo(422);
             assertThat(declined.body().path("code").asString()).isEqualTo("orders.payment-failed");
+        } finally {
+            upstreams.rejectLateOrders(null);
+        }
+        // orders' duplicate guard (same items for the customer under another key) stays a 409 for the console.
+        upstreams.rejectLateOrders("orders.late-add-duplicate", 409);
+        try {
+            Res duplicate = lateOrder(w.id(), late, "dialog-5");
+            assertThat(duplicate.status()).isEqualTo(409);
+            assertThat(duplicate.body().path("code").asString()).isEqualTo("orders.late-add-duplicate");
         } finally {
             upstreams.rejectLateOrders(null);
         }
@@ -446,8 +470,7 @@ class PreorderIT {
                 .isEqualTo(403);
         assertThat(call(HttpMethod.POST, "/v1/preorders/" + w.id() + "/pause", Map.of(), null).status())
                 .isEqualTo(403);
-        assertThat(call(HttpMethod.POST, "/v1/preorders/" + w.id() + "/late-orders", late, null).status())
-                .isEqualTo(201);
+        assertThat(lateOrder(w.id(), late, "dialog-4").status()).isEqualTo(201);
         assertThat(call(HttpMethod.GET, "/v1/service/preorders/eligibility?country=US&region=TX&atins=EGU", null,
                 null).status()).isEqualTo(403);
     }
@@ -786,6 +809,14 @@ class PreorderIT {
         return http.method(method).uri(URI.create(base + rawPath)).exchange((req, res) -> read(
                 res.getStatusCode().value(), res.getBody().readAllBytes(), res.getHeaders().getContentType(),
                 res.getHeaders().getETag()));
+    }
+
+    private Res lateOrder(UUID windowId, Object body, String idempotencyKey) {
+        RestClient.RequestBodySpec spec = http.method(HttpMethod.POST).uri("/v1/preorders/" + windowId + "/late-orders")
+                .header("Idempotency-Key", idempotencyKey).contentType(MediaType.APPLICATION_JSON)
+                .body(json.writeValueAsString(body));
+        return spec.exchange((req, res) -> read(res.getStatusCode().value(), res.getBody().readAllBytes(),
+                res.getHeaders().getContentType(), res.getHeaders().getETag()));
     }
 
     private Res call(HttpMethod method, String uri, Object body, String ifMatch) {

@@ -44,12 +44,18 @@ class LatePreorderController {
                     + "CLOSED and not delivered. Items are priced from the catalog and must be pre-orders of the "
                     + "window at the address. SAVED_CARD charges the customer's default saved card off-session "
                     + "(status PLACED, or AWAITING_PAYMENT when the bank asks the customer to authenticate); "
-                    + "PAYMENT_LINK creates a hosted Stripe payment link (status AWAITING_PAYMENT, "
-                    + "orders.preorder.payment_link_created for the SMS; voided when the link expires unpaid). The "
-                    + "order has channel AGENT_LATE and tag LATE_ADD and records the staff actor, reason and note. "
-                    + "The same Idempotency-Key returns the same order.")
+                    + "PAYMENT_LINK creates the order's PaymentIntent (manual capture) and answers a pay-now link "
+                    + "to AfroTransact's own pay page (paymentLinkUrl = <storefront>/orders/<number>/pay?token=<signed "
+                    + "token>; status AWAITING_PAYMENT, orders.preorder.payment_link_created for the SMS), where the "
+                    + "customer pays with Stripe Elements; voided and its intent cancelled when the link expires "
+                    + "unpaid. The order has channel AGENT_LATE and tag LATE_ADD and records the staff actor, reason "
+                    + "and note. The same Idempotency-Key returns the same order; another key for the same customer, "
+                    + "window and items within 10 minutes is 409 orders.late-add-duplicate.")
     @ApiResponse(responseCode = "201", description = "Created (placed or awaiting payment)")
     @ApiResponse(responseCode = "200", description = "Replay of the same Idempotency-Key")
+    @ApiResponse(responseCode = "409", description = "orders.late-add-duplicate, orders.idempotency-key-reused",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ProblemDetail.class)))
     @ApiResponse(responseCode = "422", description = "orders.preorder-not-open, orders.preorder-not-eligible, "
             + "orders.payment-failed, orders.late-add-payment-disabled, orders.phone-not-confirmed",
             content = @Content(mediaType = "application/problem+json",

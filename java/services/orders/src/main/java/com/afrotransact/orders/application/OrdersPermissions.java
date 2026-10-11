@@ -21,6 +21,8 @@ public final class OrdersPermissions {
      * S272: create orders on a customer's behalf (delivery-runs-service late pre-order adds; service clients only).
      */
     public static final String ON_BEHALF = "orders:on-behalf";
+    /** gateway-bff resolving a late pre-order add's pay-now link for the storefront pay page (token checked). */
+    public static final String PAY_LINK = "orders:pay-link";
     /** Dispatch (staff or fulfilment-service): read delivery briefs to plan routes. */
     public static final String DISPATCH = "delivery:dispatch";
 

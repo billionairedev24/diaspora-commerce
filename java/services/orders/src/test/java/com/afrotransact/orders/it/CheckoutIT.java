@@ -1,6 +1,7 @@
 package com.afrotransact.orders.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.http.HttpResponse;
 import java.util.Locale;
@@ -11,6 +12,7 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import tools.jackson.databind.JsonNode;
 
 /** POST /v1/checkout end to end through the real Temporal worker (in-JVM test server) and WireMock upstreams. */
@@ -279,5 +281,102 @@ class CheckoutIT extends OrdersIntegrationTest {
         assertThat(outbox("orders.order.cancelled", orderId)).isEqualTo(1);
         problem(send("GET", "/v1/checkout/" + created.path("orderNumber").asString(), null), 402,
                 "orders.payment-failed");
+    }
+
+    // ------------------------------------------------------------------ one open checkout per customer (gap 2)
+
+    private String openCheckoutCart(String customer, String atin, String paymentId) {
+        String bearer = "tok-" + customer;
+        String org = id("org");
+        UPSTREAMS.cart(bearer, Upstreams.pkg(org, "Lagos Foods", "AFROTRANSACT",
+                Upstreams.line(atin, org, "AFROTRANSACT", 1000, 2)));
+        UPSTREAMS.addresses(bearer, "addr-1", "TX");
+        UPSTREAMS.reservation(atin, "EWR-FC", 2);
+        UPSTREAMS.paymentIntent(customer, paymentId);
+        UPSTREAMS.paymentStatus(paymentId, "REQUIRES_PAYMENT_METHOD");
+        TestSupport.as(TestSupport.customer(customer));
+        return bearer;
+    }
+
+    private long openCheckouts(String customer) {
+        return jdbc.sql("select count(*) from checkout_request where customer_id = :c and open_checkout")
+                .param("c", customer).query(Long.class).single();
+    }
+
+    /** The answer was lost (timeout) and the client retried under a new key: the open checkout is resumed. */
+    @Test
+    void theSameCartUnderTwoKeysGivesOneOrderAndOnePaymentIntent() {
+        String customer = id("cust");
+        String paymentId = UUID.randomUUID().toString();
+        String bearer = openCheckoutCart(customer, id("ATF"), paymentId);
+
+        JsonNode first = ok(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key",
+                "k1-" + customer, "Authorization", "Bearer " + bearer), 201);
+        JsonNode second = ok(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key",
+                "k2-" + customer, "Authorization", "Bearer " + bearer), 201);
+        // A retry of the first key after a (simulated) timeout: the same order again.
+        JsonNode retry = ok(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key",
+                "k1-" + customer, "Authorization", "Bearer " + bearer), 201);
+
+        String orderId = first.path("orderId").asString();
+        assertThat(second.path("orderNumber").asString()).isEqualTo(first.path("orderNumber").asString());
+        assertThat(second.path("clientSecret").asString()).isEqualTo(first.path("clientSecret").asString());
+        assertThat(retry.path("orderNumber").asString()).isEqualTo(first.path("orderNumber").asString());
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
+                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customer))));
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(orderId)));
+        assertThat(jdbc.sql("select count(*) from customer_order where customer_id = :c and status = "
+                + "'PENDING_PAYMENT'").param("c", customer).query(Long.class).single()).isEqualTo(1);
+        assertThat(openCheckouts(customer)).isEqualTo(1);
+    }
+
+    /** Another cart under another key: the open checkout's intent is cancelled and its stock released first. */
+    @Test
+    void aDifferentCartSupersedesTheOpenCheckoutSoOnlyOnePaymentIntentIsLive() {
+        String customer = id("cust");
+        String atin = id("ATF");
+        String paymentId = UUID.randomUUID().toString();
+        String bearer = openCheckoutCart(customer, atin, paymentId);
+
+        JsonNode first = ok(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key",
+                "k1-" + customer, "Authorization", "Bearer " + bearer), 201);
+        String firstOrder = first.path("orderId").asString();
+        JsonNode second = ok(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\",\"lines\":[{\"variantAtin\":\""
+                + atin + "\",\"quantity\":1}]}", "Idempotency-Key", "k2-" + customer, "Authorization",
+                "Bearer " + bearer), 201);
+
+        assertThat(second.path("orderNumber").asString()).isNotEqualTo(first.path("orderNumber").asString());
+        WIREMOCK.verify(WireMock.moreThanOrExactly(1), WireMock.postRequestedFor(WireMock.urlPathEqualTo(
+                "/v1/payments/" + paymentId + "/cancel")));
+        assertThat(jdbc.sql("select status from customer_order where id = :id").param("id", UUID.fromString(firstOrder))
+                .query(String.class).single()).isEqualTo("CANCELLED");
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations/" + firstOrder
+                + "/release")));
+        assertThat(jdbc.sql("select count(*) from customer_order where customer_id = :c and status = "
+                + "'PENDING_PAYMENT'").param("c", customer).query(Long.class).single()).isEqualTo(1);
+        assertThat(openCheckouts(customer)).isEqualTo(1);
+    }
+
+    /** The database itself refuses a second open checkout for a customer (partial unique index). */
+    @Test
+    void theOpenCheckoutConstraintAllowsOnePerCustomer() {
+        String customer = id("cust");
+        String insert = """
+                insert into checkout_request (customer_id, idem_key, fingerprint, order_id, order_number, workflow_id,
+                    status, open_checkout, created_at, updated_at)
+                values (:c, :k, 'fp', :o, :n, :w, 'AWAITING_PAYMENT', true, now(), now())
+                """;
+        String o1 = UUID.randomUUID().toString();
+        jdbc.sql(insert).param("c", customer).param("k", "a").param("o", UUID.fromString(o1))
+                .param("n", "T-" + o1.substring(0, 8)).param("w", "checkout-" + o1).update();
+        String o2 = UUID.randomUUID().toString();
+        assertThatThrownBy(() -> jdbc.sql(insert).param("c", customer).param("k", "b").param("o", UUID.fromString(o2))
+                .param("n", "T-" + o2.substring(0, 8)).param("w", "checkout-" + o2).update())
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // Late adds and finished checkouts never hold the slot.
+        jdbc.sql(insert.replace("true", "false")).param("c", customer).param("k", "b").param("o", UUID.fromString(o2))
+                .param("n", "T-" + o2.substring(0, 8)).param("w", "late-preorder-" + o2).update();
+        assertThat(openCheckouts(customer)).isEqualTo(1);
     }
 }

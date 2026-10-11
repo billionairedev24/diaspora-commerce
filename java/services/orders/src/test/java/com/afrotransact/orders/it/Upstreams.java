@@ -101,6 +101,12 @@ final class Upstreams {
                 "{\"id\":\"" + paymentId + "\",\"status\":\"CANCELED\"}");
     }
 
+    /** {@code GET /v1/payments/{id}} (with or without refresh) answers this status. */
+    void paymentStatus(String paymentId, String status) {
+        json(WireMock.get(WireMock.urlPathEqualTo("/v1/payments/" + paymentId)), 200,
+                "{\"id\":\"" + paymentId + "\",\"status\":\"" + status + "\",\"amountMinor\":1}");
+    }
+
     void capture(String paymentId) {
         json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments/" + paymentId + "/capture")), 200,
                 "{\"id\":\"" + UUID.randomUUID() + "\",\"paymentId\":\"" + paymentId

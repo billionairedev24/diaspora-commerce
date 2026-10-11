@@ -77,8 +77,9 @@ class DeliveryRunsErrorAdvice {
 
     @ExceptionHandler(UpstreamRejectedException.class)
     ProblemDetail upstreamRejected(UpstreamRejectedException ex) {
-        ProblemDetail pd = problem(HttpStatus.UNPROCESSABLE_CONTENT, ex.code(), "Refused by orders-service",
-                ex.getMessage());
+        // A conflict stays a conflict (orders.late-add-duplicate, orders.idempotency-key-reused); other refusals 422.
+        ProblemDetail pd = problem(ex.upstreamStatus() == HttpStatus.CONFLICT.value() ? HttpStatus.CONFLICT
+                : HttpStatus.UNPROCESSABLE_CONTENT, ex.code(), "Refused by orders-service", ex.getMessage());
         pd.setProperty("upstreamStatus", ex.upstreamStatus());
         return pd;
     }
