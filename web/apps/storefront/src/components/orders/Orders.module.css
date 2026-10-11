@@ -24,3 +24,9 @@
   .orderNo { text-align: left; }
   .shipment { grid-template-columns: 1fr; }
 }
+
+/* Pickup shipments: where to collect them (order page and the "order placed" confirmation). */
+.pickup { display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); font-size: var(--at-text-sm); }
+.pickup > span { display: flex; gap: var(--at-space-1); align-items: flex-start; color: var(--at-color-text-muted); }
+.pickup svg { flex: none; margin-top: 2px; }
+.pickupList { display: flex; flex-direction: column; gap: var(--at-space-2); margin-top: var(--at-space-2); }

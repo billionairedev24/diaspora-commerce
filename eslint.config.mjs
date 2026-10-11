@@ -96,6 +96,12 @@ export default tseslint.config(
     }
   },
   {
+    // Documented exception to "design tokens only": third-party payment brand marks (Stripe, card networks) must keep
+    // their owners' colours. Only this file may hold them; everything else uses the marks from @afrotransact/ui.
+    files: ['web/packages/ui/src/commerce/PaymentBrandMarks.tsx'],
+    rules: { 'at/no-raw-hex': 'off' }
+  },
+  {
     files: ['**/next.config.ts', '**/app/**/*.{ts,tsx}', '**/src/app/**/*.{ts,tsx}'],
     plugins: { '@next/next': nextPlugin },
     rules: {

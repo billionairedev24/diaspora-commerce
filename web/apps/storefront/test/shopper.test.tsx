@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useRouter } from 'next/navigation';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { AddressBook } from '@/components/account/AddressBook';
 import { PaymentsView } from '@/components/account/PaymentsView';
@@ -95,29 +95,60 @@ describe('account pages (mock BFF)', () => {
 });
 
 describe('checkout (mock BFF + mock Stripe)', () => {
-  it('walks the three steps, chooses AfroTransact Delivery and places the order', async () => {
+  it('shows every item, delivery or pickup per seller and an always-visible payment form; places with AfroTransact Delivery', async () => {
     const api = await signInDemo();
     const jollof = await api.getProduct('AT000000P2');
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 2 });
     const user = userEvent.setup();
     renderWithProviders(<CheckoutView />);
-    expect(await screen.findAllByTestId('checkout-address')).toHaveLength(2);
-    await user.click(screen.getByRole('button', { name: 'Deliver to this address' }));
-    expect(await screen.findAllByTestId('checkout-payment')).toHaveLength(3);
-    expect(screen.getByRole('group', { name: 'Express checkout' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
+    // The default address is chosen; the items, the saved methods and the Payment Element are all on the page.
+    expect(await screen.findByTestId('checkout-address')).toHaveTextContent(/Adaeze Nwosu/);
     const pkg = await screen.findByTestId('checkout-package');
+    expect(within(pkg).getAllByTestId('checkout-item')).toHaveLength(1);
+    expect(within(pkg).getByTestId('checkout-item')).toHaveTextContent(/Qty 2/);
+    expect(screen.getAllByTestId('checkout-payment')).toHaveLength(3);
+    expect(screen.getByTestId('checkout-new-method')).toBeVisible();
+    expect(screen.queryByRole('group', { name: 'Express checkout' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /Use a new payment method/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('img', { name: 'Powered by Stripe' }).length).toBeGreaterThan(0);
+
     await user.click(within(pkg).getByRole('radio', { name: /AfroTransact Delivery/ }));
     expect(within(pkg).getByText(/Delivery preferences/)).toBeInTheDocument();
-    await user.click(within(pkg).getByRole('radio', { name: /Pick up/ }));
+    await user.click(within(pkg).getByTestId('fulfil-pickup'));
     expect(within(pkg).getByText('Houston FC — Will Call')).toBeInTheDocument();
     expect(within(pkg).getAllByText(/Mon–Sat 8 am–8 pm/).length).toBeGreaterThan(0);
+    await user.click(within(pkg).getByTestId('fulfil-delivery'));
     await user.click(within(pkg).getByRole('radio', { name: /AfroTransact Delivery/ }));
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     const push = useRouter().push;
     await waitFor(() => expect(push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
     const orders = await api.getOrderPage();
     expect(orders.items[0]?.shipments[0]?.deliveryCode).toMatch(/^\d{4}$/);
+  });
+
+  it('picks up at an AfroTransact pickup point: no shipping charge, and the order names the point', async () => {
+    const api = await signInDemo();
+    const jollof = await api.getProduct('AT000000P2');
+    await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    const user = userEvent.setup();
+    renderWithProviders(<CheckoutView />);
+    const pkg = await screen.findByTestId('checkout-package');
+    await user.click(within(pkg).getByTestId('fulfil-pickup'));
+    const points = within(pkg).getAllByTestId('pickup-point');
+    expect(points.length).toBeGreaterThan(0);
+    expect(points[0]).toHaveTextContent(/mi away/);
+    await user.click(within(points[points.length - 1] as HTMLElement).getByRole('radio'));
+    const summary = screen.getByTestId('order-summary');
+    expect(summary).toHaveTextContent(/ShippingFREE/);
+    expect(summary).toHaveTextContent(/1 pickup\(s\): no shipping charge/);
+    await user.click(screen.getByRole('button', { name: 'Place your order' }));
+    const push = useRouter().push;
+    await waitFor(() => expect(push).toHaveBeenCalled(), { timeout: 5000 });
+    const placed = String(vi.mocked(push).mock.calls.at(-1)?.[0] ?? '').split('placed=')[1] ?? '';
+    const order = await api.getOrder(decodeURIComponent(placed));
+    expect(order.shipments[0]?.deliveryMethod).toBe('pickup');
+    expect(order.shipments[0]?.pickup?.name).toBeTruthy();
+    expect(order.shippingMinor).toBe(0);
   });
 });
 
@@ -130,9 +161,9 @@ describe('checkout with AfroTransact Delivery from the seller’s store (S255)',
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
     const user = userEvent.setup();
     renderWithProviders(<CheckoutView />);
+    await user.click(await screen.findByRole('button', { name: 'Change Delivery address' }));
     await user.click(await screen.findByRole('radio', { name: /Adaeze Nwosu \(work\)/ }));
     await user.click(screen.getByRole('button', { name: 'Deliver to this address' }));
-    await user.click(await screen.findByRole('button', { name: 'Use this payment method' }));
     const problem = await screen.findByTestId('local-delivery-problem');
     expect(problem).toHaveTextContent('Not deliverable to this address');
     expect(problem).toHaveTextContent(/too far for AfroTransact Delivery/);
@@ -141,7 +172,6 @@ describe('checkout with AfroTransact Delivery from the seller’s store (S255)',
     await user.click(within(problem).getByRole('button', { name: 'Change address' }));
     await user.click(await screen.findByRole('radio', { name: /Adaeze Nwosu 9800 Westheimer/ }));
     await user.click(screen.getByRole('button', { name: 'Deliver to this address' }));
-    await user.click(await screen.findByRole('button', { name: 'Use this payment method' }));
     const quote = await screen.findByTestId('local-delivery-quote');
     expect(quote).toHaveTextContent('7.4 mi from Houston, TX · about 18 min drive');
     expect(quote).toHaveTextContent('Delivery charge $11.28');
@@ -157,8 +187,6 @@ describe('checkout with AfroTransact Delivery from the seller’s store (S255)',
     await api.setDefaultAddress('ad2');
     const user = userEvent.setup();
     renderWithProviders(<CheckoutView />);
-    await user.click(await screen.findByRole('button', { name: 'Deliver to this address' }));
-    await user.click(await screen.findByRole('button', { name: 'Use this payment method' }));
     const problem = await screen.findByTestId('local-delivery-problem');
     await user.click(within(problem).getByRole('button', { name: /Remove Ama's Market’s items from this order/ }));
     await waitFor(() => expect(screen.queryByTestId('local-delivery-problem')).not.toBeInTheDocument());

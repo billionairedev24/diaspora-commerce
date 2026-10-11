@@ -30,6 +30,8 @@ export interface PaymentElementHandle {
 
 export interface PaymentElementChange {
   complete: boolean;
+  /** Nothing entered yet (the shopper may still pay with a saved method instead). */
+  empty: boolean;
   /** Stripe payment method type the shopper is on (card, link, cashapp, affirm, us_bank_account, …). */
   type: string | null;
 }
@@ -50,11 +52,12 @@ export interface PaymentElementFieldProps {
 /** Confirmation status of the dev-only form when it sends the browser to the return page (the 3-D Secure test card). */
 export const REDIRECTED = 'redirected';
 
-/** Payment Element as designed: tabs (card, Link, Cash App Pay, Affirm, US bank), wallets only in Express Checkout. */
+/** Payment Element: a compact accordion (card first, then Apple Pay / Google Pay / Link, Cash App Pay, Klarna, Amazon
+ *  Pay, Affirm, US bank, as enabled in Stripe). Wallets live here too: there is no separate Express Checkout row. */
 const PAYMENT_ELEMENT_OPTIONS = {
-  layout: { type: 'tabs', defaultCollapsed: false },
-  wallets: { applePay: 'never', googlePay: 'never' },
-  paymentMethodOrder: ['card', 'link', 'cashapp', 'affirm', 'klarna', 'us_bank_account']
+  layout: { type: 'accordion', defaultCollapsed: false, radios: true, spacedAccordionItems: false },
+  wallets: { applePay: 'auto', googlePay: 'auto' },
+  paymentMethodOrder: ['card', 'apple_pay', 'google_pay', 'link', 'cashapp', 'klarna', 'amazon_pay', 'affirm', 'us_bank_account']
 };
 
 /**
@@ -90,7 +93,7 @@ function StripePaymentElement({ ref, publishableKey, amountMinor, currency, save
         payment.on('ready', () => setReady(true));
         payment.on('change', (ev) => {
           setError(null);
-          latest.current.onChange?.({ complete: !!ev.complete, type: ev.value?.type ?? null });
+          latest.current.onChange?.({ complete: !!ev.complete, empty: ev.empty ?? !ev.complete, type: ev.value?.type ?? null });
         });
         payment.on('loaderror', (ev) => setError(ev.error?.message ?? t('pay.stripeUnavailable')));
         payment.mount(mountRef.current);
@@ -166,7 +169,7 @@ function MockPaymentElement({ ref, onChange }: PaymentElementFieldProps) {
     setCard(next);
     setError(null);
     const complete = Object.values(next).every(Boolean) && Object.keys(checkMockCard(next)).length === 0;
-    latest.current.onChange?.({ complete, type: 'card' });
+    latest.current.onChange?.({ complete, empty: !Object.values(next).some(Boolean), type: 'card' });
   };
 
   useImperativeHandle(

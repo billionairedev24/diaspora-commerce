@@ -90,19 +90,19 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     addCookie('at_mock_stripe_pk=pk_test_fake');
     const user = userEvent.setup();
     renderWithProviders(<CheckoutView />);
-    await user.click(await screen.findByRole('button', { name: 'Deliver to this address' }));
     await screen.findAllByTestId('checkout-payment');
     return user;
   }
 
   const total = () => cents(screen.getByText('Order total').nextElementSibling?.textContent ?? '');
 
-  async function chooseNewMethod(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole('radio', { name: /Use a new payment method/ }));
+  /** The Payment Element is always on the page; typing into it switches from the saved card to a new method. */
+  async function chooseNewMethod(_user: ReturnType<typeof userEvent.setup>) {
     await waitFor(() => expect(stripe.payment()).toBeDefined());
     const el = await screen.findByTestId('stripe-payment-element');
     await waitFor(() => expect(el).toHaveAttribute('aria-busy', 'false'));
-    act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, value: { type: 'card' } }));
+    act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
+    await waitFor(() => expect(screen.getByTestId('checkout-pay-with')).toHaveTextContent('card'));
   }
 
   it('creates the Payment Element in deferred mode with the cart total, currency and manual capture; no mock form', async () => {
@@ -127,29 +127,22 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     const user = await openPaymentStep();
     await chooseNewMethod(user);
     const before = total();
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
     const pkg = await screen.findByTestId('checkout-package');
-    const radios = within(pkg).getAllByRole('radio', { name: /AfroTransact Delivery|Express|Standard|Pick up/ });
-    for (const r of radios) {
-      await user.click(r);
-      if (total() !== before) break;
-    }
+    await user.click(within(pkg).getByRole('radio', { name: /UPS Next Day Air/ }));
     expect(total()).not.toBe(before);
     expect(stripe.payment()?.updates).toContainEqual({ amount: total() });
-    expect(stripe.express()?.updates).toContainEqual({ amount: total() });
+    expect(stripe.express()).toBeUndefined();
   });
 
   it('places the order in Stripe’s order: elements.submit(), then the order, then confirmPayment with the client secret', async () => {
     const user = await openPaymentStep();
     await chooseNewMethod(user);
     await user.click(screen.getByRole('checkbox', { name: /Save for future purchases/ }));
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
-    expect(await screen.findByTestId('checkout-new-method-summary')).toHaveTextContent('Card');
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=AT-2026-/)), { timeout: 5000 });
 
     const order = stripe.log.filter((l) => l === 'placeOrder' || l === 'confirmPayment' || l.startsWith('submit:payment'));
-    expect(order).toEqual(['submit:payment', 'submit:payment', 'placeOrder', 'confirmPayment']);
+    expect(order).toEqual(['submit:payment', 'placeOrder', 'confirmPayment']);
     expect(placed[0]).toMatchObject({ newPaymentMethod: true, savePaymentMethod: true });
     expect(placed[0]).not.toHaveProperty('paymentMethodId');
     const confirm = stripe.confirms[0];
@@ -162,7 +155,6 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
   it('shows a decline from Stripe next to the Payment Element and does not continue the order', async () => {
     const user = await openPaymentStep();
     await chooseNewMethod(user);
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
     stripe.results.confirm = { error: { type: 'card_error', code: 'card_declined', message: 'Your card was declined.' } };
     await user.click(await screen.findByRole('button', { name: 'Place your order' }));
     expect(await screen.findByTestId('payment-element-error')).toHaveTextContent('Your card was declined.');
@@ -173,7 +165,6 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
   it('does not create an order when elements.submit() fails', async () => {
     const user = await openPaymentStep();
     await chooseNewMethod(user);
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
     await screen.findByTestId('checkout-package');
     stripe.results.submit = { error: { type: 'validation_error', message: 'Your card number is incomplete.' } };
     await user.click(screen.getByRole('button', { name: 'Place your order' }));
@@ -182,27 +173,15 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     expect(stripe.log).not.toContain('confirmPayment');
   });
 
-  it('keeps the saved-method path: confirmPayment with the PaymentMethod id, no Payment Element', async () => {
+  it('keeps the saved-method path: confirmPayment with the PaymentMethod id, not the Payment Element', async () => {
     const user = await openPaymentStep();
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
     await user.click(await screen.findByRole('button', { name: 'Place your order' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalled(), { timeout: 5000 });
-    expect(stripe.payment()).toBeUndefined();
+    expect(stripe.log.filter((l) => l.startsWith('submit:'))).toEqual([]);
     expect(placed[0]?.paymentMethodId).toMatch(/^pm_/);
     expect(placed[0]).not.toHaveProperty('newPaymentMethod');
     expect(stripe.confirms[0]?.elements).toBeUndefined();
     expect(stripe.confirms[0]?.confirmParams?.payment_method).toBe(placed[0]?.paymentMethodId);
-  });
-
-  it('wires Express Checkout: wallet confirm → submit → order with the wallet → confirmPayment with its elements', async () => {
-    await openPaymentStep();
-    await waitFor(() => expect(stripe.express()).toBeDefined());
-    expect(stripe.express()?.options).toMatchObject({ mode: 'payment', amount: total(), currency: 'usd', captureMethod: 'manual' });
-    await act(async () => stripe.express()?.handlers.expressCheckout?.confirm?.({ expressPaymentType: 'apple_pay' }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(expect.stringMatching(/^\/orders\?placed=/)), { timeout: 5000 });
-    expect(stripe.log.filter((l) => l === 'placeOrder' || l === 'confirmPayment' || l.startsWith('submit:'))).toEqual(['submit:expressCheckout', 'placeOrder', 'confirmPayment']);
-    expect(placed[0]).toMatchObject({ wallet: 'apple_pay' });
-    expect(stripe.confirms[0]?.elements).toBeDefined();
   });
 });
 
@@ -220,16 +199,13 @@ describe('dev-only stand-in without a Stripe key', () => {
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
     const user = userEvent.setup();
     renderWithProviders(<CheckoutView />);
-    await user.click(await screen.findByRole('button', { name: 'Deliver to this address' }));
-    await user.click(await screen.findByRole('radio', { name: /Use a new payment method/ }));
-    expect(screen.getByTestId('stripe-dev-notice')).toHaveTextContent('Stripe test mode is not configured');
+    expect(await screen.findByTestId('stripe-dev-notice')).toHaveTextContent('Stripe test mode is not configured');
     expect(screen.getByTestId('stripe-dev-notice')).toHaveTextContent('STRIPE_PUBLISHABLE_KEY and STRIPE_SECRET_KEY');
     expect(document.querySelector('script[src*="js.stripe.com"]')).toBeNull();
     await user.type(screen.getByLabelText('Card number'), '4000 0000 0000 9995');
     await user.type(screen.getByLabelText('Expiration'), '12 / 34');
     await user.type(screen.getByLabelText('Security code'), '123');
     await user.type(screen.getByLabelText('ZIP'), '77002');
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
     await user.click(await screen.findByRole('button', { name: 'Place your order' }));
     expect(await screen.findByTestId('payment-element-error')).toHaveTextContent('Your card was declined.');
     expect(nav.push).not.toHaveBeenCalled();

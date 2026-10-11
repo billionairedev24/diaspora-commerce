@@ -1,5 +1,5 @@
 /* No double charge (fake Stripe.js, mock BFF): checkout keeps its Idempotency-Key until the attempt is over, places
-   once on a double click, ignores Express Checkout while busy; the late pre-order pay-now page confirms the order's
+   once on a double click; the late pre-order pay-now page confirms the order's
    PaymentIntent with Stripe Elements and refuses invalid, expired and paid links. */
 import { MOCK_PAY_LINK } from '@afrotransact/api-client/mocks';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
@@ -39,7 +39,7 @@ describe('checkout idempotency (fake Stripe.js)', () => {
     delete window.Stripe;
   });
 
-  /** Signed in with jollof in the cart, a new payment method complete, on the review step. */
+  /** Signed in with jollof in the cart and a new payment method complete in the always-visible Payment Element. */
   async function ready() {
     const api = await signInDemo();
     const jollof = await api.getProduct('AT000000P2');
@@ -47,15 +47,13 @@ describe('checkout idempotency (fake Stripe.js)', () => {
     addCookie('at_mock_stripe_pk=pk_test_fake');
     const user = userEvent.setup();
     renderWithProviders(<CheckoutView />);
-    await user.click(await screen.findByRole('button', { name: 'Deliver to this address' }));
-    await screen.findAllByTestId('checkout-payment');
-    await user.click(screen.getByRole('radio', { name: /Use a new payment method/ }));
+    await screen.findByTestId('checkout-package');
     await waitFor(() => expect(stripe.payment()).toBeDefined());
     const el = await screen.findByTestId('stripe-payment-element');
     await waitFor(() => expect(el).toHaveAttribute('aria-busy', 'false'));
-    act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, value: { type: 'card' } }));
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
-    await screen.findByTestId('checkout-package');
+    act(() => stripe.payment()?.handlers.payment?.change?.({ complete: true, empty: false, value: { type: 'card' } }));
+    // No Express Checkout row: wallets are inside the Payment Element.
+    expect(stripe.express()).toBeUndefined();
     return user;
   }
   const placeButton = () => screen.getByRole('button', { name: /Place your order|Placing your order/ });
@@ -91,7 +89,6 @@ describe('checkout idempotency (fake Stripe.js)', () => {
     await user.click(placeButton());
     expect(await screen.findByTestId('payment-element-error')).toHaveTextContent('Your card was declined.');
     stripe.results.confirm = { paymentIntent: { id: 'pi_1', status: 'requires_capture' } };
-    await user.click(screen.getByRole('button', { name: 'Use this payment method' }));
     await user.click(await screen.findByRole('button', { name: 'Place your order' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalled(), { timeout: 5000 });
     expect(new Set(placeKeys()).size).toBe(1);
@@ -107,19 +104,6 @@ describe('checkout idempotency (fake Stripe.js)', () => {
       fireEvent.click(button);
     });
     await waitFor(() => expect(nav.push).toHaveBeenCalled(), { timeout: 5000 });
-    expect(placeKeys()).toHaveLength(1);
-    expect(stripe.confirms).toHaveLength(1);
-  });
-
-  it('ignores an Express Checkout confirmation while an order is being placed', async () => {
-    await ready();
-    const paymentFailed = vi.fn();
-    act(() => {
-      fireEvent.click(placeButton());
-      stripe.express()?.handlers.expressCheckout?.confirm?.({ expressPaymentType: 'apple_pay', paymentFailed });
-    });
-    await waitFor(() => expect(nav.push).toHaveBeenCalled(), { timeout: 5000 });
-    await waitFor(() => expect(paymentFailed).toHaveBeenCalled());
     expect(placeKeys()).toHaveLength(1);
     expect(stripe.confirms).toHaveLength(1);
   });

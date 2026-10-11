@@ -11,6 +11,7 @@ export { SocialIconLink, type SocialIconLinkProps, type SocialNetwork } from './
 export { Button, buttonClassName, type ButtonProps, type ButtonSize, type ButtonVariant, IconButton, type IconButtonProps } from './button/Button';
 export { Badge, type BadgeProps, type BadgeTone, FulfilmentBadge, type FulfilmentBadgeProps } from './commerce/Badge';
 export { ImagePlaceholder, type ImagePlaceholderProps, Skeleton } from './commerce/ImagePlaceholder';
+export { type BrandMarkProps, type CardBrand, CardBrandMark, CardBrandRow, PoweredByStripe, StripeWordmark } from './commerce/PaymentBrandMarks';
 export { Price, type PriceProps } from './commerce/Price';
 export { defaultProductCardLabels, type LinkLikeProps, ProductCard, type ProductCardAvailability, type ProductCardData, type ProductCardLabels, type ProductCardProps } from './commerce/ProductCard';
 export { QuantityStepper, type QuantityStepperProps } from './commerce/QuantityStepper';

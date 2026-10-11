@@ -14,6 +14,7 @@ import { productHref } from '@/lib/links';
 
 import styles from './Orders.module.css';
 import { placedDate } from './OrdersView';
+import { PickupDetails } from './PickupDetails';
 
 const stamp = (tag: string, iso: string) => new Date(iso).toLocaleString(tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const day = (tag: string, iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString(tag, { weekday: 'short', month: 'short', day: 'numeric' }) : null);
@@ -71,6 +72,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                         : t('ld.orderInfoShort', { amount: fmt.money(s.localDelivery.chargeMinor) })}
                     </p>
                   )}
+                  {s.pickup && <PickupDetails pickup={s.pickup} />}
                   {s.carrier && s.trackingNumber && (
                     <p className={pageStyles.muted}>
                       <Truck aria-hidden /> {t('ord.trackingNo', { carrier: s.carrier.toUpperCase(), number: s.trackingNumber })}

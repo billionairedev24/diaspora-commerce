@@ -9,14 +9,10 @@ import { expectNoSeriousA11yViolations } from '../support/a11y';
 const JOLLOF = 'AT000000P2'; // groceries: pre-order eligible
 const SHEA = 'AT00000P15'; // beauty: ships now
 
+/** Signs the demo shopper in through the mock BFF's login redirect (the identity sign-in page in a real stack). */
 async function signIn(request: APIRequestContext) {
-  const r = await request.post('/api/bff/v1/auth/sign-in', { data: { email: 'adaeze@example.com', password: 'shop2026' } });
+  const r = await request.get('/api/bff/v1/auth/login?returnTo=%2F');
   expect(r.ok()).toBe(true);
-  const body = (await r.json()) as { status: string; challengeId?: string };
-  if (body.status === 'mfa_required') {
-    const v = await request.post('/api/bff/v1/auth/mfa/verify', { data: { challengeId: body.challengeId, code: '246810' } });
-    expect(v.ok()).toBe(true);
-  }
 }
 
 const deliverTo = async (page: Page, zip: string) => expect((await page.request.put('/api/bff/v1/delivery-location', { data: { zip } })).ok()).toBe(true);
@@ -91,9 +87,9 @@ test.describe('storefront · pre-orders (S273)', () => {
     await expect(page.getByTestId('preorder-pay-notes')).toContainText('by card, Apple Pay or ACH.');
 
     await page.getByRole('link', { name: 'Proceed to checkout' }).click();
+    await page.getByRole('button', { name: 'Change Delivery address' }).click();
     await page.getByRole('radio', { name: /Adaeze Nwosu 9800 Westheimer/ }).check();
     await page.getByRole('button', { name: 'Deliver to this address' }).click();
-    await page.getByRole('button', { name: 'Use this payment method' }).click();
     await page.getByRole('button', { name: 'Place your order' }).click();
     await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
     const conf = page.getByTestId('preorder-confirmation');

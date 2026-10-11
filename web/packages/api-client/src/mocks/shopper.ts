@@ -114,6 +114,19 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
   const cart = buildCart({ ...session, zip }, now);
   const metro = metroOf(locationForZip(zip) ?? sessionLocation(session));
   const here = (city: string) => metro === city;
+  /** Pickup points: AfroTransact's near the address (platform), or the seller's own (distance only near the address). */
+  const pickupPointsOf = (seller: string, platform: boolean): PickupPoint[] =>
+    PICKUP_POINTS.filter((x) => (platform ? x.owner === 'AT' && here(x.metro) : x.owner === seller)).map((x, i) => ({
+      id: x.id,
+      name: x.name,
+      address: x.addr,
+      hours: x.hours,
+      ready: x.ready,
+      setBy: x.owner === 'AT' ? 'platform' : 'seller',
+      kind: x.owner === 'AT' ? (x.id.includes('lock') ? 'LOCKER' : 'PLATFORM_COUNTER') : 'SELLER',
+      distanceMiles: here(x.metro) ? Math.round((2.4 + i * 3.7) * 10) / 10 : null
+    }));
+  const pickupOption = (points: PickupPoint[], now: Date): DeliveryOption => withDates({ key: 'pickup', label: 'Pick up', eta: points[0]?.ready ?? '', feeMinor: 0, free: true }, now, 0);
   return cart.packages
     .map((p): CartPackage => {
       const lines = p.lines.filter((l) => l.selected).map((l) => ({ ...l, perishable: perishableLine(l.atin) }));
@@ -139,11 +152,14 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
         const option: DeliveryOption = q.available
           ? { ...base, feeMinor: q.chargeMinor, label: `$${(q.chargeMinor / 100).toFixed(2)} · AfroTransact Delivery from ${fromCity}` }
           : { ...base, label: `Not available to this address · AfroTransact Delivery from ${fromCity}` };
-        return { ...p, deliveryOptions: [option], pickupPoints: [], localDelivery, delivery: { ...p.delivery, label: option.eta } };
+        const own = pickupPointsOf(p.seller.name, false);
+        return { ...p, deliveryOptions: own.length ? [option, pickupOption(own, now)] : [option], pickupPoints: own, localDelivery, delivery: { ...p.delivery, label: option.eta } };
       }
-      const options = p.deliveryOptions.map((o) => withDates(o, now, days(o)));
-      const points: PickupPoint[] = !options.some((o) => o.key === 'pickup') ? [] : PICKUP_POINTS.filter((x) => (isAT ? x.owner === 'AT' && here(x.metro) : x.owner === p.seller.name))
-        .map((x) => ({ id: x.id, name: x.name, address: x.addr, hours: x.hours, ready: x.ready, setBy: x.owner === 'AT' ? 'platform' : 'seller' }));
+      // Like gateway-bff: platform-fulfilled packages list AfroTransact counters and lockers near the address, seller
+      // packages the seller's own pickup locations; any package with points can be picked up (free).
+      const points = pickupPointsOf(p.seller.name, isAT);
+      const options = p.deliveryOptions.filter((o) => o.key !== 'pickup' || points.length > 0).map((o) => withDates(o, now, days(o)));
+      if (points.length && !options.some((o) => o.key === 'pickup')) options.push(pickupOption(points, now));
       return { ...p, deliveryOptions: options, pickupPoints: points, delivery: { ...p.delivery, label: options[0]?.eta ?? p.delivery.label } };
     });
 }
@@ -564,7 +580,11 @@ export const shopperHandlers = [
         timeline: [{ status: 'placed', label: 'Order placed', at: iso(ctx.now) }],
         localDelivery: p.localDelivery?.available
           ? { roadMiles: p.localDelivery.roadMiles, durationMinutes: p.localDelivery.durationMinutes, chargeMinor: p.localDelivery.chargeMinor ?? 0 }
-          : null };
+          : null,
+        pickup: (() => {
+          const pt = sel?.option === 'pickup' ? p.pickupPoints?.find((x) => x.id === sel.pickupPointId) : undefined;
+          return pt ? { id: pt.id, name: pt.name, address: pt.address, hours: pt.hours, ready: pt.ready, setBy: pt.setBy } : null;
+        })() };
     });
     const order: MockOrder = { orderNumber, placedAt: iso(ctx.now), status: 'placed', currency: 'USD', itemsMinor: s.subtotalMinor, shippingMinor: shipping, taxMinor: tax,
       discountMinor: 0, totalMinor: s.subtotalMinor + shipping + tax, shipTo: `${addr?.line1}, ${addr?.city}`,

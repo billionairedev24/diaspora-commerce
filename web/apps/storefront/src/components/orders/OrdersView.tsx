@@ -15,6 +15,7 @@ import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
 import styles from './Orders.module.css';
+import { PickupDetails } from './PickupDetails';
 
 export const placedDate = (tag: string, iso: string) => new Date(iso).toLocaleDateString(tag, { month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -92,6 +93,20 @@ function OrderCard({ order }: { order: OrderSummary }) {
 }
 
 /** Your Orders (S148): every order with its shipments, delivery codes, track, cancel (until packed) and return. */
+/** The just-placed order's pickup shipments: where and when to collect them. */
+function PlacedPickups({ orderNumber }: { orderNumber: string }) {
+  const order = useQuery(shopperQueries.order(browserApi(), orderNumber));
+  const pickups = (order.data?.shipments ?? []).flatMap((s) => (s.pickup ? [{ id: s.shipmentId, pickup: s.pickup }] : []));
+  if (!pickups.length) return null;
+  return (
+    <div className={styles.pickupList}>
+      {pickups.map((p) => (
+        <PickupDetails key={p.id} pickup={p.pickup} />
+      ))}
+    </div>
+  );
+}
+
 export function OrdersView() {
   const t = useT();
   const api = browserApi();
@@ -111,6 +126,7 @@ export function OrdersView() {
               <div>
                 <strong>{t('ord.placedThanks')}</strong>
                 <p className={pageStyles.muted}>{t('ord.placedSub', { number: placed })}</p>
+                <PlacedPickups orderNumber={placed} />
               </div>
             </div>
           }

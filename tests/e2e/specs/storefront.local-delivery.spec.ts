@@ -6,14 +6,10 @@ import { expectNoSeriousA11yViolations } from '../support/a11y';
    driver brings it. The demo shopper's home address (Houston) is 7.4 road miles away; the work address (Bronx) is out
    of range. */
 
+/** Signs the demo shopper in through the mock BFF's login redirect (the identity sign-in page in a real stack). */
 async function signIn(request: APIRequestContext) {
-  const r = await request.post('/api/bff/v1/auth/sign-in', { data: { email: 'adaeze@example.com', password: 'shop2026' } });
+  const r = await request.get('/api/bff/v1/auth/login?returnTo=%2F');
   expect(r.ok()).toBe(true);
-  const body = (await r.json()) as { status: string; challengeId?: string };
-  if (body.status === 'mfa_required') {
-    const v = await request.post('/api/bff/v1/auth/mfa/verify', { data: { challengeId: body.challengeId, code: '246810' } });
-    expect(v.ok()).toBe(true);
-  }
 }
 
 /** Adds Red Palm Oil from the product page (it shows where it is delivered from) and selects the whole cart. */
@@ -29,9 +25,9 @@ async function addPalmOil(page: Page) {
 
 async function toDelivery(page: Page, address: RegExp) {
   await page.goto('/checkout');
+  await page.getByRole('button', { name: 'Change Delivery address' }).click();
   await page.getByRole('radio', { name: address }).check();
   await page.getByRole('button', { name: 'Deliver to this address' }).click();
-  await page.getByRole('button', { name: 'Use this payment method' }).click();
 }
 
 test.describe('storefront · AfroTransact Delivery from the seller’s store (S255)', () => {
@@ -67,11 +63,10 @@ test.describe('storefront · AfroTransact Delivery from the seller’s store (S2
     await expect(page.getByTestId('local-delivery-blocked')).toBeVisible();
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'storefront checkout local delivery out of range' });
 
-    // Change address goes back to the address step.
+    // Change address opens the address list.
     await problem.getByRole('button', { name: 'Change address' }).click();
     await expect(page.getByRole('button', { name: 'Deliver to this address' })).toBeVisible();
     await page.getByRole('button', { name: 'Deliver to this address' }).click();
-    await page.getByRole('button', { name: 'Use this payment method' }).click();
 
     // Remove from this order: the package leaves checkout, the items stay in the cart.
     await problem.getByRole('button', { name: /Remove Ama's Market’s items from this order/ }).click();

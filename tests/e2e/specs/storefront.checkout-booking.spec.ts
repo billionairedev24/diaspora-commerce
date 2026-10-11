@@ -1,18 +1,14 @@
 import { type APIRequestContext, expect, test } from '@playwright/test';
 
 /** Signs the demo shopper in through the BFF (mock: password then the fixed MFA code); the cookie lands in the page's context. */
+/** Signs the demo shopper in through the mock BFF's login redirect (the identity sign-in page in a real stack). */
 async function signIn(request: APIRequestContext) {
-  const r = await request.post('/api/bff/v1/auth/sign-in', { data: { email: 'adaeze@example.com', password: 'shop2026' } });
+  const r = await request.get('/api/bff/v1/auth/login?returnTo=%2F');
   expect(r.ok()).toBe(true);
-  const body = (await r.json()) as { status: string; challengeId?: string };
-  if (body.status === 'mfa_required') {
-    const v = await request.post('/api/bff/v1/auth/mfa/verify', { data: { challengeId: body.challengeId, code: '246810' } });
-    expect(v.ok()).toBe(true);
-  }
 }
 
 test.describe('storefront · signed-in shopper', () => {
-  test('checkout: address → payment → delivery choice → place order (S047, S048)', async ({ page }) => {
+  test('checkout: address, delivery or pickup per package, payment on one page → place order (S047, S048)', async ({ page }) => {
     await signIn(page.request);
 
     await page.goto('/p/AT000000P2');
@@ -21,16 +17,16 @@ test.describe('storefront · signed-in shopper', () => {
     await expect(buyBox.getByText(/in cart/)).toBeVisible();
 
     await page.goto('/checkout');
-    // Step 1: delivery address.
+    // One page: the default address, every package with delivery or pickup and its items, payment, the summary.
     await expect(page.getByTestId('checkout-address').first()).toBeVisible();
-    await page.getByRole('button', { name: 'Deliver to this address' }).click();
-    // Step 2: payment (mock Stripe: saved methods + express wallets).
     await expect(page.getByTestId('checkout-payment').first()).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Express checkout' })).toBeVisible();
-    await page.getByRole('button', { name: 'Use this payment method' }).click();
-    // Step 3: delivery choices per package with promise dates.
+    await expect(page.getByTestId('checkout-new-method')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Express checkout' })).toHaveCount(0);
     const pkg = page.getByTestId('checkout-package').first();
-    await expect(pkg).toBeVisible();
+    await expect(pkg.getByTestId('checkout-item').first()).toBeVisible();
+    await pkg.getByTestId('fulfil-pickup').click();
+    await expect(pkg.getByTestId('pickup-point').first()).toBeVisible();
+    await pkg.getByTestId('fulfil-delivery').click();
     await pkg.getByRole('radio', { name: /AfroTransact Delivery/ }).check();
     await expect(pkg.getByText(/Delivery preferences/)).toBeVisible();
 

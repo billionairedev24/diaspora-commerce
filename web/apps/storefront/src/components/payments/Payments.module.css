@@ -8,6 +8,7 @@
 .error { margin: 0; color: var(--at-color-danger); font-size: var(--at-text-sm); }
 .fine { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
 .secure { display: flex; gap: var(--at-space-2); align-items: center; margin: var(--at-space-3) 0 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.mark { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 52px; height: 34px; }
 .chip { display: inline-flex; align-items: center; justify-content: center; min-width: 52px; height: 34px; padding: 0 var(--at-space-2); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); font-size: var(--at-text-xs); font-weight: var(--at-weight-black); text-transform: uppercase; }
 .quick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--at-space-2); }
 .quickBtn { display: inline-flex; gap: var(--at-space-1); align-items: center; justify-content: center; height: 44px; border: 0; border-radius: var(--at-radius-sm); background: var(--at-color-header-bg); color: var(--at-color-header-text); font: inherit; font-weight: var(--at-weight-bold); cursor: pointer; }

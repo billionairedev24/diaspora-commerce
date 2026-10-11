@@ -54,6 +54,10 @@ export const OrderLineViewSchema = z.object({
 });
 export type OrderLineView = z.infer<typeof OrderLineViewSchema>;
 
+/** Where a pickup shipment is collected (order page and confirmation). */
+export const OrderPickupSchema = z.object({ id: z.string(), name: z.string(), address: z.string(), hours: z.string(), ready: z.string(), setBy: z.enum(['platform', 'seller']) });
+export type OrderPickup = z.infer<typeof OrderPickupSchema>;
+
 export const ShipmentDetailSchema = z.object({
   shipmentId: z.string(),
   label: z.string(),
@@ -76,7 +80,9 @@ export const ShipmentDetailSchema = z.object({
   returnWindowEndsAt: z.string().nullable().optional(),
   problemReportOnly: z.boolean().optional(),
   /** AfroTransact Delivery from the seller's store (S255), as charged at checkout. */
-  localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional()
+  localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional(),
+  /** Pickup shipments: where to collect it. */
+  pickup: OrderPickupSchema.nullable().optional()
 });
 export type ShipmentDetail = z.infer<typeof ShipmentDetailSchema>;
 
@@ -220,7 +226,11 @@ export const PickupPointSchema = z.object({
   address: z.string(),
   hours: z.string(),
   ready: z.string(),
-  setBy: z.enum(['platform', 'seller'])
+  setBy: z.enum(['platform', 'seller']),
+  /** carrier-gateway kind: AfroTransact counter or locker, or the seller's own location. */
+  kind: z.enum(['PLATFORM_COUNTER', 'LOCKER', 'SELLER']).optional(),
+  /** Straight-line miles from the delivery address; null when either isn't located. */
+  distanceMiles: z.number().nullable().optional()
 });
 export type PickupPoint = z.infer<typeof PickupPointSchema>;
 

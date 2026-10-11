@@ -158,7 +158,7 @@ function tokenReader(): (name: string) => string {
 /** Payment / Express Checkout Element appearance: gold primary, Figtree, our radius and colours (Shop design). */
 export function stripeAppearance(): StripeAppearance {
   const v = tokenReader();
-  const variables: Record<string, string> = { fontWeightNormal: '400', fontWeightMedium: '600', fontWeightBold: '700', spacingUnit: '4px' };
+  const variables: Record<string, string> = { fontWeightNormal: '400', fontWeightMedium: '600', fontWeightBold: '700', spacingUnit: '3px', gridRowSpacing: '12px' };
   for (const [key, token] of Object.entries(VARIABLE_TOKENS)) {
     const value = v(token);
     if (value) variables[key] = value;
@@ -176,7 +176,11 @@ export function stripeAppearance(): StripeAppearance {
     '.Tab--selected': { ...(selected && { borderColor: selected, boxShadow: `0 0 0 1px ${selected}` }), ...(link && { color: link }), ...(tint && { backgroundColor: tint }) },
     '.Tab--selected:focus': selected ? { boxShadow: `0 0 0 2px ${selected}` } : {},
     '.TabIcon--selected': link ? { fill: link } : {},
-    '.Label': { fontWeight: '600' }
+    '.Label': { fontWeight: '600' },
+    // Accordion layout (checkout): flat rows with our border; the selected method gets the action-secondary edge.
+    '.AccordionItem': { boxShadow: 'none', paddingTop: '12px', paddingBottom: '12px', ...(border && { borderColor: border }) },
+    '.AccordionItem--selected': { ...(selected && { borderColor: selected }), ...(link && { color: link }) },
+    '.Block': { boxShadow: 'none', ...(border && { borderColor: border }) }
   };
   return { theme: 'stripe', variables, rules };
 }
