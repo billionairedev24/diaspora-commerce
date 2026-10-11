@@ -109,7 +109,8 @@ class HostedPagesIT {
         HttpResponse<String> page = s.get(base() + "/signup");
         assertThat(page.statusCode()).isEqualTo(200);
         assertThat(page.body()).contains("Create your AfroTransact account", "value=\"" + email + "\"",
-                "Mobile phone", "(optional)", "Conditions of Use", "Privacy Notice", "12+ characters");
+                "Mobile phone", "(optional)", "Conditions of Use", "Privacy Notice", "12+ characters",
+                "/legal/conditions-of-use\"", "/legal/privacy\"", "/legal/sms-terms\"");
 
         // Field errors come back on the page, values kept (never the password).
         Map<String, String> bad = signUpForm(BrowserSession.csrfOf(page.body()), email);

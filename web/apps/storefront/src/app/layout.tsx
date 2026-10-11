@@ -8,10 +8,13 @@ import { I18nProvider } from '@afrotransact/i18n/react';
 import { WebVitalsReporter } from '@afrotransact/telemetry/next/components';
 import { resolvedVariables } from '@afrotransact/tokens';
 import { type Metadata, type Viewport } from 'next';
+import { cookies, headers } from 'next/headers';
 import { type ReactNode } from 'react';
 
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
+import { CONSENT_COOKIE, headerGpc, parseConsent } from '@/lib/consent/consent';
+import { ConsentGate } from '@/lib/consent/ConsentProvider';
 import { Providers } from '@/lib/query/Providers';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -30,6 +33,8 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, them
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await getLocale();
   const t = await getT();
+  const [jar, h] = await Promise.all([cookies(), headers()]);
+  const consent = parseConsent(jar.get(CONSENT_COOKIE)?.value);
   return (
     <html lang={locale} dir={dirOf(locale)}>
       <body>
@@ -37,8 +42,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           {t('a11y.skip')}
         </a>
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
-          <WebVitalsReporter />
-          <Providers>{children}</Providers>
+          <Providers consent={consent} gpc={headerGpc(h.get('sec-gpc'))}>
+            {/* Page-performance measurement is an analytics cookie category: only with consent (S192). */}
+            <ConsentGate category="analytics">
+              <WebVitalsReporter />
+            </ConsentGate>
+            {children}
+          </Providers>
         </I18nProvider>
       </body>
     </html>

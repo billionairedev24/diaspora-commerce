@@ -2,13 +2,14 @@ import { preorderQueries } from '@afrotransact/api-client';
 import { dehydrate, HydrationBoundary } from '@tanstack/react-query';
 import { type ReactNode, Suspense } from 'react';
 
+import { CookieBanner } from '@/components/legal/CookieBanner';
 import { Footer } from '@/components/shell/Footer';
 import { Header } from '@/components/shell/Header';
 import { accountQueries, cartQueries, siteQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
 
-/** Storefront chrome: announcement bar, header, department bar and footer (not used by /signin and /signup). */
+/** Storefront chrome: announcement bar, header, department bar, footer and the first-visit cookie banner (not used by /signin and /signup). */
 export default async function ShopLayout({ children }: { children: ReactNode }) {
   const api = await serverApi();
   const qc = getQueryClient();
@@ -30,6 +31,7 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
         {children}
       </main>
       <Footer />
+      <CookieBanner />
     </HydrationBoundary>
   );
 }

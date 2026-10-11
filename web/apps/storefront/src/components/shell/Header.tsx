@@ -63,7 +63,7 @@ export function Header() {
 
   return (
     <>
-      <header ref={headerRef} className={styles.header} data-testid="site-header">
+      <header ref={headerRef} className={styles.header} data-testid="site-header" data-noprint>
         <div className={styles.bar}>
           <Link href="/" className={`${styles.chromeBtn} ${styles.logoBtn}`} aria-label={t('header.home')}>
             <LogoMark size={32} />

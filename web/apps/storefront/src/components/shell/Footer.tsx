@@ -1,6 +1,6 @@
 'use client';
 
-import { NewsletterRequestSchema, type SiteConfig } from '@afrotransact/api-client';
+import { type LegalDocumentKey, legalDocumentKeyOf, legalHref, NewsletterRequestSchema, type SiteConfig } from '@afrotransact/api-client';
 import { isLocale, localeCookie, LOCALES } from '@afrotransact/i18n';
 import { useLocale } from '@afrotransact/i18n/react';
 import { AppleGlyph, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink, useToast } from '@afrotransact/ui';
@@ -58,6 +58,22 @@ export const FOOTER_COLUMNS: Array<{ title: MessageKey; links: FooterLink[] }> =
 ];
 
 const label = (t: Translator<MessageKey>, l: string) => (l.includes('.') ? t(l as MessageKey) : l);
+
+/** Bottom-bar legal links in the design's order (Shop design footer); shown when site config publishes the document. */
+export const FOOTER_LEGAL: ReadonlyArray<[LegalDocumentKey, MessageKey]> = [
+  ['conditions-of-use', 'legal.doc.conditions-of-use'],
+  ['privacy', 'legal.doc.privacy'],
+  ['cookies', 'legal.cookiePrefs'],
+  ['privacy-choices', 'legal.doc.privacy-choices'],
+  ['sms-terms', 'legal.doc.sms-terms'],
+  ['returns', 'legal.doc.returns'],
+  ['accessibility', 'legal.doc.accessibility']
+];
+
+function footerLegal(config: SiteConfig | undefined): Array<[LegalDocumentKey, MessageKey]> {
+  const published = new Set((config?.legal ?? []).map((l) => legalDocumentKeyOf(l.key)).filter((k) => k !== null));
+  return FOOTER_LEGAL.filter(([k]) => published.has(k));
+}
 
 function Newsletter() {
   const t = useT();
@@ -143,7 +159,7 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
     );
 
   return (
-    <footer className={styles.footer}>
+    <footer className={styles.footer} data-noprint>
       <button type="button" className={styles.top} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
         {t('footer.backToTop')}
       </button>
@@ -229,10 +245,10 @@ export function FooterView({ config, locale, year = new Date().getFullYear() }: 
           </label>
           <nav aria-label={t('footer.legal')}>
             <ul className={styles.legal}>
-              {(config?.legal ?? []).map((l) => (
-                <li key={l.key}>
-                  <Link className={styles.legalLink} href={l.href}>
-                    {l.title}
+              {footerLegal(config).map(([key, msg]) => (
+                <li key={key}>
+                  <Link className={styles.legalLink} href={legalHref(key)}>
+                    {t(msg)}
                   </Link>
                 </li>
               ))}

@@ -84,7 +84,7 @@ export default function SignIn() {
       </View>
       <AppText variant="caption" color={c.textMuted}>
         {tr('cu.signIn.agreePrefix')}{' '}
-        <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/terms')}>{tr('cu.signIn.conditionsOfUse')}</AppText> {tr('cu.signIn.and')}{' '}
+        <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/conditions-of-use')}>{tr('cu.signIn.conditionsOfUse')}</AppText> {tr('cu.signIn.and')}{' '}
         <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/privacy')}>{tr('cu.signIn.privacyNotice')}</AppText>.
       </AppText>
       {env.mocks ? <AppText variant="caption" color={c.textSubtle}>{tr('cu.signIn.devMocksAreOnSign')}</AppText> : null}

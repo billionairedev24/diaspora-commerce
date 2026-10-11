@@ -85,9 +85,9 @@ public record IdentityProperties(
             sellerCenterUrl = trim(sellerCenterUrl, "http://localhost:3001");
             staffConsoleUrl = trim(staffConsoleUrl, "http://localhost:3002");
             supportUrl = supportUrl == null || supportUrl.isBlank() ? storefrontUrl + "/help" : supportUrl;
-            termsUrl = termsUrl == null || termsUrl.isBlank() ? storefrontUrl + "/legal/terms" : termsUrl;
+            termsUrl = termsUrl == null || termsUrl.isBlank() ? storefrontUrl + "/legal/conditions-of-use" : termsUrl;
             privacyUrl = privacyUrl == null || privacyUrl.isBlank() ? storefrontUrl + "/legal/privacy" : privacyUrl;
-            smsTermsUrl = smsTermsUrl == null || smsTermsUrl.isBlank() ? storefrontUrl + "/legal/sms" : smsTermsUrl;
+            smsTermsUrl = smsTermsUrl == null || smsTermsUrl.isBlank() ? storefrontUrl + "/legal/sms-terms" : smsTermsUrl;
             smsProgram = smsProgram == null || smsProgram.isBlank() ? "AfroTransact Alerts" : smsProgram;
         }
 

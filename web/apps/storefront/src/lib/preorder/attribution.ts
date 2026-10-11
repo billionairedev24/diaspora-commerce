@@ -4,15 +4,15 @@
    has consented to analytics or advertising cookies, for 30 days in the first-party cookie `at_attr`. Checkout sends
    { src, cr, po } with the order.
 
-   Consent: the storefront has no cookie banner yet, so this reads the consent cookie the banner will write,
-   `at_consent` — URL-encoded JSON of the design's consent record (design/at-site.js `at.consent.v1`):
-   { necessary: true, functional, analytics, advertising, at, v }. Any of analytics / advertising / marketing (or
-   all / accepted) counts as consent for attribution. No cookie, or one that cannot be parsed, means no consent.
-   Withdrawing consent deletes `at_attr` on the next read. */
+   Consent: the cookie banner's `at_consent` cookie (lib/consent). Analytics or advertising consent counts for
+   attribution (Global Privacy Control switches advertising off). No cookie, or one that cannot be parsed, means no
+   consent. Withdrawing consent deletes `at_attr` on the next read. */
 import { type PreorderAttribution } from '@afrotransact/api-client';
 
+import { browserGpc, effectiveConsent, readConsent, readCookie } from '../consent/consent';
+
+export { CONSENT_COOKIE } from '../consent/consent';
 export const ATTRIBUTION_COOKIE = 'at_attr';
-export const CONSENT_COOKIE = 'at_consent';
 const SESSION_KEY = 'at.attr.v1';
 const MAX_AGE_S = 30 * 86_400;
 
@@ -28,26 +28,12 @@ interface StoredAttribution extends PreorderAttribution {
 const TOKEN = /^[A-Za-z0-9._-]{1,64}$/;
 const isSource = (v: string): v is AttributionSource => (ATTRIBUTION_SOURCES as readonly string[]).includes(v);
 
-function readCookie(name: string, jar: string): string | null {
-  for (const part of jar.split(';')) {
-    const [k, ...v] = part.trim().split('=');
-    if (k === name) return v.join('=');
-  }
-  return null;
-}
-
 const docCookie = (): string => (typeof document === 'undefined' ? '' : document.cookie);
 
 /** True when the consent cookie grants analytics or advertising (marketing) cookies. */
 export function hasAttributionConsent(jar: string = docCookie()): boolean {
-  const raw = readCookie(CONSENT_COOKIE, jar);
-  if (!raw) return false;
-  try {
-    const c = JSON.parse(decodeURIComponent(raw)) as Record<string, unknown>;
-    return [c.analytics, c.advertising, c.marketing, c.all, c.accepted].some((v) => v === true);
-  } catch {
-    return false;
-  }
+  const c = effectiveConsent(readConsent(jar), browserGpc());
+  return c !== null && (c.analytics || c.advertising);
 }
 
 function parse(raw: string | null): StoredAttribution | null {

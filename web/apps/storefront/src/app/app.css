@@ -6,3 +6,10 @@
 .link-button:hover { color: var(--at-color-link-hover); text-decoration: underline; }
 .sep { color: var(--at-color-border-strong); }
 h1, h2, h3 { text-wrap: balance; }
+
+/* Print: only the page content (legal documents print cleanly; chrome and controls are marked data-noprint). */
+@media print {
+  /* Doubled attribute: outranks any single component class without !important. */
+  [data-noprint][data-noprint] { display: none; }
+  body { background: none; }
+}

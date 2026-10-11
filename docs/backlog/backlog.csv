@@ -559,9 +559,9 @@
 - OTA updates for JS-only changes","E30","","Medium","3","cicd mobile","cicd","Done"
 "E31","Epic","Legal, privacy, i18n & accessibility","Policy pages, cookie consent, SMS terms, translations and WCAG 2.2 AA.","","","Legal, privacy, i18n & accessibility","High","","legal","legal","In Progress"
 "S191","Story","Legal center pages","Conditions of Use, Privacy, Cookie Notice, Privacy Choices, Returns, Seller & Provider Terms, Prohibited Items, Accessibility, SMS & Notification Terms.","- Each page shows version, effective date and previous versions
-- Draft-for-counsel banner until legal approves","E31","","High","5","legal web","legal","In Progress"
+- Draft-for-counsel banner until legal approves","E31","","High","5","legal web","legal","Done"
 "S192","Story","Cookie consent with GPC","Per-category switches, equal-weight Accept/Reject, Global Privacy Control respected.","- GPC signal locks advertising cookies off
-- Consent stored and auditable","E31","","High","3","legal web","legal","In Progress"
+- Consent stored and auditable","E31","","High","3","legal web","legal","Done"
 "S193","Story","Internationalisation","English, French, Spanish and Arabic (RTL) across web and mobile.","- All UI strings externalised
 - Arabic flips to RTL
 - Dates and currency localised","E31","","Medium","8","legal i18n","legal","In Progress"

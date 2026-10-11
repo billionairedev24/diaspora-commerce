@@ -1,9 +1,10 @@
 'use client';
 
-import { isApiError, type NotificationPreferences, type RecoveryCodes, securityKeys, type TotpSetup } from '@afrotransact/api-client';
+import { isApiError, legalHref, type NotificationPreferences, type RecoveryCodes, securityKeys, type TotpSetup } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, DeviceMobile, Fingerprint, Key, LockSimple, ShieldCheck, Skeleton, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 
 import { FormErrors } from '@/components/common/FormErrors';
@@ -198,6 +199,9 @@ function Notifications() {
             {label}
           </label>
         ))}
+      <p className={styles.muted}>
+        {t('sec.smsNote')} <Link href={legalHref('sms-terms')}>{t('legal.doc.sms-terms')}</Link> · <Link href={legalHref('privacy')}>{t('legal.doc.privacy')}</Link>
+      </p>
     </section>
   );
 }
