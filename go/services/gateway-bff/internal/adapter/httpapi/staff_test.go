@@ -478,6 +478,26 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"documents": []any{map[string]any{"key": "terms", "title": "Conditions of Use", "version": "3.2", "effectiveDate": "2026-09-01"}}})
 	case strings.HasPrefix(p, "/v1/legal/"):
 		writeJ(w, 200, []any{map[string]any{"version": "3.2", "effectiveDate": "2026-09-01", "status": "CURRENT"}})
+	case p == "/v1/help/admin/articles":
+		items := []any{map[string]any{"slug": "shipping", "topic": "ORDERS_DELIVERY", "topicTitle": "Orders & delivery", "title": "Shipping & delivery",
+			"summary": "Carriers and pickup", "status": "PUBLISHED", "sortOrder": 10, "version": 4, "updatedAt": now,
+			"sections": []any{map[string]any{"heading": "Pickup", "body": "Collect from a locker."}}}}
+		f.mu.Lock()
+		created := f.bodies["PUT /v1/help/articles/track-a-package"]
+		f.mu.Unlock()
+		if created != nil {
+			items = append(items, map[string]any{"slug": "track-a-package", "topic": created["topic"], "topicTitle": "Orders & delivery", "title": created["title"],
+				"summary": created["summary"], "status": created["status"], "sortOrder": 10, "version": 0, "updatedAt": now, "sections": created["sections"]})
+		}
+		writeJ(w, 200, items)
+	case strings.HasPrefix(p, "/v1/help/articles/") && r.Method == http.MethodGet:
+		if p != "/v1/help/articles/shipping" {
+			writeJ(w, 404, map[string]any{"status": 404, "code": "content.help-article-not-found", "title": "Not found"})
+			return
+		}
+		writeJ(w, 200, map[string]any{"slug": "shipping"})
+	case strings.HasPrefix(p, "/v1/help/articles/"):
+		writeJ(w, 200, map[string]any{"slug": strings.TrimPrefix(p, "/v1/help/articles/")})
 	case p == "/v1/privacy/requests":
 		writeJ(w, 200, []any{map[string]any{"id": "0b1c", "reference": "PR-100001", "type": "access", "email": "ada@example.com", "state": "TX",
 			"status": "RECEIVED", "overdue": false, "submittedAt": now, "dueAt": now, "version": 0}})
@@ -710,6 +730,34 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("site config body = %v", b)
 	}
 	do("support", "PATCH", "/v1/staff/resources/markets/CA", map[string]any{"values": map[string]any{"status": "LIVE"}}, 403)
+	// Help center pages: one Markdown text in the form, sections at "## " headings, the version read last.
+	help := do("admin", "GET", "/v1/staff/resources/help-articles/shipping", nil, 200)
+	if help["title"] != "Shipping & delivery" {
+		t.Fatalf("help sheet = %v", help)
+	}
+	page := "## Carriers\n\nUSPS, UPS and FedEx.\n\n## Pickup\n\n- Lockers\n- Will call"
+	helpValues := map[string]any{"title": "Shipping & delivery", "summary": "Carriers", "topic": "ORDERS_DELIVERY", "status": "PUBLISHED", "sortOrder": 10, "sections": page}
+	do("admin", "PATCH", "/v1/staff/resources/help-articles/shipping", map[string]any{"values": helpValues}, 200)
+	if b := f.bodies["PUT /v1/help/articles/shipping"]; b["expectedVersion"] != float64(4) || len(b["sections"].([]any)) != 2 ||
+		b["sections"].([]any)[1].(map[string]any)["body"] != "- Lockers\n- Will call" {
+		t.Fatalf("help body = %v", b)
+	}
+	badHelp := map[string]any{}
+	for k, v := range helpValues {
+		badHelp[k] = v
+	}
+	badHelp["sections"] = "No heading here"
+	do("admin", "PATCH", "/v1/staff/resources/help-articles/shipping", map[string]any{"values": badHelp}, 422)
+	newHelp := map[string]any{"slug": "track-a-package"}
+	for k, v := range helpValues {
+		newHelp[k] = v
+	}
+	do("admin", "POST", "/v1/staff/resources/help-articles", map[string]any{"values": newHelp}, 201)
+	if _, ok := f.bodies["PUT /v1/help/articles/track-a-package"]["expectedVersion"]; ok {
+		t.Fatal("a new help page is created without expectedVersion")
+	}
+	newHelp["slug"] = "shipping"
+	do("admin", "POST", "/v1/staff/resources/help-articles", map[string]any{"values": newHelp}, 422)
 	do("admin", "POST", "/v1/staff/resources/claims/clm-1/notes", map[string]any{"text": "Called the seller"}, 503)
 
 	// Exports: small ones finish within the request, behind a signed, expiring link.

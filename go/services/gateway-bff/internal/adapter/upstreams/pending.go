@@ -369,6 +369,41 @@ func (k *contentImpl) LegalDocument(ctx context.Context, key, version, locale st
 	}, k.ttl)
 }
 
+func (k *contentImpl) HelpArticles(ctx context.Context, q domain.HelpQuery) (domain.HelpArticlePage, error) {
+	v := url.Values{}
+	if q.Topic != "" {
+		v.Set("topic", q.Topic)
+	}
+	if q.Q != "" {
+		v.Set("q", q.Q)
+	}
+	if q.Cursor != "" {
+		v.Set("cursor", q.Cursor)
+	}
+	if q.Limit > 0 {
+		v.Set("limit", strconv.Itoa(q.Limit))
+	}
+	return cached(k.cache, "content:help:list:"+v.Encode(), func() (domain.HelpArticlePage, http.Header, error) {
+		var out domain.HelpArticlePage
+		res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/help/articles", Query: v}, &out)
+		if err != nil {
+			return out, nil, err
+		}
+		return out, res.Header, nil
+	}, k.ttl)
+}
+
+func (k *contentImpl) HelpArticle(ctx context.Context, slug string) (domain.HelpArticle, error) {
+	return cached(k.cache, "content:help:article:"+slug, func() (domain.HelpArticle, http.Header, error) {
+		var out domain.HelpArticle
+		res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/help/articles/" + url.PathEscape(slug)}, &out)
+		if err != nil {
+			return out, nil, err
+		}
+		return out, res.Header, nil
+	}, k.ttl)
+}
+
 func (k *contentImpl) CookiePolicy(ctx context.Context) (domain.CookiePolicy, error) {
 	return cached(k.cache, "content:cookie-policy", func() (domain.CookiePolicy, http.Header, error) {
 		var out domain.CookiePolicy

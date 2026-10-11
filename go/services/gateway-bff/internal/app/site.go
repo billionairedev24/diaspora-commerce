@@ -31,6 +31,10 @@ type SiteService interface {
 	LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error)
 	// CookiePolicy is the cookie banner configuration and the cookie table.
 	CookiePolicy(ctx context.Context) (domain.CookiePolicy, error)
+	// HelpArticles is a page of published help articles (the hub excluded), filtered by topic and text.
+	HelpArticles(ctx context.Context, q domain.HelpQuery) (domain.HelpArticlePage, error)
+	// HelpArticle is one published help page (domain.HelpHub is the help center hub); unknown pages are 404.
+	HelpArticle(ctx context.Context, slug string) (domain.HelpArticle, error)
 	// RecordConsent stores the caller's cookie choice under the BFF-chosen subject; secGPC is the Sec-GPC header.
 	RecordConsent(ctx context.Context, c *domain.Caller, in domain.ConsentChoice, secGPC bool) (domain.ConsentRecord, error)
 	// SubmitPrivacyRequest validates and forwards a privacy request (the signed-in account is attached).

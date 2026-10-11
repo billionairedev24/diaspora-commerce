@@ -94,6 +94,9 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("POST /v1/newsletter/subscriptions", lookup(h.newsletter))
 	// Legal & privacy center
 	route("GET /v1/legal/{key}", h.legalDocument)
+	// Help center
+	route("GET /v1/help/articles", h.helpArticles)
+	route("GET /v1/help/articles/{slug}", h.helpArticle)
 	route("GET /v1/consent/cookie-policy", h.cookiePolicy)
 	route("POST /v1/consent/records", lookup(h.recordConsent))
 	route("POST /v1/privacy/requests", lookup(h.privacyRequest))
@@ -256,6 +259,26 @@ func (h *handlersImpl) publicJSON(w http.ResponseWriter, r *http.Request, v any,
 func (h *handlersImpl) legalDocument(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	v, err := h.s.Site.LegalDocument(r.Context(), r.PathValue("key"), q.Get("version"), q.Get("locale"))
+	h.publicJSON(w, r, v, err)
+}
+
+func (h *handlersImpl) helpArticles(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := 0
+	if l := q.Get("limit"); l != "" {
+		n, err := strconv.Atoi(l)
+		if err != nil {
+			h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"limit": "Between 1 and 50"}))
+			return
+		}
+		limit = n
+	}
+	v, err := h.s.Site.HelpArticles(r.Context(), domain.HelpQuery{Topic: q.Get("topic"), Q: q.Get("q"), Cursor: q.Get("cursor"), Limit: limit})
+	h.publicJSON(w, r, v, err)
+}
+
+func (h *handlersImpl) helpArticle(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Site.HelpArticle(r.Context(), r.PathValue("slug"))
 	h.publicJSON(w, r, v, err)
 }
 

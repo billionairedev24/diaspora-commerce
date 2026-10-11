@@ -53,6 +53,10 @@ tags:
       Legal & privacy center (content-service): versioned policy pages, the cookie banner configuration and
       auditable consent records (Global Privacy Control and "Do not sell or share" honoured), and privacy requests
       from Your Privacy Choices.
+  - name: Help
+    description: |
+      Help center (content-service): the hub and its pages (shipping & delivery, returns, Fulfilled by AfroTransact,
+      advertising, press), edited by site-content staff without a deployment.
   - name: Location
     description: Deliver-to location and address autocomplete
   - name: Search
@@ -157,6 +161,44 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/LegalPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/help/articles:
+    get:
+      tags: [Help]
+      operationId: listHelpArticles
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Published help articles (the hub excluded), by topic and text, a page at a time
+      description: Load the next page with `cursor` = the previous page's `nextCursor` (infinite scroll). Public and cacheable.
+      parameters:
+        - {name: topic, in: query, required: false, schema: {$ref: '#/components/schemas/HelpTopicKey'}}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 100}, description: Matches titles, summaries and section text}
+        - {name: cursor, in: query, required: false, schema: {type: string}, description: The previous page's nextCursor}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+      responses:
+        '200':
+          description: One page of articles and the topics with published articles
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpArticlePage'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/help/articles/{slug}:
+    get:
+      tags: [Help]
+      operationId: getHelpArticle
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: A published help page (`help-center` is the hub at /help)
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{1,59}$'}, example: shipping}
+      responses:
+        '200':
+          description: The page
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/HelpArticle'}
         '404': {$ref: '#/components/responses/Problem'}
   /v1/consent/cookie-policy:
     get:
@@ -2630,6 +2672,58 @@ components:
           description: Every version, newest first
           items: {$ref: '#/components/schemas/LegalVersionRef'}
         href: {type: string, example: /legal/conditions-of-use}
+    HelpTopicKey:
+      type: string
+      enum: [ORDERS_DELIVERY, RETURNS_REFUNDS, ACCOUNT_PAYMENTS, SELLING, COMPANY]
+    HelpSection:
+      type: object
+      required: [heading, body]
+      properties:
+        heading: {type: string, example: Pickup}
+        body: {type: string, description: 'Markdown (paragraphs, `-` lists, **bold**, [links](…)); email addresses become mailto links'}
+    HelpArticle:
+      type: object
+      description: A help page — a title and its sections (Shop design info page)
+      required: [slug, topic, topicTitle, title, summary, sections, updatedAt]
+      properties:
+        slug: {type: string, example: shipping}
+        topic: {$ref: '#/components/schemas/HelpTopicKey'}
+        topicTitle: {type: string, example: Orders & delivery}
+        title: {type: string, example: Shipping & delivery}
+        summary: {type: string}
+        sections:
+          type: array
+          items: {$ref: '#/components/schemas/HelpSection'}
+        updatedAt: {type: string, format: date-time}
+    HelpArticleSummary:
+      type: object
+      required: [slug, topic, topicTitle, title, summary, updatedAt]
+      properties:
+        slug: {type: string}
+        topic: {$ref: '#/components/schemas/HelpTopicKey'}
+        topicTitle: {type: string}
+        title: {type: string}
+        summary: {type: string}
+        updatedAt: {type: string, format: date-time}
+    HelpTopicCount:
+      type: object
+      required: [key, title, count]
+      properties:
+        key: {$ref: '#/components/schemas/HelpTopicKey'}
+        title: {type: string, example: Orders & delivery}
+        count: {type: integer, minimum: 0}
+    HelpArticlePage:
+      type: object
+      required: [items, topics, nextCursor]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/HelpArticleSummary'}
+        topics:
+          type: array
+          description: Topics with at least one published article, in display order
+          items: {$ref: '#/components/schemas/HelpTopicCount'}
+        nextCursor: {type: [string, 'null'], description: Cursor of the next page; null on the last page}
     LegalHeading:
       type: object
       required: [id, title]

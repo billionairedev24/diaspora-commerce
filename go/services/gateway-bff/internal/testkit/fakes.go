@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -136,6 +137,8 @@ type Upstreams struct {
 	// LastPrivacyRequest / LastPrivacyBearer are the last content POST /v1/privacy/requests body and bearer token.
 	LastPrivacyRequest map[string]any
 	LastPrivacyBearer  string
+	// LastHelpQuery is the query string of the last content GET /v1/help/articles.
+	LastHelpQuery url.Values
 }
 
 type issuedCode struct {
@@ -995,6 +998,34 @@ func (u *Upstreams) contentRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("GET /v1/legal/{key}/versions/{version}", func(w http.ResponseWriter, r *http.Request) {
 		problem(w, 404, "content.legal-version-not-found", "No such version", nil)
+	})
+	mux.HandleFunc("GET /v1/help/articles", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		u.LastHelpQuery = r.URL.Query()
+		u.mu.Unlock()
+		if r.URL.Query().Get("cursor") == "bad" {
+			problem(w, 422, "content.invalid-cursor", "The cursor is invalid", map[string]any{"fieldErrors": map[string]string{"cursor": "Invalid"}})
+			return
+		}
+		w.Header().Set("Cache-Control", "public, max-age=60")
+		items := []map[string]any{{"slug": "shipping", "topic": "ORDERS_DELIVERY", "topicTitle": "Orders & delivery", "title": "Shipping & delivery",
+			"summary": "Carriers and pickup", "updatedAt": "2026-10-11T00:00:00Z"}}
+		var next any = "b2Ox"
+		if r.URL.Query().Get("cursor") != "" {
+			items = []map[string]any{{"slug": "press", "topic": "COMPANY", "topicTitle": "About AfroTransact", "title": "Press", "summary": "Media enquiries", "updatedAt": "2026-10-11T00:00:00Z"}}
+			next = nil
+		}
+		writeJSON(w, 200, map[string]any{"items": items, "nextCursor": next,
+			"topics": []map[string]any{{"key": "ORDERS_DELIVERY", "title": "Orders & delivery", "count": 1}, {"key": "COMPANY", "title": "About AfroTransact", "count": 1}}})
+	})
+	mux.HandleFunc("GET /v1/help/articles/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("slug") != "help-center" {
+			problem(w, 404, "content.help-article-not-found", "No help article", nil)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"slug": "help-center", "topic": "ORDERS_DELIVERY", "topicTitle": "Orders & delivery", "title": "Help center",
+			"summary": "Track, return, contact", "status": "PUBLISHED", "version": 3, "updatedAt": "2026-10-11T00:00:00Z",
+			"sections": []map[string]any{{"heading": "Track a package", "body": "[Your orders](/orders) shows every shipment."}}})
 	})
 	mux.HandleFunc("GET /v1/consent/cookie-policy", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=300")

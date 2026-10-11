@@ -422,6 +422,9 @@ type ContentClient interface {
 	LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error)
 	// CookiePolicy is the consent banner configuration and cookie table.
 	CookiePolicy(ctx context.Context) (domain.CookiePolicy, error)
+	// HelpArticles is a page of published help articles; HelpArticle one of them (port.ErrNotFound when unknown).
+	HelpArticles(ctx context.Context, q domain.HelpQuery) (domain.HelpArticlePage, error)
+	HelpArticle(ctx context.Context, slug string) (domain.HelpArticle, error)
 	// RecordConsent stores a consent decision (content normalises it).
 	RecordConsent(ctx context.Context, in ContentConsent) (domain.ConsentRecord, error)
 	// SubmitPrivacyRequest stores a privacy request; bearer (may be empty) attaches the signed-in account.
