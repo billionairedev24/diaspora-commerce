@@ -115,6 +115,8 @@ at:
       secret-key: ${STRIPE_SECRET_KEY}
       webhook-secret: ${STRIPE_WEBHOOK_SECRET}
       api-base: ${STRIPE_API_BASE:https://api.stripe.com}
+      # stripe everywhere; only the local profile may use its stand-in (auto / local-test, LocalTestPaymentsPolicy).
+      mode: stripe
       require-live-key: false
       max-network-retries: 2
       webhook-tolerance-seconds: 300

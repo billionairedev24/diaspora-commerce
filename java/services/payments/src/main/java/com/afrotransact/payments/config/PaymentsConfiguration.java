@@ -1,26 +1,34 @@
 package com.afrotransact.payments.config;
 
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
+import com.afrotransact.payments.adapter.out.localtest.LocalTestStripeGateway;
+import com.afrotransact.payments.adapter.out.stripe.StripeJavaGateway;
 import com.afrotransact.payments.application.PaymentsSettings;
 import com.afrotransact.payments.application.SupplierPaymentSettings;
+import com.afrotransact.payments.domain.DefaultLocalTestPaymentsPolicy;
 import com.afrotransact.payments.domain.DefaultPaymentSplitter;
 import com.afrotransact.payments.domain.DefaultPayoutPolicy;
 import com.afrotransact.payments.domain.DefaultReconciler;
 import com.afrotransact.payments.domain.DefaultRefundAllocator;
+import com.afrotransact.payments.domain.LocalTestPaymentsPolicy;
 import com.afrotransact.payments.domain.PaymentSplitter;
 import com.afrotransact.payments.domain.PayoutPolicy;
 import com.afrotransact.payments.domain.Reconciler;
 import com.afrotransact.payments.domain.RefundAllocator;
+import com.afrotransact.payments.port.StripeGateway;
 import com.stripe.StripeClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
-/** Explicit wiring of framework-free domain policies, settings and the Stripe client. */
+/** Explicit wiring of framework-free domain policies, settings and the Stripe gateway. */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(PaymentsProperties.class)
 class PaymentsConfiguration {
@@ -61,7 +69,49 @@ class PaymentsConfiguration {
     }
 
     @Bean
-    StripeClient stripeClient(PaymentsProperties props) {
+    LocalTestPaymentsPolicy localTestPaymentsPolicy() {
+        return new DefaultLocalTestPaymentsPolicy();
+    }
+
+    /**
+     * Stripe, or on the local profile without a Stripe key the local test stand-in (LocalTestPaymentsPolicy). Asking
+     * for the stand-in anywhere else stops the service at start-up.
+     */
+    @Bean
+    StripeGateway stripeGateway(PaymentsProperties props, LocalTestPaymentsPolicy policy, Environment env,
+                                @Value("${at.payments.payment-links.success-url:http://localhost:3000/orders/paid}")
+                                String linkSuccessUrl) {
+        if (useLocalTest(policy, props.stripe(), activeProfiles(env))) {
+            return new LocalTestStripeGateway(linkSuccessUrl);
+        }
+        return new StripeJavaGateway(stripeClient(props), linkSuccessUrl);
+    }
+
+    /** Active profiles, or the default profile when none is active. */
+    static Set<String> activeProfiles(Environment env) {
+        String[] active = env.getActiveProfiles();
+        return new LinkedHashSet<>(Arrays.asList(active.length > 0 ? active : env.getDefaultProfiles()));
+    }
+
+    /**
+     * True when the configuration asks for the local stand-in and the profiles allow it.
+     *
+     * @throws IllegalStateException when it is asked for outside the local profile (dev, uat, prod, …)
+     */
+    static boolean useLocalTest(LocalTestPaymentsPolicy policy, PaymentsProperties.Stripe stripe,
+                                Set<String> profiles) {
+        if (!policy.wantsLocalTest(stripe.mode(), stripe.secretKey())) {
+            return false;
+        }
+        if (!policy.localTestAllowed(profiles)) {
+            throw new IllegalStateException("Payments without Stripe (at.payments.stripe.mode=" + stripe.mode()
+                    + ") are for the local profile only (active profiles " + profiles + "); set STRIPE_SECRET_KEY "
+                    + "and at.payments.stripe.mode=stripe");
+        }
+        return true;
+    }
+
+    static StripeClient stripeClient(PaymentsProperties props) {
         PaymentsProperties.Stripe s = props.stripe();
         String key = s.secretKey();
         if (key == null || key.isBlank()) {

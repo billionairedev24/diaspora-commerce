@@ -24,7 +24,7 @@ public record PaymentsProperties(String retailOrgId, Duration settlementHold, St
         currency = currency == null ? "USD" : currency;
         zone = zone == null ? "UTC" : zone;
         payout = payout == null ? new Payout(null, null) : payout;
-        stripe = stripe == null ? new Stripe(null, null, null, null, null, null, null, null) : stripe;
+        stripe = stripe == null ? new Stripe(null, null, null, null, null, null, null, null, null) : stripe;
         webhooks = webhooks == null ? new Webhooks(null) : webhooks;
         jobs = jobs == null ? new Jobs(null, null, null, null) : jobs;
     }
@@ -43,12 +43,15 @@ public record PaymentsProperties(String retailOrgId, Duration settlementHold, St
      *
      * @param apiBase        default https://api.stripe.com (tests: WireMock)
      * @param requireLiveKey prod: only sk_live_/rk_live_ keys; elsewhere live keys are refused
+     * @param mode           stripe (default) | local-test | auto: the local profile's stand-in for Stripe, see
+     *                       LocalTestPaymentsPolicy (refused outside local)
      */
     public record Stripe(String secretKey, String webhookSecret, String apiBase, String connectBase,
                          Boolean requireLiveKey, Integer maxNetworkRetries, Duration connectTimeout,
-                         Duration readTimeout) {
+                         Duration readTimeout, String mode) {
 
         public Stripe {
+            mode = mode == null || mode.isBlank() ? "stripe" : mode.trim();
             apiBase = apiBase == null || apiBase.isBlank() ? "https://api.stripe.com" : apiBase;
             connectBase = connectBase == null || connectBase.isBlank() ? "https://connect.stripe.com" : connectBase;
             requireLiveKey = requireLiveKey != null && requireLiveKey;

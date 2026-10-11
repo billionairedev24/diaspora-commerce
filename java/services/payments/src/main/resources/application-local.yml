@@ -1,6 +1,8 @@
 # Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
-# Stripe stays real (test mode on api.stripe.com): export STRIPE_SECRET_KEY=sk_test_… and run
-# `stripe listen --forward-to localhost:8105/v1/webhooks/stripe` to get STRIPE_WEBHOOK_SECRET.
+# With STRIPE_SECRET_KEY=sk_test_… (.local/secrets.env) payments use Stripe test mode on api.stripe.com; run
+# `stripe listen --forward-to localhost:8105/v1/webhooks/stripe` to get STRIPE_WEBHOOK_SECRET. Without a key (mode
+# auto) payments use the local test stand-in: every payment is authorised like test card 4242 and no money moves
+# (LocalTestPaymentsPolicy; refused on every other profile). STRIPE_MODE=stripe or local-test forces one or the other.
 at:
   security:
     enabled: false
@@ -11,8 +13,12 @@ at:
       api-url: ${FGA_API_URL:http://localhost:8091}
   payments:
     stripe:
+      mode: ${STRIPE_MODE:auto}
       secret-key: ${STRIPE_SECRET_KEY:sk_test_replace_with_your_stripe_test_key}
       webhook-secret: ${STRIPE_WEBHOOK_SECRET:whsec_replace_with_stripe_listen_secret}
+    jobs:
+      # Locally matured settlement holds are transferred within a minute (every 15 minutes elsewhere).
+      settlement-cron: ${SETTLEMENT_CRON:0 * * * * *}
 logging:
   level:
     com.afrotransact: DEBUG

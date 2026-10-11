@@ -41,22 +41,18 @@ import com.stripe.param.SetupIntentCreateParams;
 import com.stripe.param.TransferCreateParams;
 import com.stripe.param.TransferReversalCreateParams;
 import com.stripe.param.checkout.SessionCreateParams;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 /**
  * stripe-java ({@link StripeClient}) implementation of {@link StripeGateway}. The client's API base is configurable
- * (tests point it at WireMock; every real environment uses api.stripe.com with a test or live key).
+ * (tests point it at WireMock; every real environment uses api.stripe.com with a test or live key). Wired by
+ * PaymentsConfiguration unless the local profile runs without a Stripe key (LocalTestPaymentsPolicy).
  */
-@Component
-class StripeJavaGateway implements StripeGateway {
+public class StripeJavaGateway implements StripeGateway {
 
     private final StripeClient client;
     private final String linkSuccessUrl;
 
-    StripeJavaGateway(StripeClient client,
-                      @Value("${at.payments.payment-links.success-url:http://localhost:3000/orders/paid}")
-                      String linkSuccessUrl) {
+    public StripeJavaGateway(StripeClient client, String linkSuccessUrl) {
         this.client = client;
         this.linkSuccessUrl = linkSuccessUrl;
     }
