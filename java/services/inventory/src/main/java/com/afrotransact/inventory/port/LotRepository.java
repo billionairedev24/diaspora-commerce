@@ -33,6 +33,12 @@ public interface LotRepository {
 
     Page<Lot> search(LotQuery query);
 
+    /**
+     * Lots physically at a node (on hand &gt; 0 and not written off) for a cycle count, by bin, SKU and expiry.
+     * Null filters are ignored; {@code binPrefix} matches the start of the bin.
+     */
+    List<Lot> findForCount(String nodeId, String sku, String binPrefix, String ownerOrg, int limit);
+
     /** Lots flagged for markdown (≤ 60 or ≤ 30 days), soonest expiry first. */
     List<Lot> findMarkdown(String ownerOrg, MarkdownFlag minimum);
 

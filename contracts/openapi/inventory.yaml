@@ -24,6 +24,9 @@ tags:
   description: 'Send stock to AfroTransact (S257): seller FBA plans with AT-FN unit labels and carton labels, tracking, FC
     receiving against the plan with discrepancies; AfroTransact Retail ASNs (S226). Sellers: inventory:inbound (own org);
     FC staff: inventory:receive.'
+- name: Cycle counts
+  description: Count the lots of a fulfilment centre, review variances and post them as audited ADJUST movements with reason
+    codes (S281). inventory:read to view, inventory:adjust to change.
 - name: Insights
   description: Seller FBA inventory (S067) and the staff inventory hub overview and recall traces (S066); inventory:read,
     sellers see their own organisation
@@ -71,6 +74,184 @@ paths:
                 items:
                   $ref: '#/components/schemas/Availability'
       security: []
+  /v1/cycle-counts:
+    get:
+      tags:
+      - Cycle counts
+      summary: List cycle counts, newest first (inventory:read)
+      operationId: listCycleCounts
+      parameters:
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - OPEN
+          - COUNTED
+          - POSTED
+          - CANCELLED
+      - name: sku
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CycleCountPage'
+    post:
+      tags:
+      - Cycle counts
+      summary: Start a cycle count of a node's lots (inventory:adjust)
+      description: Snapshots every lot on hand at the node (narrowed to a SKU, a bin prefix and / or an owner) as the expected
+        quantities. 422 inventory.cycle-count-empty when nothing is on hand, inventory.cycle-count-too-large over 500 lots.
+      operationId: startCycleCount
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartCycleCountRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CycleCount'
+  /v1/cycle-counts/{id}:
+    get:
+      tags:
+      - Cycle counts
+      summary: One cycle count with its lines and variances
+      operationId: getCycleCount
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CycleCount'
+  /v1/cycle-counts/{id}/cancel:
+    post:
+      tags:
+      - Cycle counts
+      summary: Cancel an open cycle count (inventory:adjust)
+      operationId: cancelCycleCount
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CycleCount'
+  /v1/cycle-counts/{id}/counts:
+    put:
+      tags:
+      - Cycle counts
+      summary: Record counted quantities (inventory:adjust)
+      description: 'A line can be counted again until the count is posted. Every line counted moves the count to COUNTED.
+        If-Match with the ETag: 409 inventory.version-mismatch.'
+      operationId: recordCycleCounts
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordCycleCountsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CycleCount'
+  /v1/cycle-counts/{id}/post:
+    post:
+      tags:
+      - Cycle counts
+      summary: Post the variances as ADJUST movements (inventory:adjust)
+      description: Every line must be counted and every variance needs a reason code (422 inventory.cycle-count-incomplete).
+        Each lot moves by counted − expected; a lot can never go below its reserved units (422 inventory.cycle-count-below-reserved).
+      operationId: postCycleCount
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CycleCount'
   /v1/fba/inventory:
     get:
       tags:
@@ -1545,6 +1726,26 @@ components:
           format: int32
           maximum: 100000
           minimum: 1
+        casePack:
+          type: integer
+          format: int32
+          description: Units per case; qty must be whole cases
+          maximum: 10000
+          minimum: 1
+        lotNo:
+          type: string
+          description: Batch / lot number on the packing list (GS1 AI 10)
+          maxLength: 59
+          minLength: 0
+        mfgDate:
+          type: string
+          format: date
+          description: Manufacture date of the batch (AI 11)
+        expDate:
+          type: string
+          format: date
+          description: Expiry / best-before date of the batch (AI 17); required by the consoles for food and perishable product
+            types
       required:
       - atin
     InboundPlanUpdateRequest:
@@ -1645,6 +1846,23 @@ components:
           type: integer
           format: int32
           description: Expected units still counted as inbound
+        casePack:
+          type: integer
+          format: int32
+          description: Units per case (null when not case-packed)
+        cases:
+          type: integer
+          format: int32
+          description: Cases announced (0 when not case-packed)
+        lotNo:
+          type: string
+          description: Announced batch (packing list)
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
     InboundShipment:
       type: object
       description: An FBA inbound plan or a retail ASN with what was received
@@ -1767,6 +1985,161 @@ components:
         trackingRegistered:
           type: boolean
           description: carrier-gateway tracks the number (scans update the shipment)
+    CycleCountEntry:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        countedQty:
+          type: integer
+          format: int32
+          maximum: 1000000
+          minimum: 0
+        reasonCode:
+          type: string
+          description: Required to post a line whose count differs from the system
+          enum:
+          - FOUND
+          - LOST
+          - DAMAGED
+          - MISPICK
+          - RECEIVING_ERROR
+          - THEFT
+          - DATA_ENTRY
+          - OTHER
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+    RecordCycleCountsRequest:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/CycleCountEntry'
+          maxItems: 500
+          minItems: 0
+      required:
+      - lines
+    CycleCount:
+      type: object
+      description: A count of one node's lots with expected and counted quantities
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        nodeId:
+          type: string
+        sku:
+          type: string
+        binPrefix:
+          type: string
+        ownerOrg:
+          type: string
+        blind:
+          type: boolean
+        status:
+          type: string
+          description: OPEN | COUNTED | POSTED | CANCELLED
+          enum:
+          - OPEN
+          - COUNTED
+          - POSTED
+          - CANCELLED
+        note:
+          type: string
+        lineCount:
+          type: integer
+          format: int32
+        countedLines:
+          type: integer
+          format: int64
+        varianceLines:
+          type: integer
+          format: int64
+        netVariance:
+          type: integer
+          format: int32
+          description: Σ counted − expected over counted lines
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/CycleCountLine'
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        countedAt:
+          type: string
+          format: date-time
+        postedBy:
+          type: string
+        postedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    CycleCountLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        lotId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        lotNo:
+          type: string
+        bin:
+          type: string
+        expDate:
+          type: string
+          format: date
+        expectedQty:
+          type: integer
+          format: int32
+          description: System quantity when the count started
+        countedQty:
+          type: integer
+          format: int32
+        variance:
+          type: integer
+          format: int32
+          description: counted − expected (0 until counted)
+        reasonCode:
+          type: string
+          enum:
+          - FOUND
+          - LOST
+          - DAMAGED
+          - MISPICK
+          - RECEIVING_ERROR
+          - THEFT
+          - DATA_ENTRY
+          - OTHER
+        note:
+          type: string
+        countedBy:
+          type: string
+        countedAt:
+          type: string
+          format: date-time
+        postedDelta:
+          type: integer
+          format: int32
+          description: Units adjusted when posted
     StorageSnapshotResult:
       type: object
       properties:
@@ -2546,6 +2919,37 @@ components:
       required:
       - carrier
       - service
+    StartCycleCountRequest:
+      type: object
+      description: 'Which lots to count: a node, optionally narrowed'
+      properties:
+        nodeId:
+          type: string
+          maxLength: 20
+          minLength: 0
+        sku:
+          type: string
+          maxLength: 64
+          minLength: 0
+        binPrefix:
+          type: string
+          description: Count only bins starting with this, e.g. A-01
+          maxLength: 30
+          minLength: 0
+        ownerOrg:
+          type: string
+          description: Count only one owner's stock (a seller org or the retail org)
+          maxLength: 80
+          minLength: 0
+        blind:
+          type: boolean
+          description: Hide system quantities from the counter
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - nodeId
     StorageDay:
       type: object
       description: Storage of one owner organisation on one UTC day (all fulfilment centres)
@@ -2985,6 +3389,22 @@ components:
           additionalProperties:
             type: integer
             format: int64
+    CycleCountPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CycleCount'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
     Availability:
       type: object
       properties:

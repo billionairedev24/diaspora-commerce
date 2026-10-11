@@ -29,13 +29,23 @@ public final class InboundCommands {
     }
 
     /**
-     * A SKU and quantity to send.
+     * A SKU and quantity to send, with the packing-list details of the batch.
      *
-     * @param atin catalog variant ATIN (required: unit labels and the Fulfilled-by-AfroTransact offer)
-     * @param sku  inventory SKU the units are stocked under (the offer's inventory SKU); default = the seller's
-     *             AT-FN unit label code, unique per seller and variant so stock never mixes
+     * @param atin     catalog variant ATIN (required: unit labels and the Fulfilled-by-AfroTransact offer)
+     * @param sku      inventory SKU the units are stocked under (the offer's inventory SKU); default = the seller's
+     *                 AT-FN unit label code, unique per seller and variant so stock never mixes
+     * @param casePack units per case (qty must be whole cases), or null
+     * @param lotNo    the batch on the packing list, or null
+     * @param mfgDate  manufacture date of the batch, or null
+     * @param expDate  expiry / best-before date of the batch, or null
      */
-    public record PlanLine(String atin, String sku, int qty) {
+    public record PlanLine(String atin, String sku, int qty, Integer casePack, String lotNo, LocalDate mfgDate,
+                           LocalDate expDate) {
+
+        /** A line without case pack or batch details. */
+        public PlanLine(String atin, String sku, int qty) {
+            this(atin, sku, qty, null, null, null, null);
+        }
     }
 
     /** One carton and its contents (units per SKU). */

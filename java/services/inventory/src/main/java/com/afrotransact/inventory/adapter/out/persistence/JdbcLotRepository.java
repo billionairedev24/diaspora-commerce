@@ -140,6 +140,28 @@ class JdbcLotRepository implements LotRepository {
     }
 
     @Override
+    public List<Lot> findForCount(String nodeId, String sku, String binPrefix, String ownerOrg, int limit) {
+        StringBuilder where = new StringBuilder(" where node_id = :node and qty_on_hand > 0 and status <> 'WRITTEN_OFF'");
+        Map<String, Object> params = new HashMap<>();
+        params.put("node", nodeId);
+        params.put("limit", limit);
+        if (sku != null) {
+            where.append(" and sku = :sku");
+            params.put("sku", sku);
+        }
+        if (binPrefix != null) {
+            where.append(" and bin like :bin");
+            params.put("bin", binPrefix.replace("%", "").replace("_", "\\_") + "%");
+        }
+        if (ownerOrg != null) {
+            where.append(" and owner_org = :owner");
+            params.put("owner", ownerOrg);
+        }
+        return jdbc.sql(SELECT + where + " order by bin nulls last, sku, exp_date nulls last, lot_no limit :limit")
+                .params(params).query(JdbcLotRepository::map).list();
+    }
+
+    @Override
     public List<Lot> findMarkdown(String ownerOrg, MarkdownFlag minimum) {
         List<String> flags = minimum == MarkdownFlag.WITHIN_30 ? List.of("WITHIN_30") : List.of("WITHIN_30", "WITHIN_60");
         Map<String, Object> params = new HashMap<>();

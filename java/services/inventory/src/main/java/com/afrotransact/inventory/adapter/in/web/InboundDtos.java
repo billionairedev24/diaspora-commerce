@@ -71,7 +71,7 @@ final class InboundDtos {
         InboundCommands.CreatePlan toCommand() {
             return new InboundCommands.CreatePlan(ownerOrg, name, nodeId, storageZone,
                     shipFrom == null ? null : shipFrom.toDomain(), expectedArrival,
-                    lines.stream().map(l -> new InboundCommands.PlanLine(l.atin(), l.sku(), l.qty())).toList(),
+                    lines.stream().map(PlanLineDto::toCommand).toList(),
                     boxes == null ? List.of() : boxes.stream().map(BoxDto::toCommand).toList());
         }
     }
@@ -83,8 +83,7 @@ final class InboundDtos {
 
         InboundCommands.CreatePlan toCommand() {
             return new InboundCommands.CreatePlan(null, null, null, null, null, null,
-                    lines == null ? List.of() : lines.stream().map(l -> new InboundCommands.PlanLine(l.atin(),
-                            l.sku(), l.qty())).toList(),
+                    lines == null ? List.of() : lines.stream().map(PlanLineDto::toCommand).toList(),
                     boxes == null ? List.of() : boxes.stream().map(BoxDto::toCommand).toList());
         }
     }
@@ -93,7 +92,18 @@ final class InboundDtos {
     record PlanLineDto(@NotBlank @Size(max = 10) String atin,
                        @Schema(description = "Inventory SKU (the FBA offer's inventory SKU); default: your AT-FN unit "
                                + "label code") @Size(max = 64) String sku,
-                       @Min(1) @Max(100_000) int qty) {
+                       @Min(1) @Max(100_000) int qty,
+                       @Schema(description = "Units per case; qty must be whole cases") @Min(1) @Max(10_000)
+                       Integer casePack,
+                       @Schema(description = "Batch / lot number on the packing list (GS1 AI 10)") @Size(max = 59)
+                       String lotNo,
+                       @Schema(description = "Manufacture date of the batch (AI 11)") LocalDate mfgDate,
+                       @Schema(description = "Expiry / best-before date of the batch (AI 17); required by the "
+                               + "consoles for food and perishable product types") LocalDate expDate) {
+
+        InboundCommands.PlanLine toCommand() {
+            return new InboundCommands.PlanLine(atin, sku, qty, casePack, lotNo, mfgDate, expDate);
+        }
     }
 
     @Schema(name = "InboundBoxInput")
@@ -152,11 +162,16 @@ final class InboundDtos {
     record LineResponse(int lineNo, String sku, String atin,
                         @Schema(description = "AT-FN unit label code (seller-specific)") String unitLabel,
                         int expectedQty, int receivedGood, int receivedDamaged, int shortQty, int overQty,
-                        @Schema(description = "Expected units still counted as inbound") int inboundOpen) {
+                        @Schema(description = "Expected units still counted as inbound") int inboundOpen,
+                        @Schema(description = "Units per case (null when not case-packed)") Integer casePack,
+                        @Schema(description = "Cases announced (0 when not case-packed)") int cases,
+                        @Schema(description = "Announced batch (packing list)") String lotNo, LocalDate mfgDate,
+                        LocalDate expDate) {
 
         static LineResponse of(InboundLine l) {
             return new LineResponse(l.lineNo(), l.sku(), l.atin(), l.unitLabel(), l.expectedQty(), l.receivedGood(),
-                    l.receivedDamaged(), l.shortQty(), l.overQty(), l.inboundOpen());
+                    l.receivedDamaged(), l.shortQty(), l.overQty(), l.inboundOpen(), l.batch().casePack(),
+                    l.batch().cases(l.expectedQty()), l.batch().lotNo(), l.batch().mfgDate(), l.batch().expDate());
         }
     }
 

@@ -6,6 +6,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -17,7 +18,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
+import com.afrotransact.inventory.domain.ExpectedBatch;
 import com.afrotransact.inventory.domain.FcAssignment;
 import com.afrotransact.inventory.domain.FcAssignmentPolicy;
 import com.afrotransact.inventory.domain.FcCandidate;
@@ -28,6 +31,7 @@ import com.afrotransact.inventory.domain.InboundSource;
 import com.afrotransact.inventory.domain.InboundStatus;
 import com.afrotransact.inventory.domain.InventoryRuleViolation;
 import com.afrotransact.inventory.domain.InventoryStateConflict;
+import com.afrotransact.inventory.domain.Lot;
 import com.afrotransact.inventory.domain.MovementType;
 import com.afrotransact.inventory.domain.Node;
 import com.afrotransact.inventory.domain.NodeKind;
@@ -54,6 +58,8 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
 
     static final String CONSUMER_RETAIL = "inventory-retail-shipments";
     static final int MAX_LINES = 200;
+    static final int MAX_CASE_PACK = 10_000;
+    private static final Pattern PLAN_LOT_NO = Pattern.compile("[A-Z0-9][A-Z0-9._/-]{0,58}");
     static final int MAX_BOXES = 200;
     static final int MAX_COPIES_PER_LABEL = 1000;
     /** FBA units are the seller's: no landed cost on AfroTransact's books. */
@@ -303,8 +309,13 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
             for (int i = 0; i < c.lines().size(); i++) {
                 InboundCommands.ReceiveLine l = c.lines().get(i);
                 String sku = resolveSku(s, l, i);
-                lines.add(new ReceiveCommand.Line(sku, l.lotNo() == null || l.lotNo().isBlank() ? receiptRef
-                        : l.lotNo(), l.mfgDate(), l.expDate(), l.qtyGood(), l.qtyDamaged(), l.bin(), 0,
+                // The packing list's batch and dates apply unless the receiver recorded what is on the case.
+                ExpectedBatch asn = announced(s, sku);
+                String lotNo = l.lotNo() != null && !l.lotNo().isBlank() ? l.lotNo()
+                        : asn.lotNo() != null ? asn.lotNo() : receiptRef;
+                LocalDate mfg = l.mfgDate() != null ? l.mfgDate() : asn.mfgDate();
+                LocalDate exp = l.expDate() != null ? l.expDate() : asn.expDate();
+                lines.add(new ReceiveCommand.Line(sku, lotNo, mfg, exp, l.qtyGood(), l.qtyDamaged(), l.bin(), 0,
                         FBA_COST_CURRENCY, null, l.holdReason()));
             }
             result = receiving.receive(new ReceiveCommand(receiptRef, s.nodeId(), s.ownerOrg(), s.number(), lines),
@@ -524,7 +535,8 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
             if (!skus.add(sku)) {
                 errors.put(p + "sku", "Duplicate SKU in this plan; add the quantities together");
             }
-            lines.add(new InboundLine(lines.size() + 1, sku, atin, code, Math.max(l.qty(), 0), 0, 0, 0));
+            ExpectedBatch batch = expectedBatch(l, p, errors);
+            lines.add(new InboundLine(lines.size() + 1, sku, atin, code, Math.max(l.qty(), 0), 0, 0, 0, batch));
         }
         if (!errors.isEmpty()) {
             throw new InventoryRuleViolation("inventory.invalid-request", "Invalid inbound plan", errors);
@@ -627,6 +639,42 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
                         + " belongs to another organisation; FBA stock is never mixed");
             }
         }
+    }
+
+    /** Case pack and the packing-list batch of a plan line; problems go into {@code errors}. */
+    private ExpectedBatch expectedBatch(InboundCommands.PlanLine l, String p, Map<String, String> errors) {
+        int before = errors.size();
+        if (l.casePack() != null) {
+            if (l.casePack() < 1 || l.casePack() > MAX_CASE_PACK) {
+                errors.put(p + "casePack", "1 to " + MAX_CASE_PACK + " units per case");
+            } else if (l.qty() % l.casePack() != 0) {
+                errors.put(p + "qty", "Send whole cases: a multiple of " + l.casePack());
+            }
+        }
+        String lotNo = l.lotNo() == null || l.lotNo().isBlank() ? null : l.lotNo().trim().toUpperCase(Locale.ROOT);
+        if (lotNo != null && (!PLAN_LOT_NO.matcher(lotNo).matches() || lotNo.endsWith(Lot.DAMAGED_SUFFIX))) {
+            errors.put(p + "lotNo", "Letters, digits, . _ / - (max 59), not ending in " + Lot.DAMAGED_SUFFIX);
+        }
+        LocalDate today = LocalDate.now(clock);
+        if (l.mfgDate() != null && l.mfgDate().isAfter(today)) {
+            errors.put(p + "mfgDate", "Cannot be in the future");
+        }
+        if (l.expDate() != null && l.expDate().isBefore(today)) {
+            errors.put(p + "expDate", "This batch has already expired");
+        }
+        if (l.mfgDate() != null && l.expDate() != null && !l.mfgDate().isBefore(l.expDate())) {
+            errors.put(p + "expDate", "Must be after the manufacture date");
+        }
+        if (errors.size() > before) {
+            return ExpectedBatch.NONE;
+        }
+        return new ExpectedBatch(l.casePack(), lotNo, l.mfgDate(), l.expDate());
+    }
+
+    /** The plan line a received SKU belongs to (its announced batch fills a receipt line without one). */
+    private static ExpectedBatch announced(InboundShipment s, String sku) {
+        return s.lines().stream().filter(x -> x.sku().equals(sku)).findFirst().map(InboundLine::batch)
+                .orElse(ExpectedBatch.NONE);
     }
 
     private String resolveSku(InboundShipment s, InboundCommands.ReceiveLine l, int i) {

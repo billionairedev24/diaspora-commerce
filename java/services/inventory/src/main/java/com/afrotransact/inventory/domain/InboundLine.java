@@ -10,14 +10,23 @@ package com.afrotransact.inventory.domain;
  * @param receivedGood    sellable units received so far
  * @param receivedDamaged damaged units received so far (quarantined as -DMG lots)
  * @param inboundOpen     expected units still counted in the position's inbound bucket
+ * @param batch           case pack and the announced batch (lot, made and expiry dates); never null
  */
 public record InboundLine(int lineNo, String sku, String atin, String unitLabel, int expectedQty, int receivedGood,
-                          int receivedDamaged, int inboundOpen) {
+                          int receivedDamaged, int inboundOpen, ExpectedBatch batch) {
 
     public InboundLine {
         if (expectedQty < 0 || receivedGood < 0 || receivedDamaged < 0 || inboundOpen < 0) {
             throw new InventoryRuleViolation("inventory.invalid-quantity", "Inbound quantities cannot be negative");
         }
+        batch = batch == null ? ExpectedBatch.NONE : batch;
+    }
+
+    /** A line without an announced batch. */
+    public InboundLine(int lineNo, String sku, String atin, String unitLabel, int expectedQty, int receivedGood,
+                       int receivedDamaged, int inboundOpen) {
+        this(lineNo, sku, atin, unitLabel, expectedQty, receivedGood, receivedDamaged, inboundOpen,
+                ExpectedBatch.NONE);
     }
 
     public int received() {
@@ -35,16 +44,16 @@ public record InboundLine(int lineNo, String sku, String atin, String unitLabel,
     }
 
     public InboundLine withUnitLabel(String code) {
-        return new InboundLine(lineNo, sku, atin, code, expectedQty, receivedGood, receivedDamaged, inboundOpen);
+        return new InboundLine(lineNo, sku, atin, code, expectedQty, receivedGood, receivedDamaged, inboundOpen, batch);
     }
 
     public InboundLine withInboundOpen(int open) {
-        return new InboundLine(lineNo, sku, atin, unitLabel, expectedQty, receivedGood, receivedDamaged, open);
+        return new InboundLine(lineNo, sku, atin, unitLabel, expectedQty, receivedGood, receivedDamaged, open, batch);
     }
 
     /** Records received units; returns the line with {@code consumed} expected units taken off its inbound. */
     public InboundLine receive(int good, int damaged, int consumed) {
         return new InboundLine(lineNo, sku, atin, unitLabel, expectedQty, receivedGood + good,
-                receivedDamaged + damaged, inboundOpen - consumed);
+                receivedDamaged + damaged, inboundOpen - consumed, batch);
     }
 }

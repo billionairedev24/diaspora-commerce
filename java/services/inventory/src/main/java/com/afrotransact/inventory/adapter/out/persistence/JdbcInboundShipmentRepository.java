@@ -5,12 +5,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.inventory.domain.ExpectedBatch;
 import com.afrotransact.inventory.domain.InboundBox;
 import com.afrotransact.inventory.domain.InboundLine;
 import com.afrotransact.inventory.domain.InboundShipment;
@@ -142,13 +144,16 @@ class JdbcInboundShipmentRepository implements InboundShipmentRepository {
         for (InboundLine l : s.lines()) {
             jdbc.sql("""
                     insert into inbound_shipment_line (shipment_id, line_no, sku, atin, unit_label, expected_qty,
-                        received_good, received_damaged, inbound_open)
-                    values (:id, :lineNo, :sku, :atin, :label, :expected, :good, :damaged, :open)
+                        received_good, received_damaged, inbound_open, case_pack, lot_no, mfg_date, exp_date)
+                    values (:id, :lineNo, :sku, :atin, :label, :expected, :good, :damaged, :open, :casePack, :lotNo,
+                        :mfgDate, :expDate)
                     """)
                     .param("id", s.id()).param("lineNo", l.lineNo()).param("sku", l.sku()).param("atin", l.atin())
                     .param("label", l.unitLabel()).param("expected", l.expectedQty())
                     .param("good", l.receivedGood()).param("damaged", l.receivedDamaged())
-                    .param("open", l.inboundOpen()).update();
+                    .param("open", l.inboundOpen()).param("casePack", l.batch().casePack())
+                    .param("lotNo", l.batch().lotNo()).param("mfgDate", l.batch().mfgDate())
+                    .param("expDate", l.batch().expDate()).update();
         }
         for (InboundBox b : s.boxes()) {
             jdbc.sql("""
@@ -169,7 +174,10 @@ class JdbcInboundShipmentRepository implements InboundShipmentRepository {
                 select * from inbound_shipment_line where shipment_id = :id order by line_no
                 """).param("id", s.id()).query((rs, n) -> new InboundLine(rs.getInt("line_no"), rs.getString("sku"),
                 rs.getString("atin"), rs.getString("unit_label"), rs.getInt("expected_qty"),
-                rs.getInt("received_good"), rs.getInt("received_damaged"), rs.getInt("inbound_open"))).list();
+                rs.getInt("received_good"), rs.getInt("received_damaged"), rs.getInt("inbound_open"),
+                new ExpectedBatch(rs.getObject("case_pack", Integer.class), rs.getString("lot_no"),
+                        rs.getObject("mfg_date", LocalDate.class), rs.getObject("exp_date", LocalDate.class))))
+                .list();
         List<InboundBox> boxes = jdbc.sql("""
                 select box_no, lpn, contents::text as contents, weight_lb, length_in, width_in, height_in, received_at
                 from inbound_box where shipment_id = :id order by box_no
