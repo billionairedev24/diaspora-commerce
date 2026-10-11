@@ -31,7 +31,7 @@ function ItemSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
   const link = useHubMutation(() => api.retail.linkAtin(item?.id ?? '', atin.trim().toUpperCase(), item?.version), (i) => `${i.sku} linked to ${i.atin ?? ''}.`, () => setAtin(''));
   const listing = useHubMutation((status: 'LIVE' | 'PAUSED') => api.retail.setListing(item?.id ?? '', status, item?.version), (i) => (i.listingStatus === 'LIVE' ? `${i.sku} is live: the storefront offer now sells this SKU’s lots.` : `${i.sku} paused: off sale.`));
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={item?.name ?? 'Item'} className="w-[min(100vw,560px)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={item?.name ?? 'Item'} width={560}>
       {items.isPending ? <Spinner /> : null}
       {item ? (
         <div className="flex flex-col gap-4" data-testid="item-sheet">
@@ -140,7 +140,7 @@ function ItemsPanel() {
         onExport={(req) => exportDataset(qc, req)}
         exportsHref="/exports"
       />
-      <Sheet open={creating} onOpenChange={setCreating} title="New AfroTransact product" className="w-[min(100vw,720px)]">
+      <Sheet open={creating} onOpenChange={setCreating} title="New AfroTransact product" width={720}>
         <ItemForm
           onDone={(i) => {
             setCreating(false);
@@ -192,7 +192,7 @@ function ReceiptsPanel() {
         onExport={(req) => exportDataset(qc, req)}
         exportsHref="/exports"
       />
-      <Sheet open={id !== null} onOpenChange={(o) => !o && setId(null)} title="Goods receipt" className="w-[min(100vw,820px)]">
+      <Sheet open={id !== null} onOpenChange={(o) => !o && setId(null)} title="Goods receipt" width={820}>
         {id ? <RetailReceiptScreen id={id} /> : null}
       </Sheet>
     </>
@@ -293,7 +293,7 @@ function SuppliersPanel() {
       onExport={(req) => exportDataset(qc, req)}
       exportsHref="/exports"
     />
-    <Sheet open={creating} onOpenChange={setCreating} title="New supplier" className="w-[min(100vw,560px)]">
+    <Sheet open={creating} onOpenChange={setCreating} title="New supplier" width={560}>
       <SupplierForm onDone={() => setCreating(false)} />
     </Sheet>
     </>

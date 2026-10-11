@@ -197,7 +197,7 @@ function PlanSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
   const track = useFbaMutation(() => api.fba.setTracking(s?.id ?? '', carrier.trim(), tracking.trim()), (x) => `Tracking saved on ${x.number}.`);
   const edit = can('inventory');
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={s ? `Shipment ${s.number}` : 'Shipment'} className="w-[min(100vw,720px)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={s ? `Shipment ${s.number}` : 'Shipment'} width={720}>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {s ? (
@@ -322,7 +322,7 @@ export function FbaShipments() {
         onExport={exportDataset}
         pollExport={pollExport}
       />
-      <Sheet open={creating} onOpenChange={setCreating} title="Send to AfroTransact" className="w-[min(100vw,720px)]">
+      <Sheet open={creating} onOpenChange={setCreating} title="Send to AfroTransact" width={720}>
         <PlanForm
           onDone={(s) => {
             setCreating(false);

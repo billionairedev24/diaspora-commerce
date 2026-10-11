@@ -71,12 +71,14 @@ export interface SheetProps extends Omit<DialogProps, 'width'> {
    * leave the page usable: rows, filters and buttons behind them keep working; Esc or the close button closes them.
    */
   modal?: boolean;
+  /** Width in px on wide screens (default 440); never wider than the viewport. */
+  width?: number;
 }
 
 const keepOpen = (e: Event) => e.preventDefault();
 
 /** Side sheet / drawer (record details, Lola, mobile navigation). */
-export function Sheet({ open, onOpenChange, title, description, header, children, side = 'right', modal = side === 'left', closeLabel = 'Close', className }: SheetProps) {
+export function Sheet({ open, onOpenChange, title, description, header, children, side = 'right', modal = side === 'left', closeLabel = 'Close', className, width }: SheetProps) {
   const returnFocus = useReturnFocus(open);
   return (
     <Root open={open} onOpenChange={onOpenChange} modal={modal}>
@@ -86,6 +88,7 @@ export function Sheet({ open, onOpenChange, title, description, header, children
           className={cx(styles.sheet, styles[side], !modal && styles.docked, className)}
           onCloseAutoFocus={returnFocus}
           onInteractOutside={modal ? undefined : keepOpen}
+          style={width ? ({ '--sheet-width': `${width}px` } as CSSProperties) : undefined}
         >
           <div className={styles.sheetHead}>
             {header}

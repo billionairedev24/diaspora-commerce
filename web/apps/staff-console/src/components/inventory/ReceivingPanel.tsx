@@ -230,7 +230,10 @@ export function ReceivingPanel() {
   const { retailView } = useHubAccess();
   const openGrns = useQuery({ ...inventoryHubQueries.receipts(api, { status: 'OPEN', page: 0, size: 50 }), enabled: retailView });
   const arriving = [...(receiving.data?.items ?? []), ...(shipped.data?.items ?? [])];
-  const current = arriving.find((s) => s.id === receive);
+  // The open shipment is read by id: it moves from SHIPPED to RECEIVING (and CLOSED) while it is counted, and the two
+  // lists refetch one after the other, so looking it up in them would unmount the counting screen and its results.
+  const opened = useQuery({ ...inventoryHubQueries.shipment(api, receive ?? ''), enabled: receive !== null });
+  const current = opened.data ?? arriving.find((s) => s.id === receive);
   const retailShipments = useQuery({ ...inventoryHubQueries.retailShipments(api), enabled: retailView });
   const openGrn = useHubMutation((shipmentRef: string) => {
     const sh = retailShipments.data?.items.find((x) => x.reference === shipmentRef);

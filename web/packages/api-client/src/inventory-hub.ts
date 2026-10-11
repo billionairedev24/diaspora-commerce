@@ -292,6 +292,9 @@ export const RetailItemSchema = z.object({
 export type RetailItem = z.infer<typeof RetailItemSchema>;
 export const RetailItemPageSchema = pageOf(RetailItemSchema);
 
+/** The organisation that owns AfroTransact Retail (1P) stock: the stock owner of staff inbound shipments by default. */
+export const RETAIL_ORG = 'org_afrotransact_retail';
+
 /** Customs / shipping document states (retail DocumentRequest): MISSING blocks departure, HOLD blocks customs clearance. */
 export const SHIPMENT_DOCUMENT_STATUSES = ['MISSING', 'PENDING', 'OK', 'HOLD'] as const;
 export type ShipmentDocumentStatus = (typeof SHIPMENT_DOCUMENT_STATUSES)[number];

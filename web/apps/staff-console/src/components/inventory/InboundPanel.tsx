@@ -7,6 +7,7 @@ import {
   inboundStep,
   inventoryHubQueries,
   requiresExpiry,
+  RETAIL_ORG,
   type RetailItem,
   validateInboundLine
 } from '@afrotransact/api-client';
@@ -123,7 +124,7 @@ function InboundForm({ onDone }: { onDone: (s: InboundShipment) => void }) {
         create.mutate({
           name: name.trim() || undefined,
           nodeId,
-          ownerOrg: owner.trim() || undefined,
+          ownerOrg: owner.trim() || RETAIL_ORG,
           expectedArrival: eta || undefined,
           lines: lines.map((l) => {
             const item = items.get(l.itemSku);
@@ -205,7 +206,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
   const close = useHubMutation(() => api.close(s?.id ?? ''), (x) => `${x.number} closed${x.discrepancy ? ' with discrepancies' : ''}.`);
   const track = useHubMutation(() => api.setTracking(s?.id ?? '', carrier.trim(), tracking.trim()), (x) => `Tracking saved on ${x.number}.`);
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={s ? `Inbound ${s.number}` : 'Inbound shipment'} className="w-[min(100vw,760px)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={s ? `Inbound ${s.number}` : 'Inbound shipment'} width={760}>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {s ? (
@@ -370,7 +371,7 @@ export function InboundPanel() {
         onExport={(req) => exportDataset(qc, req)}
         exportsHref="/exports"
       />
-      <Sheet open={creating} onOpenChange={setCreating} title="New inbound shipment" className="w-[min(100vw,760px)]">
+      <Sheet open={creating} onOpenChange={setCreating} title="New inbound shipment" width={760}>
         <InboundForm
           onDone={(s) => {
             setCreating(false);

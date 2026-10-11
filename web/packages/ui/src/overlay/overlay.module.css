@@ -42,7 +42,7 @@
   top: 0;
   bottom: 0;
   z-index: var(--at-z-drawer);
-  width: min(440px, 100%);
+  width: min(var(--sheet-width, 440px), 100%);
   display: flex;
   flex-direction: column;
   background: var(--at-color-surface);

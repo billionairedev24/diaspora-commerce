@@ -7,7 +7,7 @@ import { ClipboardText } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -30,8 +30,14 @@ function CountSheet({ id, onClose }: { id: string | null; onClose: () => void })
   const c = q.data;
   const [entries, setEntries] = useState<Record<number, Entry>>({});
   const [review, setReview] = useState(false);
+  // Edits made while a save is in flight must survive the reload it triggers: entries are reset from the server only for
+  // a new count or when nothing was edited since the last save started.
+  const dirty = useRef(false);
+  const shownId = useRef<string | null>(null);
   useEffect(() => {
     if (!c) return;
+    if (dirty.current && shownId.current === c.id) return;
+    shownId.current = c.id;
     setEntries(Object.fromEntries(c.lines.map((l) => [l.lineNo, { counted: l.countedQty === null || l.countedQty === undefined ? '' : String(l.countedQty), reason: l.reasonCode ?? '', note: l.note ?? '' }])));
   }, [c?.id, c?.version]); // eslint-disable-line react-hooks/exhaustive-deps
   const editable = Boolean(c && inventoryEdit && (c.status === 'OPEN' || c.status === 'COUNTED'));
@@ -46,23 +52,28 @@ function CountSheet({ id, onClose }: { id: string | null; onClose: () => void })
   });
   const filled = c ? c.lines.filter((l) => entries[l.lineNo]?.counted !== '' && entries[l.lineNo]?.counted !== undefined) : [];
   const save = useHubMutation(
-    () =>
-      api.recordCounts(
+    () => {
+      dirty.current = false;
+      return api.recordCounts(
         c?.id ?? '',
         filled.map((l) => {
           const e = entries[l.lineNo] as Entry;
           return { lineNo: l.lineNo, countedQty: Number(e.counted), reasonCode: e.reason || undefined, note: e.note.trim() || undefined };
         }),
         c?.version
-      ),
+      );
+    },
     (x) => `${x.number}: ${x.countedLines} of ${x.lineCount} lines counted.`,
     () => setReview(true)
   );
   const post = useHubMutation(() => api.postCount(c?.id ?? '', c?.version), (x) => `${x.number} posted: ${x.varianceLines} adjustments (net ${x.netVariance > 0 ? '+' : ''}${x.netVariance}).`);
   const cancel = useHubMutation(() => api.cancelCount(c?.id ?? '', c?.version), (x) => `${x.number} cancelled.`);
-  const set = (lineNo: number, patch: Partial<Entry>) => setEntries((e) => ({ ...e, [lineNo]: { ...(e[lineNo] ?? { counted: '', reason: '', note: '' }), ...patch } }));
+  const set = (lineNo: number, patch: Partial<Entry>) => {
+    dirty.current = true;
+    setEntries((e) => ({ ...e, [lineNo]: { ...(e[lineNo] ?? { counted: '', reason: '', note: '' }), ...patch } }));
+  };
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={c ? `Cycle count ${c.number}` : 'Cycle count'} className="w-[min(100vw,820px)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={c ? `Cycle count ${c.number}` : 'Cycle count'} width={820}>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {c ? (

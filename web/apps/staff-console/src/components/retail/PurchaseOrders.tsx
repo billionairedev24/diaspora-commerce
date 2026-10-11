@@ -188,7 +188,7 @@ export function PoSheet({ id, onClose }: { id: string | null; onClose: () => voi
   );
   const step = po ? LIFECYCLE.indexOf(po.status === 'PARTIALLY_RECEIVED' ? 'CONFIRMED' : po.status) : -1;
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={po ? `Purchase order ${po.number}` : 'Purchase order'} className="w-[min(100vw,820px)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={po ? `Purchase order ${po.number}` : 'Purchase order'} width={820}>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {po ? (
@@ -409,7 +409,7 @@ export function PurchaseOrdersPanel() {
         onExport={(req) => exportDataset(qc, req)}
         exportsHref="/exports"
       />
-      <Sheet open={creating} onOpenChange={setCreating} title="New purchase order" className="w-[min(100vw,760px)]">
+      <Sheet open={creating} onOpenChange={setCreating} title="New purchase order" width={760}>
         <PoForm
           onDone={(po) => {
             setCreating(false);
