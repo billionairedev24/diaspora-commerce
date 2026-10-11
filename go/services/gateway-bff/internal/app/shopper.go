@@ -323,6 +323,7 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 		if ld := sh.LocalDelivery; ld != nil {
 			d.LocalDelivery = &domain.OrderLocalDelivery{RoadMiles: ld.RoadMiles, DurationMinutes: ld.DurationMinutes, ChargeMinor: ld.CustomerChargeMinor}
 		}
+		d.Pickup = s.pickupOf(ctx, sh)
 		for _, l := range sh.Lines {
 			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, Title: l.Title,
 				ImageURL: optStr(l.ImageURL), Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, ItemsMinor: l.ItemsMinor})
@@ -331,6 +332,20 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 	}
 	s.withPayment(ctx, c, o.ID, &out)
 	return out, nil
+}
+
+// pickupOf reads the pickup point of a pickup shipment from carrier-gateway (best effort: nil when unreadable).
+func (s *customerOrdersServiceImpl) pickupOf(ctx context.Context, sh port.UpShipment) *domain.OrderPickup {
+	if !strings.EqualFold(sh.DeliveryMethod, "PICKUP") || sh.PickupLocationID == "" || s.d.Delivery == nil {
+		return nil
+	}
+	l, err := s.d.Delivery.PickupLocation(ctx, sh.PickupLocationID)
+	if err != nil {
+		s.d.log().WarnContext(ctx, "pickup location unavailable", "error", err, "pickupLocationId", sh.PickupLocationID)
+		return nil
+	}
+	pt := pickupPoint(l, nil)
+	return &domain.OrderPickup{ID: pt.ID, Name: pt.Name, Address: pt.Address, Hours: pt.Hours, Ready: pt.Ready, SetBy: pt.SetBy}
 }
 
 // withPayment adds charged/refunded amounts and per-line refunds from payments (best effort). The order was read

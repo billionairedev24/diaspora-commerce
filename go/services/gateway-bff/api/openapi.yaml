@@ -3277,6 +3277,8 @@ components:
                         hours: {type: string}
                         ready: {type: string}
                         setBy: {type: string, enum: [platform, seller]}
+                        kind: {type: string, enum: [PLATFORM_COUNTER, LOCKER, SELLER], description: carrier-gateway pickup location kind}
+                        distanceMiles: {type: [number, 'null'], description: Straight-line miles from the delivery address; null when either isn't located}
         addresses: {type: array, items: {$ref: '#/components/schemas/Address'}}
         paymentMethods: {type: array, items: {$ref: '#/components/schemas/PaymentMethod'}}
         subtotalMinor: {type: integer}
@@ -3630,6 +3632,19 @@ components:
               localDelivery:
                 oneOf: [{$ref: '#/components/schemas/OrderLocalDelivery'}, {type: 'null'}]
                 description: AfroTransact Delivery from the seller's store (S255); null for other shipments
+              pickup:
+                description: Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments
+                oneOf:
+                  - type: 'null'
+                  - type: object
+                    required: [id, name, address, hours, ready, setBy]
+                    properties:
+                      id: {type: string}
+                      name: {type: string}
+                      address: {type: string}
+                      hours: {type: string}
+                      ready: {type: string}
+                      setBy: {type: string, enum: [platform, seller]}
         payment: {$ref: '#/components/schemas/OrderPayment'}
     OrderTracking:
       type: object

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -49,7 +51,10 @@ func hoursLabel(l port.PickupLocation) string {
 	return fmt.Sprintf("%s %s–%s", strings.Join(days, ", "), first.Open, first.Close)
 }
 
-func pickupPoint(l port.PickupLocation) domain.PickupPoint {
+// pickupRadiusMiles is how far a pickup point may be from the delivery address to be offered (straight line).
+const pickupRadiusMiles = 60.0
+
+func pickupPoint(l port.PickupLocation, addr *port.IdentityAddress) domain.PickupPoint {
 	setBy := "platform"
 	if l.Kind == "SELLER" {
 		setBy = "seller"
@@ -58,8 +63,63 @@ func pickupPoint(l port.PickupLocation) domain.PickupPoint {
 	if l.ReadyHours > 0 {
 		ready = fmt.Sprintf("Ready about %d h after you order", l.ReadyHours)
 	}
-	return domain.PickupPoint{ID: l.ID, Name: l.Name, Hours: hoursLabel(l), Ready: ready, SetBy: setBy,
+	p := domain.PickupPoint{ID: l.ID, Name: l.Name, Hours: hoursLabel(l), Ready: ready, SetBy: setBy, Kind: l.Kind,
 		Address: strings.TrimSpace(fmt.Sprintf("%s, %s, %s %s", l.Address.Line1, l.Address.City, l.Address.State, l.Address.PostalCode))}
+	if l.Position != nil && addr != nil && addr.Latitude != nil && addr.Longitude != nil {
+		d := math.Round(domain.HaversineMiles(*addr.Latitude, *addr.Longitude, l.Position.Lat, l.Position.Lng)*10) / 10
+		p.DistanceMiles = &d
+	}
+	return p
+}
+
+// nearby: within pickupRadiusMiles of the address when both are located, else in the address's 3-digit ZIP area.
+func nearby(p domain.PickupPoint, l port.PickupLocation, zip string) bool {
+	if p.DistanceMiles != nil {
+		return *p.DistanceMiles <= pickupRadiusMiles
+	}
+	return len(zip) >= 3 && strings.HasPrefix(l.Address.PostalCode, zip[:3])
+}
+
+// maxPickupPoints is how many pickup points one package lists (nearest first).
+const maxPickupPoints = 5
+
+// pickupPointsFor lists the active pickup points a package can be collected from, nearest first: AfroTransact
+// counters and lockers (staff-configured, kind PLATFORM_COUNTER / LOCKER) for platform-fulfilled packages
+// (AfroTransact Retail and Fulfilled by AfroTransact); the seller's own locations (kind SELLER: its store address or
+// another place it set up in Seller Center) for the seller's packages.
+func pickupPointsFor(p domain.CheckoutPackage, platform, own []port.PickupLocation, addr *port.IdentityAddress, zip string) []domain.PickupPoint {
+	src, isFC := own, p.Fulfilment == domain.FulfilledByAfroTransact
+	if isFC {
+		src = platform
+	}
+	points := []domain.PickupPoint{}
+	for _, l := range src {
+		if !l.Active || (isFC && l.Kind == "SELLER") || (!isFC && (l.Kind != "SELLER" || l.OwnerOrg != p.Seller.ID)) {
+			continue
+		}
+		if pt := pickupPoint(l, addr); nearby(pt, l, zip) {
+			points = append(points, pt)
+		}
+	}
+	sort.SliceStable(points, func(i, j int) bool {
+		a, b := points[i].DistanceMiles, points[j].DistanceMiles
+		return a != nil && (b == nil || *a < *b)
+	})
+	if len(points) > maxPickupPoints {
+		points = points[:maxPickupPoints]
+	}
+	return points
+}
+
+// addPickupOption offers "Pick up" (no shipping charge) on a package with pickup points.
+func addPickupOption(p *domain.CheckoutPackage, points []domain.PickupPoint) {
+	if len(points) == 0 {
+		return
+	}
+	p.PickupPoints = points
+	if !hasOption(*p, "pickup") {
+		p.DeliveryOptions = append(p.DeliveryOptions, domain.DeliveryOption{Key: "pickup", Label: "Pick up", ETA: points[0].Ready, Free: true})
+	}
 }
 
 func hasOption(p domain.CheckoutPackage, key string) bool {
@@ -110,7 +170,7 @@ func (s *checkoutPaymentServiceImpl) Summary(ctx context.Context, c *domain.Call
 			atd = atd || z.OwnerID == fc
 		}
 	}
-	platformPoints, err := s.d.Delivery.PickupLocations(ctx, "", zip[:3])
+	platformPoints, err := s.d.Delivery.PickupLocations(ctx, "", zip[:2])
 	if err != nil {
 		log.WarnContext(ctx, "pickup locations unavailable", "error", err)
 	}
@@ -118,40 +178,29 @@ func (s *checkoutPaymentServiceImpl) Summary(ctx context.Context, c *domain.Call
 	var offers []port.PromiseOffer
 	for i := range sum.Packages {
 		p := &sum.Packages[i]
-		if p.Fulfilment == domain.AfroTransactDelivery {
-			continue // priced by distance above; the driver collects at the store, no pickup points
-		}
 		isFC := p.Fulfilment == domain.FulfilledByAfroTransact
-		carrierFree := len(p.DeliveryOptions) > 0 && p.DeliveryOptions[0].Free
-		var points []domain.PickupPoint
-		if isFC {
-			for _, l := range platformPoints {
-				if l.Active && l.Kind != "SELLER" {
-					points = append(points, pickupPoint(l))
-				}
-			}
-			if atd && !hasOption(*p, "afrotransact_delivery") {
-				o := domain.DeliveryOption{Key: "afrotransact_delivery", Label: "AfroTransact Delivery", ETA: "Same or next day", FeeMinor: AfroTransactDeliveryFeeMinor}
-				if carrierFree {
-					o.FeeMinor, o.Free = 0, true
-				}
-				p.DeliveryOptions = append(p.DeliveryOptions, o)
-			}
-		} else {
-			own, err := s.d.Delivery.PickupLocations(ctx, p.Seller.ID, zip[:3])
-			if err != nil {
+		var own []port.PickupLocation
+		if !isFC {
+			if own, err = s.d.Delivery.PickupLocations(ctx, p.Seller.ID, ""); err != nil {
 				log.WarnContext(ctx, "seller pickup locations unavailable", "error", err)
 			}
-			for _, l := range own {
-				if l.Active && l.OwnerOrg == p.Seller.ID {
-					points = append(points, pickupPoint(l))
-				}
-			}
 		}
-		if len(points) > 0 {
-			p.PickupPoints = points
-			if !hasOption(*p, "pickup") {
-				p.DeliveryOptions = append(p.DeliveryOptions, domain.DeliveryOption{Key: "pickup", Label: "Pick up", ETA: points[0].Ready, Free: true})
+		addPickupOption(p, pickupPointsFor(*p, platformPoints, own, addr, zip))
+		if p.Fulfilment == domain.AfroTransactDelivery {
+			continue // priced by distance above; the driver collects at the store
+		}
+		carrierFree := len(p.DeliveryOptions) > 0 && p.DeliveryOptions[0].Free
+		if isFC && atd && !hasOption(*p, "afrotransact_delivery") {
+			o := domain.DeliveryOption{Key: "afrotransact_delivery", Label: "AfroTransact Delivery", ETA: "Same or next day", FeeMinor: AfroTransactDeliveryFeeMinor}
+			if carrierFree {
+				o.FeeMinor, o.Free = 0, true
+			}
+			// Before pickup, which stays last.
+			n := len(p.DeliveryOptions)
+			if n > 0 && p.DeliveryOptions[n-1].Key == "pickup" {
+				p.DeliveryOptions = append(p.DeliveryOptions[:n-1], o, p.DeliveryOptions[n-1])
+			} else {
+				p.DeliveryOptions = append(p.DeliveryOptions, o)
 			}
 		}
 		if !isFC {

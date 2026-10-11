@@ -109,6 +109,8 @@ type UpShipment struct {
 	ProblemReportOnly  bool   `json:"problemReportOnly"`
 	// LocalDelivery is orders' local_delivery snapshot (S255; the seller fee is hidden from customers).
 	LocalDelivery *LocalDeliveryView `json:"localDelivery"`
+	// PickupLocationID is the pickup point of a PICKUP shipment (carrier-gateway pickup location).
+	PickupLocationID string `json:"pickupLocationId"`
 }
 
 // UpShipTo is orders' ShipTo snapshot.
@@ -659,6 +661,14 @@ type PickupLocation struct {
 	} `json:"hours"`
 	ReadyHours int  `json:"readyHours"`
 	Active     bool `json:"active"`
+	// Position is where the location is, when known.
+	Position *GeoPoint `json:"position,omitempty"`
+}
+
+// GeoPoint is a WGS84 point.
+type GeoPoint struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
 }
 
 // DeliveryZone is a geo zone covering a point.
@@ -680,6 +690,8 @@ type CarrierScan struct {
 type DeliveryFactsClient interface {
 	Promises(ctx context.Context, zip string, offers []PromiseOffer) ([]PromiseQuote, error)
 	PickupLocations(ctx context.Context, ownerOrg, postalPrefix string) ([]PickupLocation, error)
+	// PickupLocation reads one pickup location (public; port.ErrNotFound when unknown).
+	PickupLocation(ctx context.Context, id string) (PickupLocation, error)
 	ZonesCovering(ctx context.Context, lat, lon float64, zoneType string) ([]DeliveryZone, error)
 	// Tracking needs shipping:rate (a gateway-bff service token).
 	Tracking(ctx context.Context, bearer, carrier, number string) ([]CarrierScan, error)

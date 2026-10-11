@@ -2713,6 +2713,13 @@ export interface components {
                     ready: string;
                     /** @enum {string} */
                     setBy: "platform" | "seller";
+                    /**
+                     * @description carrier-gateway pickup location kind
+                     * @enum {string}
+                     */
+                    kind?: "PLATFORM_COUNTER" | "LOCKER" | "SELLER";
+                    /** @description Straight-line miles from the delivery address; null when either isn't located */
+                    distanceMiles?: number | null;
                 }[];
             })[];
             addresses: components["schemas"]["Address"][];
@@ -3080,6 +3087,16 @@ export interface components {
                 problemReportOnly?: boolean;
                 /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
                 localDelivery?: components["schemas"]["OrderLocalDelivery"] | null;
+                /** @description Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments */
+                pickup?: null | {
+                    id: string;
+                    name: string;
+                    address: string;
+                    hours: string;
+                    ready: string;
+                    /** @enum {string} */
+                    setBy: "platform" | "seller";
+                };
             }[];
             payment?: components["schemas"]["OrderPayment"];
         };

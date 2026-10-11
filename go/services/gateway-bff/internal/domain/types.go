@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"math"
 	"time"
 )
 
@@ -462,6 +463,19 @@ type PickupPoint struct {
 	Hours   string `json:"hours"`
 	Ready   string `json:"ready"`
 	SetBy   string `json:"setBy"`
+	// Kind is carrier-gateway's PLATFORM_COUNTER, LOCKER or SELLER.
+	Kind string `json:"kind,omitempty"`
+	// DistanceMiles is the straight-line distance from the delivery address (nil when either isn't located).
+	DistanceMiles *float64 `json:"distanceMiles"`
+}
+
+// HaversineMiles is the great-circle distance between two WGS84 points in miles.
+func HaversineMiles(lat1, lng1, lat2, lng2 float64) float64 {
+	const earthMiles = 3958.8
+	rad := func(d float64) float64 { return d * math.Pi / 180 }
+	dLat, dLng := rad(lat2-lat1), rad(lng2-lng1)
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Cos(rad(lat1))*math.Cos(rad(lat2))*math.Sin(dLng/2)*math.Sin(dLng/2)
+	return 2 * earthMiles * math.Asin(math.Min(1, math.Sqrt(a)))
 }
 
 // CheckoutPackage is a cart package with pickup points.

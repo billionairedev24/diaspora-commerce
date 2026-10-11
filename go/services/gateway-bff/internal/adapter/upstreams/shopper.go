@@ -540,6 +540,12 @@ func (d *deliveryFactsImpl) PickupLocations(ctx context.Context, ownerOrg, posta
 	return out.Items, err
 }
 
+func (d *deliveryFactsImpl) PickupLocation(ctx context.Context, id string) (port.PickupLocation, error) {
+	var out port.PickupLocation
+	_, err := call(ctx, d.carrier, httpclient.Request{Path: "/v1/pickup-locations/" + esc(id)}, &out)
+	return out, err
+}
+
 func (d *deliveryFactsImpl) ZonesCovering(ctx context.Context, lat, lon float64, zoneType string) ([]port.DeliveryZone, error) {
 	q := url.Values{"lat": {strconv.FormatFloat(lat, 'f', 6, 64)}, "lon": {strconv.FormatFloat(lon, 'f', 6, 64)}, "type": {zoneType}}
 	var out struct {

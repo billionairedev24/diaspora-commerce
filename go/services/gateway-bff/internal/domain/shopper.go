@@ -61,6 +61,18 @@ type ShipmentDetail struct {
 	ProblemReportOnly  bool    `json:"problemReportOnly"`
 	// LocalDelivery is AfroTransact Delivery from the seller's store (S255); nil for other shipments.
 	LocalDelivery *OrderLocalDelivery `json:"localDelivery"`
+	// Pickup is where a pickup shipment is collected; nil for other shipments (or when the point can't be read).
+	Pickup *OrderPickup `json:"pickup"`
+}
+
+// OrderPickup is the pickup point of a pickup shipment as the order page shows it.
+type OrderPickup struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	Hours   string `json:"hours"`
+	Ready   string `json:"ready"`
+	SetBy   string `json:"setBy"`
 }
 
 // OrderDetail is one order with its shipments, lines and tracking.
