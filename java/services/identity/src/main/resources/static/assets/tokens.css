@@ -45,6 +45,8 @@
   --at-color-header-text: var(--at-ink-0);
   --at-color-header-muted: var(--at-ink-300);
   --at-color-header-hover-ring: var(--at-ink-0);
+  --at-color-header-hover-bg: var(--at-ink-800);    /* header / department bar items: hover and keyboard focus */
+  --at-color-header-indicator: var(--at-gold-500);  /* underline of the current or keyboard-focused item */
   --at-color-subheader-bg: var(--at-ink-900);
   --at-color-subheader-text: var(--at-ink-0);
   --at-color-footer-bg: var(--at-ink-900);

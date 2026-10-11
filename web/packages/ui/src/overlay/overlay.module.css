@@ -54,7 +54,7 @@
 .right { right: 0; }
 .left { left: 0; }
 .sheetHead { display: flex; align-items: center; gap: var(--at-space-3); padding: var(--at-space-3) var(--at-space-4); background: var(--at-color-header-bg); color: var(--at-color-header-text); }
-.sheetHead .close:hover { background: none; outline: 1px solid var(--at-color-header-hover-ring); }
+.sheetHead .close:hover { background: var(--at-color-header-hover-bg); }
 .sheetBody { flex: 1; overflow-y: auto; padding: var(--at-space-4); }
 
 /* Menu (dropdown) */
