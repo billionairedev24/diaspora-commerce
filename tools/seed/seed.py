@@ -7,7 +7,8 @@
     SEED_IMAGES_DIR=~/Pictures/demo python3 tools/seed/seed.py
 
 Everything goes through the services' public APIs (catalog, offers, inventory, media, content, delivery-runs, seller,
-bookings), so events reach the search indexer, buy boxes and availability like real traffic.
+bookings), so events reach the search indexer, buy boxes and availability like real traffic. The last step, `users`,
+signs in every local test user (identity creates them on the local profile; tools/seed/README.md lists them).
 
 Photos: SEED_IMAGES_DIR (your files, named after product slugs or keywords) → cached downloads (.local/seed/images) →
 Pexels (PEXELS_API_KEY) → Unsplash (UNSPLASH_ACCESS_KEY) → Wikimedia Commons (no key; CC0 / public domain / CC BY /

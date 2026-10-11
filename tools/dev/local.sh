@@ -407,6 +407,39 @@ web_up() {
   done
 }
 
+# S276: identity's local profile creates these (TestPersonas.java; `make seed` links the organisation members and checks
+# every sign-in). Keep in step with tools/seed/seedlib/dataset.py TEST_USERS (make seed-test compares them).
+test_users() {
+  local sf=$1 sc=$2 st=$3 email persona app
+  echo "Test users (password Test1234!Local; staff confirm a texted code, which lands in Mailpit http://localhost:8025)"
+  while IFS='|' read -r email persona app; do
+    printf '  %-36s %-34s %s\n' "$email" "$persona" "$app"
+  done <<EOF
+customer.houston@afrotransact.test|Customer, Houston 77042|$sf
+customer.lubbock@afrotransact.test|Customer, Lubbock 79401 pre-order|$sf
+seller.owner@afrotransact.test|Owner, Mama Put Pantry|$sc
+seller.staff@afrotransact.test|Catalog manager, Mama Put Pantry|$sc
+provider.owner@afrotransact.test|Owner, Aminata's Braids|$sc (Provider Hub)
+retail.operator@afrotransact.test|Operator, AfroTransact Retail|$sc
+staff.admin@afrotransact.test|Super Admin|$st
+staff.ops@afrotransact.test|Operations Manager|$st
+staff.trust@afrotransact.test|Trust & Safety|$st
+staff.finance@afrotransact.test|Finance|$st
+staff.support@afrotransact.test|Customer Support|$st
+staff.marketing@afrotransact.test|Marketing (content, ads)|$st
+staff.catalog@afrotransact.test|Catalog Manager|$st
+staff.retail@afrotransact.test|Retail Buyer (1P)|$st
+staff.fulfilment@afrotransact.test|Fulfilment Ops|$st
+staff.inventory@afrotransact.test|Inventory Manager|$st
+staff.dispatch@afrotransact.test|Dispatcher (delivery runs)|$st
+staff.product@afrotransact.test|Product Owner|$st
+staff.developer@afrotransact.test|Developer|$st
+staff.auditor@afrotransact.test|Auditor (read-only)|$st
+driver@afrotransact.test|Driver|driver app (mobile/apps/driver)
+admin@afrotransact.com|Bootstrap admin: LocalAdmin2026!|$st
+EOF
+}
+
 links() {
   local svc
   echo
@@ -418,7 +451,7 @@ links() {
   printf '  %-20s %-30s %s\n' "Storefront" "$sf" "pre-orders: $sf/pre-orders"
   printf '  %-20s %s\n' "Seller Center" "$sc"
   printf '  %-20s %-30s %s\n' "Staff console" "$st" "pre-orders: $st/preorders"
-  echo "  Staff sign-in        admin@afrotransact.com / LocalAdmin2026!  (identity's local bootstrap admin)"
+  test_users "$sf" "$sc" "$st"
   echo "API docs (Scalar; each service also serves /swagger-ui.html or /openapi.yaml, and /redoc)"
   for svc in $ALL_SERVICES; do
     [[ -f "$PIDS/$svc.pid" ]] || continue

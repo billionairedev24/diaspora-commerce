@@ -21,12 +21,13 @@ from .images.model import ImageFile
 from .images.sources import PexelsSource, UnsplashSource, WikimediaSource
 from .media import MediaUploader
 from .state import State
+from .users import TestUsers
 
 MAIN_MIN_EDGE = 1000  # catalog: the main product image must be at least 1000 x 1000
 FOOD_TYPES = {"grocery", "perishable"}
 FC_NODES = ("HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC")
 PREORDER_TIME_ZONE = "America/Chicago"
-STEPS = ("sellers", "products", "content", "ads", "preorders", "bookings")
+STEPS = ("sellers", "products", "content", "ads", "preorders", "bookings", "users")
 
 SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
     "identity": ("IDENTITY_URL", "http://localhost:8100", "/actuator/health"),
@@ -650,6 +651,27 @@ class Seeder:
                 self.log(f"  ✓ {prov.name}: {len(prov.services)} services")
             except ApiError as e:
                 self._problem(f"provider {prov.name}: {e}")
+
+    # ------------------------------------------------------------------------------------------------ users
+    def step_users(self) -> None:
+        self.log(f"== test users (identity, local profile: {len(D.TEST_USERS)} @afrotransact.test accounts, "
+                 f"password {D.TEST_USER_PASSWORD})")
+        if not self.up.get("identity"):
+            self.log("  ! identity is down: skipped")
+            return
+        try:
+            checks = TestUsers(self.svc["identity"], self.env, self.log).run()
+        except (ApiError, KeyError, ValueError) as e:
+            self.log(f"  · test users not checked: {e} (they exist on identity's local profile only)")
+            return
+        for c in checks:
+            self.report.add("test users", "sign in" if c.ok else "problem")
+            if not c.ok:
+                self._problem(f"test user {c.email}: {c.note}")
+        for line in TestUsers.table([(c.email, c.persona, c.app) for c in checks]):
+            self.log(line)
+        self.log("  staff answer a texted two-step code: open Mailpit http://localhost:8025 (tick \"Trust this "
+                 "browser\" to skip it for 30 days)")
 
     # ------------------------------------------------------------------------------------------------ summary
     def _summary(self) -> None:

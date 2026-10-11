@@ -509,3 +509,31 @@ PREORDERS = [
      "pdp": ("preorder-elpaso-pdp", ["plantain chips", "jollof rice spices", "dried pepper"])},
 ]
 PREORDER_CATEGORIES = ["Pantry", "Spices & seasonings", "Snacks", "Sauces & pastes", "Grains & rice"]
+
+# Local test users (S276). identity creates them on the local profile (TestPersonas.java: accounts, roles, the saved
+# addresses, organisation memberships as soon as the organisations above exist); the `users` step checks that each one
+# signs in. (email, persona, app, organisation it works for, two-step code required)
+TEST_USER_PASSWORD = "Test1234!Local"
+TEST_USERS: list[tuple[str, str, str, Union[str, None], bool]] = [
+    ("customer.houston@afrotransact.test", "Customer, Houston 77042 address", "Storefront", None, False),
+    ("customer.lubbock@afrotransact.test", "Customer, Lubbock 79401 address (open pre-order)", "Storefront", None, False),
+    ("seller.owner@afrotransact.test", "Owner, Mama Put Pantry", "Seller Center", "org_mama_put_pantry", False),
+    ("seller.staff@afrotransact.test", "Catalog manager, Mama Put Pantry", "Seller Center", "org_mama_put_pantry", False),
+    ("provider.owner@afrotransact.test", "Owner, Aminata's Braids", "Provider Hub", "org_aminatas_braids", False),
+    ("retail.operator@afrotransact.test", "Operator, AfroTransact Retail (1P)", "Seller Center", RETAIL_ORG, False),
+    ("staff.admin@afrotransact.test", "Super Admin", "Staff console", None, True),
+    ("staff.ops@afrotransact.test", "Operations Manager", "Staff console", None, True),
+    ("staff.trust@afrotransact.test", "Trust & Safety", "Staff console", None, True),
+    ("staff.finance@afrotransact.test", "Finance", "Staff console", None, True),
+    ("staff.support@afrotransact.test", "Customer Support", "Staff console", None, True),
+    ("staff.marketing@afrotransact.test", "Marketing (content, ads)", "Staff console", None, True),
+    ("staff.catalog@afrotransact.test", "Catalog Manager", "Staff console", None, True),
+    ("staff.retail@afrotransact.test", "Retail Buyer (1P)", "Staff console", None, True),
+    ("staff.fulfilment@afrotransact.test", "Fulfilment Ops", "Staff console", None, True),
+    ("staff.inventory@afrotransact.test", "Inventory Manager", "Staff console", None, True),
+    ("staff.dispatch@afrotransact.test", "Dispatcher (delivery runs)", "Staff console", None, True),
+    ("staff.product@afrotransact.test", "Product Owner", "Staff console", None, True),
+    ("staff.developer@afrotransact.test", "Developer", "Staff console", None, True),
+    ("staff.auditor@afrotransact.test", "Auditor (read-only)", "Staff console", None, True),
+    ("driver@afrotransact.test", "Driver", "Driver app", None, False),
+]
