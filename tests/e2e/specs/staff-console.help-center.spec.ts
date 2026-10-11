@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-/* Site content → Help center (S279): the storefront's help pages are edited here, without a deployment. */
+/* Site content → Help center (S280): the storefront's help pages are edited here, without a deployment. */
 test.describe('staff console · help center pages', () => {
   test('lists the help pages and opens one with its sections', async ({ page }) => {
     await page.goto('/site-content');
