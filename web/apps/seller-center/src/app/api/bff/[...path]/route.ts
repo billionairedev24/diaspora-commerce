@@ -9,6 +9,10 @@ import { bffOrigin, mocksEnabled } from '@/lib/config';
 export const dynamic = 'force-dynamic';
 
 const FORWARD_REQUEST = ['accept', 'accept-language', 'content-type', 'cookie', 'idempotency-key', 'if-none-match', 'origin', 'user-agent', 'x-request-id'];
+/** Longest wait for the BFF (its own upstream timeouts are shorter): a hung connection ends as a 504, never a page that
+    loads forever. Downloads and slow writes stay well inside it. */
+const UPSTREAM_TIMEOUT_MS = 30_000;
+
 const FORWARD_RESPONSE = ['cache-control', 'content-type', 'etag', 'location', 'retry-after', 'x-request-id'];
 
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
@@ -32,9 +36,16 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
       headers,
       body: req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.arrayBuffer(),
       redirect: 'manual',
-      cache: 'no-store'
+      cache: 'no-store',
+      signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'TimeoutError') {
+      return Response.json(
+        { type: bffProblemType('UPSTREAM_TIMEOUT'), title: 'Timed out', status: 504, code: 'UPSTREAM_TIMEOUT', detail: 'AfroTransact took too long to answer. Please try again.' },
+        { status: 504, headers: { 'content-type': 'application/problem+json' } }
+      );
+    }
     return Response.json(
       { type: bffProblemType('UPSTREAM_UNAVAILABLE'), title: 'Service unavailable', status: 503, code: 'UPSTREAM_UNAVAILABLE', detail: 'We couldn’t reach AfroTransact right now. Please try again.' },
       { status: 503, headers: { 'content-type': 'application/problem+json' } }

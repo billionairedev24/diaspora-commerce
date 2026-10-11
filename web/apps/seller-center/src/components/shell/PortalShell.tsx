@@ -7,10 +7,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 
-import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
+import { NoAccess } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
-import { loginHref } from '@/lib/auth';
 import { setFormatPreferences } from '@/lib/format';
 import { type ApplyRole, applyRoleOf, entryDecision, kindOf } from '@/lib/onboarding-entry';
 import { hrefOf, moduleOf } from '@/lib/routes';
@@ -19,6 +18,7 @@ import { SellerSessionProvider } from '@/lib/session';
 
 import { ComplianceBanner, PayoutsPausedBanner } from './ComplianceBanner';
 import { Header } from './Header';
+import { AutoSignIn, clearSignInAttempt, ShellFailed, ShellLoading } from './ShellStates';
 import { Sidebar } from './Sidebar';
 
 function Centered({ children }: { children: ReactNode }) {
@@ -26,23 +26,6 @@ function Centered({ children }: { children: ReactNode }) {
 }
 
 const PILL = 'rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline';
-
-/**
- * Signed out: there is no Seller Center sign-in page of its own — credentials are entered on identity's hosted
- * pages, so the browser goes straight there and comes back to the page it asked for (with the seller or provider
- * copy when it came from "Start selling" / "Offer your services").
- */
-function AutoSignIn({ role }: { role: ApplyRole | null }) {
-  const t = useT();
-  useEffect(() => {
-    window.location.assign(loginHref(window.location.href, role ? { intent: role === 'provider' ? 'provide' : 'sell' } : {}));
-  }, [role]);
-  return (
-    <div className="p-8">
-      <Spinner label={t('sc.portalShell.takingYouToSignIn')} />
-    </div>
-  );
-}
 
 function NoOrganisation() {
   const t = useT();
@@ -171,6 +154,11 @@ export function PortalShell({ children }: { children: ReactNode }) {
     onError: () => toast.show(t('sc.portalShell.switchFailed'), 'error')
   });
 
+  // Signed in: a later expired session may go to sign-in again straight away (see AutoSignIn's loop guard).
+  useEffect(() => {
+    if (session) clearSignInAttempt();
+  }, [session]);
+
   const needsOnboarding = !entering && !!session?.activeOrg && !session.approved && active !== 'onboarding';
   const leaveOnboarding = !entering && !!session?.approved && active === 'onboarding';
   useEffect(() => {
@@ -183,7 +171,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <>
         <Header session={null} />
         <div className="p-8">
-          <Spinner label={t('sc.portalShell.loadingYourBackOffice')} />
+          <ShellLoading label={t('sc.portalShell.loadingYourBackOffice')} onRetry={() => void q.refetch()} />
         </div>
       </>
     );
@@ -193,7 +181,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       return (
         <>
           <Header session={null} />
-          <AutoSignIn role={applyRole} />
+          <AutoSignIn role={applyRole} label={t('sc.portalShell.takingYouToSignIn')} />
         </>
       );
     }
@@ -201,7 +189,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <>
         <Header session={null} />
         <div className="p-8">
-          <ErrorState error={q.error} onRetry={() => void q.refetch()} />
+          <ShellFailed error={q.error} onRetry={() => void q.refetch()} />
         </div>
       </>
     );
@@ -219,7 +207,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <>
         <Header session={session} />
         <div className="p-8">
-          <Spinner label={t('sc.portalShell.settingUpYourApplication')} />
+          <ShellLoading label={t('sc.portalShell.settingUpYourApplication')} onRetry={() => window.location.reload()} />
         </div>
       </>
     );
@@ -252,7 +240,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           {session.approved ? <PayoutsPausedBanner /> : null}
           {session.approved ? <ComplianceBanner onAccountHealth={active === 'account-health'} /> : null}
           {needsOnboarding || leaveOnboarding ? (
-            <Spinner />
+            <ShellLoading label={t('sc.portalShell.loadingYourBackOffice')} onRetry={() => window.location.reload()} />
           ) : canOpen ? (
             <AccountFormatPreferences apply={setFormatPreferences}>{children}</AccountFormatPreferences>
           ) : (

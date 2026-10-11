@@ -44,6 +44,8 @@ describe('Start selling arrival in Seller Center', () => {
     state.starts = 0;
     nav.replace.mockReset();
     assign.mockReset();
+    // Each test is a fresh browser tab (the shell's sign-in loop guard keeps its last attempt per tab).
+    window.sessionStorage.clear();
   });
   afterEach(() => {
     vi.unstubAllGlobals();
