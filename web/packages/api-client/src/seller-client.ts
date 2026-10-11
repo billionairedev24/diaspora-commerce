@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { type ApiClientOptions, createRequester } from './http';
+import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
 import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
@@ -97,10 +98,13 @@ import {
   type UploadTicket,
   UploadTicketSchema
 } from './schemas/seller';
+import { tableSearchParams } from './table-query';
 
-/** Server-driven orders table query. */
+/** Server-driven orders table query: one search over every column, the sort (`<column>,asc|desc`), cursor, limit. */
 export interface SellerOrdersQuery {
   status?: ShipmentStatus;
+  q?: string;
+  sort?: string[];
   cursor?: string;
   limit?: number;
 }
@@ -109,8 +113,16 @@ export interface SellerOrdersQuery {
 export interface ListingsQuery {
   status?: ListingStatus;
   q?: string;
+  sort?: string[];
   page: number;
   size: number;
+}
+
+/** POST /v1/seller/exports: orders or listings with the table's search, sort, columns and selection, or a client-side dataset. */
+export interface SellerExportRequest extends Partial<TableExportQuery> {
+  format: ExportFormat;
+  table?: 'orders' | 'listings';
+  dataset?: ExportDataset;
 }
 
 const enc = encodeURIComponent;
@@ -131,9 +143,14 @@ export function createSellerApiClient(options: ApiClientOptions) {
     getDashboard: (rangeDays: number, signal?: AbortSignal): Promise<Dashboard> =>
       request('/v1/seller/dashboard', DashboardSchema, { query: { rangeDays: String(rangeDays) }, signal }),
 
+    /* Exports (every table: CSV, Excel with a Summary sheet of native charts, PDF with a summary page) */
+    createExport: (body: SellerExportRequest): Promise<ExportJob> => request('/v1/seller/exports', ExportJobSchema, { method: 'POST', body }),
+    getExport: (id: string, signal?: AbortSignal): Promise<ExportJob> => request(`/v1/seller/exports/${enc(id)}`, ExportJobSchema, { signal }),
+    listExports: (signal?: AbortSignal): Promise<ExportJobList> => request('/v1/seller/exports', ExportJobListSchema, { signal }),
+
     /* Orders */
     listOrders: (q: SellerOrdersQuery, signal?: AbortSignal): Promise<SellerOrderPage> =>
-      request('/v1/seller/orders', SellerOrderPageSchema, { query: { status: q.status, cursor: q.cursor, limit: num(q.limit) }, signal }),
+      request('/v1/seller/orders', SellerOrderPageSchema, { query: tableSearchParams({ status: q.status, q: q.q, cursor: q.cursor, limit: num(q.limit) }, q.sort), signal }),
     getOrder: (orderNumber: string, signal?: AbortSignal): Promise<SellerOrderDetail> => request(`/v1/seller/orders/${enc(orderNumber)}`, SellerOrderDetailSchema, { signal }),
     updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string): Promise<SellerOrderDetail> =>
       request(`${shipment(orderNumber, shipmentId)}/status`, SellerOrderDetailSchema, { method: 'POST', body: { status }, headers: idem(key) }),
@@ -162,7 +179,7 @@ export function createSellerApiClient(options: ApiClientOptions) {
 
     /* Listings & builder */
     listListings: (q: ListingsQuery, signal?: AbortSignal): Promise<ListingPage> =>
-      request('/v1/seller/listings', ListingPageSchema, { query: { status: q.status, q: q.q, page: String(q.page), size: String(q.size) }, signal }),
+      request('/v1/seller/listings', ListingPageSchema, { query: tableSearchParams({ status: q.status, q: q.q, page: q.page, size: q.size }, q.sort), signal }),
     setListingActive: (productId: string, active: boolean): Promise<ListingRow> =>
       request(`/v1/seller/listings/${enc(productId)}/status`, ListingRowSchema, { method: 'POST', body: { active } }),
     submitProduct: (draft: ProductDraft): Promise<ListingRow> => request('/v1/seller/products', ListingRowSchema, { method: 'POST', body: draft }),

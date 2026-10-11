@@ -4,6 +4,8 @@
 /* Scan this app's sources explicitly (relative to this file), so utilities are generated wherever the CSS is
    compiled from — e.g. Storybook in web/packages/ui, whose working directory is not this app. */
 @source "..";
+/* The shared data table (web/packages/data-table) styles itself with the same token utilities. */
+@source "../../../../packages/data-table/src";
 
 /* Tailwind's preflight (base layer) resets links to inherit; restore the token link style there so utilities still
    override it (see @afrotransact/tokens: element defaults are in the base layer). */

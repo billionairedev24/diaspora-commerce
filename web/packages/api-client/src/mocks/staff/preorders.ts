@@ -49,6 +49,7 @@ import {
   toCsvText,
   windowAreaOn
 } from '../../staff-preorders';
+import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { getStaffDb, type MockStaffDb } from './db';
 import { allows, levelOf } from './model';
 import { GEO } from './preorder-geo';
@@ -261,7 +262,7 @@ export function seedPreorders(now: Date): MockPreorderState {
 const nowOf = (s: MockPreorderState) => s.base + (Date.now() - s.seededAt);
 const statusOf = (s: MockPreorderState, w: MockPreorderWindow) => preorderStatus(w, nowOf(s));
 const live = (o: PreorderOrder) => o.status !== 'CANCELLED';
-const ordersOf = (s: MockPreorderState, w: MockPreorderWindow) => s.orders.filter((o) => o.windowId === w.id).sort((a, b) => b.placedAt.localeCompare(a.placedAt));
+export const ordersOf = (s: MockPreorderState, w: MockPreorderWindow) => s.orders.filter((o) => o.windowId === w.id).sort((a, b) => b.placedAt.localeCompare(a.placedAt));
 
 function areaOffOf(s: MockPreorderState, w: MockPreorderWindow): boolean {
   const st = statusOf(s, w);
@@ -354,15 +355,26 @@ function summary(s: MockPreorderState, w: MockPreorderWindow): PreorderSummary {
 }
 
 interface OrdersFilter { status: string; channel: string; q: string }
-const filterOrders = (list: PreorderOrder[], f: OrdersFilter) => {
-  const q = f.q.trim().toLowerCase();
-  return list.filter(
-    (o) =>
-      (!f.status || o.status === f.status) &&
-      (!f.channel || o.channel === f.channel) &&
-      (!q || `${o.number} ${o.customerName} ${o.phone} ${o.addressLine} ${o.zip}`.toLowerCase().includes(q))
-  );
-};
+/** What the orders table shows (and what its one search and sort see), as in the BFF (PreorderOrderColumns). */
+export const PREORDER_ORDER_COLUMNS: TableColumnLike[] = [
+  { key: 'number', kind: 'mono' }, { key: 'customerName', kind: 'strong' }, { key: 'phone', kind: 'text' }, { key: 'email', kind: 'text' },
+  { key: 'addressLine', kind: 'text' }, { key: 'city', kind: 'text' }, { key: 'zip', kind: 'mono' }, { key: 'deliveryNote', kind: 'text' },
+  { key: 'placedAt', kind: 'datetime' }, { key: 'channel', kind: 'status' }, { key: 'trackingTag', kind: 'mono' }, { key: 'units', kind: 'number' },
+  { key: 'fulfilment', kind: 'status' }, { key: 'total', kind: 'money' }, { key: 'status', kind: 'status' }
+];
+export const preorderOrderRow = (o: PreorderOrder) => ({
+  id: o.orderId,
+  order: o,
+  cells: Object.fromEntries(PREORDER_ORDER_COLUMNS.map((c) => [c.key, (o as unknown as Record<string, string | number | null>)[c.key] ?? null]))
+});
+
+const filterOrders = (list: PreorderOrder[], f: OrdersFilter, sort: SortKey[] = []) =>
+  queryRows(
+    list.filter((o) => (!f.status || o.status === f.status) && (!f.channel || o.channel === f.channel)).map(preorderOrderRow),
+    PREORDER_ORDER_COLUMNS,
+    f.q,
+    sort
+  ).map((r) => r.order);
 
 const ORDER_CSV_HEADER = ['Order', 'Pre-order', 'Customer', 'Phone', 'Email', 'Street', 'City', 'Region', 'Postal code', 'Delivery note', 'Placed', 'Channel', 'Tracking tag', 'Items', 'Units', 'Fulfilment', 'Total', 'Status', 'Note'];
 const CHANNEL_CSV: Record<PreorderChannel, string> = {
@@ -790,10 +802,12 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         view(ctx);
         const w = windowOf(ctx, p.id);
         const f = ordersQuery(ctx);
-        const all = filterOrders(ordersOf(st(ctx), w), f);
+        const sort = parseSort(new URL(ctx.request.url).searchParams.getAll('sort'), (k) => PREORDER_ORDER_COLUMNS.some((c) => c.key === k));
+        if (!sort) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'This table can’t be sorted that way.', { sort: 'Unknown column' });
+        const all = filterOrders(ordersOf(st(ctx), w), f, sort);
         const pages = Math.max(1, Math.ceil(all.length / f.size));
         const page = Math.min(f.page, pages - 1);
-        return { items: all.slice(page * f.size, page * f.size + f.size), total: all.length, page, size: f.size };
+        return { items: all.slice(page * f.size, page * f.size + f.size), total: all.length, page, size: f.size, sort: sort.map((k) => `${k.key},${k.desc ? 'desc' : 'asc'}`), partial: false };
       })
     ),
     http.get(

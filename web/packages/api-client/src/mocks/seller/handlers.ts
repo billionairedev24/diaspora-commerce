@@ -6,6 +6,7 @@ import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { z } from 'zod';
 
 import { bffProblemType } from '../../problem-types';
+import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import {
   AvailabilityFormSchema,
   type BookingAction,
@@ -44,6 +45,8 @@ import {
   UploadRequestSchema,
   validatePickupHours
 } from '../../schemas/seller';
+import { exportFileOf } from '../export-file';
+import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, SELLER_ORG } from './db';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
 
@@ -97,6 +100,72 @@ function context(request: Request): Ctx {
   const role = override && override.startsWith(prefix) ? override : org.role;
   return { db, org, role, request, now: new Date() };
 }
+
+/* ── Tables: one search over every column, sort by any column (as the BFF: SellerOrderColumns, SellerListingColumns) ── */
+
+type SellerColumn = TableColumnLike & { label: string };
+const ORDER_COLUMNS: SellerColumn[] = [
+  { key: 'orderNumber', label: 'Order', kind: 'mono' }, { key: 'placedAt', label: 'Placed', kind: 'datetime' }, { key: 'buyerName', label: 'Buyer', kind: 'strong' },
+  { key: 'shipTo', label: 'Ship to', kind: 'text' }, { key: 'itemsSummary', label: 'Items', kind: 'text' }, { key: 'itemCount', label: 'Units', kind: 'number' },
+  { key: 'totalMinor', label: 'Total', kind: 'money' }, { key: 'fulfilment', label: 'Fulfilment', kind: 'text' }, { key: 'status', label: 'Status', kind: 'status' },
+  { key: 'trackingNumber', label: 'Tracking', kind: 'mono' }
+];
+const LISTING_COLUMNS: SellerColumn[] = [
+  { key: 'title', label: 'Product', kind: 'strong' }, { key: 'atin', label: 'ATIN', kind: 'mono' }, { key: 'sku', label: 'SKU', kind: 'mono' },
+  { key: 'variantCount', label: 'Variants', kind: 'number' }, { key: 'priceMinor', label: 'Price', kind: 'money' }, { key: 'stock', label: 'Stock', kind: 'number' },
+  { key: 'fulfilment', label: 'Fulfilment', kind: 'text' }, { key: 'status', label: 'Status', kind: 'status' }, { key: 'updatedAt', label: 'Updated', kind: 'datetime' }
+];
+const FULFILMENT_LABEL: Record<string, string> = { SELLER: 'You ship', AFROTRANSACT: 'AfroTransact', AFROTRANSACT_DELIVERY: 'AfroTransact pickup' };
+
+function sortFor(cols: readonly SellerColumn[], values: string[]): SortKey[] {
+  const sort = parseSort(values, (k) => cols.some((c) => c.key === k));
+  if (!sort) throw invalid({ sort: 'This table can’t be sorted that way.' });
+  return sort;
+}
+
+const orderCells = (r: SellerOrderRow) => ({
+  id: r.shipmentId,
+  row: r,
+  cells: { orderNumber: r.orderNumber, placedAt: r.placedAt, buyerName: r.buyerName, shipTo: r.shipTo, itemsSummary: r.itemsSummary, itemCount: r.itemCount,
+    totalMinor: r.totalMinor, fulfilment: FULFILMENT_LABEL[r.fulfilment] ?? r.fulfilment, status: r.statusLabel, trackingNumber: r.trackingNumber }
+});
+const listingCells = (r: ListingRow) => ({
+  id: r.productId,
+  row: r,
+  cells: { title: r.title, atin: r.atin, sku: r.sku, variantCount: r.variantCount, priceMinor: r.priceMinor, stock: r.stock,
+    fulfilment: FULFILMENT_LABEL[r.fulfilment] ?? r.fulfilment, status: r.statusLabel, updatedAt: r.updatedAt }
+});
+
+function sellerOrderRows(ctx: Ctx, status: string | null, q: string | null, sort: SortKey[], ids?: string[]): SellerOrderRow[] {
+  const rows = ctx.db.orders.map(orderRow).filter((r): r is SellerOrderRow => r !== null && (!status || r.status === status));
+  return queryRows(rows.map(orderCells), ORDER_COLUMNS, q, sort, ids).map((r) => r.row);
+}
+
+function sellerListingRows(ctx: Ctx, status: string | null, q: string | null, sort: SortKey[], ids?: string[]): ListingRow[] {
+  const rows: ListingRow[] = ctx.db.listings.filter((l) => !status || l.status === status).map(({ variants: _v, ...row }) => row);
+  return queryRows(rows.map(listingCells), LISTING_COLUMNS, q, sort, ids).map((r) => r.row);
+}
+
+const exportView = ({ owner: _o, orgId: _g, body: _b, ...job }: MockSellerDb['exports'][number]): ExportJob => job;
+
+const ExportBody = z.object({
+  table: z.enum(['orders', 'listings']).optional(),
+  format: ExportFormatSchema,
+  q: z.string().max(120).optional(),
+  status: z.string().max(60).optional(),
+  sort: z.array(z.string().max(90)).max(3).optional(),
+  ids: z.array(z.string().max(200)).max(1000).optional(),
+  columns: z.array(z.string().max(80)).max(40).optional(),
+  dataset: z
+    .object({
+      table: z.string().regex(/^[a-z0-9-]{1,60}$/),
+      title: z.string().max(120).optional(),
+      scope: z.string().max(200).optional(),
+      columns: z.array(z.object({ key: z.string().max(80), label: z.string().min(1).max(80), kind: ExportColumnKindSchema })).min(1).max(40),
+      rows: z.array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))).max(5000)
+    })
+    .optional()
+});
 
 /** Approval, organisation kind and module access — the same checks the BFF makes. */
 function require(ctx: Ctx, module: ModuleKey | null, level: 'VIEW' | 'EDIT', kind?: 'SELLER' | 'PROVIDER') {
@@ -535,6 +604,73 @@ export const sellerHandlers = [
     })
   ),
 
+  /* ── Exports (the mock writes CSV text for every format) ── */
+  http.get(
+    `${W}/exports`,
+    route((ctx) => {
+      require(ctx, null, 'VIEW');
+      return { items: ctx.db.exports.filter((j) => j.owner === ctx.db.user.id && j.orgId === ctx.org.id).map(exportView) };
+    })
+  ),
+  http.post(
+    `${W}/exports`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, ExportBody);
+      let key: string;
+      let title: string;
+      let file: { body: string; rows: number };
+      if (b.dataset) {
+        require(ctx, null, 'VIEW');
+        const ds = b.dataset;
+        if (ds.rows.some((r) => r.length !== ds.columns.length)) throw invalid({ 'dataset.rows': 'Each row needs one cell per column' });
+        key = ds.table;
+        title = ds.title ?? ds.table;
+        file = exportFileOf(ds.columns, ds.rows);
+      } else if (b.table) {
+        const orders = b.table === 'orders';
+        require(ctx, orders ? 'orders' : 'listings', 'VIEW', 'SELLER');
+        const all = orders ? ORDER_COLUMNS : LISTING_COLUMNS;
+        const unknown = (b.columns ?? []).find((k) => !all.some((c) => c.key === k));
+        if (unknown) throw invalid({ columns: `Unknown column ${unknown}` });
+        const cols = b.columns?.length ? all.filter((c) => b.columns?.includes(c.key)) : all;
+        const sort = sortFor(all, b.sort ?? []);
+        const rows = orders
+          ? sellerOrderRows(ctx, b.status ?? null, b.q ?? null, sort, b.ids).map((r) => orderCells(r).cells as Record<string, string | number | null>)
+          : sellerListingRows(ctx, b.status ?? null, b.q ?? null, sort, b.ids).map((r) => listingCells(r).cells as Record<string, string | number | null>);
+        key = b.table;
+        title = orders ? 'Orders' : 'Listings';
+        file = exportFileOf(cols, rows.map((r) => cols.map((c) => (c.kind === 'money' && typeof r[c.key] === 'number' ? Number(r[c.key]) / 100 : (r[c.key] ?? null)))));
+      } else {
+        throw invalid({ table: 'Choose a table to export' });
+      }
+      const id = `exp-${ctx.db.seq++}`;
+      const job = {
+        id, resource: key, title, format: b.format, status: 'READY' as const, rows: file.rows, async: false,
+        fileName: `${key}-${ctx.now.toISOString().slice(0, 10)}.${b.format}`, createdAt: ctx.now.toISOString(), finishedAt: ctx.now.toISOString(),
+        expiresAt: new Date(ctx.now.getTime() + 86_400_000).toISOString(), downloadUrl: `/api/bff/v1/seller/exports/${id}/download`, error: null,
+        owner: ctx.db.user.id, orgId: ctx.org.id, body: file.body
+      };
+      ctx.db.exports.unshift(job);
+      return exportView(job);
+    }, 201)
+  ),
+  http.get(
+    `${W}/exports/:id`,
+    route((ctx, p) => {
+      const job = ctx.db.exports.find((j) => j.id === p.id && j.owner === ctx.db.user.id && j.orgId === ctx.org.id);
+      if (!job) throw notFound();
+      return exportView(job);
+    })
+  ),
+  http.get(`${W}/exports/:id/download`, ({ request, params }) => {
+    const ctx = context(request);
+    const job = ctx.db.exports.find((j) => j.id === params.id && j.owner === ctx.db.user.id && j.orgId === ctx.org.id);
+    if (!job) return problemResponse(notFound());
+    return new HttpResponse(job.body, {
+      headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${job.fileName}"`, 'Cache-Control': 'no-store' }
+    });
+  }),
+
   /* ── Orders ── */
   http.get(
     `${W}/orders`,
@@ -544,8 +680,15 @@ export const sellerHandlers = [
       const status = q.get('status');
       const limit = Math.min(100, Math.max(1, Number(q.get('limit') ?? '20')));
       const start = Number(q.get('cursor') ?? '0') || 0;
-      const rows = ctx.db.orders.map(orderRow).filter((r): r is SellerOrderRow => r !== null && (!status || r.status === status));
-      return { items: rows.slice(start, start + limit), nextCursor: start + limit < rows.length ? String(start + limit) : null, total: rows.length };
+      const sort = sortFor(ORDER_COLUMNS, q.getAll('sort'));
+      const rows = sellerOrderRows(ctx, status, q.get('q'), sort);
+      return {
+        items: rows.slice(start, start + limit),
+        nextCursor: start + limit < rows.length ? String(start + limit) : null,
+        total: rows.length,
+        sort: sort.map((k) => `${k.key},${k.desc ? 'desc' : 'asc'}`),
+        partial: false
+      };
     })
   ),
   http.get(
@@ -619,13 +762,12 @@ export const sellerHandlers = [
       require(ctx, 'listings', 'VIEW', 'SELLER');
       const q = query(ctx);
       const status = q.get('status');
-      const text = (q.get('q') ?? '').trim().toLowerCase();
       const page = Number(q.get('page') ?? '0');
       const size = Number(q.get('size') ?? '25');
       if (size < 1 || size > 100 || page < 0) throw invalid({ size: 'Between 1 and 100' });
-      const rows = ctx.db.listings.filter((l) => (!status || l.status === status) && (!text || l.title.toLowerCase().includes(text) || l.sku.toLowerCase().includes(text)));
-      const items: ListingRow[] = rows.slice(page * size, page * size + size).map(({ variants: _v, ...row }) => row);
-      return { items, total: rows.length, page, size };
+      const sort = sortFor(LISTING_COLUMNS, q.getAll('sort'));
+      const rows = sellerListingRows(ctx, status, q.get('q'), sort);
+      return { items: rows.slice(page * size, page * size + size), total: rows.length, page, size, sort: sort.map((k) => `${k.key},${k.desc ? 'desc' : 'asc'}`), partial: false };
     })
   ),
   http.post(

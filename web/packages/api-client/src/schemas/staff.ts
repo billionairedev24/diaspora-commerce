@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { type ExportDataset, type ExportFormat, type TableExportQuery } from './exports';
 import { AccessLevelSchema, ChartSpecSchema, KpiSchema } from './seller';
 
 /* Zod schemas for contracts/openapi/gateway-bff-staff.yaml (staff console, the platform back office). Every response
@@ -70,7 +71,7 @@ export const CellValueSchema = z.union([z.string(), z.number(), z.null()]);
 export type CellValue = z.infer<typeof CellValueSchema>;
 export const ColumnKindSchema = z.enum(['text', 'strong', 'mono', 'money', 'number', 'date', 'datetime', 'status', 'percent']);
 export type ColumnKind = z.infer<typeof ColumnKindSchema>;
-export const ResourceColumnSchema = z.object({ key: z.string(), label: z.string(), kind: ColumnKindSchema, width: z.number().int().min(1).max(100) });
+export const ResourceColumnSchema = z.object({ key: z.string(), label: z.string(), kind: ColumnKindSchema, width: z.number().int().min(1).max(100), sortable: z.boolean().optional() });
 export type ResourceColumn = z.infer<typeof ResourceColumnSchema>;
 export const ResourceFacetSchema = z.object({ value: z.string(), label: z.string() });
 export type ResourceFacet = z.infer<typeof ResourceFacetSchema>;
@@ -114,7 +115,11 @@ export const ResourcePageSchema = z.object({
   searchPlaceholder: z.string().optional(),
   canCreate: z.boolean(),
   createForm: StaffFormSchema.nullable(),
-  exportable: z.boolean()
+  exportable: z.boolean(),
+  /** The applied sort (`<column>,asc|desc`); empty for the upstream order. */
+  sort: z.array(z.string()).default([]),
+  /** The search or sort covered the first 5,000 rows of a bigger table. */
+  partial: z.boolean().default(false)
 });
 export type ResourcePage = z.infer<typeof ResourcePageSchema>;
 
@@ -168,34 +173,15 @@ export type RecordDetail = z.infer<typeof RecordDetailSchema>;
 
 export type RecordValues = Record<string, FieldValue>;
 
-/* ── Exports ───────────────────────────────────────────── */
+/* ── Exports (shared schemas in ./exports) ─────────────────── */
 
-export const ExportFormatSchema = z.enum(['csv', 'xlsx']);
-export type ExportFormat = z.infer<typeof ExportFormatSchema>;
-export const ExportStatusSchema = z.enum(['QUEUED', 'RUNNING', 'READY', 'FAILED', 'EXPIRED']);
-export type ExportStatus = z.infer<typeof ExportStatusSchema>;
-export const ExportJobSchema = z.object({
-  id: z.string(),
-  resource: ResourceKeySchema,
-  format: ExportFormatSchema,
-  status: ExportStatusSchema,
-  rows: z.number().int(),
-  async: z.boolean(),
-  fileName: z.string(),
-  createdAt: z.string(),
-  finishedAt: nullableString,
-  expiresAt: nullableString,
-  downloadUrl: nullableString,
-  error: nullableString
-});
-export type ExportJob = z.infer<typeof ExportJobSchema>;
-export const ExportJobListSchema = z.object({ items: z.array(ExportJobSchema) });
-export type ExportJobList = z.infer<typeof ExportJobListSchema>;
-export interface ExportRequest {
-  resource: ResourceKey;
+/** POST /v1/staff/exports: a resource (or `table` + `parent`) with the table's search, sort, columns and selection, or a client-side dataset. */
+export interface ExportRequest extends Partial<TableExportQuery> {
   format: ExportFormat;
-  q?: string;
-  status?: string;
+  resource?: ResourceKey;
+  table?: 'preorder-orders';
+  parent?: string;
+  dataset?: ExportDataset;
 }
 
 /* ── Support console ───────────────────────────────────── */

@@ -142,7 +142,15 @@ export const SellerOrderRowSchema = z.object({
   canBuyLabel: z.boolean()
 });
 export type SellerOrderRow = z.infer<typeof SellerOrderRowSchema>;
-export const SellerOrderPageSchema = z.object({ items: z.array(SellerOrderRowSchema), nextCursor: nullableString, total: z.number().int() });
+export const SellerOrderPageSchema = z.object({
+  items: z.array(SellerOrderRowSchema),
+  nextCursor: nullableString,
+  total: z.number().int(),
+  /** The applied sort (`<column>,asc|desc`); empty for newest first. */
+  sort: z.array(z.string()).default([]),
+  /** The search or sort covered the first 5,000 shipments only. */
+  partial: z.boolean().default(false)
+});
 export type SellerOrderPage = z.infer<typeof SellerOrderPageSchema>;
 
 export const SellerAddressSchema = z.object({
@@ -374,7 +382,14 @@ export const ListingRowSchema = z.object({
   updatedAt: z.string()
 });
 export type ListingRow = z.infer<typeof ListingRowSchema>;
-export const ListingPageSchema = z.object({ items: z.array(ListingRowSchema), total: z.number().int(), page: z.number().int(), size: z.number().int() });
+export const ListingPageSchema = z.object({
+  items: z.array(ListingRowSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int(),
+  sort: z.array(z.string()).default([]),
+  partial: z.boolean().default(false)
+});
 export type ListingPage = z.infer<typeof ListingPageSchema>;
 
 export interface CategoryNode {

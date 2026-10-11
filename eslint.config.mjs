@@ -86,7 +86,7 @@ export default tseslint.config(
     }
   },
   {
-    files: ['web/apps/*/src/**/*.{ts,tsx}', 'web/packages/ui/src/**/*.{ts,tsx}', 'src/**/*.{ts,tsx}'],
+    files: ['web/apps/*/src/**/*.{ts,tsx}', 'web/packages/ui/src/**/*.{ts,tsx}', 'web/packages/data-table/src/**/*.{ts,tsx}', 'src/**/*.{ts,tsx}'],
     ignores: ['web/packages/tokens/**'],
     plugins: { 'jsx-a11y': jsxA11y },
     rules: {

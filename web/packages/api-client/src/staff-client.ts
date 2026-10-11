@@ -1,4 +1,5 @@
 import { type ApiClientOptions, createRequester } from './http';
+import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
 import {
   type Customer360,
   Customer360Schema,
@@ -9,10 +10,6 @@ import {
   DeliveryQuoteSchema,
   type DriverSuggestions,
   DriverSuggestionsSchema,
-  type ExportJob,
-  type ExportJobList,
-  ExportJobListSchema,
-  ExportJobSchema,
   type ExportRequest,
   type FeeOrgSearch,
   FeeOrgSearchSchema,
@@ -57,11 +54,13 @@ import {
   type SupportRefundRequest
 } from './schemas/staff';
 import { createStaffPreordersApi } from './staff-preorders';
+import { tableSearchParams } from './table-query';
 
-/** Server-driven table query (page-based, or cursor-based where the upstream pages with cursors). */
+/** Server-driven table query: one search over every column, the sort (`<column>,asc|desc`), page or cursor, size. */
 export interface ResourceQuery {
   q?: string;
   status?: string;
+  sort?: string[];
   page: number;
   size: number;
   cursor?: string;
@@ -84,7 +83,7 @@ export function createStaffApiClient(options: ApiClientOptions) {
     /* Resources */
     listResource: (resource: ResourceKey, q: ResourceQuery, signal?: AbortSignal): Promise<ResourcePage> =>
       request(`/v1/staff/resources/${enc(resource)}`, ResourcePageSchema, {
-        query: { q: q.q, status: q.status, page: String(q.page), size: String(q.size), cursor: q.cursor },
+        query: tableSearchParams({ q: q.q, status: q.status, page: q.page, size: q.size, cursor: q.cursor }, q.sort),
         signal
       }),
     getRecord: (resource: ResourceKey, id: string, signal?: AbortSignal): Promise<RecordDetail> => request(record(resource, id), RecordDetailSchema, { signal }),

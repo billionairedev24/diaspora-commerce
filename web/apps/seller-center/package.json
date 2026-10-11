@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@afrotransact/api-client": "workspace:*",
+    "@afrotransact/data-table": "workspace:*",
     "@afrotransact/i18n": "workspace:*",
     "@afrotransact/telemetry": "workspace:*",
     "@afrotransact/tokens": "workspace:*",

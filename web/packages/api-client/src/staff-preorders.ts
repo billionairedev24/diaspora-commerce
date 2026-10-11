@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 import { ApiError, problemFrom } from './errors';
 import { absolute, type ApiClientOptions, type FetchLike, joinUrl, type Requester } from './http';
+import { tableSearchParams } from './table-query';
 
 /* ── Enums ─────────────────────────────────────────────── */
 
@@ -238,7 +239,9 @@ export const PreorderOrderPageSchema = z.object({
   items: z.array(PreorderOrderSchema),
   total: z.number().int(),
   page: z.number().int(),
-  size: z.number().int()
+  size: z.number().int(),
+  sort: z.array(z.string()).default([]),
+  partial: z.boolean().default(false)
 });
 export type PreorderOrderPage = z.infer<typeof PreorderOrderPageSchema>;
 
@@ -453,7 +456,10 @@ export interface PreorderListQuery {
 export interface PreorderOrdersQuery {
   status?: PreorderOrderStatus | '';
   channel?: PreorderChannel | '';
+  /** One search over every column the table shows. */
   q?: string;
+  /** `<column>,asc|desc`, repeated per sort column. */
+  sort?: string[];
   page: number;
   size: number;
 }
@@ -719,7 +725,7 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
     requestUpload: (body: { fileName: string; contentType: string; size: number; width: number; height: number }): Promise<PreorderUploadTicket> =>
       request(`${P}/uploads`, UploadTicketSchema, { method: 'POST', body }),
     orders: (id: string, q: PreorderOrdersQuery, signal?: AbortSignal): Promise<PreorderOrderPage> =>
-      request(`${P}/${enc(id)}/orders`, PreorderOrderPageSchema, { query: ordersQuery(q), signal }),
+      request(`${P}/${enc(id)}/orders`, PreorderOrderPageSchema, { query: tableSearchParams(ordersQuery(q), q.sort), signal }),
     summary: (id: string, signal?: AbortSignal): Promise<PreorderSummary> => request(`${P}/${enc(id)}/summary`, PreorderSummarySchema, { signal }),
     products: (id: string, signal?: AbortSignal): Promise<PreorderProduct[]> =>
       request(`${P}/${enc(id)}/products`, PreorderProductListSchema, { signal }).then((r) => r.items),

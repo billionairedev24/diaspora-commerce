@@ -1,5 +1,6 @@
 /* In-memory state of the mock Seller Center BFF (stored on globalThis so route handlers, server components and tests
    share it). Seeded from the design prototype (backoffice-data.js, at-bookings.js, at-plans.js) relative to today. */
+import { type ExportJob } from '../../schemas/exports';
 import {
   type Availability,
   type BillingPaymentMethod,
@@ -61,6 +62,8 @@ export interface MockSellerDb {
   shipFrom: Record<string, ShipFromAddress[]>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
   offers: SellerOffer[];
+  /** Export jobs (the file body is CSV text in the mock). */
+  exports: (ExportJob & { owner: string; orgId: string; body: string })[];
   seq: number;
 }
 
@@ -365,6 +368,7 @@ function freshDb(now: Date): MockSellerDb {
     activeOrgId: SELLER_ORG,
     orders: seedOrders(now),
     labels: {},
+    exports: [],
     listings: seedListings(now),
     categoryRequests: [{ id: 'cr-1', reference: 'REQ-4821', path: 'Fashion › Women › Bridal aso-ebi sets', status: 'PENDING_REVIEW', decisionNote: null, createdAt: iso(new Date(now.getTime() - 2 * DAY)) }],
     payouts: [

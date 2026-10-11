@@ -1,6 +1,7 @@
 /* In-memory state of the mock staff BFF (stored on globalThis so the route handler, server components and tests share
    it). Seeded from the Backoffice prototype (backoffice-data.js, backoffice-config.js, at-site.js) relative to today. */
-import { type ActivityEntry, type ExportJob, type ResourceKey } from '../../schemas/staff';
+import { type ExportJob } from '../../schemas/exports';
+import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';

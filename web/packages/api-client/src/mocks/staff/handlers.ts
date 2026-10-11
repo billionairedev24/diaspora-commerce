@@ -7,12 +7,12 @@ import { z } from 'zod';
 
 import { countSmsSegments, MAX_SMS_SEGMENTS, missingPlaceholders } from '../../notifications';
 import { bffProblemType } from '../../problem-types';
+import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import { type AccessLevel, type ChartSpec } from '../../schemas/seller';
 import {
   type Customer360,
   DeliveryTariffSchema,
   type DriverSuggestions,
-  type ExportJob,
   FieldValueSchema,
   NotificationCategorySchema,
   type NotificationChannel,
@@ -38,11 +38,13 @@ import {
   type SupportActionResult
 } from '../../schemas/staff';
 import { validateStaffForm } from '../../validation/staff-form';
+import { exportFileOf, type MockExportColumn } from '../export-file';
+import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
-import { preorderHandlers } from './preorders';
+import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } from './preorders';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
@@ -168,16 +170,26 @@ const find = (ctx: Ctx, r: ResourceKey, id: string) => {
 const cellOf = (v: Scalar): string | number | null => (typeof v === 'boolean' ? (v ? 'Yes' : 'No') : v);
 const display = (v: Scalar): string => (v === null ? '—' : typeof v === 'boolean' ? (v ? 'Yes' : 'No') : String(v));
 
-function filtered(ctx: Ctx, resource: ResourceKey, q: string, status: string): MockRecord[] {
+/** A record as its table row (the cells the table shows). */
+const rowOf = (resource: ResourceKey, r: MockRecord) => ({
+  id: r.id,
+  record: r,
+  cells: Object.fromEntries(RESOURCES[resource].columns.map((c) => [c.key, c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null)]))
+});
+
+/** One search over every column the table shows, then the sort (or the resource's default order), as the BFF does. */
+function filtered(ctx: Ctx, resource: ResourceKey, q: string, status: string, sort: SortKey[] = [], ids?: string[]): MockRecord[] {
   const def = RESOURCES[resource];
-  const needle = q.trim().toLowerCase();
-  const rows = records(ctx, resource).filter((r) => {
-    if (status && def.statusKey && r.fields[def.statusKey] !== status) return false;
-    if (needle && def.search && !def.search.some((k) => String(r.fields[k] ?? '').toLowerCase().includes(needle))) return false;
-    return true;
-  });
-  return def.sort ? [...rows].sort(def.sort) : rows;
+  const base = records(ctx, resource).filter((r) => !status || !def.statusKey || r.fields[def.statusKey] === status);
+  const ordered = def.sort ? [...base].sort(def.sort) : base;
+  return queryRows(ordered.map((r) => rowOf(resource, r)), def.columns, q, sort, ids).map((r) => r.record);
 }
+
+const sortOf = (resource: ResourceKey, values: string[]): SortKey[] => {
+  const sort = parseSort(values, (k) => RESOURCES[resource].columns.some((c) => c.key === k));
+  if (!sort) throw invalid({ sort: 'This table can’t be sorted that way.' });
+  return sort;
+};
 
 function actionView(ctx: Ctx, resource: ResourceKey, r: MockRecord, a: MockAction): RecordAction {
   const min = a.level ?? 'EDIT';
@@ -225,8 +237,12 @@ function page(ctx: Ctx, resource: ResourceKey): ResourcePage {
   const def = RESOURCES[resource];
   const qs = query(ctx);
   const size = Math.min(100, Math.max(1, Number(qs.get('size') ?? 25) || 25));
-  const all = filtered(ctx, resource, qs.get('q') ?? '', qs.get('status') ?? '');
-  const start = def.cursor ? Number(qs.get('cursor') ?? 0) || 0 : (Number(qs.get('page') ?? 0) || 0) * size;
+  const q = (qs.get('q') ?? '').trim();
+  const sort = sortOf(resource, qs.getAll('sort'));
+  const all = filtered(ctx, resource, q, qs.get('status') ?? '', sort);
+  // Like the BFF: a search or a sort is paged with page numbers even where the upstream uses cursors.
+  const cursor = def.cursor && !q && !sort.length;
+  const start = cursor ? Number(qs.get('cursor') ?? 0) || 0 : (Number(qs.get('page') ?? 0) || 0) * size;
   const rows = all.slice(start, start + size);
   const hasNext = start + size < all.length;
   const canCreate = !!def.create && ctx.permissions.includes(def.create.permission) && allows(ctx.roles, RESOURCE_MODULE[resource], 'EDIT');
@@ -239,17 +255,19 @@ function page(ctx: Ctx, resource: ResourceKey): ResourcePage {
       cells: Object.fromEntries(def.columns.map((c) => [c.key, c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null)])),
       tone: toneOf(def.statusKey ? ((r.fields[def.statusKey] as string | null) ?? null) : null)
     })),
-    page: def.cursor ? 0 : Number(qs.get('page') ?? 0) || 0,
+    page: cursor ? 0 : Number(qs.get('page') ?? 0) || 0,
     size,
-    total: def.cursor ? null : all.length,
-    nextCursor: def.cursor && hasNext ? String(start + size) : null,
+    total: cursor ? null : all.length,
+    nextCursor: cursor && hasNext ? String(start + size) : null,
     hasNext,
     facets: def.facets,
-    searchable: !!def.search,
-    searchPlaceholder: def.searchPlaceholder,
+    searchable: true,
+    searchPlaceholder: `Search ${def.title.toLowerCase()}`,
     canCreate,
     createForm: canCreate && def.create ? def.create.form : null,
-    exportable: def.exportable
+    exportable: def.exportable,
+    sort: sort.map((k) => `${k.key},${k.desc ? 'desc' : 'asc'}`),
+    partial: false
   };
 }
 
@@ -310,17 +328,6 @@ function dashboard(ctx: Ctx, rangeDays: number): StaffDashboard {
 }
 
 /* ── exports ── */
-
-function csvOf(ctx: Ctx, resource: ResourceKey, q: string, status: string): { body: string; rows: number } {
-  const def = RESOURCES[resource];
-  const cell = (v: Scalar) => {
-    const s = v === null ? '' : String(v);
-    return /[",\n\r]/.test(s) || /^[=+\-@]/.test(s) ? `"${s.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""')}"` : s;
-  };
-  const rows = filtered(ctx, resource, q, status);
-  const lines = [def.columns.map((c) => cell(c.label)).join(','), ...rows.map((r) => def.columns.map((c) => cell(c.key === 'id' ? r.id : (r.fields[c.key] ?? null))).join(','))];
-  return { body: `\uFEFF${lines.join('\r\n')}`, rows: rows.length };
-}
 
 const jobView = ({ owner: _o, body: _b, ...job }: ExportJob & { owner: string; body: string }): ExportJob => job;
 
@@ -701,28 +708,88 @@ export const staffHandlers = [
   http.post(
     `${W}/exports`,
     route(async (ctx) => {
-      const body = await json(ctx.request, z.object({ resource: ResourceKeySchema, format: z.enum(['csv', 'xlsx']), q: z.string().max(120).optional(), status: z.string().max(60).optional() }));
-      requireModule(ctx, body.resource);
-      if (!RESOURCES[body.resource].exportable) throw invalid({ resource: 'This table can’t be exported.' });
-      const { body: csv, rows } = csvOf(ctx, body.resource, body.q ?? '', body.status ?? '');
+      const body = await json(
+        ctx.request,
+        z.object({
+          resource: ResourceKeySchema.optional(),
+          table: z.literal('preorder-orders').optional(),
+          parent: z.string().max(64).optional(),
+          format: ExportFormatSchema,
+          q: z.string().max(120).optional(),
+          status: z.string().max(60).optional(),
+          sort: z.array(z.string().max(90)).max(3).optional(),
+          ids: z.array(z.string().max(200)).max(1000).optional(),
+          columns: z.array(z.string().max(80)).max(40).optional(),
+          dataset: z
+            .object({
+              table: z.string().regex(/^[a-z0-9-]{1,60}$/),
+              title: z.string().max(120).optional(),
+              scope: z.string().max(200).optional(),
+              columns: z.array(z.object({ key: z.string().max(80), label: z.string().min(1).max(80), kind: ExportColumnKindSchema })).min(1).max(40),
+              rows: z.array(z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))).max(5000)
+            })
+            .optional()
+        })
+      );
+      let key: string;
+      let title: string;
+      let file: { body: string; rows: number };
+      if (body.dataset) {
+        const ds = body.dataset;
+        if (ds.rows.some((r) => r.length !== ds.columns.length)) throw invalid({ 'dataset.rows': 'Each row needs one cell per column' });
+        key = ds.table;
+        title = ds.title ?? humanize(ds.table);
+        file = exportFileOf(ds.columns, ds.rows);
+      } else if (body.table === 'preorder-orders') {
+        if (!allows(ctx.roles, 'preorders')) throw forbidden('Your roles can’t export pre-orders.');
+        const w = ctx.db.preorders.windows.find((x) => x.id === body.parent);
+        if (!w) throw invalid({ parent: 'Choose a pre-order window' });
+        const sort = parseSort(body.sort ?? [], (k) => PREORDER_ORDER_COLUMNS.some((c) => c.key === k));
+        if (!sort) throw invalid({ sort: 'This table can’t be sorted that way.' });
+        const cols = PREORDER_ORDER_COLUMNS.filter((c) => !body.columns?.length || body.columns.includes(c.key)).map((c) => ({ ...c, label: humanize(c.key) })) as MockExportColumn[];
+        const rows = queryRows(ordersOf(ctx.db.preorders, w).map(preorderOrderRow), PREORDER_ORDER_COLUMNS, body.q, sort, body.ids);
+        key = 'preorder-orders';
+        title = 'Pre-order orders';
+        file = exportFileOf(cols, rows.map((r) => cols.map((c) => (c.kind === 'money' && typeof r.cells[c.key] === 'number' ? Number(r.cells[c.key]) / 100 : (r.cells[c.key] ?? null)))));
+      } else {
+        const resource = body.resource;
+        if (!resource) throw invalid({ resource: 'Choose a table to export' });
+        requireModule(ctx, resource);
+        const def = RESOURCES[resource];
+        if (!def.exportable) throw invalid({ resource: 'This table can’t be exported.' });
+        const unknown = (body.columns ?? []).find((k) => !def.columns.some((c) => c.key === k));
+        if (unknown) throw invalid({ columns: `Unknown column ${unknown}` });
+        const cols = (body.columns?.length ? body.columns.map((k) => def.columns.find((c) => c.key === k)) : def.columns).filter((c) => c !== undefined);
+        const rows = filtered(ctx, resource, body.q ?? '', body.status ?? '', sortOf(resource, body.sort ?? []), body.ids);
+        key = resource;
+        title = def.title;
+        file = exportFileOf(
+          cols,
+          rows.map((r) => cols.map((c) => {
+            const v = c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null);
+            return c.kind === 'money' && typeof v === 'number' ? v / 100 : v;
+          }))
+        );
+      }
       const id = `exp-${ctx.db.seq++}`;
-      const ready = rows <= SYNC_EXPORT_ROWS;
+      const ready = file.rows <= SYNC_EXPORT_ROWS;
       const job: ExportJob & { owner: string; body: string } = {
         id,
-        resource: body.resource,
-        // The mock writes CSV for both formats (the Go BFF writes real XLSX).
+        resource: key,
+        title,
+        // The mock writes CSV text for every format (the Go BFF writes real XLSX with charts and PDF).
         format: body.format,
         status: ready ? 'READY' : 'QUEUED',
-        rows: ready ? rows : 0,
+        rows: ready ? file.rows : 0,
         async: !ready,
-        fileName: `${body.resource}-${ctx.now.toISOString().slice(0, 10)}.${body.format}`,
+        fileName: `${key}-${ctx.now.toISOString().slice(0, 10)}.${body.format}`,
         createdAt: ctx.now.toISOString(),
         finishedAt: ready ? ctx.now.toISOString() : null,
         expiresAt: ready ? new Date(ctx.now.getTime() + 86_400_000).toISOString() : null,
         downloadUrl: ready ? `/api/bff/v1/staff/exports/${id}/download` : null,
         error: null,
         owner: ctx.db.user.id,
-        body: csv
+        body: file.body
       };
       ctx.db.exports.unshift(job);
       return HttpResponse.json(jobView(job) as JsonBodyType, { status: ready ? 201 : 202 });
