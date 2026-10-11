@@ -138,6 +138,9 @@ func siteSettingsResource() *staffResource {
 					withValue(withMax(ff("supportPhoneDisplay", "Phone as shown", "text", true), 30), jstr(o, "contacts.supportPhoneDisplay")),
 					withValue(ff("supportEmail", "Support email", "email", true), jstr(o, "contacts.emails.support")),
 					withValue(withMax(ff("smsProgramName", "SMS program name", "text", true), 60), jstr(o, "smsProgramName")),
+					withValue(withPattern(ff("whatsappCommunityUrl", "WhatsApp community link (email footers)", "text", false),
+						`^https://(chat\.whatsapp\.com/|(www\.)?whatsapp\.com/channel/)`, "Use the invite link, like https://chat.whatsapp.com/AbCdEf123456"),
+						jstr(o, "whatsappCommunityUrl")),
 					withValue(withMax(ff("summary", "What changed", "text", true), 200), ""),
 				}
 				for _, n := range staffSocials {
@@ -163,7 +166,7 @@ func siteSettingsResource() *staffResource {
 					}
 				}
 				body := jobj{"expectedRevision": int(num(o, "revision")), "summary": vs(v, "summary"), "contacts": contacts, "socials": socials,
-					"smsProgramName": vs(v, "smsProgramName")}
+					"smsProgramName": vs(v, "smsProgramName"), "whatsappCommunityUrl": vs(v, "whatsappCommunityUrl")}
 				for _, k := range []string{"appLinks", "paymentMethods", "identityProviders", "locales", "market"} {
 					if val, ok := o[k]; ok {
 						body[k] = val

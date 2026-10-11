@@ -419,7 +419,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     exportable: false,
     titleOf: () => 'Contacts & social links',
     subtitleOf: (r) => `Revision ${str(r.fields.revision)}`,
-    sections: [['Contacts', ['supportPhone', 'supportPhoneDisplay', 'supportEmail', 'smsProgramName']], ['Social links', ['instagram', 'facebook', 'tiktok']], ['Revision', ['revision', 'updatedBy', 'updatedAt']]],
+    sections: [['Contacts', ['supportPhone', 'supportPhoneDisplay', 'supportEmail', 'smsProgramName']], ['Social links', ['instagram', 'facebook', 'tiktok', 'whatsappCommunityUrl']], ['Revision', ['revision', 'updatedBy', 'updatedAt']]],
     actions: [],
     edit: {
       permission: 'content:site.edit',
@@ -428,6 +428,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         field('supportPhoneDisplay', 'Phone as shown', 'text', true, { maxLength: 30, value: str(r.fields.supportPhoneDisplay) }),
         field('supportEmail', 'Support email', 'email', true, { value: str(r.fields.supportEmail) }),
         field('smsProgramName', 'SMS program name', 'text', true, { maxLength: 60, value: str(r.fields.smsProgramName) }),
+        field('whatsappCommunityUrl', 'WhatsApp community link (email footers)', 'text', false, { pattern: '^https://(chat\\.whatsapp\\.com/|(www\\.)?whatsapp\\.com/channel/)', value: str(r.fields.whatsappCommunityUrl) }),
         field('instagram', 'Instagram', 'text', false, { pattern: '^https://', value: str(r.fields.instagram) }),
         field('facebook', 'Facebook', 'text', false, { pattern: '^https://', value: str(r.fields.facebook) }),
         field('tiktok', 'TikTok', 'text', false, { pattern: '^https://', value: str(r.fields.tiktok) })
