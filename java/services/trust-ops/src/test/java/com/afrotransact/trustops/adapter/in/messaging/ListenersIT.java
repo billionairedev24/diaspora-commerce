@@ -205,7 +205,7 @@ class ListenersIT extends TrustOpsIntegrationTest {
 
         assertThat(jdbc.sql("select payload from audit_entry where source_event_id = :id").param("id", eventId)
                 .query(String.class).list()).containsExactly(json);
-        assertThat(jdbc.sql("select actor_id || '|' || entity_type || '|' || entity_id || '|' || occurred_at::text "
+        assertThat(jdbc.sql("select actor_id || '|' || entity_type || '|' || entity_id || '|' || (occurred_at at time zone 'UTC')::text "
                         + "from audit_entry where source_event_id = :id").param("id", eventId).query(String.class)
                 .single()).startsWith("staff-aisha|MCP_TOOL|issue_refund|2026-10-09 12:00:00");
     }
