@@ -35,6 +35,8 @@ tags:
   description: 'Your Privacy Choices: access, delete, correct and opt-out requests, answered within 45 days'
 - name: Careers
   description: Open roles, applications and role management
+- name: Help center
+  description: Help pages (shipping, returns, press, advertising…) edited without deployments
 - name: Markets (back office)
   description: Draft changes to countries and state capability switches, then Publish
 - name: Cookie consent
@@ -743,6 +745,108 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/FeatureFlag'
+  /v1/help/admin/articles:
+    get:
+      tags:
+      - Help center
+      summary: Every help article including drafts (content:site.view)
+      operationId: allHelpArticles
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HelpArticle'
+  /v1/help/articles:
+    get:
+      tags:
+      - Help center
+      summary: Published help articles (the hub excluded), by topic and text, a page at a time
+      operationId: listHelpArticles
+      parameters:
+      - name: topic
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpArticlePage'
+      security: []
+  /v1/help/articles/{slug}:
+    get:
+      tags:
+      - Help center
+      summary: A published help article (help-center is the hub)
+      operationId: getHelpArticle
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpArticle'
+      security: []
+    put:
+      tags:
+      - Help center
+      summary: Create or change a help article (content:site.edit); expectedVersion guards concurrent edits
+      operationId: saveHelpArticle
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HelpArticleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HelpArticle'
   /v1/legal:
     get:
       tags:
@@ -1921,6 +2025,90 @@ components:
         updatedAt:
           type: string
           format: date-time
+    HelpArticleRequest:
+      type: object
+      properties:
+        topic:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        title:
+          type: string
+          minLength: 1
+        summary:
+          type: string
+          minLength: 1
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpSection'
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+        sortOrder:
+          type: integer
+          format: int32
+        expectedVersion:
+          type: integer
+          format: int64
+          description: The version you edited; omit to create a new article
+      required:
+      - sections
+      - status
+      - summary
+      - title
+      - topic
+    HelpSection:
+      type: object
+      properties:
+        heading:
+          type: string
+        body:
+          type: string
+          description: Markdown
+    HelpArticle:
+      type: object
+      properties:
+        slug:
+          type: string
+        topic:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        topicTitle:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpSection'
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PUBLISHED
+        sortOrder:
+          type: integer
+          format: int32
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     FlagTargeting:
       type: object
       description: Empty lists mean any; allowList subjects always get the flag
@@ -3165,6 +3353,58 @@ components:
           format: date-time
         changeSummary:
           type: string
+    HelpArticlePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpArticleSummary'
+        topics:
+          type: array
+          items:
+            $ref: '#/components/schemas/HelpTopicCount'
+        nextCursor:
+          type: string
+          description: Cursor of the next page; absent on the last page
+    HelpArticleSummary:
+      type: object
+      properties:
+        slug:
+          type: string
+        topic:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        topicTitle:
+          type: string
+        title:
+          type: string
+        summary:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    HelpTopicCount:
+      type: object
+      properties:
+        key:
+          type: string
+          enum:
+          - ORDERS_DELIVERY
+          - RETURNS_REFUNDS
+          - ACCOUNT_PAYMENTS
+          - SELLING
+          - COMPANY
+        title:
+          type: string
+        count:
+          type: integer
+          format: int32
     CookiePolicy:
       type: object
       properties:
