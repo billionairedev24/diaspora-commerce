@@ -115,11 +115,14 @@ test('storefront sign-in on identity, then the staff console signs in without a 
   await page.goto(STAFF);
   await page.getByRole('link', { name: 'Sign in' }).click();
   await page.waitForURL(`${STAFF}/**`);
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  // Sign-out lives in the header's account menu.
+  await page.getByRole('button', { name: /Account menu for Platform Administrator/ }).click();
+  const staffSignOut = page.getByRole('menuitem', { name: 'Sign out' }).or(page.getByRole('button', { name: 'Sign out' }));
+  await expect(staffSignOut).toBeVisible();
   expect(identityPages, 'single sign-on: no identity sign-in page on the way').toEqual([]);
 
   // Signing out of the staff console ends the identity session too (RP-initiated logout) and returns there.
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await staffSignOut.click();
   await page.waitForURL(`${STAFF}/**`);
   await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
   await context.clearCookies({ name: 'at_session' });

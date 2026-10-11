@@ -120,8 +120,11 @@ test('staff.support keeps the staff two-step policy: the texted code comes from 
   await page.getByRole('button', { name: 'Verify' }).click();
 
   await page.waitForURL(`${STAFF}/**`);
-  await expect(page.getByText('Access: Customer Support')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Account menu for Amara Okonkwo/ })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
+  // Customer Support's modules: trust & compliance (claims, support), no growth group (ads, content campaigns).
+  await expect(page.getByRole('button', { name: 'Trust & compliance' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Growth' })).toHaveCount(0);
   await shot(page, 'live-staff-support.png');
   await context.close();
 });
