@@ -23,7 +23,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers \
         web-dev web-build backlog seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
-        mobile-ios-device mobile-brand mobile-hero
+        mobile-ios-device mobile-apk mobile-brand mobile-hero
 
 help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -180,6 +180,9 @@ mobile-adb-reverse: ## Android phone/emulator over USB in localhost mode: adb re
 
 mobile-android-device: ## Build + install the development build on a USB Android phone: make mobile-android-device APP=customer|driver
 	tools/dev/local.sh device android $(or $(APP),customer)
+
+mobile-apk: ## Standalone Android app (no Metro, no cable) talking to this Mac's stack over Wi-Fi; run the stack with make mobile-lan: make mobile-apk APP=customer|driver
+	tools/dev/local.sh apk $(or $(APP),customer)
 
 mobile-ios-device: ## Build + install the development build on a USB iPhone (Xcode, signing team): make mobile-ios-device APP=customer|driver
 	tools/dev/local.sh device ios $(or $(APP),customer)

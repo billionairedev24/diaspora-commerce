@@ -941,6 +941,7 @@ mobile_up() {
     # --lan: Metro advertises this machine's network address (exp://<LAN IP>:port) to Expo Go and development builds.
     (cd "$ROOT/mobile/apps/$app" || exit 1
       CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=$mocks EXPO_PUBLIC_DEV_HOST="$host" \
+        EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}" \
         nohup ./node_modules/.bin/expo start --port "$port" --lan $clear >>"$LOGS/$name.log" 2>&1 &
       echo $! >"$PIDS/$name.pid")
     env_sig >"$PIDS/$name.env"
@@ -992,6 +993,66 @@ cmd_device() {
   echo "==> building and installing the $app development build on your $platform device (first build: several minutes)"
   (cd "$ROOT/mobile/apps/$app" && EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_DEV_HOST="$EXPO_PUBLIC_DEV_HOST" \
     ./node_modules/.bin/expo run:"$platform" --device --port "$(mobile_port_of "$app")" $bundler)
+}
+
+# `apk <app>`: a standalone Android app: a release build with the JavaScript inside, so it runs without Metro and
+# without a cable, like an installed store app. It talks to this machine's stack over Wi-Fi (LAN mode, which `up`
+# must also run in) at the address baked in when it was built: rebuild after the Mac's address changes. Signed with
+# the debug key (fine for sideloading, not for the Play Store: that is `eas build --profile production`).
+# Needs the Android SDK (Android Studio) and JDK 17. Installs with adb when a phone is connected; otherwise the APK is
+# served on the Wi-Fi so the phone's browser can download it.
+cmd_apk() {
+  local app="${1:-customer}" host built out dir sdk="" java17=""
+  case "$app" in customer|driver) ;; *) echo "unknown app: $app (customer | driver)" >&2; exit 2 ;; esac
+  export MOBILE_HOST="${MOBILE_HOST:-lan}"
+  mkdir -p "$LOGS" "$PIDS"
+  load_secrets
+  platform_env
+  host=$(public_host)
+  if [[ "$host" == localhost ]]; then
+    echo "No Wi-Fi address found: run with MOBILE_HOST=<this machine's IPv4>, e.g. make mobile-apk MOBILE_HOST=192.168.1.50" >&2
+    exit 1
+  fi
+  for dir in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+    if [[ -n "$dir" && -d "$dir" ]]; then sdk="$dir"; break; fi
+  done
+  if [[ -z "$sdk" ]]; then
+    echo "Android SDK not found: install Android Studio (it brings the SDK), or set ANDROID_HOME (docs/engineering/mobile-on-your-phone.md)" >&2
+    exit 1
+  fi
+  export ANDROID_HOME="$sdk" PATH="$sdk/platform-tools:$PATH"
+  # Gradle for React Native needs JDK 17: prefer it (Android Studio's bundled JBR, Homebrew Zulu) over a newer default.
+  for dir in "${JAVA_HOME_17:-}" "/Applications/Android Studio.app/Contents/jbr/Contents/Home" \
+    "/Library/Java/JavaVirtualMachines/zulu-17.jdk/Contents/Home"; do
+    if [[ -n "$dir" && -x "$dir/bin/java" ]]; then java17="$dir"; break; fi
+  done
+  if [[ -z "$java17" ]] && command -v /usr/libexec/java_home >/dev/null 2>&1; then
+    java17=$(/usr/libexec/java_home -v 17 2>/dev/null || true)
+  fi
+  if [[ -n "$java17" ]]; then export JAVA_HOME="$java17"; fi
+  echo "==> building the standalone $app app for $host (release, JavaScript inside; first build: several minutes)"
+  (cd "$ROOT/mobile/apps/$app" || exit 1
+    export CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=0 \
+      EXPO_PUBLIC_DEV_HOST="$host" EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}"
+    # android/ is generated (git-ignored): --clean regenerates it so the local settings (plain HTTP to the LAN) apply.
+    ./node_modules/.bin/expo prebuild --platform android --clean --no-install
+    cd android && ./gradlew assembleRelease) || { echo "Build failed (see above)." >&2; exit 1; }
+  built="$ROOT/mobile/apps/$app/android/app/build/outputs/apk/release/app-release.apk"
+  [[ -f "$built" ]] || { echo "No APK at $built" >&2; exit 1; }
+  mkdir -p "$STATE/apk"
+  out="$STATE/apk/afrotransact-$app.apk"
+  cp "$built" "$out"
+  echo "  ✓ $out (talks to http://$host; package com.afrotransact.$app.local)"
+  if command -v adb >/dev/null 2>&1 && adb devices | awk 'NR > 1 && $2 == "device"' | grep -q .; then
+    echo "==> installing on the connected phone"
+    adb install -r "$out"
+    echo "  ✓ installed: open \"$( [[ "$app" == customer ]] && echo AfroTransact || echo 'AfroTransact Delivery')\" on the phone"
+    return 0
+  fi
+  echo "==> no phone on USB: serving the APK on your Wi-Fi (Ctrl-C when the phone has it)"
+  echo "  On the phone (same Wi-Fi), open:  http://$host:8765/afrotransact-$app.apk"
+  echo "  Allow \"Install unknown apps\" for the browser when Android asks, then open the downloaded file."
+  python3 -m http.server 8765 --bind 0.0.0.0 --directory "$STATE/apk"
 }
 
 cmd_up() {
@@ -1103,5 +1164,6 @@ case "${1:-}" in
   lan-env) cmd_lan_env ;;
   adb-reverse) cmd_adb_reverse ;;
   device) shift; cmd_device "$@" ;;
+  apk) shift; cmd_apk "$@" ;;
   *) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

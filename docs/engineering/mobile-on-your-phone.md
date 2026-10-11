@@ -8,8 +8,9 @@ The customer app (`mobile/apps/customer`, **AfroTransact**) and the driver app (
 | [Expo Go over Wi-Fi](#1-expo-go-over-wi-fi-quickest) | Expo Go from the App Store / Play Store, `make mobile-lan` | Everything except remote push, Face ID (iPhone), Apple Pay / Google Pay | UI work, sign-in, browsing, checkout with cards, driver flows |
 | [Development build over USB](#2-development-build-over-usb) | Android Studio or Xcode on your Mac, a cable | Everything: push, Face ID, wallets, the app's own icon and splash | Native features, push, payments end to end |
 | [Development build from EAS](#3-development-build-from-eas-no-usb-no-xcode) | A free Expo account, `eas build` | Same as USB | No Android Studio / Xcode, or Windows/Linux + iPhone |
+| [Standalone Android app](#4-standalone-android-app-no-metro-no-cable) | Android Studio on your Mac, `make mobile-apk` | Everything; no Metro needed, installs over Wi-Fi, USB or Bluetooth | Using the app like a real one against your local stack |
 
-All three load the JavaScript from Metro on your Mac, so code changes reload instantly. Every route uses the
+The first three load the JavaScript from Metro on your Mac, so code changes reload instantly. Every route uses the
 **[LAN mode](#lan-mode-the-whole-stack-on-your-wi-fi-address)** of the local stack unless you use Android over USB with
 `adb reverse`.
 
@@ -155,6 +156,41 @@ mode and open the app; it finds Metro like the USB build.
 **Push notifications** need credentials in the build: `GOOGLE_SERVICES_JSON` (EAS file variable, Android/FCM) and the
 APNs key (`eas credentials`, iOS), plus the sending side in `.local/secrets.env` (`FCM_SERVICE_ACCOUNT_JSON`,
 `APNS_*`). See [secrets and configuration](secrets-and-configuration.md#mobile-apps-eas).
+
+## 4. Standalone Android app (no Metro, no cable)
+
+A release build with the JavaScript inside: it installs and opens like a store app, keeps working when Metro is not
+running, and talks to the stack on your Mac over Wi-Fi. Use it to try the app as a customer or driver would.
+
+**Build** (Android Studio for the SDK, JDK 17; the same as [the USB build](#android-macos-windows-linux)):
+
+```bash
+make mobile-lan                         # the stack on your Wi-Fi address (the app needs it running to sign in and shop)
+make mobile-apk APP=customer            # or APP=driver; MOBILE_HOST=<ip> to pick the address
+```
+
+The APK lands in `.local/apk/afrotransact-<app>.apk` (package `com.afrotransact.<app>.local`, so it sits next to a store
+or development build). The Mac's address and your `STRIPE_PUBLISHABLE_KEY` are **baked in** when it is built: after the
+Mac gets another address (another network, a new DHCP lease) run `make mobile-apk` again, or give the Mac a fixed
+address in your router (DHCP reservation) so the APK keeps working. It is signed with the debug key: fine for
+sideloading, not for the Play Store (that is `eas build --profile production`). Push needs `google-services.json`
+(see [EAS](#3-development-build-from-eas-no-usb-no-xcode)); everything else works.
+
+**Get it onto the phone**, any of:
+
+| Route | How |
+|---|---|
+| Over Wi-Fi (built in) | With no phone on USB, `make mobile-apk` ends by serving the folder: open `http://<mac-ip>:8765/afrotransact-customer.apk` in the phone's browser (same Wi-Fi). Later, without rebuilding: `python3 -m http.server 8765 --directory .local/apk`. |
+| USB cable | Connected with USB debugging on, `make mobile-apk` installs it with `adb` by itself (`adb install -r .local/apk/afrotransact-customer.apk` later). |
+| Wireless adb (Android 11+) | Phone: *Developer options → Wireless debugging → Pair device with pairing code*. Mac: `adb pair <ip>:<pair-port>` (enter the code), then `adb connect <ip>:<port>` (the port shown on the Wireless debugging screen). Then `adb install -r .local/apk/afrotransact-customer.apk`, or `make mobile-apk` installs it. |
+| Bluetooth | Pair the phone and the Mac (*System Settings → Bluetooth*), turn on *System Settings → General → Sharing → Bluetooth Sharing*, then open **Bluetooth File Exchange** (Applications → Utilities), pick the APK and the phone, and accept the file on the phone. Slow: tens of MB at Bluetooth speed take minutes. |
+| Cloud / chat | Upload the APK to Google Drive (or send it to yourself), open it on the phone. |
+
+**Install on the phone:** open the downloaded file. The first time Android asks to allow *Install unknown apps* for
+that app (browser, Files, Bluetooth): allow it, go back, install. Play Protect may warn about an unknown developer:
+*More details → Install anyway*. Updating: install the new APK over the old one (same package, same debug key, data
+kept). If Android refuses ("package conflicts"), uninstall the old one first: it was built on another machine with a
+different debug key.
 
 ## Windows and Linux
 
