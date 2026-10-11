@@ -368,6 +368,510 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/billing/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every plan with its versions, Stripe prices and subscribers
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffPlans"];
+        put?: never;
+        /**
+         * Create a plan (draft, version 1 as a draft; plans:manage)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["createStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One plan
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["getStaffPlan"];
+        /**
+         * Edit name, tagline, features, limits, visibility and sort (no new version; expectedVersion = rowVersion)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["updateStaffPlan"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save the draft version's prices per cadence and default trial (a new version when they differ)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["saveStaffPlanDraft"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the draft version and sync Stripe (new Prices, old ones archived; never edited)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["publishStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retire a plan: no new subscribers, existing ones keep it
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["retireStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Organisations invited to an invite-only plan
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["setStaffPlanInvites"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/plans/{code}/migration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Subscribers on older versions and what the current version will charge them
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["previewStaffPlanMigration"];
+        put?: never;
+        /**
+         * Move subscribers (all or orgIds) to the current version from their next renewal (no proration)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["migrateStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/stripe-sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Drift between our plan versions and Stripe (nothing changes)
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["getStaffStripeSync"];
+        put?: never;
+        /**
+         * Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["syncStaffStripe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/trial-campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Trial campaigns (promo codes and sign-up windows)
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffTrialCampaigns"];
+        put?: never;
+        /**
+         * Create a trial campaign
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["createStaffTrialCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/trial-campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a trial campaign (expectedVersion)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["updateStaffTrialCampaign"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/trial-campaigns/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate, pause or end a trial campaign
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["setStaffTrialCampaignStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reward rules
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffRewardRules"];
+        put?: never;
+        /**
+         * Create a reward rule (DRAFT unless a status is given)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["createStaffRewardRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Who qualifies now under a rule (unsaved or edited; nothing is granted)
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        post: operations["previewStaffRewardRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Edit a reward rule (expectedVersion)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        put: operations["updateStaffRewardRule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reward-rules/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate, pause or end a reward rule
+         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
+         */
+        post: operations["setStaffRewardRuleStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Grants log: rewards and staff adjustments, newest first (server-paged)
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffBillingGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/reason-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reason codes for adjustments
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["listStaffBillingReasonCodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find an organisation by name or id for its billing panel
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["searchStaffBillingOrgs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-seller billing panel: plan, trial, credit balance, grants, invoices, collections from earnings
+         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
+         */
+        get: operations["getStaffBillingPanel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/credits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Credit the organisation's Stripe balance (billing:adjust, reason code)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["creditStaffBillingOrg"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/free-days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give free days: the subscription's trial_end moves out (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["giveStaffBillingFreeDays"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/trial": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Override the trial: before activation its length, while trialing it ends N days after it started (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["overrideStaffBillingTrial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/waive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Waive (void) an open invoice (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["waiveStaffBillingInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/earnings-collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Opt the organisation in or out of collecting plan fees from earnings (409 while the platform flag is off)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        put: operations["setStaffEarningsCollection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/fees": {
         parameters: {
             query?: never;
@@ -2907,6 +3411,461 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        StaffPlanVersionPrice: {
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** Format: int64 */
+            amountCents: number;
+            lookupKey: string;
+            stripePriceId?: string | null;
+            /** Format: date-time */
+            syncedAt?: string | null;
+            syncError?: string | null;
+        };
+        StaffPlanVersion: {
+            version: number;
+            /** @enum {string} */
+            status: "DRAFT" | "PUBLISHED" | "SUPERSEDED";
+            trialDays: number;
+            note?: string | null;
+            createdBy?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            publishedAt?: string | null;
+            /** Format: int64 */
+            subscribers: number;
+            prices: components["schemas"]["StaffPlanVersionPrice"][];
+        };
+        /** @description A plan AfroTransact owns; prices are those of the current version (0 before the first publish). */
+        StaffPlan: {
+            code: string;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            name: string;
+            tagline?: string | null;
+            features: string[];
+            limits?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            visibility: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
+            /** @enum {string} */
+            status: "DRAFT" | "ACTIVE" | "RETIRED";
+            sortOrder?: number;
+            currentVersion: number;
+            /** Format: int64 */
+            monthlyCents: number;
+            /** Format: int64 */
+            quarterlyCents: number;
+            /** Format: int64 */
+            annualCents: number;
+            trialDays: number;
+            /**
+             * Format: int64
+             * @description Send back as expectedVersion to edit the metadata
+             */
+            rowVersion: number;
+            stripeProductId?: string | null;
+            /** Format: int64 */
+            subscribers: number;
+            invites: string[];
+            versions: components["schemas"]["StaffPlanVersion"][];
+        };
+        /** @description A version's price per cadence in cents and its default trial. */
+        StaffPlanPrices: {
+            /** Format: int64 */
+            monthlyCents?: number;
+            /** Format: int64 */
+            quarterlyCents?: number;
+            /** Format: int64 */
+            annualCents?: number;
+            trialDays?: number;
+            note?: string | null;
+        };
+        StaffCreatePlanRequest: {
+            code: string;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            name: string;
+            tagline?: string | null;
+            features?: string[];
+            limits?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            visibility?: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
+            sortOrder?: number;
+            prices?: components["schemas"]["StaffPlanPrices"];
+        };
+        StaffUpdatePlanRequest: {
+            name: string;
+            tagline?: string | null;
+            features?: string[];
+            limits?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            visibility?: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
+            sortOrder?: number;
+            /** Format: int64 */
+            expectedVersion: number;
+        };
+        StaffPlanInvitesRequest: {
+            orgIds: string[];
+        };
+        StaffPlanMigrationRow: {
+            orgId: string;
+            orgName?: string | null;
+            fromVersion: number;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** Format: int64 */
+            fromCents: number;
+            /** Format: int64 */
+            toCents: number;
+            status: string;
+            /**
+             * Format: date-time
+             * @description Their next renewal, when the new price first applies
+             */
+            effectiveAt?: string | null;
+        };
+        StaffPlanMigrationPreview: {
+            planCode: string;
+            toVersion: number;
+            rows: components["schemas"]["StaffPlanMigrationRow"][];
+        };
+        StaffPlanMigrationRequest: {
+            /** @description Empty or missing = every subscriber in the preview */
+            orgIds?: string[];
+        };
+        StaffPlanMigrationResult: {
+            planCode: string;
+            toVersion: number;
+            migrated: string[];
+            failed: {
+                orgId: string;
+                error?: string | null;
+            }[];
+        };
+        StaffPlanSyncLine: {
+            planCode: string;
+            planName?: string | null;
+            version: number;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** Format: int64 */
+            amountCents: number;
+            lookupKey?: string | null;
+            /** @enum {string} */
+            state: "IN_SYNC" | "FREE" | "ADOPTABLE" | "MISSING" | "DRIFT" | "SUPERSEDED";
+            /** @enum {string} */
+            action: "NONE" | "ADOPTED" | "CREATED" | "REPLACED" | "FAILED";
+            stripePriceId?: string | null;
+            /** Format: int64 */
+            stripeAmountCents?: number | null;
+            error?: string | null;
+        };
+        StaffPlanSyncReport: {
+            /** Format: date-time */
+            checkedAt: string;
+            /** @description false for the drift report, true after a sync */
+            applied: boolean;
+            /** Format: int64 */
+            drifted: number;
+            lines: components["schemas"]["StaffPlanSyncLine"][];
+        };
+        StaffTrialCampaign: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            promoCode?: string | null;
+            trialDays: number;
+            /** Format: date-time */
+            signupFrom?: string | null;
+            /** Format: date-time */
+            signupTo?: string | null;
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            eligiblePlans: string[];
+            maxRedemptions?: number | null;
+            redemptions: number;
+            /** @enum {string} */
+            status: "ACTIVE" | "PAUSED" | "ENDED";
+            createdBy?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            updatedBy?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        /** @description A promo code, a sign-up window, or both. */
+        StaffTrialCampaignRequest: {
+            name: string;
+            promoCode?: string | null;
+            trialDays: number;
+            /** Format: date-time */
+            signupFrom?: string | null;
+            /** Format: date-time */
+            signupTo?: string | null;
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            eligiblePlans?: string[];
+            maxRedemptions?: number | null;
+            /** @enum {string|null} */
+            status?: "ACTIVE" | "PAUSED" | "ENDED" | null;
+            /** Format: int64 */
+            expectedVersion?: number | null;
+        };
+        StaffBillingStatusRequest: {
+            status: string;
+        };
+        StaffRewardRule: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description?: string | null;
+            /** @enum {string} */
+            status: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            /** @enum {string} */
+            metric: "GROSS_SALES" | "ACTIVE_LISTINGS" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "DAYS_SINCE_APPROVAL";
+            /**
+             * Format: int64
+             * @description Cents for GROSS_SALES, a count otherwise
+             */
+            threshold: number;
+            windowDays?: number | null;
+            withinDaysOfApproval?: number | null;
+            /** @enum {string} */
+            rewardType: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF";
+            freeDays?: number | null;
+            /** Format: int64 */
+            creditCents?: number | null;
+            percentOff?: number | null;
+            durationInvoices?: number | null;
+            eligiblePlans: string[];
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+            maxGrants?: number | null;
+            grantsCount: number;
+            /** @example 1 month free */
+            rewardLabel: string;
+            /** @example $1,000 in sales within 60 days of approval */
+            conditionLabel: string;
+            createdBy?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+            updatedBy?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** Format: int64 */
+            version: number;
+        };
+        StaffRewardRuleRequest: {
+            name: string;
+            description?: string | null;
+            /** @enum {string|null} */
+            kind?: "SELLER" | "PROVIDER" | null;
+            /** @enum {string} */
+            metric: "GROSS_SALES" | "ACTIVE_LISTINGS" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "DAYS_SINCE_APPROVAL";
+            /** Format: int64 */
+            threshold: number;
+            windowDays?: number | null;
+            withinDaysOfApproval?: number | null;
+            /** @enum {string} */
+            rewardType: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF";
+            freeDays?: number | null;
+            /** Format: int64 */
+            creditCents?: number | null;
+            percentOff?: number | null;
+            durationInvoices?: number | null;
+            eligiblePlans?: string[];
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+            maxGrants?: number | null;
+            /** @enum {string|null} */
+            status?: "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED" | null;
+            /** Format: int64 */
+            expectedVersion?: number | null;
+            /** @description Preview only - marks who already got this rule */
+            ruleId?: string | null;
+        };
+        StaffRewardPreviewRow: {
+            orgId: string;
+            orgName?: string | null;
+            planCode?: string | null;
+            /** Format: int64 */
+            value: number;
+            /** Format: int64 */
+            threshold: number;
+            percent: number;
+            qualifies: boolean;
+            alreadyGranted: boolean;
+            reason?: string | null;
+        };
+        StaffRewardPreview: {
+            evaluated: number;
+            qualifying: number;
+            rows: components["schemas"]["StaffRewardPreviewRow"][];
+        };
+        /** @description A reward or staff adjustment and the Stripe objects it produced. */
+        StaffBillingGrant: {
+            /** Format: uuid */
+            id: string;
+            orgId: string;
+            /** @enum {string} */
+            source: "RULE" | "MANUAL";
+            ruleId?: string | null;
+            /** @enum {string} */
+            type: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END";
+            /** Format: int64 */
+            creditCents?: number | null;
+            freeDays?: number | null;
+            percentOff?: number | null;
+            durationInvoices?: number | null;
+            invoiceId?: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPLIED" | "FAILED";
+            reasonCode?: string | null;
+            note?: string | null;
+            summary: string;
+            actorId: string;
+            metric?: string | null;
+            /** Format: int64 */
+            metricValue?: number | null;
+            stripeCustomerId?: string | null;
+            stripeSubscriptionId?: string | null;
+            stripeBalanceTransactionId?: string | null;
+            stripeCouponId?: string | null;
+            /** Format: date-time */
+            previousTrialEnd?: string | null;
+            /** Format: date-time */
+            newTrialEnd?: string | null;
+            attempts: number;
+            lastError?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            appliedAt?: string | null;
+        };
+        StaffBillingGrantPage: {
+            items: components["schemas"]["StaffBillingGrant"][];
+            page: number;
+            size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        StaffBillingReasonCode: {
+            code: string;
+            label: string;
+        };
+        StaffBillingOrgSearch: {
+            items: {
+                orgId: string;
+                name: string;
+                kind: string;
+                status: string;
+            }[];
+        };
+        /** @description seller's Billing (cents). */
+        StaffBillingSubscription: {
+            orgId: string;
+            planCode: string;
+            planName: string;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            status: string;
+            /** Format: date-time */
+            trialEndsAt?: string | null;
+            /** Format: date-time */
+            currentPeriodEnd?: string | null;
+            /** Format: date-time */
+            nextChargeAt?: string | null;
+            /** Format: int64 */
+            nextChargeCents?: number;
+            nextChargeLabel: string;
+            cancelAtPeriodEnd: boolean;
+            dunning?: string | null;
+            failedPaymentAttempts?: number;
+            planVersion: number;
+            /** Format: int64 */
+            creditBalanceCents: number;
+            /** @enum {string|null} */
+            trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
+            trialDaysOverride?: number | null;
+            collectFromEarnings?: boolean;
+        };
+        StaffBillingInvoice: {
+            id: string;
+            number?: string | null;
+            /** Format: date-time */
+            periodStart?: string | null;
+            /** Format: date-time */
+            periodEnd?: string | null;
+            /** Format: int64 */
+            amountDueCents: number;
+            /** Format: int64 */
+            amountPaidCents: number;
+            currency: string;
+            status?: string | null;
+            billingReason?: string | null;
+            hostedInvoiceUrl?: string | null;
+            invoicePdf?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        StaffEarningsCollection: {
+            invoiceId: string;
+            /** Format: int64 */
+            amountCents: number;
+            /** @enum {string} */
+            status: "REQUESTED" | "WITHHELD" | "CREDITED" | "DECLINED" | "FAILED";
+            paymentsReference?: string | null;
+            stripeBalanceTransactionId?: string | null;
+            reason?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+        };
+        StaffBillingPanel: {
+            orgId: string;
+            orgName: string | null;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            orgStatus: string;
+            /** @description null before the organisation has a subscription */
+            billing?: components["schemas"]["StaffBillingSubscription"] | null;
+            invoices: components["schemas"]["StaffBillingInvoice"][];
+            grants: components["schemas"]["StaffBillingGrant"][];
+            collections: components["schemas"]["StaffEarningsCollection"][];
+            earningsCollectionEnabled: boolean;
+        };
+        StaffCreditRequest: {
+            /** Format: int64 */
+            amountCents: number;
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffDaysRequest: {
+            days: number;
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffWaiveRequest: {
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffEarningsCollectionRequest: {
+            enabled: boolean;
+        };
         /**
          * @description LIVE serves orders; PLANNED is on the roadmap (shown, not serving); OFF is switched off (hidden by default).
          * @enum {string}
@@ -3022,7 +3981,7 @@ export interface components {
          * @description Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "notifications" | "preorders";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "notifications" | "preorders" | "plans";
         StaffUser: {
             id: string;
             firstName: string;
@@ -4582,6 +5541,10 @@ export interface components {
         MarketRegionCode: string;
         /** @description The version from the ETag (optimistic locking). */
         IfMatch: string;
+        PlanCode: string;
+        BillingId: string;
+        BillingOrgId: string;
+        BillingInvoiceId: string;
     };
     requestBodies: never;
     headers: never;
@@ -5143,6 +6106,904 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SupportActionResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffUpdatePlanRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveStaffPlanDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanPrices"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    publishStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    retireStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffPlanInvites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanInvitesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffPlanMigration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanMigrationPreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    migrateStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["PlanCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffPlanMigrationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanMigrationResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffStripeSync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanSyncReport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    syncStaffStripe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanSyncReport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffTrialCampaigns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffTrialCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTrialCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffTrialCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffTrialCampaignRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffTrialCampaignStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBillingStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTrialCampaign"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffRewardRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffRewardRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRewardRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffRewardRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRewardRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardPreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffRewardRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRewardRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffRewardRuleStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["BillingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBillingStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRewardRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffBillingGrants: {
+        parameters: {
+            query?: {
+                orgId?: string;
+                source?: string;
+                type?: string;
+                ruleId?: string;
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrantPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffBillingReasonCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingReasonCode"][];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffBillingOrgs: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingOrgSearch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffBillingPanel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingPanel"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    creditStaffBillingOrg: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffCreditRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    giveStaffBillingFreeDays: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    overrideStaffBillingTrial: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    waiveStaffBillingInvoice: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+                invoiceId: components["parameters"]["BillingInvoiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffWaiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffEarningsCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffEarningsCollectionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingPanel"];
                 };
             };
             401: components["responses"]["Problem"];

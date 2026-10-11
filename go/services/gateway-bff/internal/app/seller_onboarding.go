@@ -174,7 +174,8 @@ func (s *sellerShellImpl) SaveOnboardingOwners(ctx context.Context, c *domain.Ca
 func (s *sellerShellImpl) SaveOnboardingPlan(ctx context.Context, c *domain.Caller, in domain.OnboardingPlanInput) (domain.OnboardingStatus, error) {
 	body := port.SellerApplicationPlanStep{PlanCode: strings.TrimSpace(in.PlanCode), Cadence: strings.ToUpper(strings.TrimSpace(in.Cadence)),
 		PaymentMethodKind: strings.ToUpper(strings.TrimSpace(in.PaymentMethodKind)), StripePaymentMethodID: strings.TrimSpace(in.StripePaymentMethodID),
-		CardBrand: strings.ToLower(strings.TrimSpace(in.CardBrand)), CardLast4: strings.TrimSpace(in.CardLast4), CardExpMonth: in.CardExpMonth, CardExpYear: in.CardExpYear}
+		CardBrand: strings.ToLower(strings.TrimSpace(in.CardBrand)), CardLast4: strings.TrimSpace(in.CardLast4), CardExpMonth: in.CardExpMonth, CardExpYear: in.CardExpYear,
+		PromoCode: strings.ToUpper(strings.TrimSpace(in.PromoCode))}
 	return s.saveStep(ctx, c, "plan", body)
 }
 

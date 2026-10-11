@@ -268,6 +268,8 @@ type OnboardingPlanInput struct {
 	CardLast4             string `json:"cardLast4"`
 	CardExpMonth          *int   `json:"cardExpMonth"`
 	CardExpYear           *int   `json:"cardExpYear"`
+	// PromoCode is a trial campaign's code (S295), validated by the seller service for the plan and sign-up time.
+	PromoCode string `json:"promoCode"`
 }
 
 // OnboardingComplianceInput is PUT /v1/seller/onboarding/catalog-compliance.

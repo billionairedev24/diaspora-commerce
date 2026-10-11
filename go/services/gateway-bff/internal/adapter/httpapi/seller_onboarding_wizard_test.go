@@ -118,8 +118,9 @@ func TestOnboardingOwnersPlanAndCompliance(t *testing.T) {
 	}
 
 	plan := b.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "monthly", "paymentMethodKind": "card",
-		"stripePaymentMethodId": "pm_1", "cardBrand": "Visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029})
-	if s := up.StepBodies["plan"]; plan.status != 200 || s["cadence"] != "MONTHLY" || s["paymentMethodKind"] != "CARD" || s["cardBrand"] != "visa" {
+		"stripePaymentMethodId": "pm_1", "cardBrand": "Visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029, "promoCode": " grow60 "})
+	if s := up.StepBodies["plan"]; plan.status != 200 || s["cadence"] != "MONTHLY" || s["paymentMethodKind"] != "CARD" || s["cardBrand"] != "visa" ||
+		s["promoCode"] != "GROW60" {
 		t.Fatalf("plan = %d %v", plan.status, s)
 	}
 	if fc := plan.json(t)["form"].(map[string]any)["plan"].(map[string]any)["firstCharge"].(map[string]any); !strings.HasPrefix(fc["sentence"].(string), "Free for 30 days") {

@@ -1001,8 +1001,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Plan, cadence, next charge, payment methods, invoices and the plan catalogue
-         * @description seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/plans?kind=`.
+         * Plan, cadence, next charge, credit balance, payment methods, invoices and the plans this organisation may choose
+         * @description seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/orgs/{orgId}/billing/plans` (public plans, invite-only plans it was invited to and its current plan; AfroTransact's own catalogue, S292).
          */
         get: operations["getBilling"];
         put?: never;
@@ -1068,6 +1068,86 @@ export interface paths {
          * @description seller `DELETE /v1/orgs/{orgId}/billing/payment-methods/{id}`.
          */
         delete: operations["removePaymentMethod"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/rewards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rewards the organisation can earn (with progress) and the rewards and credits it received
+         * @description seller `GET /v1/orgs/{orgId}/billing/rewards` (S296). Same access as the billing page.
+         */
+        get: operations["getBillingRewards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/plan/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a plan or cadence change would do (upgrades show Stripe's proration now); nothing changes
+         * @description seller `GET /v1/orgs/{orgId}/billing/plan/preview`.
+         */
+        get: operations["previewPlanChange"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/setup-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start adding a card or bank account with the Payment Element (owner only)
+         * @description seller `POST /v1/orgs/{orgId}/billing/setup-intents` (a SetupIntent on the organisation's Stripe customer, usage off_session).
+         */
+        post: operations["createBillingSetupIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/payment-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register the payment method the SetupIntent confirmed (owner only)
+         * @description seller `POST /v1/orgs/{orgId}/billing/payment-methods`; only display fields are stored.
+         */
+        post: operations["addBillingPaymentMethod"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1975,6 +2055,8 @@ export interface components {
             cardLast4?: string;
             cardExpMonth?: number;
             cardExpYear?: number;
+            /** @description A trial campaign's promo code (S295); 422 promoCode when it isn't valid for this plan */
+            promoCode?: string;
         };
         OnboardingFoodPermitInput: {
             permitType?: components["schemas"]["OnboardingFoodPermitType"];
@@ -2761,6 +2843,100 @@ export interface components {
                 effectiveAt: string;
             } | null;
             dunning: string | null;
+            /** @description Plan version (prices) the organisation pays; changes only by a plan change or a staff migration (S292) */
+            planVersion?: number;
+            /**
+             * Format: int64
+             * @description Stripe credit balance the next invoices use (rewards, staff credits)
+             */
+            creditBalanceMinor?: number;
+            /** @enum {string|null} */
+            trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
+        };
+        /** @description A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296). */
+        RewardProgress: {
+            ruleId: string;
+            name: string;
+            description?: string | null;
+            /** @enum {string} */
+            metric: "GROSS_SALES" | "ACTIVE_LISTINGS" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "DAYS_SINCE_APPROVAL";
+            /**
+             * Format: int64
+             * @description Cents for GROSS_SALES, a count otherwise
+             */
+            value: number;
+            /** Format: int64 */
+            threshold: number;
+            percent: number;
+            qualifies: boolean;
+            label: string;
+            rewardLabel: string;
+            conditionLabel: string;
+            /** Format: date-time */
+            endsAt?: string | null;
+        };
+        /** @description A reward or credit the organisation received (reward rules and staff adjustments). */
+        EarnedReward: {
+            id: string;
+            /** @enum {string} */
+            source: "RULE" | "MANUAL";
+            /** @enum {string} */
+            type: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END";
+            summary: string;
+            /** @description The reward rule's name */
+            reason?: string | null;
+            /** @enum {string} */
+            status: "PENDING" | "APPLIED" | "FAILED";
+            /** Format: int64 */
+            creditMinor?: number | null;
+            freeDays?: number | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            appliedAt?: string | null;
+        };
+        SellerRewardsView: {
+            available: components["schemas"]["RewardProgress"][];
+            earned: components["schemas"]["EarnedReward"][];
+        };
+        BillingPlanChangePreview: {
+            /** @enum {string} */
+            change: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
+            planCode: string;
+            planName: string;
+            cadence: components["schemas"]["Cadence"];
+            /** Format: date-time */
+            effectiveAt?: string | null;
+            /**
+             * Format: int64
+             * @description Invoiced now: Stripe's proration of an upgrade (0 in a trial or for a change at renewal)
+             */
+            amountDueNowMinor: number;
+            /** Format: int64 */
+            nextChargeMinor: number;
+            /** Format: date-time */
+            nextChargeAt?: string | null;
+            trialing: boolean;
+        };
+        BillingSetupIntent: {
+            setupIntentId: string;
+            /** @description Confirm with the Payment Element (stripe.confirmSetup) */
+            clientSecret: string;
+            publishableKey: string;
+            /** @description No Stripe key on this machine; the local stand-in accepted it */
+            localTest: boolean;
+        };
+        AddBillingPaymentMethod: {
+            stripePaymentMethodId: string;
+            /** @enum {string} */
+            kind: "CARD" | "US_BANK_ACCOUNT";
+            brand?: string;
+            last4: string;
+            expMonth?: number;
+            expYear?: number;
+            bankName?: string;
+            accountType?: string;
+            makeDefault?: boolean;
         };
         BillingView: {
             subscription: components["schemas"]["Subscription"];
@@ -4959,6 +5135,114 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBillingRewards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rewards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerRewardsView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewPlanChange: {
+        parameters: {
+            query: {
+                planCode: string;
+                cadence?: components["schemas"]["Cadence"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPlanChangePreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createBillingSetupIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description SetupIntent */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingSetupIntent"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addBillingPaymentMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddBillingPaymentMethod"];
+            };
+        };
+        responses: {
+            /** @description Payment method */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingPaymentMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

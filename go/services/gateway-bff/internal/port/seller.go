@@ -269,6 +269,7 @@ type SellerApplicationPlanStep struct {
 	CardLast4             string `json:"cardLast4,omitempty"`
 	CardExpMonth          *int   `json:"cardExpMonth,omitempty"`
 	CardExpYear           *int   `json:"cardExpYear,omitempty"`
+	PromoCode             string `json:"promoCode,omitempty"`
 }
 
 // SellerApplicationBiz is seller's BusinessSection (step "business").
