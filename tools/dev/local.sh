@@ -30,6 +30,23 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# The services need Java 25 (maven-enforcer). When the default `java` is older, use a JDK 25 that is installed:
+# macOS java_home, then the usual Linux locations. JAVA_HOME pointing at 25 already is kept.
+java_major() { "$1/bin/java" -version 2>&1 | awk -F'"' '/version/ {split($2, v, "."); print v[1]; exit}'; }
+pick_jdk25() {
+  local cand
+  if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" && "$(java_major "$JAVA_HOME")" -ge 25 ]]; then return 0; fi
+  if [[ -x /usr/libexec/java_home ]] && cand=$(/usr/libexec/java_home -v 25+ 2>/dev/null); then
+    export JAVA_HOME="$cand" PATH="$cand/bin:$PATH"; return 0
+  fi
+  for cand in /usr/lib/jvm/java-25-openjdk* /usr/lib/jvm/*25* /opt/homebrew/opt/openjdk@25 /usr/local/opt/openjdk@25 \
+    "$HOME"/.sdkman/candidates/java/25*; do
+    if [[ -x "$cand/bin/java" && "$(java_major "$cand")" -ge 25 ]]; then export JAVA_HOME="$cand" PATH="$cand/bin:$PATH"; return 0; fi
+  done
+  echo "  ! Java 25 not found (brew install openjdk@25 / apt install openjdk-25-jdk, or set JAVA_HOME); Java builds will fail" >&2
+}
+pick_jdk25
 STATE="$ROOT/.local"
 LOGS="$STATE/logs"
 PIDS="$STATE/pids"
