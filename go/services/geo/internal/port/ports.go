@@ -60,3 +60,14 @@ type RouteCache interface {
 	Get(from, to domain.Point) (domain.CachedRoute, bool)
 	Put(from, to domain.Point, r domain.CachedRoute)
 }
+
+// Gazetteer knows every country, its regions (states, provinces…) and their cities. Lookups are in memory.
+type Gazetteer interface {
+	Countries() []domain.PlaceCountry
+	// Regions returns the country and its regions by name; false when the country is unknown.
+	Regions(country string) (domain.PlaceCountry, []domain.PlaceRegion, bool)
+	// Cities returns the region and its city names by name; false when the country or region is unknown.
+	Cities(country, region string) (domain.PlaceRegion, []string, bool)
+	// Search returns places whose name contains q, prefix matches first, at most limit (country "" = anywhere).
+	Search(q, country string, limit int) []domain.PlaceMatch
+}

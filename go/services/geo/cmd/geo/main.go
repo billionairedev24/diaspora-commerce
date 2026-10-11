@@ -21,6 +21,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/fixture"
+	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/gazetteer"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/nominatim"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/places"
@@ -133,6 +134,11 @@ func run() error {
 			nil),
 	}, log)
 	httpapi.New(addresses, reverse, zones, distances).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
+	world, err := gazetteer.New()
+	if err != nil {
+		return fmt.Errorf("gazetteer: %w", err)
+	}
+	httpapi.NewPlaces(app.NewPlaceService(world)).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

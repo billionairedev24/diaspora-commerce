@@ -22,6 +22,10 @@ tags:
     description: Delivery zones, FC catchments and provider service areas
   - name: Distance
     description: Distances between places (AfroTransact Delivery pricing, nearest drivers) and forward geocoding
+  - name: Places
+    description: |
+      World gazetteer for back-office pickers (pre-order coverage areas, markets): every country, its states /
+      provinces / regions and their cities. Built in (countries-states-cities database, ODbL-1.0), no provider call.
 paths:
   /v1/addresses/autocomplete:
     get:
@@ -207,6 +211,56 @@ paths:
         '400': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
+  /v1/places/countries:
+    get:
+      tags: [Places]
+      operationId: listPlaceCountries
+      summary: Every country, by name
+      responses:
+        '200':
+          description: Countries
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlaceCountryList'}}}
+  /v1/places/countries/{country}/regions:
+    get:
+      tags: [Places]
+      operationId: listPlaceRegions
+      summary: A country's states, provinces or regions, by name
+      parameters:
+        - {name: country, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
+      responses:
+        '200':
+          description: Regions
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlaceRegionList'}}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/places/countries/{country}/regions/{region}/cities:
+    get:
+      tags: [Places]
+      operationId: listPlaceCities
+      summary: Cities of a state / province / region, by name; q filters (contains, case-insensitive)
+      parameters:
+        - {name: country, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
+        - {name: region, in: path, required: true, schema: {type: string, maxLength: 8}}
+        - {name: q, in: query, schema: {type: string, maxLength: 80}}
+        - {name: limit, in: query, description: At most this many (default and max 5000), schema: {type: integer, minimum: 1, maximum: 5000}}
+      responses:
+        '200':
+          description: Cities
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlaceCityList'}}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/places/search:
+    get:
+      tags: [Places]
+      operationId: searchPlaces
+      summary: Countries, regions and cities whose name contains q (2+ characters); prefix matches first
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 80}}
+        - {name: country, in: query, description: Only places in this country, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 8}}
+      responses:
+        '200':
+          description: Matches
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlaceSearchResult'}}}
+        '400': {$ref: '#/components/responses/Problem'}
   /v1/zones:
     get:
       tags: [Zones]
@@ -371,3 +425,58 @@ components:
       type: object
       properties:
         results: {type: array, items: {$ref: '#/components/schemas/DistanceBatchItem'}}
+    PlaceCountry:
+      type: object
+      required: [code, name, regionLabel]
+      properties:
+        code: {type: string, description: ISO 3166-1 alpha-2}
+        name: {type: string}
+        currency: {type: string}
+        regionLabel: {type: string, description: 'What the country calls its regions: State, Province, County, Parish, Region'}
+        regionCount: {type: integer}
+    PlaceCountryList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PlaceCountry'}}
+    PlaceRegion:
+      type: object
+      required: [code, name]
+      properties:
+        code: {type: string, description: 'Subdivision code (TX, ON, LA)'}
+        name: {type: string}
+        cityCount: {type: integer}
+    PlaceRegionList:
+      type: object
+      required: [country, countryName, regionLabel, items]
+      properties:
+        country: {type: string}
+        countryName: {type: string}
+        regionLabel: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/PlaceRegion'}}
+    PlaceCityList:
+      type: object
+      required: [country, region, regionName, items, total]
+      properties:
+        country: {type: string}
+        region: {type: string}
+        regionName: {type: string}
+        items: {type: array, items: {type: string}, description: City names, by name}
+        total: {type: integer, description: Cities matching q before the limit}
+    PlaceMatch:
+      type: object
+      required: [key, code, name, type]
+      properties:
+        key: {type: string, description: 'US, US/TX or US/TX/Lubbock'}
+        code: {type: string}
+        name: {type: string}
+        type: {type: string, enum: [COUNTRY, REGION, CITY]}
+        country: {type: string}
+        countryName: {type: string}
+        region: {type: string}
+        regionName: {type: string}
+    PlaceSearchResult:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PlaceMatch'}}
