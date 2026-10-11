@@ -37,4 +37,10 @@ public interface MfaRepository {
     Optional<TrustedBrowser> trustedBrowser(UUID userId, String tokenHash, Instant now);
 
     void deleteTrustedBrowsers(UUID userId);
+
+    /** Unexpired trusted browsers, newest first. */
+    List<TrustedBrowser> trustedBrowsers(UUID userId, Instant now);
+
+    /** Deletes one trusted browser of the user; returns false when none matched. */
+    boolean deleteTrustedBrowser(UUID userId, UUID browserId);
 }

@@ -1191,7 +1191,8 @@ export interface paths {
         delete: operations["removePasskey"];
         options?: never;
         head?: never;
-        patch?: never;
+        /** Rename a passkey (identity PATCH /v1/me/passkeys/{credentialId}) */
+        patch: operations["renamePasskey"];
         trace?: never;
     };
     "/v1/account/sessions/{sessionId}": {
@@ -1257,6 +1258,139 @@ export interface paths {
         post?: never;
         /** Unlink a Google, Apple or Facebook sign-in (409 for the last sign-in method) */
         delete: operations["unlinkAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/trusted-browsers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget every browser trusted to skip two-step verification */
+        delete: operations["forgetTrustedBrowsers"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/trusted-browsers/{browserId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Forget one trusted browser (it asks for the second factor at the next sign-in) */
+        delete: operations["forgetTrustedBrowser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/sign-in-activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent sign-ins of the account across every app (identity's sign-in audit trail, newest first) */
+        get: operations["getSignInActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The signed-in person's profile with organisation memberships, platform roles and job title
+         * @description `kind` says which settings apply: `customer` (storefront), `seller` (Seller Center / Provider Hub member) or
+         *     `staff`. Email is read-only (identity has no change-email flow); `emailManaged` marks staff company addresses.
+         */
+        get: operations["getAccountProfile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change name, mobile number or job title (identity PATCH /v1/me and PUT /v1/me/work-profile)
+         * @description A new mobile number must be verified again by SMS. Job title is for back-office members only.
+         */
+        patch: operations["updateAccountProfile"];
+        trace?: never;
+    };
+    "/v1/account/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Language, time zone, date and number format and default table density */
+        get: operations["getAccountPreferences"];
+        /** Replace the display preferences (notification switches are kept) */
+        put: operations["saveAccountPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Back-office alert topics per channel and personal quiet hours (notifications /v1/preferences/{id}/alerts)
+         * @description Seller Center and Provider Hub members get the seller topics (new orders, low stock, payouts, compliance,
+         *     claims); staff get theirs (assigned queues, escalations, approvals). 403 for accounts with neither.
+         */
+        get: operations["getAlertPreferences"];
+        /** Change alert topics and quiet hours */
+        put: operations["saveAlertPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/orgs/{orgId}/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Leave an organisation (members who are not an owner) */
+        post: operations["leaveOrganisation"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2996,14 +3130,23 @@ export interface components {
                 sms: boolean;
                 smsPhone: string | null;
                 recoveryCodesLeft: number;
+                /** @description Two-step verification is required at sign-in (always for staff) */
                 required: boolean;
+                /** @description Two-step verification may be turned off altogether (never for staff) */
                 mayDisable: boolean;
+                /** @description The authenticator app may be turned off now (staff only while SMS codes stay on) */
+                mayRemoveTotp: boolean;
+                /** @description SMS codes may be turned off now (staff only while the authenticator app stays on) */
+                mayRemoveSms: boolean;
             };
-            passkeys: {
-                credentialId: string;
+            passkeys: components["schemas"]["Passkey"][];
+            /** @description Browsers that skip the second factor until expiresAt ("Trust this browser") */
+            trustedBrowsers: {
+                id: string;
+                /** @description Browser and system from the user agent, e.g. "Chrome on macOS" */
                 label: string;
                 createdAt: string | null;
-                lastUsedAt: string | null;
+                expiresAt: string | null;
             }[];
             sessions: {
                 id: string;
@@ -3021,6 +3164,106 @@ export interface components {
             linkedAccounts: components["schemas"]["LinkedAccounts"];
             /** @description identity's hosted passkey registration page (/webauthn/register) */
             passkeyRegistrationUrl: string;
+        };
+        Passkey: {
+            credentialId: string;
+            label: string;
+            createdAt: string | null;
+            lastUsedAt: string | null;
+        };
+        SignInEvent: {
+            /** Format: date-time */
+            at: string;
+            /** @description PASSWORD, MFA_TOTP, MFA_SMS, MFA_RECOVERY_CODE, PASSKEY, LOGIN_TICKET */
+            method: string;
+            /** @description SUCCEEDED, FAILED, MFA_REQUIRED, LOCKED, BLOCKED, … */
+            outcome: string;
+            /** @description Which app signed in, e.g. "AfroTransact web" or "Driver app" */
+            app: string;
+            /** @description Browser and system from the user agent */
+            device: string;
+            ip: string | null;
+        };
+        AccountProfile: {
+            id: string;
+            /** @enum {string} */
+            kind: "customer" | "seller" | "staff";
+            firstName: string;
+            lastName: string;
+            email: string;
+            emailVerified: boolean;
+            /** @description A company (staff) address managed by AfroTransact IT */
+            emailManaged: boolean;
+            initials: string;
+            /** @description The account's mobile number (E.164) */
+            phone: string | null;
+            phoneVerified: boolean;
+            jobTitle: string | null;
+            /** @description Seller and provider organisations with this person's role (read-only) */
+            memberships: {
+                orgId: string;
+                name: string;
+                /** @enum {string} */
+                kind: "SELLER" | "PROVIDER" | "BOTH";
+                status: string;
+                roleKey: string;
+                roleLabel: string;
+                owner: boolean;
+                /** @description The organisation this person currently acts for */
+                active: boolean;
+            }[];
+            /** @description Platform (staff) roles (read-only) */
+            roles: {
+                key: string;
+                label: string;
+            }[];
+        };
+        AccountProfileInput: {
+            firstName?: string;
+            lastName?: string;
+            phone?: string;
+            jobTitle?: string | null;
+        };
+        AccountPreferences: {
+            /** @description BCP 47 tag, e.g. en-US or fr-CA; null = platform default */
+            locale: string | null;
+            /** @description IANA zone, e.g. America/Chicago; null = market zone */
+            timeZone: string | null;
+            /** @enum {string} */
+            dateFormat: "AUTO" | "MDY" | "DMY" | "YMD";
+            /** @enum {string} */
+            numberFormat: "AUTO" | "COMMA_DOT" | "DOT_COMMA" | "SPACE_COMMA";
+            /** @enum {string} */
+            tableDensity: "COMFORTABLE" | "COMPACT";
+        };
+        AlertPreference: {
+            /** @enum {string} */
+            topic: "seller.orders" | "seller.inventory" | "seller.payouts" | "seller.compliance" | "seller.claims" | "staff.assigned" | "staff.escalations" | "staff.approvals";
+            /** @enum {string} */
+            channel: "email" | "sms";
+            enabled: boolean;
+            /** @description Always on (the platform must reach you on this channel) */
+            locked: boolean;
+        };
+        QuietHours: {
+            enabled: boolean;
+            start: string;
+            end: string;
+        };
+        AlertPreferences: {
+            /** @enum {string} */
+            audience: "seller" | "staff";
+            preferences: components["schemas"]["AlertPreference"][];
+            quietHours: components["schemas"]["QuietHours"];
+        };
+        AlertPreferencesInput: {
+            preferences: {
+                topic: string;
+                /** @enum {string} */
+                channel: "email" | "sms";
+                enabled: boolean;
+            }[];
+            quietHours?: components["schemas"]["QuietHours"];
         };
         NotificationPreferences: {
             email: boolean;
@@ -5084,6 +5327,38 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    renamePasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    label: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Passkey"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     revokeSession: {
         parameters: {
             query?: never;
@@ -5175,6 +5450,246 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    forgetTrustedBrowsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Forgotten */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    forgetTrustedBrowser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                browserId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Forgotten */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSignInActivity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 20 recent sign-in events */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["SignInEvent"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountProfile"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateAccountProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountProfileInput"];
+            };
+        };
+        responses: {
+            /** @description Profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountProfile"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountPreferences"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveAccountPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountPreferences"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountPreferences"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAlertPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alert preferences */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertPreferences"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveAlertPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertPreferencesInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertPreferences"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    leaveOrganisation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Left */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

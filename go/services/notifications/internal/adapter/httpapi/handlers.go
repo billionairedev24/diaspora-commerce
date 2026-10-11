@@ -31,6 +31,7 @@ type Deps struct {
 	Log          app.NotificationLog
 	Templates    app.Templates
 	Preferences  app.Preferences
+	Alerts       app.AlertPreferences // nil disables /v1/preferences/{recipientId}/alerts
 	Receipts     app.Receipts
 	Compliance   app.SmsCompliance
 	Unsubscriber app.Unsubscriber
@@ -76,6 +77,10 @@ func (h *handlersImpl) Register(mux *http.ServeMux, authn func(http.Handler) htt
 	secured("DELETE /v1/suppressions/{address}", PermManage, h.unsuppress)
 	mux.Handle("GET /v1/preferences/{recipientId}", authn(http.HandlerFunc(h.getPreferences)))
 	mux.Handle("PUT /v1/preferences/{recipientId}", authn(http.HandlerFunc(h.setPreferences)))
+	if h.d.Alerts != nil {
+		mux.Handle("GET /v1/preferences/{recipientId}/alerts", authn(http.HandlerFunc(h.getAlerts)))
+		mux.Handle("PUT /v1/preferences/{recipientId}/alerts", authn(http.HandlerFunc(h.setAlerts)))
+	}
 	if h.d.StockAlerts != nil {
 		mux.Handle("POST /v1/stock-alerts", authn(http.HandlerFunc(h.subscribeStockAlert)))
 		mux.Handle("GET /v1/stock-alerts", authn(http.HandlerFunc(h.listStockAlerts)))
@@ -280,6 +285,69 @@ func (h *handlersImpl) setPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.getPreferences(w, r)
+}
+
+// alertQuietBody is personal quiet hours on the wire ("21:00" / "07:00").
+type alertQuietBody struct {
+	Enabled bool   `json:"enabled"`
+	Start   string `json:"start"`
+	End     string `json:"end"`
+}
+
+func alertsBody(id string, s domain.AlertSettings) map[string]any {
+	return map[string]any{"recipientId": id, "audience": s.Audience, "preferences": s.Preferences,
+		"quietHours": alertQuietBody{Enabled: s.Quiet.Enabled, Start: domain.FormatClockMinutes(s.Quiet.StartMinute),
+			End: domain.FormatClockMinutes(s.Quiet.EndMinute)}}
+}
+
+func (h *handlersImpl) getAlerts(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("recipientId")
+	if !canManageRecipient(r, id) {
+		problem.Write(w, r, problem.New(http.StatusForbidden, "auth.missing-permission", "Only the recipient or staff with "+PermManage+" may read alert preferences"))
+		return
+	}
+	out, err := h.d.Alerts.Get(r.Context(), id, domain.AlertAudience(r.URL.Query().Get("audience")))
+	if err != nil {
+		h.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, alertsBody(id, out))
+}
+
+func (h *handlersImpl) setAlerts(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("recipientId")
+	if !canManageRecipient(r, id) {
+		problem.Write(w, r, problem.New(http.StatusForbidden, "auth.missing-permission", "Only the recipient or staff with "+PermManage+" may change alert preferences"))
+		return
+	}
+	var body struct {
+		Audience    domain.AlertAudience     `json:"audience"`
+		Preferences []domain.AlertPreference `json:"preferences"`
+		QuietHours  *alertQuietBody          `json:"quietHours"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	var quiet *domain.PersonalQuietHours
+	if body.QuietHours != nil {
+		start, err := domain.ParseClockMinutes(body.QuietHours.Start)
+		if err != nil {
+			h.writeErr(w, r, err)
+			return
+		}
+		end, err := domain.ParseClockMinutes(body.QuietHours.End)
+		if err != nil {
+			h.writeErr(w, r, err)
+			return
+		}
+		quiet = &domain.PersonalQuietHours{Enabled: body.QuietHours.Enabled, StartMinute: start, EndMinute: end}
+	}
+	out, err := h.d.Alerts.Set(r.Context(), id, body.Audience, body.Preferences, quiet)
+	if err != nil {
+		h.writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, alertsBody(id, out))
 }
 
 func (h *handlersImpl) recordConsent(w http.ResponseWriter, r *http.Request) {

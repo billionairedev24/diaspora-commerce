@@ -6,13 +6,15 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// SecurityService is Login & security over identity /v1/me: password, authenticator app and SMS codes, recovery
-// codes, passkeys, signed-in sessions, push devices, linked accounts and notification switches.
+// SecurityService is Login & security over identity /v1/me for every app (storefront, Seller Center, staff console):
+// password, authenticator app and SMS codes, recovery codes, passkeys, trusted browsers, signed-in sessions, recent
+// sign-in activity, push devices, linked accounts and notification switches.
 type SecurityService interface {
 	Overview(ctx context.Context, c *domain.Caller) (domain.SecurityOverview, error)
 	ChangePassword(ctx context.Context, c *domain.Caller, in domain.PasswordChange) error
@@ -24,6 +26,11 @@ type SecurityService interface {
 	DisableSMS(ctx context.Context, c *domain.Caller) error
 	RecoveryCodes(ctx context.Context, c *domain.Caller) (domain.RecoveryCodes, error)
 	RemovePasskey(ctx context.Context, c *domain.Caller, id string) error
+	RenamePasskey(ctx context.Context, c *domain.Caller, id, label string) (domain.Passkey, error)
+	ForgetTrustedBrowser(ctx context.Context, c *domain.Caller, id string) error
+	ForgetTrustedBrowsers(ctx context.Context, c *domain.Caller) error
+	// SignInActivity is the account's 20 most recent sign-ins (every app), newest first.
+	SignInActivity(ctx context.Context, c *domain.Caller) ([]domain.SignInEvent, error)
 	RevokeSession(ctx context.Context, c *domain.Caller, id string) error
 	RevokeOtherSessions(ctx context.Context, c *domain.Caller) (int, error)
 	RemoveDevice(ctx context.Context, c *domain.Caller, id string) error
@@ -57,6 +64,11 @@ func securityErr(err error) error {
 			firstNonEmpty(p.Detail, "Your current password is incorrect.")).WithCause(err)
 	case strings.Contains(code, "weak-password") || strings.Contains(code, "password-policy"):
 		return domain.FieldProblem(domain.CodeWeakPassword, "Password too weak", "newPassword", firstNonEmpty(p.Detail, "Choose a stronger password.")).WithCause(err)
+	case strings.Contains(code, "staff-mfa-required"):
+		return domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Two-step verification is required",
+			firstNonEmpty(p.Detail, "Two-step verification is mandatory for staff accounts: turn on another method first.")).WithCause(err)
+	case strings.Contains(code, "trusted-browser-not-found"):
+		return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "That browser is no longer trusted.").WithCause(err)
 	case strings.Contains(code, "last-sign-in-method") || strings.Contains(code, "last-method"):
 		return domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Keep one way to sign in",
 			firstNonEmpty(p.Detail, "Add another sign-in method before removing this one.")).WithCause(err)
@@ -81,14 +93,16 @@ func (s *securityServiceImpl) Overview(ctx context.Context, c *domain.Caller) (d
 		sessions []port.UpSession
 		devices  []port.UpDevice
 		linked   port.UpLinkedAccounts
+		trusted  []port.UpTrustedBrowser
 	)
-	errs := make([]error, 5)
+	errs := make([]error, 6)
 	var wg sync.WaitGroup
 	wg.Go(func() { mfa, errs[0] = s.d.Security.MFA(ctx, c.BearerToken) })
 	wg.Go(func() { passkeys, errs[1] = s.d.Security.Passkeys(ctx, c.BearerToken) })
 	wg.Go(func() { sessions, errs[2] = s.d.Security.Sessions(ctx, c.BearerToken) })
 	wg.Go(func() { devices, errs[3] = s.d.Security.Devices(ctx, c.BearerToken) })
 	wg.Go(func() { linked, errs[4] = s.d.Security.Linked(ctx, c.BearerToken) })
+	wg.Go(func() { trusted, errs[5] = s.d.Security.TrustedBrowsers(ctx, c.BearerToken) })
 	wg.Wait()
 	for _, err := range errs {
 		if err != nil {
@@ -97,14 +111,17 @@ func (s *securityServiceImpl) Overview(ctx context.Context, c *domain.Caller) (d
 	}
 	out := domain.SecurityOverview{
 		MFA: domain.MfaStatus{TOTP: mfa.TOTP, SMS: mfa.SMS, SMSPhone: optStr(mfa.SMSPhone), RecoveryCodesLeft: mfa.RecoveryCodesLeft,
-			Required: mfa.Required, MayDisable: mfa.MayDisable},
-		Passkeys: []domain.Passkey{}, Sessions: []domain.SignedInSession{}, Devices: []domain.PushDevice{},
+			Required: mfa.Required, MayDisable: mfa.MayDisable, MayRemoveTOTP: mfa.TOTP && mfa.MayRemoveTOTP, MayRemoveSMS: mfa.SMS && mfa.MayRemoveSMS},
+		Passkeys: []domain.Passkey{}, TrustedBrowsers: []domain.TrustedBrowser{}, Sessions: []domain.SignedInSession{}, Devices: []domain.PushDevice{},
 		Linked:                 domain.LinkedAccounts{Accounts: []domain.LinkedAccount{}, HasPassword: linked.HasPassword},
 		PasskeyRegistrationURL: strings.TrimSuffix(s.d.IdentityPublicURL, "/") + "/webauthn/register",
 	}
 	for _, p := range passkeys {
-		out.Passkeys = append(out.Passkeys, domain.Passkey{CredentialID: p.CredentialID, Label: firstNonEmpty(p.Label, "Passkey"),
-			CreatedAt: isoOrNil(p.CreatedAt), LastUsedAt: isoOrNil(p.LastUsedAt)})
+		out.Passkeys = append(out.Passkeys, toPasskey(p))
+	}
+	for _, b := range trusted {
+		out.TrustedBrowsers = append(out.TrustedBrowsers, domain.TrustedBrowser{ID: b.ID, Label: domain.DescribeUserAgent(b.UserAgent),
+			CreatedAt: isoOrNil(b.CreatedAt), ExpiresAt: isoOrNil(b.ExpiresAt)})
 	}
 	for _, x := range sessions {
 		out.Sessions = append(out.Sessions, domain.SignedInSession{ID: x.ID, ClientName: firstNonEmpty(x.ClientName, x.ClientID, "AfroTransact"),
@@ -217,6 +234,59 @@ func (s *securityServiceImpl) RemovePasskey(ctx context.Context, c *domain.Calle
 		return err
 	}
 	return wrapSec(s.d.Security.RemovePasskey(ctx, c.BearerToken, id))
+}
+
+func toPasskey(p port.UpPasskey) domain.Passkey {
+	return domain.Passkey{CredentialID: p.CredentialID, Label: firstNonEmpty(p.Label, "Passkey"),
+		CreatedAt: isoOrNil(p.CreatedAt), LastUsedAt: isoOrNil(p.LastUsedAt)}
+}
+
+func (s *securityServiceImpl) RenamePasskey(ctx context.Context, c *domain.Caller, id, label string) (domain.Passkey, error) {
+	if err := requireCustomer(c); err != nil {
+		return domain.Passkey{}, err
+	}
+	label = strings.TrimSpace(label)
+	if label == "" || utf8.RuneCountInString(label) > 64 {
+		return domain.Passkey{}, domain.FieldProblem(domain.CodeValidationFailed, "Validation failed", "label", "Use 1 to 64 characters")
+	}
+	p, err := s.d.Security.RenamePasskey(ctx, c.BearerToken, id, label)
+	if err != nil {
+		return domain.Passkey{}, securityErr(err)
+	}
+	return toPasskey(p), nil
+}
+
+func (s *securityServiceImpl) ForgetTrustedBrowser(ctx context.Context, c *domain.Caller, id string) error {
+	if err := requireCustomer(c); err != nil {
+		return err
+	}
+	return wrapSec(s.d.Security.ForgetTrustedBrowser(ctx, c.BearerToken, id))
+}
+
+func (s *securityServiceImpl) ForgetTrustedBrowsers(ctx context.Context, c *domain.Caller) error {
+	if err := requireCustomer(c); err != nil {
+		return err
+	}
+	return wrapSec(s.d.Security.ForgetTrustedBrowsers(ctx, c.BearerToken))
+}
+
+// signInActivityLimit is how many recent sign-ins the security pages list.
+const signInActivityLimit = 20
+
+func (s *securityServiceImpl) SignInActivity(ctx context.Context, c *domain.Caller) ([]domain.SignInEvent, error) {
+	if err := requireCustomer(c); err != nil {
+		return nil, err
+	}
+	rows, err := s.d.Security.SignInActivity(ctx, c.BearerToken, signInActivityLimit)
+	if err != nil {
+		return nil, securityErr(err)
+	}
+	out := make([]domain.SignInEvent, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, domain.SignInEvent{At: r.At, Method: r.Method, Outcome: r.Outcome,
+			App: domain.ClientLabel(r.ClientID, "AfroTransact"), Device: domain.DescribeUserAgent(r.UserAgent), IP: optStr(r.IP)})
+	}
+	return out, nil
 }
 
 func (s *securityServiceImpl) RevokeSession(ctx context.Context, c *domain.Caller, id string) error {

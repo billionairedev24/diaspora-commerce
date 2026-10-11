@@ -17,6 +17,7 @@ import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.port.OrganizationRepository;
 import com.afrotransact.identity.port.RoleRepository;
 import com.afrotransact.identity.port.UserAccountRepository;
+import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -31,15 +32,18 @@ class OrgTeamServiceImpl implements OrgTeamService {
     private final UserAccountRepository users;
     private final MembershipWriter writer;
     private final TeamPolicy policy;
+    private final CurrentUser current;
 
     OrgTeamServiceImpl(OrgTeamAccess access, OrganizationRepository orgs, RoleRepository roles,
-                       UserAccountRepository users, MembershipWriter writer, TeamPolicy policy) {
+                       UserAccountRepository users, MembershipWriter writer, TeamPolicy policy,
+                       CurrentUser current) {
         this.access = access;
         this.orgs = orgs;
         this.roles = roles;
         this.users = users;
         this.writer = writer;
         this.policy = policy;
+        this.current = current;
     }
 
     @Override
@@ -106,6 +110,21 @@ class OrgTeamServiceImpl implements OrgTeamService {
             policy.requireOwnerRemains(currentRole, null, otherOwners(org.id(), userId));
         }
         writer.remove(org, userId, currentRole, caller.subject(), reason(caller));
+    }
+
+    @Override
+    @Transactional
+    public void leave(String orgId) {
+        UUID me = current.id();
+        Organization org = orgs.findById(orgId).orElseThrow(() -> new NotFoundException("identity.member-not-found",
+                "Not a member of this organisation"));
+        String role = orgs.memberRole(org.id(), me).orElseThrow(() -> new NotFoundException(
+                "identity.member-not-found", "Not a member of this organisation"));
+        if (policy.isOwnerRole(role)) {
+            throw new ConflictException("identity.owner-cannot-leave",
+                    "Owners can't leave their organisation; make someone else an owner and ask them to remove you");
+        }
+        writer.remove(org, me, role, me.toString(), "left organisation");
     }
 
     private int otherOwners(String orgId, UUID userId) {

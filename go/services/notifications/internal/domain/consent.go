@@ -110,6 +110,12 @@ type ConsentFacts struct {
 	Location    *time.Location
 	Now         time.Time
 	Quiet       QuietHours
+	// Topic is the back-office alert topic of the template ("" when none); TopicOff is the member's switch for it on
+	// this channel turned off.
+	Topic    AlertTopic
+	TopicOff bool
+	// PersonalQuiet is the member's own do-not-disturb window for SMS and push (nil when off).
+	PersonalQuiet *QuietHours
 }
 
 // Decide applies the platform's notification rules:
@@ -118,7 +124,9 @@ type ConsentFacts struct {
 //  2. Suppressed addresses (hard bounce, complaint) never receive anything else.
 //  3. SMS needs a TCPA consent record that has not been revoked by STOP.
 //  4. Marketing needs an explicit opt-in preference for the channel; other categories send unless opted out.
-//  5. Reminders and marketing are held during quiet hours (recipient local time) and released when they end.
+//  5. Back-office alert topics the member muted on the channel are dropped.
+//  6. Reminders and marketing are held during quiet hours (recipient local time) and released when they end; SMS and
+//     push are also held during the member's own quiet hours.
 func Decide(f ConsentFacts) Decision {
 	if f.Category == CategorySecurity {
 		return Decision{Verdict: VerdictAllow, Reason: "security messages always send"}
@@ -139,14 +147,21 @@ func Decide(f ConsentFacts) Decision {
 		return Decision{Verdict: VerdictDeny, Reason: "no marketing opt-in for " + string(f.Channel)}
 	case f.Preference != nil && !f.Preference.Enabled:
 		return Decision{Verdict: VerdictDeny, Reason: "recipient turned off " + string(f.Category) + " on " + string(f.Channel)}
+	case f.TopicOff:
+		return Decision{Verdict: VerdictDeny, Reason: "recipient turned off " + string(f.Topic) + " alerts on " + string(f.Channel)}
+	}
+	loc := f.Location
+	if loc == nil {
+		loc = time.UTC
 	}
 	if f.Category == CategoryReminder || f.Category == CategoryMarketing {
-		loc := f.Location
-		if loc == nil {
-			loc = time.UTC
-		}
 		if until, quiet := f.Quiet.Until(f.Now.In(loc)); quiet {
 			return Decision{Verdict: VerdictDefer, Reason: "quiet hours", Until: until}
+		}
+	}
+	if f.PersonalQuiet != nil && (f.Channel == ChannelSMS || f.Channel == ChannelPush) {
+		if until, quiet := f.PersonalQuiet.Until(f.Now.In(loc)); quiet {
+			return Decision{Verdict: VerdictDefer, Reason: "recipient's quiet hours", Until: until}
 		}
 	}
 	return Decision{Verdict: VerdictAllow}

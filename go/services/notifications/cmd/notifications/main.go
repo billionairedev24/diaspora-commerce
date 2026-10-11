@@ -188,7 +188,7 @@ func run() error {
 	authMW := auth.Middleware(verifier, false)
 	authn := func(h http.Handler) http.Handler { return authMW(contacts.Capture(h)) }
 	httpapi.New(httpapi.Deps{Notifier: notifier, Log: app.NewNotificationLog(store), Templates: templates,
-		Preferences: prefs, Receipts: receipts, Compliance: compliance, Unsubscriber: unsub, StockAlerts: stockAlerts,
+		Preferences: prefs, Alerts: app.NewAlertPreferences(postgres.NewAlertPreferenceStore(pool)), Receipts: receipts, Compliance: compliance, Unsubscriber: unsub, StockAlerts: stockAlerts,
 		Samples: samples, Twilio: twilioV, Resend: resendV, SendGrid: sendGridV, Logger: log}).Register(srv.Mux(), authn)
 
 	// ---- background workers ----

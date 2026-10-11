@@ -489,6 +489,116 @@ class IdentityFlowIT {
         assertThat(status.get("totp").asBoolean()).isTrue();
         assertThat(status.get("recoveryCodesLeft").asInt()).isEqualTo(9);
         assertThat(status.get("mayDisable").asBoolean()).isTrue();
+        assertThat(status.get("mayRemoveTotp").asBoolean()).isTrue();
+
+        // The trusted browser is listed and can be forgotten: the next sign-in asks for the second factor again.
+        JsonNode trusted = BrowserSession.json(s.api("GET", "/v1/me/trusted-browsers", t.accessToken(), null).body());
+        assertThat(trusted.size()).isEqualTo(1);
+        assertThat(trusted.get(0).get("expiresAt").asString()).isNotBlank();
+        assertThat(s.api("DELETE", "/v1/me/trusted-browsers/" + UUID.randomUUID(), t.accessToken(), null)
+                .statusCode()).isEqualTo(404);
+        assertThat(s.api("DELETE", "/v1/me/trusted-browsers/" + trusted.get(0).get("id").asString(),
+                t.accessToken(), null).statusCode()).isEqualTo(204);
+        assertThat(BrowserSession.json(s.api("GET", "/v1/me/trusted-browsers", t.accessToken(), null).body()).size())
+                .isZero();
+        laptop.cookies().getCookieStore().getCookies().stream().filter(c -> "SESSION".equals(c.getName()))
+                .toList().forEach(c -> laptop.cookies().getCookieStore().remove(null, c));
+        assertThat(laptop.signIn(STOREFRONT, STOREFRONT_REDIRECT, email, PASSWORD).mfaRequired()).isTrue();
+
+        // Recent sign-in activity of this account, newest first, capped at 50 rows.
+        JsonNode activity = BrowserSession.json(s.api("GET", "/v1/me/sign-in-activity?limit=2", t.accessToken(), null)
+                .body());
+        assertThat(activity.size()).isEqualTo(2);
+        List<String> outcomes = new ArrayList<>();
+        activity.forEach(a -> outcomes.add(a.get("outcome").asString()));
+        assertThat(outcomes).contains("SUCCEEDED");
+        assertThat(Instant.parse(activity.get(0).get("at").asString()))
+                .isAfterOrEqualTo(Instant.parse(activity.get(1).get("at").asString()));
+        JsonNode capped = BrowserSession.json(s.api("GET", "/v1/me/sign-in-activity?limit=500", t.accessToken(), null)
+                .body());
+        assertThat(capped.size()).isBetween(3, 50);
+    }
+
+    @Test
+    void preferencesAndWorkProfileKeepTheNotificationSwitches() {
+        BrowserSession s = new BrowserSession(base());
+        String email = "kemi." + UUID.randomUUID() + "@example.com";
+        registerAndVerify(s, email, "sell");
+        String token = s.exchangePublic(STOREFRONT, STOREFRONT_REDIRECT,
+                s.signIn(STOREFRONT, STOREFRONT_REDIRECT, email, PASSWORD)).accessToken();
+        assertThat(s.api("PUT", "/v1/me/notification-preferences", token,
+                "{\"email\":true,\"sms\":false,\"push\":true,\"marketingOptIn\":true}").statusCode()).isEqualTo(200);
+
+        JsonNode defaults = BrowserSession.json(s.api("GET", "/v1/me/preferences", token, null).body());
+        assertThat(defaults.get("tableDensity").asString()).isEqualTo("COMFORTABLE");
+        assertThat(defaults.get("dateFormat").asString()).isEqualTo("AUTO");
+
+        HttpResponse<String> saved = s.api("PUT", "/v1/me/preferences", token, """
+                {"locale":"fr-ca","timeZone":"America/Toronto","dateFormat":"DMY","numberFormat":"SPACE_COMMA",
+                 "tableDensity":"COMPACT"}""");
+        assertThat(saved.statusCode()).as(saved.body()).isEqualTo(200);
+        JsonNode prefs = BrowserSession.json(s.api("GET", "/v1/me/preferences", token, null).body());
+        assertThat(prefs.get("locale").asString()).isEqualTo("fr-CA");
+        assertThat(prefs.get("timeZone").asString()).isEqualTo("America/Toronto");
+        assertThat(prefs.get("numberFormat").asString()).isEqualTo("SPACE_COMMA");
+        assertThat(prefs.get("tableDensity").asString()).isEqualTo("COMPACT");
+        JsonNode switches = BrowserSession.json(s.api("GET", "/v1/me/notification-preferences", token, null).body());
+        assertThat(switches.get("sms").asBoolean()).isFalse();
+        assertThat(switches.get("marketingOptIn").asBoolean()).isTrue();
+
+        HttpResponse<String> badZone = s.api("PUT", "/v1/me/preferences", token,
+                "{\"timeZone\":\"Mars/Olympus\",\"dateFormat\":\"AUTO\",\"numberFormat\":\"AUTO\",\"tableDensity\":\"COMPACT\"}");
+        assertThat(badZone.statusCode()).isEqualTo(422);
+        assertThat(BrowserSession.json(badZone.body()).get("fieldErrors").has("timeZone")).isTrue();
+        assertThat(s.api("PUT", "/v1/me/preferences", token, "{\"dateFormat\":\"SOMETIMES\"}").statusCode())
+                .isEqualTo(400);
+
+        JsonNode noTitle = BrowserSession.json(s.api("GET", "/v1/me/work-profile", token, null).body()).get("jobTitle");
+        assertThat(noTitle == null || noTitle.isNull()).isTrue();
+        JsonNode work = BrowserSession.json(s.api("PUT", "/v1/me/work-profile", token,
+                "{\"jobTitle\":\"  Catalogue lead \"}").body());
+        assertThat(work.get("jobTitle").asString()).isEqualTo("Catalogue lead");
+    }
+
+    @Test
+    void staffSwitchTwoStepMethodsButCannotTurnItOff() {
+        BrowserSession user = new BrowserSession(base());
+        String email = "yemi." + UUID.randomUUID() + "@example.com";
+        String userId = registerAndVerify(user, email, "shop");
+        Tokens customer = user.exchangePublic(STOREFRONT, STOREFRONT_REDIRECT,
+                user.signIn(STOREFRONT, STOREFRONT_REDIRECT, email, PASSWORD));
+        assertThat(user.api("PUT", "/v1/admin/users/" + userId + "/roles/platform.customer_support?reason=hired",
+                adminToken(), null).statusCode()).isEqualTo(200);
+        String token = user.refreshPublic(STOREFRONT, customer.refreshToken()).accessToken();
+
+        JsonNode status = BrowserSession.json(user.api("GET", "/v1/me/mfa", token, null).body());
+        assertThat(status.get("required").asBoolean()).isTrue();
+        assertThat(status.get("mayDisable").asBoolean()).isFalse();
+
+        String secret = BrowserSession.json(user.api("POST", "/v1/me/mfa/totp", token, null).body()).get("secret")
+                .asString();
+        String code = new DefaultTotpAuthenticator().codeAt(secret, Instant.now().getEpochSecond() / 30);
+        assertThat(user.api("POST", "/v1/me/mfa/totp/confirm", token, "{\"code\":\"" + code + "\"}")
+                .statusCode()).isEqualTo(200);
+        status = BrowserSession.json(user.api("GET", "/v1/me/mfa", token, null).body());
+        assertThat(status.get("totp").asBoolean()).isTrue();
+        assertThat(status.get("mayRemoveTotp").asBoolean()).isFalse();
+        HttpResponse<String> refused = user.api("DELETE", "/v1/me/mfa/totp", token, null);
+        assertThat(refused.statusCode()).isEqualTo(403);
+        assertThat(problemCode(refused)).isEqualTo("identity.staff-mfa-required");
+
+        // Switch to SMS: turn SMS codes on, then the authenticator app may go, but never the last factor.
+        assertThat(user.api("POST", "/v1/me/mfa/sms", token, null).statusCode()).isEqualTo(202);
+        assertThat(user.api("POST", "/v1/me/mfa/sms/confirm", token,
+                "{\"code\":\"" + latestCode(ADMIN_PHONE) + "\"}").statusCode()).isEqualTo(200);
+        status = BrowserSession.json(user.api("GET", "/v1/me/mfa", token, null).body());
+        assertThat(status.get("mayRemoveTotp").asBoolean()).isTrue();
+        assertThat(status.get("mayRemoveSms").asBoolean()).isTrue();
+        assertThat(user.api("DELETE", "/v1/me/mfa/totp", token, null).statusCode()).isEqualTo(204);
+        assertThat(user.api("DELETE", "/v1/me/mfa/sms", token, null).statusCode()).isEqualTo(403);
+        status = BrowserSession.json(user.api("GET", "/v1/me/mfa", token, null).body());
+        assertThat(status.get("sms").asBoolean()).isTrue();
+        assertThat(status.get("totp").asBoolean()).isFalse();
     }
 
     @Test

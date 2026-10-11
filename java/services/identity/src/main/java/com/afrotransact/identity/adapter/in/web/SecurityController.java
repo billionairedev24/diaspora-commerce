@@ -8,6 +8,7 @@ import com.afrotransact.identity.adapter.in.web.SecurityDtos.LinkedAccountsRespo
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.PasskeyResponse;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.RevokedResponse;
 import com.afrotransact.identity.adapter.in.web.SecurityDtos.SessionResponse;
+import com.afrotransact.identity.adapter.in.web.SecurityDtos.SignInActivityResponse;
 import com.afrotransact.identity.application.PasskeyService;
 import com.afrotransact.identity.application.SecurityService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -89,6 +91,14 @@ class SecurityController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void removePasskey(@PathVariable String credentialId) {
         passkeys.delete(credentialId);
+    }
+
+    @Operation(summary = "Recent sign-in activity of the signed-in account (newest first)",
+            description = "From the append-only sign-in audit trail; failed attempts and second-factor prompts "
+                    + "included. limit is kept between 1 and 50.")
+    @GetMapping("/v1/me/sign-in-activity")
+    List<SignInActivityResponse> signInActivity(@RequestParam(defaultValue = "20") int limit) {
+        return security.signInActivity(limit).stream().map(SignInActivityResponse::of).toList();
     }
 
     private static Optional<String> token(Jwt jwt) {

@@ -36,6 +36,7 @@ type shopperState struct {
 	checkouts     map[string]string // idempotency key → order number
 	lastCheckout  map[string]any
 	prefs         map[string]any
+	account       *accountState
 }
 
 func readJSON(r *http.Request) map[string]any {
@@ -49,7 +50,8 @@ func readJSON(r *http.Request) map[string]any {
 
 func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 	st := &shopperState{defaultPM: "pm_visa", rmas: map[string]map[string]any{}, bookingStatus: "CONFIRMED", checkouts: map[string]string{},
-		prefs: map[string]any{"email": true, "sms": true, "push": true, "marketingOptIn": false}}
+		prefs:   map[string]any{"email": true, "sms": true, "push": true, "marketingOptIn": false, "locale": "fr-CA", "timeZone": "America/Toronto"},
+		account: newAccountState()}
 	shopperStates.Store(u, st)
 	mux := http.NewServeMux()
 	root.Handle(ShopperPrefix+"/", http.StripPrefix(ShopperPrefix, mux))
@@ -262,6 +264,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 	}))
 
 	u.shopperIdentityRoutes(mux, st, authed)
+	u.shopperAccountRoutes(mux, st, authed)
 	u.shopperBookingRoutes(mux, st, authed)
 	u.shopperDeliveryRoutes(mux, authed)
 }
@@ -277,7 +280,11 @@ func (u *Upstreams) shopperIdentityRoutes(mux *http.ServeMux, st *shopperState, 
 	}
 	noContent := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) }
 	mux.HandleFunc("GET /v1/me/mfa", authed(func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"totp": true, "sms": false, "smsPhone": "•••• 0142", "recoveryCodesLeft": 8, "passkeys": 1, "required": false, "mayDisable": true})
+		st.mu.Lock()
+		staff := st.account.principalType == "STAFF"
+		st.mu.Unlock()
+		writeJSON(w, 200, map[string]any{"totp": true, "sms": false, "smsPhone": "•••• 0142", "recoveryCodesLeft": 8, "passkeys": 1, "required": staff, "mayDisable": !staff,
+			"mayRemoveTotp": !staff, "mayRemoveSms": false})
 	}))
 	mux.HandleFunc("GET /v1/me/passkeys", authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{{"credentialId": "cred-1", "label": "iPhone", "createdAt": "2026-09-01T10:00:00Z"}})
@@ -345,6 +352,8 @@ func (u *Upstreams) shopperIdentityRoutes(mux *http.ServeMux, st *shopperState, 
 				st.prefs[k] = v
 			}
 		}
+		// Like identity, the PUT replaces the whole row: a missing language or time zone clears it.
+		st.prefs["locale"], st.prefs["timeZone"] = b["locale"], b["timeZone"]
 		writeJSON(w, 200, st.prefs)
 	}))
 }

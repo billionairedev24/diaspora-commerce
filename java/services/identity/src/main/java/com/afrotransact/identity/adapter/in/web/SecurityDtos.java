@@ -2,11 +2,14 @@ package com.afrotransact.identity.adapter.in.web;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import com.afrotransact.identity.application.LinkedAccountsView;
 import com.afrotransact.identity.application.MfaStatus;
 import com.afrotransact.identity.domain.FederatedIdentity;
 import com.afrotransact.identity.domain.Passkey;
+import com.afrotransact.identity.domain.SignInAuditEntry;
+import com.afrotransact.identity.domain.TrustedBrowser;
 import com.afrotransact.identity.domain.UserSession;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -67,11 +70,36 @@ final class SecurityDtos {
 
     @Schema(name = "MfaStatus")
     record MfaStatusResponse(boolean totp, boolean sms, String smsPhone, int recoveryCodesLeft, int passkeys,
-                             boolean required, boolean mayDisable) {
+                             boolean required, boolean mayDisable,
+                             @Schema(description = "The authenticator app may be turned off now (staff only while SMS "
+                                     + "codes stay on)") boolean mayRemoveTotp,
+                             @Schema(description = "SMS codes may be turned off now (staff only while the "
+                                     + "authenticator app stays on)") boolean mayRemoveSms) {
 
         static MfaStatusResponse of(MfaStatus s) {
             return new MfaStatusResponse(s.enrolment().totp(), s.enrolment().sms(), s.enrolment().smsPhone(),
-                    s.enrolment().recoveryCodesLeft(), s.enrolment().passkeys(), s.required(), s.mayDisable());
+                    s.enrolment().recoveryCodesLeft(), s.enrolment().passkeys(), s.required(), s.mayDisable(),
+                    s.mayRemoveTotp(), s.mayRemoveSms());
+        }
+    }
+
+    @Schema(name = "TrustedBrowser")
+    record TrustedBrowserResponse(UUID id, String userAgent, Instant createdAt, Instant expiresAt) {
+
+        static TrustedBrowserResponse of(TrustedBrowser b) {
+            return new TrustedBrowserResponse(b.id(), b.userAgent(), b.createdAt(), b.expiresAt());
+        }
+    }
+
+    @Schema(name = "SignInActivity", description = "One sign-in audit row of the signed-in account")
+    record SignInActivityResponse(Instant at, @Schema(examples = {"PASSWORD", "MFA_TOTP", "PASSKEY"}) String method,
+                                  @Schema(examples = {"SUCCEEDED", "FAILED", "MFA_REQUIRED"}) String outcome,
+                                  @Schema(description = "first-party (BFF forms) or hosted (identity's pages)")
+                                  String channel, String clientId, String ip, String userAgent) {
+
+        static SignInActivityResponse of(SignInAuditEntry e) {
+            return new SignInActivityResponse(e.at(), e.method(), e.outcome(), e.channel(), e.clientId(), e.ip(),
+                    e.userAgent());
         }
     }
 

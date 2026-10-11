@@ -30,4 +30,10 @@ public interface OrgTeamService {
 
     /** Removes a member (idempotent for the seller service). */
     void removeMember(String orgId, UUID userId);
+
+    /**
+     * The signed-in member leaves the organisation. Owners cannot leave (409 identity.owner-cannot-leave: transfer
+     * ownership first); 404 identity.member-not-found when not a member.
+     */
+    void leave(String orgId);
 }

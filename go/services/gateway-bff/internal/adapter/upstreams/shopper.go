@@ -273,6 +273,31 @@ func (s *securityImpl) RemovePasskey(ctx context.Context, bearer, id string) err
 	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/passkeys/"+esc(id), nil, nil)
 }
 
+func (s *securityImpl) RenamePasskey(ctx context.Context, bearer, id, label string) (port.UpPasskey, error) {
+	var out port.UpPasskey
+	return out, s.send(ctx, bearer, http.MethodPatch, "/v1/me/passkeys/"+esc(id), map[string]string{"label": label}, &out)
+}
+
+func (s *securityImpl) TrustedBrowsers(ctx context.Context, bearer string) ([]port.UpTrustedBrowser, error) {
+	var out []port.UpTrustedBrowser
+	return out, s.get(ctx, bearer, "/v1/me/trusted-browsers", &out)
+}
+
+func (s *securityImpl) ForgetTrustedBrowser(ctx context.Context, bearer, id string) error {
+	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/trusted-browsers/"+esc(id), nil, nil)
+}
+
+func (s *securityImpl) ForgetTrustedBrowsers(ctx context.Context, bearer string) error {
+	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/trusted-browsers", nil, nil)
+}
+
+func (s *securityImpl) SignInActivity(ctx context.Context, bearer string, limit int) ([]port.UpSignInActivity, error) {
+	var out []port.UpSignInActivity
+	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/me/sign-in-activity", Bearer: bearer,
+		Query: url.Values{"limit": {strconv.Itoa(limit)}}}, &out)
+	return out, err
+}
+
 func (s *securityImpl) RevokeSession(ctx context.Context, bearer, id string) error {
 	return s.send(ctx, bearer, http.MethodDelete, "/v1/me/sessions/"+esc(id), nil, nil)
 }
@@ -293,9 +318,23 @@ func (s *securityImpl) Preferences(ctx context.Context, bearer string) (domain.N
 	return out, s.get(ctx, bearer, "/v1/me/notification-preferences", &out)
 }
 
+// upNotificationPreferences is identity's NotificationPreferences with the language and time zone the switches
+// share a row with.
+type upNotificationPreferences struct {
+	domain.NotificationPreferences
+	Locale   *string `json:"locale"`
+	TimeZone *string `json:"timeZone"`
+}
+
 func (s *securityImpl) SavePreferences(ctx context.Context, bearer string, p domain.NotificationPreferences) (domain.NotificationPreferences, error) {
+	// identity's PUT replaces the whole row: send the current language and time zone back so they are kept.
+	var current upNotificationPreferences
+	if err := s.get(ctx, bearer, "/v1/me/notification-preferences", &current); err != nil {
+		return domain.NotificationPreferences{}, err
+	}
 	var out domain.NotificationPreferences
-	return out, s.send(ctx, bearer, http.MethodPut, "/v1/me/notification-preferences", p, &out)
+	return out, s.send(ctx, bearer, http.MethodPut, "/v1/me/notification-preferences",
+		upNotificationPreferences{NotificationPreferences: p, Locale: current.Locale, TimeZone: current.TimeZone}, &out)
 }
 
 // ---------------------------------------------------------------- bookings (public directory + customer)

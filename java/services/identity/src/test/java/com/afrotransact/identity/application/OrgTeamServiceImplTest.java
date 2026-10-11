@@ -39,6 +39,7 @@ import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,9 +69,10 @@ class OrgTeamServiceImplTest {
 
     private OrgTeamServiceImpl service() {
         Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        OrgTeamAccess access = new OrgTeamAccess(new CurrentUser(() -> caller), orgs, roles, modules, policy);
+        CurrentUser current = new CurrentUser(() -> caller);
+        OrgTeamAccess access = new OrgTeamAccess(current, orgs, roles, modules, policy);
         MembershipWriter writer = new MembershipWriter(orgs, users, changeLog, events, clock);
-        return new OrgTeamServiceImpl(access, orgs, roles, users, writer, policy);
+        return new OrgTeamServiceImpl(access, orgs, roles, users, writer, policy, current);
     }
 
     @BeforeEach
@@ -97,6 +99,24 @@ class OrgTeamServiceImplTest {
         when(orgs.removeMember(eq(ORG), any())).thenReturn(true);
         when(orgs.members(ORG)).thenReturn(List.of(new OrgMember(owner, "Ada", "Okafor", "ada@example.com",
                 "seller.owner", "Owner", true, NOW)));
+    }
+
+    @Test
+    void membersLeaveOnTheirOwnButOwnersMustHandOverFirst() {
+        caller = user(catalog);
+        service().leave(ORG);
+        verify(orgs).removeMember(ORG, catalog);
+        verify(events).publish(eq("identity.role.revoked"), eq("identity"), eq(catalog.toString()), any());
+        verify(changeLog).append(eq(catalog.toString()), eq("org.member.removed"), eq(catalog), eq("seller.catalog"),
+                eq(ORG), any());
+
+        caller = user(owner);
+        assertThatThrownBy(() -> service().leave(ORG)).isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Owners can't leave");
+        caller = user(stranger);
+        assertThatThrownBy(() -> service().leave(ORG)).isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> service().leave("org_missing")).isInstanceOf(NotFoundException.class);
+        verify(orgs, never()).removeMember(ORG, owner);
     }
 
     @Test

@@ -29,6 +29,8 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 	}
 	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
 		Checkout: app.NewCheckoutPaymentService(d), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d),
+		Settings: app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(client("identity", base)),
+			Alerts: upstreams.NewAlertPreferences(client("notifications", base))}),
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
 		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", u.URL())), "us")}
 }

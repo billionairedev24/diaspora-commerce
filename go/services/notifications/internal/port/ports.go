@@ -55,6 +55,16 @@ type ConsentQuery struct {
 	Category    domain.Category
 	TimeZone    string
 	Market      string
+	// TemplateKey selects the back-office alert topic whose switch applies (domain.TopicForTemplate).
+	TemplateKey string
+}
+
+// AlertPreferenceStore keeps members' back-office alert topic switches and personal quiet hours.
+type AlertPreferenceStore interface {
+	// AlertPreferences returns the stored topic switches (any audience) and quiet hours (zero value when never set).
+	AlertPreferences(ctx context.Context, recipientKey string) ([]domain.AlertPreference, domain.PersonalQuietHours, error)
+	// SetAlertPreferences upserts topic switches and, when quiet is not nil, the quiet hours.
+	SetAlertPreferences(ctx context.Context, recipientKey string, prefs []domain.AlertPreference, quiet *domain.PersonalQuietHours) error
 }
 
 // ConsentChecker applies consent, suppression, preference and quiet-hour rules (domain.Decide) to stored facts.

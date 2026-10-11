@@ -10,9 +10,11 @@ import java.util.UUID;
 import com.afrotransact.identity.domain.AccessPolicy;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.MfaEnrolment;
+import com.afrotransact.identity.domain.MfaFactor;
 import com.afrotransact.identity.domain.MfaPolicy;
 import com.afrotransact.identity.domain.TotpAuthenticator;
 import com.afrotransact.identity.domain.TotpEnrolment;
+import com.afrotransact.identity.domain.TrustedBrowser;
 import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.domain.VerificationPurpose;
 import com.afrotransact.identity.port.AccessChangeLog;
@@ -69,7 +71,9 @@ class MfaServiceImpl implements MfaService {
         UserAccount u = user();
         boolean staff = staff(u);
         MfaEnrolment e = support.enrolment(u.id());
-        return new MfaStatus(e, staff || e.anyFactor(), policy.mayDisable(staff));
+        return new MfaStatus(e, staff || e.anyFactor(), policy.mayDisable(staff),
+                e.totp() && policy.mayRemove(staff, e, MfaFactor.TOTP),
+                e.sms() && policy.mayRemove(staff, e, MfaFactor.SMS));
     }
 
     @Override
@@ -102,7 +106,7 @@ class MfaServiceImpl implements MfaService {
     @Transactional
     public void disableTotp() {
         UserAccount u = user();
-        requireMayDisable(u);
+        requireMayRemove(u, MfaFactor.TOTP);
         mfa.deleteTotp(u.id());
         afterFactorRemoved(u.id());
         changeLog.append(u.id().toString(), "mfa.totp.disabled", u.id(), null, "totp", null);
@@ -136,7 +140,7 @@ class MfaServiceImpl implements MfaService {
     @Transactional
     public void disableSms() {
         UserAccount u = user();
-        requireMayDisable(u);
+        requireMayRemove(u, MfaFactor.SMS);
         mfa.disableSms(u.id());
         afterFactorRemoved(u.id());
         changeLog.append(u.id().toString(), "mfa.sms.disabled", u.id(), null, "sms", null);
@@ -168,10 +172,34 @@ class MfaServiceImpl implements MfaService {
         }
     }
 
-    private void requireMayDisable(UserAccount u) {
-        if (!policy.mayDisable(staff(u))) {
+    @Override
+    @Transactional(readOnly = true)
+    public List<TrustedBrowser> trustedBrowsers() {
+        return mfa.trustedBrowsers(current.id(), Instant.now(clock));
+    }
+
+    @Override
+    @Transactional
+    public void forgetTrustedBrowser(UUID browserId) {
+        UUID user = current.id();
+        if (!mfa.deleteTrustedBrowser(user, browserId)) {
+            throw new NotFoundException("identity.trusted-browser-not-found", "That browser isn't trusted");
+        }
+        changeLog.append(user.toString(), "mfa.trusted-browser.forgotten", user, null, browserId.toString(), null);
+    }
+
+    @Override
+    @Transactional
+    public void forgetTrustedBrowsers() {
+        UUID user = current.id();
+        mfa.deleteTrustedBrowsers(user);
+        changeLog.append(user.toString(), "mfa.trusted-browsers.forgotten", user, null, "all", null);
+    }
+
+    private void requireMayRemove(UserAccount u, MfaFactor factor) {
+        if (!policy.mayRemove(staff(u), support.enrolment(u.id()), factor)) {
             throw new ForbiddenActionException("identity.staff-mfa-required",
-                    "Two-step verification is mandatory for staff accounts");
+                    "Two-step verification is mandatory for staff accounts: turn on another method first");
         }
     }
 

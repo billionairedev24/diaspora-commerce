@@ -21,6 +21,8 @@ type ShopperServices struct {
 	Checkout app.CheckoutPaymentService
 	Returns  app.ReturnsService
 	Security app.SecurityService
+	// Settings is the profile, display preferences, back-office alerts and leaving an organisation (every app).
+	Settings app.AccountSettingsService
 	Services app.ServicesService
 	Lola     app.LolaService
 	// SearchClicks reports result clicks to search (optional).
@@ -61,12 +63,19 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	route("DELETE /v1/account/mfa/sms", h.disableSMS)
 	route("POST /v1/account/mfa/recovery-codes", auth(h.recoveryCodes))
 	route("DELETE /v1/account/passkeys/{credentialId}", h.removePasskey)
+	route("PATCH /v1/account/passkeys/{credentialId}", h.renamePasskey)
+	route("DELETE /v1/account/trusted-browsers", h.forgetTrustedBrowsers)
+	route("DELETE /v1/account/trusted-browsers/{browserId}", h.forgetTrustedBrowser)
+	route("GET /v1/account/sign-in-activity", h.signInActivity)
 	route("DELETE /v1/account/sessions/{sessionId}", h.revokeSession)
 	route("POST /v1/account/sessions/revoke-others", h.revokeOtherSessions)
 	route("DELETE /v1/account/devices/{deviceId}", h.removeDevice)
 	route("DELETE /v1/account/linked-accounts/{provider}", h.unlink)
 	route("GET /v1/account/notification-preferences", h.preferences)
 	route("PUT /v1/account/notification-preferences", h.savePreferences)
+	if h.s.Shopper.Settings != nil {
+		h.registerAccountSettings(route)
+	}
 	// Services & bookings
 	route("GET /v1/services/search", h.searchServices)
 	route("GET /v1/service-providers/{orgId}", h.providerPage)
@@ -220,6 +229,31 @@ func (h *handlersImpl) recoveryCodes(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) removePasskey(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.RemovePasskey(r.Context(), callerFrom(r.Context()), r.PathValue("credentialId")))
+}
+
+func (h *handlersImpl) renamePasskey(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Label string `json:"label"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Shopper.Security.RenamePasskey(r.Context(), callerFrom(r.Context()), r.PathValue("credentialId"), b.Label)
+	h.ok(w, r, v, err)
+}
+
+func (h *handlersImpl) forgetTrustedBrowser(w http.ResponseWriter, r *http.Request) {
+	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.ForgetTrustedBrowser(r.Context(), callerFrom(r.Context()), r.PathValue("browserId")))
+}
+
+func (h *handlersImpl) forgetTrustedBrowsers(w http.ResponseWriter, r *http.Request) {
+	h.reply(w, r, http.StatusNoContent, nil, h.s.Shopper.Security.ForgetTrustedBrowsers(r.Context(), callerFrom(r.Context())))
+}
+
+func (h *handlersImpl) signInActivity(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.Security.SignInActivity(r.Context(), callerFrom(r.Context()))
+	h.ok(w, r, map[string]any{"items": v}, err)
 }
 
 func (h *handlersImpl) revokeSession(w http.ResponseWriter, r *http.Request) {

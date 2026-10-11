@@ -148,4 +148,22 @@ class JdbcMfaRepository implements MfaRepository {
     public void deleteTrustedBrowsers(UUID userId) {
         jdbc.sql("delete from trusted_browser where user_id = :u").param("u", userId).update();
     }
+
+    @Override
+    public List<TrustedBrowser> trustedBrowsers(UUID userId, Instant now) {
+        return jdbc.sql("""
+                select * from trusted_browser where user_id = :u and expires_at > :now order by created_at desc
+                """)
+                .param("u", userId).param("now", Jdbc.ts(now))
+                .query((rs, n) -> new TrustedBrowser(rs.getObject("id", UUID.class),
+                        rs.getObject("user_id", UUID.class), rs.getString("token_hash"), rs.getString("user_agent"),
+                        Jdbc.instant(rs, "created_at"), Jdbc.instant(rs, "expires_at")))
+                .list();
+    }
+
+    @Override
+    public boolean deleteTrustedBrowser(UUID userId, UUID browserId) {
+        return jdbc.sql("delete from trusted_browser where user_id = :u and id = :id")
+                .param("u", userId).param("id", browserId).update() > 0;
+    }
 }

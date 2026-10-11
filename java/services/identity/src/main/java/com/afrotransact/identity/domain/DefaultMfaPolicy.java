@@ -19,4 +19,16 @@ public class DefaultMfaPolicy implements MfaPolicy {
     public boolean mayDisable(boolean staff) {
         return !staff;
     }
+
+    @Override
+    public boolean mayRemove(boolean staff, MfaEnrolment enrolment, MfaFactor factor) {
+        if (!staff) {
+            return true;
+        }
+        return switch (factor) {
+            case TOTP -> enrolment.totp() && enrolment.sms();
+            case SMS -> enrolment.sms() && enrolment.totp();
+            case RECOVERY_CODE -> false;
+        };
+    }
 }

@@ -223,3 +223,81 @@ func TestTemplateSample(t *testing.T) {
 		t.Fatalf("needs notifications:read: %d", rec.Code)
 	}
 }
+
+type fakeAlerts struct {
+	key   string
+	prefs []domain.AlertPreference
+	quiet *domain.PersonalQuietHours
+}
+
+func (f *fakeAlerts) Get(_ context.Context, key string, audience domain.AlertAudience) (domain.AlertSettings, error) {
+	if err := domain.ValidateAlerts(audience, nil, nil); err != nil {
+		return domain.AlertSettings{}, err
+	}
+	f.key = key
+	q := domain.DefaultPersonalQuietHours
+	if f.quiet != nil {
+		q = *f.quiet
+	}
+	return domain.AlertSettings{Audience: audience, Preferences: domain.ResolveAlerts(audience, f.prefs), Quiet: q}, nil
+}
+
+func (f *fakeAlerts) Set(ctx context.Context, key string, audience domain.AlertAudience, prefs []domain.AlertPreference, quiet *domain.PersonalQuietHours) (domain.AlertSettings, error) {
+	if err := domain.ValidateAlerts(audience, prefs, quiet); err != nil {
+		return domain.AlertSettings{}, err
+	}
+	f.prefs, f.quiet = prefs, quiet
+	return f.Get(ctx, key, audience)
+}
+
+func TestAlertPreferencesAreTheMembersOwn(t *testing.T) {
+	alerts := &fakeAlerts{}
+	me := auth.Actor{Subject: "user-1", Type: "SELLER_MEMBER"}
+	rec := httptest.NewRecorder()
+	mux(httpapi.Deps{Alerts: alerts}, me).ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/v1/preferences/user-1/alerts?audience=seller", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	var got struct {
+		Audience    string                   `json:"audience"`
+		Preferences []domain.AlertPreference `json:"preferences"`
+		QuietHours  struct {
+			Enabled    bool
+			Start, End string
+		} `json:"quietHours"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Audience != "seller" || len(got.Preferences) != 10 || got.QuietHours.Start != "21:00" || got.QuietHours.End != "07:00" {
+		t.Fatalf("unexpected body %s", rec.Body)
+	}
+
+	rec = httptest.NewRecorder()
+	mux(httpapi.Deps{Alerts: alerts}, me).ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "PUT", "/v1/preferences/user-1/alerts",
+		strings.NewReader(`{"audience":"seller","preferences":[{"topic":"seller.orders","channel":"sms","enabled":false}],"quietHours":{"enabled":true,"start":"22:30","end":"06:45"}}`)))
+	if rec.Code != http.StatusOK || alerts.quiet == nil || alerts.quiet.StartMinute != 1350 || alerts.quiet.EndMinute != 405 {
+		t.Fatalf("status %d %s quiet %+v", rec.Code, rec.Body, alerts.quiet)
+	}
+	if !strings.Contains(rec.Body.String(), `"start":"22:30"`) {
+		t.Errorf("quiet hours echoed as HH:MM: %s", rec.Body)
+	}
+
+	for name, body := range map[string]string{
+		"locked":     `{"audience":"seller","preferences":[{"topic":"seller.compliance","channel":"email","enabled":false}]}`,
+		"bad clock":  `{"audience":"seller","preferences":[],"quietHours":{"enabled":true,"start":"9pm","end":"07:00"}}`,
+		"wrong side": `{"audience":"staff","preferences":[{"topic":"seller.orders","channel":"sms","enabled":false}]}`,
+	} {
+		rec = httptest.NewRecorder()
+		mux(httpapi.Deps{Alerts: alerts}, me).ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "PUT", "/v1/preferences/user-1/alerts", strings.NewReader(body)))
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s: want 400, got %d", name, rec.Code)
+		}
+	}
+
+	rec = httptest.NewRecorder()
+	mux(httpapi.Deps{Alerts: alerts}, me).ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/v1/preferences/user-2/alerts?audience=seller", nil))
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("another member's alerts: want 403, got %d", rec.Code)
+	}
+}

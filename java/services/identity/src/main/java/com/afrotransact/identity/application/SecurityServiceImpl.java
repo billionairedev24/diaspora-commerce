@@ -9,6 +9,7 @@ import java.util.Optional;
 
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.PasswordPolicy;
+import com.afrotransact.identity.domain.SignInAuditEntry;
 import com.afrotransact.identity.domain.SignInMethods;
 import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.domain.UserSession;
@@ -16,6 +17,7 @@ import com.afrotransact.identity.port.AccessChangeLog;
 import com.afrotransact.identity.port.FederatedIdentityRepository;
 import com.afrotransact.identity.port.PasswordHasher;
 import com.afrotransact.identity.port.SessionStore;
+import com.afrotransact.identity.port.SignInAuditLog;
 import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -33,11 +35,14 @@ class SecurityServiceImpl implements SecurityService {
     private final FederatedIdentityRepository federated;
     private final SignInMethodsReader methods;
     private final AccessChangeLog changeLog;
+    private final SignInAuditLog audit;
     private final Clock clock;
+
+    private static final int MAX_ACTIVITY = 50;
 
     SecurityServiceImpl(CurrentUser current, UserAccountRepository users, PasswordPolicy passwordPolicy,
                         PasswordHasher hasher, SessionStore sessions, FederatedIdentityRepository federated,
-                        SignInMethodsReader methods, AccessChangeLog changeLog, Clock clock) {
+                        SignInMethodsReader methods, AccessChangeLog changeLog, SignInAuditLog audit, Clock clock) {
         this.current = current;
         this.users = users;
         this.passwordPolicy = passwordPolicy;
@@ -46,6 +51,7 @@ class SecurityServiceImpl implements SecurityService {
         this.federated = federated;
         this.methods = methods;
         this.changeLog = changeLog;
+        this.audit = audit;
         this.clock = clock;
     }
 
@@ -115,6 +121,12 @@ class SecurityServiceImpl implements SecurityService {
         federated.unlink(u.id(), provider);
         changeLog.append(u.id().toString(), "identity.unlinked", u.id(), null, provider, null);
         return linkedAccounts();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SignInAuditEntry> signInActivity(int limit) {
+        return audit.recent(current.id(), Math.clamp(limit, 1, MAX_ACTIVITY));
     }
 
     private UserAccount user() {

@@ -318,6 +318,27 @@ type UpMfa struct {
 	RecoveryCodesLeft int    `json:"recoveryCodesLeft"`
 	Required          bool   `json:"required"`
 	MayDisable        bool   `json:"mayDisable"`
+	MayRemoveTOTP     bool   `json:"mayRemoveTotp"`
+	MayRemoveSMS      bool   `json:"mayRemoveSms"`
+}
+
+// UpTrustedBrowser is identity's TrustedBrowser.
+type UpTrustedBrowser struct {
+	ID        string `json:"id"`
+	UserAgent string `json:"userAgent"`
+	CreatedAt string `json:"createdAt"`
+	ExpiresAt string `json:"expiresAt"`
+}
+
+// UpSignInActivity is identity's SignInActivity.
+type UpSignInActivity struct {
+	At        string `json:"at"`
+	Method    string `json:"method"`
+	Outcome   string `json:"outcome"`
+	Channel   string `json:"channel"`
+	ClientID  string `json:"clientId"`
+	IP        string `json:"ip"`
+	UserAgent string `json:"userAgent"`
 }
 
 // UpPasskey is identity's Passkey.
@@ -373,10 +394,16 @@ type SecurityClient interface {
 	DisableSMS(ctx context.Context, bearer string) error
 	RecoveryCodes(ctx context.Context, bearer string) (domain.RecoveryCodes, error)
 	RemovePasskey(ctx context.Context, bearer, id string) error
+	RenamePasskey(ctx context.Context, bearer, id, label string) (UpPasskey, error)
+	TrustedBrowsers(ctx context.Context, bearer string) ([]UpTrustedBrowser, error)
+	ForgetTrustedBrowser(ctx context.Context, bearer, id string) error
+	ForgetTrustedBrowsers(ctx context.Context, bearer string) error
+	SignInActivity(ctx context.Context, bearer string, limit int) ([]UpSignInActivity, error)
 	RevokeSession(ctx context.Context, bearer, id string) error
 	RevokeOtherSessions(ctx context.Context, bearer string) (int, error)
 	RemoveDevice(ctx context.Context, bearer, id string) error
 	Preferences(ctx context.Context, bearer string) (domain.NotificationPreferences, error)
+	// SavePreferences replaces the switches and keeps the account's language and time zone.
 	SavePreferences(ctx context.Context, bearer string, p domain.NotificationPreferences) (domain.NotificationPreferences, error)
 }
 

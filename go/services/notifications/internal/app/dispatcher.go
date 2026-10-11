@@ -124,7 +124,7 @@ func (d *dispatcherImpl) RunOnce(ctx context.Context) (int, error) {
 
 func (d *dispatcherImpl) process(ctx context.Context, n domain.Notification) error {
 	dec, err := d.consent.Check(ctx, port.ConsentQuery{RecipientID: n.RecipientID, Address: n.Address,
-		Channel: n.Channel, Category: n.Category, TimeZone: n.TimeZone, Market: n.Market})
+		Channel: n.Channel, Category: n.Category, TimeZone: n.TimeZone, Market: n.Market, TemplateKey: n.TemplateKey})
 	if err != nil {
 		return d.wrap(d.store.Reschedule(ctx, n.ID, d.now().Add(30*time.Second), "consent check failed: "+err.Error()))
 	}

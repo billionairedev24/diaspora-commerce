@@ -21,6 +21,19 @@ class MfaRulesTest {
     }
 
     @Test
+    void staffSwitchMethodsButNeverDropTheLastFactor() {
+        MfaEnrolment both = new MfaEnrolment(true, true, "+17135550142", 10, 0);
+        MfaEnrolment smsOnly = new MfaEnrolment(false, true, "+17135550142", 10, 0);
+        assertThat(policy.mayRemove(true, both, MfaFactor.TOTP)).isTrue();
+        assertThat(policy.mayRemove(true, both, MfaFactor.SMS)).isTrue();
+        assertThat(policy.mayRemove(true, totp, MfaFactor.TOTP)).isFalse();
+        assertThat(policy.mayRemove(true, smsOnly, MfaFactor.SMS)).isFalse();
+        assertThat(policy.mayRemove(true, both, MfaFactor.RECOVERY_CODE)).isFalse();
+        assertThat(policy.mayRemove(false, totp, MfaFactor.TOTP)).isTrue();
+        assertThat(policy.mayRemove(false, smsOnly, MfaFactor.SMS)).isTrue();
+    }
+
+    @Test
     void trustedBrowserAndPasskeySkipThePrompt() {
         assertThat(policy.secondFactorRequired(false, totp, false, false)).isTrue();
         assertThat(policy.secondFactorRequired(false, totp, true, false)).isFalse();

@@ -18,4 +18,10 @@ public interface MfaPolicy {
 
     /** Staff cannot disable MFA; everyone else can. */
     boolean mayDisable(boolean staff);
+
+    /**
+     * Whether one enrolled factor may be turned off now. Everyone but staff may; staff may switch methods (turn one
+     * off) only while another enrolled factor stays on, so their account never drops to "no second factor".
+     */
+    boolean mayRemove(boolean staff, MfaEnrolment enrolment, MfaFactor factor);
 }

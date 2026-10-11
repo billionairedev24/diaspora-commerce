@@ -160,6 +160,16 @@ type MfaStatus struct {
 	RecoveryCodesLeft int     `json:"recoveryCodesLeft"`
 	Required          bool    `json:"required"`
 	MayDisable        bool    `json:"mayDisable"`
+	MayRemoveTOTP     bool    `json:"mayRemoveTotp"`
+	MayRemoveSMS      bool    `json:"mayRemoveSms"`
+}
+
+// TrustedBrowser is a browser that skips the second factor until it expires.
+type TrustedBrowser struct {
+	ID        string  `json:"id"`
+	Label     string  `json:"label"`
+	CreatedAt *string `json:"createdAt"`
+	ExpiresAt *string `json:"expiresAt"`
 }
 
 // Passkey is a registered passkey.
@@ -204,6 +214,7 @@ type LinkedAccounts struct {
 type SecurityOverview struct {
 	MFA                    MfaStatus         `json:"mfa"`
 	Passkeys               []Passkey         `json:"passkeys"`
+	TrustedBrowsers        []TrustedBrowser  `json:"trustedBrowsers"`
 	Sessions               []SignedInSession `json:"sessions"`
 	Devices                []PushDevice      `json:"devices"`
 	Linked                 LinkedAccounts    `json:"linkedAccounts"`

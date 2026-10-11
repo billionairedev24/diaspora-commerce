@@ -1126,7 +1126,7 @@ paths:
     delete:
       tags:
       - Two-step verification
-      summary: Turn off SMS sign-in codes (403 for staff)
+      summary: Turn off SMS sign-in codes (403 identity.staff-mfa-required for staff without the authenticator app on)
       operationId: disableSms
       responses:
         '204':
@@ -1166,7 +1166,7 @@ paths:
     delete:
       tags:
       - Two-step verification
-      summary: Turn off the authenticator app (403 for staff)
+      summary: Turn off the authenticator app (403 identity.staff-mfa-required for staff without SMS codes on)
       operationId: disableTotp
       responses:
         '204':
@@ -1221,6 +1221,23 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/NotificationPreferences'
+  /v1/me/orgs/{orgId}/leave:
+    post:
+      tags:
+      - Me
+      summary: Leave an organisation (members who are not its owner)
+      description: 409 identity.owner-cannot-leave for owners (transfer ownership first); 404 identity.member-not-found
+        when not a member. Publishes identity.role.revoked; an organisation the user acts for stops being active.
+      operationId: leaveOrg
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
   /v1/me/passkeys:
     get:
       tags:
@@ -1370,6 +1387,40 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PhoneVerification'
+  /v1/me/preferences:
+    get:
+      tags:
+      - Me
+      summary: Display preferences (language, time zone, date and number format, table density)
+      description: Language and time zone are the same values notifications-service uses for messages and quiet hours.
+      operationId: preferences
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
+    put:
+      tags:
+      - Me
+      summary: Replace the display preferences
+      description: 422 identity.invalid-preferences with field errors for an unknown language tag or time zone. Notification
+        switches are kept.
+      operationId: savePreferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPreferencesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserPreferences'
   /v1/me/roles/provider-applicant:
     post:
       tags:
@@ -1439,6 +1490,101 @@ paths:
       responses:
         '204':
           description: No Content
+  /v1/me/sign-in-activity:
+    get:
+      tags:
+      - Login & security
+      summary: Recent sign-in activity of the signed-in account (newest first)
+      description: From the append-only sign-in audit trail; failed attempts and second-factor prompts included. limit
+        is kept between 1 and 50.
+      operationId: signInActivity
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SignInActivity'
+  /v1/me/trusted-browsers:
+    get:
+      tags:
+      - Two-step verification
+      summary: Browsers trusted to skip the second factor ("Trust this browser"), unexpired only
+      operationId: trustedBrowsers
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TrustedBrowser'
+    delete:
+      tags:
+      - Two-step verification
+      summary: Forget every trusted browser (each asks for the second factor again)
+      operationId: forgetTrustedBrowsers
+      responses:
+        '204':
+          description: No Content
+  /v1/me/trusted-browsers/{browserId}:
+    delete:
+      tags:
+      - Two-step verification
+      summary: Forget one trusted browser (404 identity.trusted-browser-not-found)
+      operationId: forgetTrustedBrowser
+      parameters:
+      - name: browserId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /v1/me/work-profile:
+    get:
+      tags:
+      - Me
+      summary: Work profile shown in the back offices (job title)
+      operationId: workProfile
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WorkProfile'
+    put:
+      tags:
+      - Me
+      summary: Replace the work profile
+      operationId: saveWorkProfile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkProfileRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WorkProfile'
   /v1/orgs/{orgId}:
     put:
       tags:
@@ -1998,6 +2144,130 @@ components:
         expiresAt:
           type: string
           format: date-time
+    UserPreferences:
+      type: object
+      properties:
+        locale:
+          type: string
+        timeZone:
+          type: string
+        dateFormat:
+          type: string
+          enum:
+          - AUTO
+          - MDY
+          - DMY
+          - YMD
+        numberFormat:
+          type: string
+          enum:
+          - AUTO
+          - COMMA_DOT
+          - DOT_COMMA
+          - SPACE_COMMA
+        tableDensity:
+          type: string
+          enum:
+          - COMFORTABLE
+          - COMPACT
+        updatedAt:
+          type: string
+          format: date-time
+    UserPreferencesRequest:
+      type: object
+      properties:
+        locale:
+          type: string
+          examples:
+          - fr-CA
+          maxLength: 35
+          minLength: 0
+        timeZone:
+          type: string
+          examples:
+          - America/Chicago
+          maxLength: 64
+          minLength: 0
+        dateFormat:
+          type: string
+          enum:
+          - AUTO
+          - MDY
+          - DMY
+          - YMD
+        numberFormat:
+          type: string
+          enum:
+          - AUTO
+          - COMMA_DOT
+          - DOT_COMMA
+          - SPACE_COMMA
+        tableDensity:
+          type: string
+          enum:
+          - COMFORTABLE
+          - COMPACT
+      required:
+      - dateFormat
+      - numberFormat
+      - tableDensity
+    WorkProfile:
+      type: object
+      properties:
+        jobTitle:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    WorkProfileRequest:
+      type: object
+      properties:
+        jobTitle:
+          type: string
+          maxLength: 80
+          minLength: 0
+    TrustedBrowser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userAgent:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+    SignInActivity:
+      type: object
+      description: One sign-in audit row of the signed-in account
+      properties:
+        at:
+          type: string
+          format: date-time
+        method:
+          type: string
+          examples:
+          - PASSWORD
+          - MFA_TOTP
+          - PASSKEY
+        outcome:
+          type: string
+          examples:
+          - SUCCEEDED
+          - FAILED
+          - MFA_REQUIRED
+        channel:
+          type: string
+          description: first-party (BFF forms) or hosted (identity's pages)
+        clientId:
+          type: string
+        ip:
+          type: string
+        userAgent:
+          type: string
     RevokedSessions:
       type: object
       properties:
@@ -2838,6 +3108,12 @@ components:
           type: boolean
         mayDisable:
           type: boolean
+        mayRemoveTotp:
+          type: boolean
+          description: The authenticator app may be turned off now (staff only while SMS codes stay on)
+        mayRemoveSms:
+          type: boolean
+          description: SMS codes may be turned off now (staff only while the authenticator app stays on)
     LinkedAccount:
       type: object
       properties:

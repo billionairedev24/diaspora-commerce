@@ -320,6 +320,49 @@ paths:
               schema: {$ref: '#/components/schemas/Preferences'}
         '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+  /v1/preferences/{recipientId}/alerts:
+    parameters:
+      - {name: recipientId, in: path, required: true, schema: {type: string}}
+    get:
+      security: [{bearer: []}]
+      tags: [Preferences]
+      operationId: getAlertPreferences
+      summary: A back-office member's alert topics per channel and personal quiet hours
+      description: |
+        Callable by the recipient themselves or staff with `notifications:manage`. Topics of the audience
+        (seller: orders, inventory, payouts, compliance, claims; staff: assigned, escalations, approvals) × email and
+        SMS, default on. `locked` switches (compliance and claims email, staff escalations email) always stay on.
+        A muted topic drops the matching templates on that channel (security messages are never muted); personal
+        quiet hours hold SMS and push until the window ends (recipient time zone).
+      parameters:
+        - {name: audience, in: query, required: true, schema: {$ref: '#/components/schemas/AlertAudience'}}
+      responses:
+        '200':
+          description: Alert preferences
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertPreferences'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+    put:
+      security: [{bearer: []}]
+      tags: [Preferences]
+      operationId: setAlertPreferences
+      summary: Change alert topics and quiet hours
+      description: Only the listed topic × channel pairs change; quietHours is replaced when present. 400 for a topic of another audience or a locked switch turned off.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AlertPreferencesInput'}
+      responses:
+        '200':
+          description: Updated alert preferences
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertPreferences'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/stock-alerts:
     post:
       security: [{bearer: []}]
@@ -771,6 +814,50 @@ components:
       properties:
         recipientId: {type: string}
         preferences: {type: array, items: {$ref: '#/components/schemas/Preference'}}
+    AlertAudience:
+      type: string
+      enum: [seller, staff]
+    AlertTopic:
+      type: string
+      enum: [seller.orders, seller.inventory, seller.payouts, seller.compliance, seller.claims, staff.assigned, staff.escalations, staff.approvals]
+    AlertPreference:
+      type: object
+      required: [topic, channel, enabled, locked]
+      properties:
+        topic: {$ref: '#/components/schemas/AlertTopic'}
+        channel: {type: string, enum: [email, sms]}
+        enabled: {type: boolean}
+        locked: {type: boolean, description: "Always on: the platform must reach the member on this channel"}
+    QuietHours:
+      type: object
+      required: [enabled, start, end]
+      properties:
+        enabled: {type: boolean}
+        start: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', examples: ['21:00']}
+        end: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$', examples: ['07:00']}
+    AlertPreferences:
+      type: object
+      required: [recipientId, audience, preferences, quietHours]
+      properties:
+        recipientId: {type: string}
+        audience: {$ref: '#/components/schemas/AlertAudience'}
+        preferences: {type: array, items: {$ref: '#/components/schemas/AlertPreference'}}
+        quietHours: {$ref: '#/components/schemas/QuietHours'}
+    AlertPreferencesInput:
+      type: object
+      required: [audience, preferences]
+      properties:
+        audience: {$ref: '#/components/schemas/AlertAudience'}
+        preferences:
+          type: array
+          items:
+            type: object
+            required: [topic, channel, enabled]
+            properties:
+              topic: {$ref: '#/components/schemas/AlertTopic'}
+              channel: {type: string, enum: [email, sms]}
+              enabled: {type: boolean}
+        quietHours: {$ref: '#/components/schemas/QuietHours'}
     SmsConsentInput:
       type: object
       required: [phone, source, textVersion]

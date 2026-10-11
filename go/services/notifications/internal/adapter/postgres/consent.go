@@ -237,5 +237,38 @@ func (c *consentCheckerImpl) Check(ctx context.Context, q port.ConsentQuery) (do
 	default:
 		return domain.Decision{}, fmt.Errorf("preference: %w", err)
 	}
+	if err := c.memberFacts(ctx, q, &f); err != nil {
+		return domain.Decision{}, err
+	}
 	return domain.Decide(f), nil
+}
+
+// memberFacts adds a signed-in member's back-office alert topic switch and personal quiet hours (S281).
+func (c *consentCheckerImpl) memberFacts(ctx context.Context, q port.ConsentQuery, f *domain.ConsentFacts) error {
+	if q.RecipientID == "" {
+		return nil
+	}
+	if def, ok := domain.TopicForTemplate(q.TemplateKey); ok && !def.IsLocked(q.Channel) {
+		f.Topic = def.Topic
+		var enabled bool
+		err := c.pool.QueryRow(ctx, `SELECT enabled FROM alert_preference WHERE recipient_key = $1 AND topic = $2 AND channel = $3`,
+			q.RecipientID, string(def.Topic), string(q.Channel)).Scan(&enabled)
+		switch {
+		case err == nil:
+			f.TopicOff = !enabled
+		case errors.Is(err, pgx.ErrNoRows):
+		default:
+			return fmt.Errorf("alert preference: %w", err)
+		}
+	}
+	if q.Channel == domain.ChannelSMS || q.Channel == domain.ChannelPush {
+		quiet, err := quietHours(ctx, c.pool, q.RecipientID)
+		if err != nil {
+			return err
+		}
+		if w, ok := quiet.Window(); ok {
+			f.PersonalQuiet = &w
+		}
+	}
+	return nil
 }

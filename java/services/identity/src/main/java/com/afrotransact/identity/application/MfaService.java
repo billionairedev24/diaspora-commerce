@@ -2,8 +2,14 @@ package com.afrotransact.identity.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
-/** Self-service two-step verification for the signed-in user. Staff cannot turn MFA off. */
+import com.afrotransact.identity.domain.TrustedBrowser;
+
+/**
+ * Self-service two-step verification for the signed-in user. Staff cannot turn MFA off: they may switch methods,
+ * turning one factor off only while another stays on.
+ */
 public interface MfaService {
 
     MfaStatus status();
@@ -25,4 +31,13 @@ public interface MfaService {
 
     /** Replaces all recovery codes; the new ones are shown once. */
     List<String> regenerateRecoveryCodes();
+
+    /** Browsers that skip the second factor ("Trust this browser"), unexpired, newest first. */
+    List<TrustedBrowser> trustedBrowsers();
+
+    /** Forgets one trusted browser (404 identity.trusted-browser-not-found). */
+    void forgetTrustedBrowser(UUID browserId);
+
+    /** Forgets every trusted browser of the account. */
+    void forgetTrustedBrowsers();
 }

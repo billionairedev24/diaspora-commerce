@@ -3,6 +3,7 @@ package com.afrotransact.identity.application;
 import java.util.List;
 import java.util.Optional;
 
+import com.afrotransact.identity.domain.SignInAuditEntry;
 import com.afrotransact.identity.domain.UserSession;
 
 /** Login & security page: password, sessions, linked social accounts. */
@@ -23,4 +24,7 @@ public interface SecurityService {
 
     /** Cannot unlink the last sign-in method. */
     LinkedAccountsView unlink(String provider);
+
+    /** Recent sign-in audit rows of the signed-in account, newest first ({@code limit} 1..50). */
+    List<SignInAuditEntry> signInActivity(int limit);
 }

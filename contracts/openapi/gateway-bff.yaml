@@ -1394,6 +1394,32 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [Account]
+      operationId: renamePasskey
+      summary: Rename a passkey (identity PATCH /v1/me/passkeys/{credentialId})
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: credentialId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label]
+              properties:
+                label: {type: string, minLength: 1, maxLength: 64}
+      responses:
+        '200':
+          description: Renamed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Passkey'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/sessions/{sessionId}:
     delete:
       tags: [Account]
@@ -1453,6 +1479,169 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/LinkedAccounts'}
         '401': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/trusted-browsers:
+    delete:
+      tags: [Account]
+      operationId: forgetTrustedBrowsers
+      summary: Forget every browser trusted to skip two-step verification
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '204': {description: Forgotten}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/trusted-browsers/{browserId}:
+    delete:
+      tags: [Account]
+      operationId: forgetTrustedBrowser
+      summary: Forget one trusted browser (it asks for the second factor at the next sign-in)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: browserId, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Forgotten}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/sign-in-activity:
+    get:
+      tags: [Account]
+      operationId: getSignInActivity
+      summary: Recent sign-ins of the account across every app (identity's sign-in audit trail, newest first)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Up to 20 recent sign-in events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/SignInEvent'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/profile:
+    get:
+      tags: [Account]
+      operationId: getAccountProfile
+      summary: The signed-in person's profile with organisation memberships, platform roles and job title
+      description: |
+        `kind` says which settings apply: `customer` (storefront), `seller` (Seller Center / Provider Hub member) or
+        `staff`. Email is read-only (identity has no change-email flow); `emailManaged` marks staff company addresses.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountProfile'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [Account]
+      operationId: updateAccountProfile
+      summary: Change name, mobile number or job title (identity PATCH /v1/me and PUT /v1/me/work-profile)
+      description: A new mobile number must be verified again by SMS. Job title is for back-office members only.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AccountProfileInput'}
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountProfile'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/preferences:
+    get:
+      tags: [Account]
+      operationId: getAccountPreferences
+      summary: Language, time zone, date and number format and default table density
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Preferences
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountPreferences'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Account]
+      operationId: saveAccountPreferences
+      summary: Replace the display preferences (notification switches are kept)
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AccountPreferences'}
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountPreferences'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/alerts:
+    get:
+      tags: [Account]
+      operationId: getAlertPreferences
+      summary: Back-office alert topics per channel and personal quiet hours (notifications /v1/preferences/{id}/alerts)
+      description: |
+        Seller Center and Provider Hub members get the seller topics (new orders, low stock, payouts, compliance,
+        claims); staff get theirs (assigned queues, escalations, approvals). 403 for accounts with neither.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Alert preferences
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertPreferences'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Account]
+      operationId: saveAlertPreferences
+      summary: Change alert topics and quiet hours
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AlertPreferencesInput'}
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AlertPreferences'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/orgs/{orgId}/leave:
+    post:
+      tags: [Account]
+      operationId: leaveOrganisation
+      summary: Leave an organisation (members who are not an owner)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orgId, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Left}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/account/notification-preferences:
@@ -3507,28 +3696,34 @@ components:
         hasPassword: {type: boolean}
     SecurityOverview:
       type: object
-      required: [mfa, passkeys, sessions, devices, linkedAccounts, passkeyRegistrationUrl]
+      required: [mfa, passkeys, trustedBrowsers, sessions, devices, linkedAccounts, passkeyRegistrationUrl]
       properties:
         mfa:
           type: object
-          required: [totp, sms, smsPhone, recoveryCodesLeft, required, mayDisable]
+          required: [totp, sms, smsPhone, recoveryCodesLeft, required, mayDisable, mayRemoveTotp, mayRemoveSms]
           properties:
             totp: {type: boolean}
             sms: {type: boolean}
             smsPhone: {type: [string, 'null']}
             recoveryCodesLeft: {type: integer}
-            required: {type: boolean}
-            mayDisable: {type: boolean}
+            required: {type: boolean, description: Two-step verification is required at sign-in (always for staff)}
+            mayDisable: {type: boolean, description: Two-step verification may be turned off altogether (never for staff)}
+            mayRemoveTotp: {type: boolean, description: The authenticator app may be turned off now (staff only while SMS codes stay on)}
+            mayRemoveSms: {type: boolean, description: SMS codes may be turned off now (staff only while the authenticator app stays on)}
         passkeys:
           type: array
+          items: {$ref: '#/components/schemas/Passkey'}
+        trustedBrowsers:
+          type: array
+          description: Browsers that skip the second factor until expiresAt ("Trust this browser")
           items:
             type: object
-            required: [credentialId, label, createdAt, lastUsedAt]
+            required: [id, label, createdAt, expiresAt]
             properties:
-              credentialId: {type: string}
-              label: {type: string}
+              id: {type: string}
+              label: {type: string, description: 'Browser and system from the user agent, e.g. "Chrome on macOS"'}
               createdAt: {type: [string, 'null']}
-              lastUsedAt: {type: [string, 'null']}
+              expiresAt: {type: [string, 'null']}
         sessions:
           type: array
           items:
@@ -3552,6 +3747,115 @@ components:
               lastSeenAt: {type: [string, 'null']}
         linkedAccounts: {$ref: '#/components/schemas/LinkedAccounts'}
         passkeyRegistrationUrl: {type: string, description: "identity's hosted passkey registration page (/webauthn/register)"}
+    Passkey:
+      type: object
+      required: [credentialId, label, createdAt, lastUsedAt]
+      properties:
+        credentialId: {type: string}
+        label: {type: string}
+        createdAt: {type: [string, 'null']}
+        lastUsedAt: {type: [string, 'null']}
+    SignInEvent:
+      type: object
+      required: [at, method, outcome, app, device, ip]
+      properties:
+        at: {type: string, format: date-time}
+        method: {type: string, description: 'PASSWORD, MFA_TOTP, MFA_SMS, MFA_RECOVERY_CODE, PASSKEY, LOGIN_TICKET'}
+        outcome: {type: string, description: 'SUCCEEDED, FAILED, MFA_REQUIRED, LOCKED, BLOCKED, …'}
+        app: {type: string, description: 'Which app signed in, e.g. "AfroTransact web" or "Driver app"'}
+        device: {type: string, description: 'Browser and system from the user agent'}
+        ip: {type: [string, 'null']}
+    AccountProfile:
+      type: object
+      required: [id, kind, firstName, lastName, email, emailVerified, emailManaged, initials, phone, phoneVerified, jobTitle, memberships, roles]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [customer, seller, staff]}
+        firstName: {type: string}
+        lastName: {type: string}
+        email: {type: string}
+        emailVerified: {type: boolean}
+        emailManaged: {type: boolean, description: A company (staff) address managed by AfroTransact IT}
+        initials: {type: string}
+        phone: {type: [string, 'null'], description: The account's mobile number (E.164)}
+        phoneVerified: {type: boolean}
+        jobTitle: {type: [string, 'null']}
+        memberships:
+          type: array
+          description: Seller and provider organisations with this person's role (read-only)
+          items:
+            type: object
+            required: [orgId, name, kind, status, roleKey, roleLabel, owner, active]
+            properties:
+              orgId: {type: string}
+              name: {type: string}
+              kind: {type: string, enum: [SELLER, PROVIDER, BOTH]}
+              status: {type: string}
+              roleKey: {type: string}
+              roleLabel: {type: string}
+              owner: {type: boolean}
+              active: {type: boolean, description: The organisation this person currently acts for}
+        roles:
+          type: array
+          description: Platform (staff) roles (read-only)
+          items:
+            type: object
+            required: [key, label]
+            properties:
+              key: {type: string}
+              label: {type: string}
+    AccountProfileInput:
+      type: object
+      properties:
+        firstName: {type: string, minLength: 1, maxLength: 80}
+        lastName: {type: string, minLength: 1, maxLength: 80}
+        phone: {type: string, maxLength: 32}
+        jobTitle: {type: [string, 'null'], maxLength: 80}
+    AccountPreferences:
+      type: object
+      required: [locale, timeZone, dateFormat, numberFormat, tableDensity]
+      properties:
+        locale: {type: [string, 'null'], description: 'BCP 47 tag, e.g. en-US or fr-CA; null = platform default', maxLength: 35}
+        timeZone: {type: [string, 'null'], description: 'IANA zone, e.g. America/Chicago; null = market zone', maxLength: 64}
+        dateFormat: {type: string, enum: [AUTO, MDY, DMY, YMD]}
+        numberFormat: {type: string, enum: [AUTO, COMMA_DOT, DOT_COMMA, SPACE_COMMA]}
+        tableDensity: {type: string, enum: [COMFORTABLE, COMPACT]}
+    AlertPreference:
+      type: object
+      required: [topic, channel, enabled, locked]
+      properties:
+        topic: {type: string, enum: [seller.orders, seller.inventory, seller.payouts, seller.compliance, seller.claims, staff.assigned, staff.escalations, staff.approvals]}
+        channel: {type: string, enum: [email, sms]}
+        enabled: {type: boolean}
+        locked: {type: boolean, description: Always on (the platform must reach you on this channel)}
+    QuietHours:
+      type: object
+      required: [enabled, start, end]
+      properties:
+        enabled: {type: boolean}
+        start: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$'}
+        end: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$'}
+    AlertPreferences:
+      type: object
+      required: [audience, preferences, quietHours]
+      properties:
+        audience: {type: string, enum: [seller, staff]}
+        preferences: {type: array, items: {$ref: '#/components/schemas/AlertPreference'}}
+        quietHours: {$ref: '#/components/schemas/QuietHours'}
+    AlertPreferencesInput:
+      type: object
+      required: [preferences]
+      properties:
+        preferences:
+          type: array
+          items:
+            type: object
+            required: [topic, channel, enabled]
+            properties:
+              topic: {type: string}
+              channel: {type: string, enum: [email, sms]}
+              enabled: {type: boolean}
+        quietHours: {$ref: '#/components/schemas/QuietHours'}
     NotificationPreferences:
       type: object
       required: [email, sms, push, marketingOptIn]
