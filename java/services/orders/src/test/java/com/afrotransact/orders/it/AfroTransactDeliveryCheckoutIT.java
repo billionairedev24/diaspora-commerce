@@ -23,9 +23,10 @@ class AfroTransactDeliveryCheckoutIT extends OrdersIntegrationTest {
     }
 
     private void store(String offerId, String org, String locationId, boolean enabled) {
+        // offers-service PublicOfferDetail: the offer is nested, next to buyable / notEligible.
         UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/public/offers/" + offerId)), 200,
-                "{\"offerId\":\"" + offerId + "\",\"fulfilment\":\"AFROTRANSACT_DELIVERY\",\"shipFromLocationId\":\""
-                        + locationId + "\"}");
+                "{\"offer\":{\"offerId\":\"" + offerId + "\",\"fulfilment\":\"AFROTRANSACT_DELIVERY\","
+                        + "\"shipFromLocationId\":\"" + locationId + "\"},\"buyable\":true,\"notEligible\":[]}");
         UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/ship-from-locations/" + locationId))
                 .withHeader("Authorization", WireMock.equalTo("Bearer " + Upstreams.SERVICE_TOKEN)), 200,
                 "{\"id\":\"" + locationId + "\",\"orgId\":\"" + org + "\",\"position\":{\"lat\":29.7589,"

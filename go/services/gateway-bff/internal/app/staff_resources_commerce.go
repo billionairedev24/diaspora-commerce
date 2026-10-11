@@ -96,11 +96,15 @@ func ordersResource() *staffResource {
 				form: func(_ context.Context, _ staffCtx, o jobj) *domain.Form {
 					opts := []domain.FieldOption{}
 					for _, s := range objs(o, "shipments") {
-						opts = append(opts, domain.FieldOption{Value: firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id")), Label: jstr(s, "label") + " · " + domain.Humanize(jstr(s, "status"))})
+						label := jstr(s, "label") + " · " + domain.Humanize(jstr(s, "status"))
+						if next := strs(s, "nextActions"); len(next) > 0 {
+							label += " → " + strings.ToLower(domain.Humanize(strings.ToUpper(strings.Join(next, ", "))))
+						}
+						opts = append(opts, domain.FieldOption{Value: firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id")), Label: label})
 					}
 					return &domain.Form{Title: "Move a shipment to another status", SubmitLabel: "Update", Fields: []domain.FormField{
 						withOptions(ff("shipmentId", "Shipment", "select", true), opts),
-						withOptions(ff("to", "New status", "select", true), domain.StaffOptions("CONFIRMED", "OUT_FOR_DELIVERY", "DELIVERED", "DELIVERY_FAILED", "RETURNED", "CANCELLED")),
+						withOptions(ff("to", "New status", "select", true), domain.StaffOptions(shipmentMoves(o)...)),
 						withMax(ff("reason", "Reason", "text", false), 500)}}
 				},
 				when: func(_ staffCtx, o jobj) string {
@@ -114,6 +118,33 @@ func ordersResource() *staffResource {
 				}},
 		},
 	}
+}
+
+// shipmentLifecycle is the order of the shipment statuses staff may move a shipment to (orders-service state machine).
+var shipmentLifecycle = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED",
+	"DELIVERY_FAILED", "RETURNED", "CANCELLED"}
+
+// shipmentMoves lists the statuses the order's shipments can move to next, from each shipment's nextActions (orders-service
+// applies the state machine for the caller: staff move AfroTransact-fulfilled packages through every step, but only
+// confirm delivery, record a failure, return or cancel a seller's). Without nextActions every staff move is offered and
+// orders-service refuses the ones that do not apply.
+func shipmentMoves(o jobj) []string {
+	next := map[string]bool{}
+	for _, s := range objs(o, "shipments") {
+		for _, a := range strs(s, "nextActions") {
+			next[strings.ToUpper(a)] = true
+		}
+	}
+	out := []string{}
+	for _, v := range shipmentLifecycle {
+		if next[v] {
+			out = append(out, v)
+		}
+	}
+	if len(out) == 0 {
+		return shipmentLifecycle
+	}
+	return out
 }
 
 // ---------------------------------------------------------------- products (catalog)

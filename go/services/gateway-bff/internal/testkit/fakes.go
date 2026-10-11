@@ -124,6 +124,8 @@ type Upstreams struct {
 	tickets      map[string]string
 	// AccessDeniedMatrix makes identity's module matrix answer 403 (like for org members without access:read).
 	AccessDeniedMatrix bool
+	// AccountHealthForbidden makes seller-service's account health answer 403 (members other than owner and finance).
+	AccountHealthForbidden bool
 	seller             *sellerState
 	// PhoneVerified is identity's phoneVerified for every account; LastSignUp is the last POST /v1/accounts body.
 	PhoneVerified bool

@@ -561,3 +561,16 @@ func TestSellerPendingUpstreamsAnswer503(t *testing.T) {
 		t.Fatalf("calendar without bookings = %d", r.status)
 	}
 }
+
+// Account health is for the owner and finance: other members get an empty compliance summary, not a failed call on
+// every page of the shell.
+func TestComplianceForMembersWhoMayNotSeeAccountHealth(t *testing.T) {
+	bff, b := sellerSetup(t, testkit.Options{})
+	bff.Upstreams.AccountHealthForbidden = true
+	r := b.do("GET", "/v1/seller/compliance", nil)
+	mustStatus(t, r, 200)
+	got := r.json(t)
+	if items, _ := got["items"].([]any); len(items) != 0 {
+		t.Fatalf("items = %v, want none", got["items"])
+	}
+}

@@ -37,8 +37,10 @@ class HttpPickupLocations implements PickupLocations {
         if (offerId == null || offerId.isBlank()) {
             return Optional.empty();
         }
-        JsonNode offer = notFoundIsEmpty(() -> offers.call(c -> c.get().uri("/v1/public/offers/{id}", offerId)
+        JsonNode detail = notFoundIsEmpty(() -> offers.call(c -> c.get().uri("/v1/public/offers/{id}", offerId)
                 .retrieve().body(JsonNode.class)));
+        // PublicOfferDetail: {offer: {…, shipFromLocationId}, buyable, notEligible}
+        JsonNode offer = detail == null ? null : detail.path("offer").isObject() ? detail.path("offer") : detail;
         String locationId = offer == null ? null : offer.path("shipFromLocationId").asString(null);
         if (locationId == null || locationId.isBlank()) {
             return Optional.empty();

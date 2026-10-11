@@ -51,3 +51,27 @@ func TestAutoSectionsAndPaging(t *testing.T) {
 		t.Fatalf("last page = %+v", p)
 	}
 }
+
+func TestShipmentMovesFollowTheShipmentsNextActions(t *testing.T) {
+	o := jobj{"shipments": []any{
+		jobj{"label": "Shipment 1 of 2", "status": "packed", "nextActions": []any{"ready", "cancelled"}},
+		jobj{"label": "Shipment 2 of 2", "status": "in_transit", "nextActions": []any{"out_for_delivery", "delivered"}},
+	}}
+	got := shipmentMoves(o)
+	want := []string{"READY", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED"}
+	if len(got) != len(want) {
+		t.Fatalf("moves = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("moves = %v, want %v", got, want)
+		}
+	}
+	if all := shipmentMoves(jobj{"shipments": []any{jobj{"status": "placed"}}}); len(all) != len(shipmentLifecycle) {
+		t.Fatalf("without nextActions every move is offered, got %v", all)
+	}
+	form := ordersResource().actions[0].form(nil, staffCtx{}, o)
+	if form.Fields[0].Options[0].Label != "Shipment 1 of 2 · Packed → ready, cancelled" {
+		t.Fatalf("shipment option = %q", form.Fields[0].Options[0].Label)
+	}
+}

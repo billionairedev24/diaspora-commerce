@@ -142,6 +142,19 @@ class PreorderResolverTest {
         assertThat(resolver.eligibility(r, new ProductFacts("A4", "Pantry", false, false)).preorder()).isFalse();
     }
 
+    @Test
+    void aCatalogPathMatchesAnyOfItsLevels() {
+        PreorderWindow open = window("US/TX/Lubbock", NOW.minus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(5)),
+                NOW.plus(Duration.ofDays(7)));
+        Resolution r = resolver.resolve("US", "TX", "Lubbock", List.of(open),
+                coverage(true, area("US/TX/Lubbock", true)), Map.of(), false, NOW);
+        assertThat(resolver.eligibility(r, new ProductFacts("A5", "Groceries › Pantry › Grains & rice", false, true))
+                .preorder()).as("under Pantry").isTrue();
+        assertThat(resolver.eligibility(r, new ProductFacts("A6", "Fashion › Fabrics › Ankara & wax prints", false,
+                true)).preorder()).isFalse();
+        assertThat(resolver.eligibility(r, new ProductFacts("A7", null, false, true)).preorder()).isFalse();
+    }
+
     private static PreorderWindow window(String target, Instant opens, Instant closes, Instant delivers) {
         return Preorders.published(Preorders.withDates(Preorders.details(List.of(target)), opens, closes,
                 LocalDate.ofInstant(delivers, Preorders.CHICAGO)));

@@ -144,6 +144,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			"completedSteps": []string{"BUSINESS", "OWNERS", "STRIPE", "PAYOUTS", "PLAN"}, "requestedItems": []string{"Harris County food permit"}})
 	})
 	mux.HandleFunc("GET /v1/orgs/{id}/account-health", func(w http.ResponseWriter, r *http.Request) {
+		if u.AccountHealthForbidden {
+			problem(w, 403, "seller.org-role-required", "Only the organisation's finance or owner can do this", nil)
+			return
+		}
 		if r.PathValue("id") == ProviderOrgID {
 			writeJSON(w, 200, map[string]any{"status": "COMPLIANT", "chargesEnabled": true, "payoutsEnabled": true, "openItems": 0, "requirements": []any{}})
 			return

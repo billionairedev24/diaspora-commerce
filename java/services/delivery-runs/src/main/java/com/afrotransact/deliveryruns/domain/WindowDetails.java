@@ -11,6 +11,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * What staff edit on a pre-order window (wizard: Details, Comms). Drafts may be incomplete: completeness is checked
@@ -45,6 +47,9 @@ public record WindowDetails(String name, List<AreaKey> targets, Instant opensAt,
 
     /** Delivery-day reference time: dates without a time are read as local noon (the design's {@code T()}). */
     public static final LocalTime DELIVERY_REFERENCE = LocalTime.NOON;
+
+    /** Separator of catalog category paths ("Groceries › Pantry › Grains & rice"). */
+    private static final String PATH_SEPARATOR = Pattern.quote("›");
 
     public WindowDetails {
         name = trim(name);
@@ -109,13 +114,22 @@ public record WindowDetails(String name, List<AreaKey> targets, Instant opensAt,
         return deliversOn.atTime(DELIVERY_REFERENCE).atZone(timeZone).toInstant();
     }
 
-    /** Whether a category (case-insensitive) is in the window. */
+    /**
+     * Whether a category (case-insensitive) is in the window: a name, or a catalog path ("Groceries › Pantry › Grains
+     * & rice") of which any level is one of the window's categories, so "Pantry" covers everything under it.
+     */
     public boolean includesCategory(String category) {
         if (category == null) {
             return false;
         }
-        String c = category.trim().toLowerCase(Locale.ROOT);
-        return categories.stream().anyMatch(x -> x.toLowerCase(Locale.ROOT).equals(c));
+        Set<String> wanted = categories.stream().map(x -> x.trim().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        for (String level : category.split(PATH_SEPARATOR)) {
+            if (wanted.contains(level.trim().toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String trim(String s) {

@@ -423,8 +423,9 @@ func (s *sellerShellImpl) Compliance(ctx context.Context, c *domain.Caller) (dom
 	}
 	h, err := s.r.d.Sellers.AccountHealth(ctx, c.BearerToken, sc.org.ID)
 	if err != nil {
-		if errors.Is(err, port.ErrNotFound) {
-			// No Connect account yet (or not mirrored): nothing outstanding to show.
+		// No Connect account yet (or not mirrored), or a member whose role may not see account health (it is for the
+		// owner and finance; the shell asks on every page for every member): nothing outstanding to show.
+		if p, ok := port.AsUpstreamProblem(err); errors.Is(err, port.ErrNotFound) || ok && p.Status == http.StatusForbidden {
 			out := domain.ComplianceSummary{Items: []domain.ComplianceItem{}}
 			domain.ComplianceBanner(&out, s.r.d.Location)
 			return out, nil
