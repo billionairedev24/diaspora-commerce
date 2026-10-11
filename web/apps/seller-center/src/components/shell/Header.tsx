@@ -11,13 +11,18 @@ import { useT } from '@/i18n/t';
 import { signOutEverywhere } from '@/lib/auth';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 
-/** Black top bar: logo, gold portal tag ("Seller Central" / "Provider Hub"), and the member's account menu (My account in Seller Center, the storefront as an external link, sign out). */
+/**
+ * Black top bar: logo, gold portal tag ("Seller Central" / "Provider Hub"), and the member's account menu (My account in
+ * Seller Center, the storefront as an external link, sign out). While the application is in progress (an organisation
+ * that is not approved yet) only onboarding is open: no account menu, just a plain "Sign out".
+ */
 export function Header({ session }: { session: SellerSession | null }) {
   const storefrontUrl = useStorefrontUrl();
   const t = useT();
   const at = useAccountT();
   const router = useRouter();
   const provider = session?.portal === 'PROVIDER_HUB';
+  const applying = !!session?.activeOrg && !session.approved;
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 bg-header px-4 text-header-text lg:px-5">
       <a href="/" className="flex items-center gap-2 text-header-text no-underline hover:text-header-text hover:no-underline">
@@ -31,7 +36,16 @@ export function Header({ session }: { session: SellerSession | null }) {
         className="h-9 min-w-11 cursor-pointer rounded-md border border-header-muted bg-header px-2 text-sm text-header-text"
         onChanged={() => router.refresh()}
       />
-      {session ? (
+      {applying ? (
+        <button
+          type="button"
+          onClick={() => void signOutEverywhere(storefrontUrl)}
+          className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-pill border border-header-muted bg-header px-3 text-sm font-semibold text-header-text hover:border-header-text"
+        >
+          <SignOut size={16} aria-hidden />
+          {t('sc.header.signOut')}
+        </button>
+      ) : session ? (
         <UserMenu
           initials={session.user.initials}
           name={`${session.user.firstName} ${session.user.lastName}`}

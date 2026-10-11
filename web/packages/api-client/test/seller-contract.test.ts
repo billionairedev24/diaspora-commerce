@@ -19,8 +19,15 @@ import {
   type ListingPage,
   type ListingRow,
   type OnboardingBusinessInput,
+  type OnboardingComplianceInput,
   type OnboardingDetailsInput,
+  type OnboardingOwnersInput,
+  type OnboardingPayoutsInput,
+  type OnboardingPlanInput,
+  type OnboardingPlans,
   type OnboardingStatus,
+  type OnboardingStripeSession,
+  type OnboardingUploadRequest,
   type PayoutsView,
   type ProductTypeSchema,
   type PublicPage,
@@ -52,6 +59,13 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<OnboardingStatus>().toExtend<S['OnboardingStatus']>();
     expectTypeOf<OnboardingBusinessInput>().toExtend<S['OnboardingBusinessInput']>();
     expectTypeOf<OnboardingDetailsInput>().toExtend<S['OnboardingDetailsInput']>();
+    expectTypeOf<OnboardingOwnersInput>().toExtend<S['OnboardingOwnersInput']>();
+    expectTypeOf<OnboardingPayoutsInput>().toExtend<S['OnboardingPayoutsInput']>();
+    expectTypeOf<OnboardingPlanInput>().toExtend<S['OnboardingPlanInput']>();
+    expectTypeOf<OnboardingComplianceInput>().toExtend<S['OnboardingComplianceInput']>();
+    expectTypeOf<OnboardingStripeSession>().toExtend<S['OnboardingStripeSession']>();
+    expectTypeOf<OnboardingPlans>().toExtend<S['OnboardingPlans']>();
+    expectTypeOf<OnboardingUploadRequest>().toExtend<S['OnboardingUploadRequest']>();
     expectTypeOf<Dashboard>().toExtend<S['Dashboard']>();
     expectTypeOf<SellerOrderPage>().toExtend<S['SellerOrderPage']>();
     expectTypeOf<SellerOrderDetail>().toExtend<S['SellerOrderDetail']>();
@@ -194,6 +208,48 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const details = await api.saveOnboardingDetails({ legalFirstName: 'Titi', legalLastName: 'Adebayo', address: { line1: '1 Main St', city: 'Houston', state: 'tx', postalCode: '77002' } });
     expect(details.form.details.address?.state).toBe('TX');
     expect(details.form.prefilled).toEqual(['business.contactEmail', 'business.phone', 'details.legalLastName']);
+  });
+
+  it('runs the whole wizard: completion only with real data, Stripe stand-in, payouts linked, submit (S289)', async () => {
+    const api = client();
+    getSellerDb().orgs = [];
+    const started = await api.startOnboarding('SELLER');
+    expect(started.resumeStep).toBe('business');
+    // The prefilled payout holder name is not a payout account.
+    expect(started.form.payouts.accountHolderName).toBe('Titilayo Adebayo');
+    expect(started.steps.find((s) => s.key === 'PAYOUTS')?.state).toBe('TODO');
+    const b = await api.saveOnboardingBusiness({ offering: 'PRODUCTS', entityType: 'SINGLE_MEMBER_LLC', country: 'US', storeName: 'Titi Foods', contactEmail: 't@titi.test', phone: '+17132490142' });
+    expect(b.steps.map((s) => `${s.slug}:${s.state}`)).toEqual(['business:DONE', 'business-details:TODO', 'owners:TODO', 'stripe-verification:TODO', 'payouts:TODO', 'plan:TODO', 'catalog-compliance:TODO', 'review:TODO']);
+    expect(b.resumeStep).toBe('business-details');
+    const d = await api.saveOnboardingDetails({ legalName: 'Titi Foods LLC', taxId: '12-3456789', stateOfFormation: 'TX', dateOfFormation: '2021-03-01', formationDocumentAssetId: 'asset-doc-1',
+      address: { line1: '1 Main St', city: 'Houston', state: 'TX', postalCode: '77002' } });
+    expect(d.form.details.taxIdMasked).toBe('••-•••6789');
+    expect(JSON.stringify(d)).not.toContain('3456789');
+    await expect(api.saveOnboardingOwners({ owners: [{ firstName: 'A', ownershipPercent: 70 }, { firstName: 'B', ownershipPercent: 40 }] })).rejects.toSatisfy(
+      (e) => isApiError(e) && e.fieldErrors['owners.ownershipTotal'] !== undefined
+    );
+    const o = await api.saveOnboardingOwners({ owners: [{ firstName: 'Titi', lastName: 'Adebayo', title: 'Owner', email: 't@titi.test', ownershipPercent: 100, significantControl: true, dateOfBirth: '1985-01-02',
+      address: { line1: '1 Main St', city: 'Houston', state: 'TX', postalCode: '77002' } }] });
+    expect(o.resumeStep).toBe('stripe-verification');
+    await expect(api.saveOnboardingPayouts({ accountHolderName: 'Titi Foods LLC', accountType: 'checking', routingNumber: '021000021', accountNumber: '000123456789', accountNumberConfirmation: '000123456789' }))
+      .rejects.toSatisfy((e) => isApiError(e) && e.fieldErrors['payouts.externalAccount'] !== undefined);
+    const session = await api.createOnboardingStripeSession();
+    expect(session.localTest).toBe(true);
+    const verified = await api.refreshOnboardingStripe();
+    expect(verified.stripe.status).toBe('VERIFIED');
+    const p = await api.saveOnboardingPayouts({ accountHolderName: 'Titi Foods LLC', accountType: 'checking', routingNumber: '021000021', accountNumber: '000123456789', accountNumberConfirmation: '000123456789' });
+    expect(p.form.payouts).toMatchObject({ linked: true, accountLast4: '6789' });
+    expect(JSON.stringify(p)).not.toContain('000123456789');
+    const plans = await api.getOnboardingPlans();
+    expect(plans.plans.map((x) => x.code)).toEqual(['seller_essentials', 'seller_growth', 'seller_pro']);
+    await api.saveOnboardingPlan({ planCode: 'seller_essentials', cadence: 'MONTHLY' });
+    await expect(api.submitOnboarding()).rejects.toSatisfy((e) => isApiError(e) && e.fieldErrors['compliance.agreementsAccepted'] !== undefined);
+    const c = await api.saveOnboardingCompliance({ categories: ['groceries'], foodPermit: { permitType: 'COTTAGE_FOOD', permitNumber: 'CF-1', expiresOn: '2030-01-01', documentAssetId: 'asset-doc-2' },
+      agreementsAccepted: true, w9Certified: true, w9SignerName: 'Titi Adebayo' });
+    expect(c.resumeStep).toBe('review');
+    const submitted = await api.submitOnboarding();
+    expect(submitted).toMatchObject({ status: 'PENDING_REVIEW', canResume: false });
+    expect(submitted.steps.at(-1)).toMatchObject({ key: 'REVIEW', state: 'WAITING' });
   });
 
   it('turns AfroTransact pickup on per address and lets offers use it (S255)', async () => {

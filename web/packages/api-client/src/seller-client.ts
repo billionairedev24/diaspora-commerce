@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { type ApiClientOptions, createRequester } from './http';
 import { createSellerFbaApi } from './inventory-hub';
 import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
+import { type AddressSuggestions, AddressSuggestionsSchema } from './schemas/location';
 import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
@@ -52,9 +53,18 @@ import {
   type ListingStatus,
   type OfferFulfilmentRequest,
   type OnboardingBusinessInput,
+  type OnboardingComplianceInput,
   type OnboardingDetailsInput,
+  type OnboardingOwnersInput,
+  type OnboardingPayoutsInput,
+  type OnboardingPlanInput,
+  type OnboardingPlans,
+  OnboardingPlansSchema,
   type OnboardingStatus,
   OnboardingStatusSchema,
+  type OnboardingStripeSession,
+  OnboardingStripeSessionSchema,
+  type OnboardingUploadRequest,
   type OrgKind,
   type Parcel,
   type Payout,
@@ -149,6 +159,29 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/onboarding/business', OnboardingStatusSchema, { method: 'PUT', body }),
     saveOnboardingDetails: (body: OnboardingDetailsInput): Promise<OnboardingStatus> =>
       request('/v1/seller/onboarding/business-details', OnboardingStatusSchema, { method: 'PUT', body }),
+    saveOnboardingOwners: (body: OnboardingOwnersInput): Promise<OnboardingStatus> =>
+      request('/v1/seller/onboarding/owners', OnboardingStatusSchema, { method: 'PUT', body }),
+    /** The bank numbers go to Stripe once (through the seller service) and are never stored. */
+    saveOnboardingPayouts: (body: OnboardingPayoutsInput): Promise<OnboardingStatus> =>
+      request('/v1/seller/onboarding/payouts', OnboardingStatusSchema, { method: 'PUT', body }),
+    saveOnboardingPlan: (body: OnboardingPlanInput): Promise<OnboardingStatus> =>
+      request('/v1/seller/onboarding/plan', OnboardingStatusSchema, { method: 'PUT', body }),
+    saveOnboardingCompliance: (body: OnboardingComplianceInput): Promise<OnboardingStatus> =>
+      request('/v1/seller/onboarding/catalog-compliance', OnboardingStatusSchema, { method: 'PUT', body }),
+    getOnboardingPlans: (signal?: AbortSignal): Promise<OnboardingPlans> => request('/v1/seller/onboarding/plans', OnboardingPlansSchema, { signal }),
+    /** Account Session for Stripe's embedded Connect onboarding (localTest: the local stand-in). */
+    createOnboardingStripeSession: (): Promise<OnboardingStripeSession> =>
+      request('/v1/seller/onboarding/stripe/session', OnboardingStripeSessionSchema, { method: 'POST' }),
+    refreshOnboardingStripe: (): Promise<OnboardingStatus> => request('/v1/seller/onboarding/stripe/refresh', OnboardingStatusSchema, { method: 'POST' }),
+    submitOnboarding: (): Promise<OnboardingStatus> => request('/v1/seller/onboarding/submit', OnboardingStatusSchema, { method: 'POST' }),
+    /** Private upload ticket for an application document (permit, licence, insurance, formation document). */
+    requestOnboardingUpload: (body: OnboardingUploadRequest): Promise<UploadTicket> =>
+      request('/v1/seller/onboarding/uploads', UploadTicketSchema, { method: 'POST', body }),
+    completeOnboardingUpload: (assetId: string): Promise<Asset> =>
+      request(`/v1/seller/onboarding/uploads/${enc(assetId)}/complete`, AssetSchema, { method: 'POST' }),
+    /** Address suggestions (geo service: Google Places / OSM), the same search the storefront uses. */
+    searchAddresses: (q: string, signal?: AbortSignal): Promise<AddressSuggestions> =>
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q }, signal }),
     getCompliance: (signal?: AbortSignal): Promise<ComplianceSummary> => request('/v1/seller/compliance', ComplianceSummarySchema, { signal }),
     getDashboard: (rangeDays: number, signal?: AbortSignal): Promise<Dashboard> =>
       request('/v1/seller/dashboard', DashboardSchema, { query: { rangeDays: String(rangeDays) }, signal }),

@@ -311,7 +311,8 @@ type OnboardingPlanOffer struct {
 	Prices       []OnboardingPlanPrice `json:"prices"`
 }
 
-// OnboardingPlans is GET /v1/seller/onboarding/plans.
+// OnboardingPlans is GET /v1/seller/onboarding/plans. PublishableKey is for Stripe Elements (a paid plan's card).
 type OnboardingPlans struct {
-	Plans []OnboardingPlanOffer `json:"plans"`
+	Plans          []OnboardingPlanOffer `json:"plans"`
+	PublishableKey string                `json:"publishableKey"`
 }

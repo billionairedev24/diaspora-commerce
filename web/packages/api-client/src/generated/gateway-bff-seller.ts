@@ -1996,6 +1996,8 @@ export interface components {
             firstCharge: components["schemas"]["OnboardingFirstCharge"] | null;
         };
         OnboardingPlans: {
+            /** @description Stripe publishable key for Stripe Elements (the card of a paid plan); empty locally without Stripe, where Seller Center shows its labelled test card form */
+            publishableKey: string;
             plans: {
                 code: string;
                 name: string;

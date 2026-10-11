@@ -178,7 +178,11 @@ func TestOnboardingSubmitPlansAndDocuments(t *testing.T) {
 		t.Fatalf("submitted = %v", r)
 	}
 
-	plans := b.do("GET", "/v1/seller/onboarding/plans", nil).json(t)["plans"].([]any)
+	pl := b.do("GET", "/v1/seller/onboarding/plans", nil).json(t)
+	if pl["publishableKey"] != "pk_test_x" {
+		t.Fatalf("plans key = %v", pl["publishableKey"])
+	}
+	plans := pl["plans"].([]any)
 	growth := plans[1].(map[string]any)
 	if len(plans) != 2 || growth["code"] != "seller_growth" || len(growth["prices"].([]any)) != 3 || growth["trialDays"] != 30.0 {
 		t.Fatalf("plans = %v", plans)

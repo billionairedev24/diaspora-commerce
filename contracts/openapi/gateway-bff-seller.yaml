@@ -2112,8 +2112,9 @@ components:
             - {type: 'null'}
     OnboardingPlans:
       type: object
-      required: [plans]
+      required: [plans, publishableKey]
       properties:
+        publishableKey: {type: string, description: 'Stripe publishable key for Stripe Elements (the card of a paid plan); empty locally without Stripe, where Seller Center shows its labelled test card form'}
         plans:
           type: array
           items:

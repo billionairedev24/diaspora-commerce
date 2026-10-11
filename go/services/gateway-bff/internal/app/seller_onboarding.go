@@ -287,7 +287,7 @@ func (s *sellerShellImpl) OnboardingPlans(ctx context.Context, c *domain.Caller)
 	if err != nil {
 		return domain.OnboardingPlans{}, mapErr("seller", err)
 	}
-	out := domain.OnboardingPlans{Plans: []domain.OnboardingPlanOffer{}}
+	out := domain.OnboardingPlans{Plans: []domain.OnboardingPlanOffer{}, PublishableKey: s.r.d.PublishableKey}
 	for _, p := range plans {
 		if p.Kind != "" && normalizeKind(p.Kind) != kind {
 			continue

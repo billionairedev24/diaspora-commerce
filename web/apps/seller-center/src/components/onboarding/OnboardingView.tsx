@@ -1,237 +1,235 @@
 'use client';
 
-import { isApiError, type OnboardingEntityType, type OnboardingForm, type OnboardingOffering, type OnboardingStatus, type OrgKind, sellerKeys, sellerQueries, US_STATES } from '@afrotransact/api-client';
-import { Button, cx, Select, TextField, useToast } from '@afrotransact/ui';
-import { CheckCircle, CircleDashed, HourglassMedium, UserCircleCheck, WarningCircle, X, XCircle } from '@phosphor-icons/react/ssr';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { type OnboardingStatus, type OnboardingStepSlug, sellerKeys, sellerQueries } from '@afrotransact/api-client';
+import { Button } from '@afrotransact/ui';
+import { ArrowLeft, UserCircleCheck, X } from '@phosphor-icons/react/ssr';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
+import { type ComponentType, useEffect, useRef, useState } from 'react';
 
-import { ModulePage } from '@/components/ui/ModulePage';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
-import { formValues, isPrefilled, needsLegalName, type OnboardingValues, prefillNote, toBusinessInput, toDetailsInput } from '@/lib/onboarding-form';
+import { signOutEverywhere } from '@/lib/auth';
+import { prefillNote } from '@/lib/onboarding-form';
+import { isEditable, nextSlug, onboardingHref, prevSlug, progressOf, redirectFor } from '@/lib/onboarding-wizard';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 import { useSeller } from '@/lib/session';
 
-const STATE = {
-  DONE: { Icon: CheckCircle, cls: 'text-success', text: 'Complete' },
-  TODO: { Icon: CircleDashed, cls: 'text-subtle', text: 'To do' },
-  ACTION: { Icon: WarningCircle, cls: 'text-warning', text: 'Action needed' },
-  WAITING: { Icon: HourglassMedium, cls: 'text-info', text: 'In review · SLA 2 business days' },
-  BLOCKED: { Icon: XCircle, cls: 'text-danger', text: 'Not approved' }
-} as const;
+import { Stepper } from './Stepper';
+import { BusinessStep } from './steps/BusinessStep';
+import { ComplianceStep } from './steps/ComplianceStep';
+import { DetailsStep } from './steps/DetailsStep';
+import { OwnersStep } from './steps/OwnersStep';
+import { PayoutsStep } from './steps/PayoutsStep';
+import { PlanStep } from './steps/PlanStep';
+import { ReviewStep } from './steps/ReviewStep';
+import { StripeStep } from './steps/StripeStep';
+import { SubmittedView } from './SubmittedView';
+import { type StepHandle, type StepProps } from './WizardKit';
 
-const OFFERINGS: { value: OnboardingOffering; label: string }[] = [
-  { value: 'PRODUCTS', label: 'Products' },
-  { value: 'SERVICES', label: 'Services' },
-  { value: 'BOTH', label: 'Products and services' }
-];
-const ENTITY_TYPES: { value: OnboardingEntityType; label: string }[] = [
-  { value: 'SOLE_PROPRIETOR', label: 'Sole proprietor' },
-  { value: 'SINGLE_MEMBER_LLC', label: 'Single-member LLC' },
-  { value: 'MULTI_MEMBER_LLC', label: 'Multi-member LLC' },
-  { value: 'CORPORATION', label: 'Corporation' },
-  { value: 'PARTNERSHIP', label: 'Partnership' },
-  { value: 'NONPROFIT', label: 'Nonprofit' }
-];
-const STATES = US_STATES.map(([value, label]) => ({ value, label }));
-
-/** Server field names (seller service) → wizard fields. */
-const FIELD_OF: Record<string, keyof OnboardingValues> = {
-  offering: 'offering', entityType: 'entityType', 'business.entityType': 'entityType', storeName: 'storeName', contactEmail: 'contactEmail', phone: 'phone',
-  website: 'website', legalFirstName: 'legalFirstName', legalLastName: 'legalLastName', legalName: 'legalName', address: 'line1', 'address.line1': 'line1',
-  'address.city': 'city', 'address.state': 'state', 'address.postalCode': 'postalCode'
+const STEP_COMPONENTS: Record<OnboardingStepSlug, ComponentType<StepProps>> = {
+  business: BusinessStep,
+  'business-details': DetailsStep,
+  owners: OwnersStep,
+  'stripe-verification': StripeStep,
+  payouts: PayoutsStep,
+  plan: PlanStep,
+  'catalog-compliance': ComplianceStep,
+  review: ReviewStep
 };
 
-function FromAccount({ on }: { on: boolean }) {
-  return on ? <span className="ml-1 rounded-pill bg-gold-100 px-2 py-0.5 text-xs font-semibold text-text">From your account</span> : null;
+const SUBTITLES: Partial<Record<OnboardingStepSlug, string>> = {
+  business: 'Tell us what you’ll sell and how your business is set up. The rest of the form adapts to your answers.',
+  owners: 'Each person will verify their identity in the next step.',
+  'stripe-verification': 'Verification runs inside AfroTransact, powered by Stripe. It takes about three minutes on a phone.',
+  payouts: 'Payouts go here weekly, after delivery. The account must belong to the business or owner.',
+  plan: 'Every paid plan starts with a free trial. Change plans any time.',
+  'catalog-compliance': 'Some categories need permits. We only ask for what applies to you.',
+  review: 'Our trust team reviews every application, usually within 2 business days. You can’t sell until it’s approved.'
+};
+
+function subtitleOf(st: OnboardingStatus, slug: OnboardingStepSlug): string {
+  if (slug === 'business-details') {
+    return st.form.business.entityType === 'SOLE_PROPRIETOR'
+      ? 'Must match what the IRS has for your SSN or ITIN.'
+      : 'Must match your IRS records for this EIN. We run an IRS TIN match before approval.';
+  }
+  if (slug === 'catalog-compliance' && st.form.business.offering === 'SERVICES') return 'Regulated services need a valid licence before you can take bookings.';
+  return SUBTITLES[slug] ?? '';
 }
 
-function Section({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
-  return (
-    <fieldset className="m-0 flex min-w-0 flex-col gap-4 rounded-md border border-border p-5">
-      <legend className="px-1 text-lg font-bold">{title}</legend>
-      <p className="m-0 -mt-2 text-sm text-muted">{hint}</p>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">{children}</div>
-    </fieldset>
-  );
-}
-
-/** The application's first two steps, prefilled from the account and autosaved on "Save and continue". */
-function ApplicationForm({ status, kind }: { status: OnboardingStatus; kind: OrgKind }) {
-  const api = sellerApi();
-  const qc = useQueryClient();
-  const toast = useToast();
+function useOnboarding() {
   const { orgId } = useSeller();
-  const form: OnboardingForm = status.form;
-  const [values, setValues] = useState<OnboardingValues>(() => formValues(form, kind));
-  const [errors, setErrors] = useState<Partial<Record<keyof OnboardingValues, string>>>({});
-  const [note, setNote] = useState<string | null>(() => prefillNote(form));
-  const disabled = !form.editable;
+  return useQuery(sellerQueries.onboarding(sellerApi(), orgId));
+}
 
-  const save = useMutation({
-    mutationFn: async (v: OnboardingValues) => {
-      await api.saveOnboardingBusiness(toBusinessInput(v));
-      return api.saveOnboardingDetails(toDetailsInput(v));
-    },
-    onSuccess: (st) => {
-      qc.setQueryData(sellerKeys.onboarding(orgId), st);
-      void qc.invalidateQueries({ queryKey: sellerKeys.session() });
-      toast.show('Saved. You can sign out and continue any time.');
-    },
-    onError: (e) => {
-      if (isApiError(e) && Object.keys(e.fieldErrors).length) {
-        const next: Partial<Record<keyof OnboardingValues, string>> = {};
-        Object.entries(e.fieldErrors).forEach(([k, msg]) => {
-          const f = FIELD_OF[k];
-          if (f) next[f] = msg;
-        });
-        setErrors(next);
-      }
-      toast.show(isApiError(e) && e.problem.detail ? e.problem.detail : 'We couldn’t save your answers. Try again.', 'error');
-    }
-  });
-
-  const set = (k: keyof OnboardingValues) => (e: { target: { value: string } }) => {
-    const value = e.target.value;
-    setValues((v) => ({ ...v, [k]: value }));
-    setErrors((er) => ({ ...er, [k]: undefined }));
-  };
-  const field = (k: keyof OnboardingValues, label: string, extra: { type?: string; autoComplete?: string; span?: boolean; optional?: boolean } = {}) => (
-    <TextField
-      label={
-        <>
-          {label}
-          {extra.optional ? <span className="font-normal text-muted"> (optional)</span> : null}
-          <FromAccount on={isPrefilled(form, k) && values[k] !== '' && values[k] === formValues(form, kind)[k]} />
-        </>
-      }
-      name={k}
-      type={extra.type ?? 'text'}
-      autoComplete={extra.autoComplete}
-      value={values[k]}
-      onChange={set(k)}
-      error={errors[k]}
-      disabled={disabled}
-      className={extra.span ? 'sm:col-span-2' : undefined}
-    />
-  );
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!values.entityType) {
-      setErrors((er) => ({ ...er, entityType: 'Choose your business type' }));
-      return;
-    }
-    save.mutate(values);
-  };
-
+function ApplicationHeading({ status }: { status: OnboardingStatus }) {
+  const provider = status.kind === 'PROVIDER';
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-5" aria-label="Your application">
-      {note ? (
-        <div role="status" className="flex items-start gap-3 rounded-sm bg-gold-50 px-4 py-3 text-sm">
-          <UserCircleCheck size={22} aria-hidden className="flex-none" />
-          <span className="flex-1">
-            <strong>Using your existing AfroTransact account.</strong> {note}
-          </span>
-          <button type="button" aria-label="Dismiss" className="cursor-pointer border-0 bg-transparent p-0 text-text" onClick={() => setNote(null)}>
-            <X size={18} aria-hidden />
-          </button>
-        </div>
-      ) : null}
-      <Section title="Your business" hint="What you’ll offer and how shoppers and our team reach you.">
-        <Select label="What will you offer?" name="offering" options={OFFERINGS} value={values.offering} onChange={set('offering')} error={errors.offering} disabled={disabled} />
-        <Select
-          label="Business type"
-          name="entityType"
-          placeholder="Choose…"
-          options={ENTITY_TYPES}
-          value={values.entityType}
-          onChange={set('entityType')}
-          error={errors.entityType}
-          disabled={disabled}
-        />
-        {field('storeName', kind === 'PROVIDER' ? 'Business name' : 'Store name', { autoComplete: 'organization', span: true })}
-        {field('contactEmail', 'Contact email', { type: 'email', autoComplete: 'email' })}
-        {field('phone', 'Mobile phone', { type: 'tel', autoComplete: 'tel' })}
-        {field('website', 'Website', { type: 'url', autoComplete: 'url', span: true, optional: true })}
-      </Section>
-      <Section title="About you" hint="Your legal name as on your ID, and your business address.">
-        {field('legalFirstName', 'Legal first name', { autoComplete: 'given-name' })}
-        {field('legalLastName', 'Legal last name', { autoComplete: 'family-name' })}
-        {needsLegalName(values.entityType) ? field('legalName', 'Registered business name', { autoComplete: 'organization', span: true }) : null}
-        {field('line1', 'Street address', { autoComplete: 'address-line1', span: true })}
-        {field('line2', 'Apt, suite, unit', { autoComplete: 'address-line2', span: true, optional: true })}
-        {field('city', 'City', { autoComplete: 'address-level2' })}
-        <div className="grid grid-cols-2 gap-4">
-          <Select
-            label={
-              <>
-                State
-                <FromAccount on={isPrefilled(form, 'state') && values.state !== '' && values.state === formValues(form, kind).state} />
-              </>
-            }
-            name="state"
-            placeholder="State"
-            options={STATES}
-            value={values.state}
-            onChange={set('state')}
-            error={errors.state}
-            disabled={disabled}
-          />
-          {field('postalCode', 'ZIP code', { autoComplete: 'postal-code' })}
-        </div>
-      </Section>
-      {form.editable ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? 'Saving…' : 'Save and continue'}
-          </Button>
-          <span className="text-sm text-muted">Progress saves to your account. Sign out any time and continue later.</span>
-        </div>
-      ) : null}
-    </form>
+    <div className="flex flex-col gap-0.5">
+      <h1 className="m-0 text-xl font-bold">
+        {provider ? 'Your provider application' : 'Your seller application'}
+        {status.reference ? <span className="font-normal text-muted"> · {status.reference}</span> : null}
+      </h1>
+      <p className="m-0 text-sm text-muted">
+        {provider ? 'Provider Hub' : 'Seller Center'} opens once AfroTransact approves your application. Progress saves to your account.
+      </p>
+    </div>
   );
 }
 
-/** Onboarding: the only page before approval — the application (prefilled from the account) and its checklist. */
-export function OnboardingView() {
-  const { orgId, isProvider, session } = useSeller();
-  const q = useQuery(sellerQueries.onboarding(sellerApi(), orgId));
-  const kind: OrgKind = session.activeOrg?.kind ?? (isProvider ? 'PROVIDER' : 'SELLER');
+/** The design's prefill banner ("Using your existing AfroTransact account."), dismissable. */
+function PrefillBanner({ status }: { status: OnboardingStatus }) {
+  const [note, setNote] = useState<string | null>(() => prefillNote(status.form));
+  if (!note) return null;
   return (
-    <ModulePage module="onboarding" readOnlyNote={false}>
-      <Notice tone="warning" title={`${isProvider ? 'Provider Hub' : 'Seller Center'} is locked.`} icon="shield">
-        Finish your application and wait for approval. Only onboarding is open to your account.
-      </Notice>
-      {q.isPending ? <Spinner /> : null}
-      {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
-      {q.data ? (
-        <>
-          <h2 className="m-0 text-xl font-bold">
-            {isProvider ? 'Your provider application' : 'Your seller application'} {q.data.reference ? <span className="font-normal text-muted">· {q.data.reference}</span> : null}
-          </h2>
-          <ApplicationForm key={q.data.orgId} status={q.data} kind={kind} />
-          <section className="flex flex-col gap-4 rounded-md border border-border p-6" aria-label="Application progress">
-            <strong className="text-lg">Progress</strong>
-            <ol className="m-0 flex list-none flex-col gap-2 p-0">
-              {q.data.steps.map((s) => {
-                const st = STATE[s.state];
-                return (
-                  <li key={s.key} className="flex items-center gap-3">
-                    <st.Icon size={22} weight="fill" aria-hidden className={st.cls} />
-                    <span className="flex-1">{s.label}</span>
-                    <span className={cx('text-xs', st.cls)}>{st.text}</span>
-                  </li>
-                );
-              })}
-            </ol>
-            {q.data.requestedItems.length ? (
-              <Notice tone="warning" title="We need:">{q.data.requestedItems.join(', ')}</Notice>
-            ) : null}
-          </section>
-        </>
+    <div role="status" className="flex items-start gap-3 rounded-sm bg-gold-50 px-4 py-2.5 text-sm">
+      <UserCircleCheck size={20} aria-hidden className="flex-none" />
+      <span className="flex-1">
+        <strong>Using your existing AfroTransact account.</strong> {note}
+      </span>
+      <button type="button" aria-label="Dismiss" className="cursor-pointer border-0 bg-transparent p-0 text-text" onClick={() => setNote(null)}>
+        <X size={18} aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * /onboarding: resumes the wizard at the first incomplete step, or (once submitted) shows what happens next and where
+ * the application is.
+ */
+export function OnboardingView() {
+  const q = useOnboarding();
+  const router = useRouter();
+  const target = q.data ? redirectFor(q.data, null) : null;
+  useEffect(() => {
+    if (target) router.replace(target);
+  }, [target, router]);
+  if (q.isPending || target) return <Spinner />;
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <ApplicationHeading status={q.data} />
+      <div className="rounded-md border border-border bg-surface p-4 sm:p-6">
+        <SubmittedView status={q.data} onRefresh={() => void q.refetch()} refreshing={q.isFetching} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * /onboarding/<step>: the application wizard. Progress at the top, the step's fields in a compact grid, and a sticky
+ * footer: Back, "Save & sign out" and "Save and continue" (validates, saves, then opens the next step).
+ */
+export function OnboardingWizard({ slug }: { slug: string }) {
+  const q = useOnboarding();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { orgId } = useSeller();
+  const storefrontUrl = useStorefrontUrl();
+  const step = useRef<StepHandle>(null);
+  const [busy, setBusy] = useState<'continue' | 'exit' | null>(null);
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const target = q.data ? redirectFor(q.data, slug) : null;
+  useEffect(() => {
+    if (target) router.replace(target);
+  }, [target, router]);
+
+  if (q.isPending || target) return <Spinner />;
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
+  const status = q.data;
+  const current = status.steps.find((s) => s.slug === slug);
+  if (!current) return <Spinner />;
+  const Step = STEP_COMPONENTS[current.slug];
+  const editable = isEditable(status);
+  const p = progressOf(status, slug);
+  const back = prevSlug(status, slug);
+  const isReview = current.slug === 'review';
+
+  const latest = (): OnboardingStatus => qc.getQueryData<OnboardingStatus>(sellerKeys.onboarding(orgId)) ?? status;
+  const saveAndContinue = async () => {
+    if (!step.current) return;
+    setBusy('continue');
+    try {
+      const ok = await step.current.save('continue');
+      if (!ok) return;
+      setSavedAt(new Date());
+      const st = latest();
+      if (isReview || !isEditable(st)) {
+        router.push('/onboarding');
+        return;
+      }
+      router.push(onboardingHref(nextSlug(st, slug) ?? st.resumeStep));
+      window.scrollTo({ top: 0 });
+    } finally {
+      setBusy(null);
+    }
+  };
+  const saveAndSignOut = async () => {
+    if (!step.current) return;
+    setBusy('exit');
+    const ok = await step.current.save('draft');
+    if (ok) await signOutEverywhere(storefrontUrl);
+    setBusy(null);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <ApplicationHeading status={status} />
+      {status.status === 'INFO_REQUESTED' && status.requestedItems.length ? (
+        <Notice tone="warning" title="We need a little more information:" role="alert">
+          {status.requestedItems.join('; ')}. Update the highlighted steps and submit again.
+        </Notice>
       ) : null}
-    </ModulePage>
+      {current.slug === 'business' || current.slug === 'business-details' ? <PrefillBanner status={status} /> : null}
+      <Stepper status={status} current={slug} />
+      <section aria-labelledby="ob-step-title" className="flex flex-col gap-4 rounded-md border border-border bg-surface p-4 sm:p-6">
+        <header className="flex flex-col gap-0.5">
+          <span className="text-xs font-semibold text-muted max-md:hidden">
+            Step {p.num} of {p.total}
+          </span>
+          <h2 id="ob-step-title" className="m-0 text-2xl font-bold">
+            {current.label}
+          </h2>
+          <p className="m-0 max-w-[70ch] text-sm text-muted">{subtitleOf(status, current.slug)}</p>
+        </header>
+        <Step key={`${slug}-${status.orgId}`} status={status} ref={step} />
+      </section>
+      <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border bg-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:-mx-8 sm:px-8">
+        {back ? (
+          <Button variant="neutral" size="sm" onClick={() => router.push(onboardingHref(back))} disabled={busy !== null}>
+            <ArrowLeft size={16} aria-hidden /> Back
+          </Button>
+        ) : null}
+        <span className="min-w-0 flex-1 text-xs text-muted max-sm:hidden" aria-live="polite">
+          {savedAt ? 'Saved' : editable ? 'Progress saves to your account' : 'Submitted — answers can’t be changed now'}
+        </span>
+        <span className="flex-1 sm:hidden" />
+        {editable ? (
+          <>
+            <Button variant="neutral" size="sm" onClick={() => void saveAndSignOut()} disabled={busy !== null}>
+              {busy === 'exit' ? 'Saving…' : 'Save & sign out'}
+            </Button>
+            <Button onClick={() => void saveAndContinue()} disabled={busy !== null}>
+              {busy === 'continue'
+                ? isReview
+                  ? 'Submitting…'
+                  : 'Saving…'
+                : isReview
+                  ? status.status === 'INFO_REQUESTED'
+                    ? 'Resubmit for review'
+                    : 'Submit for review'
+                  : 'Save and continue'}
+            </Button>
+          </>
+        ) : (
+          <Button variant="neutral" size="sm" onClick={() => router.push('/onboarding')}>
+            Application status
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }

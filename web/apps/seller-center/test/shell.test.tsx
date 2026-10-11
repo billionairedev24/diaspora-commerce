@@ -85,7 +85,7 @@ describe('My account in Seller Center', () => {
     expect(storefront?.getAttribute('href')).toMatch(/^http/);
   });
 
-  it('opens the account pages before approval, without sending the member to onboarding', async () => {
+  it('keeps My account closed while the application is in progress: it redirects to onboarding', async () => {
     await mockApi().setActiveOrg(PENDING_ORG);
     nav.pathname = '/account/security';
     renderWithProviders(
@@ -95,8 +95,7 @@ describe('My account in Seller Center', () => {
         </PortalShell>
       </AccountEnv>
     );
-    // The page re-mounts once when the saved display preferences arrive.
-    await waitFor(() => expect(screen.getByTestId('two-step')).toBeInTheDocument(), { timeout: 5000 });
-    expect(nav.replace).not.toHaveBeenCalledWith('/onboarding');
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/onboarding'));
+    expect(screen.queryByTestId('two-step')).not.toBeInTheDocument();
   });
 });

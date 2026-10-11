@@ -150,7 +150,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const q = useQuery({ ...sellerQueries.session(api), retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2 });
   const session = q.data;
   const active = moduleOf(pathname);
-  // My account (/account/…) belongs to the person, not an organisation: open before approval and without one.
+  // My account (/account/…) belongs to the person, not an organisation: open without one, but not while an
+  // application is in progress (only onboarding is open then).
   const accountPage = accountSectionOf(pathname) !== null;
   // Read once on arrival (no useSearchParams: the shell renders on every page, statically).
   const [applyRole, setApplyRole] = useState<ApplyRole | null>(() =>
@@ -170,7 +171,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
     onError: () => toast.show(t('sc.portalShell.switchFailed'), 'error')
   });
 
-  const needsOnboarding = !entering && !!session?.activeOrg && !session.approved && active !== 'onboarding' && !accountPage;
+  const needsOnboarding = !entering && !!session?.activeOrg && !session.approved && active !== 'onboarding';
   const leaveOnboarding = !entering && !!session?.approved && active === 'onboarding';
   useEffect(() => {
     if (needsOnboarding) router.replace('/onboarding');

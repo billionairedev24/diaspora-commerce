@@ -12,7 +12,6 @@ import {
   type EarningsRow,
   type Invoice,
   type ListingRow,
-  type OnboardingForm,
   type OrgKind,
   type OrgStatus,
   type Payout,
@@ -28,6 +27,7 @@ import {
   type TeamMember
 } from '../../schemas/seller';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
+import { type MockApplication } from './onboarding';
 
 export interface MockOrg {
   id: string;
@@ -59,8 +59,8 @@ export interface MockSellerDb {
   policy: Required<CancellationPolicyInput>;
   earnings: EarningsRow[];
   pages: Record<string, PublicPage>;
-  /** Answers of the onboarding wizard's first two steps per organisation (S286); prefilled from the account on start. */
-  onboarding: Record<string, OnboardingForm>;
+  /** The application per organisation (S286, S289): answers (prefilled from the account on start), Stripe, submission. */
+  onboarding: Record<string, MockApplication>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
   shipFrom: Record<string, ShipFromAddress[]>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */

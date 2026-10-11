@@ -1,10 +1,10 @@
 import { createSellerApiClient } from '@afrotransact/api-client';
 import { getSellerDb, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { handleSellerMockRequest } from '@afrotransact/api-client/mocks/seller-runtime';
-import { screen, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { OnboardingView } from '@/components/onboarding/OnboardingView';
+import { OnboardingView, OnboardingWizard } from '@/components/onboarding/OnboardingView';
 import { PortalShell } from '@/components/shell/PortalShell';
 
 import { renderWithProviders } from './render';
@@ -60,10 +60,19 @@ describe('Start selling arrival in Seller Center', () => {
     );
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/onboarding'));
     expect(state.starts).toBe(1);
+    // /onboarding resumes the wizard at its first incomplete step.
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/onboarding/business'));
+    cleanup();
+    nav.pathname = '/onboarding/business';
+    renderWithProviders(
+      <PortalShell>
+        <OnboardingWizard slug="business" />
+      </PortalShell>
+    );
     expect(await screen.findByText('Using your existing AfroTransact account.')).toBeInTheDocument();
-    expect(screen.getByLabelText(/Legal first name/)).toHaveValue('Titilayo');
-    expect(screen.getByLabelText(/Street address/)).toHaveValue('4410 Bellaire Blvd');
-    expect(screen.getByLabelText(/Contact email/)).toHaveValue('titilayo@adeskitchen.com');
+    expect(screen.getByText(/We filled in your name, email, phone and address/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Business email/)).toHaveValue('titilayo@adeskitchen.com');
+    expect(screen.getByLabelText(/Mobile phone/)).toHaveValue('(713) 249-0142');
     expect(screen.queryByText(/Sign in to Seller Central/)).not.toBeInTheDocument();
     expect(assign).not.toHaveBeenCalled();
     // A second "Start selling" resumes the same application.

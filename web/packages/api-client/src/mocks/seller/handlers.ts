@@ -23,9 +23,8 @@ import {
   FulfilmentKindSchema,
   type ListingRow,
   type ModuleKey,
-  type OnboardingForm,
   type OnboardingStatus,
-  type OrgKind,
+  type OnboardingStripeSession,
   type OrgSummary,
   ParcelSchema,
   PickupWindowSchema,
@@ -47,11 +46,27 @@ import {
   UploadRequestSchema,
   validatePickupHours
 } from '../../schemas/seller';
+import { suggestAddresses } from '../addresses';
 import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
-import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, SELLER_ORG } from './db';
+import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
+import {
+  accountForm,
+  applicationOf,
+  type FieldErrors,
+  type MockApplication,
+  onboardingPlans,
+  onboardingStatus,
+  saveCompliance,
+  saveDetails,
+  saveOwners,
+  savePayouts,
+  savePlan,
+  submit,
+  verifyStripe
+} from './onboarding';
 import { sellerSettingsHandlers } from './settings';
 
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
@@ -560,51 +575,7 @@ const fbaGate: HubGate = (request, _area, level) => {
   }
 };
 
-/* ── Start selling (S286): the application's first two steps, prefilled from the account ── */
-
-const ACCOUNT_ADDRESS = { line1: '4410 Bellaire Blvd', line2: null, city: 'Houston', state: 'TX', postalCode: '77025', country: 'US' };
-
-function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
-  return {
-    business: { offering: kind === 'PROVIDER' ? 'SERVICES' : null, entityType: null, country: null, storeName: null, contactEmail: db.user.email, phone: '+17132490142', website: null },
-    details: { legalFirstName: db.user.firstName, legalLastName: db.user.lastName, legalName: null, address: { ...ACCOUNT_ADDRESS } },
-    prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],
-    editable: true
-  };
-}
-
-function onboardingOf(db: MockSellerDb, org: MockOrg): OnboardingForm {
-  const form = db.onboarding[org.id] ?? accountForm(db, org.kind);
-  return { ...form, editable: org.status === 'DRAFT' || org.status === 'INFO_REQUESTED' };
-}
-
-function onboardingStatus(db: MockSellerDb, org: MockOrg): OnboardingStatus {
-  const steps: [string, string][] = [
-    ['ACCOUNT', 'Account & email verified'], ['BUSINESS', 'Business details & TIN'], ['OWNERS', 'Owners'], ['STRIPE', 'Stripe verification'],
-    ['PAYOUTS', 'Payouts'], ['PLAN', 'Plan'], ['COMPLIANCE', 'Catalog, permits & licences']
-  ];
-  const info = org.status === 'INFO_REQUESTED';
-  const draft = org.status === 'DRAFT';
-  return {
-    orgId: org.id, kind: org.kind, status: org.status, reference: draft ? 'APP-40001' : 'APP-30131',
-    steps: [
-      ...steps.map(([key, label]) => ({ key, label, state: draft ? ('TODO' as const) : key === 'COMPLIANCE' && info ? ('ACTION' as const) : ('DONE' as const) })),
-      { key: 'REVIEW', label: 'AfroTransact staff review', state: draft ? 'TODO' : info ? 'ACTION' : org.status === 'APPROVED' ? 'DONE' : 'WAITING' }
-    ],
-    requestedItems: info ? ['Harris County food establishment permit (current)'] : [],
-    canResume: info || draft,
-    form: onboardingOf(db, org)
-  };
-}
-
-/** Keeps a prefilled marker only while the answer is unchanged. */
-function keepPrefilled(before: OnboardingForm, after: OnboardingForm): string[] {
-  const value = (f: OnboardingForm, key: string): string => {
-    const [section, field] = key.split('.') as ['business' | 'details', string];
-    return JSON.stringify((f[section] as Record<string, unknown>)[field] ?? null);
-  };
-  return before.prefilled.filter((k) => value(before, k) === value(after, k));
-}
+/* ── The application wizard (S286, S289): see ./onboarding ── */
 
 const StartBody = z.object({ kind: z.enum(['SELLER', 'PROVIDER']) });
 const BusinessBody = z.object({
@@ -616,12 +587,46 @@ const BusinessBody = z.object({
   phone: z.string().optional(),
   website: z.string().optional()
 });
+const AddressBody = z.object({ line1: z.string(), line2: z.string().optional(), city: z.string(), state: z.string(), postalCode: z.string(), country: z.string().optional() });
 const DetailsBody = z.object({
   legalFirstName: z.string().optional(),
   legalLastName: z.string().optional(),
   legalName: z.string().optional(),
-  address: z.object({ line1: z.string(), line2: z.string().optional(), city: z.string(), state: z.string(), postalCode: z.string(), country: z.string().optional() }).optional()
+  dba: z.string().optional(),
+  taxId: z.string().optional(),
+  dateOfBirth: z.string().optional(),
+  stateOfFormation: z.string().optional(),
+  dateOfFormation: z.string().optional(),
+  address: AddressBody.optional(),
+  formationDocumentAssetId: z.string().optional(),
+  irsDeterminationLetterAssetId: z.string().optional()
 });
+const OwnersBody = z.object({
+  owners: z.array(z.object({
+    firstName: z.string().optional(), lastName: z.string().optional(), title: z.string().optional(), email: z.string().optional(),
+    ownershipPercent: z.number().min(0).max(100).optional(), significantControl: z.boolean().optional(), dateOfBirth: z.string().optional(), address: AddressBody.optional()
+  })).max(10)
+});
+const PayoutsBody = z.object({
+  accountHolderName: z.string(), accountType: z.enum(['checking', 'savings']), routingNumber: z.string(), accountNumber: z.string(), accountNumberConfirmation: z.string()
+});
+const OnboardingPlanBody = z.object({
+  planCode: z.string(), cadence: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']), paymentMethodKind: z.enum(['CARD']).optional(), stripePaymentMethodId: z.string().optional(),
+  cardBrand: z.string().optional(), cardLast4: z.string().optional(), cardExpMonth: z.number().int().optional(), cardExpYear: z.number().int().optional()
+});
+const ComplianceBody = z.object({
+  categories: z.array(z.string()).optional(),
+  foodPermit: z.object({ permitType: z.enum(['FOOD_ESTABLISHMENT', 'COTTAGE_FOOD', 'FDA_FACILITY', 'FOOD_HANDLER']).optional(), permitNumber: z.string().optional(),
+    issuingAuthority: z.string().optional(), expiresOn: z.string().optional(), documentAssetId: z.string().optional() }).optional(),
+  beautyLabellingConfirmed: z.boolean().optional(),
+  services: z.array(z.object({ serviceName: z.string(), regulated: z.boolean().optional(), licenceNumber: z.string().optional(), issuingState: z.string().optional(),
+    expiresOn: z.string().optional(), documentAssetId: z.string().optional() })).optional(),
+  insuranceDocumentAssetId: z.string().optional(),
+  agreementsAccepted: z.boolean().optional(),
+  w9Certified: z.boolean().optional(),
+  w9SignerName: z.string().optional()
+});
+const UploadBody = z.object({ fileName: z.string().min(1), contentType: z.string(), size: z.number().int() });
 const blankToNull = (v: string | undefined): string | null => (v && v.trim() ? v.trim() : null);
 
 /** The applicant's DRAFT organisation (or the active one), for the wizard's autosave. */
@@ -630,6 +635,17 @@ function applicantOrg(db: MockSellerDb): MockOrg {
   if (!org) throw new SellerProblem(404, 'NOT_FOUND', 'Not found', 'You haven’t started an application yet.');
   if (org.status !== 'DRAFT' && org.status !== 'INFO_REQUESTED') throw new SellerProblem(409, 'CONFLICT', 'Conflict', 'This application can’t be edited.');
   return org;
+}
+
+/** Saves one step with fn (null = saved, else field errors → 422) and answers the application's status. */
+function saveStep<S extends z.ZodType>(schema: S, fn: (app: MockApplication, input: z.infer<S>, org: MockOrg) => FieldErrors | null) {
+  return plain(async (db, request) => {
+    const input = await body(request, schema);
+    const org = applicantOrg(db);
+    const errors = fn(applicationOf(db, org), input, org);
+    if (errors) throw new SellerProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'Some fields are invalid.', errors);
+    return onboardingStatus(db, org);
+  });
 }
 
 function plain(fn: (db: MockSellerDb, request: Request) => unknown | Promise<unknown>, status = 200) {
@@ -673,7 +689,7 @@ export const sellerHandlers = [
         const org: MockOrg = { id: 'org_new', kind, name: kind === 'PROVIDER' ? 'Your provider application' : 'Your seller application', status: 'DRAFT', role: kind === 'PROVIDER' ? 'provider.owner' : 'seller.owner' };
         db.orgs.push(org);
         db.activeOrgId = org.id;
-        db.onboarding[org.id] = accountForm(db, kind);
+        db.onboarding[org.id] = { form: accountForm(db, kind), stripe: { status: 'NOT_STARTED', detailsSubmitted: false, chargesEnabled: false, payoutsEnabled: false, identityStatus: null, taxIdStatus: null, currentlyDue: [] }, submittedAt: null, timeline: [] };
         return HttpResponse.json(onboardingStatus(db, org) as JsonBodyType, { status: 201 });
       } catch (e) {
         if (e instanceof SellerProblem) return problemResponse(e);
@@ -683,35 +699,91 @@ export const sellerHandlers = [
   ),
   http.put(
     `${W}/onboarding/business`,
-    plain(async (db, request) => {
-      const b = await body(request, BusinessBody);
-      if (b.storeName !== undefined && b.storeName.trim().length === 1) throw invalid({ storeName: '2 to 80 characters' });
-      const org = applicantOrg(db);
-      const before = onboardingOf(db, org);
-      const after: OnboardingForm = {
-        ...before,
+    saveStep(BusinessBody, (app, b) => {
+      if (b.storeName !== undefined && b.storeName.trim().length === 1) return { storeName: '2 to 80 characters' };
+      const next = {
+        ...app.form,
         business: { offering: b.offering ?? null, entityType: b.entityType ?? null, country: blankToNull(b.country)?.toUpperCase() ?? null, storeName: blankToNull(b.storeName),
           contactEmail: blankToNull(b.contactEmail), phone: blankToNull(b.phone), website: blankToNull(b.website) }
       };
-      db.onboarding[org.id] = { ...after, prefilled: keepPrefilled(before, after) };
+      app.form = { ...next, owners: b.entityType === 'SOLE_PROPRIETOR' ? [] : next.owners, prefilled: app.form.prefilled.filter((k) => !k.startsWith('business.') ||
+        JSON.stringify((app.form.business as Record<string, unknown>)[k.slice(9)] ?? null) === JSON.stringify((next.business as Record<string, unknown>)[k.slice(9)] ?? null)) };
+      return null;
+    })
+  ),
+  http.put(`${W}/onboarding/business-details`, saveStep(DetailsBody, (app, d) => saveDetails(app, d))),
+  http.put(`${W}/onboarding/owners`, saveStep(OwnersBody, (app, o) => saveOwners(app, o.owners))),
+  http.put(`${W}/onboarding/payouts`, saveStep(PayoutsBody, (app, p) => savePayouts(app, p))),
+  http.put(`${W}/onboarding/plan`, saveStep(OnboardingPlanBody, (app, p, org) => savePlan(app, org.kind, p))),
+  http.put(`${W}/onboarding/catalog-compliance`, saveStep(ComplianceBody, (app, c) => saveCompliance(app, c))),
+  http.get(
+    `${W}/onboarding/plans`,
+    plain((db) => onboardingPlans((db.orgs.find((o) => o.id === db.activeOrgId) ?? db.orgs[0])?.kind ?? 'SELLER'))
+  ),
+  http.post(
+    `${W}/onboarding/stripe/session`,
+    plain((db): OnboardingStripeSession => {
+      const app = applicationOf(db, applicantOrg(db));
+      if (app.stripe.status === 'NOT_STARTED') app.stripe = { ...app.stripe, status: 'IN_PROGRESS', identityStatus: 'unverified', taxIdStatus: 'pending' };
+      // The mock BFF has no Stripe: like the seller service's local stand-in, the session is flagged localTest.
+      return { accountId: 'acct_local_mock', clientSecret: 'local_test_session_mock', publishableKey: '', expiresAt: null, localTest: true };
+    })
+  ),
+  http.post(
+    `${W}/onboarding/stripe/refresh`,
+    plain((db) => {
+      const org = applicantOrg(db);
+      const app = applicationOf(db, org);
+      if (app.stripe.status === 'NOT_STARTED') throw new SellerProblem(409, 'CONFLICT', 'Conflict', 'Start Stripe verification first.');
+      verifyStripe(app);
       return onboardingStatus(db, org);
     })
   ),
-  http.put(
-    `${W}/onboarding/business-details`,
-    plain(async (db, request) => {
-      const d = await body(request, DetailsBody);
+  http.post(
+    `${W}/onboarding/submit`,
+    plain((db) => {
       const org = applicantOrg(db);
-      const before = onboardingOf(db, org);
-      const a = d.address;
-      const after: OnboardingForm = {
-        ...before,
-        details: { legalFirstName: blankToNull(d.legalFirstName), legalLastName: blankToNull(d.legalLastName), legalName: blankToNull(d.legalName),
-          address: a ? { line1: a.line1, line2: blankToNull(a.line2), city: a.city, state: a.state.toUpperCase(), postalCode: a.postalCode, country: a.country ?? 'US' } : null }
-      };
-      db.onboarding[org.id] = { ...after, prefilled: keepPrefilled(before, after) };
+      const errors = submit(db, org);
+      if (errors) throw new SellerProblem(422, 'VALIDATION_FAILED', 'Some steps are incomplete', 'Some steps are incomplete or invalid; fix the highlighted fields and submit again.', errors);
       return onboardingStatus(db, org);
     })
+  ),
+  http.post(
+    `${W}/onboarding/uploads`,
+    plain(async (db, request) => {
+      const u = await body(request, UploadBody);
+      if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(u.contentType)) throw invalid({ contentType: 'Use a PDF, JPG, PNG or WebP' });
+      if (u.size > 15 * 1024 * 1024) throw invalid({ size: 'Documents must be 15 MB or smaller' });
+      db.seq += 1;
+      const assetId = `asset-doc-${db.seq}`;
+      return { assetId, method: 'PUT', url: `/api/bff/mock-uploads/${assetId}`, headers: { 'Content-Type': u.contentType }, publicUrl: null, expiresAt: null };
+    }, 201)
+  ),
+  http.put('*/mock-uploads/:assetId', () => new HttpResponse(null, { status: 200 })),
+  http.post(
+    `${W}/onboarding/uploads/:assetId/complete`,
+    plain((_db, request) => {
+      const assetId = new URL(request.url).pathname.split('/').at(-2) ?? '';
+      return { id: assetId, url: '', width: null, height: null, bytes: 120_000, contentType: 'application/pdf', status: 'READY' };
+    })
+  ),
+  /* Mock control for tests (not part of the contract): reseed the shared mock state; `applicant: true` leaves a
+     customer who belongs to no organisation, ready for "Start selling". */
+  http.post(
+    `${W}/__mock/reset`,
+    plain(async (_db, request) => {
+      const { applicant } = await body(request, z.object({ applicant: z.boolean().optional() }));
+      const db = resetSellerDb(new Date());
+      if (applicant) db.orgs = [];
+      return { orgs: db.orgs.length };
+    })
+  ),
+  http.get(
+    '*/v1/geo/address-suggestions',
+    plain((_db, request) => ({
+      suggestions: suggestAddresses(new URL(request.url).searchParams.get('q') ?? ''),
+      attribution: 'Sample addresses (geo service: Google Places / OpenStreetMap Nominatim in production)'
+    }))
   ),
   http.put(
     `${W}/session/active-org`,

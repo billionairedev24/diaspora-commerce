@@ -67,7 +67,71 @@ export const OnboardingAddressSchema = z.object({
 });
 export type OnboardingAddress = z.infer<typeof OnboardingAddressSchema>;
 
-/** The wizard's first two steps (S286); `prefilled` names the answers taken from the account and still unchanged. */
+export const OnboardingStepKeySchema = z.enum(['BUSINESS', 'BUSINESS_DETAILS', 'OWNERS', 'STRIPE_VERIFICATION', 'PAYOUTS', 'PLAN', 'CATALOG_COMPLIANCE', 'REVIEW']);
+export type OnboardingStepKey = z.infer<typeof OnboardingStepKeySchema>;
+export const OnboardingStepSlugSchema = z.enum(['business', 'business-details', 'owners', 'stripe-verification', 'payouts', 'plan', 'catalog-compliance', 'review']);
+export type OnboardingStepSlug = z.infer<typeof OnboardingStepSlugSchema>;
+export const OnboardingStepStateSchema = z.enum(['DONE', 'TODO', 'ACTION', 'WAITING', 'BLOCKED']);
+export type OnboardingStepState = z.infer<typeof OnboardingStepStateSchema>;
+
+export const OnboardingStepSchema = z.object({
+  key: OnboardingStepKeySchema,
+  slug: OnboardingStepSlugSchema,
+  label: z.string(),
+  sub: z.string(),
+  state: OnboardingStepStateSchema
+});
+export type OnboardingStep = z.infer<typeof OnboardingStepSchema>;
+
+export const OnboardingStripeStatusSchema = z.enum(['NOT_STARTED', 'IN_PROGRESS', 'REQUIREMENTS_DUE', 'PENDING', 'VERIFIED', 'REJECTED']);
+export type OnboardingStripeStatus = z.infer<typeof OnboardingStripeStatusSchema>;
+export const OnboardingStripeSchema = z.object({
+  status: OnboardingStripeStatusSchema,
+  detailsSubmitted: z.boolean(),
+  chargesEnabled: z.boolean(),
+  payoutsEnabled: z.boolean(),
+  identityStatus: nullableString,
+  taxIdStatus: nullableString,
+  currentlyDue: z.array(z.string())
+});
+export type OnboardingStripe = z.infer<typeof OnboardingStripeSchema>;
+
+export const OnboardingOwnerSchema = z.object({
+  firstName: nullableString,
+  lastName: nullableString,
+  title: nullableString,
+  email: nullableString,
+  ownershipPercent: z.number().nullable(),
+  significantControl: z.boolean(),
+  dateOfBirth: nullableString,
+  address: OnboardingAddressSchema.nullable()
+});
+export type OnboardingOwner = z.infer<typeof OnboardingOwnerSchema>;
+
+export const OnboardingFirstChargeSchema = z.object({ chargeOn: nullableString, amountCents: z.number().int(), sentence: z.string() });
+export type OnboardingFirstCharge = z.infer<typeof OnboardingFirstChargeSchema>;
+
+export const OnboardingFoodPermitTypeSchema = z.enum(['FOOD_ESTABLISHMENT', 'COTTAGE_FOOD', 'FDA_FACILITY', 'FOOD_HANDLER']);
+export type OnboardingFoodPermitType = z.infer<typeof OnboardingFoodPermitTypeSchema>;
+export const OnboardingFoodPermitSchema = z.object({
+  permitType: nullableString,
+  permitNumber: nullableString,
+  issuingAuthority: nullableString,
+  expiresOn: nullableString,
+  documentAssetId: nullableString
+});
+export const OnboardingServiceLicenceSchema = z.object({
+  serviceName: z.string(),
+  regulated: z.boolean(),
+  licenceNumber: nullableString,
+  issuingState: nullableString,
+  expiresOn: nullableString,
+  documentAssetId: nullableString
+});
+export type OnboardingServiceLicence = z.infer<typeof OnboardingServiceLicenceSchema>;
+
+/** Every answer of the wizard (S286, S289); `prefilled` names the answers taken from the account and still unchanged.
+ *  The tax ID comes back masked and the bank account as last 4 only. */
 export const OnboardingFormSchema = z.object({
   business: z.object({
     offering: OnboardingOfferingSchema.nullable(),
@@ -82,8 +146,47 @@ export const OnboardingFormSchema = z.object({
     legalFirstName: nullableString,
     legalLastName: nullableString,
     legalName: nullableString,
-    address: OnboardingAddressSchema.nullable()
+    dba: nullableString,
+    taxIdType: z.enum(['SSN', 'ITIN', 'EIN']).nullable(),
+    taxIdMasked: nullableString,
+    dateOfBirth: nullableString,
+    stateOfFormation: nullableString,
+    dateOfFormation: nullableString,
+    address: OnboardingAddressSchema.nullable(),
+    formationDocumentAssetId: nullableString,
+    irsDeterminationLetterAssetId: nullableString
   }),
+  owners: z.array(OnboardingOwnerSchema),
+  payouts: z.object({
+    accountHolderName: nullableString,
+    accountType: nullableString,
+    bankName: nullableString,
+    routingLast4: nullableString,
+    accountLast4: nullableString,
+    linked: z.boolean()
+  }),
+  plan: z.object({
+    planCode: nullableString,
+    planName: nullableString,
+    cadence: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']).nullable(),
+    paymentMethodKind: z.enum(['CARD', 'US_BANK_ACCOUNT']).nullable(),
+    cardBrand: nullableString,
+    cardLast4: nullableString,
+    cardExpMonth: z.number().int().nullable(),
+    cardExpYear: z.number().int().nullable(),
+    firstCharge: OnboardingFirstChargeSchema.nullable()
+  }),
+  compliance: z.object({
+    categories: z.array(z.string()),
+    foodPermit: OnboardingFoodPermitSchema.nullable(),
+    beautyLabellingConfirmed: z.boolean().nullable(),
+    services: z.array(OnboardingServiceLicenceSchema),
+    insuranceDocumentAssetId: nullableString,
+    agreementsAccepted: z.boolean().nullable(),
+    w9Certified: z.boolean().nullable(),
+    w9SignerName: nullableString
+  }),
+  documents: z.array(z.object({ assetId: z.string(), kind: z.string(), label: z.string() })),
   prefilled: z.array(z.string()),
   editable: z.boolean()
 });
@@ -94,9 +197,13 @@ export const OnboardingStatusSchema = z.object({
   kind: OrgKindSchema,
   status: z.string(),
   reference: nullableString,
-  steps: z.array(z.object({ key: z.string(), label: z.string(), state: z.enum(['DONE', 'TODO', 'ACTION', 'WAITING', 'BLOCKED']) })),
+  steps: z.array(OnboardingStepSchema),
   requestedItems: z.array(z.string()),
   canResume: z.boolean(),
+  resumeStep: z.string(),
+  submittedAt: nullableString,
+  stripe: OnboardingStripeSchema,
+  timeline: z.array(z.object({ action: z.string(), status: z.string(), note: nullableString, occurredAt: z.string() })),
   form: OnboardingFormSchema
 });
 export type OnboardingStatus = z.infer<typeof OnboardingStatusSchema>;
@@ -112,12 +219,122 @@ export interface OnboardingBusinessInput {
   website?: string;
 }
 
-/** PUT /v1/seller/onboarding/business-details. */
+export interface OnboardingAddressInput {
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country?: string;
+}
+
+/** PUT /v1/seller/onboarding/business-details (the whole step). `taxId` is write-only; omit it to keep the stored one. */
 export interface OnboardingDetailsInput {
   legalFirstName?: string;
   legalLastName?: string;
   legalName?: string;
-  address?: { line1: string; line2?: string; city: string; state: string; postalCode: string; country?: string };
+  dba?: string;
+  taxId?: string;
+  dateOfBirth?: string;
+  stateOfFormation?: string;
+  dateOfFormation?: string;
+  address?: OnboardingAddressInput;
+  formationDocumentAssetId?: string;
+  irsDeterminationLetterAssetId?: string;
+}
+
+export interface OnboardingOwnerInput {
+  firstName?: string;
+  lastName?: string;
+  title?: string;
+  email?: string;
+  ownershipPercent?: number;
+  significantControl?: boolean;
+  dateOfBirth?: string;
+  address?: OnboardingAddressInput;
+}
+
+/** PUT /v1/seller/onboarding/owners. */
+export interface OnboardingOwnersInput {
+  owners: OnboardingOwnerInput[];
+}
+
+/** PUT /v1/seller/onboarding/payouts: the numbers go to Stripe once and are never stored. */
+export interface OnboardingPayoutsInput {
+  accountHolderName: string;
+  accountType: 'checking' | 'savings';
+  routingNumber: string;
+  accountNumber: string;
+  accountNumberConfirmation: string;
+}
+
+/** PUT /v1/seller/onboarding/plan. */
+export interface OnboardingPlanInput {
+  planCode: string;
+  cadence: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  paymentMethodKind?: 'CARD';
+  stripePaymentMethodId?: string;
+  cardBrand?: string;
+  cardLast4?: string;
+  cardExpMonth?: number;
+  cardExpYear?: number;
+}
+
+/** PUT /v1/seller/onboarding/catalog-compliance. */
+export interface OnboardingComplianceInput {
+  categories?: string[];
+  foodPermit?: { permitType?: OnboardingFoodPermitType; permitNumber?: string; issuingAuthority?: string; expiresOn?: string; documentAssetId?: string };
+  beautyLabellingConfirmed?: boolean;
+  services?: { serviceName: string; regulated?: boolean; licenceNumber?: string; issuingState?: string; expiresOn?: string; documentAssetId?: string }[];
+  insuranceDocumentAssetId?: string;
+  agreementsAccepted?: boolean;
+  w9Certified?: boolean;
+  w9SignerName?: string;
+}
+
+export const OnboardingStripeSessionSchema = z.object({
+  accountId: z.string(),
+  clientSecret: z.string(),
+  publishableKey: z.string(),
+  expiresAt: nullableString,
+  localTest: z.boolean()
+});
+export type OnboardingStripeSession = z.infer<typeof OnboardingStripeSessionSchema>;
+
+export const OnboardingPlanPriceSchema = z.object({
+  cadence: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']),
+  months: z.number().int(),
+  totalCents: z.number().int(),
+  perMonthCents: z.number().int(),
+  savingCents: z.number().int(),
+  perMonthLabel: z.string(),
+  billedLabel: z.string(),
+  savingLabel: nullableString,
+  firstCharge: OnboardingFirstChargeSchema.nullable()
+});
+export type OnboardingPlanPrice = z.infer<typeof OnboardingPlanPriceSchema>;
+export const OnboardingPlansSchema = z.object({
+  publishableKey: z.string(),
+  plans: z.array(
+    z.object({
+      code: z.string(),
+      name: z.string(),
+      tagline: nullableString,
+      monthlyCents: z.number().int(),
+      trialDays: z.number().int(),
+      features: z.array(z.string()),
+      prices: z.array(OnboardingPlanPriceSchema)
+    })
+  )
+});
+export type OnboardingPlans = z.infer<typeof OnboardingPlansSchema>;
+export type OnboardingPlanOffer = OnboardingPlans['plans'][number];
+
+/** POST /v1/seller/onboarding/uploads (private kyc-document). */
+export interface OnboardingUploadRequest {
+  fileName: string;
+  contentType: 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp';
+  size: number;
 }
 
 export const ComplianceStatusSchema = z.enum(['COMPLIANT', 'ACTION_NEEDED', 'RESTRICTED_SOON', 'RESTRICTED', 'VERIFYING']);

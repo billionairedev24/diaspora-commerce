@@ -10,6 +10,7 @@ export const sellerKeys = {
   session: () => [...sellerKeys.all, 'session'] as const,
   org: (orgId: string) => [...sellerKeys.all, 'org', orgId] as const,
   onboarding: (orgId: string) => [...sellerKeys.org(orgId), 'onboarding'] as const,
+  onboardingPlans: (orgId: string) => [...sellerKeys.onboarding(orgId), 'plans'] as const,
   compliance: (orgId: string) => [...sellerKeys.org(orgId), 'compliance'] as const,
   dashboard: (orgId: string, rangeDays: number) => [...sellerKeys.org(orgId), 'dashboard', rangeDays] as const,
   orders: (orgId: string) => [...sellerKeys.org(orgId), 'orders'] as const,
@@ -46,6 +47,8 @@ export const sellerQueries = {
   session: (api: SellerApiClient) => queryOptions({ queryKey: sellerKeys.session(), queryFn: ({ signal }) => api.getSession(signal), staleTime: MINUTE }),
   onboarding: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.onboarding(orgId), queryFn: ({ signal }) => api.getOnboarding(signal), staleTime: MINUTE }),
+  onboardingPlans: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.onboardingPlans(orgId), queryFn: ({ signal }) => api.getOnboardingPlans(signal), staleTime: 10 * MINUTE }),
   compliance: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.compliance(orgId), queryFn: ({ signal }) => api.getCompliance(signal), staleTime: 5 * MINUTE }),
   dashboard: (api: SellerApiClient, orgId: string, rangeDays: number) =>
