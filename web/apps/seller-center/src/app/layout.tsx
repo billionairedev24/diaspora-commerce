@@ -27,7 +27,8 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: resolvedVariables['--at-color-header-bg'] };
+// viewport-fit=cover: the page runs edge to edge on notched phones; sticky bars pad themselves with the safe-area insets.
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: resolvedVariables['--at-color-header-bg'] };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const locale = await getLocale();

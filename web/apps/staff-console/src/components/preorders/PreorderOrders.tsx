@@ -85,7 +85,7 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
         cell: ({ row }) => (
           <span className="flex flex-col text-xs">
             <span>{PREORDER_CHANNEL_LABEL[row.original.channel]}</span>
-            <span className="truncate font-mono text-[10px] text-subtle">{row.original.trackingTag}</span>
+            <span className="truncate font-mono text-2xs text-subtle">{row.original.trackingTag}</span>
           </span>
         )
       },

@@ -394,7 +394,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
                 disabled={busy}
                 className={`flex cursor-pointer items-center gap-2 rounded-pill border-0 px-3 py-1 text-xs font-bold ${i === step ? 'bg-ink-1000 text-ink-0' : 'bg-transparent text-ink-700'}`}
               >
-                <span aria-hidden className={`grid size-[18px] place-items-center rounded-pill text-[10px] text-ink-1000 ${i <= step ? 'bg-gold-500' : 'bg-ink-200'}`}>
+                <span aria-hidden className={`grid size-[18px] place-items-center rounded-pill text-2xs text-ink-1000 ${i <= step ? 'bg-gold-500' : 'bg-ink-200'}`}>
                   {i < step ? '✓' : String(i + 1)}
                 </span>
                 {label}

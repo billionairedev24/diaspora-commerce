@@ -6,7 +6,7 @@ import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 
 
 import { fS, num } from './model';
 
-const tick = { fontSize: 10, fill: resolvedVariables['--at-color-text-subtle'] };
+const tick = { fontSize: 12, fill: resolvedVariables['--at-color-text-subtle'] };
 const tooltip = { contentStyle: { borderRadius: 8, border: `1px solid ${resolvedVariables['--at-color-border']}`, fontSize: 12 }, cursor: { fill: resolvedVariables['--at-ink-50'] } };
 const GREEN = resolvedVariables['--at-green-600'];
 const GOLD = resolvedVariables['--at-gold-500'];
@@ -79,7 +79,7 @@ export function HBars({ title, rows, color, labelWidth = 130, valueText }: { tit
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows} layout="vertical" margin={{ top: 0, right: 44, left: 0, bottom: 0 }} barCategoryGap={6}>
               <XAxis type="number" hide domain={[0, 'dataMax']} />
-              <YAxis type="category" dataKey="k" width={labelWidth} tick={{ ...tick, fontSize: 11, fill: resolvedVariables['--at-color-text'] }} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="k" width={labelWidth} tick={{ ...tick, fontSize: 12, fill: resolvedVariables['--at-color-text'] }} tickLine={false} axisLine={false} />
               <Tooltip {...tooltip} formatter={(v) => [fmt(Number(v)), title]} />
               <Bar dataKey="n" fill={fill} radius={[5, 5, 5, 5]} barSize={10} background={{ fill: resolvedVariables['--at-ink-100'], radius: 5 }} label={{ position: 'right', fontSize: 11, fontWeight: 700, formatter: (v: unknown) => fmt(Number(v)) }} />
             </BarChart>

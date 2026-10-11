@@ -96,7 +96,7 @@ function NavGroupSection({ group, active, single }: { group: NavGroup; active: M
                 href={hrefOf(m.key)}
                 aria-current={current ? 'page' : undefined}
                 className={cx(
-                  'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline',
+                  'flex h-[34px] items-center gap-3 rounded-sm pr-3 pl-4 text-md text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline pointer-coarse:h-11',
                   current ? 'bg-gold-100 font-bold hover:bg-gold-100' : 'font-normal'
                 )}
               >
@@ -129,6 +129,37 @@ export function Sidebar({ session, active, onSwitch, switching }: { session: Sel
         <br />
         {session.accessNote}
       </p>
+    </nav>
+  );
+}
+
+/** Icon rail (tablets): the organisation's modules, one icon each, grouped by a rule; names as tooltips. */
+export function SidebarRail({ session, active }: { session: SellerSession; active: ModuleKey | null }) {
+  const t = useT();
+  return (
+    <nav aria-label={t('sc.sidebar.backOffice')} className="flex flex-col gap-2 px-2 py-3">
+      {session.navGroups.map((g, gi) => (
+        <ul key={`${session.activeOrg?.id}-${g.key}`} aria-label={g.label} className={cx('m-0 flex list-none flex-col items-center gap-1 p-0', gi > 0 && 'border-t border-border pt-2')}>
+          {g.modules.map((m) => {
+            const Icon = MODULE_ICONS[m.key];
+            const current = m.key === active;
+            return (
+              <li key={m.key}>
+                <Link
+                  href={hrefOf(m.key)}
+                  aria-current={current ? 'page' : undefined}
+                  title={m.label}
+                  className={cx('relative flex size-11 items-center justify-center rounded-sm text-text no-underline hover:bg-surface-hover hover:text-text hover:no-underline', current && 'bg-gold-100 hover:bg-gold-100')}
+                >
+                  <Icon size={20} aria-hidden weight={current ? 'fill' : 'regular'} />
+                  <span className="at-visually-hidden">{m.badge ? `${m.label} (${m.badge})` : m.label}</span>
+                  {m.badge ? <span aria-hidden className="absolute top-1.5 right-1.5 size-2 rounded-pill bg-gold-500" /> : null}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ))}
     </nav>
   );
 }

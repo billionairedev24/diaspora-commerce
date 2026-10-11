@@ -16,12 +16,13 @@ const ICON_COLOR: Record<NoticeTone, string> = { info: 'text-info', warning: 'te
 export function Notice({ tone, title, children, icon, action, role = 'status' }: { tone: NoticeTone; title: ReactNode; children?: ReactNode; icon?: 'eye' | 'shield'; action?: ReactNode; role?: 'status' | 'alert' }) {
   const I = icon === 'eye' ? Eye : icon === 'shield' ? ShieldWarning : tone === 'info' ? Info : WarningCircle;
   return (
-    <div role={role} className={cx('flex items-start gap-3 rounded-md border px-4 py-3 text-md', STYLES[tone])}>
+    // Narrow screens: the action drops under the text (aligned with it) instead of squeezing it into a thin column.
+    <div role={role} className={cx('flex flex-wrap items-start gap-x-3 gap-y-1 rounded-md border px-4 py-3 text-md', STYLES[tone])}>
       <I size={22} weight="fill" aria-hidden className={cx('mt-px flex-none', ICON_COLOR[tone])} />
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-56">
         <strong>{title}</strong> {children}
       </div>
-      {action}
+      {action ? <div className="flex-none max-sm:basis-full max-sm:pl-[34px] pointer-coarse:[&>a]:inline-flex pointer-coarse:[&>a]:min-h-11 pointer-coarse:[&>a]:items-center">{action}</div> : null}
     </div>
   );
 }

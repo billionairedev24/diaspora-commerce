@@ -14,7 +14,7 @@ import { download, sliceColour, slug, tabular, toneColour } from '@/lib/export/t
 import { toXlsx } from '@/lib/export/xlsx';
 import { dollars } from '@/lib/format';
 
-const tick = { fontSize: 11, fill: resolvedVariables['--at-color-text-muted'] };
+const tick = { fontSize: 12, fill: resolvedVariables['--at-color-text-muted'] };
 const gridStroke = resolvedVariables['--at-color-border'];
 const tooltip = { contentStyle: { borderRadius: 8, border: `1px solid ${resolvedVariables['--at-color-border']}`, fontSize: 12 } };
 

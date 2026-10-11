@@ -2,7 +2,7 @@
 
 import { AccountFormatPreferences, accountSectionOf } from '@afrotransact/account';
 import { isApiError, type ModuleKey, type OnboardingStatus, sellerKeys, sellerQueries, type SellerSession } from '@afrotransact/api-client';
-import { Button, useToast } from '@afrotransact/ui';
+import { BackofficeFrame, Button, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -19,7 +19,7 @@ import { SellerSessionProvider } from '@/lib/session';
 import { ComplianceBanner, PayoutsPausedBanner } from './ComplianceBanner';
 import { Header } from './Header';
 import { AutoSignIn, clearSignInAttempt, ShellFailed, ShellLoading } from './ShellStates';
-import { Sidebar } from './Sidebar';
+import { Sidebar, SidebarRail } from './Sidebar';
 
 function Centered({ children }: { children: ReactNode }) {
   return <div className="mx-auto flex w-[min(560px,100%)] flex-col items-center gap-4 px-4 py-16 text-center">{children}</div>;
@@ -227,15 +227,18 @@ export function PortalShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const sidebar = <Sidebar session={session} active={active} onSwitch={(id) => switchOrg.mutate(id)} switching={switchOrg.isPending} />;
   const canOpen = accountPage || allowed(session, active);
   return (
     <SellerSessionProvider session={session}>
-      <Header session={session} />
-      <div className="grid min-h-[calc(100vh-56px)] grid-cols-1 md:grid-cols-[264px_minmax(0,1fr)]">
-        <aside className="border-b border-border bg-surface md:sticky md:top-14 md:h-[calc(100vh-56px)] md:self-start md:overflow-y-auto md:overscroll-contain md:border-r md:border-b-0">
-          {sidebar}
-        </aside>
+      <BackofficeFrame
+        header={(menuButton) => <Header session={session} menuButton={menuButton} />}
+        nav={<Sidebar session={session} active={active} onSwitch={(id) => switchOrg.mutate(id)} switching={switchOrg.isPending} />}
+        rail={<SidebarRail session={session} active={active} />}
+        routeKey={pathname}
+        menuLabel={t('sc.portalShell.menu')}
+        expandLabel={t('sc.portalShell.expandMenu')}
+        collapseLabel={t('sc.portalShell.collapseMenu')}
+      >
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">
           {session.approved ? <PayoutsPausedBanner /> : null}
           {session.approved ? <ComplianceBanner onAccountHealth={active === 'account-health'} /> : null}
@@ -254,7 +257,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
             </div>
           ) : null}
         </main>
-      </div>
+      </BackofficeFrame>
     </SellerSessionProvider>
   );
 }

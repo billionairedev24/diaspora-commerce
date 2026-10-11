@@ -130,7 +130,7 @@ function SocialPreview({ w }: { w: PreorderWindow }) {
       <div className="relative aspect-[9/16] w-60 overflow-hidden rounded-lg bg-ink-1000 text-ink-0 shadow-lg">
         {story ? <div role="img" aria-label="Story creative" className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url("${story.url}")` }} /> : null}
         <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2 bg-gradient-to-t from-ink-1000/85 to-transparent p-4">
-          <span className="text-[10px] text-ink-300">Sponsored · AfroTransact</span>
+          <span className="text-2xs text-ink-300">Sponsored · AfroTransact</span>
           <strong className="text-md leading-tight">{w.ribbon}</strong>
           <span className="text-xs text-ink-200">{`Order by ${fS(w.closesAt)} · delivered ${fS(w.deliversOn)}`}</span>
           <span className="grid h-8 place-items-center rounded-pill bg-gold-500 text-xs font-bold text-ink-1000">Pre-order now</span>

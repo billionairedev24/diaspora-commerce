@@ -64,7 +64,7 @@ function ListTabs({ tab }: { tab: PreorderListTab }) {
   const counts = useQuery(staffPreorderQueries.list(api, { status: 'all', page: 0 })).data?.counts;
   const tabs: [PreorderListTab, string][] = [['all', 'All'], ['open', 'Open'], ['upcoming', 'Scheduled'], ['closed', 'Closed'], ['draft', 'Drafts']];
   return (
-    <div role="tablist" aria-label="Pre-order status" className="flex gap-0.5 rounded-md border border-border bg-surface-muted p-0.5">
+    <div role="tablist" aria-label="Pre-order status" className="flex max-w-full gap-0.5 overflow-x-auto overscroll-x-contain rounded-md border border-border bg-surface-muted p-0.5">
       {tabs.map(([k, label]) => (
         <Link
           key={k}
@@ -73,7 +73,7 @@ function ListTabs({ tab }: { tab: PreorderListTab }) {
           href={href.list(k)}
           replace
           scroll={false}
-          className={`flex h-8 items-center gap-1.5 rounded-sm px-3 text-sm font-semibold text-text no-underline hover:text-text hover:no-underline ${tab === k ? 'bg-surface shadow-sm' : ''}`}
+          className={`flex h-8 shrink-0 items-center gap-1.5 rounded-sm px-3 text-sm font-semibold text-text no-underline hover:text-text hover:no-underline ${tab === k ? 'bg-surface shadow-sm' : ''}`}
         >
           {label}
           <span className="text-xs text-muted" data-testid={`tab-count-${k}`}>

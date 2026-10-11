@@ -77,23 +77,23 @@ export function HoursEditor() {
           <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
             {form.weekly.map((d, i) => (
               <li key={d.day} className="flex flex-wrap items-start gap-3 py-3">
-                <div className="w-32 flex-none pt-2">
+                <div className="w-full flex-none sm:w-32 sm:pt-2">
                   <Checkbox label={DAY_LABEL[d.day]} checked={d.ranges.length > 0} onChange={(e) => setDay(i, e.target.checked ? [{ start: '09:00', end: '17:00' }] : [])} />
                 </div>
                 <div className="flex min-w-0 flex-1 flex-col gap-2">
                   {d.ranges.length === 0 ? <span className="pt-2 text-sm text-muted">Closed</span> : null}
                   {d.ranges.map((r, j) => (
                     <div key={j} className="flex items-center gap-2">
-                      <input aria-label={`${DAY_LABEL[d.day]} range ${j + 1} start`} type="time" value={r.start} className="h-9 rounded-sm border border-border px-2"
+                      <input aria-label={`${DAY_LABEL[d.day]} range ${j + 1} start`} type="time" value={r.start} className="h-9 min-w-0 flex-1 rounded-sm border border-border px-2 sm:max-w-36 sm:flex-none pointer-coarse:h-11"
                         onChange={(e) => setDay(i, d.ranges.map((x, k) => (k === j ? { ...x, start: e.target.value } : x)))} />
                       <span className="text-muted">–</span>
-                      <input aria-label={`${DAY_LABEL[d.day]} range ${j + 1} end`} type="time" value={r.end} className="h-9 rounded-sm border border-border px-2"
+                      <input aria-label={`${DAY_LABEL[d.day]} range ${j + 1} end`} type="time" value={r.end} className="h-9 min-w-0 flex-1 rounded-sm border border-border px-2 sm:max-w-36 sm:flex-none pointer-coarse:h-11"
                         onChange={(e) => setDay(i, d.ranges.map((x, k) => (k === j ? { ...x, end: e.target.value } : x)))} />
                       <IconButton label="Remove range" onClick={() => setDay(i, d.ranges.filter((_, k) => k !== j))}><X size={16} /></IconButton>
                     </div>
                   ))}
                   {d.ranges.length > 0 && d.ranges.length < 4 ? (
-                    <button type="button" className="flex items-center gap-1 self-start text-sm font-semibold text-link"
+                    <button type="button" className="flex min-h-8 items-center gap-1 self-start text-sm font-semibold text-link pointer-coarse:min-h-11"
                       onClick={() => {
                         const last = d.ranges.at(-1);
                         setDay(i, [...d.ranges, { start: last?.end ?? '13:00', end: '18:00' }]);
@@ -142,7 +142,7 @@ export function HoursEditor() {
         </div>
       </fieldset>
       {editable ? (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button onClick={submit} loading={save.isPending}>Save working hours</Button>
           <Button variant="neutral" onClick={() => { setForm(q.data ?? form); setErrors([]); }}>Discard changes</Button>
         </div>

@@ -62,7 +62,13 @@ export function DashboardView() {
                 {q.data.todo.map((t) => (
                   <li key={t.label} className="flex items-center gap-3 text-sm">
                     <span aria-hidden className={cx('size-2 flex-none rounded-pill', TODO_DOT[t.tone])} />
-                    {can(t.module as ModuleKey, 'VIEW') ? <Link href={hrefOf(t.module)}>{t.label}</Link> : <span>{t.label}</span>}
+                    {can(t.module as ModuleKey, 'VIEW') ? (
+                      <Link href={hrefOf(t.module)} className="pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center">
+                        {t.label}
+                      </Link>
+                    ) : (
+                      <span>{t.label}</span>
+                    )}
                   </li>
                 ))}
               </ul>
