@@ -12,7 +12,7 @@
  * table brings TanStack Table and the export contract (api-client types) that only the back offices need.
  */
 export { ColumnsMenu, type Density } from './ColumnsMenu';
-export { DataTable, type DataTableProps } from './DataTable';
+export { DataTable, type DataTableProps, pageNumbers } from './DataTable';
 export { columnLabel, datasetOf, type ExportOutcome, type TableExportRequest, tableKey } from './export';
 export { everyColumnFilter, kindSortingFn, searchTerms, searchTexts } from './search';
 export { readPrefs, type TablePrefs, writePrefs } from './storage';

@@ -99,6 +99,21 @@ function pinStyle<T>(c: Column<T, unknown>, header = false): CSSProperties {
 
 const fmt = (n: number) => n.toLocaleString('en-US');
 
+/** Page numbers to show (0-based), with null for a gap: 1 … 4 5 6 … 20. */
+export function pageNumbers(current: number, count: number): (number | null)[] {
+  if (count <= 7) return Array.from({ length: count }, (_, i) => i);
+  const set = new Set([0, count - 1, current - 1, current, current + 1].filter((n) => n >= 0 && n < count));
+  if (current <= 2) [1, 2, 3].forEach((n) => set.add(n));
+  if (current >= count - 3) [count - 4, count - 3, count - 2].forEach((n) => set.add(n));
+  const sorted = [...set].sort((a, b) => a - b);
+  const out: (number | null)[] = [];
+  sorted.forEach((n, i) => {
+    if (i > 0 && n - (sorted[i - 1] ?? n) > 1) out.push(null);
+    out.push(n);
+  });
+  return out;
+}
+
 /** The data table of every back-office list (see the package README in index.ts). */
 export function DataTable<T>(props: DataTableProps<T>) {
   const {
@@ -146,11 +161,18 @@ export function DataTable<T>(props: DataTableProps<T>) {
     setVisibility(p.visibility ?? {});
     setSizing(p.sizing ?? {});
     setDensity(p.density ?? 'comfortable');
+    // Rows per page are remembered per table (a size in the URL, e.g. a shared link, wins).
+    if (p.pageSize && pageSizes.includes(p.pageSize) && !state.sizeFromUrl && p.pageSize !== state.pagination.pageSize) {
+      state.setPagination({ pageIndex: 0, pageSize: p.pageSize });
+    }
     setPrefsLoaded(true);
+    // Read once per table id.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+  const pageSizeNow = state.pagination.pageSize;
   useEffect(() => {
-    if (prefsLoaded) writePrefs(id, { visibility, sizing, density });
-  }, [id, visibility, sizing, density, prefsLoaded]);
+    if (prefsLoaded) writePrefs(id, { visibility, sizing, density, pageSize: pageSizeNow });
+  }, [id, visibility, sizing, density, prefsLoaded, pageSizeNow]);
 
   // Selection survives paging and sorting, and is cleared by a new search.
   const [selection, setSelection] = useState<RowSelectionState>({});
@@ -248,7 +270,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
     if (!client && paging === 'cursor' && pagination.pageIndex > 0 && cursor === undefined) resetPaging();
   }, [client, paging, pagination.pageIndex, cursor, resetPaging]);
   // A page past the end (rows deleted, a narrower search) goes back to the last page.
-  const pageCount = client ? table.getPageCount() : paging === 'pages' && total != null ? Math.max(1, Math.ceil(total / pagination.pageSize)) : null;
+  const pageCount = client ? table.getPageCount() : total != null ? Math.max(1, Math.ceil(total / pagination.pageSize)) : null;
   useEffect(() => {
     if (pageCount !== null && pagination.pageIndex > pageCount - 1) state.setPagination((p) => ({ ...p, pageIndex: Math.max(0, pageCount - 1) }));
   }, [pageCount, pagination.pageIndex, state]);
@@ -428,6 +450,14 @@ export function DataTable<T>(props: DataTableProps<T>) {
     if (!client && paging === 'cursor') setCursor(pagination.pageIndex + 1, nextCursor ?? undefined);
     state.setPagination((p) => ({ ...p, pageIndex: p.pageIndex + 1 }));
   };
+  const cursorPaged = !client && paging === 'cursor';
+  // Cursor-paged APIs can jump only to pages already reached (and the next one); page numbers need a known count.
+  const numberedCount = pageCount ?? (cursorPaged ? pagination.pageIndex + (hasNext ? 2 : 1) : pagination.pageIndex + 1);
+  const reachable = (n: number) => !cursorPaged || state.cursorKnown(n) || (n === pagination.pageIndex + 1 && !!nextCursor);
+  const goTo = (n: number) => {
+    if (n === pagination.pageIndex + 1) return goNext();
+    state.setPagination((p) => ({ ...p, pageIndex: n }));
+  };
   const showing =
     matching === null
       ? `${fmt(pageRows.length)} shown${hasNext ? ' · more on the next page' : ''}`
@@ -591,17 +621,36 @@ export function DataTable<T>(props: DataTableProps<T>) {
               ))}
             </select>
           </label>
-          {pageCount !== null ? (
-            <span>
-              Page {fmt(pagination.pageIndex + 1)} of {fmt(pageCount)}
-            </span>
-          ) : null}
-          <Button variant="neutral" size="sm" icon={<CaretLeft size={14} aria-hidden />} disabled={!hasPrev || fetching} onClick={() => state.setPagination((p) => ({ ...p, pageIndex: p.pageIndex - 1 }))}>
-            Previous
-          </Button>
-          <Button variant="neutral" size="sm" disabled={!hasNext || fetching} onClick={goNext}>
-            Next <CaretRight size={14} aria-hidden />
-          </Button>
+          <nav aria-label={`${label} pages`} className="flex flex-wrap items-center gap-1">
+            <Button variant="neutral" size="sm" icon={<CaretLeft size={14} aria-hidden />} disabled={!hasPrev || fetching} onClick={() => goTo(pagination.pageIndex - 1)}>
+              Previous
+            </Button>
+            {pageNumbers(pagination.pageIndex, numberedCount).map((n, i) =>
+              n === null ? (
+                <span key={`gap-${i}`} aria-hidden className="px-1">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={n}
+                  type="button"
+                  aria-label={`Page ${n + 1}`}
+                  aria-current={n === pagination.pageIndex ? 'page' : undefined}
+                  disabled={fetching || !reachable(n)}
+                  onClick={() => goTo(n)}
+                  className={cx(
+                    'h-8 min-w-8 rounded-sm border px-2 text-xs font-semibold tabular-nums disabled:cursor-default',
+                    n === pagination.pageIndex ? 'border-gold-500 bg-gold-50 text-text' : 'border-border-strong bg-surface text-text hover:bg-surface-hover disabled:opacity-45'
+                  )}
+                >
+                  {fmt(n + 1)}
+                </button>
+              )
+            )}
+            <Button variant="neutral" size="sm" disabled={!hasNext || fetching} onClick={goNext}>
+              Next <CaretRight size={14} aria-hidden />
+            </Button>
+          </nav>
         </span>
       </div>
       {footer}

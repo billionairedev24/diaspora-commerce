@@ -7,6 +7,8 @@ export interface TablePrefs {
   visibility?: Record<string, boolean>;
   sizing?: Record<string, number>;
   density?: 'comfortable' | 'compact';
+  /** Rows per page chosen for this table. */
+  pageSize?: number;
 }
 
 export function readPrefs(id: string): TablePrefs {

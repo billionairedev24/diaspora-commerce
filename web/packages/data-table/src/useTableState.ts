@@ -42,8 +42,12 @@ export interface TableState {
   cursor: string | undefined;
   /** Remembers the cursor that opens a page (cursor-paged APIs). */
   setCursor: (pageIndex: number, cursor: string | undefined) => void;
+  /** Whether a page's cursor is known (cursor-paged APIs can only jump to pages already reached). */
+  cursorKnown: (pageIndex: number) => boolean;
   /** Back to the first page (and forget cursors). */
   resetPaging: () => void;
+  /** The page size came from the URL (it then wins over the remembered one). */
+  sizeFromUrl: boolean;
 }
 
 export const PAGE_SIZES = [10, 25, 50, 100];
@@ -77,7 +81,8 @@ export function useTableState(options: TableStateOptions = {}): TableState {
     q: searchParams?.get(k('q')) ?? '',
     sort: searchParams?.getAll(k('sort')).length ? paramsToSort(searchParams.getAll(k('sort'))) : defaultSort,
     page: Math.max(0, (Number(searchParams?.get(k('page')) ?? '1') || 1) - 1),
-    size: Number(searchParams?.get(k('size'))) || defaultPageSize
+    size: Number(searchParams?.get(k('size'))) || defaultPageSize,
+    sizeFromUrl: !!searchParams?.get(k('size'))
   }).current;
 
   const [searchInput, setSearchInputRaw] = useState(initial.q);
@@ -146,6 +151,8 @@ export function useTableState(options: TableStateOptions = {}): TableState {
     sort,
     cursor: cursors[pagination.pageIndex],
     setCursor,
-    resetPaging
+    cursorKnown: (i: number) => i === 0 || cursors[i] !== undefined,
+    resetPaging,
+    sizeFromUrl: initial.sizeFromUrl
   };
 }

@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DataTable, type DataTableProps, type TableExportRequest, useTableState } from '../src';
+import { DataTable, type DataTableProps, pageNumbers, type TableExportRequest, useTableState } from '../src';
 
 interface Order {
   id: string;
@@ -173,5 +173,31 @@ describe('DataTable', () => {
     await user.click(screen.getByRole('button', { name: /Next/ }));
     expect(rowIds()).toEqual(['o3', 'o4']);
     expect(window.location.search).toContain('page=2');
+    // Numbered pages: 3 pages of 2, the current one marked.
+    const pages = screen.getByRole('navigation', { name: 'Orders pages' });
+    expect(within(pages).getByRole('button', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page');
+    await user.click(within(pages).getByRole('button', { name: 'Page 3' }));
+    expect(rowIds()).toEqual(['o5']);
+    expect(within(pages).queryByRole('button', { name: 'Page 4' })).toBeNull();
+  });
+
+  it('remembers rows per page per table', async () => {
+    const { unmount } = render(<Harness pageSizes={[2, 25]} />);
+    act(() => {
+      fireEvent.change(screen.getByRole('combobox', { name: /Rows per page/ }), { target: { value: '2' } });
+    });
+    expect(JSON.parse(window.localStorage.getItem('at.table.test.orders') ?? '{}').pageSize).toBe(2);
+    unmount();
+    window.history.replaceState(null, '', '/orders');
+    render(<Harness pageSizes={[2, 25]} />);
+    await waitFor(() => expect(rowIds()).toEqual(['o1', 'o2']));
+    expect(screen.getByRole('combobox', { name: /Rows per page/ })).toHaveValue('2');
+  });
+
+  it('numbers pages with gaps', () => {
+    expect(pageNumbers(0, 5)).toEqual([0, 1, 2, 3, 4]);
+    expect(pageNumbers(9, 20)).toEqual([0, null, 8, 9, 10, null, 19]);
+    expect(pageNumbers(0, 20)).toEqual([0, 1, 2, 3, null, 19]);
+    expect(pageNumbers(19, 20)).toEqual([0, null, 16, 17, 18, 19]);
   });
 });
