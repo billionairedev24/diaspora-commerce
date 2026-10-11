@@ -18,7 +18,8 @@ function appUrl(envVar: string, portVar: string, fallback: number): string {
   if (explicit) return explicit;
   try {
     const line = readFileSync(path.join(ROOT, '.local/web-ports'), 'utf8').split('\n').find((l) => l.startsWith(`${portVar}=`));
-    if (line) return `http://localhost:${line.split('=')[1].trim()}`;
+    const port = line?.split('=')[1]?.trim();
+    if (port) return `http://localhost:${port}`;
   } catch {
     /* no .local/web-ports: default ports */
   }
