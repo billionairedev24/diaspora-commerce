@@ -1,5 +1,5 @@
 import { isApiError } from '@afrotransact/api-client';
-import { isServer, QueryClient } from '@tanstack/react-query';
+import { environmentManager, QueryClient } from '@tanstack/react-query';
 
 function makeQueryClient() {
   return new QueryClient({
@@ -17,7 +17,7 @@ let browserClient: QueryClient | undefined;
 
 /** New client per server request; one shared client in the browser. */
 export function getQueryClient(): QueryClient {
-  if (isServer) return makeQueryClient();
+  if (environmentManager.isServer()) return makeQueryClient();
   browserClient ??= makeQueryClient();
   return browserClient;
 }
