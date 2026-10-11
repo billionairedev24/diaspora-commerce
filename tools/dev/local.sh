@@ -60,7 +60,7 @@ health_url() {
 
 running() { [[ -f "$PIDS/$1.pid" ]] && kill -0 "$(cat "$PIDS/$1.pid")" 2>/dev/null; }
 
-healthy() { curl -fsS -o /dev/null --max-time 2 "$(health_url "$1")"; }
+healthy() { curl -fs -o /dev/null --max-time 2 "$(health_url "$1")"; }
 
 wait_healthy() {
   local svc=$1 secs=${2:-180}
@@ -94,6 +94,14 @@ setup_host_postgres() {
     echo "Can't connect to your Postgres on localhost:5432 as '$su' (set PG_SUPERUSER / PGPASSWORD, or PG_EXTERNAL=0 to use the container on another port: POSTGRES_HOST_PORT=5433)." >&2; exit 1; }
   [[ "$("${q[@]}" -d postgres -c "select count(*) from pg_available_extensions where name = 'postgis'")" == 1 ]] || {
     echo "Your Postgres has no PostGIS (geo, fulfilment need it): brew install postgis, then re-run." >&2; exit 1; }
+  local maxconn
+  maxconn=$("${q[@]}" -d postgres -c 'show max_connections')
+  if ((maxconn < 200)); then
+    echo "  ! your Postgres allows $maxconn connections; the whole stack needs ~150. Raise it once, then restart Postgres:" >&2
+    echo "      psql -h localhost -d postgres -c 'ALTER SYSTEM SET max_connections = 300'" >&2
+    echo "      brew services restart postgresql@17      # or restart it the way you installed it" >&2
+    echo "    Continuing with small connection pools; with < 150 some services may fail to start." >&2
+  fi
   echo "==> preparing your Postgres: infra/local/postgres/create-local-databases.sql (idempotent)"
   PGOPTIONS="-c afrotransact.su_password=${PGPASSWORD:-}" "${q[@]}" -d postgres \
     -f "$ROOT/infra/local/postgres/create-local-databases.sql" >/dev/null
@@ -115,6 +123,7 @@ services:
     extra_hosts: ["host.docker.internal:host-gateway"]
     environment:
       OPENFGA_DATASTORE_URI: postgres://openfga:openfga@host.docker.internal:5432/openfga?sslmode=disable
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: 5
 YAML
 }
 
@@ -173,10 +182,27 @@ telemetry_env() {
   export OTEL_EXPORTER_OTLP_ENDPOINT_HOST=""
 }
 
+# ~20 services share one Postgres: a stock server allows 100 connections (the compose one 300). Keep pools small.
+pool_env() {
+  local svc=$1
+  export SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE="${DB_POOL:-3}" SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=1
+  unset DB_URL
+  if [[ "$(runtime_of "$svc")" == go ]]; then
+    local url
+    url=$(grep -E '^[[:space:]]*(databaseUrl|url):[[:space:]]*"?postgres(ql)?://' "$ROOT/go/services/$svc/config/local.yaml" \
+      2>/dev/null | head -1 | sed -E 's/^[^:]+:[[:space:]]*"?([^" #]+)"?.*/\1/')
+    if [[ -n "$url" && "$url" != *pool_max_conns* ]]; then
+      [[ "$url" == *\?* ]] && url="$url&pool_max_conns=${DB_POOL:-3}" || url="$url?pool_max_conns=${DB_POOL:-3}"
+      export DB_URL="$url"
+    fi
+  fi
+}
+
 start() {
   local svc=$1
   mkdir -p "$LOGS" "$PIDS"
   telemetry_env
+  pool_env "$svc"
   if running "$svc"; then echo "  · $svc already running (pid $(cat "$PIDS/$svc.pid"))"; return 0; fi
   : >"$LOGS/$svc.log"
   if [[ "$(runtime_of "$svc")" == java ]]; then
