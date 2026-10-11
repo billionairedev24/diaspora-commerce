@@ -62,7 +62,7 @@ export type StaffDashboard = z.infer<typeof StaffDashboardSchema>;
 export const ResourceKeySchema = z.enum([
   'users', 'roles', 'applications', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
   'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates',
-  'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events'
+  'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
 

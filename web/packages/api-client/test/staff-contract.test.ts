@@ -110,10 +110,20 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     await expect(client('guest').getSession()).rejects.toSatisfy((e) => isApiError(e) && e.status === 401);
   });
 
+  it('Delivery dispatch › Pickup points: staff add an AfroTransact counter customers can choose at checkout', async () => {
+    const api = client();
+    const before = await api.listResource('pickup-locations', { page: 0, size: 50 });
+    expect(before.rows.length).toBeGreaterThan(0);
+    const created = await api.createRecord('pickup-locations', { name: 'Katy counter', kind: 'PLATFORM_COUNTER', line1: '1 Mason Rd', city: 'Katy', state: 'TX', postalCode: '77449', days: 'MON_FRI', opens: '09:00', closes: '17:00', readyHours: 4, active: true });
+    expect(created.title).toBe('Katy counter');
+    const after = await api.listResource('pickup-locations', { page: 0, size: 50, status: 'ACTIVE' });
+    expect(after.rows.map((r) => r.id)).toContain(created.id);
+  });
+
   it('serves every table with columns and server-side paging', async () => {
     const api = client();
     const keys: ResourceKey[] = ['users', 'roles', 'applications', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
-      'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates'];
+      'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'pickup-locations'];
     for (const key of keys) {
       const page = await api.listResource(key, { page: 0, size: 5 });
       expect(page.columns.length).toBeGreaterThan(0);

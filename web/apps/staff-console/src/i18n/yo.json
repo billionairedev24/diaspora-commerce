@@ -164,6 +164,7 @@
   "st.dispatch.sosTab": "Ìkìlọ̀ SOS",
   "st.dispatch.defectsTab": "Àbùkù ọkọ̀",
   "st.dispatch.eventsTab": "Ìṣẹ̀lẹ̀ awakọ̀",
+  "st.dispatch.pickupPointsTab": "Ibi gbígbà fún oníbàárà",
   "st.pickups.intro": "AfroTransact Delivery from the seller’s store: the seller packs and the nearest available driver collects. New pickups join the best driver’s route automatically; here you see the ones still waiting and can override with a reason.",
   "st.pickups.waiting": "Waiting for a route ({n})",
   "st.pickups.waitingTable": "Seller pickups waiting for a route",

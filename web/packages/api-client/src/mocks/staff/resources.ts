@@ -584,6 +584,33 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     subtitleOf: (r) => str(r.fields.note),
     actions: []
   },
+  'pickup-locations': {
+    title: 'Pickup points',
+    columns: [col('name', 'Name', 'strong', 22), col('kindLabel', 'Kind', 'text', 14), col('place', 'Address', 'text', 26), col('hoursLabel', 'Hours', 'text', 18), col('readyHours', 'Ready after (h)', 'number', 8), col('state', 'Status', 'status', 10)],
+    statusKey: 'state',
+    facets: facets('ACTIVE', 'PAUSED'),
+    search: ['name', 'place'],
+    searchPlaceholder: 'Name, city or ZIP',
+    exportable: false,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => `${str(r.fields.kindLabel)} · ${str(r.fields.place)}`,
+    actions: [],
+    // identity grants shipping:admin (what carrier-gateway checks) to every role with shipping:manage.
+    edit: {
+      permission: 'shipping:manage',
+      form: (r) => pickupForm('Edit the pickup point', 'Save pickup point', r),
+      apply: (r, v) => applyPickup(r, v)
+    },
+    create: {
+      permission: 'shipping:manage',
+      form: pickupForm('New pickup point', 'Add pickup point', null),
+      build: (v, id) => {
+        const r: MockRecord = { id, fields: {}, activity: [] };
+        applyPickup(r, v);
+        return r;
+      }
+    }
+  },
   'tax-rates': {
     title: 'Tax rates',
     columns: [col('kind', 'Rule', 'status', 10), col('state', 'State', 'mono', 8), col('zipPrefix', 'ZIP prefix', 'mono', 12), col('name', 'Name', 'strong', 22), col('generalRate', 'General', 'percent', 12), col('groceryRate', 'Grocery', 'percent', 12), col('preparedFoodRate', 'Prepared food', 'percent', 14), col('version', 'Version', 'number', 10)],
@@ -667,4 +694,38 @@ function placementsDef(title: string, announcementsOnly: boolean): MockResource 
       })
     }
   };
+}
+
+/* Delivery dispatch › Pickup points (carrier-gateway pickup locations, like staff_resources_pickup.go). */
+/** Opening-day patterns (a function: the resource table above builds its create form at module load). */
+function pickupDays(): [string, string][] {
+  return [['MON_SAT', 'Monday to Saturday'], ['MON_FRI', 'Monday to Friday'], ['EVERY_DAY', 'Every day'], ['TUE_SUN', 'Tuesday to Sunday']];
+}
+
+function pickupForm(title: string, submit: string, r: MockRecord | null): StaffForm {
+  const f = r?.fields ?? {};
+  return form(title, submit, [
+    field('name', 'Name customers see', 'text', true, { maxLength: 80, value: str(f.name) }),
+    field('kind', 'Kind', 'select', true, { options: [{ value: 'PLATFORM_COUNTER', label: 'Pickup counter' }, { value: 'LOCKER', label: 'Locker' }], value: str(f.kind) || 'PLATFORM_COUNTER' }),
+    field('line1', 'Street address', 'text', true, { maxLength: 120, value: str(f.line1) }),
+    field('city', 'City', 'text', true, { maxLength: 60, value: str(f.city) }),
+    field('state', 'State', 'text', true, { pattern: '^[A-Z]{2}$', help: 'Two-letter state code, e.g. TX', value: str(f.stateCode) }),
+    field('postalCode', 'ZIP code', 'text', true, { pattern: '^[0-9]{5}$', help: '5-digit ZIP', value: str(f.postalCode) }),
+    field('days', 'Open on', 'select', true, { options: pickupDays().map(([value, label]) => ({ value, label })), value: str(f.days) || 'MON_SAT' }),
+    field('opens', 'Opens (24-hour)', 'text', true, { pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', help: 'HH:MM, e.g. 09:00', value: str(f.opens) || '09:00' }),
+    field('closes', 'Closes (24-hour)', 'text', true, { pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', help: 'HH:MM, e.g. 18:00', value: str(f.closes) || '18:00' }),
+    field('readyHours', 'Ready after (hours)', 'number', false, { min: 0, max: 168, value: num(f.readyHours) }),
+    field('active', 'Customers can choose it at checkout', 'toggle', false, { value: r ? f.state === 'ACTIVE' : true })
+  ]);
+}
+
+function applyPickup(r: MockRecord, v: Record<string, FieldValue>): void {
+  const days = str(v.days) || 'MON_SAT';
+  const kind = str(v.kind) === 'LOCKER' ? 'LOCKER' : 'PLATFORM_COUNTER';
+  Object.assign(r.fields, {
+    name: str(v.name), kind, kindLabel: kind === 'LOCKER' ? 'AfroTransact locker' : 'AfroTransact counter', line1: str(v.line1), city: str(v.city),
+    stateCode: str(v.state).toUpperCase(), postalCode: str(v.postalCode), days, opens: str(v.opens), closes: str(v.closes), readyHours: num(v.readyHours),
+    place: `${str(v.line1)}, ${str(v.city)}, ${str(v.state).toUpperCase()} ${str(v.postalCode)}`,
+    hoursLabel: `${pickupDays().find(([k]) => k === days)?.[1] ?? days} ${str(v.opens)}–${str(v.closes)}`, state: v.active === false ? 'PAUSED' : 'ACTIVE'
+  });
 }

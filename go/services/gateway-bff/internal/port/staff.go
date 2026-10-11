@@ -61,6 +61,8 @@ type StaffUpstreams struct {
 	// Offers and Search are read by the Inventory hub's trace (offer inventory SKU, buy box, search index; S281).
 	Offers StaffUpstream
 	Search StaffUpstream
+	// Carrier is carrier-gateway: customer pickup points (Delivery dispatch › Pickup points).
+	Carrier StaffUpstream
 }
 
 // ExportJobStore keeps export jobs (shared by every BFF replica; jobs live 24 hours after they finish).

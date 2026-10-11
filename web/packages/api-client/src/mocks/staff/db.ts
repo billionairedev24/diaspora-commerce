@@ -436,6 +436,16 @@ function seed(now: Date): MockStaffDb {
     { id: `ntf-${i}-2`, recipientId: c.id, channel: 'sms', templateKey: 'delivery.otp', subject: null, status: i % 3 === 0 ? 'FAILED' : 'SENT', address: '+1832555010' + String(i), createdAt: ago(i, 1) }
   ]);
 
+  const pickupLocations: MockRecord[] = [
+    ['pu-hou-fc', 'Houston FC — Will Call', 'PLATFORM_COUNTER', '12000 Bissonnet St', 'Houston', 'TX', '77099', 'MON_SAT', '08:00', '20:00', 2, 'ACTIVE'],
+    ['pu-hou-lock', 'AfroTransact Locker · Bellaire', 'LOCKER', '7100 Bellaire Blvd', 'Houston', 'TX', '77074', 'EVERY_DAY', '00:00', '23:59', 18, 'ACTIVE'],
+    ['pu-edi-fc', 'Edison FC — Will Call', 'PLATFORM_COUNTER', '300 Raritan Center Pkwy', 'Edison', 'NJ', '08837', 'MON_SAT', '08:00', '20:00', 2, 'ACTIVE'],
+    ['pu-atl-fc', 'Atlanta FC — Will Call', 'PLATFORM_COUNTER', '1600 Murphy Ave SW', 'Atlanta', 'GA', '30310', 'MON_SAT', '08:00', '18:00', 3, 'PAUSED']
+  ].map(([id, name, kind, line1, city, st, zip, days, opens, closes, ready, state]) =>
+    rec(String(id), { name: String(name), kind: String(kind), kindLabel: kind === 'LOCKER' ? 'AfroTransact locker' : 'AfroTransact counter', line1: String(line1), city: String(city),
+      stateCode: String(st), postalCode: String(zip), days: String(days), opens: String(opens), closes: String(closes), readyHours: Number(ready),
+      place: `${line1}, ${city}, ${st} ${zip}`, hoursLabel: `${days === 'EVERY_DAY' ? 'Every day' : 'Monday to Saturday'} ${opens}–${closes}`, state: String(state) }));
+
   return {
     now,
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
@@ -443,7 +453,8 @@ function seed(now: Date): MockStaffDb {
       users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates,
-      'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents
+      'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
+      'pickup-locations': pickupLocations
     },
     notifications,
     exports: [],
