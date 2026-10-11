@@ -1075,11 +1075,17 @@ paths:
       tags:
       - Markets (back office)
       summary: Change a country's status or launch note (content:markets.edit)
+      description: 'If-Match: the country''s version (412 content.version-mismatch when it changed since).'
       operationId: updateCountry
       parameters:
       - name: code
         in: path
         required: true
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
         schema:
           type: string
       requestBody:
@@ -1133,11 +1139,39 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/MarketCountry'
+  /v1/markets/draft/countries/{code}/regions:
+    post:
+      tags:
+      - Markets (back office)
+      summary: Add a state / province as PLANNED (content:markets.edit)
+      description: From the gazetteer. An OFF state becomes PLANNED; 409 content.region-in-use when it is already LIVE or
+        PLANNED.
+      operationId: addRegion
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMarketRegionRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
   /v1/markets/draft/countries/{code}/regions/{region}:
     patch:
       tags:
       - Markets (back office)
-      summary: Change a state's capability switches (content:markets.edit)
+      summary: Change a state's status, city coverage or capability switches (content:markets.edit)
+      description: 'If-Match: the state''s version (412 content.version-mismatch when it changed since).'
       operationId: setCapabilities
       parameters:
       - name: code
@@ -1148,6 +1182,11 @@ paths:
       - name: region
         in: path
         required: true
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
         schema:
           type: string
       requestBody:
@@ -1163,13 +1202,123 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/MarketCountry'
+  /v1/markets/draft/countries/{code}/regions/{region}/cities:
+    post:
+      tags:
+      - Markets (back office)
+      summary: Append cities to a state (content:markets.edit)
+      description: 'Cities already listed keep their status; new ones default to PLANNED. A LIVE city needs the state LIVE
+        (422 content.region-not-live). If-Match: the state''s version.'
+      operationId: addCities
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMarketCitiesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+    delete:
+      tags:
+      - Markets (back office)
+      summary: Remove listed cities (content:markets.edit)
+      description: 'name repeats per city. If-Match: the state''s version.'
+      operationId: removeCities
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: name
+        in: query
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+    patch:
+      tags:
+      - Markets (back office)
+      summary: Set the status of listed cities (content:markets.edit)
+      description: 'A LIVE city needs the state LIVE (422 content.region-not-live). If-Match: the state''s version.'
+      operationId: setCityStatus
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarketCityStatusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
   /v1/markets/eligibility:
     get:
       tags:
       - Markets
       summary: Can we sell / deliver / onboard here?
-      description: Checkout and the BFF block delivery when deliveryAllowed is false (state switched off); onboarding rejects
-        countries where onboardingAllowed is false and offers the launch list.
+      description: 'Checkout and the BFF block delivery when deliveryAllowed is false (state switched off); onboarding rejects
+        countries where onboardingAllowed is false and offers the launch list. With city, the state''s cities decide too:
+        a city listed PLANNED or OFF is not served (reason city-not-live), and a state that does not cover every city serves
+        only the cities listed LIVE (reason city-not-covered).'
       operationId: eligibility
       parameters:
       - name: country
@@ -1183,6 +1332,11 @@ paths:
         schema:
           type: string
       - name: zip
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: city
         in: query
         required: false
         schema:
@@ -2660,6 +2814,21 @@ components:
           type: string
         audience:
           type: string
+    AddMarketRegionRequest:
+      type: object
+      description: A state / province picked from the gazetteer; it starts PLANNED
+      properties:
+        code:
+          type: string
+          maxLength: 10
+          minLength: 1
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+      required:
+      - code
+      - name
     Capabilities:
       type: object
       properties:
@@ -2673,6 +2842,17 @@ components:
           type: boolean
         taxRegistration:
           type: boolean
+    MarketCity:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - LIVE
+          - PLANNED
+          - 'OFF'
     MarketCountry:
       type: object
       properties:
@@ -2698,6 +2878,13 @@ components:
         liveRegions:
           type: integer
           format: int32
+        plannedRegions:
+          type: integer
+          format: int32
+        version:
+          type: integer
+          format: int64
+          description: 'Optimistic-lock version of the country: If-Match for its status'
         regions:
           type: array
           items:
@@ -2713,6 +2900,58 @@ components:
           type: string
         capabilities:
           $ref: '#/components/schemas/Capabilities'
+        status:
+          type: string
+          description: LIVE (marketplace on), PLANNED or OFF
+          enum:
+          - LIVE
+          - PLANNED
+          - 'OFF'
+        everyCity:
+          type: boolean
+          description: Every city is covered (listed cities are overrides); false = only cities listed LIVE
+        version:
+          type: integer
+          format: int64
+          description: 'Optimistic-lock version: send it back as If-Match'
+        cityCount:
+          type: integer
+          format: int32
+        liveCities:
+          type: integer
+          format: int32
+        cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketCity'
+    AddMarketCitiesRequest:
+      type: object
+      description: Cities to append (cities already listed keep their status)
+      properties:
+        cities:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketCityInput'
+          maxItems: 2000
+          minItems: 0
+      required:
+      - cities
+    MarketCityInput:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 80
+          minLength: 1
+        status:
+          type: string
+          description: Defaults to PLANNED
+          enum:
+          - LIVE
+          - PLANNED
+          - 'OFF'
+      required:
+      - name
     RaiseLegalVersionRequest:
       type: object
       properties:
@@ -2961,8 +3200,9 @@ components:
           minLength: 0
     CapabilityChangeRequest:
       type: object
-      description: Only the switches present are changed. Marketplace off turns every other capability off; enabling another
-        capability needs the marketplace on.
+      description: 'Only what is present is changed. status LIVE switches the marketplace on, PLANNED / OFF switch it off.
+        Marketplace off turns every other capability off; enabling another capability needs the marketplace on. everyCity:
+        cover every city, or only cities listed LIVE.'
       properties:
         marketplace:
           type: boolean
@@ -2974,6 +3214,32 @@ components:
           type: boolean
         taxRegistration:
           type: boolean
+        status:
+          type: string
+          enum:
+          - LIVE
+          - PLANNED
+          - 'OFF'
+        everyCity:
+          type: boolean
+    MarketCityStatusRequest:
+      type: object
+      properties:
+        names:
+          type: array
+          items:
+            type: string
+          maxItems: 2000
+          minItems: 0
+        status:
+          type: string
+          enum:
+          - LIVE
+          - PLANNED
+          - 'OFF'
+      required:
+      - names
+      - status
     AmendLegalVersionRequest:
       type: object
       description: Counsel sign-off (draftBanner false), effective date or translations
@@ -3259,6 +3525,18 @@ components:
         liveRegions:
           type: integer
           format: int32
+        plannedRegions:
+          type: integer
+          format: int32
+        cityCount:
+          type: integer
+          format: int32
+        liveCities:
+          type: integer
+          format: int32
+        version:
+          type: integer
+          format: int64
     MarketCountries:
       type: object
       properties:

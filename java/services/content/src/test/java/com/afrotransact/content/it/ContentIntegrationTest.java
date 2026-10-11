@@ -85,6 +85,18 @@ abstract class ContentIntegrationTest {
         return send(withBody(path, "PATCH", json));
     }
 
+    HttpResponse<String> patchWith(String path, String json, String... headers) {
+        return send(withBody(path, "PATCH", json, headers));
+    }
+
+    HttpResponse<String> delete(String path, String... headers) {
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).DELETE();
+        if (headers.length > 0) {
+            b.headers(headers);
+        }
+        return send(b.build());
+    }
+
     private HttpRequest withBody(String path, String method, String json, String... headers) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                 .header("Content-Type", "application/json")

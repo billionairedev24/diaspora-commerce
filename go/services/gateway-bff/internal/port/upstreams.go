@@ -417,7 +417,8 @@ type ContentClient interface {
 	Subscribe(ctx context.Context, email string) (string, error)
 	Jobs(ctx context.Context) ([]domain.Job, error)
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)
-	Eligibility(ctx context.Context, country, state, zip string) (domain.MarketEligibility, error)
+	// Eligibility asks content whether a place is served; city is optional (a city switched off in Markets is not).
+	Eligibility(ctx context.Context, country, state, zip, city string) (domain.MarketEligibility, error)
 	// LegalDocument is a document's current version (version "") or one version; port.ErrNotFound when unknown.
 	LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error)
 	// CookiePolicy is the consent banner configuration and cookie table.

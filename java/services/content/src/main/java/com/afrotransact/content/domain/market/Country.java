@@ -17,12 +17,19 @@ import com.afrotransact.content.domain.ContentRuleViolation;
  * @param currency   ISO 4217 currency
  * @param sortOrder  picker order (launch markets first)
  * @param regions    states / provinces (empty for countries without regional switches)
+ * @param version    optimistic-lock version of the draft country row (0 in published snapshots)
  */
 public record Country(String code, String name, MarketStatus status, String launchNote, String currency,
-                      int sortOrder, List<Region> regions) {
+                      int sortOrder, List<Region> regions, long version) {
 
     public Country {
         regions = regions == null ? List.of() : List.copyOf(regions);
+    }
+
+    /** An unversioned country (published snapshots, tests). */
+    public Country(String code, String name, MarketStatus status, String launchNote, String currency, int sortOrder,
+                   List<Region> regions) {
+        this(code, name, status, launchNote, currency, sortOrder, regions, 0);
     }
 
     public Optional<Region> region(String regionCode) {
@@ -43,24 +50,35 @@ public record Country(String code, String name, MarketStatus status, String laun
     }
 
     public Country withStatus(MarketStatus next, String note) {
-        return new Country(code, name, next, note, currency, sortOrder, regions);
+        return new Country(code, name, next, note, currency, sortOrder, regions, version);
     }
 
     public Country withRegion(Region updated) {
         return new Country(code, name, status, launchNote, currency, sortOrder,
-                regions.stream().map(r -> r.code().equals(updated.code()) ? updated : r).toList());
+                regions.stream().map(r -> r.code().equals(updated.code()) ? updated : r).toList(), version);
     }
 
     /** "Activate all": every capability on in every region. */
     public Country activateAll() {
         return new Country(code, name, status, launchNote, currency, sortOrder,
-                regions.stream().map(r -> r.withCapabilities(Capabilities.allOn())).toList());
+                regions.stream().map(r -> r.withCapabilities(Capabilities.allOn())).toList(), version);
     }
 
     /** "Deactivate all": every capability off in every region. */
     public Country deactivateAll() {
         return new Country(code, name, status, launchNote, currency, sortOrder,
-                regions.stream().map(r -> r.withCapabilities(Capabilities.allOff())).toList());
+                regions.stream().map(r -> r.withCapabilities(Capabilities.allOff())).toList(), version);
+    }
+
+    /** Same country ignoring draft row versions (publish diffs compare content only). */
+    public Country unversioned() {
+        return new Country(code, name, status, launchNote, currency, sortOrder,
+                regions.stream().map(Region::unversioned).toList(), 0);
+    }
+
+    /** Regions in use: LIVE or PLANNED. */
+    public long regionCount(LocationStatus s) {
+        return regions.stream().filter(r -> r.status() == s).count();
     }
 
     public boolean live() {

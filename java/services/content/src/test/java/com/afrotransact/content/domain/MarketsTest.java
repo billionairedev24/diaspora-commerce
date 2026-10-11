@@ -8,8 +8,10 @@ import java.util.List;
 
 import com.afrotransact.content.domain.market.Capabilities;
 import com.afrotransact.content.domain.market.Capability;
+import com.afrotransact.content.domain.market.City;
 import com.afrotransact.content.domain.market.Country;
 import com.afrotransact.content.domain.market.Eligibility;
+import com.afrotransact.content.domain.market.LocationStatus;
 import com.afrotransact.content.domain.market.MarketChanges;
 import com.afrotransact.content.domain.market.MarketSnapshot;
 import com.afrotransact.content.domain.market.MarketStatus;
@@ -123,5 +125,38 @@ class MarketsTest {
         assertThat(changes.disabledRegions()).containsExactly("US-TX");
         assertThat(changes.enabledRegions()).containsExactly("US-AK");
         assertThat(MarketChanges.between(SNAPSHOT.countries(), SNAPSHOT.countries()).empty()).isTrue();
+    }
+
+    @Test
+    void citiesAppendSwitchAndFollowTheStateStatus() {
+        Region tx = TX.addCities(List.of(new City("Houston", LocationStatus.LIVE), new City("Lubbock", null)));
+        assertThat(tx.cities()).extracting(City::name).containsExactly("Houston", "Lubbock");
+        assertThat(tx.city("lubbock").orElseThrow().status()).isEqualTo(LocationStatus.PLANNED);
+        Region more = tx.addCities(List.of(new City("houston", LocationStatus.OFF), new City("Katy", null)));
+        assertThat(more.cities()).extracting(City::name).containsExactly("Houston", "Lubbock", "Katy");
+        assertThat(more.city("Houston").orElseThrow().status()).as("existing keep their status")
+                .isEqualTo(LocationStatus.LIVE);
+        Region planned = more.withStatus(LocationStatus.PLANNED);
+        assertThat(planned.status()).isEqualTo(LocationStatus.PLANNED);
+        assertThat(planned.city("Houston").orElseThrow().status()).isEqualTo(LocationStatus.PLANNED);
+        assertThatThrownBy(() -> planned.setCityStatus(List.of("Katy"), LocationStatus.LIVE))
+                .isInstanceOfSatisfying(ContentRuleViolation.class,
+                        ex -> assertThat(ex.code()).isEqualTo("content.region-not-live"));
+        assertThat(planned.withStatus(LocationStatus.OFF).status()).isEqualTo(LocationStatus.OFF);
+        assertThat(more.removeCities(List.of("KATY")).cities()).hasSize(2);
+    }
+
+    @Test
+    void cityEligibility() {
+        Region tx = TX.addCities(List.of(new City("Houston", LocationStatus.LIVE), new City("Lubbock", LocationStatus.OFF)));
+        MarketSnapshot s = new MarketSnapshot(8, Instant.parse("2026-10-01T00:00:00Z"), "ops", List.of(US.withRegion(tx)));
+        assertThat(s.eligibility("US", "TX", "77042", "Houston").deliveryAllowed()).isTrue();
+        assertThat(s.eligibility("US", "TX", "79401", "Lubbock").reason()).isEqualTo("city-not-live");
+        assertThat(s.eligibility("US", "TX", "79401", null).deliveryAllowed()).isTrue();
+        assertThat(s.eligibility("US", "TX", "75201", "Dallas").deliveryAllowed()).isTrue();
+        MarketSnapshot listOnly = new MarketSnapshot(9, Instant.parse("2026-10-01T00:00:00Z"), "ops",
+                List.of(US.withRegion(tx.withEveryCity(false))));
+        assertThat(listOnly.eligibility("US", "TX", "75201", "Dallas").reason()).isEqualTo("city-not-covered");
+        assertThat(listOnly.eligibility("US", "TX", "77042", "houston").deliveryAllowed()).isTrue();
     }
 }

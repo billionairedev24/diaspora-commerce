@@ -39,6 +39,8 @@ const (
 	CodeIdempotencyConflict = "IDEMPOTENCY_CONFLICT"
 	CodeStockChanged        = "STOCK_CHANGED"
 	CodeConflict            = "CONFLICT"
+	// CodeVersionConflict: an If-Match edit named an older version (412); reload and retry.
+	CodeVersionConflict     = "VERSION_CONFLICT"
 	CodeRateLimited         = "RATE_LIMITED"
 	CodeInvalidQuery        = "INVALID_QUERY"
 	CodePayloadTooLarge     = "PAYLOAD_TOO_LARGE"

@@ -25,7 +25,7 @@ public record MarketChanges(List<String> changedCountries, List<String> newlyLiv
         List<String> on = new ArrayList<>();
         for (Country now : draft) {
             Country was = before.get(now.code());
-            if (was == null || !was.equals(now)) {
+            if (was == null || !was.unversioned().equals(now.unversioned())) {
                 changed.add(now.code());
             }
             if (now.live() && (was == null || !was.live())) {

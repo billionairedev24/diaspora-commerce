@@ -2,6 +2,7 @@ package com.afrotransact.content.adapter.in.web;
 
 import com.afrotransact.content.domain.ContentRuleViolation;
 import com.afrotransact.content.domain.ContentStateConflict;
+import com.afrotransact.content.domain.StaleVersionException;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -25,6 +26,14 @@ class ContentErrorAdvice {
     @ExceptionHandler(ContentStateConflict.class)
     ProblemDetail state(ContentStateConflict ex) {
         return problem(HttpStatus.CONFLICT, ex.code(), "Invalid state", ex.getMessage());
+    }
+
+    @ExceptionHandler(StaleVersionException.class)
+    ProblemDetail stale(StaleVersionException ex) {
+        ProblemDetail pd = problem(HttpStatus.PRECONDITION_FAILED, "content.version-mismatch", "Changed by someone else",
+                ex.getMessage());
+        pd.setProperty("currentVersion", ex.current());
+        return pd;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

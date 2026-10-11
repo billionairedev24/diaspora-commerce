@@ -16,10 +16,20 @@ public interface MarketRepository {
 
     Optional<Country> draftCountry(String code);
 
-    /** Saves a country's status and launch note (regions untouched). */
-    void saveDraftCountry(Country country, String actor, Instant now);
+    /**
+     * Saves a country's status and launch note (regions untouched) and bumps its version. Returns false when the
+     * stored version is no longer {@code country.version()} (a concurrent edit won).
+     */
+    boolean saveDraftCountry(Country country, String actor, Instant now);
 
-    void saveDraftRegion(Region region, String actor, Instant now);
+    /**
+     * Saves a region's switches, status, city coverage and cities, and bumps its version. Returns false when the
+     * stored version is no longer {@code region.version()} (a concurrent edit won).
+     */
+    boolean saveDraftRegion(Region region, String actor, Instant now);
+
+    /** Adds a region that is not in the draft yet (a state picked from the gazetteer). */
+    void insertDraftRegion(Region region, String actor, Instant now);
 
     /** Latest published version number. */
     int latestVersion();

@@ -65,6 +65,9 @@ func mapErr(upstream string, err error) error {
 			}
 			pr := domain.NewProblem(http.StatusUnprocessableEntity, domain.CodeValidationFailed, "Validation failed", detail)
 			return pr.WithCause(err)
+		case http.StatusPreconditionFailed:
+			return domain.NewProblem(http.StatusPreconditionFailed, domain.CodeVersionConflict, "Changed by someone else",
+				firstNonEmpty(p.Detail, "Someone else changed this since you loaded it. Refresh to see the latest.")).WithCause(err)
 		case http.StatusConflict:
 			return domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Conflict", firstNonEmpty(p.Detail, "That conflicts with the current state.")).WithCause(err)
 		}

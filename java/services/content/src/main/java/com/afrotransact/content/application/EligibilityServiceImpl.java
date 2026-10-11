@@ -19,12 +19,12 @@ class EligibilityServiceImpl implements EligibilityService {
     }
 
     @Override
-    public Eligibility check(String country, String region, String postalCode) {
+    public Eligibility check(String country, String region, String postalCode, String city) {
         if (country == null || country.isBlank()) {
             throw new ContentRuleViolation("content.country-required", "country is required",
                     Map.of("country", "Required"));
         }
-        return published.get().eligibility(country, region, postalCode);
+        return published.get().eligibility(country, region, postalCode, city);
     }
 
     @Override

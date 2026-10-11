@@ -53,10 +53,11 @@ func (l *locationServiceImpl) fallback() domain.DeliveryLocation {
 		Label: l.o.DefaultCity + " " + l.o.DefaultZIP, Serviceable: true}
 }
 
-// serviceable asks content's market eligibility (deliveryAllowed for country/state/ZIP); unknown (content
-// unavailable) counts as serviceable so shopping is never blocked by a missing dependency.
-func (l *locationServiceImpl) serviceable(ctx context.Context, state, zip string) bool {
-	e, err := l.content.Eligibility(ctx, "US", state, zip)
+// serviceable asks content's market eligibility (deliveryAllowed for country/state/ZIP/city: a city switched off or
+// planned in Markets & locations is not served); unknown (content unavailable) counts as serviceable so shopping is
+// never blocked by a missing dependency.
+func (l *locationServiceImpl) serviceable(ctx context.Context, state, zip, city string) bool {
+	e, err := l.content.Eligibility(ctx, "US", state, zip, city)
 	if err != nil {
 		return true
 	}
@@ -69,7 +70,7 @@ func (l *locationServiceImpl) lookup(ctx context.Context, zip string) (domain.De
 		return domain.DeliveryLocation{}, fmt.Errorf("zip lookup: %w", err)
 	}
 	city := firstNonEmpty(a.City, zip)
-	return domain.DeliveryLocation{ZIP: zip, City: city, State: a.State, Label: city + " " + zip, Serviceable: l.serviceable(ctx, a.State, zip)}, nil
+	return domain.DeliveryLocation{ZIP: zip, City: city, State: a.State, Label: city + " " + zip, Serviceable: l.serviceable(ctx, a.State, zip, a.City)}, nil
 }
 
 func (l *locationServiceImpl) Current(ctx context.Context, c *domain.Caller) domain.DeliveryLocation {
@@ -135,7 +136,7 @@ func (l *locationServiceImpl) SetCoordinates(ctx context.Context, c *domain.Call
 		return domain.DeliveryLocation{}, zipNotServiceable()
 	}
 	city := firstNonEmpty(a.City, zip)
-	loc := domain.DeliveryLocation{ZIP: zip, City: city, State: a.State, Label: city + " " + zip, Serviceable: l.serviceable(ctx, a.State, zip)}
+	loc := domain.DeliveryLocation{ZIP: zip, City: city, State: a.State, Label: city + " " + zip, Serviceable: l.serviceable(ctx, a.State, zip, a.City)}
 	return loc, l.remember(ctx, c, zip)
 }
 

@@ -1149,6 +1149,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/markets/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every country with its status and counts, plus the unpublished changes
+         * @description content `GET /v1/markets/draft/countries` and `GET /v1/markets/draft/changes` (VIEW).
+         */
+        get: operations["listStaffMarketCountries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/markets/countries/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+            };
+            cookie?: never;
+        };
+        /**
+         * One country with its states, cities and what depends on them
+         * @description content `GET /v1/markets/draft/countries/{code}` (VIEW) plus open pre-orders per state and city (delivery-runs, best effort).
+         */
+        get: operations["getStaffMarketCountry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change a country's status or launch note (If-Match = the country's version) */
+        patch: operations["updateStaffMarketCountry"];
+        trace?: never;
+    };
+    "/v1/staff/markets/countries/{code}/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a state / province (from the gazetteer); it starts PLANNED
+         * @description content `POST /v1/markets/draft/countries/{code}/regions`. 409 when the state is already LIVE or PLANNED.
+         */
+        post: operations["addStaffMarketRegion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/markets/countries/{code}/regions/{region}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+                region: components["parameters"]["MarketRegionCode"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a state's status, city coverage or capability switches (If-Match = the state's version)
+         * @description Only what is present changes. LIVE switches the marketplace on; PLANNED and OFF switch it off (and every
+         *     capability with it; LIVE cities become PLANNED). everyCity true covers every city (listed cities are overrides);
+         *     false serves only the cities listed LIVE.
+         */
+        patch: operations["updateStaffMarketRegion"];
+        trace?: never;
+    };
+    "/v1/staff/markets/countries/{code}/regions/{region}/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+                region: components["parameters"]["MarketRegionCode"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Append cities to a state (If-Match = the state's version)
+         * @description Cities already listed keep their status; new ones default to PLANNED. A LIVE city needs the state LIVE (422).
+         */
+        post: operations["addStaffMarketCities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Switch listed cities to LIVE, PLANNED or OFF (If-Match = the state's version) */
+        patch: operations["setStaffMarketCities"];
+        trace?: never;
+    };
+    "/v1/staff/markets/countries/{code}/regions/{region}/cities/{city}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+                region: components["parameters"]["MarketRegionCode"];
+                city: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a listed city (If-Match = the state's version)
+         * @description 409 `markets.city-in-use` while an open pre-order sells there (switch it off instead).
+         */
+        delete: operations["removeStaffMarketCity"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/markets/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish the draft as a new version (eligibility, checkout and the deliver-to check read it)
+         * @description content `POST /v1/markets/publications`. 409 when there is nothing to publish.
+         */
+        post: operations["publishStaffMarkets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Browse geo's gazetteer for the location pickers (Markets and Pre-order areas)
+         * @description No country → every country; country → its states / provinces (label = what the country calls them);
+         *     country + region → its cities (q filters, limit at most 5000, total = matches before the limit). Needs VIEW on
+         *     Markets or Pre-orders.
+         */
+        get: operations["listStaffPlaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/inventory/flow": {
         parameters: {
             query?: never;
@@ -2721,6 +2901,97 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description LIVE serves orders; PLANNED is on the roadmap (shown, not serving); OFF is switched off (hidden by default).
+         * @enum {string}
+         */
+        StaffPlaceStatus: "LIVE" | "PLANNED" | "OFF";
+        StaffMarketCity: {
+            name: string;
+            status: components["schemas"]["StaffPlaceStatus"];
+            /** @description Open pre-orders selling here (removal is refused while any do) */
+            preorders?: string[];
+        };
+        StaffMarketRegion: {
+            code: string;
+            name: string;
+            kind?: string;
+            status: components["schemas"]["StaffPlaceStatus"];
+            /** @description Every city is covered (listed cities are overrides); false = only cities listed LIVE */
+            everyCity: boolean;
+            /** @description Send back as If-Match */
+            version: number;
+            cityCount?: number;
+            liveCities?: number;
+            /** @description Open pre-orders targeting this state or its cities */
+            preorders?: number;
+            capabilities?: {
+                marketplace?: boolean;
+                services?: boolean;
+                food?: boolean;
+                pickup?: boolean;
+                taxRegistration?: boolean;
+            };
+            cities: components["schemas"]["StaffMarketCity"][];
+        };
+        StaffMarketCountry: {
+            code: string;
+            name: string;
+            /** @enum {string} */
+            status: "LIVE" | "PAUSED" | "COMING_SOON" | "PLANNED";
+            launchNote?: string | null;
+            currency?: string | null;
+            liveRegions?: number;
+            plannedRegions?: number;
+            /** @description Send back as If-Match when changing the country's status */
+            version: number;
+            canEdit?: boolean;
+            regions: components["schemas"]["StaffMarketRegion"][];
+        } & {
+            [key: string]: unknown;
+        };
+        StaffMarketCountrySummary: {
+            code: string;
+            name: string;
+            /** @enum {string} */
+            status: "LIVE" | "PAUSED" | "COMING_SOON" | "PLANNED";
+            regionCount?: number;
+            liveRegions?: number;
+            plannedRegions?: number;
+            cityCount?: number;
+            liveCities?: number;
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffMarketChanges: {
+            pending?: boolean;
+            changedCountries?: string[];
+            newlyLive?: string[];
+            disabledRegions?: string[];
+            enabledRegions?: string[];
+        };
+        StaffMarketCountries: {
+            items: components["schemas"]["StaffMarketCountrySummary"][];
+            changes: components["schemas"]["StaffMarketChanges"];
+            canEdit: boolean;
+        };
+        StaffMarketPublication: {
+            version: number;
+            changes?: components["schemas"]["StaffMarketChanges"];
+        };
+        StaffPlaceList: {
+            /** @description Country, what the country calls its regions (State, Province…), or City */
+            label: string;
+            total: number;
+            items: {
+                /** @description ISO code, subdivision code, or the city name */
+                code: string;
+                name: string;
+                label?: string;
+                cityCount?: number;
+            }[];
+        };
         Problem: {
             /** Format: uri */
             type: string;
@@ -4301,6 +4572,8 @@ export interface components {
         IdempotencyKey: string;
         /** @description Same key = same refund; never refunds twice. */
         IdempotencyKeyRequired: string;
+        MarketCountryCode: string;
+        MarketRegionCode: string;
         /** @description The version from the ETag (optimistic locking). */
         IfMatch: string;
     };
@@ -6214,6 +6487,348 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LateAddCustomers"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffMarketCountries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Countries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountries"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffMarketCountry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Country */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffMarketCountry: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    status?: "LIVE" | "PAUSED" | "COMING_SOON" | "PLANNED";
+                    launchNote?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Country */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addStaffMarketRegion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                    name: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Country */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffMarketRegion: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+                region: components["parameters"]["MarketRegionCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    status?: components["schemas"]["StaffPlaceStatus"];
+                    everyCity?: boolean;
+                    marketplace?: boolean;
+                    services?: boolean;
+                    food?: boolean;
+                    pickup?: boolean;
+                    taxRegistration?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Country */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addStaffMarketCities: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+                region: components["parameters"]["MarketRegionCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    cities: {
+                        name: string;
+                        status?: components["schemas"]["StaffPlaceStatus"];
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Country */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffMarketCities: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+                region: components["parameters"]["MarketRegionCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    names: string[];
+                    status: components["schemas"]["StaffPlaceStatus"];
+                };
+            };
+        };
+        responses: {
+            /** @description Country */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removeStaffMarketCity: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+            };
+            path: {
+                code: components["parameters"]["MarketCountryCode"];
+                region: components["parameters"]["MarketRegionCode"];
+                city: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Country */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketCountry"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    publishStaffMarkets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    note?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffMarketPublication"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPlaces: {
+        parameters: {
+            query?: {
+                country?: string;
+                region?: string;
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Places */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlaceList"];
                 };
             };
             401: components["responses"]["Problem"];

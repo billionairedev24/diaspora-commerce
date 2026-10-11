@@ -8,13 +8,18 @@ import java.util.Map;
 import com.afrotransact.content.application.MarketService.PublishResult;
 import com.afrotransact.content.domain.market.Capabilities;
 import com.afrotransact.content.domain.market.Capability;
+import com.afrotransact.content.domain.market.City;
 import com.afrotransact.content.domain.market.Country;
 import com.afrotransact.content.domain.market.Eligibility;
+import com.afrotransact.content.domain.market.LocationStatus;
 import com.afrotransact.content.domain.market.MarketChanges;
 import com.afrotransact.content.domain.market.MarketStatus;
 import com.afrotransact.content.domain.market.Region;
 import com.afrotransact.content.port.MarketRepository.Publication;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 /** Request and response bodies of the markets endpoints. */
@@ -32,32 +37,79 @@ final class MarketDtos {
         }
     }
 
+    @Schema(name = "MarketCity")
+    record CityDto(String name, LocationStatus status) {
+
+        static CityDto of(City c) {
+            return new CityDto(c.name(), c.status());
+        }
+    }
+
     @Schema(name = "MarketRegion")
-    record RegionDto(String code, String name, String kind, CapabilitiesDto capabilities) {
+    record RegionDto(String code, String name, String kind, CapabilitiesDto capabilities,
+                     @Schema(description = "LIVE (marketplace on), PLANNED or OFF") LocationStatus status,
+                     @Schema(description = "Every city is covered (listed cities are overrides); false = only cities "
+                             + "listed LIVE") boolean everyCity,
+                     @Schema(description = "Optimistic-lock version: send it back as If-Match") long version,
+                     int cityCount, int liveCities, List<CityDto> cities) {
 
         static RegionDto of(Region r) {
-            return new RegionDto(r.code(), r.name(), r.kind().name(), CapabilitiesDto.of(r.capabilities()));
+            return new RegionDto(r.code(), r.name(), r.kind().name(), CapabilitiesDto.of(r.capabilities()), r.status(),
+                    r.everyCity(), r.version(), r.cities().size(), (int) r.cityCount(LocationStatus.LIVE),
+                    r.cities().stream().map(CityDto::of).toList());
         }
     }
 
     @Schema(name = "MarketCountry")
     record CountryDto(String code, String name, MarketStatus status, String launchNote, String currency,
-                      boolean onboarding, boolean launchListOpen, int liveRegions, List<RegionDto> regions) {
+                      boolean onboarding, boolean launchListOpen, int liveRegions, int plannedRegions,
+                      @Schema(description = "Optimistic-lock version of the country: If-Match for its status")
+                      long version, List<RegionDto> regions) {
 
         static CountryDto of(Country c) {
             return new CountryDto(c.code(), c.name(), c.status(), c.launchNote(), c.currency(), c.live(),
-                    launchList(c), live(c), c.regions().stream().map(RegionDto::of).toList());
+                    launchList(c), live(c), (int) c.regionCount(LocationStatus.PLANNED), c.version(),
+                    c.regions().stream().map(RegionDto::of).toList());
         }
     }
 
     @Schema(name = "MarketCountrySummary", description = "For country pickers: every ISO country with its status")
     record CountrySummaryDto(String code, String name, MarketStatus status, String launchNote, boolean onboarding,
-                             boolean launchListOpen, int regionCount, int liveRegions) {
+                             boolean launchListOpen, int regionCount, int liveRegions, int plannedRegions,
+                             int cityCount, int liveCities, long version) {
 
         static CountrySummaryDto of(Country c) {
             return new CountrySummaryDto(c.code(), c.name(), c.status(), c.launchNote(), c.live(), launchList(c),
-                    c.regions().size(), live(c));
+                    c.regions().size(), live(c), (int) c.regionCount(LocationStatus.PLANNED),
+                    c.regions().stream().mapToInt(r -> r.cities().size()).sum(),
+                    (int) c.regions().stream().mapToLong(r -> r.cityCount(LocationStatus.LIVE)).sum(), c.version());
         }
+    }
+
+    @Schema(name = "AddMarketRegionRequest", description = "A state / province picked from the gazetteer; it starts "
+            + "PLANNED")
+    record AddRegionRequest(@NotNull @Size(min = 1, max = 10) String code, @NotNull @Size(min = 1, max = 80) String name) {
+    }
+
+    @Schema(name = "MarketCityInput")
+    record CityInput(@NotNull @Size(min = 1, max = 80) String name,
+                     @Schema(description = "Defaults to PLANNED") LocationStatus status) {
+
+        City toCity() {
+            return new City(name, status == null ? LocationStatus.PLANNED : status);
+        }
+    }
+
+    @Schema(name = "AddMarketCitiesRequest", description = "Cities to append (cities already listed keep their status)")
+    record AddCitiesRequest(@NotEmpty @Size(max = 2000) List<@Valid CityInput> cities) {
+
+        List<City> toCities() {
+            return cities.stream().map(CityInput::toCity).toList();
+        }
+    }
+
+    @Schema(name = "MarketCityStatusRequest")
+    record CityStatusRequest(@NotEmpty @Size(max = 2000) List<String> names, @NotNull LocationStatus status) {
     }
 
     @Schema(name = "MarketCountries")
@@ -68,10 +120,11 @@ final class MarketDtos {
     record UpdateCountryRequest(MarketStatus status, @Size(max = 500) String launchNote) {
     }
 
-    @Schema(name = "CapabilityChangeRequest", description = "Only the switches present are changed. Marketplace off "
-            + "turns every other capability off; enabling another capability needs the marketplace on.")
+    @Schema(name = "CapabilityChangeRequest", description = "Only what is present is changed. status LIVE switches the "
+            + "marketplace on, PLANNED / OFF switch it off. Marketplace off turns every other capability off; enabling "
+            + "another capability needs the marketplace on. everyCity: cover every city, or only cities listed LIVE.")
     record CapabilityChangeRequest(Boolean marketplace, Boolean services, Boolean food, Boolean pickup,
-                                   Boolean taxRegistration) {
+                                   Boolean taxRegistration, LocationStatus status, Boolean everyCity) {
 
         Map<Capability, Boolean> changes() {
             Map<Capability, Boolean> m = new EnumMap<>(Capability.class);

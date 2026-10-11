@@ -46,13 +46,17 @@ class MarketPublicController {
 
     @Operation(summary = "Can we sell / deliver / onboard here?",
             description = "Checkout and the BFF block delivery when deliveryAllowed is false (state switched off); "
-                    + "onboarding rejects countries where onboardingAllowed is false and offers the launch list.")
+                    + "onboarding rejects countries where onboardingAllowed is false and offers the launch list. With "
+                    + "city, the state's cities decide too: a city listed PLANNED or OFF is not served (reason "
+                    + "city-not-live), and a state that does not cover every city serves only the cities listed LIVE "
+                    + "(reason city-not-covered).")
     @GetMapping("/eligibility")
     ResponseEntity<EligibilityResponse> eligibility(@RequestParam String country,
                                                     @RequestParam(required = false) String state,
-                                                    @RequestParam(required = false) String zip) {
+                                                    @RequestParam(required = false) String zip,
+                                                    @RequestParam(required = false) String city) {
         return ResponseEntity.ok().cacheControl(SHORT)
-                .body(EligibilityResponse.of(eligibility.check(country, state, zip)));
+                .body(EligibilityResponse.of(eligibility.check(country, state, zip, city)));
     }
 
     @Operation(summary = "Every country with its status (onboarding pickers)")

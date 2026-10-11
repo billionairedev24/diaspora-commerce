@@ -32,6 +32,15 @@ public record MarketSnapshot(int version, Instant publishedAt, String publishedB
      * postal code. When both are given they must agree.
      */
     public Eligibility eligibility(String countryCode, String region, String postalCode) {
+        return eligibility(countryCode, region, postalCode, null);
+    }
+
+    /**
+     * Like {@link #eligibility(String, String, String)}, and when {@code city} is given the live state's cities
+     * decide too: a city listed PLANNED or OFF is not served, and when the state does not cover every city only the
+     * cities listed LIVE are. Without a city the state decides alone.
+     */
+    public Eligibility eligibility(String countryCode, String region, String postalCode, String city) {
         Optional<Country> found = country(countryCode);
         if (found.isEmpty()) {
             return new Eligibility(upper(countryCode), null, null, false, false, Capabilities.allOff(),
@@ -68,8 +77,24 @@ public record MarketSnapshot(int version, Instant publishedAt, String publishedB
             return new Eligibility(c.code(), c.status(), r.code(), false, false, r.capabilities(), "region-disabled",
                     "AfroTransact doesn't deliver to " + r.name() + " yet.", c.launchNote(), true, version);
         }
+        if (!isBlank(city)) {
+            Optional<City> listed = r.city(city);
+            if (listed.isPresent() && listed.get().status() != LocationStatus.LIVE) {
+                return cityBlocked(c, r, "city-not-live", "AfroTransact doesn't deliver to " + listed.get().name()
+                        + " yet.");
+            }
+            if (listed.isEmpty() && !r.everyCity()) {
+                return cityBlocked(c, r, "city-not-covered", "AfroTransact doesn't deliver to " + city.trim()
+                        + " yet.");
+            }
+        }
         return new Eligibility(c.code(), c.status(), r.code(), true, true, r.capabilities(), "ok",
                 "AfroTransact delivers to " + r.name() + ".", c.launchNote(), false, version);
+    }
+
+    private Eligibility cityBlocked(Country c, Region r, String reason, String message) {
+        return new Eligibility(c.code(), c.status(), r.code(), true, false, r.capabilities(), reason, message,
+                c.launchNote(), true, version);
     }
 
     private Eligibility blocked(Country c, String region, String reason, String message) {

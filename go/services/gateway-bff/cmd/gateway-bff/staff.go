@@ -75,6 +75,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Dispatch, out.Notifications = app.NewStaffDispatchService(d), app.NewStaffNotificationsService(d)
 	out.Preorders = app.NewStaffPreordersService(d)
 	out.Inventory = app.NewStaffInventoryService(d)
+	out.Markets = app.NewStaffMarketsService(d)
 	return out, seller, sellerFiles, nil
 }
 

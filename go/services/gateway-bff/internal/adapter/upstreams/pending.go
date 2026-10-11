@@ -180,8 +180,8 @@ func (k *contentImpl) Apply(ctx context.Context, jobID string, a domain.JobAppli
 	return out, err
 }
 
-func (k *contentImpl) Eligibility(ctx context.Context, country, state, zip string) (domain.MarketEligibility, error) {
-	return cached(k.cache, "content:eligibility:"+country+":"+state+":"+zip, func() (domain.MarketEligibility, http.Header, error) {
+func (k *contentImpl) Eligibility(ctx context.Context, country, state, zip, city string) (domain.MarketEligibility, error) {
+	return cached(k.cache, "content:eligibility:"+country+":"+state+":"+zip+":"+strings.ToLower(city), func() (domain.MarketEligibility, http.Header, error) {
 		var out domain.MarketEligibility
 		q := url.Values{"country": {country}}
 		if state != "" {
@@ -189,6 +189,9 @@ func (k *contentImpl) Eligibility(ctx context.Context, country, state, zip strin
 		}
 		if zip != "" {
 			q.Set("zip", zip)
+		}
+		if city != "" {
+			q.Set("city", city)
 		}
 		res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/markets/eligibility", Query: q}, &out)
 		if err != nil {

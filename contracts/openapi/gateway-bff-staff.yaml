@@ -73,6 +73,16 @@ tags:
       APPROVE (view + late add), Finance / Auditor / Product owner / Fulfilment / Retail VIEW. Writes need EDIT and
       `preorders:manage`, settings need FULL and `preorders:manage`, exports `preorders:export`, late adds
       `preorders:late-add` with APPROVE or above. Window, list, settings and area answers carry `can`.
+  - name: Markets
+    description: |
+      Settings → Markets & locations as one location tree (country → states → cities). Mirrors content's draft markets
+      with the staff member's token: country status, add a state (PLANNED), a state's status (LIVE / PLANNED / OFF),
+      city coverage ("every city" or only listed cities) and capability switches, and its cities (append, switch,
+      remove). Every edit sends the version it loaded as If-Match (412 `VERSION_CONFLICT` when someone else changed
+      it). Changes are a draft until Publish. Country and state answers carry what depends on each place (`preorders`:
+      open pre-orders, from delivery-runs); removing a city an open pre-order sells to is refused (409, switch it off
+      instead). Module `markets`: VIEW to read; EDIT and `content:markets.edit` to change. `GET /v1/staff/places`
+      browses geo's gazetteer for the pickers of Markets and Pre-order areas.
   - name: Inventory hub
     description: |
       Inventory hub (S281): mirrors inventory-service 1:1 with the staff member's token — inbound shipments (ASNs with
@@ -1409,6 +1419,249 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── S281 inventory
+  /v1/staff/markets/countries:
+    get:
+      tags: [Markets]
+      operationId: listStaffMarketCountries
+      security: [{sessionCookie: []}]
+      summary: Every country with its status and counts, plus the unpublished changes
+      description: content `GET /v1/markets/draft/countries` and `GET /v1/markets/draft/changes` (VIEW).
+      responses:
+        '200': {description: Countries, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountries'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/markets/countries/{code}:
+    parameters:
+      - $ref: '#/components/parameters/MarketCountryCode'
+    get:
+      tags: [Markets]
+      operationId: getStaffMarketCountry
+      security: [{sessionCookie: []}]
+      summary: One country with its states, cities and what depends on them
+      description: content `GET /v1/markets/draft/countries/{code}` (VIEW) plus open pre-orders per state and city (delivery-runs, best effort).
+      responses:
+        '200': {description: Country, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [Markets]
+      operationId: updateStaffMarketCountry
+      security: [{sessionCookie: []}]
+      summary: Change a country's status or launch note (If-Match = the country's version)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: {type: string, enum: [LIVE, PAUSED, COMING_SOON, PLANNED]}
+                launchNote: {type: string, maxLength: 500}
+      responses:
+        '200': {description: Country, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/markets/countries/{code}/regions:
+    parameters:
+      - $ref: '#/components/parameters/MarketCountryCode'
+    post:
+      tags: [Markets]
+      operationId: addStaffMarketRegion
+      security: [{sessionCookie: []}]
+      summary: Add a state / province (from the gazetteer); it starts PLANNED
+      description: content `POST /v1/markets/draft/countries/{code}/regions`. 409 when the state is already LIVE or PLANNED.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, name]
+              properties:
+                code: {type: string, pattern: '^[A-Za-z0-9]{1,10}$'}
+                name: {type: string, minLength: 1, maxLength: 80}
+      responses:
+        '201': {description: Country, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/markets/countries/{code}/regions/{region}:
+    parameters:
+      - $ref: '#/components/parameters/MarketCountryCode'
+      - $ref: '#/components/parameters/MarketRegionCode'
+    patch:
+      tags: [Markets]
+      operationId: updateStaffMarketRegion
+      security: [{sessionCookie: []}]
+      summary: Change a state's status, city coverage or capability switches (If-Match = the state's version)
+      description: |
+        Only what is present changes. LIVE switches the marketplace on; PLANNED and OFF switch it off (and every
+        capability with it; LIVE cities become PLANNED). everyCity true covers every city (listed cities are overrides);
+        false serves only the cities listed LIVE.
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: {$ref: '#/components/schemas/StaffPlaceStatus'}
+                everyCity: {type: boolean}
+                marketplace: {type: boolean}
+                services: {type: boolean}
+                food: {type: boolean}
+                pickup: {type: boolean}
+                taxRegistration: {type: boolean}
+      responses:
+        '200': {description: Country, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/markets/countries/{code}/regions/{region}/cities:
+    parameters:
+      - $ref: '#/components/parameters/MarketCountryCode'
+      - $ref: '#/components/parameters/MarketRegionCode'
+    post:
+      tags: [Markets]
+      operationId: addStaffMarketCities
+      security: [{sessionCookie: []}]
+      summary: Append cities to a state (If-Match = the state's version)
+      description: Cities already listed keep their status; new ones default to PLANNED. A LIVE city needs the state LIVE (422).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cities]
+              properties:
+                cities:
+                  type: array
+                  minItems: 1
+                  maxItems: 2000
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name: {type: string, minLength: 1, maxLength: 80}
+                      status: {$ref: '#/components/schemas/StaffPlaceStatus'}
+      responses:
+        '200': {description: Country, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [Markets]
+      operationId: setStaffMarketCities
+      security: [{sessionCookie: []}]
+      summary: Switch listed cities to LIVE, PLANNED or OFF (If-Match = the state's version)
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [names, status]
+              properties:
+                names: {type: array, minItems: 1, maxItems: 2000, items: {type: string, maxLength: 80}}
+                status: {$ref: '#/components/schemas/StaffPlaceStatus'}
+      responses:
+        '200': {description: Country, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/markets/countries/{code}/regions/{region}/cities/{city}:
+    parameters:
+      - $ref: '#/components/parameters/MarketCountryCode'
+      - $ref: '#/components/parameters/MarketRegionCode'
+      - {name: city, in: path, required: true, schema: {type: string, maxLength: 80}}
+    delete:
+      tags: [Markets]
+      operationId: removeStaffMarketCity
+      security: [{sessionCookie: []}]
+      summary: Remove a listed city (If-Match = the state's version)
+      description: 409 `markets.city-in-use` while an open pre-order sells there (switch it off instead).
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200': {description: Country, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketCountry'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/markets/publications:
+    post:
+      tags: [Markets]
+      operationId: publishStaffMarkets
+      security: [{sessionCookie: []}]
+      summary: Publish the draft as a new version (eligibility, checkout and the deliver-to check read it)
+      description: content `POST /v1/markets/publications`. 409 when there is nothing to publish.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note: {type: string, maxLength: 500}
+      responses:
+        '201': {description: Published, content: {application/json: {schema: {$ref: '#/components/schemas/StaffMarketPublication'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/places:
+    get:
+      tags: [Markets]
+      operationId: listStaffPlaces
+      security: [{sessionCookie: []}]
+      summary: Browse geo's gazetteer for the location pickers (Markets and Pre-order areas)
+      description: |
+        No country → every country; country → its states / provinces (label = what the country calls them);
+        country + region → its cities (q filters, limit at most 5000, total = matches before the limit). Needs VIEW on
+        Markets or Pre-orders.
+      parameters:
+        - {name: country, in: query, schema: {type: string, maxLength: 2}}
+        - {name: region, in: query, schema: {type: string, maxLength: 10}}
+        - {name: q, in: query, schema: {type: string, maxLength: 80}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 5000}}
+      responses:
+        '200': {description: Places, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlaceList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/inventory/flow:
     get:
       tags: [Inventory hub]
@@ -3276,6 +3529,8 @@ components:
     TemplateKey: {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,119}$'}, example: order.confirmed}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
     IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same refund; never refunds twice.}
+    MarketCountryCode: {name: code, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
+    MarketRegionCode: {name: region, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9]{1,10}$'}}
     IfMatch: {name: If-Match, in: header, required: false, schema: {type: string, maxLength: 40}, description: The version from the ETag (optimistic locking).}
   responses:
     Problem:
@@ -3289,6 +3544,105 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    StaffPlaceStatus:
+      type: string
+      enum: [LIVE, PLANNED, OFF]
+      description: LIVE serves orders; PLANNED is on the roadmap (shown, not serving); OFF is switched off (hidden by default).
+    StaffMarketCity:
+      type: object
+      required: [name, status]
+      properties:
+        name: {type: string}
+        status: {$ref: '#/components/schemas/StaffPlaceStatus'}
+        preorders: {type: array, items: {type: string}, description: Open pre-orders selling here (removal is refused while any do)}
+    StaffMarketRegion:
+      type: object
+      required: [code, name, status, everyCity, version, cities]
+      properties:
+        code: {type: string}
+        name: {type: string}
+        kind: {type: string}
+        status: {$ref: '#/components/schemas/StaffPlaceStatus'}
+        everyCity: {type: boolean, description: Every city is covered (listed cities are overrides); false = only cities listed LIVE}
+        version: {type: integer, description: Send back as If-Match}
+        cityCount: {type: integer}
+        liveCities: {type: integer}
+        preorders: {type: integer, description: Open pre-orders targeting this state or its cities}
+        capabilities:
+          type: object
+          properties:
+            marketplace: {type: boolean}
+            services: {type: boolean}
+            food: {type: boolean}
+            pickup: {type: boolean}
+            taxRegistration: {type: boolean}
+        cities: {type: array, items: {$ref: '#/components/schemas/StaffMarketCity'}}
+    StaffMarketCountry:
+      type: object
+      required: [code, name, status, version, regions]
+      properties:
+        code: {type: string}
+        name: {type: string}
+        status: {type: string, enum: [LIVE, PAUSED, COMING_SOON, PLANNED]}
+        launchNote: {type: [string, 'null']}
+        currency: {type: [string, 'null']}
+        liveRegions: {type: integer}
+        plannedRegions: {type: integer}
+        version: {type: integer, description: Send back as If-Match when changing the country's status}
+        canEdit: {type: boolean}
+        regions: {type: array, items: {$ref: '#/components/schemas/StaffMarketRegion'}}
+      additionalProperties: true
+    StaffMarketCountrySummary:
+      type: object
+      required: [code, name, status]
+      properties:
+        code: {type: string}
+        name: {type: string}
+        status: {type: string, enum: [LIVE, PAUSED, COMING_SOON, PLANNED]}
+        regionCount: {type: integer}
+        liveRegions: {type: integer}
+        plannedRegions: {type: integer}
+        cityCount: {type: integer}
+        liveCities: {type: integer}
+        version: {type: integer}
+      additionalProperties: true
+    StaffMarketChanges:
+      type: object
+      properties:
+        pending: {type: boolean}
+        changedCountries: {type: array, items: {type: string}}
+        newlyLive: {type: array, items: {type: string}}
+        disabledRegions: {type: array, items: {type: string}}
+        enabledRegions: {type: array, items: {type: string}}
+    StaffMarketCountries:
+      type: object
+      required: [items, changes, canEdit]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffMarketCountrySummary'}}
+        changes: {$ref: '#/components/schemas/StaffMarketChanges'}
+        canEdit: {type: boolean}
+    StaffMarketPublication:
+      type: object
+      required: [version]
+      properties:
+        version: {type: integer}
+        changes: {$ref: '#/components/schemas/StaffMarketChanges'}
+    StaffPlaceList:
+      type: object
+      required: [items, label, total]
+      properties:
+        label: {type: string, description: 'Country, what the country calls its regions (State, Province…), or City'}
+        total: {type: integer}
+        items:
+          type: array
+          items:
+            type: object
+            required: [code, name]
+            properties:
+              code: {type: string, description: 'ISO code, subdivision code, or the city name'}
+              name: {type: string}
+              label: {type: string}
+              cityCount: {type: integer}
     Problem:
       type: object
       required: [type, title, status]
