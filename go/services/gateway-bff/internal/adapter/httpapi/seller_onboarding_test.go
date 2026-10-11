@@ -44,7 +44,7 @@ func TestStartSellingCreatesThePrefilledApplicationOnce(t *testing.T) {
 		labels = append(labels, st.(map[string]any)["key"].(string)+"="+st.(map[string]any)["label"].(string))
 	}
 	if fmt.Sprint(labels) != "[BUSINESS=Your business BUSINESS_DETAILS=Business details & TIN OWNERS=Owners STRIPE_VERIFICATION=Stripe verification "+
-		"PAYOUTS=Payouts PLAN=Plan CATALOG_COMPLIANCE=Catalog, permits & licences REVIEW=AfroTransact staff review]" {
+		"PAYOUTS=Payouts PLAN=Plan CATALOG_COMPLIANCE=Catalog, permits & licences REVIEW=Review & submit]" {
 		t.Fatalf("steps = %v", labels)
 	}
 	form := r.json(t)["form"].(map[string]any)
@@ -93,9 +93,8 @@ func TestStartSellingCreatesThePrefilledApplicationOnce(t *testing.T) {
 	if sb["entityType"] != "SOLE_PROPRIETOR" || sb["offering"] != "PRODUCTS" || sb["country"] != "US" {
 		t.Fatalf("saved business = %v", sb)
 	}
-	up.Application["businessDetails"].(map[string]any)["dateOfBirth"] = "1990-04-02"
 	det := b.do("PUT", "/v1/seller/onboarding/business-details", map[string]any{"legalFirstName": "Adaeze", "legalLastName": "Nwosu",
-		"address": map[string]any{"line1": "1 Main St", "city": "Houston", "state": "tx", "postalCode": "77002"}})
+		"dateOfBirth": "1990-04-02", "address": map[string]any{"line1": "1 Main St", "city": "Houston", "state": "tx", "postalCode": "77002"}})
 	if det.status != 200 {
 		t.Fatalf("details = %d %s", det.status, det.body)
 	}

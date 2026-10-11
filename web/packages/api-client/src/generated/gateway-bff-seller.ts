@@ -108,11 +108,218 @@ export interface paths {
         };
         get?: never;
         /**
-         * Autosave the wizard's "About you" step (legal name and address)
-         * @description seller `PUT /v1/applications/me/steps/business-details`; only the fields present are validated.
+         * Save "About you" (sole proprietor) / "Business details & TIN"
+         * @description seller `PUT /v1/applications/me/steps/business-details`; the whole step is sent (the seller service replaces the
+         *     section). `taxId` (SSN/ITIN or EIN) is encrypted at rest by the seller service and never returned or logged;
+         *     omit it to keep the stored one. Only the fields present are validated; completion is decided by the seller
+         *     service.
          */
         put: operations["saveOnboardingDetails"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/owners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save "Owners" (beneficial owners and control persons)
+         * @description seller `PUT /v1/applications/me/steps/owners` (not for sole proprietors). Everyone with 25%+ and at least one person with significant control; ownership may not exceed 100%.
+         */
+        put: operations["saveOnboardingOwners"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save "Payouts" (the payout bank account, linked via Stripe)
+         * @description seller `PUT /v1/applications/me/steps/payouts`. The routing and account numbers go to Stripe once as the connected account's payout account and are never stored or returned (last 4 only). The step is complete only once Stripe accepted the account (`form.payouts.linked`); 422 `seller.stripe-account-required` before Stripe verification.
+         */
+        put: operations["saveOnboardingPayouts"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save "Plan" (plan, billing frequency and, for paid plans, the card)
+         * @description seller `PUT /v1/applications/me/steps/plan`. Cards are tokenised by Stripe.js (`pm_…`); only brand, last 4 and expiry are stored. The subscription starts after approval, with the plans free trial.
+         */
+        put: operations["saveOnboardingPlan"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/catalog-compliance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save "Catalog, permits & licences" / "Services & licences"
+         * @description seller `PUT /v1/applications/me/steps/catalog-compliance`: categories (lower-cased keys), the food permit for groceries / prepared food, beauty labelling, service licences, insurance, agreements and the W-9 certification.
+         */
+        put: operations["saveOnboardingCompliance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plans the applicant can choose (their kind), with prices per billing frequency and the first charge
+         * @description seller `GET /v1/plans?kind=` for the application's kind.
+         */
+        get: operations["getOnboardingPlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/stripe/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Account Session for Stripe's embedded Connect onboarding (identity and tax ID verification)
+         * @description seller `POST /v1/applications/me/stripe/account-session`: creates the platform-controlled connected account on
+         *     first use and an Account Session for Connect.js (`account-onboarding`), with the BFF's Stripe publishable key.
+         *     No Stripe-hosted page: verification runs embedded in Seller Center. `localTest` is true only for the seller
+         *     service's local stand-in (local profile without a Stripe key); Seller Center then shows its labelled local
+         *     verification. 503 `STRIPE_NOT_CONFIGURED` when a real session can't load for lack of a publishable key.
+         */
+        post: operations["createOnboardingStripeSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/stripe/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Re-read the Stripe verification results (after the embedded onboarding closes)
+         * @description seller `POST /v1/applications/me/stripe/refresh`.
+         */
+        post: operations["refreshOnboardingStripe"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit the application to AfroTransact staff review (or resubmit after a request for information)
+         * @description seller `POST /v1/applications/me/submit`; 422 lists every field still missing across the steps.
+         */
+        post: operations["submitOnboarding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Direct upload ticket for an application document (permit, licence, insurance, formation document)
+         * @description media `POST /v1/uploads` with purpose `kyc-document` (private; PDF, JPG, PNG or WebP, ≤ 15 MB).
+         */
+        post: operations["requestOnboardingUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/onboarding/uploads/{assetId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finalise an uploaded application document
+         * @description media `POST /v1/assets/{id}/complete`.
+         */
+        post: operations["completeOnboardingUpload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1485,18 +1692,53 @@ export interface components {
         };
         /** @enum {string} */
         OnboardingStepState: "DONE" | "TODO" | "ACTION" | "WAITING" | "BLOCKED";
+        OnboardingStep: {
+            /** @enum {string} */
+            key: "BUSINESS" | "BUSINESS_DETAILS" | "OWNERS" | "STRIPE_VERIFICATION" | "PAYOUTS" | "PLAN" | "CATALOG_COMPLIANCE" | "REVIEW";
+            /**
+             * @description URL segment in Seller Center (/onboarding/<slug>)
+             * @enum {string}
+             */
+            slug: "business" | "business-details" | "owners" | "stripe-verification" | "payouts" | "plan" | "catalog-compliance" | "review";
+            /** @description Design title: "About you" for a sole proprietor, "Services & licences" for services only */
+            label: string;
+            sub: string;
+            /** @description DONE only when the seller service finds the step's required data complete and valid (Stripe verification and Payouts from what Stripe reports). REVIEW is WAITING while staff review the application. */
+            state: components["schemas"]["OnboardingStepState"];
+        };
+        /** @enum {string} */
+        OnboardingStripeStatus: "NOT_STARTED" | "IN_PROGRESS" | "REQUIREMENTS_DUE" | "PENDING" | "VERIFIED" | "REJECTED";
+        OnboardingStripe: {
+            status: components["schemas"]["OnboardingStripeStatus"];
+            detailsSubmitted: boolean;
+            chargesEnabled: boolean;
+            payoutsEnabled: boolean;
+            identityStatus: string | null;
+            taxIdStatus: string | null;
+            /** @description Stripe requirement keys still due */
+            currentlyDue: string[];
+        };
+        OnboardingTimelineEntry: {
+            action: string;
+            status: string;
+            note: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+        };
         OnboardingStatus: {
             orgId: string;
             kind: components["schemas"]["OrgKind"];
             status: string;
             reference: string | null;
-            steps: {
-                key: string;
-                label: string;
-                state: components["schemas"]["OnboardingStepState"];
-            }[];
+            steps: components["schemas"]["OnboardingStep"][];
             requestedItems: string[];
             canResume: boolean;
+            /** @description Slug of the first incomplete step (review once every step is complete) */
+            resumeStep: string;
+            /** Format: date-time */
+            submittedAt: string | null;
+            stripe: components["schemas"]["OnboardingStripe"];
+            timeline: components["schemas"]["OnboardingTimelineEntry"][];
             form: components["schemas"]["OnboardingForm"];
         };
         StartOnboardingRequest: {
@@ -1516,10 +1758,48 @@ export interface components {
             /** @description ISO 3166-1 alpha-2 */
             country: string | null;
         };
+        OnboardingOwner: {
+            firstName: string | null;
+            lastName: string | null;
+            title: string | null;
+            email: string | null;
+            ownershipPercent: number | null;
+            significantControl: boolean;
+            /** Format: date */
+            dateOfBirth: string | null;
+            address: components["schemas"]["OnboardingAddress"] | null;
+        };
+        OnboardingFirstCharge: {
+            /** Format: date */
+            chargeOn: string | null;
+            /** Format: int64 */
+            amountCents: number;
+            sentence: string;
+        };
+        /** @enum {string} */
+        OnboardingFoodPermitType: "FOOD_ESTABLISHMENT" | "COTTAGE_FOOD" | "FDA_FACILITY" | "FOOD_HANDLER";
+        OnboardingFoodPermit: {
+            /** @description OnboardingFoodPermitType */
+            permitType: string | null;
+            permitNumber: string | null;
+            issuingAuthority: string | null;
+            /** Format: date */
+            expiresOn: string | null;
+            documentAssetId: string | null;
+        };
+        OnboardingServiceLicence: {
+            serviceName: string;
+            regulated: boolean;
+            licenceNumber: string | null;
+            issuingState: string | null;
+            /** Format: date */
+            expiresOn: string | null;
+            documentAssetId: string | null;
+        };
         /**
-         * @description The answers to the wizard's first two steps (S286). `prefilled` lists the fields filled in from the account
-         *     and still unchanged: business.contactEmail, business.phone, business.storeName, details.legalFirstName,
-         *     details.legalLastName, details.address.
+         * @description Every answer of the wizard (S286, S289). `prefilled` lists the fields filled in from the account and still
+         *     unchanged: business.contactEmail, business.phone, business.storeName, details.legalFirstName,
+         *     details.legalLastName, details.address. The tax ID and bank numbers are never returned (masked / last 4).
          */
         OnboardingForm: {
             business: {
@@ -1537,8 +1817,58 @@ export interface components {
                 legalLastName: string | null;
                 /** @description Registered business name (not for sole proprietors) */
                 legalName: string | null;
+                dba: string | null;
+                /** @enum {string|null} */
+                taxIdType: "SSN" | "ITIN" | "EIN" | null;
+                /** @description e.g. •••-••-6789 */
+                taxIdMasked: string | null;
+                /** Format: date */
+                dateOfBirth: string | null;
+                stateOfFormation: string | null;
+                /** Format: date */
+                dateOfFormation: string | null;
                 address: components["schemas"]["OnboardingAddress"] | null;
+                formationDocumentAssetId: string | null;
+                irsDeterminationLetterAssetId: string | null;
             };
+            owners: components["schemas"]["OnboardingOwner"][];
+            payouts: {
+                accountHolderName: string | null;
+                accountType: string | null;
+                bankName: string | null;
+                routingLast4: string | null;
+                accountLast4: string | null;
+                /** @description Stripe accepted the account as the payout account (the step's completion) */
+                linked: boolean;
+            };
+            plan: {
+                planCode: string | null;
+                planName: string | null;
+                /** @enum {string|null} */
+                cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL" | null;
+                /** @enum {string|null} */
+                paymentMethodKind: "CARD" | "US_BANK_ACCOUNT" | null;
+                cardBrand: string | null;
+                cardLast4: string | null;
+                cardExpMonth: number | null;
+                cardExpYear: number | null;
+                firstCharge: components["schemas"]["OnboardingFirstCharge"] | null;
+            };
+            compliance: {
+                categories: string[];
+                foodPermit: components["schemas"]["OnboardingFoodPermit"] | null;
+                beautyLabellingConfirmed: boolean | null;
+                services: components["schemas"]["OnboardingServiceLicence"][];
+                insuranceDocumentAssetId: string | null;
+                agreementsAccepted: boolean | null;
+                w9Certified: boolean | null;
+                w9SignerName: string | null;
+            };
+            documents: {
+                assetId: string;
+                kind: string;
+                label: string;
+            }[];
             prefilled: string[];
             /** @description Whether the applicant can still change answers (DRAFT or INFO_REQUESTED) */
             editable: boolean;
@@ -1554,18 +1884,134 @@ export interface components {
             phone?: string;
             website?: string;
         };
+        OnboardingAddressInput: {
+            line1: string;
+            line2?: string;
+            city: string;
+            state: string;
+            postalCode: string;
+            country?: string;
+        };
         OnboardingDetailsInput: {
             legalFirstName?: string;
             legalLastName?: string;
             legalName?: string;
-            address?: {
-                line1: string;
-                line2?: string;
-                city: string;
-                state: string;
-                postalCode: string;
-                country?: string;
-            };
+            dba?: string;
+            /** @description SSN/ITIN or EIN (write-only, encrypted at rest; omit to keep the stored one) */
+            taxId?: string;
+            /** Format: date */
+            dateOfBirth?: string;
+            stateOfFormation?: string;
+            /** Format: date */
+            dateOfFormation?: string;
+            address?: components["schemas"]["OnboardingAddressInput"];
+            formationDocumentAssetId?: string;
+            irsDeterminationLetterAssetId?: string;
+        };
+        OnboardingOwnerInput: {
+            firstName?: string;
+            lastName?: string;
+            title?: string;
+            email?: string;
+            ownershipPercent?: number;
+            significantControl?: boolean;
+            /** Format: date */
+            dateOfBirth?: string;
+            address?: components["schemas"]["OnboardingAddressInput"];
+        };
+        OnboardingOwnersInput: {
+            owners: components["schemas"]["OnboardingOwnerInput"][];
+        };
+        OnboardingPayoutsInput: {
+            accountHolderName: string;
+            /** @enum {string} */
+            accountType: "checking" | "savings";
+            routingNumber: string;
+            accountNumber: string;
+            accountNumberConfirmation: string;
+        };
+        OnboardingPlanInput: {
+            planCode: string;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** @enum {string} */
+            paymentMethodKind?: "CARD";
+            /** @description pm_… from Stripe.js */
+            stripePaymentMethodId?: string;
+            cardBrand?: string;
+            cardLast4?: string;
+            cardExpMonth?: number;
+            cardExpYear?: number;
+        };
+        OnboardingFoodPermitInput: {
+            permitType?: components["schemas"]["OnboardingFoodPermitType"];
+            permitNumber?: string;
+            issuingAuthority?: string;
+            /** Format: date */
+            expiresOn?: string;
+            documentAssetId?: string;
+        };
+        OnboardingServiceLicenceInput: {
+            serviceName: string;
+            regulated?: boolean;
+            licenceNumber?: string;
+            issuingState?: string;
+            /** Format: date */
+            expiresOn?: string;
+            documentAssetId?: string;
+        };
+        OnboardingComplianceInput: {
+            categories?: string[];
+            foodPermit?: components["schemas"]["OnboardingFoodPermitInput"];
+            beautyLabellingConfirmed?: boolean;
+            services?: components["schemas"]["OnboardingServiceLicenceInput"][];
+            insuranceDocumentAssetId?: string;
+            agreementsAccepted?: boolean;
+            w9Certified?: boolean;
+            w9SignerName?: string;
+        };
+        OnboardingStripeSession: {
+            accountId: string;
+            /** @description Account Session client secret for Connect.js */
+            clientSecret: string;
+            publishableKey: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** @description The seller service's local stand-in (local profile without a Stripe key only) */
+            localTest: boolean;
+        };
+        OnboardingPlanPrice: {
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            months: number;
+            /** Format: int64 */
+            totalCents: number;
+            /** Format: int64 */
+            perMonthCents: number;
+            /** Format: int64 */
+            savingCents: number;
+            perMonthLabel: string;
+            billedLabel: string;
+            savingLabel: string | null;
+            firstCharge: components["schemas"]["OnboardingFirstCharge"] | null;
+        };
+        OnboardingPlans: {
+            plans: {
+                code: string;
+                name: string;
+                tagline: string | null;
+                /** Format: int64 */
+                monthlyCents: number;
+                trialDays: number;
+                features: string[];
+                prices: components["schemas"]["OnboardingPlanPrice"][];
+            }[];
+        };
+        OnboardingUploadRequest: {
+            fileName: string;
+            /** @enum {string} */
+            contentType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+            size: number;
         };
         /** @enum {string} */
         ComplianceStatus: "COMPLIANT" | "ACTION_NEEDED" | "RESTRICTED_SOON" | "RESTRICTED" | "VERIFYING";
@@ -3024,6 +3470,282 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveOnboardingOwners: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingOwnersInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveOnboardingPayouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingPayoutsInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveOnboardingPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingPlanInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveOnboardingCompliance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingComplianceInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getOnboardingPlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Plans */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingPlans"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createOnboardingStripeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account Session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStripeSession"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    refreshOnboardingStripe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Application status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    submitOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Submitted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    requestOnboardingUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OnboardingUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload instructions */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadTicket"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    completeOnboardingUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Asset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asset"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

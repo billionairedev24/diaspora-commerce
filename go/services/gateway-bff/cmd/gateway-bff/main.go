@@ -116,7 +116,7 @@ func run() error {
 		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
 		Fees:       upstreams.NewFees(paymentsClient, serviceTokens),
 		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
-		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log,
+		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
 	}
 	verifier := upstreams.NewTokenVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.ClientID,
 		&http.Client{Timeout: up.Identity.Timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)})

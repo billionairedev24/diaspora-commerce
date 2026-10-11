@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 )
@@ -191,16 +192,94 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			problem(w, 404, "seller.no-application", "You haven't started an application yet", nil)
 			return
 		}
-		switch r.PathValue("step") {
+		step := r.PathValue("step")
+		if u.StepBodies == nil {
+			u.StepBodies = map[string]map[string]any{}
+		}
+		u.StepBodies[step] = b
+		switch step {
 		case "business":
 			if s, _ := b["storeName"].(string); len(s) == 1 {
 				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"storeName": "2 to 80 characters"}})
 				return
 			}
 			u.Application["business"] = b
+			if b["entityType"] == "sole_proprietor" {
+				u.Application["steps"] = []string{"business", "business-details", "stripe-verification", "payouts", "plan", "catalog-compliance"}
+			}
 		case "business-details":
-			u.Application["businessDetails"] = b
+			d := map[string]any{}
+			for k, v := range b {
+				if k != "taxId" {
+					d[k] = v
+				}
+			}
+			if t, _ := b["taxId"].(string); len(t) >= 4 {
+				d["taxIdType"], d["taxIdMasked"] = "SSN", "•••-••-"+t[len(t)-4:]
+			}
+			u.Application["businessDetails"] = d
+		case "owners":
+			u.Application["owners"] = b["owners"]
+		case "payouts":
+			acct, _ := b["accountNumber"].(string)
+			if acct == "" {
+				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"payouts.accountNumber": "4 to 17 digits"}})
+				return
+			}
+			u.Application["payouts"] = map[string]any{"accountHolderName": b["accountHolderName"], "accountType": b["accountType"], "bankName": "STRIPE TEST BANK",
+				"routingLast4": "0021", "accountLast4": acct[len(acct)-4:], "externalAccountLinked": true}
+		case "plan":
+			b["planName"] = "Seller Growth"
+			b["firstCharge"] = map[string]any{"chargeOn": "2026-11-09", "amountCents": 3900, "sentence": "Free for 30 days. First charge of $39.00 on Nov 9, 2026."}
+			u.Application["plan"] = b
+		case "catalog-compliance":
+			u.Application["compliance"] = b
 		}
+		done, _ := u.Application["completedSteps"].([]string)
+		if !slices.Contains(done, step) {
+			u.Application["completedSteps"] = append(done, step)
+		}
+		writeJSON(w, 200, u.Application)
+	})
+	mux.HandleFunc("POST /v1/applications/me/stripe/account-session", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if u.Application == nil {
+			problem(w, 404, "seller.no-application", "You haven't started an application yet", nil)
+			return
+		}
+		u.Application["stripe"] = map[string]any{"accountId": "acct_local_1", "detailsSubmitted": false, "identityStatus": "unverified", "taxIdStatus": "pending", "currentlyDue": []string{}}
+		//nolint:gosec // a test fixture, not a credential
+		writeJSON(w, 200, map[string]any{"accountId": "acct_local_1", "clientSecret": "accs_secret_1", "expiresAt": "2026-10-10T13:00:00Z", "localTest": u.StripeLocalTest})
+	})
+	mux.HandleFunc("POST /v1/applications/me/stripe/refresh", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		u.Application["stripe"] = map[string]any{"accountId": "acct_local_1", "detailsSubmitted": true, "chargesEnabled": true, "payoutsEnabled": true,
+			"identityStatus": "verified", "taxIdStatus": "verified", "currentlyDue": []string{}}
+		done, _ := u.Application["completedSteps"].([]string)
+		u.Application["completedSteps"] = append(done, "stripe-verification")
+		writeJSON(w, 200, u.Application)
+	})
+	mux.HandleFunc("POST /v1/applications/me/submit", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if u.Application["compliance"] == nil {
+			problem(w, 422, "seller.application-incomplete", "Some steps are incomplete or invalid; fix the highlighted fields and submit again",
+				map[string]any{"fieldErrors": map[string]string{"compliance.agreementsAccepted": "Required"}})
+			return
+		}
+		u.Application["status"], u.Application["submittedAt"] = "PENDING_REVIEW", "2026-10-10T12:00:00Z"
+		u.Application["timeline"] = []map[string]any{{"action": "SUBMITTED", "toStatus": "PENDING_REVIEW", "occurredAt": "2026-10-10T12:00:00Z"}}
 		writeJSON(w, 200, u.Application)
 	})
 	mux.HandleFunc("GET /v1/applications/me", func(w http.ResponseWriter, r *http.Request) {
@@ -576,7 +655,12 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		problem(w, 404, "seller.ship-from-not-found", "not found", nil)
 	})
-	mux.HandleFunc("POST /v1/uploads", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /v1/uploads", func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		u.mu.Lock()
+		u.LastUploadPurpose, _ = body["purpose"].(string)
+		u.mu.Unlock()
 		writeJSON(w, 201, map[string]any{"asset": map[string]any{"id": "asset-1", "status": "PENDING"}, "upload": map[string]any{"method": "PUT",
 			"url": "https://uploads.example/asset-1", "headers": map[string]string{"Content-Type": "image/webp"}, "publicUrl": "https://img.example/asset-1.webp", "expiresAt": "2026-10-10T12:15:00Z"}})
 	})

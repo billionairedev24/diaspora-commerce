@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,6 +25,16 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/onboarding", h.startOnboarding)
 	route("PUT /v1/seller/onboarding/business", h.saveOnboardingBusiness)
 	route("PUT /v1/seller/onboarding/business-details", h.saveOnboardingDetails)
+	route("PUT /v1/seller/onboarding/owners", onboardingSave(h, h.s.SellerShell.SaveOnboardingOwners))
+	route("PUT /v1/seller/onboarding/payouts", onboardingSave(h, h.s.SellerShell.SaveOnboardingPayouts))
+	route("PUT /v1/seller/onboarding/plan", onboardingSave(h, h.s.SellerShell.SaveOnboardingPlan))
+	route("PUT /v1/seller/onboarding/catalog-compliance", onboardingSave(h, h.s.SellerShell.SaveOnboardingCompliance))
+	route("GET /v1/seller/onboarding/plans", h.onboardingPlans)
+	route("POST /v1/seller/onboarding/stripe/session", h.onboardingStripeSession)
+	route("POST /v1/seller/onboarding/stripe/refresh", h.onboardingStripeRefresh)
+	route("POST /v1/seller/onboarding/submit", h.submitOnboarding)
+	route("POST /v1/seller/onboarding/uploads", h.onboardingUpload)
+	route("POST /v1/seller/onboarding/uploads/{assetId}/complete", h.completeOnboardingUpload)
 	route("GET /v1/seller/compliance", h.sellerCompliance)
 	route("GET /v1/seller/dashboard", h.sellerDashboard)
 	// Orders
@@ -172,6 +183,58 @@ func (h *handlersImpl) saveOnboardingDetails(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	v, err := h.s.SellerShell.SaveOnboardingDetails(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// onboardingSave decodes a wizard step's body and saves it with fn.
+func onboardingSave[T any](h *handlersImpl, fn func(context.Context, *domain.Caller, T) (domain.OnboardingStatus, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var b T
+		if err := decode(r, &b, false); err != nil {
+			h.reply(w, r, 0, nil, err)
+			return
+		}
+		v, err := fn(r.Context(), callerFrom(r.Context()), b)
+		h.reply(w, r, http.StatusOK, v, err)
+	}
+}
+
+func (h *handlersImpl) onboardingPlans(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShell.OnboardingPlans(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) onboardingStripeSession(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShell.OnboardingStripeSession(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) onboardingStripeRefresh(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShell.RefreshOnboardingStripe(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) submitOnboarding(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShell.SubmitOnboarding(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) onboardingUpload(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		FileName    string `json:"fileName"`
+		ContentType string `json:"contentType"`
+		Size        int64  `json:"size"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShell.OnboardingUpload(r.Context(), callerFrom(r.Context()), b.FileName, b.ContentType, b.Size)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) completeOnboardingUpload(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShell.CompleteOnboardingUpload(r.Context(), callerFrom(r.Context()), r.PathValue("assetId"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

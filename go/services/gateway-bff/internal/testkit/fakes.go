@@ -91,6 +91,8 @@ type Options struct {
 	// SellerPending serves the seller-side routes of services still being built (orders, bookings) so their
 	// mapping can be tested; without it they answer 404 like a service that does not exist yet.
 	SellerPending bool
+	// SellerPublishableKey is the Stripe publishable key the BFF hands to Connect.js for the onboarding wizard.
+	SellerPublishableKey string
 }
 
 // Upstreams is one httptest server playing every upstream the BFF calls.
@@ -138,6 +140,12 @@ type Upstreams struct {
 	ApplicantRoles   []string
 	Application      map[string]any
 	LastPrefill      map[string]any
+	// StepBodies records the seller service's step saves (PUT /v1/applications/me/steps/{step}) by step;
+	// StripeLocalTest makes account sessions come from the seller service's local stand-in;
+	// LastUploadPurpose is media's last upload purpose.
+	StepBodies        map[string]map[string]any
+	StripeLocalTest   bool
+	LastUploadPurpose string
 	// PhoneVerified is identity's phoneVerified for every account; LastSignUp is the last POST /v1/accounts body.
 	PhoneVerified bool
 	LastSignUp    map[string]any

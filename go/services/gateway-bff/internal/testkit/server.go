@@ -116,7 +116,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Payouts: upstreams.NewPayouts(client("payments", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
 		Storefront: upstreams.NewStorefront(client("storefront", base)), InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)),
 		Bookings: upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
-		Clock: clock.Now, Log: log}
+		Clock: clock.Now, Log: log, PublishableKey: u.opts.SellerPublishableKey}
 
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
 	sellers := app.SellerDirectory{RetailOrgID: "org_afrotransact_retail", Names: map[string]string{"org_kente": "Kente Naturals"}}

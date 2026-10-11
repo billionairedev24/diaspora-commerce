@@ -165,8 +165,12 @@ paths:
       tags: [Shell]
       operationId: saveOnboardingDetails
       security: [{sessionCookie: []}]
-      summary: Autosave the wizard's "About you" step (legal name and address)
-      description: seller `PUT /v1/applications/me/steps/business-details`; only the fields present are validated.
+      summary: Save "About you" (sole proprietor) / "Business details & TIN"
+      description: |
+        seller `PUT /v1/applications/me/steps/business-details`; the whole step is sent (the seller service replaces the
+        section). `taxId` (SSN/ITIN or EIN) is encrypted at rest by the seller service and never returned or logged;
+        omit it to keep the stored one. Only the fields present are validated; completion is decided by the seller
+        service.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingDetailsInput'}}}
@@ -176,6 +180,171 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/owners:
+    put:
+      tags: [Shell]
+      operationId: saveOnboardingOwners
+      security: [{sessionCookie: []}]
+      summary: Save "Owners" (beneficial owners and control persons)
+      description: seller `PUT /v1/applications/me/steps/owners` (not for sole proprietors). Everyone with 25%+ and at least one person with significant control; ownership may not exceed 100%.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingOwnersInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/payouts:
+    put:
+      tags: [Shell]
+      operationId: saveOnboardingPayouts
+      security: [{sessionCookie: []}]
+      summary: Save "Payouts" (the payout bank account, linked via Stripe)
+      description: seller `PUT /v1/applications/me/steps/payouts`. The routing and account numbers go to Stripe once as the connected account's payout account and are never stored or returned (last 4 only). The step is complete only once Stripe accepted the account (`form.payouts.linked`); 422 `seller.stripe-account-required` before Stripe verification.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingPayoutsInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/plan:
+    put:
+      tags: [Shell]
+      operationId: saveOnboardingPlan
+      security: [{sessionCookie: []}]
+      summary: Save "Plan" (plan, billing frequency and, for paid plans, the card)
+      description: seller `PUT /v1/applications/me/steps/plan`. Cards are tokenised by Stripe.js (`pm_…`); only brand, last 4 and expiry are stored. The subscription starts after approval, with the plans free trial.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingPlanInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/catalog-compliance:
+    put:
+      tags: [Shell]
+      operationId: saveOnboardingCompliance
+      security: [{sessionCookie: []}]
+      summary: Save "Catalog, permits & licences" / "Services & licences"
+      description: 'seller `PUT /v1/applications/me/steps/catalog-compliance`: categories (lower-cased keys), the food permit for groceries / prepared food, beauty labelling, service licences, insurance, agreements and the W-9 certification.'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingComplianceInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/plans:
+    get:
+      tags: [Shell]
+      operationId: getOnboardingPlans
+      security: [{sessionCookie: []}]
+      summary: Plans the applicant can choose (their kind), with prices per billing frequency and the first charge
+      description: seller `GET /v1/plans?kind=` for the application's kind.
+      responses:
+        '200': {description: Plans, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingPlans'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/stripe/session:
+    post:
+      tags: [Shell]
+      operationId: createOnboardingStripeSession
+      security: [{sessionCookie: []}]
+      summary: Account Session for Stripe's embedded Connect onboarding (identity and tax ID verification)
+      description: |
+        seller `POST /v1/applications/me/stripe/account-session`: creates the platform-controlled connected account on
+        first use and an Account Session for Connect.js (`account-onboarding`), with the BFF's Stripe publishable key.
+        No Stripe-hosted page: verification runs embedded in Seller Center. `localTest` is true only for the seller
+        service's local stand-in (local profile without a Stripe key); Seller Center then shows its labelled local
+        verification. 503 `STRIPE_NOT_CONFIGURED` when a real session can't load for lack of a publishable key.
+      responses:
+        '200': {description: Account Session, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStripeSession'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/stripe/refresh:
+    post:
+      tags: [Shell]
+      operationId: refreshOnboardingStripe
+      security: [{sessionCookie: []}]
+      summary: Re-read the Stripe verification results (after the embedded onboarding closes)
+      description: seller `POST /v1/applications/me/stripe/refresh`.
+      responses:
+        '200': {description: Application status, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/submit:
+    post:
+      tags: [Shell]
+      operationId: submitOnboarding
+      security: [{sessionCookie: []}]
+      summary: Submit the application to AfroTransact staff review (or resubmit after a request for information)
+      description: seller `POST /v1/applications/me/submit`; 422 lists every field still missing across the steps.
+      responses:
+        '200': {description: Submitted, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/uploads:
+    post:
+      tags: [Shell]
+      operationId: requestOnboardingUpload
+      security: [{sessionCookie: []}]
+      summary: Direct upload ticket for an application document (permit, licence, insurance, formation document)
+      description: media `POST /v1/uploads` with purpose `kyc-document` (private; PDF, JPG, PNG or WebP, ≤ 15 MB).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingUploadRequest'}}}
+      responses:
+        '201': {description: Upload instructions, content: {application/json: {schema: {$ref: '#/components/schemas/UploadTicket'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding/uploads/{assetId}/complete:
+    post:
+      tags: [Shell]
+      operationId: completeOnboardingUpload
+      security: [{sessionCookie: []}]
+      summary: Finalise an uploaded application document
+      description: media `POST /v1/assets/{id}/complete`.
+      parameters: [{name: assetId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/compliance:
@@ -1617,25 +1786,52 @@ components:
       properties:
         orgId: {type: string, minLength: 1}
     OnboardingStepState: {type: string, enum: [DONE, TODO, ACTION, WAITING, BLOCKED]}
+    OnboardingStep:
+      type: object
+      required: [key, slug, label, sub, state]
+      properties:
+        key: {type: string, enum: [BUSINESS, BUSINESS_DETAILS, OWNERS, STRIPE_VERIFICATION, PAYOUTS, PLAN, CATALOG_COMPLIANCE, REVIEW]}
+        slug: {type: string, description: 'URL segment in Seller Center (/onboarding/<slug>)', enum: [business, business-details, owners, stripe-verification, payouts, plan, catalog-compliance, review]}
+        label: {type: string, description: 'Design title: "About you" for a sole proprietor, "Services & licences" for services only'}
+        sub: {type: string}
+        state:
+          allOf: [{$ref: '#/components/schemas/OnboardingStepState'}]
+          description: DONE only when the seller service finds the step's required data complete and valid (Stripe verification and Payouts from what Stripe reports). REVIEW is WAITING while staff review the application.
+    OnboardingStripeStatus: {type: string, enum: [NOT_STARTED, IN_PROGRESS, REQUIREMENTS_DUE, PENDING, VERIFIED, REJECTED]}
+    OnboardingStripe:
+      type: object
+      required: [status, detailsSubmitted, chargesEnabled, payoutsEnabled, identityStatus, taxIdStatus, currentlyDue]
+      properties:
+        status: {$ref: '#/components/schemas/OnboardingStripeStatus'}
+        detailsSubmitted: {type: boolean}
+        chargesEnabled: {type: boolean}
+        payoutsEnabled: {type: boolean}
+        identityStatus: {type: [string, 'null']}
+        taxIdStatus: {type: [string, 'null']}
+        currentlyDue: {type: array, items: {type: string}, description: Stripe requirement keys still due}
+    OnboardingTimelineEntry:
+      type: object
+      required: [action, status, note, occurredAt]
+      properties:
+        action: {type: string}
+        status: {type: string}
+        note: {type: [string, 'null']}
+        occurredAt: {type: string, format: date-time}
     OnboardingStatus:
       type: object
-      required: [orgId, kind, status, reference, steps, requestedItems, canResume, form]
+      required: [orgId, kind, status, reference, steps, requestedItems, canResume, resumeStep, submittedAt, stripe, timeline, form]
       properties:
         orgId: {type: string}
         kind: {$ref: '#/components/schemas/OrgKind'}
         status: {type: string}
         reference: {type: [string, 'null']}
-        steps:
-          type: array
-          items:
-            type: object
-            required: [key, label, state]
-            properties:
-              key: {type: string}
-              label: {type: string}
-              state: {$ref: '#/components/schemas/OnboardingStepState'}
+        steps: {type: array, items: {$ref: '#/components/schemas/OnboardingStep'}}
         requestedItems: {type: array, items: {type: string}}
         canResume: {type: boolean}
+        resumeStep: {type: string, description: Slug of the first incomplete step (review once every step is complete)}
+        submittedAt: {type: [string, 'null'], format: date-time}
+        stripe: {$ref: '#/components/schemas/OnboardingStripe'}
+        timeline: {type: array, items: {$ref: '#/components/schemas/OnboardingTimelineEntry'}}
         form: {$ref: '#/components/schemas/OnboardingForm'}
     StartOnboardingRequest:
       type: object
@@ -1656,13 +1852,55 @@ components:
         state: {type: [string, 'null'], description: Two-letter state code}
         postalCode: {type: [string, 'null']}
         country: {type: [string, 'null'], description: ISO 3166-1 alpha-2}
+    OnboardingOwner:
+      type: object
+      required: [firstName, lastName, title, email, ownershipPercent, significantControl, dateOfBirth, address]
+      properties:
+        firstName: {type: [string, 'null']}
+        lastName: {type: [string, 'null']}
+        title: {type: [string, 'null']}
+        email: {type: [string, 'null']}
+        ownershipPercent: {type: [number, 'null']}
+        significantControl: {type: boolean}
+        dateOfBirth: {type: [string, 'null'], format: date}
+        address:
+          oneOf:
+            - {$ref: '#/components/schemas/OnboardingAddress'}
+            - {type: 'null'}
+    OnboardingFirstCharge:
+      type: object
+      required: [chargeOn, amountCents, sentence]
+      properties:
+        chargeOn: {type: [string, 'null'], format: date}
+        amountCents: {type: integer, format: int64}
+        sentence: {type: string}
+    OnboardingFoodPermitType: {type: string, enum: [FOOD_ESTABLISHMENT, COTTAGE_FOOD, FDA_FACILITY, FOOD_HANDLER]}
+    OnboardingFoodPermit:
+      type: object
+      required: [permitType, permitNumber, issuingAuthority, expiresOn, documentAssetId]
+      properties:
+        permitType: {type: [string, 'null'], description: OnboardingFoodPermitType}
+        permitNumber: {type: [string, 'null']}
+        issuingAuthority: {type: [string, 'null']}
+        expiresOn: {type: [string, 'null'], format: date}
+        documentAssetId: {type: [string, 'null']}
+    OnboardingServiceLicence:
+      type: object
+      required: [serviceName, regulated, licenceNumber, issuingState, expiresOn, documentAssetId]
+      properties:
+        serviceName: {type: string}
+        regulated: {type: boolean}
+        licenceNumber: {type: [string, 'null']}
+        issuingState: {type: [string, 'null']}
+        expiresOn: {type: [string, 'null'], format: date}
+        documentAssetId: {type: [string, 'null']}
     OnboardingForm:
       type: object
       description: |
-        The answers to the wizard's first two steps (S286). `prefilled` lists the fields filled in from the account
-        and still unchanged: business.contactEmail, business.phone, business.storeName, details.legalFirstName,
-        details.legalLastName, details.address.
-      required: [business, details, prefilled, editable]
+        Every answer of the wizard (S286, S289). `prefilled` lists the fields filled in from the account and still
+        unchanged: business.contactEmail, business.phone, business.storeName, details.legalFirstName,
+        details.legalLastName, details.address. The tax ID and bank numbers are never returned (masked / last 4).
+      required: [business, details, owners, payouts, plan, compliance, documents, prefilled, editable]
       properties:
         business:
           type: object
@@ -1677,15 +1915,74 @@ components:
             website: {type: [string, 'null']}
         details:
           type: object
-          required: [legalFirstName, legalLastName, legalName, address]
+          required: [legalFirstName, legalLastName, legalName, dba, taxIdType, taxIdMasked, dateOfBirth, stateOfFormation, dateOfFormation, address, formationDocumentAssetId, irsDeterminationLetterAssetId]
           properties:
             legalFirstName: {type: [string, 'null']}
             legalLastName: {type: [string, 'null']}
             legalName: {type: [string, 'null'], description: Registered business name (not for sole proprietors)}
+            dba: {type: [string, 'null']}
+            taxIdType: {type: [string, 'null'], enum: [SSN, ITIN, EIN, null]}
+            taxIdMasked: {type: [string, 'null'], description: 'e.g. •••-••-6789'}
+            dateOfBirth: {type: [string, 'null'], format: date}
+            stateOfFormation: {type: [string, 'null']}
+            dateOfFormation: {type: [string, 'null'], format: date}
             address:
               oneOf:
                 - {$ref: '#/components/schemas/OnboardingAddress'}
                 - {type: 'null'}
+            formationDocumentAssetId: {type: [string, 'null']}
+            irsDeterminationLetterAssetId: {type: [string, 'null']}
+        owners: {type: array, items: {$ref: '#/components/schemas/OnboardingOwner'}}
+        payouts:
+          type: object
+          required: [accountHolderName, accountType, bankName, routingLast4, accountLast4, linked]
+          properties:
+            accountHolderName: {type: [string, 'null']}
+            accountType: {type: [string, 'null']}
+            bankName: {type: [string, 'null']}
+            routingLast4: {type: [string, 'null']}
+            accountLast4: {type: [string, 'null']}
+            linked: {type: boolean, description: Stripe accepted the account as the payout account (the step's completion)}
+        plan:
+          type: object
+          required: [planCode, planName, cadence, paymentMethodKind, cardBrand, cardLast4, cardExpMonth, cardExpYear, firstCharge]
+          properties:
+            planCode: {type: [string, 'null']}
+            planName: {type: [string, 'null']}
+            cadence: {type: [string, 'null'], enum: [MONTHLY, QUARTERLY, ANNUAL, null]}
+            paymentMethodKind: {type: [string, 'null'], enum: [CARD, US_BANK_ACCOUNT, null]}
+            cardBrand: {type: [string, 'null']}
+            cardLast4: {type: [string, 'null']}
+            cardExpMonth: {type: [integer, 'null']}
+            cardExpYear: {type: [integer, 'null']}
+            firstCharge:
+              oneOf:
+                - {$ref: '#/components/schemas/OnboardingFirstCharge'}
+                - {type: 'null'}
+        compliance:
+          type: object
+          required: [categories, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName]
+          properties:
+            categories: {type: array, items: {type: string}}
+            foodPermit:
+              oneOf:
+                - {$ref: '#/components/schemas/OnboardingFoodPermit'}
+                - {type: 'null'}
+            beautyLabellingConfirmed: {type: [boolean, 'null']}
+            services: {type: array, items: {$ref: '#/components/schemas/OnboardingServiceLicence'}}
+            insuranceDocumentAssetId: {type: [string, 'null']}
+            agreementsAccepted: {type: [boolean, 'null']}
+            w9Certified: {type: [boolean, 'null']}
+            w9SignerName: {type: [string, 'null']}
+        documents:
+          type: array
+          items:
+            type: object
+            required: [assetId, kind, label]
+            properties:
+              assetId: {type: string}
+              kind: {type: string}
+              label: {type: string}
         prefilled: {type: array, items: {type: string}}
         editable: {type: boolean, description: 'Whether the applicant can still change answers (DRAFT or INFO_REQUESTED)'}
     OnboardingBusinessInput:
@@ -1698,22 +1995,145 @@ components:
         contactEmail: {type: string, maxLength: 254}
         phone: {type: string, maxLength: 32}
         website: {type: string, maxLength: 200}
+    OnboardingAddressInput:
+      type: object
+      required: [line1, city, state, postalCode]
+      properties:
+        line1: {type: string, maxLength: 120}
+        line2: {type: string, maxLength: 120}
+        city: {type: string, maxLength: 80}
+        state: {type: string, maxLength: 2}
+        postalCode: {type: string, maxLength: 10}
+        country: {type: string, minLength: 2, maxLength: 2}
     OnboardingDetailsInput:
       type: object
       properties:
         legalFirstName: {type: string, maxLength: 80}
         legalLastName: {type: string, maxLength: 80}
         legalName: {type: string, maxLength: 160}
-        address:
-          type: object
-          required: [line1, city, state, postalCode]
-          properties:
-            line1: {type: string, maxLength: 120}
-            line2: {type: string, maxLength: 120}
-            city: {type: string, maxLength: 80}
-            state: {type: string, maxLength: 2}
-            postalCode: {type: string, maxLength: 10}
-            country: {type: string, minLength: 2, maxLength: 2}
+        dba: {type: string, maxLength: 160}
+        taxId: {type: string, maxLength: 11, description: 'SSN/ITIN or EIN (write-only, encrypted at rest; omit to keep the stored one)', writeOnly: true}
+        dateOfBirth: {type: string, format: date}
+        stateOfFormation: {type: string, maxLength: 2}
+        dateOfFormation: {type: string, format: date}
+        address: {$ref: '#/components/schemas/OnboardingAddressInput'}
+        formationDocumentAssetId: {type: string}
+        irsDeterminationLetterAssetId: {type: string}
+    OnboardingOwnerInput:
+      type: object
+      properties:
+        firstName: {type: string, maxLength: 120}
+        lastName: {type: string, maxLength: 120}
+        title: {type: string, maxLength: 80}
+        email: {type: string, maxLength: 254}
+        ownershipPercent: {type: number, minimum: 0, maximum: 100}
+        significantControl: {type: boolean}
+        dateOfBirth: {type: string, format: date}
+        address: {$ref: '#/components/schemas/OnboardingAddressInput'}
+    OnboardingOwnersInput:
+      type: object
+      required: [owners]
+      properties:
+        owners: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/OnboardingOwnerInput'}}
+    OnboardingPayoutsInput:
+      type: object
+      required: [accountHolderName, accountType, routingNumber, accountNumber, accountNumberConfirmation]
+      properties:
+        accountHolderName: {type: string, maxLength: 120}
+        accountType: {type: string, enum: [checking, savings]}
+        routingNumber: {type: string, maxLength: 11, writeOnly: true}
+        accountNumber: {type: string, maxLength: 20, writeOnly: true}
+        accountNumberConfirmation: {type: string, maxLength: 20, writeOnly: true}
+    OnboardingPlanInput:
+      type: object
+      required: [planCode, cadence]
+      properties:
+        planCode: {type: string}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        paymentMethodKind: {type: string, enum: [CARD]}
+        stripePaymentMethodId: {type: string, description: pm_… from Stripe.js}
+        cardBrand: {type: string}
+        cardLast4: {type: string, pattern: '^\d{4}$'}
+        cardExpMonth: {type: integer, minimum: 1, maximum: 12}
+        cardExpYear: {type: integer}
+    OnboardingFoodPermitInput:
+      type: object
+      properties:
+        permitType: {$ref: '#/components/schemas/OnboardingFoodPermitType'}
+        permitNumber: {type: string, maxLength: 60}
+        issuingAuthority: {type: string, maxLength: 120}
+        expiresOn: {type: string, format: date}
+        documentAssetId: {type: string}
+    OnboardingServiceLicenceInput:
+      type: object
+      required: [serviceName]
+      properties:
+        serviceName: {type: string, maxLength: 80}
+        regulated: {type: boolean}
+        licenceNumber: {type: string, maxLength: 60}
+        issuingState: {type: string, maxLength: 2}
+        expiresOn: {type: string, format: date}
+        documentAssetId: {type: string}
+    OnboardingComplianceInput:
+      type: object
+      properties:
+        categories: {type: array, items: {type: string}}
+        foodPermit: {$ref: '#/components/schemas/OnboardingFoodPermitInput'}
+        beautyLabellingConfirmed: {type: boolean}
+        services: {type: array, items: {$ref: '#/components/schemas/OnboardingServiceLicenceInput'}}
+        insuranceDocumentAssetId: {type: string}
+        agreementsAccepted: {type: boolean}
+        w9Certified: {type: boolean}
+        w9SignerName: {type: string, maxLength: 120}
+    OnboardingStripeSession:
+      type: object
+      required: [accountId, clientSecret, publishableKey, expiresAt, localTest]
+      properties:
+        accountId: {type: string}
+        clientSecret: {type: string, description: Account Session client secret for Connect.js}
+        publishableKey: {type: string}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        localTest: {type: boolean, description: The seller service's local stand-in (local profile without a Stripe key only)}
+    OnboardingPlanPrice:
+      type: object
+      required: [cadence, months, totalCents, perMonthCents, savingCents, perMonthLabel, billedLabel, savingLabel, firstCharge]
+      properties:
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        months: {type: integer}
+        totalCents: {type: integer, format: int64}
+        perMonthCents: {type: integer, format: int64}
+        savingCents: {type: integer, format: int64}
+        perMonthLabel: {type: string}
+        billedLabel: {type: string}
+        savingLabel: {type: [string, 'null']}
+        firstCharge:
+          oneOf:
+            - {$ref: '#/components/schemas/OnboardingFirstCharge'}
+            - {type: 'null'}
+    OnboardingPlans:
+      type: object
+      required: [plans]
+      properties:
+        plans:
+          type: array
+          items:
+            type: object
+            required: [code, name, tagline, monthlyCents, trialDays, features, prices]
+            properties:
+              code: {type: string}
+              name: {type: string}
+              tagline: {type: [string, 'null']}
+              monthlyCents: {type: integer, format: int64}
+              trialDays: {type: integer}
+              features: {type: array, items: {type: string}}
+              prices: {type: array, items: {$ref: '#/components/schemas/OnboardingPlanPrice'}}
+    OnboardingUploadRequest:
+      type: object
+      required: [fileName, contentType, size]
+      properties:
+        fileName: {type: string, minLength: 1, maxLength: 200}
+        contentType: {type: string, enum: [application/pdf, image/jpeg, image/png, image/webp]}
+        size: {type: integer, minimum: 1, maximum: 15728640}
     ComplianceStatus: {type: string, enum: [COMPLIANT, ACTION_NEEDED, RESTRICTED_SOON, RESTRICTED, VERIFYING]}
     ComplianceSummary:
       type: object

@@ -31,6 +31,9 @@ type SellerDeps struct {
 	Fees       port.FeesClient
 	Storefront port.StorefrontClient
 	Bookings   port.BookingsClient
+	// PublishableKey is the Stripe publishable key Connect.js uses for the embedded onboarding (empty locally: the seller
+	// service's local stand-in then answers account sessions with localTest).
+	PublishableKey string
 	// InventoryAPI relays Seller Center's FBA inbound plans and lots to inventory-service with the member's token (S281).
 	InventoryAPI port.StaffUpstream
 	// Cache holds identity's module matrix per portal (not personal data).
@@ -221,6 +224,22 @@ type SellerShellService interface {
 	StartOnboarding(ctx context.Context, c *domain.Caller, kind string) (st domain.OnboardingStatus, created bool, err error)
 	SaveOnboardingBusiness(ctx context.Context, c *domain.Caller, in domain.OnboardingBusinessInput) (domain.OnboardingStatus, error)
 	SaveOnboardingDetails(ctx context.Context, c *domain.Caller, in domain.OnboardingDetailsInput) (domain.OnboardingStatus, error)
+	SaveOnboardingOwners(ctx context.Context, c *domain.Caller, in domain.OnboardingOwnersInput) (domain.OnboardingStatus, error)
+	SaveOnboardingPayouts(ctx context.Context, c *domain.Caller, in domain.OnboardingPayoutsInput) (domain.OnboardingStatus, error)
+	SaveOnboardingPlan(ctx context.Context, c *domain.Caller, in domain.OnboardingPlanInput) (domain.OnboardingStatus, error)
+	SaveOnboardingCompliance(ctx context.Context, c *domain.Caller, in domain.OnboardingComplianceInput) (domain.OnboardingStatus, error)
+	// OnboardingStripeSession is the Account Session for Stripe's embedded Connect onboarding.
+	OnboardingStripeSession(ctx context.Context, c *domain.Caller) (domain.OnboardingStripeSession, error)
+	// RefreshOnboardingStripe re-reads the verification results from Stripe.
+	RefreshOnboardingStripe(ctx context.Context, c *domain.Caller) (domain.OnboardingStatus, error)
+	// SubmitOnboarding sends the application to AfroTransact staff review.
+	SubmitOnboarding(ctx context.Context, c *domain.Caller) (domain.OnboardingStatus, error)
+	// OnboardingPlans lists the plans of the application's kind with prices and first charges.
+	OnboardingPlans(ctx context.Context, c *domain.Caller) (domain.OnboardingPlans, error)
+	// OnboardingUpload signs a private upload (media purpose kyc-document) for a permit, licence or formation document.
+	OnboardingUpload(ctx context.Context, c *domain.Caller, fileName, contentType string, size int64) (domain.UploadTicket, error)
+	// CompleteOnboardingUpload finalises an uploaded document.
+	CompleteOnboardingUpload(ctx context.Context, c *domain.Caller, assetID string) (domain.Asset, error)
 	Compliance(ctx context.Context, c *domain.Caller) (domain.ComplianceSummary, error)
 }
 
@@ -357,96 +376,6 @@ func (s *sellerShellImpl) badges(ctx context.Context, c *domain.Caller, sc selle
 		})
 	}
 	wg.Wait()
-	return out
-}
-
-var onboardingSteps = []struct{ key, label string }{
-	{"ACCOUNT", "Account & email verified"}, {"BUSINESS", "Business details & TIN"}, {"OWNERS", "Owners"},
-	{"STRIPE", "Stripe verification"}, {"PAYOUTS", "Payouts"}, {"PLAN", "Plan"}, {"COMPLIANCE", "Catalog, permits & licences"},
-	{"REVIEW", "AfroTransact staff review"},
-}
-
-// sellerStepLabels names the seller service's wizard steps (business, business-details, …; normalised to upper case
-// with underscores). "review" is not listed: the staff review row is always appended last.
-var sellerStepLabels = map[string]string{
-	"BUSINESS": "Your business", "BUSINESS_DETAILS": "Business details & TIN", "STRIPE_VERIFICATION": "Stripe verification",
-	"CATALOG_COMPLIANCE": "Catalog, permits & licences",
-}
-
-func stepKey(k string) string {
-	return strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(k), "-", "_"))
-}
-
-func (s *sellerShellImpl) Onboarding(ctx context.Context, c *domain.Caller) (domain.OnboardingStatus, error) {
-	if err := requireCustomer(c); err != nil {
-		return domain.OnboardingStatus{}, err
-	}
-	a, err := s.r.d.Sellers.Application(ctx, c.BearerToken)
-	if err != nil {
-		return domain.OnboardingStatus{}, mapErr("seller", err)
-	}
-	return onboardingStatus(a), nil
-}
-
-// onboardingStatus is the checklist and the wizard form of an application.
-func onboardingStatus(a port.SellerApplication) domain.OnboardingStatus {
-	status := orgStatus(a.Status)
-	labels := map[string]string{}
-	for _, st := range onboardingSteps {
-		labels[st.key] = st.label
-	}
-	// The seller service's own step keys (business-details, …) take their labels when it sends them.
-	if len(a.Steps) > 0 {
-		for k, v := range sellerStepLabels {
-			labels[k] = v
-		}
-	}
-	keys := a.Steps
-	if len(keys) == 0 {
-		for _, st := range onboardingSteps[:7] {
-			keys = append(keys, st.key)
-		}
-	}
-	done := map[string]bool{}
-	for _, k := range a.CompletedSteps {
-		done[stepKey(k)] = true
-	}
-	out := domain.OnboardingStatus{OrgID: a.OrgID, Kind: normalizeKind(a.Kind), Status: status, Reference: strPtr(a.Reference),
-		Steps: []domain.OnboardingStep{}, RequestedItems: append([]string{}, a.RequestedItems...),
-		CanResume: status == "DRAFT" || status == "INFO_REQUESTED", Form: onboardingForm(a, status)}
-	if out.Kind == "" {
-		out.Kind = domain.OrgKindSeller
-	}
-	for _, k := range keys {
-		ku := stepKey(k)
-		if ku == "REVIEW" {
-			continue // appended below
-		}
-		label := labels[ku]
-		if label == "" {
-			label = strings.ToUpper(ku[:1]) + strings.ToLower(strings.ReplaceAll(ku[1:], "_", " "))
-		}
-		state := "TODO"
-		switch {
-		case status == domain.OrgApproved || done[ku]:
-			state = "DONE"
-		case status == "INFO_REQUESTED" && strings.EqualFold(k, a.CurrentStep):
-			state = "ACTION"
-		}
-		out.Steps = append(out.Steps, domain.OnboardingStep{Key: ku, Label: label, State: state})
-	}
-	review := "TODO"
-	switch status {
-	case domain.OrgApproved:
-		review = "DONE"
-	case "REJECTED", "SUSPENDED":
-		review = "BLOCKED"
-	case "PENDING_REVIEW", "FLAGGED", "AWAITING_FINAL_APPROVAL":
-		review = "WAITING"
-	case "INFO_REQUESTED":
-		review = "ACTION"
-	}
-	out.Steps = append(out.Steps, domain.OnboardingStep{Key: "REVIEW", Label: labels["REVIEW"], State: review})
 	return out
 }
 

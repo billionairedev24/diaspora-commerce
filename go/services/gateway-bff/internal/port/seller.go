@@ -139,9 +139,146 @@ type SellerApplication struct {
 	CompletedSteps []string `json:"completedSteps"`
 	RequestedItems []string `json:"requestedItems"`
 	// PrefilledFields lists answers taken from the account and still unchanged (business.phone, …).
-	PrefilledFields []string                  `json:"prefilledFields"`
-	Business        *SellerApplicationBiz     `json:"business"`
-	BusinessDetails *SellerApplicationDetails `json:"businessDetails"`
+	PrefilledFields []string                     `json:"prefilledFields"`
+	Business        *SellerApplicationBiz        `json:"business"`
+	BusinessDetails *SellerApplicationDetails    `json:"businessDetails"`
+	Owners          []SellerApplicationOwner     `json:"owners"`
+	Stripe          *SellerApplicationStripe     `json:"stripe"`
+	Payouts         *SellerApplicationPayouts    `json:"payouts"`
+	Plan            *SellerApplicationPlan       `json:"plan"`
+	Compliance      *SellerApplicationCompliance `json:"compliance"`
+	Documents       []SellerApplicationDocument  `json:"documents"`
+	SubmittedAt     *time.Time                   `json:"submittedAt"`
+	Timeline        []SellerApplicationEvent     `json:"timeline"`
+}
+
+// SellerApplicationOwner is seller's OwnerView (and Owner when saving).
+type SellerApplicationOwner struct {
+	FirstName          string        `json:"firstName,omitempty"`
+	LastName           string        `json:"lastName,omitempty"`
+	Title              string        `json:"title,omitempty"`
+	Email              string        `json:"email,omitempty"`
+	OwnershipPercent   *float64      `json:"ownershipPercent,omitempty"`
+	SignificantControl bool          `json:"significantControl"`
+	DateOfBirth        string        `json:"dateOfBirth,omitempty"`
+	Address            *SellerPostal `json:"address,omitempty"`
+}
+
+// SellerApplicationStripe is seller's StripeVerification (results only; never ID images or tax numbers).
+type SellerApplicationStripe struct {
+	AccountID        string   `json:"accountId"`
+	DetailsSubmitted bool     `json:"detailsSubmitted"`
+	ChargesEnabled   bool     `json:"chargesEnabled"`
+	PayoutsEnabled   bool     `json:"payoutsEnabled"`
+	IdentityStatus   string   `json:"identityStatus"`
+	TaxIDStatus      string   `json:"taxIdStatus"`
+	CurrentlyDue     []string `json:"currentlyDue"`
+	DisabledReason   string   `json:"disabledReason"`
+}
+
+// SellerApplicationPayouts is seller's PayoutSection.
+type SellerApplicationPayouts struct {
+	AccountHolderName     string `json:"accountHolderName"`
+	AccountType           string `json:"accountType"`
+	BankName              string `json:"bankName"`
+	RoutingLast4          string `json:"routingLast4"`
+	AccountLast4          string `json:"accountLast4"`
+	ExternalAccountLinked bool   `json:"externalAccountLinked"`
+}
+
+// SellerFirstCharge is seller's FirstCharge.
+type SellerFirstCharge struct {
+	ChargeOn    string `json:"chargeOn"`
+	AmountCents int64  `json:"amountCents"`
+	Sentence    string `json:"sentence"`
+}
+
+// SellerApplicationPlan is seller's PlanSelection.
+type SellerApplicationPlan struct {
+	PlanCode          string             `json:"planCode"`
+	PlanName          string             `json:"planName"`
+	Cadence           string             `json:"cadence"`
+	PaymentMethodKind string             `json:"paymentMethodKind"`
+	CardBrand         string             `json:"cardBrand"`
+	CardLast4         string             `json:"cardLast4"`
+	CardExpMonth      *int               `json:"cardExpMonth"`
+	CardExpYear       *int               `json:"cardExpYear"`
+	FirstCharge       *SellerFirstCharge `json:"firstCharge"`
+}
+
+// SellerFoodPermit is seller's FoodPermit.
+type SellerFoodPermit struct {
+	PermitType       string `json:"permitType,omitempty"`
+	PermitNumber     string `json:"permitNumber,omitempty"`
+	IssuingAuthority string `json:"issuingAuthority,omitempty"`
+	ExpiresOn        string `json:"expiresOn,omitempty"`
+	DocumentAssetID  string `json:"documentAssetId,omitempty"`
+}
+
+// SellerServiceLicence is seller's ServiceLicence.
+type SellerServiceLicence struct {
+	ServiceName     string `json:"serviceName"`
+	Regulated       bool   `json:"regulated"`
+	LicenceNumber   string `json:"licenceNumber,omitempty"`
+	IssuingState    string `json:"issuingState,omitempty"`
+	ExpiresOn       string `json:"expiresOn,omitempty"`
+	DocumentAssetID string `json:"documentAssetId,omitempty"`
+}
+
+// SellerApplicationCompliance is seller's ComplianceSection (CatalogComplianceStep when saving).
+type SellerApplicationCompliance struct {
+	Categories               []string               `json:"categories"`
+	FoodPermit               *SellerFoodPermit      `json:"foodPermit,omitempty"`
+	BeautyLabellingConfirmed *bool                  `json:"beautyLabellingConfirmed,omitempty"`
+	Services                 []SellerServiceLicence `json:"services"`
+	InsuranceDocumentAssetID string                 `json:"insuranceDocumentAssetId,omitempty"`
+	AgreementsAccepted       *bool                  `json:"agreementsAccepted,omitempty"`
+	W9Certified              *bool                  `json:"w9Certified,omitempty"`
+	W9SignerName             string                 `json:"w9SignerName,omitempty"`
+}
+
+// SellerApplicationDocument is seller's DocumentRef.
+type SellerApplicationDocument struct {
+	AssetID string `json:"assetId"`
+	Kind    string `json:"kind"`
+	Label   string `json:"label"`
+}
+
+// SellerApplicationEvent is seller's TimelineEntry.
+type SellerApplicationEvent struct {
+	Action     string    `json:"action"`
+	ToStatus   string    `json:"toStatus"`
+	Note       string    `json:"note"`
+	OccurredAt time.Time `json:"occurredAt"`
+}
+
+// SellerAccountSession is seller's AccountSession.
+type SellerAccountSession struct {
+	AccountID    string     `json:"accountId"`
+	ClientSecret string     `json:"clientSecret"`
+	ExpiresAt    *time.Time `json:"expiresAt"`
+	LocalTest    bool       `json:"localTest"`
+}
+
+// SellerApplicationPayoutsStep is seller's PayoutsStep.
+type SellerApplicationPayoutsStep struct {
+	AccountHolderName         string `json:"accountHolderName,omitempty"`
+	AccountType               string `json:"accountType,omitempty"`
+	RoutingNumber             string `json:"routingNumber,omitempty"`
+	AccountNumber             string `json:"accountNumber,omitempty"`
+	AccountNumberConfirmation string `json:"accountNumberConfirmation,omitempty"`
+}
+
+// SellerApplicationPlanStep is seller's PlanStep.
+type SellerApplicationPlanStep struct {
+	PlanCode              string `json:"planCode,omitempty"`
+	Cadence               string `json:"cadence,omitempty"`
+	PaymentMethodKind     string `json:"paymentMethodKind,omitempty"`
+	StripePaymentMethodID string `json:"stripePaymentMethodId,omitempty"`
+	CardBrand             string `json:"cardBrand,omitempty"`
+	CardLast4             string `json:"cardLast4,omitempty"`
+	CardExpMonth          *int   `json:"cardExpMonth,omitempty"`
+	CardExpYear           *int   `json:"cardExpYear,omitempty"`
 }
 
 // SellerApplicationBiz is seller's BusinessSection (step "business").
@@ -155,13 +292,16 @@ type SellerApplicationBiz struct {
 	Website      string `json:"website,omitempty"`
 }
 
-// SellerApplicationDetails is the part of seller's BusinessDetails the wizard edits, plus the fields it carries over
-// unchanged when saving (the step replaces the whole section).
+// SellerApplicationDetails is seller's BusinessDetails (BusinessDetailsStep when saving: TaxID is write-only, empty
+// keeps the stored one; TaxIDMasked and TaxIDType are read-only).
 type SellerApplicationDetails struct {
 	LegalFirstName                string        `json:"legalFirstName,omitempty"`
 	LegalLastName                 string        `json:"legalLastName,omitempty"`
 	LegalName                     string        `json:"legalName,omitempty"`
 	DBA                           string        `json:"dba,omitempty"`
+	TaxID                         string        `json:"taxId,omitempty"`
+	TaxIDType                     string        `json:"taxIdType,omitempty"`
+	TaxIDMasked                   string        `json:"taxIdMasked,omitempty"`
 	DateOfBirth                   string        `json:"dateOfBirth,omitempty"`
 	StateOfFormation              string        `json:"stateOfFormation,omitempty"`
 	DateOfFormation               string        `json:"dateOfFormation,omitempty"`
@@ -215,14 +355,15 @@ type AccountHealth struct {
 
 // SellerPlanPrice is seller's PlanPrice (cents).
 type SellerPlanPrice struct {
-	Cadence       string `json:"cadence"`
-	Months        int    `json:"months"`
-	TotalCents    int64  `json:"totalCents"`
-	PerMonthCents int64  `json:"perMonthCents"`
-	SavingCents   int64  `json:"savingCents"`
-	PerMonthLabel string `json:"perMonthLabel"`
-	BilledLabel   string `json:"billedLabel"`
-	SavingLabel   string `json:"savingLabel"`
+	Cadence       string             `json:"cadence"`
+	Months        int                `json:"months"`
+	TotalCents    int64              `json:"totalCents"`
+	PerMonthCents int64              `json:"perMonthCents"`
+	SavingCents   int64              `json:"savingCents"`
+	PerMonthLabel string             `json:"perMonthLabel"`
+	BilledLabel   string             `json:"billedLabel"`
+	SavingLabel   string             `json:"savingLabel"`
+	FirstCharge   *SellerFirstCharge `json:"firstCharge"`
 }
 
 // SellerPlan is seller's Plan.
@@ -373,6 +514,13 @@ type SellerServiceClient interface {
 	StartApplication(ctx context.Context, bearer, kind string, prefill ApplicationPrefill) (a SellerApplication, created bool, err error)
 	// SaveApplicationStep autosaves one wizard step (seller PUT /v1/applications/me/steps/{step}).
 	SaveApplicationStep(ctx context.Context, bearer, step string, body any) (SellerApplication, error)
+	// ApplicationStripeSession creates the connected account on first use and an Account Session for Stripe's
+	// embedded onboarding (seller POST /v1/applications/me/stripe/account-session).
+	ApplicationStripeSession(ctx context.Context, bearer string) (SellerAccountSession, error)
+	// RefreshApplicationStripe re-reads the verification results from Stripe (POST …/stripe/refresh).
+	RefreshApplicationStripe(ctx context.Context, bearer string) (SellerApplication, error)
+	// SubmitApplication validates every step and sends the application to staff review (POST …/submit).
+	SubmitApplication(ctx context.Context, bearer string) (SellerApplication, error)
 	AccountHealth(ctx context.Context, bearer, orgID string) (AccountHealth, error)
 	Billing(ctx context.Context, bearer, orgID string) (SellerBilling, error)
 	Invoices(ctx context.Context, bearer, orgID string) ([]SellerInvoice, error)

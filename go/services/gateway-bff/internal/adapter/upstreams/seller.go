@@ -159,6 +159,24 @@ func (s *sellerServiceImpl) SaveApplicationStep(ctx context.Context, bearer, ste
 	return a, err
 }
 
+func (s *sellerServiceImpl) ApplicationStripeSession(ctx context.Context, bearer string) (port.SellerAccountSession, error) {
+	var out port.SellerAccountSession
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/account-session", Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) RefreshApplicationStripe(ctx context.Context, bearer string) (port.SellerApplication, error) {
+	var a port.SellerApplication
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/refresh", Bearer: bearer}, &a)
+	return a, err
+}
+
+func (s *sellerServiceImpl) SubmitApplication(ctx context.Context, bearer string) (port.SellerApplication, error) {
+	var a port.SellerApplication
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/submit", Bearer: bearer}, &a)
+	return a, err
+}
+
 func (s *sellerServiceImpl) AccountHealth(ctx context.Context, bearer, orgID string) (port.AccountHealth, error) {
 	var h port.AccountHealth
 	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/account-health"), Bearer: bearer}, &h)
