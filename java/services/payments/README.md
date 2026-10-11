@@ -396,6 +396,6 @@ helm template x java/services/payments/deploy/helm -f java/services/payments/dep
 tools/contracts/export_java_openapi.sh payments payments 8105   # after mvn package
 ```
 
-Integration tests run PostgreSQL (`postgis/postgis:17-3.5`) and an in-JVM WireMock standing in for Stripe; they
+Integration tests run PostgreSQL (`imresamu/postgis:17-3.5.4-alpine3.22`) and an in-JVM WireMock standing in for Stripe; they
 assert the exact Stripe requests (amounts, idempotency keys, `transfer_group`, `Stripe-Account`), sign webhooks with
 a test secret, and move an injectable clock across the settlement hold.

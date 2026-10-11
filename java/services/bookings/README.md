@@ -234,7 +234,7 @@ tools/contracts/export_java_openapi.sh bookings bookings 8109
 Unit tests cover slot generation (breaks, notice, buffers, daily limit, overrides, horizon, DST), policy math,
 take-home / earnings under payments' or the fallback fee schedule, the state machine with its money instructions, the
 off-session job's decisions (`BalanceChargePolicyTest`) and long-dated outcomes (release, SCA, declines, flagging,
-capture on completion). Integration tests run PostgreSQL (`postgis/postgis:17-3.5`) and in-JVM WireMocks standing in
+capture on completion). Integration tests run PostgreSQL (`imresamu/postgis:17-3.5.4-alpine3.22`) and in-JVM WireMocks standing in
 for payments-service (with identity's token endpoint) and geo-service; they cover the full money flow, eight parallel
 requests for one slot (exactly one wins), the exclusion constraint itself, request / hold expiry, policy refunds,
 reschedules, price snapshots, role scoping, seller compliance hide/restore, release after the deposit capture

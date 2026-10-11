@@ -67,7 +67,7 @@ Rules of thumb
 
    | Dependency | Image | Java | Go |
    |---|---|---|---|
-   | PostgreSQL 17 (+PostGIS) | `postgis/postgis:17-3.5` | `PostgresTestContainer.create()` | `testcontainers.Run(ctx, "postgis/postgis:17-3.5", …)` |
+   | PostgreSQL 17 (+PostGIS) | `imresamu/postgis:17-3.5.4-alpine3.22` | `PostgresTestContainer.create()` | `testcontainers.Run(ctx, "imresamu/postgis:17-3.5.4-alpine3.22", …)` |
    | Kafka (KRaft) | `apache/kafka:4.1.0` | `new KafkaContainer("apache/kafka:4.1.0")` | — |
    | Valkey | `valkey/valkey:8.1-alpine` | — | yes |
    | Elasticsearch | `elasticsearch:9.3.0` (`xpack.security.enabled=false`, 512 MB heap) | — | yes |

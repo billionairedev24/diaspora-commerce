@@ -274,7 +274,7 @@ GOTOOLCHAIN=go1.27.2 GOWORK=off go vet ./... && GOWORK=off go test ./...   # Doc
 GOWORK=off golangci-lint run --config ../../.golangci.yml ./...
 ```
 
-The Postgres integration test (testcontainers) uses `postgis/postgis:17-3.5` (override with
+The Postgres integration test (testcontainers) uses `imresamu/postgis:17-3.5.4-alpine3.22` (override with
 `NOTIFICATIONS_TEST_PG_IMAGE`; skip with `-short` or `SKIP_DOCKER_TESTS=1`). It covers migrations, seeded templates
 and versioning, idempotent submit, inbox de-duplication, `SKIP LOCKED` claiming across workers, retry with
 backoff → dead letter → replay, TCPA consent with STOP/START, quiet hours, OTP bypass, receipts that never move
@@ -288,7 +288,7 @@ supplier without identity, attachment reference stored, PDF attached by the disp
 `make template-gallery` (repo root; Docker needed, or `ARGS=--dsn=postgres://…` for a database it may migrate) writes
 `build/template-gallery/index.html` (gitignored): one self-contained page with the latest version of every seeded key,
 locale and channel. `cmd/template-gallery` runs the real migrations against a throwaway Testcontainers Postgres
-(`postgis/postgis:17-3.5`, `--image` or `NOTIFICATIONS_TEST_PG_IMAGE` to override), renders with the real `Renderer`
+(`imresamu/postgis:17-3.5.4-alpine3.22`, `--image` or `NOTIFICATIONS_TEST_PG_IMAGE` to override), renders with the real `Renderer`
 and takes sample data from `app.NewTemplateSamples`: the contract-shaped producer fixtures in
 `internal/app/samples_fixtures.go` (`SampleEvents`, `SampleRequests`) run through the real ingest, so each template
 gets exactly the fields its rule's `Enrich` derives, plus `SampleData` for keys no event maps to (`booking.reminder`,

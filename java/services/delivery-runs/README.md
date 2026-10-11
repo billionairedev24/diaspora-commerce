@@ -182,7 +182,7 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
 
 - Unit: `RunLifecycleTest` (state machine, edits, reminders), `CutoffPolicyTest`, `CapacityTest`, `EconomicsTest`,
   `SubscriptionTest`, `HttpGeoClientTest` (geo contract on WireMock), `ArchitectureTest`.
-- ITs (local `postgis/postgis:17-3.5` and `apache/kafka:4.1.0` images): `RunFlowIT` (slots, roll-over, cutoff job
+- ITs (local `imresamu/postgis:17-3.5.4-alpine3.22` and `apache/kafka:4.1.0` images): `RunFlowIT` (slots, roll-over, cutoff job
   confirm / extend / cancel, concurrent replicas, outbox payloads), `SubscriptionIT` (double opt-in, consent log,
   counts, audience), `HttpApiIT` (HTTP API and problems), `OutboxRelayIT` (events on `at.delivery-runs.events`).
 

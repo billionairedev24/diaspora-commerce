@@ -29,7 +29,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/config"
 )
 
-const defaultImage = "postgis/postgis:17-3.5"
+const defaultImage = "imresamu/postgis:17-3.5.4-alpine3.22"
 
 type options struct {
 	out, dsn, image, repo, env string

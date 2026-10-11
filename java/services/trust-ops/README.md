@@ -199,7 +199,7 @@ cd java && ./mvnw -B -f services/trust-ops/pom.xml verify    # checkstyle, unit,
 ./mvnw -f services/trust-ops/pom.xml spring-boot:run         # http://localhost:8110/docs
 ```
 
-Integration tests run against `postgis/postgis:17-3.5` with one WireMock standing in for identity's token endpoint,
+Integration tests run against `imresamu/postgis:17-3.5.4-alpine3.22` with one WireMock standing in for identity's token endpoint,
 catalog, bookings, payments, seller, offers and ai-gateway; Kafka listeners and jobs are called directly
 (`ReviewModerationIT` and `ListenersIT` cover S243). Migrations:
 `V1__trustops_schema.sql`, `V2__live_listings_and_seller_suspension.sql` (moderation item type and report fields;

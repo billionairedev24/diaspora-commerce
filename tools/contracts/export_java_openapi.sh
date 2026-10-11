@@ -10,7 +10,7 @@ jar=$(ls "$root"/java/services/"$svc"/target/*-service-*.jar | grep -v plain | h
 name="openapi-export-$svc-$$"
 pgport=$((20000 + RANDOM % 20000)); appport=$((40000 + RANDOM % 20000))
 docker run -d --rm --name "$name" -e POSTGRES_USER="$db" -e POSTGRES_PASSWORD="$db" -e POSTGRES_DB="$db" \
-  -p "$pgport:5432" postgis/postgis:17-3.5 >/dev/null
+  -p "$pgport:5432" imresamu/postgis:17-3.5.4-alpine3.22 >/dev/null
 trap 'kill "${pid:-0}" 2>/dev/null || true; docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 60); do docker exec "$name" pg_isready -U "$db" >/dev/null 2>&1 && break; sleep 1; done
 sleep 2

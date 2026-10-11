@@ -25,7 +25,7 @@ import (
 )
 
 // The platform's local Postgres image (PostgreSQL 17); override with NOTIFICATIONS_TEST_PG_IMAGE.
-const defaultImage = "postgis/postgis:17-3.5"
+const defaultImage = "imresamu/postgis:17-3.5.4-alpine3.22"
 
 var discard = slog.New(slog.NewTextHandler(io.Discard, nil))
 

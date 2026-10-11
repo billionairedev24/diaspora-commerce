@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// postgisPool starts one local postgis/postgis:17-3.5 container for the package (Docker Hub is never needed).
+// postgisPool starts one local imresamu/postgis:17-3.5.4-alpine3.22 container for the package (Docker Hub is never needed).
 func postgisPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	testdocker.Require(t)
@@ -37,7 +37,7 @@ func postgisPool(t *testing.T) *pgxpool.Pool {
 		return sharedPool
 	}
 	ctx := context.Background()
-	ctr, err := testcontainers.Run(ctx, "postgis/postgis:17-3.5",
+	ctr, err := testcontainers.Run(ctx, "imresamu/postgis:17-3.5.4-alpine3.22",
 		testcontainers.WithEnv(map[string]string{"POSTGRES_USER": "geo", "POSTGRES_PASSWORD": "geo", "POSTGRES_DB": "geo"}),
 		testcontainers.WithExposedPorts("5432/tcp"),
 		testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").

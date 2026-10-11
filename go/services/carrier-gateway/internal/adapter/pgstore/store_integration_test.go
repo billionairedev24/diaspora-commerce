@@ -26,7 +26,7 @@ func startPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 	testdocker.Require(t)
 	ctx := context.Background()
-	ctr, err := testcontainers.Run(ctx, "postgis/postgis:17-3.5",
+	ctr, err := testcontainers.Run(ctx, "imresamu/postgis:17-3.5.4-alpine3.22",
 		testcontainers.WithEnv(map[string]string{"POSTGRES_USER": "carriers", "POSTGRES_PASSWORD": "carriers", "POSTGRES_DB": "carriers"}),
 		testcontainers.WithExposedPorts("5432/tcp"),
 		testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").

@@ -94,7 +94,9 @@ services:
 
   # ======================================== data ========================================
   postgres:
-    image: postgis/postgis:17-3.5
+    # The PostGIS maintainer's multi-arch build: postgis/postgis has no arm64 image (Apple Silicon). Same image in every
+    # Testcontainers suite (PostgresTestContainer, Go *_integration_test.go).
+    image: imresamu/postgis:17-3.5.4-alpine3.22
     <<: [*restart, *logging]
     environment:
       POSTGRES_USER: postgres
