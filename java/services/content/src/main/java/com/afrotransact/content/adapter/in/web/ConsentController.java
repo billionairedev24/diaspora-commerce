@@ -52,12 +52,14 @@ class ConsentController {
     record ConsentRequest(@Schema(description = "Anonymous device id or user id") String subject,
                           @Schema(description = "Choice per category key") Map<String, Boolean> categories,
                           @Schema(description = "Global Privacy Control (also read from the Sec-GPC header)") Boolean gpc,
+                          @Schema(description = "Do not sell or share my personal information (implied by GPC); "
+                                  + "turns GPC-locked categories off") Boolean saleOptOut,
                           @Schema(description = "banner, preferences, privacy-choices, app or gpc") String source) {
     }
 
     @Schema(name = "ConsentRecord")
-    record ConsentResponse(UUID id, Map<String, Boolean> categories, boolean gpc, String policyVersion,
-                           Instant recordedAt) {
+    record ConsentResponse(UUID id, Map<String, Boolean> categories, boolean gpc, boolean saleOptOut,
+                           String policyVersion, Instant recordedAt) {
     }
 
     @Schema(name = "CookieCategoryRequest")
@@ -81,15 +83,16 @@ class ConsentController {
                         p.cookies()));
     }
 
-    @Operation(summary = "Store a consent decision (required categories forced on; GPC forces advertising off)")
+    @Operation(summary = "Store a consent decision (required categories forced on; GPC or a sale/sharing opt-out forces advertising off)")
     @SecurityRequirements
     @PostMapping("/records")
     @ResponseStatus(HttpStatus.CREATED)
     ConsentResponse record(@RequestBody ConsentRequest body,
                            @RequestHeader(name = "Sec-GPC", required = false) String secGpc) {
         boolean gpc = Boolean.TRUE.equals(body.gpc()) || "1".equals(secGpc);
-        ConsentRecord r = consent.record(body.subject(), body.categories(), gpc, body.source());
-        return new ConsentResponse(r.id(), r.categories(), r.gpc(), r.policyVersion(), r.recordedAt());
+        ConsentRecord r = consent.record(body.subject(), body.categories(), gpc, Boolean.TRUE.equals(body.saleOptOut()),
+                body.source());
+        return new ConsentResponse(r.id(), r.categories(), r.gpc(), r.saleOptOut(), r.policyVersion(), r.recordedAt());
     }
 
     @Operation(summary = "Create or change a cookie category (content:legal.edit)")

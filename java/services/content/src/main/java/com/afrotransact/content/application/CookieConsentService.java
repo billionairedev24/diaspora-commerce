@@ -13,8 +13,11 @@ public interface CookieConsentService {
 
     CookiePolicy policy();
 
-    /** Normalises and stores a decision (required on, GPC-locked off); returns the stored record. */
-    ConsentRecord record(String subject, Map<String, Boolean> choices, boolean gpc, String source);
+    /**
+     * Normalises and stores a decision: required categories on; GPC-locked categories off when the browser sends
+     * Global Privacy Control or the visitor opts out of sale and sharing (GPC implies that opt-out). Returns the record.
+     */
+    ConsentRecord record(String subject, Map<String, Boolean> choices, boolean gpc, boolean saleOptOut, String source);
 
     CookieCategory saveCategory(CookieCategory category);
 

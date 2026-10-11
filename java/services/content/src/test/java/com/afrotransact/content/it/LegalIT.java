@@ -64,7 +64,7 @@ class LegalIT extends ContentIntegrationTest {
     void cookieConsentIsStoredWithGpcRespected() {
         JsonNode policy = json(get("/v1/consent/cookie-policy"));
         assertThat(policy.get("categories").size()).isEqualTo(4);
-        assertThat(policy.get("cookies").size()).isEqualTo(8);
+        assertThat(policy.get("cookies").size()).isEqualTo(10);
         assertThat(policy.get("noticeVersion").asString()).isEqualTo("2.1");
 
         HttpResponse<String> recorded = post("/v1/consent/records",
@@ -79,7 +79,17 @@ class LegalIT extends ContentIntegrationTest {
         assertThat(r.get("policyVersion").asString()).isEqualTo("2.1");
         assertThat(jdbc.sql("select count(*) from consent_record where subject = 'device-1234567'")
                 .query(Long.class).single()).isEqualTo(1);
+        assertThat(r.get("saleOptOut").asBoolean()).isTrue();
         assertThat(post("/v1/consent/records", "{\"subject\":\"device-1234567\",\"categories\":{\"tracking\":true}}")
                 .statusCode()).isEqualTo(422);
+
+        JsonNode optedOut = json(post("/v1/consent/records", "{\"subject\":\"device-7654321\",\"categories\":"
+                + "{\"functional\":true,\"advertising\":true},\"saleOptOut\":true,\"source\":\"privacy-choices\"}"));
+        assertThat(optedOut.get("gpc").asBoolean()).isFalse();
+        assertThat(optedOut.get("saleOptOut").asBoolean()).isTrue();
+        assertThat(optedOut.get("categories").get("functional").asBoolean()).isTrue();
+        assertThat(optedOut.get("categories").get("advertising").asBoolean()).isFalse();
+        assertThat(jdbc.sql("select sale_opt_out from consent_record where subject = 'device-7654321'")
+                .query(Boolean.class).single()).isTrue();
     }
 }

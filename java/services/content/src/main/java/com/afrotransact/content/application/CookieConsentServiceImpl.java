@@ -59,7 +59,8 @@ class CookieConsentServiceImpl implements CookieConsentService {
 
     @Override
     @Transactional
-    public ConsentRecord record(String subject, Map<String, Boolean> choices, boolean gpc, String source) {
+    public ConsentRecord record(String subject, Map<String, Boolean> choices, boolean gpc, boolean saleOptOut,
+                                String source) {
         if (subject == null || !SUBJECT.matcher(subject).matches()) {
             throw new ContentRuleViolation("content.invalid-consent", "subject must be the device or user id",
                     Map.of("subject", "6-120 letters, digits or . _ : @ -"));
@@ -69,8 +70,9 @@ class CookieConsentServiceImpl implements CookieConsentService {
             throw new ContentRuleViolation("content.invalid-consent", "Unknown source " + source,
                     Map.of("source", "One of " + SOURCES));
         }
-        Map<String, Boolean> normalised = ConsentPolicy.normalise(choices, cookies.categories(), gpc);
-        ConsentRecord rec = new ConsentRecord(UUID.randomUUID(), subject, normalised, gpc,
+        boolean optOut = saleOptOut || gpc;
+        Map<String, Boolean> normalised = ConsentPolicy.normalise(choices, cookies.categories(), optOut);
+        ConsentRecord rec = new ConsentRecord(UUID.randomUUID(), subject, normalised, gpc, optOut,
                 notice().version().toString(), src, Instant.now(clock));
         cookies.insertConsent(rec);
         return rec;

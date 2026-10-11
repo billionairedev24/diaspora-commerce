@@ -31,6 +31,8 @@ tags:
   description: 'Seller campaigns: CPC bids, budgets, targeting, reports (S127)'
 - name: Markets
   description: 'Published markets: eligibility for checkout and onboarding, country pickers, launch lists'
+- name: Privacy requests
+  description: 'Your Privacy Choices: access, delete, correct and opt-out requests, answered within 45 days'
 - name: Careers
   description: Open roles, applications and role management
 - name: Markets (back office)
@@ -598,7 +600,7 @@ paths:
     post:
       tags:
       - Cookie consent
-      summary: Store a consent decision (required categories forced on; GPC forces advertising off)
+      summary: Store a consent decision (required categories forced on; GPC or a sale/sharing opt-out forces advertising off)
       operationId: record
       parameters:
       - name: Sec-GPC
@@ -1463,6 +1465,90 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Placement'
+  /v1/privacy/requests:
+    get:
+      tags:
+      - Privacy requests
+      summary: Privacy requests, newest first (content:legal.view)
+      operationId: listPrivacyRequests
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrivacyRequestRecord'
+    post:
+      tags:
+      - Privacy requests
+      summary: Submit a privacy request (anyone; a signed-in caller's account is attached)
+      operationId: submitPrivacyRequest
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivacyRequestSubmission'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestReceipt'
+      security: []
+  /v1/privacy/requests/{reference}:
+    get:
+      tags:
+      - Privacy requests
+      summary: One privacy request (content:legal.view)
+      operationId: getPrivacyRequest
+      parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestRecord'
+  /v1/privacy/requests/{reference}/resolution:
+    post:
+      tags:
+      - Privacy requests
+      summary: Complete or deny a received request; a denial needs a reason (content:legal.edit)
+      operationId: resolvePrivacyRequest
+      parameters:
+      - name: reference
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrivacyRequestResolution'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PrivacyRequestRecord'
   /v1/site-config:
     get:
       tags:
@@ -2179,6 +2265,116 @@ components:
           type: boolean
           description: 'AfroTransact Retail campaign: the budget is an internal pacing cap and the spend is a notional cost,
             never billed'
+    PrivacyRequestSubmission:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - access
+          - delete
+          - correct
+          - optout
+        email:
+          type: string
+          description: Email on the requester's account
+        state:
+          type: string
+          description: US state of residence (two letters, DC included)
+          example: TX
+        details:
+          type: string
+          description: Optional details, up to 2000 characters
+        locale:
+          type: string
+          example: en
+    PrivacyRequestReceipt:
+      type: object
+      properties:
+        reference:
+          type: string
+          example: PR-100001
+        type:
+          type: string
+          enum:
+          - access
+          - delete
+          - correct
+          - optout
+        status:
+          type: string
+          enum:
+          - RECEIVED
+          - COMPLETED
+          - DENIED
+        submittedAt:
+          type: string
+          format: date-time
+        dueAt:
+          type: string
+          format: date-time
+          description: Response deadline (45 days)
+    PrivacyRequestResolution:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum:
+          - COMPLETED
+          - DENIED
+        note:
+          type: string
+          description: What was done, or why the request is denied (required to deny)
+    PrivacyRequestRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+          example: PR-100001
+        type:
+          type: string
+          enum:
+          - access
+          - delete
+          - correct
+          - optout
+        email:
+          type: string
+        state:
+          type: string
+        details:
+          type: string
+        accountSubject:
+          type: string
+          description: Account id when the requester was signed in
+        locale:
+          type: string
+        status:
+          type: string
+          enum:
+          - RECEIVED
+          - COMPLETED
+          - DENIED
+        overdue:
+          type: boolean
+        resolutionNote:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+        dueAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+        resolvedBy:
+          type: string
+        version:
+          type: integer
+          format: int64
     RejectPlacementRequest:
       type: object
       properties:
@@ -2451,6 +2647,9 @@ components:
         gpc:
           type: boolean
           description: Global Privacy Control (also read from the Sec-GPC header)
+        saleOptOut:
+          type: boolean
+          description: Do not sell or share my personal information (implied by GPC); turns GPC-locked categories off
         source:
           type: string
           description: banner, preferences, privacy-choices, app or gpc
@@ -2465,6 +2664,8 @@ components:
           additionalProperties:
             type: boolean
         gpc:
+          type: boolean
+        saleOptOut:
           type: boolean
         policyVersion:
           type: string

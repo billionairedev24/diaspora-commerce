@@ -77,11 +77,12 @@ class JdbcCookieRepository implements CookieRepository {
     @Override
     public void insertConsent(ConsentRecord r) {
         jdbc.sql("""
-                insert into consent_record (id, subject, categories, gpc, policy_version, source, recorded_at)
-                values (:id, :subject, cast(:categories as jsonb), :gpc, :version, :source, :at)
+                insert into consent_record (id, subject, categories, gpc, sale_opt_out, policy_version, source,
+                    recorded_at)
+                values (:id, :subject, cast(:categories as jsonb), :gpc, :optOut, :version, :source, :at)
                 """)
                 .param("id", r.id()).param("subject", r.subject()).param("categories", json.write(r.categories()))
-                .param("gpc", r.gpc()).param("version", r.policyVersion()).param("source", r.source())
+                .param("gpc", r.gpc()).param("optOut", r.saleOptOut()).param("version", r.policyVersion()).param("source", r.source())
                 .param("at", Timestamps.of(r.recordedAt()))
                 .update();
     }
@@ -89,13 +90,14 @@ class JdbcCookieRepository implements CookieRepository {
     @Override
     public Optional<ConsentRecord> findConsent(UUID id) {
         return jdbc.sql("""
-                select id, subject, categories::text as categories, gpc, policy_version, source, recorded_at
+                select id, subject, categories::text as categories, gpc, sale_opt_out, policy_version, source,
+                       recorded_at
                 from consent_record where id = :id
                 """)
                 .param("id", id)
                 .query((rs, n) -> new ConsentRecord(rs.getObject("id", UUID.class), rs.getString("subject"),
                         json.booleanMap(rs.getString("categories")), rs.getBoolean("gpc"),
-                        rs.getString("policy_version"), rs.getString("source"), Timestamps.instant(rs, "recorded_at")))
+                        rs.getBoolean("sale_opt_out"), rs.getString("policy_version"), rs.getString("source"), Timestamps.instant(rs, "recorded_at")))
                 .optional();
     }
 }

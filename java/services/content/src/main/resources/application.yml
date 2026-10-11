@@ -113,6 +113,7 @@ at:
       - /v1/markets/launch-list
       - /v1/careers/jobs/*/applications
       - /v1/consent/records
+      - /v1/privacy/requests
       - /v1/flags/evaluate
       - /ofrep/v1/evaluate/flags
       - /ofrep/v1/evaluate/flags/*
