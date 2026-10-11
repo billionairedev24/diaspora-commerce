@@ -6,7 +6,13 @@ import { mockServer } from '@afrotransact/api-client/mocks/node';
 import { afterAll, afterEach, beforeAll, beforeEach } from 'vitest';
 
 let cookie = '';
+let extra: string[] = [];
 const realFetch = globalThis.fetch;
+
+/** Adds a cookie to every request (e.g. at_mock_stripe_pk, the mock BFF's switch to a fake Stripe key). */
+export function addCookie(nameValue: string) {
+  extra.push(nameValue);
+}
 
 export function installMockBff() {
   beforeAll(() => {
@@ -14,7 +20,8 @@ export function installMockBff() {
     const msw = globalThis.fetch;
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const req = new Request(input instanceof URL ? input.toString() : input, init);
-      if (cookie) req.headers.set('cookie', cookie);
+      const jar = [cookie, ...extra].filter(Boolean).join('; ');
+      if (jar) req.headers.set('cookie', jar);
       const res = await msw(req);
       const set = res.headers.get('set-cookie');
       if (set) cookie = set.split(';')[0] ?? '';
@@ -24,6 +31,7 @@ export function installMockBff() {
   beforeEach(() => {
     resetDb();
     cookie = '';
+    extra = [];
   });
   afterEach(() => mockServer.resetHandlers());
   afterAll(() => {

@@ -9,37 +9,13 @@ import { FormErrors } from '@/components/common/FormErrors';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { BFF_BASE_PATH } from '@/lib/config';
-import { getStripe, isMockKey, stripeAppearance,type StripeElements, type StripeInstance } from '@/lib/payments/stripe';
+import { getStripe, isMockKey, STRIPE_FONTS, stripeAppearance, type StripeElements, type StripeInstance } from '@/lib/payments/stripe';
 
+import { cardBrand, DECLINED_CARD, digits, luhn } from './mockCard';
 import styles from './Payments.module.css';
+import { StripeDevNotice } from './StripeDevNotice';
 
-/* ── Mock mode (pk_test_mock…): the storefront's own form, confirmed against the mock BFF ───────────── */
-
-const digits = (s: string) => s.replace(/\D/g, '');
-
-export function luhn(num: string): boolean {
-  const d = digits(num);
-  if (d.length < 12 || d.length > 19) return false;
-  let sum = 0;
-  for (let i = 0; i < d.length; i += 1) {
-    let n = Number(d[d.length - 1 - i]);
-    if (i % 2 === 1) n = n * 2 > 9 ? n * 2 - 9 : n * 2;
-    sum += n;
-  }
-  return sum % 10 === 0;
-}
-
-export function cardBrand(num: string): string {
-  const d = digits(num);
-  if (d.startsWith('4')) return 'visa';
-  if (/^(5[1-5]|2[2-7])/.test(d)) return 'mastercard';
-  if (/^3[47]/.test(d)) return 'amex';
-  if (/^6(011|5)/.test(d)) return 'discover';
-  return 'card';
-}
-
-/** Stripe's test card that is always declined. */
-const DECLINED = '4000000000009995';
+/* ── No Stripe key (local only): the labelled stand-in form, confirmed against the mock BFF ─────────── */
 
 async function confirmMock(clientSecret: string, body: Record<string, unknown>, failed: string): Promise<PaymentMethod> {
   const res = await fetch(`${window.location.origin}${BFF_BASE_PATH}/v1/mock-stripe/setup-intents/${encodeURIComponent(clientSecret)}/confirm`, {
@@ -69,7 +45,7 @@ function MockMethodForm({ clientSecret, onSaved }: { clientSecret: string; onSav
       const expYear = 2000 + (yy ?? 0);
       const now = new Date();
       if (!luhn(f.number)) next.number = t('pay.cardNumberInvalid');
-      else if (digits(f.number) === DECLINED) next.number = t('pay.cardDeclined');
+      else if (digits(f.number) === DECLINED_CARD) next.number = t('pay.cardDeclined');
       if (!mm || mm > 12 || !yy || expYear < now.getFullYear() || (expYear === now.getFullYear() && mm < now.getMonth() + 1)) next.exp = t('pay.expInvalid');
       if (!/^\d{3,4}$/.test(f.cvc)) next.cvc = t('pay.cvcInvalid');
       if (!/^\d{5}$/.test(f.zip)) next.zip = t('pay.zipInvalid');
@@ -94,6 +70,7 @@ function MockMethodForm({ clientSecret, onSaved }: { clientSecret: string; onSav
 
   return (
     <form className={styles.form} onSubmit={submit} noValidate data-testid="mock-payment-element">
+      <StripeDevNotice />
       <FormErrors errors={errors} ids={{ number: 'pm-number', exp: 'pm-exp', cvc: 'pm-cvc', zip: 'pm-zip', bank: 'pm-bank', routing: 'pm-routing', account: 'pm-account' }} />
       <div className={styles.tabs} role="tablist" aria-label={t('pay.methodType')}>
         <button type="button" role="tab" aria-selected={tab === 'card'} className={styles.tab} onClick={() => setTab('card')}>
@@ -147,8 +124,9 @@ function StripeSetupForm({ setup, onSaved }: { setup: SetupIntent; onSaved: () =
     getStripe(setup.publishableKey)
       .then((s) => {
         if (disposed || !mountRef.current) return;
-        const e = s.elements({ clientSecret: setup.clientSecret, appearance: stripeAppearance() });
-        const payment = e.create('payment', { layout: 'tabs', paymentMethodOrder: ['card', 'us_bank_account', 'cashapp'] });
+        // Same Payment Element and Appearance as checkout, on the SetupIntent (no amount: nothing is charged).
+        const e = s.elements({ clientSecret: setup.clientSecret, appearance: stripeAppearance(), fonts: STRIPE_FONTS });
+        const payment = e.create('payment', { layout: { type: 'tabs', defaultCollapsed: false }, paymentMethodOrder: ['card', 'us_bank_account', 'cashapp'] });
         payment.mount(mountRef.current);
         payment.on('ready', () => setReady(true));
         el = payment;

@@ -30,7 +30,7 @@ import {
 import { getDb, type MockSession } from './db';
 import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf } from './delivery';
 import { PICKUP_POINTS } from './fixtures/geo';
-import { body, type Ctx, json, problem, requireUser, route } from './http-kit';
+import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
 import { buildCart, MockProblem, sessionLocation } from './service';
@@ -38,6 +38,10 @@ import { account, type AccountState, bookingFor, MOCK_REFUND_QUOTE, type MockOrd
 
 const DEMO_CODE = '246810';
 const MOCK_PUBLISHABLE_KEY = 'pk_test_mock';
+/** Test hook (mock BFF only): a cookie that swaps the mock key for another one, so browser tests can drive the
+ *  storefront's real Stripe Elements code against a fake window.Stripe. */
+export const MOCK_STRIPE_KEY_COOKIE = 'at_mock_stripe_pk';
+const publishableKey = (ctx: Ctx) => readCookie(ctx.request, MOCK_STRIPE_KEY_COOKIE) ?? MOCK_PUBLISHABLE_KEY;
 const iso = (d: Date) => d.toISOString();
 const noContent = () => new HttpResponse(null, { status: 204 });
 const me = (ctx: Ctx) => account(requireUser(ctx).id);
@@ -153,7 +157,7 @@ function summary(ctx: Ctx, addressId: string | null): CheckoutSummary {
   const shipping = packages.reduce((s, p) => s + (p.deliveryOptions[0]?.feeMinor ?? 0), 0);
   return { packages, addresses: a.addresses, paymentMethods: a.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: 0,
     taxRateLabel: 'Calculated when you place your order', totalMinor: subtotal + shipping, currency: 'USD',
-    sellerCount: new Set(packages.map((p) => p.seller.id)).size, publishableKey: MOCK_PUBLISHABLE_KEY };
+    sellerCount: new Set(packages.map((p) => p.seller.id)).size, publishableKey: publishableKey(ctx) };
 }
 
 function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
@@ -303,7 +307,7 @@ export const shopperHandlers = [
     const a = me(ctx);
     const secret = `seti_mock_${seq()}_secret_mock`;
     a.setupIntents.add(secret);
-    return json({ clientSecret: secret, publishableKey: MOCK_PUBLISHABLE_KEY }, 201);
+    return json({ clientSecret: secret, publishableKey: publishableKey(ctx) }, 201);
   })),
   http.post('*/v1/account/payment-methods/:id/default', route((ctx, p) => {
     const a = me(ctx);
@@ -513,7 +517,10 @@ export const shopperHandlers = [
     const errors: Record<string, string> = {};
     const addr = a.addresses.find((x) => x.id === req.addressId);
     if (!addr) errors.addressId = 'Choose a delivery address';
-    if (!req.paymentMethodId && !req.wallet) errors.paymentMethodId = 'Choose a payment method';
+    const sources = [!!req.paymentMethodId, !!req.wallet, !!req.newPaymentMethod].filter(Boolean).length;
+    if (!sources) errors.paymentMethodId = 'Choose a payment method';
+    else if (sources > 1) errors.paymentMethodId = 'Pay with one of a saved method, a wallet or a new payment method';
+    if (req.savePaymentMethod && !req.newPaymentMethod) errors.savePaymentMethod = 'Only a new payment method can be saved';
     if (req.paymentMethodId && !a.paymentMethods.some((x) => x.id === req.paymentMethodId)) errors.paymentMethodId = 'Unknown payment method';
     const s = summary(ctx, req.addressId);
     const locked = s.packages.find((p) => p.preorder && p.preorder.stage !== 'OPEN');
@@ -658,7 +665,7 @@ export const shopperHandlers = [
     const b = bookingFor(svc, `bk-${n}`, `BK-${n.toString(36).toUpperCase()}`, 'PENDING_PAYMENT', start, { notes: req.notes ?? '', location: req.location || (PROVIDERS[svc.orgId]?.location ?? '') });
     b.service.mode = req.mode;
     a.bookings.unshift(b);
-    return json({ booking: b, payment: { clientSecret: `pi_mock_bk_${n}_secret_mock`, publishableKey: MOCK_PUBLISHABLE_KEY } }, 201);
+    return json({ booking: b, payment: { clientSecret: `pi_mock_bk_${n}_secret_mock`, publishableKey: publishableKey(ctx) } }, 201);
   })),
   http.get('*/v1/account/bookings', route((ctx) => json({ items: me(ctx).bookings }))),
   http.get('*/v1/account/bookings/:id', route((ctx, p) => json(bookingOr404(me(ctx), p.id ?? '')))),

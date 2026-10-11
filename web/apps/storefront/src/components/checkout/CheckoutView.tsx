@@ -22,19 +22,29 @@ import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AddressDialog } from '@/components/account/AddressDialog';
-import { AddPaymentMethodDialog } from '@/components/payments/AddPaymentMethodDialog';
 import { PaymentChip } from '@/components/payments/PaymentChip';
+import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle, REDIRECTED } from '@/components/payments/PaymentElementField';
 import { QuickPay } from '@/components/payments/QuickPay';
 import { useCartPreorderCopy } from '@/components/preorder/CartPreorder';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
-import { type ConfirmResult, confirmWithSavedMethod } from '@/lib/payments/stripe';
+import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
 
 import styles from './Checkout.module.css';
 
 type Choice = { option: DeliveryMethod; pickupPointId?: string; preferences: DeliveryPreferences };
+
+/** How the order is paid: a saved method, a wallet (Express Checkout) or a new method in the Payment Element. */
+type PaySpec = { paymentMethodId: string } | { wallet: Wallet } | { newPaymentMethod: true; savePaymentMethod: boolean };
+
+/** Where Stripe sends the shopper back after a redirect (3-D Secure page, Cash App, Affirm, bank): checks the payment. */
+export const checkoutReturnUrl = (orderNumber: string) => `${window.location.origin}/checkout/complete?order=${encodeURIComponent(orderNumber)}`;
+
+const NEW_METHOD_TYPES = ['card', 'link', 'cashapp', 'affirm', 'klarna', 'us_bank_account'] as const;
+const newMethodLabel = (t: Translator<MessageKey>, type: string | null) =>
+  type && (NEW_METHOD_TYPES as readonly string[]).includes(type) ? t(`co.pm.${type as (typeof NEW_METHOD_TYPES)[number]}`) : t('co.newMethodSummary');
 
 const OPTION_ICON: Record<DeliveryMethod, ReactNode> = {
   carrier: <Truck aria-hidden />,
@@ -249,10 +259,16 @@ function PackageDelivery({
 const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', 'co.placing.split'] as const;
 
 /**
- * Three-step checkout (S047, S048): delivery address, payment (quick pay, saved methods, add via Stripe) and items with
- * a delivery choice per package (carrier, AfroTransact Delivery, pickup — promise dates from the BFF). Each step folds
- * to a summary with Change; the order summary stays on the right. Placing the order starts the orders saga, confirms
- * the PaymentIntent with Stripe and lets orders continue.
+ * Three-step checkout (S047, S048, S282): delivery address, payment and items with a delivery choice per package
+ * (carrier, AfroTransact Delivery, pickup — promise dates from the BFF). Each step folds to a summary with Change; the
+ * order summary stays on the right.
+ *
+ * Payment is Stripe Elements on the deferred-intent flow: the Express Checkout Element (Apple Pay, Google Pay, Link) at
+ * the top, then the shopper's saved methods, then "Use a new payment method" with the Payment Element inline (created
+ * from the cart total, updated as delivery choices change; "Save for future purchases" sets setupFutureUsage). Place
+ * order runs elements.submit(), places the order (orders creates the PaymentIntent, manual capture), confirms it with
+ * stripe.confirmPayment({ elements, clientSecret }) and lets orders continue; redirect-based methods come back to
+ * /checkout/complete. Saved methods confirm with their PaymentMethod id as before.
  */
 export function CheckoutView() {
   const fmt = useFormatters();
@@ -266,9 +282,12 @@ export function CheckoutView() {
   const s = summary.data;
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [pmId, setPmId] = useState<string | null>(null);
+  const [payWith, setPayWith] = useState<'saved' | 'new' | null>(null);
+  const [save, setSave] = useState(false);
+  const [newMethod, setNewMethod] = useState<PaymentElementChange>({ complete: false, type: null });
+  const payEl = useRef<PaymentElementHandle>(null);
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [addrDialog, setAddrDialog] = useState<{ open: boolean; address: Address | null }>({ open: false, address: null });
-  const [pmDialog, setPmDialog] = useState(false);
   const [placing, setPlacing] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const keyRef = useRef<string>(crypto.randomUUID());
@@ -281,6 +300,7 @@ export function CheckoutView() {
       if (def) setAddressId(def.id);
     }
     if (!pmId || !s.paymentMethods.some((p) => p.id === pmId)) setPmId((s.paymentMethods.find((p) => p.isDefault) ?? s.paymentMethods[0])?.id ?? null);
+    setPayWith((w) => w ?? (s.paymentMethods.length ? 'saved' : 'new'));
     setChoices((c) => {
       const next = { ...c };
       for (const p of s.packages) {
@@ -305,6 +325,10 @@ export function CheckoutView() {
   const preBlock = (s?.packages ?? []).find((p) => p.preorder)?.preorder ?? null;
   const preCopy = useCartPreorderCopy(preBlock);
   const preLocked = !!preBlock && preBlock.stage !== 'OPEN';
+  // Pre-order windows may restrict payment methods; the PaymentIntent and the Elements must use the same list.
+  const allowedByWindow = (s?.packages ?? []).flatMap((p) => (p.preorder ? [p.preorder.allowedMethods.join(',')] : [])).join('|');
+  const methodTypes = useMemo(() => (allowedByWindow ? stripePaymentMethodTypes(allowedByWindow.split('|').map((w) => w.split(','))) : undefined), [allowedByWindow]);
+  const paymentChosen = payWith === 'new' || (payWith === 'saved' && !!pm);
   const blocked = (s?.packages ?? []).some((p) => p.localDelivery?.available === false) || preLocked;
   const [removing, setRemoving] = useState<string | null>(null);
   const removePackage = async (p: CheckoutPackage) => {
@@ -343,15 +367,14 @@ export function CheckoutView() {
     void qc.invalidateQueries({ queryKey: checkoutKeys.all });
   };
 
-  const place = async (wallet?: Wallet): Promise<OrderConfirmation | null> => {
+  const place = async (pay: PaySpec): Promise<OrderConfirmation | null> => {
     if (!address) return (setStep(1), setError(t('co.needAddress')), null);
-    if (!wallet && !pm) return (setStep(2), setError(t('co.needPayment')), null);
     setError(null);
     setPlacing(0);
     try {
       // Last-touch channel (?src=&cr=&po= or the pre-order placement clicked) is stored on the order.
       const attribution = readAttribution() ?? undefined;
-      return await api.placeOrder({ addressId: address.id, paymentMethodId: wallet ? undefined : (pm?.id ?? undefined), wallet, deliverySelections: selections(), attribution }, keyRef.current);
+      return await api.placeOrder({ addressId: address.id, ...pay, deliverySelections: selections(), attribution }, keyRef.current);
     } catch (e) {
       fail(e);
       return null;
@@ -360,6 +383,7 @@ export function CheckoutView() {
 
   const finish = async (conf: OrderConfirmation, confirmed: ConfirmResult) => {
     if (!confirmed.ok) return fail(new Error(confirmed.message));
+    if (confirmed.status === REDIRECTED) return; // the browser is on its way to /checkout/complete
     try {
       setPlacing(2);
       let status = conf.status === 'placed' ? conf : await api.confirmCheckoutPayment(conf.orderNumber);
@@ -376,11 +400,40 @@ export function CheckoutView() {
   };
 
   const placeWithCard = async () => {
-    const conf = await place();
-    if (!conf || !pm) return;
+    if (!pm) return (setStep(2), setError(t('co.needPayment')));
+    const conf = await place({ paymentMethodId: pm.id });
+    if (!conf) return;
     setPlacing(1);
-    const confirmed = conf.paymentClientSecret ? await confirmWithSavedMethod(s?.publishableKey ?? '', conf.paymentClientSecret, pm.id) : ({ ok: true } as const);
+    const confirmed = conf.paymentClientSecret
+      ? await confirmWithSavedMethod(s?.publishableKey ?? '', conf.paymentClientSecret, pm.id, checkoutReturnUrl(conf.orderNumber))
+      : ({ ok: true } as const);
     await finish(conf, confirmed);
+  };
+
+  // Stripe's deferred-intent order: elements.submit() → order + PaymentIntent (orders) → stripe.confirmPayment().
+  const placeWithElement = async () => {
+    const el = payEl.current;
+    if (!el) return (setStep(2), setError(t('co.needPayment')));
+    setError(null);
+    const submitted = await el.submit();
+    if (!submitted.ok) return (setStep(2), setError(submitted.message));
+    const conf = await place({ newPaymentMethod: true, savePaymentMethod: save });
+    if (!conf) return;
+    setPlacing(1);
+    const confirmed = conf.paymentClientSecret ? await el.confirm(conf.paymentClientSecret, checkoutReturnUrl(conf.orderNumber)) : ({ ok: true } as const);
+    // A decline or failed authentication is shown in the Payment Element: reopen it so the shopper can fix or switch.
+    if (!confirmed.ok) setStep(2);
+    await finish(conf, confirmed);
+  };
+
+  const confirmPaymentChoice = async () => {
+    setError(null);
+    if (payWith === 'new') {
+      // Validates the Payment Element now, so problems show next to the fields before the review step.
+      const submitted = await payEl.current?.submit();
+      if (!submitted?.ok) return;
+    }
+    setStep(3);
   };
 
   const walletConf = useRef<OrderConfirmation | null>(null);
@@ -445,26 +498,35 @@ export function CheckoutView() {
           )}
         </Step>
 
-        <Step n={2} title={step > 2 && pm ? t('co.payingWith') : t('co.choosePayment')} done={step > 2 && !!pm} onChange={() => setStep(2)}>
+        <Step n={2} title={step > 2 && paymentChosen ? t('co.payingWith') : t('co.choosePayment')} done={step > 2 && paymentChosen} onChange={() => setStep(2)}>
           {step < 2 && <p className={styles.muted}>{t('co.afterAddress')}</p>}
-          {step > 2 && pm && (
+          {step > 2 && payWith === 'saved' && pm && (
             <p className={styles.summaryLine}>
               <PaymentChip method={pm} /> {pm.label} <span className={styles.muted}>· {pmSub(t, pm)}</span>
               <br />
               <span className={styles.muted}>{t('co.billingSame')}</span>
             </p>
           )}
-          {step === 2 && (
-            <div className={styles.choices}>
+          {step > 2 && payWith === 'new' && (
+            <p className={styles.summaryLine} data-testid="checkout-new-method-summary">
+              <strong>{newMethodLabel(t, newMethod.type)}</strong> <span className={styles.muted}>· {t('co.newMethodSummary')}</span>
+              {save && <span className={styles.muted}>· {t('co.saveForLater')}</span>}
+            </p>
+          )}
+          {/* Mounted from step 2 on and only hidden afterwards: Place order submits and confirms this Payment Element. */}
+          {step >= 2 && (
+            <div className={styles.choices} hidden={step !== 2}>
               <QuickPay
                 publishableKey={s.publishableKey ?? ''}
                 amountMinor={total}
+                currency={s.currency}
+                paymentMethodTypes={methodTypes}
                 disabled={busy || preLocked}
                 onPay={async (w) => {
-                  const conf = await place(w);
+                  const conf = await place({ wallet: w });
                   walletConf.current = conf;
                   if (conf) setPlacing(1);
-                  return conf?.paymentClientSecret ?? null;
+                  return conf?.paymentClientSecret ? { clientSecret: conf.paymentClientSecret, returnUrl: checkoutReturnUrl(conf.orderNumber) } : null;
                 }}
                 onConfirmed={(r) => { if (walletConf.current) void finish(walletConf.current, r); else if (!r.ok) fail(new Error(r.message)); }}
               />
@@ -475,7 +537,7 @@ export function CheckoutView() {
               </div>
               {s.paymentMethods.map((p) => (
                 <label key={p.id} className={styles.choice} data-testid="checkout-payment">
-                  <input type="radio" name="paym" checked={p.id === pmId} onChange={() => setPmId(p.id)} />
+                  <input type="radio" name="paym" checked={payWith === 'saved' && p.id === pmId} onChange={() => { setPayWith('saved'); setPmId(p.id); }} />
                   <PaymentChip method={p} />
                   <span className={styles.choiceText}>
                     <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(t, p)}</span>
@@ -483,10 +545,34 @@ export function CheckoutView() {
                   {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
                 </label>
               ))}
-              <button type="button" className={styles.addRow} onClick={() => setPmDialog(true)}>
-                <Plus aria-hidden /> {t('co.addPayment')}
-              </button>
-              <Button onClick={() => { setError(null); setStep(3); }} disabled={!pm}>
+              <label className={styles.choice} data-testid="checkout-new-method">
+                <input type="radio" name="paym" checked={payWith === 'new'} onChange={() => setPayWith('new')} />
+                <Plus aria-hidden />
+                <span className={styles.choiceText}>
+                  <strong>{t('co.newMethod')}</strong> <span className={styles.muted}>{t('co.newMethodHint')}</span>
+                </span>
+              </label>
+              {payWith === 'new' && (
+                <div className={styles.newMethod}>
+                  <PaymentElementField
+                    ref={payEl}
+                    publishableKey={s.publishableKey ?? ''}
+                    amountMinor={total}
+                    currency={s.currency}
+                    save={save}
+                    paymentMethodTypes={methodTypes}
+                    onChange={setNewMethod}
+                  />
+                  <label className={styles.save}>
+                    <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
+                    <span>
+                      {t('co.saveForLater')}
+                      <small>{t('co.saveForLaterHint')}</small>
+                    </span>
+                  </label>
+                </div>
+              )}
+              <Button onClick={() => void confirmPaymentChoice()} disabled={!paymentChosen}>
                 {t('co.usePayment')}
               </Button>
               <span className={styles.muted}>
@@ -518,7 +604,7 @@ export function CheckoutView() {
       </div>
 
       <aside className={styles.aside} aria-label={t('co.orderSummary')}>
-        <Button size="lg" block onClick={() => void placeWithCard()} loading={busy} disabled={step < 3 || !pm || !address || blocked} data-place-order="1">
+        <Button size="lg" block onClick={() => void (payWith === 'new' ? placeWithElement() : placeWithCard())} loading={busy} disabled={step < 3 || !paymentChosen || !address || blocked} data-place-order="1">
           {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
         </Button>
         {preLocked && preCopy?.copy.lockedText && (
@@ -566,7 +652,6 @@ export function CheckoutView() {
       </aside>
 
       <AddressDialog open={addrDialog.open} onOpenChange={(o) => setAddrDialog((d) => ({ ...d, open: o }))} address={addrDialog.address} onSaved={(a) => setAddressId(a.id)} />
-      <AddPaymentMethodDialog open={pmDialog} onOpenChange={setPmDialog} onSaved={(p) => { if (p) setPmId(p.id); }} />
     </div>
   );
 }

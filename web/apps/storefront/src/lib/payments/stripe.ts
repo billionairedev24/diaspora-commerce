@@ -1,10 +1,15 @@
 'use client';
 
 /* Stripe.js without an npm dependency: the official script from js.stripe.com (what @stripe/stripe-js loads) plus the
-   small typed surface the storefront uses — the Payment Element for saving methods (SetupIntent from payments),
-   PaymentIntent confirmation for orders and booking deposits, and the Express Checkout Element (Apple Pay, Google Pay,
-   Link). Mock mode (publishable key pk_test_mock…, used with NEXT_PUBLIC_API_MOCKS=1 and in tests) renders the
-   storefront's own card form and confirms against the mock BFF instead. */
+   small typed surface the storefront uses (S282, Stripe's recommended deferred-intent integration):
+   - checkout: the Payment Element inline, created from the cart (mode 'payment', amount, currency, manual capture,
+     setupFutureUsage when the shopper saves the method) before any PaymentIntent exists; Place order runs
+     elements.submit() → orders creates the PaymentIntent → stripe.confirmPayment({ elements, clientSecret });
+   - the Express Checkout Element (Apple Pay, Google Pay, Link) on the same deferred options;
+   - the Payment Element on a SetupIntent for saving methods (Your Payments, booking deposits);
+   - PaymentIntent confirmation with a saved method.
+   Mock mode (publishable key pk_test_mock…, or none: the local BFF without STRIPE_PUBLISHABLE_KEY) renders the
+   storefront's own labelled test form instead; gateway-bff refuses to start without a real key outside local. */
 
 export interface StripeError {
   type?: string;
@@ -12,27 +17,67 @@ export interface StripeError {
   message?: string;
 }
 
+export interface StripeElementChange {
+  complete?: boolean;
+  empty?: boolean;
+  value?: { type?: string };
+  expressPaymentType?: string;
+  error?: StripeError;
+}
+
 export interface StripeElement {
   mount(target: HTMLElement): void;
   unmount(): void;
   destroy?(): void;
-  on(event: string, handler: (e: Record<string, unknown>) => void): void;
+  on(event: string, handler: (e: StripeElementChange & Record<string, unknown>) => void): void;
 }
+
+/** Appearance API (https://docs.stripe.com/elements/appearance-api): variables and rules, values resolved. */
+export interface StripeAppearance {
+  theme: 'stripe' | 'flat' | 'night';
+  variables: Record<string, string>;
+  rules: Record<string, Record<string, string>>;
+}
+
+/** Elements options of the deferred-intent flow (no client secret yet). */
+export interface DeferredIntentOptions {
+  mode: 'payment';
+  /** Minor units; shown in wallets and used for BNPL eligibility. Kept current with elements.update({ amount }). */
+  amount: number;
+  /** Lower-case ISO currency. */
+  currency: string;
+  /** Must match the PaymentIntent: payments always creates order intents with manual capture (captured per shipment). */
+  captureMethod: 'manual';
+  /** Must match the PaymentIntent: 'off_session' when the shopper saves the method (savePaymentMethod). */
+  setupFutureUsage?: 'off_session' | null;
+  /** Only when the intent is restricted (pre-order windows); otherwise automatic payment methods (Dashboard settings). */
+  paymentMethodTypes?: string[];
+  appearance: StripeAppearance;
+  fonts: { cssSrc: string }[];
+}
+
+export type ElementsOptions = DeferredIntentOptions | { clientSecret: string; appearance: StripeAppearance; fonts: { cssSrc: string }[] };
 
 export interface StripeElements {
   create(type: 'payment' | 'expressCheckout', options?: Record<string, unknown>): StripeElement;
   submit(): Promise<{ error?: StripeError }>;
+  update(options: Partial<Pick<DeferredIntentOptions, 'amount' | 'setupFutureUsage' | 'appearance'>>): void;
+}
+
+export interface PaymentIntentResult {
+  error?: StripeError;
+  paymentIntent?: { id?: string; status: string };
 }
 
 export interface StripeInstance {
-  elements(options: Record<string, unknown>): StripeElements;
+  elements(options: ElementsOptions): StripeElements;
   confirmSetup(options: { elements: StripeElements; redirect: 'if_required'; confirmParams?: Record<string, unknown> }): Promise<{ error?: StripeError; setupIntent?: { status: string } }>;
   confirmPayment(options: {
     clientSecret: string;
     elements?: StripeElements;
     redirect: 'if_required';
     confirmParams?: Record<string, unknown>;
-  }): Promise<{ error?: StripeError; paymentIntent?: { status: string } }>;
+  }): Promise<PaymentIntentResult>;
 }
 
 type StripeFactory = (publishableKey: string) => StripeInstance;
@@ -45,7 +90,10 @@ declare global {
 
 export const STRIPE_JS = 'https://js.stripe.com/v3/';
 
-/** True for the mock BFF's key: no Stripe.js, the storefront's own test form and confirmations. */
+/** Figtree inside Stripe's iframes (they cannot use the page's self-hosted font files). */
+export const STRIPE_FONTS = [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap' }];
+
+/** True for the mock BFF's key or no key at all (local without STRIPE_PUBLISHABLE_KEY): the labelled test form. */
 export const isMockKey = (publishableKey: string | null | undefined): boolean => !publishableKey || publishableKey.startsWith('pk_test_mock');
 
 let loader: Promise<StripeFactory> | null = null;
@@ -79,41 +127,132 @@ export async function getStripe(publishableKey: string): Promise<StripeInstance>
   return s;
 }
 
-/** Payment Element appearance from the design tokens (Stripe renders in its own iframe, so values are resolved). */
-export function stripeAppearance(): Record<string, unknown> {
+/** Forgets loaded instances (tests swap window.Stripe between cases). */
+export function resetStripe(): void {
+  instances.clear();
+  loader = null;
+}
+
+/* Appearance variables from the design tokens. Stripe renders in its own iframe, so each value is read from the CSS
+   custom properties at runtime (var() references resolved by the browser); a missing token leaves Stripe's default. */
+const VARIABLE_TOKENS: Record<string, string> = {
+  colorPrimary: '--at-color-action-primary',
+  colorBackground: '--at-color-surface',
+  colorText: '--at-color-text',
+  colorTextSecondary: '--at-color-text-muted',
+  colorTextPlaceholder: '--at-color-text-muted',
+  colorDanger: '--at-color-danger',
+  colorSuccess: '--at-color-success',
+  colorIcon: '--at-color-text-muted',
+  fontFamily: '--at-font-sans',
+  fontSizeBase: '--at-text-md',
+  borderRadius: '--at-radius-sm',
+  focusOutline: '--at-color-focus'
+};
+
+function tokenReader(): (name: string) => string {
   const css = typeof window === 'undefined' ? null : getComputedStyle(document.documentElement);
-  const v = (name: string, fallback: string) => css?.getPropertyValue(name).trim() || fallback;
+  return (name: string) => css?.getPropertyValue(name).trim() ?? '';
+}
+
+/** Payment / Express Checkout Element appearance: gold primary, Figtree, our radius and colours (Shop design). */
+export function stripeAppearance(): StripeAppearance {
+  const v = tokenReader();
+  const variables: Record<string, string> = { fontWeightNormal: '400', fontWeightMedium: '600', fontWeightBold: '700', spacingUnit: '4px' };
+  for (const [key, token] of Object.entries(VARIABLE_TOKENS)) {
+    const value = v(token);
+    if (value) variables[key] = value;
+  }
+  const border = v('--at-color-border-strong');
+  const selected = v('--at-color-action-secondary');
+  const link = v('--at-color-link');
+  const focus = v('--at-color-focus');
+  const tint = v('--at-gold-50');
+  const rules: Record<string, Record<string, string>> = {
+    '.Input': { boxShadow: 'none', ...(border && { borderColor: border }) },
+    '.Input:focus': focus ? { borderColor: focus, boxShadow: `0 0 0 1px ${focus}` } : {},
+    '.Tab': { boxShadow: 'none', ...(border && { borderColor: border }) },
+    // Selected tab as designed: action-secondary border, link-coloured label (pmTabs in the Shop prototype).
+    '.Tab--selected': { ...(selected && { borderColor: selected, boxShadow: `0 0 0 1px ${selected}` }), ...(link && { color: link }), ...(tint && { backgroundColor: tint }) },
+    '.Tab--selected:focus': selected ? { boxShadow: `0 0 0 2px ${selected}` } : {},
+    '.TabIcon--selected': link ? { fill: link } : {},
+    '.Label': { fontWeight: '600' }
+  };
+  return { theme: 'stripe', variables, rules };
+}
+
+/* Pre-order windows can restrict payment methods (back office: CARD, WALLET, ACH). The PaymentIntent then carries
+   explicit payment_method_types and the Elements must be created with the same list: this mirrors orders'
+   PreorderPayments.stripeTypes (every method → automatic; CARD or WALLET → card; WALLET → link; ACH-only → automatic,
+   since us_bank_account cannot be captured manually). */
+const ALL_METHODS = ['CARD', 'WALLET', 'ACH'] as const;
+
+export function stripePaymentMethodTypes(windows: readonly (readonly string[])[]): string[] | undefined {
+  let allowed: Set<string> = new Set(ALL_METHODS);
+  for (const w of windows) {
+    const upper = new Set(w.map((m) => m.toUpperCase()));
+    allowed = new Set([...allowed].filter((m) => upper.has(m)));
+  }
+  if (ALL_METHODS.every((m) => allowed.has(m))) return undefined;
+  const types: string[] = [];
+  if (allowed.has('CARD') || allowed.has('WALLET')) types.push('card');
+  if (allowed.has('WALLET')) types.push('link');
+  return types.length ? types : undefined;
+}
+
+/** Elements options for an order's PaymentIntent before it exists (deferred intent). */
+export function deferredIntentOptions(o: { amountMinor: number; currency: string; save?: boolean; paymentMethodTypes?: string[] }): DeferredIntentOptions {
   return {
-    theme: 'stripe',
-    variables: {
-      colorPrimary: v('--at-color-action-secondary', 'green'),
-      colorText: v('--at-color-text', 'black'),
-      colorDanger: v('--at-color-danger', 'red'),
-      fontFamily: 'Figtree, system-ui, sans-serif',
-      borderRadius: '8px'
-    }
+    mode: 'payment',
+    amount: Math.max(o.amountMinor, 0),
+    currency: o.currency.toLowerCase(),
+    captureMethod: 'manual',
+    ...(o.save ? { setupFutureUsage: 'off_session' as const } : {}),
+    ...(o.paymentMethodTypes?.length ? { paymentMethodTypes: o.paymentMethodTypes } : {}),
+    appearance: stripeAppearance(),
+    fonts: STRIPE_FONTS
   };
 }
 
-export type ConfirmResult = { ok: true } | { ok: false; message: string };
+export type ConfirmResult = { ok: true; status?: string } | { ok: false; message: string };
 
 const failure = (e: StripeError | undefined, fallback: string): ConfirmResult => ({ ok: false, message: e?.message ?? fallback });
+
+/** PaymentIntent states that mean the shopper's part is done (authorised for manual capture, or settling). */
+const PAID = new Set(['requires_capture', 'succeeded', 'processing']);
+
+/**
+ * Confirms the order's PaymentIntent with the details collected by the Payment Element (call elements.submit() before
+ * the intent is created). Card 3-D Secure opens in Stripe's modal; redirect-based methods (Cash App Pay, Affirm, bank
+ * redirects) leave the page for Stripe and come back to returnUrl, which checks the intent through the BFF.
+ */
+export async function confirmWithElements(stripe: StripeInstance, elements: StripeElements, clientSecret: string, returnUrl: string): Promise<ConfirmResult> {
+  try {
+    const res = await stripe.confirmPayment({ elements, clientSecret, redirect: 'if_required', confirmParams: { return_url: returnUrl } });
+    if (res.error) return failure(res.error, 'Your payment could not be confirmed.');
+    const status = res.paymentIntent?.status;
+    if (status && !PAID.has(status)) return { ok: false, message: 'Your payment was not completed. Try again or choose another payment method.' };
+    return { ok: true, status };
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'Payments are unavailable right now.' };
+  }
+}
 
 /**
  * Confirms a PaymentIntent (order or booking deposit) with a saved method. 3-D Secure challenges open in Stripe's
  * modal; the BFF is then told to continue (orders confirm / bookings payment sync) by the caller.
  */
-export async function confirmWithSavedMethod(publishableKey: string, clientSecret: string, paymentMethodId: string): Promise<ConfirmResult> {
+export async function confirmWithSavedMethod(publishableKey: string, clientSecret: string, paymentMethodId: string, returnUrl?: string): Promise<ConfirmResult> {
   if (isMockKey(publishableKey)) return clientSecret.includes('decline') ? { ok: false, message: 'Your card was declined.' } : { ok: true };
   try {
     const stripe = await getStripe(publishableKey);
     const res = await stripe.confirmPayment({
       clientSecret,
       redirect: 'if_required',
-      confirmParams: { payment_method: paymentMethodId, return_url: window.location.href }
+      confirmParams: { payment_method: paymentMethodId, return_url: returnUrl ?? window.location.href }
     });
     if (res.error) return failure(res.error, 'Your payment could not be confirmed.');
-    return { ok: true };
+    return { ok: true, status: res.paymentIntent?.status };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : 'Payments are unavailable right now.' };
   }

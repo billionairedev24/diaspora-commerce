@@ -281,6 +281,10 @@ export const PlaceOrderRequestSchema = z.object({
   addressId: z.string().min(1),
   paymentMethodId: z.string().optional(),
   wallet: WalletSchema.optional(),
+  /** Paid with a new method from Stripe's Payment Element (deferred intent): confirmed with the order's client secret. */
+  newPaymentMethod: z.boolean().optional(),
+  /** With newPaymentMethod: keep it on the shopper's Stripe Customer (setup_future_usage=off_session). */
+  savePaymentMethod: z.boolean().optional(),
   gift: z.boolean().optional(),
   couponCode: z.string().max(20).optional(),
   deliverySelections: z.array(DeliverySelectionSchema),

@@ -12,6 +12,11 @@
 .summaryLine { margin: 0 0 0 calc(28px + var(--at-space-3)); font-size: var(--at-text-sm); line-height: var(--at-leading-normal); display: flex; flex-wrap: wrap; gap: var(--at-space-2); align-items: center; }
 .choices { display: flex; flex-direction: column; gap: var(--at-space-2); align-items: stretch; padding-left: calc(28px + var(--at-space-3)); }
 .choices > button { align-self: flex-start; }
+.choices[hidden] { display: none; }
+.newMethod { display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--at-color-surface); }
+.save { display: flex; gap: var(--at-space-2); align-items: flex-start; font-size: var(--at-text-sm); cursor: pointer; }
+.save input { margin-top: 3px; accent-color: var(--at-color-action-secondary); }
+.save small { display: block; color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
 .choice { display: flex; gap: var(--at-space-3); align-items: center; padding: var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); font-size: var(--at-text-sm); cursor: pointer; }
 .choice:has(input:checked) { border-color: var(--at-color-action-secondary); background: var(--at-color-success-bg); }
 .choice input { accent-color: var(--at-color-action-secondary); }
