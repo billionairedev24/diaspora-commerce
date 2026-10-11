@@ -36,6 +36,14 @@ export { createSellerApiClient, type ListingsQuery, type SellerApiClient, type S
 export { createSettingsApiClient, type SettingsApiClient } from './settings-client';
 export { type SlotQuery } from './shopper-client';
 export { createStaffApiClient, type ResourceQuery, type StaffApiClient } from './staff-client';
+export {
+  createStaffMarketsApi,
+  staffMarketKeys,
+  staffMarketQueries,
+  type StaffMarketsApi,
+  staffPlaceKeys,
+  staffPlaceQueries
+} from './staff-markets';
 export { createStaffPreordersApi, staffPreorderKeys, staffPreorderQueries, type StaffPreordersApi } from './staff-preorders';
 export { tableSearchParams } from './table-query';
 export { US_STATES } from './us-states';

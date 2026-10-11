@@ -21,7 +21,8 @@
     "./mocks/staff-runtime": "./src/mocks/staff-runtime.ts",
     "./mocks/staff-node": "./src/mocks/staff-node.ts",
     "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts",
-    "./staff-preorders": "./src/staff-preorders.ts"
+    "./staff-preorders": "./src/staff-preorders.ts",
+    "./staff-markets": "./src/staff-markets.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",

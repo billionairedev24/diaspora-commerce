@@ -109,37 +109,3 @@ describe('Pre-orders list and detail switches', () => {
     within(table).getAllByRole('switch').forEach((s) => expect(s).toBeDisabled());
   });
 });
-
-describe('Editing a state’s cities in place', () => {
-  beforeEach(() => {
-    resetStaffDb(new Date('2026-10-10T15:00:00Z'));
-    asRoles(null);
-  });
-
-  it('adds cities, switches one off, and keeps cities a live pre-order sells to', async () => {
-    const user = userEvent.setup();
-    nav.set('/preorders/settings');
-    await renderScreen(<PreordersView screen={{ kind: 'settings' }} />);
-    const state = await screen.findByRole('combobox', { name: 'State to edit' });
-    await within(state).findByRole('option', { name: 'Texas' });
-    await user.selectOptions(state, 'TX');
-    await user.click(screen.getByRole('button', { name: 'Edit cities' }));
-    const editor = await screen.findByTestId('region-editor');
-    await waitFor(() => expect(within(editor).getAllByTestId('region-city').length).toBeGreaterThan(3));
-    expect(within(editor).getByRole('button', { name: 'Remove Lubbock' })).toBeDisabled();
-    expect(within(editor).getByText(/Lubbock Pre-order #7.*sell/)).toBeInTheDocument();
-
-    await user.type(within(editor).getByRole('textbox', { name: 'Search cities in Texas' }), 'hou');
-    await user.click(await within(editor).findByRole('checkbox', { name: 'Houston' }));
-    await user.click(within(editor).getByRole('button', { name: /Add 1 selected/ }));
-    await user.click(within(editor).getByRole('switch', { name: 'Switch Odessa on or off' }));
-    await user.click(within(editor).getByRole('button', { name: 'Remove Amarillo' }));
-    await user.click(within(editor).getByRole('button', { name: 'Save cities' }));
-
-    await waitFor(() => expect(getStaffDb().preorders.areas.find((a) => a.key === 'US/TX/Houston')?.on).toBe(true));
-    const areas = getStaffDb().preorders.areas;
-    expect(areas.find((a) => a.key === 'US/TX/Odessa')?.on).toBe(false);
-    expect(areas.some((a) => a.key === 'US/TX/Lubbock')).toBe(true);
-    expect(areas.some((a) => a.key === 'CA/ON/Toronto')).toBe(true);
-  });
-});

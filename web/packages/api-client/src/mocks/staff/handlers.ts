@@ -43,6 +43,7 @@ import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
+import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
 import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } from './preorders';
@@ -1089,6 +1090,8 @@ export const staffHandlers = [
   ),
   /* ── pre-orders (S274): delivery-runs' staff API through the BFF ── */
   ...preorderHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Settings → Markets & locations (location tree) and the shared place pickers */
+  ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Inventory hub and AfroTransact Retail (1P) (S281) */
   ...inventoryHubHandlers(W, hubGate),
   /* Anything else under /v1/staff is not part of the contract. */

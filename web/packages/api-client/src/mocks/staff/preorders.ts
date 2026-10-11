@@ -423,7 +423,8 @@ function regionOf(s: MockPreorderState, country: string, region: string): Preord
   };
 }
 
-function areaPage(s: MockPreorderState, country: string | null, region: string | null, q: string, page: number): PreorderAreaPage {
+function areaPage(s: MockPreorderState, country: string | null, region: string | null, q: string, page: number, size = PAGE): PreorderAreaPage {
+  const per = Math.min(Math.max(1, size), 100);
   const A = s.areas;
   const winsIn = (k: string) => s.windows.filter((w) => !w.draft && w.targets.some((t) => keyWithin(k, t) || keyWithin(t, k))).length;
   const sumOn = (list: CoverageArea[]) => list.filter((a) => a.on).length;
@@ -464,11 +465,11 @@ function areaPage(s: MockPreorderState, country: string | null, region: string |
   const ql = q.trim().toLowerCase();
   rows = rows.filter((r) => !ql || r.name.toLowerCase().includes(ql));
   if (level !== 'AREA') rows.sort((a, b) => a.name.localeCompare(b.name));
-  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+  const pages = Math.max(1, Math.ceil(rows.length / per));
   const p = Math.min(Math.max(0, page), pages - 1);
   return {
     level, country, region, countryName: country ? countryName(country) : null, regionName: country && region ? regionName(country, region) : null,
-    regionLabel: country ? regionLabel(country) : 'State', rows: rows.slice(p * PAGE, p * PAGE + PAGE), total: rows.length, page: p, size: PAGE,
+    regionLabel: country ? regionLabel(country) : 'State', rows: rows.slice(p * per, p * per + per), total: rows.length, page: p, size: per,
     onCount: A.filter((a) => a.on).length, offCount: A.filter((a) => !a.on).length,
     saved: A.filter((a) => a.on).map((a) => ({ key: a.key, label: areaLabel(a.key) })).sort((a, b) => a.label.localeCompare(b.label))
   };
@@ -677,7 +678,7 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
       route((ctx): PreorderAreaPage => {
         view(ctx);
         const qs = new URL(ctx.request.url).searchParams;
-        return areaPage(st(ctx), qs.get('country') || null, qs.get('region') || null, qs.get('q') ?? '', Number(qs.get('page') ?? 0) || 0);
+        return areaPage(st(ctx), qs.get('country') || null, qs.get('region') || null, qs.get('q') ?? '', Number(qs.get('page') ?? 0) || 0, Number(qs.get('size') ?? PAGE) || PAGE);
       })
     ),
     http.post(

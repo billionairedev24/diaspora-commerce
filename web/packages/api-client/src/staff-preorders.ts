@@ -530,6 +530,8 @@ export interface PreorderAreasQuery {
   region?: string;
   q?: string;
   page: number;
+  /** Rows per page (delivery-runs default 12, at most 100). */
+  size?: number;
 }
 
 export interface PlacesQuery {
@@ -833,7 +835,7 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
     updateSettings: (body: PreorderSettingsInput, version: number): Promise<PreorderSettings> =>
       request(`${P}/settings`, PreorderSettingsSchema, { method: 'PUT', body, headers: ifMatch(version) }),
     areas: (q: PreorderAreasQuery, signal?: AbortSignal): Promise<PreorderAreaPage> =>
-      request(`${P}/areas`, PreorderAreaPageSchema, { query: { country: q.country, region: q.region, q: q.q || undefined, page: String(q.page) }, signal }),
+      request(`${P}/areas`, PreorderAreaPageSchema, { query: { country: q.country, region: q.region, q: q.q || undefined, page: String(q.page), size: q.size ? String(q.size) : undefined }, signal }),
     addArea: (key: string): Promise<PreorderAreaPage> => request(`${P}/areas`, PreorderAreaPageSchema, { method: 'POST', body: { key } }),
     /** Bulk switch every area at or under each key (a country, a region or one area). */
     setAreas: (keys: string[], on: boolean): Promise<PreorderAreaPage> => request(`${P}/areas`, PreorderAreaPageSchema, { method: 'PATCH', body: { keys, on } }),

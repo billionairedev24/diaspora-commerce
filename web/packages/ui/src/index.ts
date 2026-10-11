@@ -27,6 +27,6 @@ export * from './icons';
 export { Dialog, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';
 export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSeparator } from './overlay/Menu';
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';
-export { type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
+export { type ToastAction, type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
 export { QR_QUIET_ZONE, QrCodeImage, type QrCodeImageProps, type QrMatrix, qrMatrix, qrPath } from './security/QrCodeImage';
 export { UserMenu, type UserMenuLink, type UserMenuProps } from './shell/UserMenu';

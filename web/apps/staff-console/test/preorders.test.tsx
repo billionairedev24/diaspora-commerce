@@ -184,25 +184,6 @@ describe('Pre-orders back office (S274)', () => {
     expect(nav.search).toBe('tab=orders');
   });
 
-  it('drills coverage areas down and switches an area off', async () => {
-    const user = userEvent.setup();
-    nav.set('/preorders/settings');
-    await renderScreen(<PreordersView screen={{ kind: 'settings' }} />);
-    const table = await screen.findByRole('table', { name: 'Pre-order areas' });
-    await waitFor(() => expect(within(table).getAllByTestId('area-row')).toHaveLength(2));
-    expect(screen.getByTestId('area-count')).toHaveTextContent('8 on · 1 off');
-    await user.click(within(table).getByRole('button', { name: 'United States' }));
-    await user.click(await within(table).findByRole('button', { name: 'Texas' }));
-    const lubbock = (await within(table).findByText('Lubbock')).closest('tr') as HTMLElement;
-    await user.click(within(lubbock).getByRole('switch', { name: 'Switch Lubbock on or off' }));
-    await waitFor(() => expect(screen.getByTestId('area-count')).toHaveTextContent('7 on · 2 off'));
-    await user.click(screen.getByRole('button', { name: 'All countries' }));
-    const us = (await within(table).findByRole('button', { name: 'United States' })).closest('tr') as HTMLElement;
-    expect(us).toHaveTextContent('4 of 6');
-    await user.click(within(us).getByRole('switch'));
-    await waitFor(() => expect(screen.getByTestId('area-count')).toHaveTextContent('3 on · 6 off'));
-  });
-
   it('shows payment & fees read-only below Full access', async () => {
     asRoles('platform.operations_manager');
     nav.set('/preorders/settings');

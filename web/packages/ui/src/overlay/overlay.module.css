@@ -135,4 +135,6 @@
 }
 
 .toastIcon { color: var(--at-gold-500); flex: none; }
+.toastAction { margin-left: var(--at-space-2); min-height: 32px; padding: 0 var(--at-space-3); border: 1px solid currentColor; border-radius: var(--at-radius-pill); background: transparent; color: inherit; font: inherit; font-weight: var(--at-weight-bold); cursor: pointer; }
+.toastAction:focus-visible { outline: 2px solid var(--at-gold-500); outline-offset: 2px; }
 .toastError .toastIcon { color: var(--at-red-100); }

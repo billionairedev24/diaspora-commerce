@@ -54,6 +54,7 @@ import {
   SupportActionResultSchema,
   type SupportRefundRequest
 } from './schemas/staff';
+import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPreordersApi } from './staff-preorders';
 import { tableSearchParams } from './table-query';
 
@@ -147,6 +148,9 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`/v1/staff/notifications/templates/${enc(key)}/versions`, NotificationTemplateVersionSchema, { method: 'POST', body }),
     testSendNotificationTemplate: (key: string, body: NotificationPreviewRequest): Promise<NotificationTestSendResult> =>
       request(`/v1/staff/notifications/templates/${enc(key)}/test-send`, NotificationTestSendResultSchema, { method: 'POST', body }),
+
+    /* Settings → Markets & locations: /v1/staff/markets/** (location tree) and /v1/staff/places (gazetteer) */
+    markets: createStaffMarketsApi(request),
 
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
     preorders: createStaffPreordersApi(request, options),

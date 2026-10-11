@@ -7,23 +7,21 @@ import {
   linkExpiryProblem,
   type PaymentMethod,
   type PlacementKey,
-  type PreorderAreaRow,
   type PreorderFallback,
   type PreorderPaymentSettings,
   type PreorderSettings,
   type PreorderSettingsInput
 } from '@afrotransact/api-client/staff-preorders';
 import { cx, useToast } from '@afrotransact/ui';
-import { CaretRight, FunnelSimple, ListChecks, Package, PencilSimple, X } from '@phosphor-icons/react/ssr';
+import { ListChecks, Package } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 
-import { AreaPicker } from './AreaPicker';
 import { amountText, NO_SETTINGS_TITLE, parseAmount } from './model';
+import { PreorderAreasTree } from './PreorderAreasTree';
 import { controlClass, labelClass, smallButton, Toggle, usePreorderAccess, usePreordersApi } from './primitives';
-import { RegionCoverageEditor, RegionEditorLauncher } from './RegionEditor';
 
 const FALLBACKS: [PreorderFallback, typeof Package, string, string][] = [
   ['SHIP', Package, 'Ship by UPS Ground', 'Shoppers can still buy, at the quoted rate (3–5 days).'],
@@ -65,234 +63,18 @@ function useSaveSettings() {
   });
 }
 
-/** Coverage areas: add via dropdowns or "City, ST", drill down country → region → city with on/off toggles. */
-function Areas({ canEdit, canAdd }: { canEdit: boolean; canAdd: boolean }) {
-  const api = usePreordersApi();
-  const qc = useQueryClient();
-  const toast = useToast();
-  const [nav, setNav] = useState<{ c?: string; r?: string }>({});
-  const [q, setQ] = useState('');
-  const [page, setPage] = useState(0);
-  const [free, setFree] = useState('');
-  const [editing, setEditing] = useState<{ c: string; r: string } | null>(null);
-  const query = useQuery(staffPreorderQueries.areas(api, { country: nav.c, region: nav.r, q: q.trim() || undefined, page }));
-  const root = useQuery(staffPreorderQueries.areas(api, { page: 0 }));
-  const refresh = () => qc.invalidateQueries({ queryKey: staffPreorderKeys.all });
-  const fail = (e: unknown) => toast.show(problemMessage(e), 'error');
-  const add = useMutation({
-    mutationFn: (key: string) => api.addArea(key),
-    onSuccess: (p, key) => {
-      void refresh();
-      setNav({ c: p.country ?? undefined, r: p.region ?? undefined });
-      setQ('');
-      setPage(0);
-      const [, r, city] = key.split('/');
-      toast.show(`${city ? `${city}, ${r ?? ''}` : `All of ${p.regionName ?? r ?? ''}`} added to pre-order areas`);
-    },
-    onError: fail
-  });
-  const toggle = useMutation({ mutationFn: (row: PreorderAreaRow) => api.setAreas([row.key], row.on === 0), onSuccess: () => void refresh(), onError: fail });
-  const remove = useMutation({ mutationFn: (row: PreorderAreaRow) => api.removeArea(row.key), onSuccess: () => void refresh(), onError: fail });
-  const p = query.data;
-  const saved = new Set((root.data?.saved ?? []).map((s) => s.key));
-  const has = (k: string) => saved.has(k) || (p?.level === 'AREA' && p.rows.some((r) => r.key === k));
-  const freeKey = (() => {
-    const m = /^(.+?),\s*([A-Za-z]{2,3})$/.exec(free.trim());
-    return m ? { city: (m[1] ?? '').trim(), region: (m[2] ?? '').toUpperCase() } : null;
-  })();
-  const colName = !p || p.level === 'COUNTRY' ? 'Country' : p.level === 'REGION' ? p.regionLabel : 'City';
-  const crumbs: { label: string; go: () => void }[] = [{ label: 'All countries', go: () => setNav({}) }];
-  if (p?.country) crumbs.push({ label: p.countryName ?? p.country, go: () => setNav({ c: p.country ?? undefined }) });
-  if (p?.region) crumbs.push({ label: p.regionName ?? p.region, go: () => undefined });
-  const pages = p ? Math.max(1, Math.ceil(p.total / p.size)) : 1;
+/** Pre-order areas: the shared location tree (country → states → cities, each On or Off), edited in place. */
+function Areas({ canEdit }: { canEdit: boolean }) {
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h3 className="m-0 text-sm font-bold">Pre-order areas</h3>
-        <span className="text-xs text-muted" data-testid="area-count">
-          {p ? `${p.onCount} on · ${p.offCount} off` : ''}
-        </span>
-      </div>
+    <section aria-labelledby="po-areas" className="flex flex-col gap-2">
+      <h3 id="po-areas" className="m-0 text-sm font-bold">
+        Pre-order areas
+      </h3>
       <span className="text-xs text-muted">
-        Only places you add here can get a pre-order. Pick a country, then a state or province, then a city (or every city in it). Switch an area off to pause it without losing its settings.
+        Only places listed here can get a pre-order. Open a country and a state to add cities, switch them on or off, or cover every city in the state. Off areas are hidden until you show them.
       </span>
-      <div className="flex max-w-[720px] flex-col gap-2 rounded-md border border-border bg-ink-25 p-3">
-        <AreaPicker onAdd={(k) => add.mutate(k)} exclude={has} disabled={!canAdd} pending={add.isPending} addLabel="Add area" />
-        <form
-          className="flex flex-wrap items-end gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!freeKey || !canAdd) return;
-            void api
-              .places({ q: freeKey.region })
-              .then((r) => {
-                const region = r.items.find((x) => x.type === 'REGION' && x.code === freeKey.region);
-                if (!region) {
-                  toast.show(`No state, province or region “${freeKey.region}”. Type it as “City, ST”.`, 'error');
-                  return;
-                }
-                add.mutate(`${region.key}/${freeKey.city}`);
-                setFree('');
-              })
-              .catch(fail);
-          }}
-        >
-          <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-semibold text-muted">
-            Or type a city that isn&apos;t in the list
-            <input value={free} onChange={(e) => setFree(e.currentTarget.value)} placeholder="City, ST" disabled={!canAdd} className={controlClass} />
-          </label>
-          <button type="submit" disabled={!canAdd || !freeKey} className={smallButton}>
-            Add city
-          </button>
-        </form>
-      </div>
-      <div className="flex max-w-[760px] flex-col gap-1 rounded-md border border-border bg-ink-25 p-3">
-        <span className="text-xs font-semibold text-muted">Edit a state&apos;s or province&apos;s cities in place: add or remove many at once, switch each on or off.</span>
-        <RegionEditorLauncher onOpen={(c, r) => setEditing({ c, r })} disabled={!canAdd} />
-      </div>
-      {editing ? <RegionCoverageEditor key={`${editing.c}/${editing.r}`} country={editing.c} region={editing.r} canEdit={canAdd} onClose={() => setEditing(null)} /> : null}
-      <div className="flex flex-col overflow-hidden rounded-md border border-border">
-        <div className="flex flex-wrap items-center gap-2 bg-ink-50 px-3 py-2">
-          <nav aria-label="Area level" className="flex flex-wrap items-center gap-1 text-sm">
-            {crumbs.map((c, i) => {
-              const cur = i === crumbs.length - 1;
-              return (
-                <span key={c.label} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      c.go();
-                      setQ('');
-                      setPage(0);
-                    }}
-                    disabled={cur}
-                    aria-current={cur ? 'location' : undefined}
-                    className={cx('cursor-pointer border-0 bg-transparent px-1 py-0.5 text-sm', cur ? 'font-bold text-text' : 'font-normal text-link')}
-                  >
-                    {c.label}
-                  </button>
-                  {!cur ? <span className="text-subtle">›</span> : null}
-                </span>
-              );
-            })}
-          </nav>
-          <span className="flex-1" />
-          <label className="flex h-8 min-w-[180px] items-center gap-1 rounded-sm border border-border-strong bg-ink-0 px-2">
-            <FunnelSimple aria-hidden className="text-ink-500" />
-            <input
-              value={q}
-              onChange={(e) => {
-                setQ(e.currentTarget.value);
-                setPage(0);
-              }}
-              placeholder={!p || p.level === 'COUNTRY' ? 'Filter countries' : p.level === 'REGION' ? `Filter ${p.regionLabel.toLowerCase()}s` : 'Filter cities'}
-              aria-label="Filter this list"
-              className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none"
-            />
-          </label>
-        </div>
-        {query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
-        <table className="w-full border-collapse text-sm" aria-label="Pre-order areas" aria-busy={query.isFetching || undefined}>
-          <colgroup>
-            <col style={{ width: '34%' }} />
-            <col style={{ width: '30%' }} />
-            <col style={{ width: '12%' }} />
-            <col style={{ width: '17%' }} />
-            <col style={{ width: '7%' }} />
-          </colgroup>
-          <thead>
-            <tr className="border-t border-border text-left text-2xs font-bold tracking-[0.06em] text-subtle uppercase">
-              <th scope="col" className="px-3 py-2">{colName}</th>
-              <th scope="col" className="px-3 py-2">Coverage</th>
-              <th scope="col" className="px-3 py-2">Pre-orders</th>
-              <th scope="col" className="px-3 py-2">On / off</th>
-              <th scope="col" className="px-3 py-2">
-                <span className="at-visually-hidden">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {(p?.rows ?? []).map((a) => {
-              const on = a.on > 0;
-              const open = () => {
-                const [c, r] = a.key.split('/');
-                setNav(r ? { c, r } : { c });
-                setQ('');
-                setPage(0);
-              };
-              return (
-                <tr key={a.key} className="border-t border-border bg-ink-0" data-testid="area-row">
-                  <td className="px-3 py-2">
-                    {a.leaf ? (
-                      <span className={cx('font-semibold', !on && 'line-through')}>{a.name}</span>
-                    ) : (
-                      <button type="button" onClick={open} className={cx('cursor-pointer border-0 bg-transparent p-0 text-left text-sm font-semibold text-text', !on && 'line-through')}>
-                        {a.name}
-                      </button>
-                    )}
-                  </td>
-                  <td className="truncate px-3 py-2 text-xs text-muted">{a.coverage}</td>
-                  <td className="px-3 py-2 text-xs">{a.windows ? a.windows : '—'}</td>
-                  <td className="px-3 py-2">
-                    <span className="flex items-center gap-2">
-                      <Toggle on={on} label={`Switch ${a.name} on or off`} disabled={!canEdit || toggle.isPending} title={canEdit ? undefined : NO_SETTINGS_TITLE} onClick={() => toggle.mutate(a)} />
-                      <span className="text-2xs text-muted">{a.leaf ? (on ? 'On' : 'Off') : `${a.on} of ${a.total}`}</span>
-                    </span>
-                  </td>
-                  <td className="px-1 py-2">
-                    {a.leaf ? (
-                      <button type="button" onClick={() => remove.mutate(a)} disabled={!canEdit} aria-label={`Remove ${a.name}`} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent text-ink-500 disabled:opacity-45">
-                        <X aria-hidden />
-                      </button>
-                    ) : (
-                      <span className="flex items-center">
-                        {a.key.includes('/') ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const [c, r] = a.key.split('/');
-                              if (c && r) setEditing({ c, r });
-                            }}
-                            aria-label={`Edit cities in ${a.name}`}
-                            className="size-7 cursor-pointer rounded-sm border-0 bg-transparent text-ink-500"
-                          >
-                            <PencilSimple aria-hidden />
-                          </button>
-                        ) : null}
-                        <button type="button" onClick={open} aria-label={`Open ${a.name}`} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent text-ink-500">
-                          <CaretRight aria-hidden />
-                        </button>
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-            {p && !p.rows.length ? (
-              <tr>
-                <td colSpan={5} className="border-t border-border p-5 text-sm text-muted">
-                  {q.trim() ? `Nothing here matches “${q.trim()}”.` : 'No pre-order areas yet. Use the dropdowns above to add the first one.'}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-        {!p ? <Spinner /> : null}
-        {p && p.total > p.size ? (
-          <div className="flex items-center justify-between border-t border-border px-3 py-2 text-xs text-muted">
-            <span>{`${p.page * p.size + 1}–${Math.min(p.total, p.page * p.size + p.size)} of ${p.total}`}</span>
-            <span className="flex gap-1">
-              <button type="button" onClick={() => setPage(Math.max(0, page - 1))} className={smallButton}>
-                Prev
-              </button>
-              <button type="button" onClick={() => setPage(Math.min(pages - 1, page + 1))} className={smallButton}>
-                Next
-              </button>
-            </span>
-          </div>
-        ) : null}
-      </div>
-    </div>
+      <PreorderAreasTree canEdit={canEdit} />
+    </section>
   );
 }
 
@@ -497,7 +279,7 @@ export function PreorderSettingsPanel() {
           {access.canEdit ? 'Pre-order managers with Edit access can add areas from a pre-order; switching areas, fallback, placements and fees needs Full access.' : 'View only for your role.'}
         </p>
       ) : null}
-      <Areas canEdit={canEdit} canAdd={canEdit} />
+      <Areas canEdit={canEdit} />
       <section aria-labelledby="po-fallback" className="flex flex-col gap-2">
         <h3 id="po-fallback" className="m-0 text-sm font-bold">
           When pre-order is off for a city

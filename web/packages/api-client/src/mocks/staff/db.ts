@@ -5,6 +5,7 @@ import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
+import { type MockMarketsState, seedMarkets } from './markets';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { type MockPreorderState, seedPreorders } from './preorders';
 
@@ -44,6 +45,8 @@ export interface MockStaffDb {
   templates: { rows: MockTemplateRow[]; samples: Record<string, MockTemplateSample> };
   /** delivery-runs' pre-order windows, orders, coverage and settings (S274). */
   preorders: MockPreorderState;
+  /** content's draft markets: countries → states → cities (Markets & locations). */
+  markets: MockMarketsState;
   seq: number;
 }
 
@@ -449,6 +452,7 @@ function seed(now: Date): MockStaffDb {
     dispatch: seedDispatch(now),
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
+    markets: seedMarkets(),
     seq: 1
   };
 }
@@ -458,6 +462,7 @@ export function getStaffDb(): MockStaffDb {
   g[KEY] ??= seed(new Date());
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
+  g[KEY].markets ??= seedMarkets();
   return g[KEY];
 }
 

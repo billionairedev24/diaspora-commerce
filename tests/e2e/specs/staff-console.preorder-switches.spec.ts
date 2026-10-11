@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 /* Back office › Pre-orders: each pre-order has its own on/off switch (the master switch is a separate global kill
-   switch that never rewrites them), and a state's cities are edited in place. Runs against the in-process mock BFF;
+   switch that never rewrites them). Pre-order areas are edited in the location tree (staff-console.locations.spec.ts).
+   Runs against the in-process mock BFF;
    the journey puts everything back so it can run again on the same server. SHOTS (optional) saves screenshots. */
 const shot = (name: string) => (process.env.SHOTS ? { path: `${process.env.SHOTS}/${name}.png`, fullPage: true } : undefined);
 
@@ -36,34 +37,5 @@ test.describe('staff console · pre-order switches and coverage', () => {
     await expect(page.getByTestId('detail-status')).toHaveText('Paused');
     await page.getByRole('switch', { name: 'Switch Lubbock Pre-order #7 on or off' }).click();
     await expect(page.getByTestId('detail-status')).toHaveText('Open');
-  });
-
-  test("edits a state's cities in place", async ({ page }) => {
-    await page.goto('/preorders/settings');
-    const state = page.getByRole('combobox', { name: 'State to edit' });
-    await expect(state.getByRole('option', { name: 'Texas' })).toHaveCount(1);
-    await state.selectOption('TX');
-    await page.getByRole('button', { name: 'Edit cities' }).click();
-    const editor = page.getByTestId('region-editor');
-    await expect(editor.getByRole('button', { name: 'Remove Lubbock' })).toBeDisabled();
-
-    const houston = editor.getByTestId('region-city').filter({ hasText: /^Houston/ });
-    if (!(await houston.count())) {
-      await editor.getByRole('textbox', { name: 'Search cities in Texas' }).fill('houston');
-      await editor.getByRole('checkbox', { name: 'Houston' }).check();
-      await editor.getByRole('button', { name: /Add 1 selected/ }).click();
-    }
-    await editor.getByRole('switch', { name: 'Switch Odessa on or off' }).click();
-    await editor.getByRole('button', { name: 'Save cities' }).click();
-    await expect(page.getByText(/Saved Texas/)).toBeVisible();
-    await expect(editor.getByRole('switch', { name: 'Switch Houston on or off' })).toHaveAttribute('aria-checked', 'true');
-    const s = shot('mock-region-editor');
-    if (s) await page.screenshot(s);
-
-    // Put it back: remove Houston, switch Odessa back.
-    await editor.getByRole('button', { name: 'Remove Houston' }).click();
-    await editor.getByRole('switch', { name: 'Switch Odessa on or off' }).click();
-    await editor.getByRole('button', { name: 'Save cities' }).click();
-    await expect(editor.getByRole('switch', { name: 'Switch Houston on or off' })).toHaveCount(0);
   });
 });
