@@ -91,8 +91,12 @@ var StaffPlanOps = []StaffPlanOp{
 	{Name: "waiveInvoice", Route: "POST /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/waive", Method: http.MethodPost,
 		Path: "/v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive", Permission: domain.PermBillingAdjust,
 		Status: http.StatusCreated, Body: true},
-	{Name: "setEarningsCollection", Route: "PUT /v1/staff/billing/orgs/{orgId}/earnings-collection", Method: http.MethodPut,
-		Path: "/v1/orgs/{orgId}/billing/earnings-collection", Permission: domain.PermBillingAdjust, Body: true},
+	// S298: how each seller pays its plan (staff override with a reason) and the default for new sellers.
+	{Name: "overridePlanFeeCollection", Route: "PUT /v1/staff/billing/orgs/{orgId}/plan-fee-collection", Method: http.MethodPut,
+		Path: "/v1/orgs/{orgId}/billing/plan-fee-collection/override", Permission: domain.PermBillingAdjust, Body: true},
+	{Name: "billingSettings", Route: "GET /v1/staff/billing/settings", Method: http.MethodGet, Path: "/v1/billing/settings"},
+	{Name: "updateBillingSettings", Route: "PUT /v1/staff/billing/settings", Method: http.MethodPut, Path: "/v1/billing/settings",
+		Permission: domain.PermPlansManage, Body: true},
 }
 
 // StaffPlanOpParams are the path parameters an operation's route carries.

@@ -53,6 +53,7 @@ func (u *Upstreams) orgByID(id string) (MemberOrg, bool) {
 
 type sellerState struct {
 	plan          string
+	planFeeMode   string
 	defaultPM     string
 	listingStatus map[string]string
 	shipStatus    string
@@ -61,7 +62,7 @@ type sellerState struct {
 }
 
 func newSellerState() *sellerState {
-	return &sellerState{plan: "seller_growth", defaultPM: "aaaaaaaa-0000-0000-0000-000000000001", listingStatus: map[string]string{"prod-1": "LIVE"},
+	return &sellerState{plan: "seller_growth", planFeeMode: "EARNINGS_FIRST", defaultPM: "aaaaaaaa-0000-0000-0000-000000000001", listingStatus: map[string]string{"prod-1": "LIVE"},
 		shipStatus: "placed", storefront: map[string]any{"orgId": SellerOrgID, "kind": "SELLER", "slug": "ade-s-kitchen", "name": "Ade's Kitchen",
 			"tagline": "Home-style Nigerian pantry", "theme": map[string]any{"primary": "#0A8264", "accent": "#FFD400"}, "status": "DRAFT",
 			"social": []any{map[string]any{"network": "instagram", "url": "https://instagram.com/adeskitchen", "status": "APPROVED"}}, "version": 3}}
@@ -248,6 +249,8 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			b["planName"] = "Seller Growth"
 			b["firstCharge"] = map[string]any{"chargeOn": "2026-11-09", "amountCents": 3900, "sentence": "Free for 30 days. First charge of $39.00 on Nov 9, 2026."}
 			u.Application["plan"] = b
+			// S298: the Plan step offers paying the plan from sales.
+			u.Application["planFeeCollectionOption"] = map[string]any{"available": true, "platformDefault": "EARNINGS_FIRST"}
 		case "catalog-compliance":
 			if fp, ok := b["foodPermit"].(map[string]any); ok {
 				if t, _ := fp["permitType"].(string); !slices.Contains([]string{"FOOD_ESTABLISHMENT", "COTTAGE_FOOD", "FDA_FACILITY", "FOOD_HANDLER"}, t) {
@@ -380,7 +383,34 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/invoices", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{{"id": "in_s3", "number": "AT-0003", "periodStart": "2026-07-10T00:00:00Z", "periodEnd": "2026-10-10T00:00:00Z",
 			"amountDueCents": 11115, "amountPaidCents": 11115, "currency": "usd", "status": "paid", "invoicePdf": "https://files.example/in_s3.pdf",
-			"hostedInvoiceUrl": "https://invoice.example/in_s3", "createdAt": "2026-10-10T00:00:00Z"}})
+			"hostedInvoiceUrl": "https://invoice.example/in_s3", "createdAt": "2026-10-10T00:00:00Z", "paidFromSalesCents": 9000,
+			"paidByCardCents": 2115}})
+	})
+	// S298: how the organisation pays its plan.
+	planFees := func() map[string]any {
+		return map[string]any{"orgId": SellerOrgID, "available": true, "mode": u.seller.planFeeMode, "effective": u.seller.planFeeMode,
+			"source": "SELLER", "changedAt": "2026-10-11T10:00:00Z", "changedBy": "user-1", "platformDefault": "EARNINGS_FIRST",
+			"appliesFromInvoiceAt": "2027-01-10T00:00:00Z", "appliesFromLabel": "Applies from your next invoice, on Jan 10, 2027",
+			"inProgressInvoiceId": nil, "history": []any{}}
+	}
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/plan-fee-collection", func(w http.ResponseWriter, _ *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		writeJSON(w, 200, planFees())
+	})
+	mux.HandleFunc("PUT /v1/orgs/{id}/billing/plan-fee-collection", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Mode string `json:"mode"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if u.PlanFeeCollectionOff {
+			problem(w, 409, "seller.earnings-collection-off", "Paying plans from sales is switched off on this platform", nil)
+			return
+		}
+		u.seller.planFeeMode = b.Mode
+		writeJSON(w, 200, planFees())
 	})
 	mux.HandleFunc("GET /v1/plans", func(w http.ResponseWriter, _ *http.Request) {
 		price := func(cad string, months int, total, per, save int64) map[string]any {
@@ -865,8 +895,22 @@ func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
 	u.feeRoutes(mux)
 	mux.HandleFunc("GET /v1/payouts/balance", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "currency": "USD", "availableMinor": 128455, "onHoldMinor": 52725, "requestedOrInTransitMinor": 0,
-			"paidMinor": 932210, "providerFeesMinor": 1500, "minimumPayoutMinor": 2500, "canRequestToday": true,
+			"paidMinor": 932210, "providerFeesMinor": 1500, "planFeesMinor": 0, "minimumPayoutMinor": 2500, "canRequestToday": true,
 			"payoutsPaused": true, "payoutsPausedReason": "AUTO_PAST_DUE", "onHold": []map[string]any{{"orderId": "AT-2026-000123", "amountMinor": 52725}}})
+	})
+	// S298: plan invoices paid from sales (a DECLINED one took nothing and is not shown).
+	mux.HandleFunc("GET /v1/orgs/{id}/plan-fee-withholdings", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []map[string]any{
+			{"id": "pf-2", "orgId": SellerOrgID, "invoiceId": "in_s4", "invoiceNumber": nil, "currency": "USD", "requestedMinor": 11115,
+				"withheldMinor": 0, "releasedMinor": 0, "settledMinor": 0, "outstandingMinor": 0, "status": "DECLINED",
+				"reason": "No delivered, undisputed earnings to collect from", "label": "Plan fee (invoice in_s4)", "createdAt": "2026-10-11T00:00:00Z",
+				"updatedAt": "2026-10-11T00:00:00Z", "deductions": []any{}},
+			{"id": "pf-1", "orgId": SellerOrgID, "invoiceId": "in_s3", "invoiceNumber": "AT-0003", "currency": "USD", "requestedMinor": 11115,
+				"withheldMinor": 9000, "releasedMinor": 0, "settledMinor": 9000, "outstandingMinor": 0, "status": "WITHHELD",
+				"reason": "Only $90.00 of $111.15 was available; the card pays the rest", "label": "Plan fee (invoice AT-0003)",
+				"createdAt": "2026-10-10T00:00:00Z", "updatedAt": "2026-10-12T00:00:00Z", "deductions": []any{map[string]any{
+					"orderId": "AT-2026-000123", "amountMinor": 9000, "at": "2026-10-12T00:00:00Z",
+					"label": "Plan fee (invoice AT-0003) deducted from order AT-2026-000123"}}}})
 	})
 	mux.HandleFunc("GET /v1/payouts/provider-fees", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{

@@ -515,6 +515,7 @@ type PayoutBalance struct {
 	RequestedOrInTransitMinor int64        `json:"requestedOrInTransitMinor"`
 	PaidMinor                 int64        `json:"paidMinor"`
 	ProviderFeesMinor         int64        `json:"providerFeesMinor"`
+	PlanFeesMinor             int64        `json:"planFeesMinor"`
 	MinimumPayoutMinor        int64        `json:"minimumPayoutMinor"`
 	CanRequestToday           bool         `json:"canRequestToday"`
 	PayoutsPaused             bool         `json:"payoutsPaused"`
@@ -557,6 +558,50 @@ type PayoutsView struct {
 	Balance          PayoutBalance `json:"balance"`
 	Payouts          []Payout      `json:"payouts"`
 	HistoryAvailable bool          `json:"historyAvailable"`
+	// PlanFeeDeductions are plan invoices paid from sales (S298), newest first.
+	PlanFeeDeductions []PlanFeeDeduction `json:"planFeeDeductions"`
+}
+
+// PlanFeeTransfer is part of a plan fee deducted from (or, negative, paid back with) one order's settlement.
+type PlanFeeTransfer struct {
+	OrderID     string    `json:"orderId"`
+	AmountMinor int64     `json:"amountMinor"`
+	At          time.Time `json:"at"`
+	Label       string    `json:"label"`
+}
+
+// PlanFeeDeduction is a plan invoice paid from sales: "Plan fee (invoice …)" (S298).
+type PlanFeeDeduction struct {
+	InvoiceID        string            `json:"invoiceId"`
+	InvoiceNumber    *string           `json:"invoiceNumber"`
+	Label            string            `json:"label"`
+	Status           string            `json:"status"`
+	RequestedMinor   int64             `json:"requestedMinor"`
+	WithheldMinor    int64             `json:"withheldMinor"`
+	ReleasedMinor    int64             `json:"releasedMinor"`
+	OutstandingMinor int64             `json:"outstandingMinor"`
+	CreatedAt        time.Time         `json:"createdAt"`
+	Transfers        []PlanFeeTransfer `json:"transfers"`
+}
+
+// Plan fee collection modes (S298).
+const (
+	PlanFeeEarningsFirst = "EARNINGS_FIRST"
+	PlanFeeCard          = "CARD"
+)
+
+// PlanFeeCollectionView is how the organisation pays its plan (S298).
+type PlanFeeCollectionView struct {
+	Available            bool       `json:"available"`
+	Mode                 string     `json:"mode"`
+	Effective            string     `json:"effective"`
+	Source               string     `json:"source"`
+	PlatformDefault      string     `json:"platformDefault"`
+	AppliesFromInvoiceAt *time.Time `json:"appliesFromInvoiceAt"`
+	AppliesFromLabel     string     `json:"appliesFromLabel"`
+	InProgressInvoiceID  *string    `json:"inProgressInvoiceId"`
+	ChangedAt            *time.Time `json:"changedAt"`
+	CanChange            bool       `json:"canChange"`
 }
 
 // Cadences of a subscription.
@@ -615,6 +660,9 @@ type Invoice struct {
 	PDFURL          *string    `json:"pdfUrl"`
 	HostedURL       *string    `json:"hostedUrl"`
 	CreatedAt       time.Time  `json:"createdAt"`
+	// PaidFromSalesMinor is what the organisation's sales paid (S298); PaidByCardMinor the rest.
+	PaidFromSalesMinor int64 `json:"paidFromSalesMinor"`
+	PaidByCardMinor    int64 `json:"paidByCardMinor"`
 }
 
 // PendingPlanChange is a downgrade or cadence change applied at renewal.
@@ -657,6 +705,8 @@ type BillingView struct {
 	PaymentMethods []BillingPaymentMethod `json:"paymentMethods"`
 	Invoices       []Invoice              `json:"invoices"`
 	CanManage      bool                   `json:"canManage"`
+	// PlanFeeCollection is how the plan is paid (S298); nil when it can't be read.
+	PlanFeeCollection *PlanFeeCollectionView `json:"planFeeCollection"`
 }
 
 // RewardProgress is a reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free".

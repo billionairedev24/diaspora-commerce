@@ -118,10 +118,20 @@ func TestOnboardingOwnersPlanAndCompliance(t *testing.T) {
 	}
 
 	plan := b.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "monthly", "paymentMethodKind": "card",
-		"stripePaymentMethodId": "pm_1", "cardBrand": "Visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029, "promoCode": " grow60 "})
+		"stripePaymentMethodId": "pm_1", "cardBrand": "Visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029, "promoCode": " grow60 ",
+		"planFeeCollection": "card"})
 	if s := up.StepBodies["plan"]; plan.status != 200 || s["cadence"] != "MONTHLY" || s["paymentMethodKind"] != "CARD" || s["cardBrand"] != "visa" ||
-		s["promoCode"] != "GROW60" {
+		s["promoCode"] != "GROW60" || s["planFeeCollection"] != "CARD" {
 		t.Fatalf("plan = %d %v", plan.status, s)
+	}
+	// S298: the applicant chose the card; the step offers paying from sales with the platform default.
+	if p := plan.json(t)["form"].(map[string]any)["plan"].(map[string]any); p["planFeeCollection"] != "CARD" || p["planFeeCollectionAvailable"] != true ||
+		p["planFeeCollectionDefault"] != "EARNINGS_FIRST" {
+		t.Fatalf("plan fee collection = %v", p)
+	}
+	if r := b.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "MONTHLY",
+		"planFeeCollection": "sometimes"}); r.status != 422 {
+		t.Fatalf("invalid plan fee collection = %d %s", r.status, r.body)
 	}
 	if fc := plan.json(t)["form"].(map[string]any)["plan"].(map[string]any)["firstCharge"].(map[string]any); !strings.HasPrefix(fc["sentence"].(string), "Free for 30 days") {
 		t.Fatalf("first charge = %v", fc)

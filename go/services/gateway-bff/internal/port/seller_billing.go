@@ -20,6 +20,24 @@ type SellerBillingClient interface {
 	CreateSetupIntent(ctx context.Context, bearer, orgID string) (SellerSetupIntent, error)
 	// AddPaymentMethod is seller POST /v1/orgs/{orgId}/billing/payment-methods.
 	AddPaymentMethod(ctx context.Context, bearer, orgID string, in SellerPaymentMethodInput) (SellerPaymentMethod, error)
+	// PlanFeeCollection is seller GET /v1/orgs/{orgId}/billing/plan-fee-collection (S298).
+	PlanFeeCollection(ctx context.Context, bearer, orgID string) (SellerPlanFeeCollection, error)
+	// SetPlanFeeCollection is seller PUT /v1/orgs/{orgId}/billing/plan-fee-collection (owner / finance).
+	SetPlanFeeCollection(ctx context.Context, bearer, orgID, mode string) (SellerPlanFeeCollection, error)
+}
+
+// SellerPlanFeeCollection is seller's PlanFeeCollection: how the organisation pays its plan (S298).
+type SellerPlanFeeCollection struct {
+	OrgID                string     `json:"orgId"`
+	Available            bool       `json:"available"`
+	Mode                 string     `json:"mode"`
+	Effective            string     `json:"effective"`
+	Source               string     `json:"source"`
+	ChangedAt            *time.Time `json:"changedAt"`
+	PlatformDefault      string     `json:"platformDefault"`
+	AppliesFromInvoiceAt *time.Time `json:"appliesFromInvoiceAt"`
+	AppliesFromLabel     string     `json:"appliesFromLabel"`
+	InProgressInvoiceID  *string    `json:"inProgressInvoiceId"`
 }
 
 // SellerRewardProgress is seller's RewardProgress.

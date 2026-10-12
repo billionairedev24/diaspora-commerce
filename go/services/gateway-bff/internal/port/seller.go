@@ -150,6 +150,8 @@ type SellerApplication struct {
 	Documents       []SellerApplicationDocument  `json:"documents"`
 	SubmittedAt     *time.Time                   `json:"submittedAt"`
 	Timeline        []SellerApplicationEvent     `json:"timeline"`
+	// PlanFeeCollectionOption is what the Plan step offers (S298); nil from an older seller service.
+	PlanFeeCollectionOption *SellerPlanFeeOption `json:"planFeeCollectionOption"`
 }
 
 // SellerApplicationOwner is seller's OwnerView (and Owner when saving).
@@ -203,6 +205,14 @@ type SellerApplicationPlan struct {
 	CardExpMonth      *int               `json:"cardExpMonth"`
 	CardExpYear       *int               `json:"cardExpYear"`
 	FirstCharge       *SellerFirstCharge `json:"firstCharge"`
+	// PlanFeeCollection is the applicant's choice (S298): EARNINGS_FIRST, CARD or empty for the platform default.
+	PlanFeeCollection string `json:"planFeeCollection"`
+}
+
+// SellerPlanFeeOption is seller's PlanFeeCollectionOption: whether the Plan step offers paying the plan from sales.
+type SellerPlanFeeOption struct {
+	Available       bool   `json:"available"`
+	PlatformDefault string `json:"platformDefault"`
 }
 
 // SellerFoodPermit is seller's FoodPermit.
@@ -270,6 +280,7 @@ type SellerApplicationPlanStep struct {
 	CardExpMonth          *int   `json:"cardExpMonth,omitempty"`
 	CardExpYear           *int   `json:"cardExpYear,omitempty"`
 	PromoCode             string `json:"promoCode,omitempty"`
+	PlanFeeCollection     string `json:"planFeeCollection,omitempty"`
 }
 
 // SellerApplicationBiz is seller's BusinessSection (step "business").
@@ -437,6 +448,9 @@ type SellerInvoice struct {
 	HostedInvoiceURL string     `json:"hostedInvoiceUrl"`
 	InvoicePDF       string     `json:"invoicePdf"`
 	CreatedAt        time.Time  `json:"createdAt"`
+	// S298: what the organisation's sales paid, and the card the rest.
+	PaidFromSalesCents int64 `json:"paidFromSalesCents"`
+	PaidByCardCents    int64 `json:"paidByCardCents"`
 }
 
 // ShipFromAddress is seller's ShipFromAddress.
@@ -931,6 +945,7 @@ type PayoutBalanceResponse struct {
 	RequestedOrInTransitMinor int64  `json:"requestedOrInTransitMinor"`
 	PaidMinor                 int64  `json:"paidMinor"`
 	ProviderFeesMinor         int64  `json:"providerFeesMinor"`
+	PlanFeesMinor             int64  `json:"planFeesMinor"`
 	MinimumPayoutMinor        int64  `json:"minimumPayoutMinor"`
 	CanRequestToday           bool   `json:"canRequestToday"`
 	PayoutsPaused             bool   `json:"payoutsPaused"`
@@ -972,6 +987,28 @@ type PayoutsClient interface {
 	ProviderFees(ctx context.Context, bearer, orgID string) ([]ProviderFeeResponse, error)
 	Requests(ctx context.Context, bearer, orgID string) ([]PayoutResponse, error)
 	RequestPayout(ctx context.Context, bearer, idempotencyKey string, amountMinor int64, all bool) (PayoutResponse, error)
+	// PlanFeeWithholdings is payments GET /v1/orgs/{orgId}/plan-fee-withholdings (S298): plan invoices paid from sales.
+	PlanFeeWithholdings(ctx context.Context, bearer, orgID string) ([]PlanFeeWithholding, error)
+}
+
+// PlanFeeWithholding is payments' PlanFeeWithholdingResponse.
+type PlanFeeWithholding struct {
+	ID               string    `json:"id"`
+	InvoiceID        string    `json:"invoiceId"`
+	InvoiceNumber    string    `json:"invoiceNumber"`
+	RequestedMinor   int64     `json:"requestedMinor"`
+	WithheldMinor    int64     `json:"withheldMinor"`
+	ReleasedMinor    int64     `json:"releasedMinor"`
+	OutstandingMinor int64     `json:"outstandingMinor"`
+	Status           string    `json:"status"`
+	Label            string    `json:"label"`
+	CreatedAt        time.Time `json:"createdAt"`
+	Deductions       []struct {
+		OrderID     string    `json:"orderId"`
+		AmountMinor int64     `json:"amountMinor"`
+		At          time.Time `json:"at"`
+		Label       string    `json:"label"`
+	} `json:"deductions"`
 }
 
 // ---------------------------------------------------------------- payments (fee schedules)

@@ -345,6 +345,16 @@ func (p *payoutsImpl) RequestPayout(ctx context.Context, bearer, key string, amo
 	return out, err
 }
 
+func (p *payoutsImpl) PlanFeeWithholdings(ctx context.Context, bearer, orgID string) ([]port.PlanFeeWithholding, error) {
+	res, err := call(ctx, p.c, httpclient.Request{Path: "/v1/orgs/" + esc(orgID) + "/plan-fee-withholdings", Query: url.Values{"limit": {"50"}},
+		Bearer: bearer}, nil)
+	if err != nil {
+		return nil, err
+	}
+	items, _, err := itemsOf[port.PlanFeeWithholding](res.Body)
+	return items, err
+}
+
 // ---------------------------------------------------------------- payments: fee schedules (contracts/openapi/payments.yaml)
 
 // FeesScope is the client-credentials scope payments accepts for reading fee schedules on behalf of a service.

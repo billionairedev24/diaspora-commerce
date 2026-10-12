@@ -919,7 +919,7 @@ paths:
       tags: [Plans & billing]
       operationId: getStaffBillingPanel
       security: [{sessionCookie: []}]
-      summary: "Per-seller billing panel: plan, trial, credit balance, grants, invoices, collections from earnings"
+      summary: "Per-seller billing panel: plan, trial, credit balance, grants, invoices, how the plan is paid and the invoices paid from earnings"
       description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
       parameters:
         - {$ref: '#/components/parameters/BillingOrgId'}
@@ -1019,24 +1019,56 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/staff/billing/orgs/{orgId}/earnings-collection:
+  /v1/staff/billing/orgs/{orgId}/plan-fee-collection:
     put:
       tags: [Plans & billing]
-      operationId: setStaffEarningsCollection
+      operationId: overrideStaffPlanFeeCollection
       security: [{sessionCookie: []}]
-      summary: "Opt the organisation in or out of collecting plan fees from earnings (409 while the platform flag is off)"
-      description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+      summary: "Override how the organisation pays its plan: from its sales first or always by card (billing:adjust, reason code; S298)"
+      description: |
+        Needs EDIT on Plans & billing and `billing:adjust`. seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection/override`:
+        audited with a billing reason code (OTHER needs a note) and applied from the organisation's next invoice. 409
+        `seller.earnings-collection-off` while the kill switch COLLECT_PLAN_FEES_FROM_EARNINGS is off.
       parameters:
         - {$ref: '#/components/parameters/BillingOrgId'}
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/StaffEarningsCollectionRequest'}}}
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanFeeCollectionRequest'}}}
       responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingPanel'}}}}
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanFeeCollection'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/settings:
+    get:
+      tags: [Plans & billing]
+      operationId: getStaffBillingSettings
+      security: [{sessionCookie: []}]
+      summary: "Platform billing settings: whether sellers may pay their plan from their sales (kill switch) and the default for new sellers (S298)"
+      description: Needs VIEW on Plans & billing. seller `GET /v1/billing/settings`.
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Plans & billing]
+      operationId: updateStaffBillingSettings
+      security: [{sessionCookie: []}]
+      summary: "Set how new sellers pay their plan unless they choose (plans:manage; S298)"
+      description: Needs EDIT on Plans & billing and `plans:manage`. seller `PUT /v1/billing/settings`; existing sellers keep their choice.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingSettingsRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
@@ -4439,10 +4471,10 @@ components:
         creditBalanceCents: {type: integer, format: int64}
         trialSource: {type: [string, 'null'], enum: [PLAN, CAMPAIGN, OVERRIDE, NONE, null]}
         trialDaysOverride: {type: [integer, 'null']}
-        collectFromEarnings: {type: boolean}
+        planFeeCollection: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
     StaffBillingInvoice:
       type: object
-      required: [id, amountDueCents, amountPaidCents, currency, createdAt]
+      required: [id, amountDueCents, amountPaidCents, currency, createdAt, paidFromSalesCents, paidByCardCents]
       properties:
         id: {type: string}
         number: {type: [string, 'null']}
@@ -4456,17 +4488,86 @@ components:
         hostedInvoiceUrl: {type: [string, 'null']}
         invoicePdf: {type: [string, 'null']}
         createdAt: {type: string, format: date-time}
+        paidFromSalesCents: {type: integer, format: int64, description: 'Paid from the organisation''s sales (S298): withheld from its earnings and credited to the invoice'}
+        paidByCardCents: {type: integer, format: int64, description: 'Paid (or, while open, due) by card or bank: the rest'}
     StaffEarningsCollection:
       type: object
-      required: [invoiceId, amountCents, status]
+      description: One plan invoice paid (or asked to be paid) from earnings (S298).
+      required: [invoiceId, amountCents, withheldCents, creditedCents, releasedCents, paidFromSalesCents, status, attempts]
       properties:
         invoiceId: {type: string}
-        amountCents: {type: integer, format: int64}
-        status: {type: string, enum: [REQUESTED, WITHHELD, CREDITED, DECLINED, FAILED]}
+        invoiceNumber: {type: [string, 'null']}
+        invoiceAmountCents: {type: [integer, 'null'], format: int64, description: Invoice amount when Stripe created it}
+        amountCents: {type: integer, format: int64, description: Asked from earnings (the invoice less the credit balance)}
+        withheldCents: {type: integer, format: int64}
+        creditedCents: {type: integer, format: int64}
+        releasedCents: {type: integer, format: int64}
+        paidFromSalesCents: {type: integer, format: int64}
+        status: {type: string, enum: [REQUESTED, WITHHELD, CREDITED, DECLINED, MISSED, FAILED, RELEASED]}
         paymentsReference: {type: [string, 'null']}
         stripeBalanceTransactionId: {type: [string, 'null']}
         reason: {type: [string, 'null']}
+        attempts: {type: integer}
+        lastError: {type: [string, 'null']}
         createdAt: {type: [string, 'null'], format: date-time}
+        updatedAt: {type: [string, 'null'], format: date-time}
+    StaffPlanFeeCollectionMode:
+      type: string
+      enum: [EARNINGS_FIRST, CARD]
+      description: 'EARNINGS_FIRST: each plan invoice is taken from pending earnings and the card pays only the rest. CARD: always charged to the card.'
+    StaffPlanFeeCollectionChange:
+      type: object
+      required: [id, mode, source, actorId, createdAt]
+      properties:
+        id: {type: string}
+        previous:
+          oneOf:
+            - {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+            - {type: 'null'}
+        mode: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+        source: {type: string, enum: [ONBOARDING, SELLER, STAFF]}
+        actorId: {type: string}
+        reasonCode: {type: [string, 'null']}
+        note: {type: [string, 'null']}
+        appliesFrom: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+    StaffPlanFeeCollection:
+      type: object
+      description: seller's PlanFeeCollection (S298)
+      required: [orgId, available, mode, effective, source, platformDefault, appliesFromLabel, history]
+      properties:
+        orgId: {type: string}
+        available: {type: boolean, description: The kill switch is on; the choice is offered and honoured}
+        mode: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+        effective: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+        source: {type: string, enum: [DEFAULT, ONBOARDING, SELLER, STAFF]}
+        changedAt: {type: [string, 'null'], format: date-time}
+        changedBy: {type: [string, 'null']}
+        platformDefault: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+        appliesFromInvoiceAt: {type: [string, 'null'], format: date-time, description: A change applies from the invoice of this date (the next renewal)}
+        appliesFromLabel: {type: string}
+        inProgressInvoiceId: {type: [string, 'null'], description: An invoice being collected now keeps the choice it was created with}
+        history: {type: array, items: {$ref: '#/components/schemas/StaffPlanFeeCollectionChange'}}
+    StaffPlanFeeCollectionRequest:
+      type: object
+      required: [mode, reasonCode]
+      properties:
+        mode: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+        reasonCode: {type: string}
+        note: {type: [string, 'null'], maxLength: 500}
+    StaffBillingSettings:
+      type: object
+      required: [earningsCollectionEnabled, planFeeCollectionDefault]
+      properties:
+        earningsCollectionEnabled: {type: boolean, description: The kill switch COLLECT_PLAN_FEES_FROM_EARNINGS (deployment configuration)}
+        planFeeCollectionDefault: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+        updatedBy: {type: [string, 'null']}
+        updatedAt: {type: [string, 'null'], format: date-time}
+    StaffBillingSettingsRequest:
+      type: object
+      required: [planFeeCollectionDefault]
+      properties:
+        planFeeCollectionDefault: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
     StaffBillingPanel:
       type: object
       required: [orgId, orgName, kind, orgStatus, invoices, grants, collections, earningsCollectionEnabled]
@@ -4484,6 +4585,11 @@ components:
         grants: {type: array, items: {$ref: '#/components/schemas/StaffBillingGrant'}}
         collections: {type: array, items: {$ref: '#/components/schemas/StaffEarningsCollection'}}
         earningsCollectionEnabled: {type: boolean}
+        planFeeCollection:
+          description: How the plan is paid (S298); null before the organisation has a subscription
+          oneOf:
+            - {$ref: '#/components/schemas/StaffPlanFeeCollection'}
+            - {type: 'null'}
     StaffCreditRequest:
       type: object
       required: [amountCents, reasonCode]
@@ -4504,11 +4610,6 @@ components:
       properties:
         reasonCode: {type: string}
         note: {type: [string, 'null'], maxLength: 500}
-    StaffEarningsCollectionRequest:
-      type: object
-      required: [enabled]
-      properties:
-        enabled: {type: boolean}
     StaffPlaceStatus:
       type: string
       enum: [LIVE, PLANNED, OFF]

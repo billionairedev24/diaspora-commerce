@@ -40,6 +40,19 @@ func (s *sellerServiceImpl) CreateSetupIntent(ctx context.Context, bearer, orgID
 	return out, err
 }
 
+func (s *sellerServiceImpl) PlanFeeCollection(ctx context.Context, bearer, orgID string) (port.SellerPlanFeeCollection, error) {
+	var out port.SellerPlanFeeCollection
+	_, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/plan-fee-collection"), Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) SetPlanFeeCollection(ctx context.Context, bearer, orgID, mode string) (port.SellerPlanFeeCollection, error) {
+	var out port.SellerPlanFeeCollection
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: orgPath(orgID, "/billing/plan-fee-collection"),
+		Bearer: bearer, RetryUnsafe: true, JSON: map[string]string{"mode": mode}}, &out)
+	return out, err
+}
+
 func (s *sellerServiceImpl) AddPaymentMethod(ctx context.Context, bearer, orgID string, in port.SellerPaymentMethodInput) (port.SellerPaymentMethod, error) {
 	var out port.SellerPaymentMethod
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/payment-methods"),

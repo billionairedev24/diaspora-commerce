@@ -92,11 +92,30 @@ func samplePanel() map[string]any {
 			"trialEndsAt": "2026-11-09T10:00:00Z", "currentPeriodEnd": "2026-11-09T10:00:00Z", "nextChargeAt": "2026-11-09T10:00:00Z",
 			"nextChargeCents": 3900, "nextChargeLabel": "Free trial ends Nov 9, 2026", "cancelAtPeriodEnd": false, "dunning": "NONE",
 			"failedPaymentAttempts": 0, "planVersion": 2, "creditBalanceCents": 2500, "trialSource": "CAMPAIGN", "trialDaysOverride": nil,
-			"collectFromEarnings": false, "price": map[string]any{"cadence": "MONTHLY"}, "paymentMethods": []any{}},
+			"planFeeCollection": "EARNINGS_FIRST", "price": map[string]any{"cadence": "MONTHLY"}, "paymentMethods": []any{}},
 		"invoices": []any{map[string]any{"id": "in_1", "number": "AT-0001", "periodStart": nil, "periodEnd": nil, "amountDueCents": 3900,
 			"amountPaidCents": 0, "currency": "usd", "status": "open", "billingReason": "subscription_cycle", "hostedInvoiceUrl": nil,
-			"invoicePdf": nil, "createdAt": "2026-10-09T10:00:00Z", "lines": []any{}, "meteredAmountCents": 0}},
-		"grants": []any{sampleGrant("CREDIT")}, "collections": []any{}, "earningsCollectionEnabled": false}
+			"invoicePdf": nil, "createdAt": "2026-10-09T10:00:00Z", "lines": []any{}, "meteredAmountCents": 0, "paidFromSalesCents": 2500,
+			"paidByCardCents": 1400}},
+		"grants": []any{sampleGrant("CREDIT")}, "collections": []any{map[string]any{"invoiceId": "in_1", "invoiceNumber": "AT-0001",
+			"invoiceAmountCents": 3900, "amountCents": 3900, "withheldCents": 2500, "creditedCents": 2500, "releasedCents": 0,
+			"paidFromSalesCents": 2500, "status": "CREDITED", "paymentsReference": "wh_1", "stripeBalanceTransactionId": "cbtxn_9",
+			"reason": "Only $25.00 was available", "attempts": 1, "lastError": nil, "createdAt": "2026-10-09T10:00:00Z",
+			"updatedAt": "2026-10-09T10:01:00Z"}},
+		"earningsCollectionEnabled": true, "planFeeCollection": samplePlanFeeCollection("EARNINGS_FIRST", "DEFAULT")}
+}
+
+// samplePlanFeeCollection is seller's PlanFeeCollection (S298).
+func samplePlanFeeCollection(mode, source string) map[string]any {
+	history := []any{}
+	if source == "STAFF" {
+		history = append(history, map[string]any{"id": "0f0e0d0c-0000-4000-8000-000000000001", "previous": "EARNINGS_FIRST", "mode": mode,
+			"source": "STAFF", "actorId": "stf-finance", "reasonCode": "SELLER_REQUEST", "note": "Asked by phone",
+			"appliesFrom": "2026-11-09T10:00:00Z", "createdAt": "2026-10-12T10:00:00Z"})
+	}
+	return map[string]any{"orgId": "org_1", "available": true, "mode": mode, "effective": mode, "source": source, "changedAt": nil,
+		"changedBy": nil, "platformDefault": "EARNINGS_FIRST", "appliesFromInvoiceAt": "2026-11-09T10:00:00Z",
+		"appliesFromLabel": "Applies from your next invoice, on Nov 9, 2026", "inProgressInvoiceId": nil, "history": history}
 }
 
 func (f *fakeSellerBilling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -174,12 +193,30 @@ func (f *fakeSellerBilling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/orgs/directory":
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"id": "org_1", "displayName": "Mama Put", "kind": "seller", "status": "approved"},
 			map[string]any{"id": "org_2", "displayName": "Ade's Kitchen", "kind": "seller", "status": "approved"}}, "total": 2})
-	case p == "/v1/orgs/org_1/billing/panel" || p == "/v1/orgs/org_1/billing/earnings-collection":
-		if strings.HasSuffix(p, "earnings-collection") && body["enabled"] == true {
-			problemJ(w, 409, "seller.earnings-collection-off")
-			return
-		}
+	case p == "/v1/orgs/org_1/billing/panel":
 		writeJ(w, 200, samplePanel())
+	case key == "PUT /v1/orgs/org_1/billing/plan-fee-collection/override":
+		switch {
+		case body["reasonCode"] == nil:
+			writeJ(w, 422, map[string]any{"status": 422, "code": "seller.invalid-plan-fee-collection", "detail": "Choose a reason",
+				"fieldErrors": map[string]string{"reasonCode": "Choose a reason"}})
+		case body["mode"] == "EARNINGS_FIRST" && body["note"] == "off":
+			problemJ(w, 409, "seller.earnings-collection-off")
+		default:
+			writeJ(w, 200, samplePlanFeeCollection(body["mode"].(string), "STAFF"))
+		}
+	case p == "/v1/billing/settings":
+		def := "EARNINGS_FIRST"
+		if r.Method == http.MethodPut {
+			if body["planFeeCollectionDefault"] != "CARD" && body["planFeeCollectionDefault"] != "EARNINGS_FIRST" {
+				writeJ(w, 422, map[string]any{"status": 422, "code": "seller.invalid-plan-fee-collection", "detail": "Choose EARNINGS_FIRST or CARD",
+					"fieldErrors": map[string]string{"planFeeCollectionDefault": "EARNINGS_FIRST or CARD"}})
+				return
+			}
+			def = body["planFeeCollectionDefault"].(string)
+		}
+		writeJ(w, 200, map[string]any{"earningsCollectionEnabled": true, "planFeeCollectionDefault": def, "updatedBy": "stf-finance",
+			"updatedAt": "2026-10-12T10:00:00Z"})
 	case p == "/v1/orgs/org_404/billing/panel":
 		problemJ(w, 404, "seller.org-not-found")
 	case strings.HasPrefix(p, "/v1/orgs/org_1/billing/"):
@@ -373,8 +410,28 @@ func TestStaffPlansAndBilling(t *testing.T) {
 	do("finance", "POST", "/v1/staff/billing/orgs/org_1/free-days", map[string]any{"days": 30, "reasonCode": "RETENTION"}, 201)
 	do("finance", "POST", "/v1/staff/billing/orgs/org_1/trial", map[string]any{"days": 45, "reasonCode": "ONBOARDING_DELAY"}, 201)
 	do("finance", "POST", "/v1/staff/billing/orgs/org_1/invoices/in_1/waive", map[string]any{"reasonCode": "BILLING_ERROR"}, 201)
-	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/earnings-collection", map[string]any{"enabled": true}, 409)
-	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/earnings-collection", map[string]any{"enabled": false}, 200)
+
+	// How the seller pays its plan (S298): a staff override with a reason, and the platform default.
+	panel := do("auditor", "GET", "/v1/staff/billing/orgs/org_1", nil, 200)
+	if pfc := panel["planFeeCollection"].(map[string]any); pfc["mode"] != "EARNINGS_FIRST" {
+		t.Errorf("panel plan fee collection = %v", pfc)
+	}
+	do("auditor", "PUT", "/v1/staff/billing/orgs/org_1/plan-fee-collection", map[string]any{"mode": "CARD", "reasonCode": "SELLER_REQUEST"}, 403)
+	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/plan-fee-collection", map[string]any{"mode": "CARD"}, 422)
+	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/plan-fee-collection", map[string]any{"mode": "EARNINGS_FIRST", "reasonCode": "OTHER",
+		"note": "off"}, 409)
+	overridden := do("finance", "PUT", "/v1/staff/billing/orgs/org_1/plan-fee-collection", map[string]any{"mode": "CARD",
+		"reasonCode": "SELLER_REQUEST", "note": "Asked by phone"}, 200)
+	if overridden["source"] != "STAFF" || f.bodies["PUT /v1/orgs/org_1/billing/plan-fee-collection/override"]["reasonCode"] != "SELLER_REQUEST" {
+		t.Errorf("override = %v, relayed %v", overridden, f.bodies["PUT /v1/orgs/org_1/billing/plan-fee-collection/override"])
+	}
+	do("auditor", "GET", "/v1/staff/billing/settings", nil, 200)
+	do("support", "GET", "/v1/staff/billing/settings", nil, 403)
+	do("auditor", "PUT", "/v1/staff/billing/settings", map[string]any{"planFeeCollectionDefault": "CARD"}, 403)
+	do("finance", "PUT", "/v1/staff/billing/settings", map[string]any{"planFeeCollectionDefault": "SOMETIMES"}, 422)
+	if s := do("finance", "PUT", "/v1/staff/billing/settings", map[string]any{"planFeeCollectionDefault": "CARD"}, 200); s["planFeeCollectionDefault"] != "CARD" {
+		t.Errorf("settings = %v", s)
+	}
 
 	// Every Plans & billing operation of the contract was exercised.
 	for path, item := range doc.Paths.Map() {

@@ -221,6 +221,11 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "", "quantity": -1, "reason": "?"}), 422)
 	exerciseSellerFba(t, b)
 	// Money.
+	// S298: plan invoices paid from sales are listed as "Plan fee (invoice …)" deductions; DECLINED ones took nothing.
+	if r := b.do("GET", "/v1/seller/payouts", nil); r.status != 200 || len(r.json(t)["planFeeDeductions"].([]any)) != 1 ||
+		r.json(t)["planFeeDeductions"].([]any)[0].(map[string]any)["label"] != "Plan fee (invoice AT-0003)" {
+		t.Fatalf("payouts plan fees = %d %s", r.status, r.body)
+	}
 	if r := b.do("GET", "/v1/seller/payouts", nil); r.status != 200 || r.json(t)["historyAvailable"] != false {
 		t.Fatalf("payouts = %d %s", r.status, r.body)
 	} else if bal := r.json(t)["balance"].(map[string]any); bal["payoutsPaused"] != true || bal["payoutsPausedReason"] != "AUTO_PAST_DUE" ||
@@ -263,7 +268,22 @@ func TestSellerContractConformance(t *testing.T) {
 			t.Fatalf("upcoming delivery fee = %v", df)
 		}
 	}
-	mustStatus(t, b.do("GET", "/v1/seller/billing", nil), 200)
+	billing := b.do("GET", "/v1/seller/billing", nil)
+	mustStatus(t, billing, 200)
+	// S298: how the plan is paid, and on each invoice what sales and the card paid.
+	if bv := billing.json(t); bv["planFeeCollection"].(map[string]any)["mode"] != "EARNINGS_FIRST" ||
+		bv["planFeeCollection"].(map[string]any)["canChange"] != true ||
+		num(bv["invoices"].([]any)[0].(map[string]any), "paidFromSalesMinor") != 9000 ||
+		num(bv["invoices"].([]any)[0].(map[string]any), "paidByCardMinor") != 2115 {
+		t.Fatalf("billing plan fees = %v / %v", bv["planFeeCollection"], bv["invoices"])
+	}
+	if pf := b.do("PUT", "/v1/seller/billing/plan-fee-collection", map[string]any{"mode": "CARD"}); pf.status != 200 || pf.json(t)["mode"] != "CARD" {
+		t.Fatalf("plan fee collection = %d %s", pf.status, pf.body)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/billing/plan-fee-collection", map[string]any{"mode": "SOMETIMES"}), 422)
+	bff.Upstreams.PlanFeeCollectionOff = true
+	mustStatus(t, b.do("PUT", "/v1/seller/billing/plan-fee-collection", map[string]any{"mode": "EARNINGS_FIRST"}), 409)
+	bff.Upstreams.PlanFeeCollectionOff = false
 	mustStatus(t, b.do("POST", "/v1/seller/billing/plan", map[string]any{"planCode": "seller_pro", "cadence": "ANNUAL"}), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/billing/plan", map[string]any{"planCode": "seller_pro", "cadence": "WEEKLY"}), 422)
 	mustStatus(t, b.do("DELETE", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000001", nil), 409)

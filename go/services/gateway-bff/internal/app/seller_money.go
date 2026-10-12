@@ -27,6 +27,8 @@ type SellerMoneyService interface {
 	SetupIntent(ctx context.Context, c *domain.Caller) (domain.BillingSetupIntent, error)
 	// AddPaymentMethod registers the payment method the SetupIntent confirmed (owner only).
 	AddPaymentMethod(ctx context.Context, c *domain.Caller, in domain.AddBillingPaymentMethod) (domain.BillingPaymentMethod, error)
+	// SetPlanFeeCollection chooses how the plan is paid (S298): from sales first or always by card (owner / finance).
+	SetPlanFeeCollection(ctx context.Context, c *domain.Caller, mode string) (domain.PlanFeeCollectionView, error)
 }
 
 type sellerMoneyImpl struct{ r *orgResolver }
@@ -49,23 +51,26 @@ func (s *sellerMoneyImpl) Payouts(ctx context.Context, c *domain.Caller) (domain
 		return domain.PayoutsView{}, err
 	}
 	var (
-		wg      sync.WaitGroup
-		bal     port.PayoutBalanceResponse
-		balErr  error
-		history []port.PayoutResponse
-		histErr error
+		wg       sync.WaitGroup
+		bal      port.PayoutBalanceResponse
+		balErr   error
+		history  []port.PayoutResponse
+		histErr  error
+		planFees []port.PlanFeeWithholding
 	)
 	wg.Go(func() { bal, balErr = s.r.d.Payouts.Balance(ctx, c.BearerToken, sc.org.ID) })
 	wg.Go(func() { history, histErr = s.r.d.Payouts.Requests(ctx, c.BearerToken, sc.org.ID) })
+	// Plan invoices paid from sales (S298) are optional: the page works without them.
+	wg.Go(func() { planFees, _ = s.r.d.Payouts.PlanFeeWithholdings(ctx, c.BearerToken, sc.org.ID) })
 	wg.Wait()
 	if balErr != nil {
 		return domain.PayoutsView{}, mapErr("payments", balErr)
 	}
 	out := domain.PayoutsView{Balance: domain.PayoutBalance{Currency: firstNonEmpty(bal.Currency, domain.Currency), AvailableMinor: bal.AvailableMinor,
 		OnHoldMinor: bal.OnHoldMinor, RequestedOrInTransitMinor: bal.RequestedOrInTransitMinor, PaidMinor: bal.PaidMinor,
-		ProviderFeesMinor: bal.ProviderFeesMinor, MinimumPayoutMinor: bal.MinimumPayoutMinor, CanRequestToday: bal.CanRequestToday && !bal.PayoutsPaused,
-		PayoutsPaused: bal.PayoutsPaused, Holds: []domain.PayoutHold{}},
-		Payouts: []domain.Payout{}, HistoryAvailable: histErr == nil}
+		ProviderFeesMinor: bal.ProviderFeesMinor, PlanFeesMinor: bal.PlanFeesMinor, MinimumPayoutMinor: bal.MinimumPayoutMinor,
+		CanRequestToday: bal.CanRequestToday && !bal.PayoutsPaused, PayoutsPaused: bal.PayoutsPaused, Holds: []domain.PayoutHold{}},
+		Payouts: []domain.Payout{}, HistoryAvailable: histErr == nil, PlanFeeDeductions: planFeeDeductionsOf(planFees)}
 	if bal.PayoutsPaused {
 		reason := strings.ToUpper(bal.PayoutsPausedReason)
 		if domain.IsPausedReason(reason) {
@@ -83,6 +88,27 @@ func (s *sellerMoneyImpl) Payouts(ctx context.Context, c *domain.Caller) (domain
 	return out, nil
 }
 
+// planFeeDeductionsOf maps payments' plan fee withholdings to the "Plan fee (invoice …)" lines; DECLINED ones (nothing
+// was taken from sales) are left out.
+func planFeeDeductionsOf(list []port.PlanFeeWithholding) []domain.PlanFeeDeduction {
+	out := []domain.PlanFeeDeduction{}
+	for _, w := range list {
+		status := strings.ToUpper(w.Status)
+		if status != "WITHHELD" && status != "RELEASED" {
+			continue
+		}
+		d := domain.PlanFeeDeduction{InvoiceID: w.InvoiceID, InvoiceNumber: strPtr(w.InvoiceNumber),
+			Label: firstNonEmpty(w.Label, "Plan fee (invoice "+firstNonEmpty(w.InvoiceNumber, w.InvoiceID)+")"), Status: status,
+			RequestedMinor: w.RequestedMinor, WithheldMinor: w.WithheldMinor, ReleasedMinor: w.ReleasedMinor,
+			OutstandingMinor: w.OutstandingMinor, CreatedAt: w.CreatedAt, Transfers: []domain.PlanFeeTransfer{}}
+		for _, t := range w.Deductions {
+			d.Transfers = append(d.Transfers, domain.PlanFeeTransfer{OrderID: t.OrderID, AmountMinor: t.AmountMinor, At: t.At, Label: t.Label})
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
 func (s *sellerMoneyImpl) RequestPayout(ctx context.Context, c *domain.Caller, key string, amountMinor int64, all bool) (domain.Payout, error) {
 	if !all && amountMinor <= 0 {
 		return domain.Payout{}, domain.ValidationProblem(map[string]string{"amountMinor": "Enter an amount or request everything available"})
@@ -98,6 +124,33 @@ func (s *sellerMoneyImpl) RequestPayout(ctx context.Context, c *domain.Caller, k
 }
 
 func isOwner(role string) bool { return strings.HasSuffix(role, ".owner") }
+
+// isOwnerOrFinance: the roles that may change how the plan is paid (S298).
+func isOwnerOrFinance(role string) bool { return isOwner(role) || strings.HasSuffix(role, ".finance") }
+
+func planFeeCollectionOf(p port.SellerPlanFeeCollection, role string) *domain.PlanFeeCollectionView {
+	mode := strings.ToUpper(p.Mode)
+	if mode != domain.PlanFeeEarningsFirst {
+		mode = domain.PlanFeeCard
+	}
+	effective := domain.PlanFeeCard
+	if p.Available && strings.EqualFold(p.Effective, domain.PlanFeeEarningsFirst) {
+		effective = domain.PlanFeeEarningsFirst
+	}
+	def := domain.PlanFeeCard
+	if strings.EqualFold(p.PlatformDefault, domain.PlanFeeEarningsFirst) {
+		def = domain.PlanFeeEarningsFirst
+	}
+	source := strings.ToUpper(p.Source)
+	switch source {
+	case "DEFAULT", "ONBOARDING", "SELLER", "STAFF":
+	default:
+		source = "DEFAULT"
+	}
+	return &domain.PlanFeeCollectionView{Available: p.Available, Mode: mode, Effective: effective, Source: source, PlatformDefault: def,
+		AppliesFromInvoiceAt: p.AppliesFromInvoiceAt, AppliesFromLabel: p.AppliesFromLabel, InProgressInvoiceID: p.InProgressInvoiceID,
+		ChangedAt: p.ChangedAt, CanChange: p.Available && isOwnerOrFinance(role)}
+}
 
 func cadenceOf(v string) string {
 	switch strings.ToUpper(v) {
@@ -143,7 +196,7 @@ func priceOf(p port.SellerPlanPrice) domain.PlanPrice {
 		SavingMinor: p.SavingCents, PerMonthLabel: p.PerMonthLabel, BilledLabel: p.BilledLabel, SavingLabel: p.SavingLabel}
 }
 
-func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerPlan, invoices []port.SellerInvoice, role string) domain.BillingView {
+func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerPlan, invoices []port.SellerInvoice, fees *port.SellerPlanFeeCollection, role string) domain.BillingView {
 	sub := domain.Subscription{PlanCode: b.PlanCode, PlanName: b.PlanName, Cadence: cadenceOf(b.Cadence), Status: strings.ToUpper(b.Status),
 		TrialEndsAt: b.TrialEndsAt, CurrentPeriodEnd: b.CurrentPeriodEnd, NextChargeAt: b.NextChargeAt, NextChargeMinor: b.NextChargeCents,
 		NextChargeLabel: b.NextChargeLabel, CancelAtPeriodEnd: b.CancelAtPeriodEnd, Dunning: strPtr(b.Dunning),
@@ -157,6 +210,9 @@ func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerP
 	}
 	out := domain.BillingView{Subscription: sub, Plans: []domain.Plan{}, PaymentMethods: paymentMethodsOf(b.PaymentMethods), Invoices: []domain.Invoice{},
 		CanManage: isOwner(role)}
+	if fees != nil {
+		out.PlanFeeCollection = planFeeCollectionOf(*fees, role)
+	}
 	for _, p := range plans {
 		plan := domain.Plan{Code: p.Code, Name: p.Name, Tagline: p.Tagline, MonthlyMinor: p.MonthlyCents, TrialDays: p.TrialDays,
 			Features: append([]string{}, p.Features...), Prices: []domain.PlanPrice{}, Current: p.Code == b.PlanCode}
@@ -168,7 +224,8 @@ func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerP
 	for _, in := range invoices {
 		out.Invoices = append(out.Invoices, domain.Invoice{ID: in.ID, Number: firstNonEmpty(in.Number, in.ID), PeriodStart: in.PeriodStart, PeriodEnd: in.PeriodEnd,
 			AmountDueMinor: in.AmountDueCents, AmountPaidMinor: in.AmountPaidCents, Currency: strings.ToUpper(firstNonEmpty(in.Currency, domain.Currency)),
-			Status: strings.ToUpper(in.Status), PDFURL: strPtr(in.InvoicePDF), HostedURL: strPtr(in.HostedInvoiceURL), CreatedAt: in.CreatedAt})
+			Status: strings.ToUpper(in.Status), PDFURL: strPtr(in.InvoicePDF), HostedURL: strPtr(in.HostedInvoiceURL), CreatedAt: in.CreatedAt,
+			PaidFromSalesMinor: max(0, in.PaidFromSalesCents), PaidByCardMinor: max(0, in.PaidByCardCents)})
 	}
 	return out
 }
@@ -180,8 +237,15 @@ func (s *sellerMoneyImpl) load(ctx context.Context, c *domain.Caller, sc sellerC
 		bErr     error
 		plans    []port.SellerPlan
 		invoices []port.SellerInvoice
+		fees     *port.SellerPlanFeeCollection
 	)
 	wg.Go(func() { b, bErr = s.r.d.Sellers.Billing(ctx, c.BearerToken, sc.org.ID) })
+	// How the plan is paid (S298): optional, the page works without it.
+	wg.Go(func() {
+		if p, err := s.r.d.Sellers.PlanFeeCollection(ctx, c.BearerToken, sc.org.ID); err == nil {
+			fees = &p
+		}
+	})
 	// The plans this organisation may choose: public, invited and its current plan (our catalogue, S292).
 	wg.Go(func() { plans, _ = s.r.d.Sellers.OrgPlans(ctx, c.BearerToken, sc.org.ID) })
 	wg.Go(func() { invoices, _ = s.r.d.Sellers.Invoices(ctx, c.BearerToken, sc.org.ID) })
@@ -189,7 +253,7 @@ func (s *sellerMoneyImpl) load(ctx context.Context, c *domain.Caller, sc sellerC
 	if bErr != nil {
 		return domain.BillingView{}, mapErr("seller", bErr)
 	}
-	return s.billingView(b, plans, invoices, sc.org.Role), nil
+	return s.billingView(b, plans, invoices, fees, sc.org.Role), nil
 }
 
 func (s *sellerMoneyImpl) Billing(ctx context.Context, c *domain.Caller) (domain.BillingView, error) {
@@ -198,6 +262,26 @@ func (s *sellerMoneyImpl) Billing(ctx context.Context, c *domain.Caller) (domain
 		return domain.BillingView{}, err
 	}
 	return s.load(ctx, c, sc)
+}
+
+func (s *sellerMoneyImpl) SetPlanFeeCollection(ctx context.Context, c *domain.Caller, mode string) (domain.PlanFeeCollectionView, error) {
+	mode = strings.ToUpper(strings.TrimSpace(mode))
+	if mode != domain.PlanFeeEarningsFirst && mode != domain.PlanFeeCard {
+		return domain.PlanFeeCollectionView{}, domain.ValidationProblem(map[string]string{"mode": "Choose EARNINGS_FIRST or CARD"})
+	}
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.PlanFeeCollectionView{}, err
+	}
+	if !isOwnerOrFinance(sc.org.Role) {
+		return domain.PlanFeeCollectionView{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Owner or finance only",
+			"Only the owner or a finance member can change how the plan is paid.")
+	}
+	p, err := s.r.d.Sellers.SetPlanFeeCollection(ctx, c.BearerToken, sc.org.ID, mode)
+	if err != nil {
+		return domain.PlanFeeCollectionView{}, mapErr("seller", err)
+	}
+	return *planFeeCollectionOf(p, sc.org.Role), nil
 }
 
 func ownerOnly() error {

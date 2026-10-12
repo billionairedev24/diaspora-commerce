@@ -175,7 +175,10 @@ func (s *sellerShellImpl) SaveOnboardingPlan(ctx context.Context, c *domain.Call
 	body := port.SellerApplicationPlanStep{PlanCode: strings.TrimSpace(in.PlanCode), Cadence: strings.ToUpper(strings.TrimSpace(in.Cadence)),
 		PaymentMethodKind: strings.ToUpper(strings.TrimSpace(in.PaymentMethodKind)), StripePaymentMethodID: strings.TrimSpace(in.StripePaymentMethodID),
 		CardBrand: strings.ToLower(strings.TrimSpace(in.CardBrand)), CardLast4: strings.TrimSpace(in.CardLast4), CardExpMonth: in.CardExpMonth, CardExpYear: in.CardExpYear,
-		PromoCode: strings.ToUpper(strings.TrimSpace(in.PromoCode))}
+		PromoCode: strings.ToUpper(strings.TrimSpace(in.PromoCode)), PlanFeeCollection: strings.ToUpper(strings.TrimSpace(in.PlanFeeCollection))}
+	if body.PlanFeeCollection != "" && body.PlanFeeCollection != domain.PlanFeeEarningsFirst && body.PlanFeeCollection != domain.PlanFeeCard {
+		return domain.OnboardingStatus{}, domain.ValidationProblem(map[string]string{"planFeeCollection": "Choose EARNINGS_FIRST or CARD"})
+	}
 	return s.saveStep(ctx, c, "plan", body)
 }
 
@@ -413,7 +416,16 @@ func onboardingForm(a port.SellerApplication, status string) domain.OnboardingFo
 	if p := a.Plan; p != nil {
 		f.Plan = domain.OnboardingPlan{PlanCode: strPtr(p.PlanCode), PlanName: strPtr(p.PlanName), Cadence: strPtr(strings.ToUpper(p.Cadence)),
 			PaymentMethodKind: strPtr(strings.ToUpper(p.PaymentMethodKind)), CardBrand: strPtr(p.CardBrand), CardLast4: strPtr(p.CardLast4),
-			CardExpMonth: p.CardExpMonth, CardExpYear: p.CardExpYear, FirstCharge: firstChargeOf(p.FirstCharge)}
+			CardExpMonth: p.CardExpMonth, CardExpYear: p.CardExpYear, FirstCharge: firstChargeOf(p.FirstCharge),
+			PlanFeeCollection: strPtr(strings.ToUpper(p.PlanFeeCollection))}
+	}
+	// S298: whether the Plan step offers paying the plan from sales; without the seller's answer, the card.
+	f.Plan.PlanFeeCollectionDefault = domain.PlanFeeCard
+	if o := a.PlanFeeCollectionOption; o != nil {
+		f.Plan.PlanFeeCollectionAvailable = o.Available
+		if o.PlatformDefault == domain.PlanFeeEarningsFirst {
+			f.Plan.PlanFeeCollectionDefault = domain.PlanFeeEarningsFirst
+		}
 	}
 	if c := a.Compliance; c != nil {
 		f.Compliance.Categories = append(f.Compliance.Categories, c.Categories...)

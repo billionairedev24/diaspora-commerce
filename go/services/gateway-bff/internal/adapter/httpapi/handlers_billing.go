@@ -15,6 +15,19 @@ func (h *handlersImpl) registerSellerBilling(route func(pattern string, fn http.
 	route("GET /v1/seller/billing/plan/preview", h.previewPlanChange)
 	route("POST /v1/seller/billing/setup-intents", h.billingSetupIntent)
 	route("POST /v1/seller/billing/payment-methods", h.addBillingMethod)
+	route("PUT /v1/seller/billing/plan-fee-collection", h.setPlanFeeCollection)
+}
+
+func (h *handlersImpl) setPlanFeeCollection(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Mode string `json:"mode"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerMoney.SetPlanFeeCollection(r.Context(), callerFrom(r.Context()), b.Mode)
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) billingRewards(w http.ResponseWriter, r *http.Request) {

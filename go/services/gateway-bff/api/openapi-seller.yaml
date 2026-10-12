@@ -964,7 +964,7 @@ paths:
       operationId: getPayouts
       security: [{sessionCookie: []}]
       summary: Balance (available, on hold per order, on the way) and payout history
-      description: payments `GET /v1/payouts/balance` (incl. payoutsPaused, payoutsPausedReason, providerFeesMinor) + `GET /v1/payouts/requests?orgId=` (history is omitted with `historyAvailable=false` when the member may not read it).
+      description: payments `GET /v1/payouts/balance` (incl. payoutsPaused, payoutsPausedReason, providerFeesMinor, planFeesMinor) + `GET /v1/payouts/requests?orgId=` (history is omitted with `historyAvailable=false` when the member may not read it) + `GET /v1/orgs/{orgId}/plan-fee-withholdings` (plan fees paid from sales and the transfers they were deducted from, S298; empty when it can't be read).
       responses:
         '200': {description: Payouts, content: {application/json: {schema: {$ref: '#/components/schemas/PayoutsView'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -1014,11 +1014,33 @@ paths:
       operationId: getBilling
       security: [{sessionCookie: []}]
       summary: Plan, cadence, next charge, credit balance, payment methods, invoices and the plans this organisation may choose
-      description: seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/orgs/{orgId}/billing/plans` (public plans, invite-only plans it was invited to and its current plan; AfroTransact's own catalogue, S292).
+      description: seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices`, `GET /v1/orgs/{orgId}/billing/plans` (public plans, invite-only plans it was invited to and its current plan; AfroTransact's own catalogue, S292) and `GET /v1/orgs/{orgId}/billing/plan-fee-collection` (how the plan is paid, S298; null when it can't be read).
       responses:
         '200': {description: Billing, content: {application/json: {schema: {$ref: '#/components/schemas/BillingView'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/plan-fee-collection:
+    put:
+      tags: [Money]
+      operationId: setPlanFeeCollection
+      security: [{sessionCookie: []}]
+      summary: Pay the plan from sales first (EARNINGS_FIRST) or always by card (CARD) — owner and finance only (S298)
+      description: |
+        seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection`. Applies from the next invoice (`appliesFromInvoiceAt`);
+        an invoice being collected now keeps the choice it was created with. 403 for other roles, 409
+        `seller.earnings-collection-off` while the platform's kill switch is off.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PlanFeeCollectionInput'}}}
+      responses:
+        '200': {description: The choice, content: {application/json: {schema: {$ref: '#/components/schemas/PlanFeeCollectionView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/billing/plan:
@@ -2045,7 +2067,7 @@ components:
             linked: {type: boolean, description: Stripe holds a usable payout account}
         plan:
           type: object
-          required: [planCode, planName, cadence, paymentMethodKind, cardBrand, cardLast4, cardExpMonth, cardExpYear, firstCharge]
+          required: [planCode, planName, cadence, paymentMethodKind, cardBrand, cardLast4, cardExpMonth, cardExpYear, firstCharge, planFeeCollection, planFeeCollectionAvailable, planFeeCollectionDefault]
           properties:
             planCode: {type: [string, 'null']}
             planName: {type: [string, 'null']}
@@ -2059,6 +2081,13 @@ components:
               oneOf:
                 - {$ref: '#/components/schemas/OnboardingFirstCharge'}
                 - {type: 'null'}
+            planFeeCollection:
+              description: How the applicant chose to pay the plan (S298); null keeps the platform default
+              oneOf:
+                - {$ref: '#/components/schemas/PlanFeeCollectionMode'}
+                - {type: 'null'}
+            planFeeCollectionAvailable: {type: boolean, description: 'The platform offers paying the plan from sales (kill switch on); false hides the choice'}
+            planFeeCollectionDefault: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
         compliance:
           type: object
           required: [categories, foodPermit, beautyLabellingConfirmed, services, insuranceDocumentAssetId, agreementsAccepted, w9Certified, w9SignerName]
@@ -2148,6 +2177,7 @@ components:
         cardExpMonth: {type: integer, minimum: 1, maximum: 12}
         cardExpYear: {type: integer}
         promoCode: {type: string, maxLength: 40, description: "A trial campaign's promo code (S295); 422 promoCode when it isn't valid for this plan"}
+        planFeeCollection: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
     OnboardingFoodPermitInput:
       type: object
       properties:
@@ -2892,7 +2922,7 @@ components:
     # ── money
     PayoutBalance:
       type: object
-      required: [currency, availableMinor, onHoldMinor, requestedOrInTransitMinor, paidMinor, providerFeesMinor, minimumPayoutMinor, canRequestToday, payoutsPaused, payoutsPausedReason, payoutsPausedMessage, holds]
+      required: [currency, availableMinor, onHoldMinor, requestedOrInTransitMinor, paidMinor, providerFeesMinor, planFeesMinor, minimumPayoutMinor, canRequestToday, payoutsPaused, payoutsPausedReason, payoutsPausedMessage, holds]
       properties:
         currency: {type: string}
         availableMinor: {type: integer}
@@ -2900,6 +2930,7 @@ components:
         requestedOrInTransitMinor: {type: integer}
         paidMinor: {type: integer}
         providerFeesMinor: {type: integer, description: Provider fees (late cancellations) debited from or reserved in the balance}
+        planFeesMinor: {type: integer, description: 'Plan fees paid from sales (S298) not yet deducted from a transfer: they come out of the amounts on hold. Negative when a released fee is paid back with the next transfer'}
         payoutsPaused: {type: boolean, description: 'Compliance hold: payout requests fail until it is lifted; the balance keeps accruing'}
         payoutsPausedReason:
           oneOf:
@@ -2930,11 +2961,37 @@ components:
         failureMessage: {type: [string, 'null']}
     PayoutsView:
       type: object
-      required: [balance, payouts, historyAvailable]
+      required: [balance, payouts, historyAvailable, planFeeDeductions]
       properties:
         balance: {$ref: '#/components/schemas/PayoutBalance'}
         payouts: {type: array, items: {$ref: '#/components/schemas/Payout'}}
         historyAvailable: {type: boolean}
+        planFeeDeductions: {type: array, items: {$ref: '#/components/schemas/PlanFeeDeduction'}, description: 'Plan invoices paid from sales, newest first (S298)'}
+    PlanFeeDeduction:
+      type: object
+      description: 'A plan invoice paid from sales: "Plan fee (invoice …)", deducted from the next transfers (S298)'
+      required: [invoiceId, invoiceNumber, label, status, requestedMinor, withheldMinor, releasedMinor, outstandingMinor, createdAt, transfers]
+      properties:
+        invoiceId: {type: string}
+        invoiceNumber: {type: [string, 'null']}
+        label: {type: string, description: Plan fee (invoice …)}
+        status: {type: string, enum: [WITHHELD, DECLINED, RELEASED]}
+        requestedMinor: {type: integer}
+        withheldMinor: {type: integer, description: Paid from sales; the card paid requested − withheld}
+        releasedMinor: {type: integer, description: Given back (voided or refunded invoice)}
+        outstandingMinor: {type: integer, description: Still to deduct from the next transfers (negative while owed back)}
+        createdAt: {type: string, format: date-time}
+        transfers:
+          type: array
+          description: The settlements it was deducted from (negative amounts were paid back with them)
+          items:
+            type: object
+            required: [orderId, amountMinor, at, label]
+            properties:
+              orderId: {type: string}
+              amountMinor: {type: integer}
+              at: {type: string, format: date-time}
+              label: {type: string}
     PayoutRequest:
       type: object
       properties:
@@ -2983,7 +3040,7 @@ components:
         label: {type: string}
     Invoice:
       type: object
-      required: [id, number, periodStart, periodEnd, amountDueMinor, amountPaidMinor, currency, status, pdfUrl, hostedUrl, createdAt]
+      required: [id, number, periodStart, periodEnd, amountDueMinor, amountPaidMinor, currency, status, pdfUrl, hostedUrl, createdAt, paidFromSalesMinor, paidByCardMinor]
       properties:
         id: {type: string}
         number: {type: string}
@@ -2996,6 +3053,32 @@ components:
         pdfUrl: {type: [string, 'null']}
         hostedUrl: {type: [string, 'null']}
         createdAt: {type: string, format: date-time}
+        paidFromSalesMinor: {type: integer, description: 'Paid from the organisation''s sales (S298): withheld from its earnings and credited to the invoice'}
+        paidByCardMinor: {type: integer, description: 'Paid (or, while open, due) by card or bank: the rest'}
+    PlanFeeCollectionMode:
+      type: string
+      enum: [EARNINGS_FIRST, CARD]
+      description: 'EARNINGS_FIRST: "Pay your plan from your sales" — each invoice is taken from pending earnings and the card pays only what they don''t cover. CARD: "Charge my card" — plan fees stay a separate card expense.'
+    PlanFeeCollectionInput:
+      type: object
+      required: [mode]
+      properties:
+        mode: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
+    PlanFeeCollectionView:
+      type: object
+      description: How the organisation pays its plan (S298)
+      required: [available, mode, effective, source, platformDefault, appliesFromInvoiceAt, appliesFromLabel, inProgressInvoiceId, changedAt, canChange]
+      properties:
+        available: {type: boolean, description: The platform offers the choice; false hides it and every invoice is charged to the card}
+        mode: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
+        effective: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
+        source: {type: string, enum: [DEFAULT, ONBOARDING, SELLER, STAFF]}
+        platformDefault: {$ref: '#/components/schemas/PlanFeeCollectionMode'}
+        appliesFromInvoiceAt: {type: [string, 'null'], format: date-time, description: A change applies from the invoice of this date (the next renewal)}
+        appliesFromLabel: {type: string}
+        inProgressInvoiceId: {type: [string, 'null'], description: An invoice being paid from sales right now keeps the earlier choice}
+        changedAt: {type: [string, 'null'], format: date-time}
+        canChange: {type: boolean, description: Owner and finance roles may change it}
     Subscription:
       type: object
       required: [planCode, planName, cadence, status, priceLabel, billedLabel, trialEndsAt, currentPeriodEnd, nextChargeAt, nextChargeMinor, nextChargeLabel, cancelAtPeriodEnd, pendingChange, dunning]
@@ -3098,8 +3181,13 @@ components:
         makeDefault: {type: boolean}
     BillingView:
       type: object
-      required: [subscription, plans, paymentMethods, invoices, canManage]
+      required: [subscription, plans, paymentMethods, invoices, canManage, planFeeCollection]
       properties:
+        planFeeCollection:
+          description: How the plan is paid (S298); null when it can't be read
+          oneOf:
+            - {$ref: '#/components/schemas/PlanFeeCollectionView'}
+            - {type: 'null'}
         subscription: {$ref: '#/components/schemas/Subscription'}
         plans: {type: array, items: {$ref: '#/components/schemas/Plan'}}
         paymentMethods: {type: array, items: {$ref: '#/components/schemas/BillingPaymentMethod'}}

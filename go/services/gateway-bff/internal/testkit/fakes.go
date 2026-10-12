@@ -143,9 +143,11 @@ type Upstreams struct {
 	// StepBodies records the seller service's step saves (PUT /v1/applications/me/steps/{step}) by step;
 	// StripeLocalTest makes account sessions come from the seller service's local stand-in;
 	// LastUploadPurpose is media's last upload purpose.
-	StepBodies        map[string]map[string]any
-	StripeLocalTest   bool
-	LastUploadPurpose string
+	StepBodies      map[string]map[string]any
+	StripeLocalTest bool
+	// PlanFeeCollectionOff makes the seller service answer 409 to plan fee collection changes (S298 kill switch off).
+	PlanFeeCollectionOff bool
+	LastUploadPurpose    string
 	// PhoneVerified is identity's phoneVerified for every account; LastSignUp is the last POST /v1/accounts body.
 	PhoneVerified bool
 	LastSignUp    map[string]any

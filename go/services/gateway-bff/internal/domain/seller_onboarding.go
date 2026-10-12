@@ -151,6 +151,10 @@ type OnboardingPlan struct {
 	CardExpMonth      *int                   `json:"cardExpMonth"`
 	CardExpYear       *int                   `json:"cardExpYear"`
 	FirstCharge       *OnboardingFirstCharge `json:"firstCharge"`
+	// S298: the applicant's choice (nil keeps the platform default), whether it is offered and the default.
+	PlanFeeCollection          *string `json:"planFeeCollection"`
+	PlanFeeCollectionAvailable bool    `json:"planFeeCollectionAvailable"`
+	PlanFeeCollectionDefault   string  `json:"planFeeCollectionDefault"`
 }
 
 // OnboardingFoodPermit is the food permit of a groceries / prepared-food seller.
@@ -270,6 +274,8 @@ type OnboardingPlanInput struct {
 	CardExpYear           *int   `json:"cardExpYear"`
 	// PromoCode is a trial campaign's code (S295), validated by the seller service for the plan and sign-up time.
 	PromoCode string `json:"promoCode"`
+	// PlanFeeCollection is how the plan will be paid (S298): EARNINGS_FIRST, CARD or empty for the platform default.
+	PlanFeeCollection string `json:"planFeeCollection"`
 }
 
 // OnboardingComplianceInput is PUT /v1/seller/onboarding/catalog-compliance.
