@@ -5,6 +5,11 @@ console › Plans & billing, Seller Center › Plan & billing). Stripe Billing s
 collection, Smart Retries, invoices and their PDFs, card updates and 3DS. Nobody manages plans in the Stripe
 Dashboard; the seller service creates and maintains the Stripe objects it needs.
 
+Plan fees are only part of what sellers and providers pay: payments also takes a configurable **commission** on
+product sales and a **connection fee** on service bookings, whose rates can depend on the plan (plan rates in the fee
+schedule), the category and rates negotiated per organisation. Payments learns each organisation's plan from
+`seller.subscription.changed`. See [commission-and-connection-fees.md](commission-and-connection-fees.md).
+
 Stories S292–S299 (epic E14). Code: `java/services/seller` (domain `Plan*`, `Trial*`, `Reward*`, `BillingGrant`,
 `FreeDays`, `PlanFeeCollection`; use cases `PlanAdminService`, `PlanSyncService`, `TrialService`, `RewardService`,
 `BillingAdjustmentService`, `EarningsCollectionService`, `PlanFeeCollectionService`); Flyway

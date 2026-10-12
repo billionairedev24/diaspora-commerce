@@ -1046,3 +1046,28 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Seller Center and Provider Hub keep acting for the organisation; staff and service principals are never changed by the header
 - Storefront account menu shows Seller Center or Continue your seller application, Provider Hub and Staff console from GET /v1/me backOffices, linking to the configured SELLER_CENTER_URL / STAFF_CONSOLE_URL; the customer app's account screen lists the same
 - Regression tests: go/pkg/auth, platform-security, cart, orders DualRoleShopperIT, BFF testkit minting org-scoped tokens like identity and dual_role_test, storefront and mobile tests","E02","","Highest","5","identity security gateway-bff web mobile","identity","Done"
+"S302","Story","Commission on sales and connection fees for service providers (plan rates, precedence, snapshot)","Apart from the plan fees sellers and providers subscribe to, payments charges a configurable commission on product sales and a configurable connection fee on service bookings. Precedence (first match wins): negotiated rate (category, then *) → plan rate (category, then the plan's *) → category rate → default; Retail pays none. Payments learns each organisation's plan from seller.subscription.changed (org_plan projection, fallback read of seller's billing API). Design: docs/engineering/commission-and-connection-fees.md.","- Fee-schedule versions carry planBps (plan → category → bps) and a connectionFee section (default, category and plan rates); a version without one prices services at the services commission
+- GET /v1/fee-schedules/effective accepts kind=PRODUCT or SERVICE and reports rate, source, plan and negotiated rate; GET /v1/orgs/{orgId}/rate-card lists every category with its source
+- Every payment line snapshots fee kind, rate, source, plan, negotiated rate id/until; captures, refunds and statements use the snapshot
+- Service connection fees post to 4050 (separate from commission 4000), statements and exports report connectionFeeMinor separately; refunds reverse it per reverseCommissionOnRefund
+- V15 seeds plan rates matching the plan features (Essentials 15 %, Growth 8–12 %, Pro 6–10 %, Provider Solo 10 %, Studio 8 %, Business 6 %)
+- Bookings reads the connection fee with kind=SERVICE and the service category, and degrades to the services commission against an older payments service
+- Unit tests for precedence; Testcontainers ITs for order and booking settlements incl. refunds","E07","","High","8","payments bookings fees","payments","Done"
+"S303","Story","Negotiated commission and connection fees with reason, audit and expiry","Staff negotiate a commission or connection fee with one organisation: type, optional category, rate, start/end, required reason, negotiated by and an optional reference. Negotiated rates win over plan and category rates while active.","- POST/GET /v1/negotiated-rates, GET /{id}, POST /{id}/end with a reason; overlapping rates are refused with 409
+- Creating, ending and expiring are recorded in the append-only negotiated_rate_audit and the audit log
+- A scheduled job records expiries (NEGOTIATED_RATE_EXPIRY_CRON)
+- gateway-bff staff operations with conformance tests","E07","","High","5","payments fees audit","payments","Done"
+"S304","Story","Fees & commissions: commission and connection-fee matrices, negotiated rates, rate calculator","Staff console Fees & commissions gains tabs Product commission (category × plan), Service connection fees (category × plan), Negotiated rates (server-driven DataTable with filters, create/end with a reason) and a Rate calculator; the seller detail lists the seller's negotiated rates and offers Negotiate plan price (private invite-only plan).","- Matrices save a new fee-schedule version with only that section changed
+- A warning shows when a plan's feature text differs from its configured rates
+- Negotiated rates table filters by type and status; create and end require a reason
+- Rate calculator explains the effective rate and its source
+- Negotiate plan price creates an invite-only plan copy and invites the organisation
+- Component tests and a Playwright mock spec; i18n in every locale","E25","","High","5","staff-console fees","staff-console","Done"
+"S305","Story","Seller Center fees source and Provider Hub take-home with connection fee","Sellers see where each rate comes from; providers see what they keep after the connection fee before accepting a booking and on earnings.","- Fees page shows the plan, the source per category (Negotiated rate until <date>, Your plan: <plan>, Category rate, Standard rate) and the negotiated rates
+- Providers see their connection fees per service category
+- Booking requests show You keep $X after the N% connection fee
+- Earnings report the connection fee as its own column and total
+- Component tests; i18n in every locale","E24","","High","3","seller-center provider-hub fees","seller-center","Done"
+"S306","Story","Staff assign a negotiated (invite-only) plan to a seller directly","Negotiate plan price creates a private invite-only plan and invites the organisation, but seller-service only lets the organisation's owner change its plan. Add a staff plan-change operation (seller:billing.manage, audited, with reason and proration rules) so staff can move the seller onto the negotiated plan.","- Seller-service staff endpoint to change an organisation's plan with a reason, audited
+- gateway-bff Negotiate plan price can assign the plan in the same step
+- Staff console shows the assignment in the seller billing panel","E14","","Medium","3","billing staff-console","billing","To Do"
