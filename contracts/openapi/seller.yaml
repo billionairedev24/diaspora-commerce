@@ -2537,7 +2537,8 @@ components:
     RewardRuleRequest:
       type: object
       description: Reach threshold of metric (optionally in the last windowDays days and/or within withinDaysOfApproval days
-        of approval) and get the reward, once per seller
+        of approval) and get the reward, once per seller. LESS_THAN rewards staying under the threshold in the first withinDaysOfApproval
+        days (from approval or the subscription's start), checked once, checkLeadHours before the window or the trial ends
       properties:
         name:
           type: string
@@ -2566,6 +2567,26 @@ components:
         withinDaysOfApproval:
           type: integer
           format: int32
+          description: The first N days from windowAnchor (the window of a rule checked at window end)
+        comparison:
+          type: string
+          description: Default AT_LEAST
+          enum:
+          - AT_LEAST
+          - LESS_THAN
+        windowAnchor:
+          type: string
+          description: Default APPROVAL
+          enum:
+          - APPROVAL
+          - SUBSCRIPTION_START
+        checkAtWindowEnd:
+          type: boolean
+          description: 'AT_LEAST: decide once when the window closes (LESS_THAN always does)'
+        checkLeadHours:
+          type: integer
+          format: int32
+          description: Hours before the window (or the trial) ends that the check runs; default 24
         rewardType:
           type: string
           enum:
@@ -2631,6 +2652,22 @@ components:
           type: integer
           format: int32
         withinDaysOfApproval:
+          type: integer
+          format: int32
+        comparison:
+          type: string
+          enum:
+          - AT_LEAST
+          - LESS_THAN
+        windowAnchor:
+          type: string
+          enum:
+          - APPROVAL
+          - SUBSCRIPTION_START
+        checkAtWindowEnd:
+          type: boolean
+          description: Decided once when the window closes (always for LESS_THAN)
+        checkLeadHours:
           type: integer
           format: int32
         rewardType:
@@ -3338,6 +3375,13 @@ components:
         appliedAt:
           type: string
           format: date-time
+        ruleComparison:
+          type: string
+          description: 'Seller rewards: the rule''s comparison (LESS_THAN = low-sales relief); null for staff adjustments
+            and in the grants log'
+          enum:
+          - AT_LEAST
+          - LESS_THAN
     BillingSetupIntent:
       type: object
       properties:
@@ -3856,6 +3900,10 @@ components:
         qualifying:
           type: integer
           format: int32
+        pending:
+          type: integer
+          format: int32
+          description: 'Rules checked at window end: organisations still in their window'
         rows:
           type: array
           items:
@@ -3872,6 +3920,7 @@ components:
         value:
           type: integer
           format: int64
+          description: The metric so far (in the window)
         threshold:
           type: integer
           format: int64
@@ -3884,6 +3933,20 @@ components:
           type: boolean
         reason:
           type: string
+        status:
+          type: string
+          description: 'PENDING: in the window of a rule checked at window end'
+          enum:
+          - GRANTED
+          - QUALIFIES
+          - PENDING
+          - CHECKED
+          - NOT_YET
+          - INELIGIBLE
+        checkAt:
+          type: string
+          format: date-time
+          description: 'Rules checked at window end: when this organisation is checked'
     CreatePlanRequest:
       type: object
       properties:
@@ -4500,6 +4563,31 @@ components:
         endsAt:
           type: string
           format: date-time
+        comparison:
+          type: string
+          enum:
+          - AT_LEAST
+          - LESS_THAN
+        windowAnchor:
+          type: string
+          enum:
+          - APPROVAL
+          - SUBSCRIPTION_START
+        windowDays:
+          type: integer
+          format: int32
+          description: The window's length in days (the first N days)
+        pending:
+          type: boolean
+          description: Checked once at window end and the check is still to come
+        checkAt:
+          type: string
+          format: date-time
+          description: 'Rules checked at window end: when the check runs'
+        windowClosesAt:
+          type: string
+          format: date-time
+          description: 'Rules checked at window end: when the window closes'
     SellerRewards:
       type: object
       description: Rewards the organisation can still earn and what it received

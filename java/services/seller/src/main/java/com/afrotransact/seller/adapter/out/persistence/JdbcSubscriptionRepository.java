@@ -53,6 +53,8 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                        current_period_end = :end, cancel_at_period_end = :cancel, pending_plan_code = :pendingPlan,
                        pending_cadence = :pendingCadence, pending_effective_at = :pendingAt, dunning = :dunning,
                        failed_payment_attempts = :attempts, next_payment_attempt_at = :nextAttempt,
+                       started_at = coalesce(started_at, case when cast(:sub as varchar) is not null
+                           then coalesce(cast(:start as timestamptz), cast(:at as timestamptz)) end),
                        updated_at = :at, version = version + 1
                 where org_id = :org and version = :version
                 """)

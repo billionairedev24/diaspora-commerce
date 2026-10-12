@@ -149,6 +149,8 @@ at:
       metering-cron: ${METERING_CRON:0 20 1 * * *}
       # Daily: every live reward rule for every organisation (days since approval, windows without events).
       rewards-cron: ${REWARDS_CRON:0 40 2 * * *}
+      # S299: rules checked at window end (low-sales relief), decided when due (lead before the window/trial ends).
+      reward-window-interval: ${REWARD_WINDOW_INTERVAL:15m}
       grant-retry-interval: ${GRANT_RETRY_INTERVAL:15m}
       earnings-interval: ${EARNINGS_COLLECTION_INTERVAL:1m}
       zone: ${JOBS_ZONE:UTC}

@@ -112,7 +112,7 @@ class RewardController {
     @GetMapping("/v1/orgs/{orgId}/billing/rewards")
     SellerRewardsResponse sellerRewards(@PathVariable String orgId) {
         return new SellerRewardsResponse(rewards.progress(orgId).stream().map(ProgressView::of).toList(),
-                rewards.earned(orgId).stream().map(GrantView::of).toList());
+                rewards.earned(orgId).stream().map(GrantView::ofEarned).toList());
     }
 
     private static String blank(String s) {

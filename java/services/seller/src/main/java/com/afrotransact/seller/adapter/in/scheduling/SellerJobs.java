@@ -48,6 +48,22 @@ class SellerJobs {
         run("rewards", () -> LOG.info("Daily reward evaluation granted {} reward(s)", rewards.evaluateAll()));
     }
 
+    /**
+     * S299: rules checked at window end ("less than $1,000 in the first 30 days"), decided once per (rule,
+     * organisation, window) when the check is due: the rule's lead (default 24 h) before the window or the trial ends,
+     * so a free period moves trial_end before Stripe creates the invoice. Unique checks make replicas decide once.
+     */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.reward-window-interval:15m}",
+            initialDelayString = "${at.seller.jobs.reward-window-interval:15m}")
+    void rewardWindowEnds() {
+        run("reward-window-ends", () -> {
+            int made = rewards.evaluateWindowEnds();
+            if (made > 0) {
+                LOG.info("Window-end reward checks granted {} reward(s)", made);
+            }
+        });
+    }
+
     /** Grants recorded but not applied at Stripe yet (Stripe was unavailable): retried with their own keys. */
     @Scheduled(fixedDelayString = "${at.seller.jobs.grant-retry-interval:15m}",
             initialDelayString = "${at.seller.jobs.grant-retry-interval:15m}")

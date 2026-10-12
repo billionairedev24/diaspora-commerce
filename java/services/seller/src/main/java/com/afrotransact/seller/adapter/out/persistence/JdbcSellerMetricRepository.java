@@ -20,9 +20,14 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcSellerMetricRepository implements SellerMetricRepository {
 
-    /** Approved organisations with their subscription, plan and approval time (application.decided_at). */
+    /**
+     * Approved organisations with their subscription, plan, approval time (application.decided_at), subscription start
+     * and next renewal (the trial end while trialing, else the period end).
+     */
     private static final String FACTS = """
-            select o.id, o.kind, s.plan_code, a.decided_at,
+            select o.id, o.kind, s.plan_code, a.decided_at, s.started_at,
+                   case when s.status = 'TRIALING' and s.trial_ends_at is not null then s.trial_ends_at
+                        else s.current_period_end end as renewal_at,
                    (s.stripe_subscription_id is not null and s.status in ('TRIALING', 'ACTIVE', 'PAST_DUE')
                     and exists (select 1 from plan_version_price pr where pr.plan_code = s.plan_code
                                 and pr.version = s.plan_version and pr.amount_cents > 0)) as paid
@@ -110,6 +115,7 @@ class JdbcSellerMetricRepository implements SellerMetricRepository {
 
     private SellerFacts mapFacts(ResultSet rs, int n) throws SQLException {
         return new SellerFacts(rs.getString("id"), OrgKind.valueOf(rs.getString("kind")), rs.getString("plan_code"),
-                Sql.instant(rs, "decided_at"), rs.getBoolean("paid"));
+                Sql.instant(rs, "decided_at"), rs.getBoolean("paid"), Sql.instant(rs, "started_at"),
+                Sql.instant(rs, "renewal_at"));
     }
 }
