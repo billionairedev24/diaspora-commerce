@@ -50,6 +50,10 @@ its tests.
 | orders late add | `(customer, key)` claim | Business guard: a second live late add of the same window and items for the customer within 10 min under **another** key is 409 `orders.late-add-duplicate` (advisory lock + `late_add_guard`). Saved card: payments `<orderId>:create-intent` off-session, so the card is charged once. |
 | Pay-now page → BFF → orders | Signed token | Lookup is read-only. Confirm reads the intent through payments and places the order once (`place` is a no-op once placed). The webhook path does the same. |
 | Late add expiry | — | The job cancels the PaymentIntent (`<orderId>:cancel`), then voids the order. The pay page refuses the link as soon as it expires. |
+| Plan invoice paid from sales (S298, seller → payments) | `plan-fee-<invoice>` | One `plan_fee_withholding` per Stripe invoice id; a replay answers the first decision (WITHHELD, possibly partial, or DECLINED); another amount for the invoice is 409. SERIALIZABLE, so two invoices never claim the same earnings. Journal key `plan-fee:<invoice>`. |
+| Seller → Stripe customer balance credit for it | `earnings-<invoice>` | The collection step holds the row lock and rolls back on failure, so the retry replays the same key; the invoice is read back first and a finalised one is released instead of credited. |
+| Plan fee released (voided invoice, credit note out of band) | `plan-fee-release-<invoice or credit note>` (payments), `earnings-plan-fee-release-<invoice>` (Stripe balance debit) | `plan_fee_release` primary key = the key (journal `plan-fee-release:<key>`); `earnings_release` queues each release once. |
+| Plan fee recovered from a transfer | journal `plan-fee-settled:<uuid>` inside the transfer's transaction | The deduction and the transfer journal commit together; a failed Stripe transfer leaves the payable already reduced, so the retry transfers the same smaller amount. |
 | Booking deposits (web and app) | `bk-<uuid>` / `bk_<uuid>` per attempt | The key is kept after timeouts and deposit errors and changes only after success or a refusal. The BFF's minute-bucket key is used only when a client sends none. |
 
 ## Seller accounts and liability
@@ -109,6 +113,7 @@ record for disputes, at the cost of one card charge per seller in a multi-seller
 | Area | Tests |
 |---|---|
 | orders | `CheckoutIT`: same cart under two keys gives one order and one intent; retry with the same key; a different cart supersedes the open checkout; the open-checkout constraint. `PreorderCheckoutIT`: pay-now link to our page, expiry cancels the intent, a paid link places once and is then refused, key replay charges once, duplicate under another key is 409, key required. `HmacPayLinkSignerTest`. |
+| payments (plan fees, S298) | `PlanFeeWithholdingIT`: withheld once per invoice, partial when short, never from undelivered or disputed orders, deducted from the next transfer, a release paid back with the following one. `PlanFeeWithholdingTest`. Seller `PlanFeeCollectionIT`: Idempotency-Keys of the withholding, the balance credit and the release; 503 then a single collection on redelivery. |
 | payments | `WebhookInboxIT`: a stale `payment_failed` after AUTHORIZED; a late authorisation of a cancelled payment is cancelled. `PreorderPaymentsIT`: pay-now late adds create a PaymentIntent, never a session; cancelling one cancels the intent; an off-session replay charges once. `PaymentTest`. `StripeMockContractIT` (stripe-mock). |
 | delivery-runs | `PreorderIT`: a late add without a key is 422; a replayed key gives one order, one charge and one SMS; orders' 409 stays 409. |
 | gateway-bff | Late add key required and relayed; `TestPayLinksServeOurPayPageWithoutASession`; `TestSlowCallsUseTheSlowTimeout`. |

@@ -6,8 +6,10 @@ collection, Smart Retries, invoices and their PDFs, card updates and 3DS. Nobody
 Dashboard; the seller service creates and maintains the Stripe objects it needs.
 
 Stories S292–S298 (epic E14). Code: `java/services/seller` (domain `Plan*`, `Trial*`, `Reward*`, `BillingGrant`,
-`FreeDays`; use cases `PlanAdminService`, `PlanSyncService`, `TrialService`, `RewardService`,
-`BillingAdjustmentService`, `EarningsCollectionService`); Flyway `V70__plan_catalog_trials_rewards.sql`.
+`FreeDays`, `PlanFeeCollection`; use cases `PlanAdminService`, `PlanSyncService`, `TrialService`, `RewardService`,
+`BillingAdjustmentService`, `EarningsCollectionService`, `PlanFeeCollectionService`); Flyway
+`V70__plan_catalog_trials_rewards.sql`, `V71__plan_fee_collection.sql`; payments `PlanFeeService`,
+`V14__plan_fee_withholdings.sql`.
 
 ## Plan catalogue and versions
 
@@ -109,15 +111,95 @@ Applied grants publish `seller.billing.grant_applied` (at.seller-subscription.ev
 owners (`seller.billing.reward_earned` for rules, `seller.billing.credit_granted` for staff adjustments). Staff
 requests carry an `Idempotency-Key` header: a replay returns the first grant.
 
-## Collection from earnings (flag, default off)
+## How sellers pay their plan: from their sales or by card (S298)
 
-`at.seller.billing.collect-from-earnings` (`COLLECT_PLAN_FEES_FROM_EARNINGS`, default `false`), plus a per-organisation
-opt-in by staff. When Stripe creates a renewal invoice (`invoice.created`, draft, `subscription_cycle`, about an hour
-before it finalises), the seller service records it (`earnings_collection`, `REQUESTED`). A job asks payments to
-withhold the amount from the organisation's next settlement transfer (`POST /v1/orgs/{orgId}/plan-fee-withholdings`,
-`Idempotency-Key: plan-fee-<invoice>`). Once payments answers `WITHHELD`, the seller service posts a customer balance
-credit for the same amount (`earnings-<invoice>`), so the invoice is paid from the balance and the card isn't
-charged. If payments declines or doesn't answer in time, nothing changes and Stripe charges the card.
+Each organisation chooses how it pays its plan (`subscription.plan_fee_collection`):
 
-**Payments side (S298, not built):** the withholding endpoint, deducting withheld fees from the next transfer in the
-ledger, and releasing a withholding when the invoice is voided. Keep the flag off until S298 ships.
+| Choice | Seller Center label | What happens to a renewal invoice |
+|---|---|---|
+| `EARNINGS_FIRST` | "Pay your plan from your sales" | taken from pending earnings (payments withholds it from the next transfers); the card pays only what earnings don't cover |
+| `CARD` | "Charge my card" | charged to the card, separate from payouts: for sellers who book plan fees as their own card expense |
+
+- **Who chooses:** owners and finance members in Seller Center › Plan & billing
+  (`PUT /v1/orgs/{orgId}/billing/plan-fee-collection`), and applicants on the onboarding Plan step (`planFeeCollection`
+  of the plan step; omitted = the platform default). Staff set the **platform default for new sellers** in the staff
+  console › Plans & billing › Settings (`PUT /v1/billing/settings`, plans:manage; table `billing_setting`) and
+  **override one seller** in its billing panel (`PUT /v1/orgs/{orgId}/billing/plan-fee-collection/override`,
+  billing:adjust, a billing reason code, OTHER needs a note). Every change is audited in `plan_fee_collection_change`
+  (who, source ONBOARDING / SELLER / STAFF, reason, note, the invoice it applies from); the subscription keeps the
+  source (DEFAULT when the platform default applied at activation).
+- **From when:** a change applies from the **next invoice** (`appliesFromInvoiceAt` = the next renewal, shown in Seller
+  Center). An invoice Stripe already created keeps the choice it was created with: the decision is taken once, when
+  `invoice.created` arrives.
+- **Kill switch:** `at.seller.billing.collect-from-earnings` (`COLLECT_PLAN_FEES_FROM_EARNINGS`): on in the `local` and
+  `dev` profiles and Helm `values-dev.yaml`, off in uat and prod until operations switch it on there. Off: the choice is
+  hidden (Seller Center, onboarding), changes answer `409 seller.earnings-collection-off`, every invoice is charged to
+  the card; organisations keep their stored choice for when it is on again. `tools/ci/check_env_config.py` checks it is
+  on in local / dev and that wherever it can be on the seller-service client holds `payments:plan-fees` and the chart
+  sets `PAYMENTS_URL`.
+- AfroTransact Retail is never billed, so never withheld from.
+
+### Timing: `invoice.created`, collected before Stripe finalises
+
+Stripe creates a renewal or trial-end invoice (`billing_reason = subscription_cycle`) as a **draft** and finalises it
+one hour after our endpoint acknowledged `invoice.created` (it keeps waiting, up to 72 hours, while the endpoint fails).
+That window is used, rather than a scheduled pre-renewal withholding, because the draft has the exact amount (metered
+usage lines, prorations, coupons), a per-invoice id to make every step idempotent, and nothing to undo when a
+subscription is cancelled, upgraded or given free days before renewal. First invoices (`subscription_create`, no
+trial) and upgrades (`subscription_update`) are charged at once, so the card pays them; a new seller has no earnings
+yet anyway.
+
+1. **Claim** (inside the webhook transaction): an `EARNINGS_FIRST` organisation's draft `subscription_cycle` invoice is
+   claimed in `earnings_collection` (REQUESTED) for its amount **less the customer's credit balance** (rewards and staff
+   credits pay first; nothing is asked when they cover it).
+2. **Collect** right after the webhook transaction commits, holding the collection's row lock:
+   - read the invoice back from Stripe; if it is no longer a draft, the card paid it: MISSED, and whatever payments
+     holds is released;
+   - `POST /v1/orgs/{orgId}/plan-fee-withholdings` (Idempotency-Key `plan-fee-<invoice>`): payments withholds **up to**
+     the amount from delivered, undisputed, untransferred earnings → WITHHELD (possibly less) or DECLINED (card pays);
+   - credit the Stripe customer balance by what was withheld (`POST /v1/customers/{id}/balance_transactions`, amount
+     negative, Idempotency-Key `earnings-<invoice>`) → CREDITED. Stripe applies the balance when it finalises the
+     invoice, so the card is charged only for the rest (or nothing).
+3. **Retry:** a transient failure (payments or Stripe unavailable) rolls the step back and counts an attempt; the
+   webhook answers **503**, so Stripe redelivers `invoice.created` and keeps the invoice a draft, and the redelivery
+   (a duplicate in the inbox) collects again. The job (`at.seller.jobs.earnings-interval`, default 1 minute) retries
+   too, with back-off (1, 2, 4, 8, then every 10 minutes). After 12 attempts the collection is FAILED, whatever
+   payments may hold is released and the card pays. Every remote call replays under its key, so a retry never
+   withholds or credits twice.
+
+### Voids and refunds
+
+- `invoice.voided` / `invoice.deleted`: when the credit was posted (CREDITED), Stripe returns an applied balance on a
+  void (and a deleted draft never used it), so the seller service first takes the credit back
+  (`balance_transactions`, amount positive, Idempotency-Key `earnings-plan-fee-release-<invoice>`), then releases the
+  earnings at payments (`POST …/plan-fee-withholdings/{invoice}/release`, Idempotency-Key
+  `plan-fee-release-<invoice>`) → RELEASED. Before the credit: release only (MISSED).
+- `credit_note.created` on an invoice paid from sales: the part refunded **out of band** (`out_of_band_amount`) is
+  released at payments (`plan-fee-release-<credit note>`); refunds to the card or to the customer balance are Stripe's
+  own and release nothing. To refund a fee paid from sales, issue the credit note out of band.
+- Releases are queued in `earnings_release` (one per key) and sent right after the webhook, then by the job.
+
+### What payments does
+
+See `java/services/payments/README.md` › Plan fees paid from earnings. In short: Dr `2000:<org>` (no order) /
+Cr `4600` Seller plan fees collected from earnings; the organisation's next transfers recover it (`PLAN_FEE_SETTLED`,
+one "Plan fee (invoice …)" deduction per settlement); a release posts Dr `4600` / Cr `2000:<org>` and is paid back
+with the next transfer; money under an open dispute, undelivered orders and money already claimed by label charges or
+earlier plan fees are never withheld.
+
+### What sellers and staff see
+
+- Seller Center › Plan & billing: the choice (owner / finance can change it) with the invoice it applies from, and on
+  each invoice "Paid from your sales: $X · Card: $Y". Payouts: "Plan fees paid from your sales" with each
+  "Plan fee (invoice …)" and the orders it was deducted from.
+- Staff console › Plans & billing › Seller billing: the choice, who set it and the change log, the override, the
+  invoices paid from earnings (asked, withheld, released, status, last error); › Settings: the kill switch (read-only)
+  and the default for new sellers.
+
+| Step | Idempotency-Key | Dedupe |
+|---|---|---|
+| invoice.created | Stripe event id | webhook inbox; `earnings_collection` primary key = invoice id |
+| withhold at payments | `plan-fee-<invoice>` | `plan_fee_withholding.invoice_id` unique; replay answers the first decision |
+| balance credit | `earnings-<invoice>` | Stripe (24 h); CREDITED is terminal |
+| balance debit on void | `earnings-plan-fee-release-<invoice>` | Stripe replays the key; `earnings_release` is DONE once payments released |
+| release at payments | `plan-fee-release-<invoice or credit note>` | `plan_fee_release` primary key = the key |

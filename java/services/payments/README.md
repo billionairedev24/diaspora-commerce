@@ -35,8 +35,8 @@ use the **manual payout schedule**; sellers are paid **on request**.
 payable (attributed to the seller) · `2200` Customer refunds payable · `2300:<org>` Chargeback reserve · `2400` Carrier
 labels payable · `2500:<supplier>` Retail supplier payables · `4000` Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA and
 AfroTransact Delivery lines) · `4250` Local delivery fees (sellers' AfroTransact Delivery pickup fees, S255) ·
-`4300` Provider late-cancellation fees · `4400` AfroTransact Retail sales · `4500` Shipping label handling · `5000`
-Stripe fees · `5100` Chargeback losses.
+`4300` Provider late-cancellation fees · `4400` AfroTransact Retail sales · `4500` Shipping label handling · `4600`
+Seller plan fees collected from earnings (S298) · `5000` Stripe fees · `5100` Chargeback losses.
 
 `4400` holds AfroTransact Retail's net (items + all its shipping − its Stripe-fee share); its lines carry the Retail
 org id for attribution. Retail is the merchant of record, so there is never a `2000:<retail>` payable, a `2300` reserve,
@@ -55,6 +55,9 @@ a transfer, a reversal or a payout for it. Staff see Retail revenue as its own `
 | Shipping label charged to a seller (S256) | Dr 2000:<org> (cost + handling, no order) / Cr 2400 (carrier cost), Cr 4500 (handling) |
 | Label voided | Dr 2400, Dr 4500 / Cr 2000:<org> (once per label) |
 | Label balance settled at a transfer | Dr 2000:<org> on the order / Cr 2000:<org> unattributed (recovery; the opposite for a credit owed back) |
+| Plan invoice withheld from earnings (S298) | Dr 2000:<org> (no order) / Cr 4600 (`PLAN_FEE_WITHHELD`, key `plan-fee:<invoice>`) |
+| Plan fee released (invoice voided / refunded) | Dr 4600 / Cr 2000:<org> (`PLAN_FEE_RELEASED`, key `plan-fee-release:<release key>`) |
+| Plan fee settled at a transfer | Dr 2000:<org> on the order / Cr 2000:<org> unattributed (`PLAN_FEE_SETTLED`, one deduction per order; the opposite to pay a released fee back) |
 | Retail supplier invoices released (S226) | Dr 1400 / Cr 2500:<supplier> (lines attributed to Retail's org) |
 | Supplier paid by Finance | Dr 2500:<supplier> / Cr 1050 |
 | Authorisation released | — (authorisations never reach the ledger; 1000 moves only at capture) |
@@ -212,6 +215,8 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | `GET /v1/payouts/label-charges?orgId=&status=&from=&to=&limit=` | org members (own org) / staff: shipping labels charged to the organisation (S256) with tracking number, shipment, order, cost, handling, status; filters `status` CHARGED / CREDITED, purchased in `[from, to)`, `limit` ≤ 200 |
 | `GET /v1/payouts/statement?orgId=&currency=&from=&to=&limit=&kind=` | org members (own org) / staff: the seller statement (`kind` repeatable, e.g. `kind=LABEL_CHARGE&kind=LABEL_CREDIT`) — movements of `2000:<org>` (captures, refunds, transfers, chargebacks, `LABEL_CHARGE` / `LABEL_CREDIT` with labelId, shipmentId, trackingNumber), signed (credit to the seller positive), newest first, default last 90 days |
 | `GET /v1/payouts/requests?status=&orgId=` · `POST …/{id}/approve` · `/hold` · `/release` | Finance `payouts:approve` |
+| `POST /v1/orgs/{orgId}/plan-fee-withholdings` (Idempotency-Key `plan-fee-<invoice>`) · `POST …/{invoiceId}/release` (Idempotency-Key `plan-fee-release-<invoice or credit note>`) | the seller service only (SERVICE, `payments:plan-fees`): withhold a plan invoice from the organisation's earnings (S298) and release it again |
+| `GET /v1/orgs/{orgId}/plan-fee-withholdings?limit=` | the seller service, the organisation's members who see payouts, staff `payments:read`: plan fees with the transfers that settled them ("Plan fee (invoice …)") |
 | `GET /v1/reconciliation/runs` · `POST /v1/reconciliation/runs {date}` | `payments:read` / `payments:configure` |
 | `PUT/GET /v1/connected-accounts/{orgId}` | seller service or `payments:configure` |
 | `GET /v1/customers/me/payment-methods` · `POST /v1/customers/me/setup-intents` · `POST …/{id}/default` · `DELETE …/{id}` | the shopper (CUSTOMER token relayed by gateway-bff) |
@@ -268,6 +273,33 @@ balance transaction, matched 1:1 by reconciliation with the collection journal. 
 OUTSTANDING, is retried with backoff after each settlement run, and is subtracted from the payout balance so it can
 never be paid out first. Account debits need Express / Custom accounts (platform-controlled), which matches
 AfroTransact's manual payout schedule.
+
+### Plan fees paid from earnings (S298)
+
+Sellers who chose "Pay your plan from your sales" (seller service, `EARNINGS_FIRST`) have each renewal invoice taken
+from their earnings before Stripe charges the card. The seller service asks
+`POST /v1/orgs/{orgId}/plan-fee-withholdings {invoiceId, invoiceNumber, amountMinor, currency}` while the invoice is
+still a draft; it then credits the Stripe customer balance by what was withheld, so the card pays only the rest.
+
+- **What may be withheld:** the organisation's positive payable on orders whose settlement hold started (order or
+  shipment delivered: matured but untransferred, or still in the hold), never orders with an `OPEN` dispute, less
+  outstanding label charges and earlier plan fees not yet recovered (`EarningsPool`). Up to `amountMinor`: `WITHHELD`
+  with `withheldMinor` (possibly less, the card pays the rest) or `DECLINED` with a reason when nothing is available.
+  Captured but undelivered orders don't count (they can still be refunded before delivery).
+- **Idempotency:** one `plan_fee_withholding` row per invoice id; the key must be `plan-fee-<invoice>`; a replay answers
+  the first decision, the same invoice with another amount is `409 payments.idempotency-conflict`. Each step runs in a
+  SERIALIZABLE transaction, so two invoices can't claim the same earnings.
+- **Ledger:** Dr `2000:<org>` without an order / Cr `4600`: like a label charge, the organisation owes it, not an order.
+  Before each Connect transfer settlement pays back released fees, then recovers withheld fees oldest first
+  (`PLAN_FEE_SETTLED`, a reclass inside `2000:<org>`, one `plan_fee_deduction` per order: the "Plan fee (invoice …)"
+  line of that settlement), then settles label charges. The transfer is smaller by the fee.
+- **Balance:** `planFeesMinor` is what is still to settle. It comes out of the amounts on hold (it was taken from
+  them); only the part those no longer cover (refunds after the withholding) reserves `availableMinor`.
+- **Release:** `POST …/{invoiceId}/release {amountMinor?, reason}` (voided or deleted invoice: everything; credit note
+  refunded out of band: that amount) posts Dr `4600` / Cr `2000:<org>` once per key (`plan_fee_release`). Whatever
+  was already recovered is paid back with the next transfer.
+- **Statement:** `PLAN_FEE_WITHHELD` / `PLAN_FEE_RELEASED` lines say "Plan fee (invoice …)"; settlements net to zero on
+  `2000:<org>` and appear as deductions of `GET /v1/orgs/{orgId}/plan-fee-withholdings`.
 
 ### Shipping labels charged to sellers (S256)
 

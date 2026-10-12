@@ -161,7 +161,15 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 
 `POST /v1/webhooks/stripe-billing` (secret `STRIPE_BILLING_WEBHOOK_SECRET`): `invoice.paid`,
 `invoice.payment_failed` (dunning `RETRYING` / `FINAL_ATTEMPT_FAILED`, status `PAST_DUE`),
-`customer.subscription.updated` / `deleted`.
+`customer.subscription.updated` / `deleted`; `invoice.created`, `invoice.voided`, `invoice.deleted` and
+`credit_note.created` for plans paid from sales (S298: 503 while collecting an invoice failed for a transient reason,
+so Stripe redelivers and keeps the draft).
+
+**How the plan is paid (S298).** `GET/PUT /v1/orgs/{orgId}/billing/plan-fee-collection` (owner / finance):
+`EARNINGS_FIRST` ("Pay your plan from your sales": payments withholds each renewal invoice from earnings, the card
+pays the rest) or `CARD` ("Charge my card"); applies from the next invoice. Staff: `PUT …/plan-fee-collection/override`
+(billing:adjust, reason code), `GET/PUT /v1/billing/settings` (the default for new sellers, plans:manage). Kill switch
+`COLLECT_PLAN_FEES_FROM_EARNINGS`. Design, timing and keys: docs/engineering/plans-and-billing.md.
 
 **S103 acceptance criteria.** Upgrades prorate immediately (`always_invoice`, previewable), downgrades and cadence
 changes apply at renewal (pending change + `Pending plan changes` job, `proration_behavior=none`); trials come from the
@@ -243,6 +251,7 @@ knows the organisation.
 | Compliance reminders | hourly `0 15 * * * *` | 7 / 3 / 1 day(s) before `current_deadline`; one per threshold (unique index) |
 | Pending plan changes | hourly `0 5 * * * *` | downgrades and cadence changes whose renewal has come |
 | Subscription activation retry | every 10 min | approvals whose Stripe subscription could not be created |
+| Plan fees from sales (S298) | every 1 min (`EARNINGS_COLLECTION_INTERVAL`) | renewal invoices still to withhold and credit (back-off, 12 attempts), and releases still to send |
 
 ## Configuration
 
@@ -251,7 +260,9 @@ knows the organisation.
 `STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` (base64 32 bytes; `FIELD_ENCRYPTION_KEY_ID`, default `k1`).
 Other: `AUTH_ISSUER_URL`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`, `GEO_URL`, `GEO_TIMEOUT`,
 `PICKUP_MAX_RADIUS_MILES` (25),
-`SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`. `at.seller.stripe.api-base` /
+`SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`,
+`COLLECT_PLAN_FEES_FROM_EARNINGS` (kill switch; on in the local and dev profiles), `PAYMENTS_URL`, `PAYMENTS_TIMEOUT`,
+`EARNINGS_COLLECTION_INTERVAL`. `at.seller.stripe.api-base` /
 `files-base` point stripe-java at another host (the ITs use WireMock). The local profile ships a well-known dev
 encryption key; every other environment must provide its own.
 
