@@ -21,7 +21,7 @@ CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/c
 .PHONY: help up up-infra down logs ps reset apps-up apps-down mobile docs-up secrets-check stripe-setup \
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links repair-orgs \
         helm-lint gitops-render rules dashboards observability-check \
-        env-check render tf-check security coverage smoke-carriers \
+        env-check render tf-check security coverage smoke-carriers perf-k6 perf-k6-smoke perf-ab perf-hey perf-wrk \
         web-dev web-build backlog seed seed-test mobile-lan lan-env mobile-adb-reverse mobile-android-device \
         mobile-ios-device mobile-apk mobile-brand mobile-hero
 
@@ -146,6 +146,23 @@ coverage: ## Coverage summary + gate (SERVICE=<name> for one; Go modules are tes
 
 smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARRIER_GATEWAY_URL, default localhost:8209)
 	tools/smoke/carriers.sh
+
+SCENARIO ?= smoke
+
+perf-k6: ## k6 load test (SCENARIO=smoke|gateway-readonly|search; K6_VUS, K6_DURATION, see tools/perf/README.md)
+	tools/perf/run-k6.sh $(SCENARIO)
+
+perf-k6-smoke: ## k6 quick health smoke (~15s, 5 VUs)
+	tools/perf/run-k6.sh smoke
+
+perf-ab: ## Apache Bench on gateway home + search (PERF_AB_REQUESTS, PERF_AB_CONCURRENCY)
+	tools/perf/run-ab.sh
+
+perf-hey: ## hey load generator on gateway + search
+	tools/perf/run-hey.sh
+
+perf-wrk: ## wrk on gateway healthz + search (WRK_THREADS, WRK_CONNECTIONS, WRK_DURATION)
+	tools/perf/run-wrk.sh
 
 # ------------------------------------------------------------------------------------------------ web / misc
 dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)

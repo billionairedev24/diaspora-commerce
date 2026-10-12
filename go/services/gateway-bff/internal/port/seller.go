@@ -715,6 +715,27 @@ type OffersClient interface {
 	List(ctx context.Context, bearer string, page, size int) (OfferPage, error)
 	// Update is PATCH /v1/offers/{id} (only the fields present change).
 	Update(ctx context.Context, bearer, id string, body map[string]any) (SellerOfferUp, error)
+	// ListCoupons is GET /v1/coupons (seller-funded for the token's organisation).
+	ListCoupons(ctx context.Context, bearer string) ([]SellerCouponUp, error)
+	CreateCoupon(ctx context.Context, bearer string, body map[string]any) (SellerCouponUp, error)
+	SetCouponStatus(ctx context.Context, bearer, id, status string) (SellerCouponUp, error)
+}
+
+// SellerCouponUp is offers-service CouponResponse.
+type SellerCouponUp struct {
+	ID            string `json:"id"`
+	Code          string `json:"code"`
+	Description   string `json:"description"`
+	Type          string `json:"type"`
+	Value         int64  `json:"value"`
+	Currency      string `json:"currency"`
+	Scope         string `json:"scope"`
+	ScopeRef      string `json:"scopeRef"`
+	MinSpendMinor int64  `json:"minSpendMinor"`
+	Status        string `json:"status"`
+	Funding       string `json:"funding"`
+	FundedByOrg   string `json:"fundedByOrg"`
+	Version       int64  `json:"version"`
 }
 
 // SellerOfferUp is offers' Offer as seller center sees it.

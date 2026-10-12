@@ -24,3 +24,32 @@
 }
 
 .at-skip-link:focus { top: var(--at-space-2); }
+
+/* Dense tables inside Sheets: scroll sideways instead of breaking words letter-by-letter. */
+.at-sheet-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.at-sheet-table-scroll .at-table {
+  table-layout: auto;
+  width: max-content;
+  min-width: 100%;
+}
+
+.at-sheet-table-scroll .at-table th,
+.at-sheet-table-scroll .at-table td {
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.at-sheet-table-scroll .at-table td .at-cell-stack {
+  white-space: normal;
+}
+
+.at-sheet-table-scroll.at-sheet-table-form .at-table td {
+  white-space: normal;
+}

@@ -87,6 +87,13 @@ class ShipmentSettlementAndOrderRefundIT extends PaymentsIntegrationTest {
         assertThat(ok(send("POST", "/v1/settlements/" + order + "/shipments/" + order + "-S1/delivered", Map.of(),
                 null)).path("releaseAt").asString()).isEqualTo(hold.path("releaseAt").asString());
 
+        TestSupport.as(TestSupport.seller(org, "seller.owner", "payouts:request"));
+        JsonNode balance = ok(send("GET", "/v1/payouts/balance", null, null));
+        assertThat(balance.path("onHoldMinor").asLong()).isPositive();
+        assertThat(balance.path("onHold").get(0).path("orderId").asString()).isEqualTo(order);
+        assertThat(balance.path("onHold").get(0).path("releaseAt").asString())
+                .isEqualTo(hold.path("releaseAt").asString());
+
         STRIPE.transfer(order, account, "tr_" + order + "_1", firstNet);
         TestSupport.CLOCK.advance(Duration.ofDays(7).plusMinutes(5));
         settlements.releaseMatured(500);

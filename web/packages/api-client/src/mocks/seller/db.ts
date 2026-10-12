@@ -12,6 +12,7 @@ import {
   type EarningsRow,
   type Invoice,
   type ListingRow,
+  type SellerCoupon,
   type OrgKind,
   type OrgStatus,
   type Payout,
@@ -79,6 +80,8 @@ export interface MockSellerDb {
   shipFrom: Record<string, ShipFromAddress[]>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
   offers: SellerOffer[];
+  /** Seller-funded coupons (offers-service). */
+  coupons: SellerCoupon[];
   /** Export jobs (the file body is CSV text in the mock). */
   exports: (ExportJob & { owner: string; orgId: string; body: string })[];
   /** What the one-step form stored per product (S307); seeded listings derive theirs from the row. */
@@ -532,6 +535,7 @@ function freshDb(now: Date): MockSellerDb {
       ]
     },
     offers: [],
+    coupons: [],
     pages: {
       [SELLER_ORG]: { kind: 'SELLER', slug: 'ades-kitchen', name: 'Ade’s Kitchen', tagline: 'Home-style Nigerian pantry, shipped from Houston', status: 'PUBLISHED',
         publishedAt: iso(new Date(now.getTime() - 30 * DAY)), primaryColor: '#0A8264', accentColor: '#FFD400', layout: 'CLASSIC', header: 'BAND', buttonShape: 'ROUNDED',
@@ -548,6 +552,9 @@ function freshDb(now: Date): MockSellerDb {
     seq: 1
   };
   db.offers = seedOffers(db.listings);
+  db.coupons = [
+    { id: 'cp-mock-1', code: 'ADE10', description: '10% off Ade’s Kitchen', type: 'PERCENT', value: 10, currency: 'USD', scope: 'SELLER', minSpendMinor: 2500, status: 'ACTIVE', funding: 'SELLER', editable: true, version: 1 }
+  ];
   return db;
 }
 

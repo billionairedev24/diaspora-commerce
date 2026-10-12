@@ -22,7 +22,8 @@
     "./mocks/staff-node": "./src/mocks/staff-node.ts",
     "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts",
     "./staff-preorders": "./src/staff-preorders.ts",
-    "./staff-markets": "./src/staff-markets.ts"
+    "./staff-markets": "./src/staff-markets.ts",
+    "./correlation": "./src/correlation.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",

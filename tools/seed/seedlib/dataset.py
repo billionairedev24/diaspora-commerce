@@ -519,6 +519,7 @@ TEST_USERS: list[tuple[str, str, str, Union[str, None], bool]] = [
     ("customer.lubbock@afrotransact.test", "Customer, Lubbock 79401 address (open pre-order)", "Storefront", None, False),
     ("seller.owner@afrotransact.test", "Owner, Mama Put Pantry", "Seller Center", "org_mama_put_pantry", False),
     ("seller.staff@afrotransact.test", "Catalog manager, Mama Put Pantry", "Seller Center", "org_mama_put_pantry", False),
+    ("seller.bamako@afrotransact.test", "Owner, Bamako Home", "Seller Center", "org_bamako_home", False),
     ("provider.owner@afrotransact.test", "Owner, Aminata's Braids", "Provider Hub", "org_aminatas_braids", False),
     ("retail.operator@afrotransact.test", "Operator, AfroTransact Retail (1P)", "Seller Center", RETAIL_ORG, False),
     ("staff.admin@afrotransact.test", "Super Admin", "Staff console", None, True),
@@ -563,5 +564,13 @@ PICKUP_POINTS = [
      "address": {"line1": "1600 Murphy Ave SW", "city": "Atlanta", "state": "GA", "postalCode": "30310", "country": "US"},
      "timezone": "America/New_York", "hours": _hours((1, 2, 3, 4, 5, 6), "08:00", "18:00"), "readyHours": 3,
      "position": {"lat": 33.7144, "lng": -84.4185}},
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000105", "kind": "PLATFORM_COUNTER", "name": "Dallas FC — Will Call",
+     "address": {"line1": "5000 Singleton Blvd", "city": "Dallas", "state": "TX", "postalCode": "75212", "country": "US"},
+     "timezone": "America/Chicago", "hours": _hours((1, 2, 3, 4, 5, 6), "08:00", "20:00"), "readyHours": 2,
+     "position": {"lat": 32.776, "lng": -96.822}},
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000106", "kind": "LOCKER", "name": "AfroTransact Locker · Oak Lawn",
+     "address": {"line1": "2727 Oak Lawn Ave", "city": "Dallas", "state": "TX", "postalCode": "75219", "country": "US"},
+     "timezone": "America/Chicago", "hours": _hours((0, 1, 2, 3, 4, 5, 6), "06:00", "22:00"), "readyHours": 18,
+     "position": {"lat": 32.802, "lng": -96.801}},
 ]
 PICKUP_OWNER = "afrotransact"

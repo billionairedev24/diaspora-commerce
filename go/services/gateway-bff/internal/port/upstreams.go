@@ -448,7 +448,7 @@ type ContentConsent struct {
 
 // PaymentsClient manages the customer's saved Stripe payment methods.
 type PaymentsClient interface {
-	PaymentMethods(ctx context.Context, bearer string) ([]domain.PaymentMethod, error)
+	PaymentMethods(ctx context.Context, bearer string) (Wallet, error)
 	SetupIntent(ctx context.Context, bearer string) (domain.SetupIntent, error)
 	DeletePaymentMethod(ctx context.Context, bearer, id string) error
 }

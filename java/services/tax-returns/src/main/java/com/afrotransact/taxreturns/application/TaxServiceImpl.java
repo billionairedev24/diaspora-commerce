@@ -102,4 +102,22 @@ class TaxServiceImpl implements TaxService {
                     + zipPrefix);
         }
     }
+
+    @Override
+    @Transactional
+    public TaxRatesImportResult importCsv(String csv) {
+        access.staff(TaxReturnsPermissions.TAX_CONFIGURE);
+        TaxRatesCsvImport.Parsed parsed = TaxRatesCsvImport.parse(csv);
+        for (StateTaxRule s : parsed.states()) {
+            rates.upsertState(s);
+        }
+        for (LocalTaxRate l : parsed.locals()) {
+            if (rates.state("US", l.state()).isEmpty()) {
+                throw new NotFoundException("tax-returns.state-not-found",
+                        "Add a STATE row for " + l.state() + " before local ZIP " + l.zipPrefix());
+            }
+            rates.upsertLocal(l);
+        }
+        return new TaxRatesImportResult(parsed.states().size(), parsed.locals().size(), parsed.warnings());
+    }
 }

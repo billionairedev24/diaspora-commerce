@@ -26,7 +26,7 @@ import {
 /** Sidebar icon of each module (the Backoffice prototype's Phosphor icons). */
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
   dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
-  apps: IdentificationCard, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
+  orgs: UsersThree, apps: IdentificationCard, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
   audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, notifications: BellRinging, preorders: CalendarCheck,
   plans: CreditCard
 };
@@ -34,7 +34,7 @@ export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
 /** URL path of each module. */
 export const MODULE_PATHS: Record<StaffModuleKey, string> = {
   dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
-  apps: '/applications', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
+  orgs: '/organisations', apps: '/applications', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
   audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', notifications: '/notifications', preorders: '/preorders',
   plans: '/plans'
 };
@@ -59,6 +59,10 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
   inventory: [{ resource: 'inventory', label: 'Lots' }],
   retail: [{ resource: 'purchase-orders', label: 'Purchase orders' }],
   dispatch: [{ resource: 'routes', label: 'Routes' }],
+  orgs: [
+    { resource: 'organisations', label: 'Organisations' },
+    { resource: 'connect-accounts', label: 'Stripe Connect' }
+  ],
   apps: [{ resource: 'applications', label: 'Applications' }],
   rbac: [
     { resource: 'users', label: 'People' },
@@ -71,7 +75,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
   ],
   marketing: [
     { resource: 'announcements', label: 'Announcements' },
-    { resource: 'placements', label: 'Placements & ads' }
+    { resource: 'placements', label: 'Placements & ads' },
+    { resource: 'coupons', label: 'Platform coupons' }
   ],
   disputes: [
     { resource: 'claims', label: 'A-to-z claims' },

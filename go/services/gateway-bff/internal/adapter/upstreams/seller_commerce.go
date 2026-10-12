@@ -182,6 +182,25 @@ func (o *offersImpl) Update(ctx context.Context, bearer, id string, body map[str
 	return out, err
 }
 
+func (o *offersImpl) ListCoupons(ctx context.Context, bearer string) ([]port.SellerCouponUp, error) {
+	var out []port.SellerCouponUp
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/coupons", Bearer: bearer, Query: url.Values{"funding": {"SELLER"}}}, &out)
+	return out, err
+}
+
+func (o *offersImpl) CreateCoupon(ctx context.Context, bearer string, body map[string]any) (port.SellerCouponUp, error) {
+	var out port.SellerCouponUp
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons", Bearer: bearer, JSON: body}, &out)
+	return out, err
+}
+
+func (o *offersImpl) SetCouponStatus(ctx context.Context, bearer, id, status string) (port.SellerCouponUp, error) {
+	var out port.SellerCouponUp
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/coupons/" + url.PathEscape(id) + "/status", Bearer: bearer,
+		JSON: map[string]any{"status": status}}, &out)
+	return out, err
+}
+
 // ---------------------------------------------------------------- media (contracts/openapi/media.yaml)
 
 type mediaImpl struct{ c httpclient.Client }

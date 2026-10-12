@@ -1,5 +1,6 @@
 import { type z } from 'zod';
 
+import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
 
 export type FetchLike = (input: Request) => Promise<Response>;
@@ -46,7 +47,7 @@ export type Requester = <S extends z.ZodType>(path: string, schema: S, opts?: Re
 export function createRequester(options: ApiClientOptions): Requester {
   const doFetch: FetchLike = options.fetch ?? ((req) => fetch(req));
   return async function request<S extends z.ZodType>(path: string, schema: S, opts: RequestOptions = {}): Promise<z.infer<S>> {
-    const headers: Record<string, string> = { Accept: 'application/json', ...options.headers, ...opts.headers };
+    const headers: Record<string, string> = withCorrelationHeaders({ Accept: 'application/json', ...options.headers, ...opts.headers });
     // FormData (file uploads) sets its own multipart Content-Type with the boundary.
     const form = typeof FormData !== 'undefined' && opts.body instanceof FormData;
     if (opts.body !== undefined && !form) headers['Content-Type'] = 'application/json';
@@ -77,7 +78,7 @@ export function createDownloader(options: ApiClientOptions): Downloader {
   const doFetch: FetchLike = options.fetch ?? ((req) => fetch(req));
   return async (path, query, fallbackName = 'download') => {
     const req = new Request(absolute(joinUrl(options.baseUrl, path, query)), {
-      headers: { Accept: '*/*', ...options.headers },
+      headers: withCorrelationHeaders({ Accept: '*/*', ...options.headers }),
       credentials: 'include'
     });
     const res = await doFetch(req);

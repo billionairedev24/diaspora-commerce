@@ -10,37 +10,33 @@ import {
   isApiError,
   type OrderConfirmation,
   orderKeys,
-  type PaymentMethod
 } from '@afrotransact/api-client';
-import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CardBrandRow, CheckCircle, Circle, CircleNotch, LockSimple, Plus, PoweredByStripe, ShieldCheck, Skeleton, useToast } from '@afrotransact/ui';
+import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AddressDialog } from '@/components/account/AddressDialog';
-import { PaymentChip } from '@/components/payments/PaymentChip';
-import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle, REDIRECTED } from '@/components/payments/PaymentElementField';
+import { type PaymentElementChange, type PaymentElementHandle, REDIRECTED } from '@/components/payments/PaymentElementField';
 import { useCartPreorderCopy } from '@/components/preorder/CartPreorder';
-import { type MessageKey, type Translator, useT } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
 
+import { CheckoutOrderPanel } from './CheckoutOrderPanel';
 import styles from './Checkout.module.css';
 import { type Choice, feeOf, initialChoice, PackageCard } from './PackageCard';
 
-/** How the order is paid: a saved method, or a new method in the Payment Element. */
+/** How the order is paid: saved card or new details via the Payment Element. */
 type PaySpec = { paymentMethodId: string } | { newPaymentMethod: true; savePaymentMethod: boolean };
 
 /** Where Stripe sends the shopper back after a redirect (3-D Secure page, Cash App, Affirm, bank): checks the payment. */
 export const checkoutReturnUrl = (orderNumber: string) => `${window.location.origin}/checkout/complete?order=${encodeURIComponent(orderNumber)}`;
 
 const addressLine = (a: Address) => `${a.line1}${a.line2 ? ` ${a.line2}` : ''}, ${a.city}, ${a.state} ${a.zip}`;
-const pmSub = (t: Translator<MessageKey>, pm: PaymentMethod) => (pm.expires ? t('pay.expires', { date: pm.expires }) : pm.type === 'us_bank_account' ? t('pay.bankAccount') : t('pay.wallet'));
-
 /** A checkout section: numbered heading, optional action, body. */
 function Section({ n, id, title, action, children }: { n: number; id: string; title: string; action?: ReactNode; children: ReactNode }) {
   return (
@@ -59,14 +55,10 @@ function Section({ n, id, title, action, children }: { n: number; id: string; ti
   );
 }
 
-const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', 'co.placing.split'] as const;
-
 /**
- * Checkout (S047, S048, S282): one page, nothing folded away. The main column holds 1 the delivery address, 2 every
- * seller group with Delivery or Pickup (pickup points per group: AfroTransact counters for platform-fulfilled items,
- * the seller's own locations for theirs) and every item, 3 payment: the shopper's saved methods and Stripe's Payment
- * Element (compact accordion: card, wallets, Link, Klarna, Amazon Pay… as enabled in Stripe), always visible. The
- * right column is a sticky order summary with Place your order.
+ * Checkout (S047, S048, S282): two columns from 1000px. The main column is address and delivery or pickup per seller
+ * group; the sticky right rail holds line items, totals, payment (Stripe Payment Element) and an optional
+ * checkout_cross_sell placement from content. Below 1000px the rail follows delivery choices.
  *
  * Payment is Stripe Elements on the deferred-intent flow: the Payment Element is created from the order total and
  * updated as delivery choices change; Place order runs elements.submit(), places the order (orders creates the
@@ -79,22 +71,25 @@ const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', '
  * replays the same order and PaymentIntent. A ref (not state) makes Place order single-flight.
  */
 export function CheckoutView() {
-  const fmt = useFormatters();
   const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();
   const router = useRouter();
   const [addressId, setAddressId] = useState<string | null>(null);
-  const summary = useQuery(shopperQueries.checkoutSummary(api, addressId));
-  const s = summary.data;
+  const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [addressOpen, setAddressOpen] = useState(false);
   const [pmId, setPmId] = useState<string | null>(null);
   const [payWith, setPayWith] = useState<'saved' | 'new' | null>(null);
   const [save, setSave] = useState(false);
   const [newMethod, setNewMethod] = useState<PaymentElementChange>({ complete: false, empty: true, type: null });
   const payEl = useRef<PaymentElementHandle>(null);
-  const [choices, setChoices] = useState<Record<string, Choice>>({});
+  const [couponDraft, setCouponDraft] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState('');
+  /** Sent to the BFF so shipping, tax and coupons match the selected delivery option per package. */
+  const [packageDeliveryKey, setPackageDeliveryKey] = useState<string | undefined>();
+  const summary = useQuery(shopperQueries.checkoutSummary(api, addressId, packageDeliveryKey, appliedCoupon || undefined));
+  const s = summary.data;
   const [addrDialog, setAddrDialog] = useState<{ open: boolean; address: Address | null }>({ open: false, address: null });
   const [placing, setPlacing] = useState(-1);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +98,6 @@ export function CheckoutView() {
   const busyRef = useRef(false);
   /** The order the current key created, once orders answered (checked after an error before a new key is made). */
   const orderRef = useRef<string | null>(null);
-
   // Saved addresses and payment methods load by default (the default one preselected).
   useEffect(() => {
     if (!s) return;
@@ -125,11 +119,33 @@ export function CheckoutView() {
     });
   }, [s, addressId, pmId]);
 
+  const deliveryKeyOf = (pkgs: CheckoutPackage[], ch: Record<string, Choice>) =>
+    pkgs.map((p) => `${p.packageId}:${(ch[p.packageId] ?? initialChoice(p)).option}`).join(',');
+
+  useEffect(() => {
+    if (!s?.packages.length) return;
+    const key = deliveryKeyOf(s.packages, choices);
+    setPackageDeliveryKey((prev) => (prev === key ? prev : key));
+  }, [s, choices]);
+
+  const setPackageChoice = (packageId: string, choice: Choice) => {
+    setChoices((prev) => {
+      const next = { ...prev, [packageId]: choice };
+      if (s?.packages.length) setPackageDeliveryKey(deliveryKeyOf(s.packages, next));
+      return next;
+    });
+  };
+
   const address = s?.addresses.find((a) => a.id === addressId) ?? null;
   const pm = s?.paymentMethods.find((p) => p.id === pmId) ?? null;
-  const shipping = useMemo(() => (s ? s.packages.reduce((sum, p) => sum + feeOf(p, choices[p.packageId]), 0) : 0), [s, choices]);
+  const selectedShipping = useMemo(() => (s ? s.packages.reduce((sum, p) => sum + feeOf(p, choices[p.packageId]), 0) : 0), [s, choices]);
   const pickups = s ? s.packages.filter((p) => choices[p.packageId]?.option === 'pickup').length : 0;
-  const total = (s?.subtotalMinor ?? 0) + shipping + (s?.taxMinor ?? 0);
+  /** Optimistic total: shipping follows UI choices immediately; tax and coupon discounts follow the BFF summary. */
+  const total = useMemo(() => {
+    if (!s) return 0;
+    const ship = Math.max(0, selectedShipping - (s.shippingDiscountMinor ?? 0));
+    return s.subtotalMinor - (s.discountMinor ?? 0) + ship + s.taxMinor;
+  }, [s, selectedShipping]);
   const itemCount = s?.packages.reduce((n, p) => n + p.itemCount, 0) ?? 0;
   const busy = placing >= 0;
   // A pre-order package whose window is not open (upcoming or closed) blocks the order (S273, 422 orders.preorder-not-open).
@@ -214,7 +230,13 @@ export function CheckoutView() {
       orderRef.current = null;
     }
     end();
-    setError(isApiError(e) ? (Object.values(e.fieldErrors)[0] ?? e.message) : e instanceof Error ? e.message : t('auth.genericError'));
+    setError(
+      isApiError(e)
+        ? (e.fieldErrors.couponCode ?? Object.values(e.fieldErrors)[0] ?? e.message)
+        : e instanceof Error
+          ? e.message
+          : t('auth.genericError')
+    );
     void qc.invalidateQueries({ queryKey: checkoutKeys.all });
   };
 
@@ -224,7 +246,8 @@ export function CheckoutView() {
     try {
       // Last-touch channel (?src=&cr=&po= or the pre-order placement clicked) is stored on the order.
       const attribution = readAttribution() ?? undefined;
-      const conf = await api.placeOrder({ addressId: address.id, ...pay, deliverySelections: selections(), attribution }, keyRef.current);
+      const couponCode = s?.coupon?.applicable ? s.coupon.code : undefined;
+      const conf = await api.placeOrder({ addressId: address.id, ...pay, deliverySelections: selections(), attribution, couponCode }, keyRef.current);
       orderRef.current = conf.orderNumber;
       return conf;
     } catch (e) {
@@ -304,18 +327,24 @@ export function CheckoutView() {
 
   const addressList = addressOpen || !address;
   // The BFF sends a rate ('8.25% TX') or, before an address is known, its own sentence: never repeat it.
-  const taxNote = s.taxMinor ? null : /\d\s*%/.test(s.taxRateLabel) ? t('co.taxNoteRate', { rate: s.taxRateLabel }) : s.taxRateLabel || t('co.taxNote');
+  const taxNote = s.taxMinor
+    ? /\d\s*%/.test(s.taxRateLabel)
+      ? t('co.taxExplainRate', { rate: s.taxRateLabel })
+      : t('co.taxExplain')
+    : /\d\s*%/.test(s.taxRateLabel)
+      ? t('co.taxNoteRate', { rate: s.taxRateLabel })
+      : s.taxRateLabel || t('co.taxNote');
 
   return (
     <div className={styles.layout}>
-      <div className={styles.main}>
-        <div className={styles.head}>
-          <h1 className={styles.title}>{t('co.title')}</h1>
-          <span className={styles.headMeta}>
-            <LockSimple weight="fill" aria-hidden /> {t('co.items', { n: itemCount })}
-          </span>
-        </div>
+      <header className={styles.head}>
+        <h1 className={styles.title}>{t('co.title')}</h1>
+        <span className={styles.headMeta}>
+          <LockSimple weight="fill" aria-hidden /> {t('co.items', { n: itemCount })}
+        </span>
+      </header>
 
+      <div className={styles.mainCol}>
         <Section
           n={1}
           id="co-address"
@@ -371,7 +400,7 @@ export function CheckoutView() {
           )}
         </Section>
 
-        <Section n={2} id="co-items" title={t('co.step.items')} action={<span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>}>
+        <Section n={2} id="co-delivery" title={t('co.step.delivery')} action={<span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>}>
           <div className={styles.packages}>
             {s.packages.map((p, i) => (
               <PackageCard
@@ -380,7 +409,7 @@ export function CheckoutView() {
                 n={i + 1}
                 total={s.packages.length}
                 choice={choices[p.packageId] ?? initialChoice(p)}
-                onChoice={(c) => setChoices((x) => ({ ...x, [p.packageId]: c }))}
+                onChoice={(c) => setPackageChoice(p.packageId, c)}
                 onRemove={() => void removePackage(p)}
                 onChangeAddress={changeAddress}
                 removing={removing === p.packageId}
@@ -388,120 +417,49 @@ export function CheckoutView() {
             ))}
           </div>
         </Section>
-
-        <Section n={3} id="co-payment" title={t('co.step.payment')} action={<CardBrandRow height={18} className={styles.brands} />}>
-          <div className={styles.payment}>
-            {s.paymentMethods.length > 0 && (
-              <fieldset className={styles.saved}>
-                <legend className={styles.legend}>{t('co.savedMethods')}</legend>
-                {s.paymentMethods.map((p) => (
-                  <label key={p.id} className={styles.choice} data-testid="checkout-payment">
-                    <input
-                      type="radio"
-                      name="paym"
-                      checked={payWith === 'saved' && p.id === pmId}
-                      onChange={() => {
-                        setPayWith('saved');
-                        setPmId(p.id);
-                      }}
-                    />
-                    <PaymentChip method={p} />
-                    <span className={styles.choiceText}>
-                      <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(t, p)}</span>
-                    </span>
-                    {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method">
-              <span className={styles.legend}>{s.paymentMethods.length > 0 ? t('co.orNew') : t('co.payWith')}</span>
-              <PaymentElementField ref={payEl} publishableKey={s.publishableKey ?? ''} amountMinor={total} currency={s.currency} save={save} paymentMethodTypes={methodTypes} onChange={onNewMethod} />
-              <label className={styles.save}>
-                <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-                <span>
-                  {t('co.saveForLater')}
-                  <small>{t('co.saveForLaterHint')}</small>
-                </span>
-              </label>
-            </div>
-            <div className={styles.secure}>
-              <PoweredByStripe height={24} />
-              <span className={styles.secureText}>
-                <ShieldCheck aria-hidden /> {t('pay.storedByStripe')}
-              </span>
-            </div>
-          </div>
-        </Section>
       </div>
 
-      <aside className={styles.aside} aria-label={t('co.orderSummary')}>
-        <div className={styles.summaryCard}>
-          <h2 className={styles.summaryTitle}>{t('co.orderSummary')}</h2>
-          <dl className={styles.totals} data-testid="order-summary">
-            <div className={styles.row}>
-              <dt>{t('co.itemsTotal', { n: itemCount })}</dt>
-              <dd>{fmt.money(s.subtotalMinor)}</dd>
-            </div>
-            <div className={styles.row}>
-              <dt>{t('co.shippingShort')}</dt>
-              <dd>{shipping === 0 ? t('co.free') : fmt.money(shipping)}</dd>
-              {pickups > 0 && <dd className={styles.rowNote}>{t('co.pickupNote', { n: pickups })}</dd>}
-            </div>
-            <div className={styles.row}>
-              <dt>{t('co.taxShort')}</dt>
-              <dd>{s.taxMinor ? fmt.money(s.taxMinor) : '—'}</dd>
-              {taxNote && <dd className={styles.rowNote}>{taxNote}</dd>}
-            </div>
-            <div className={styles.grandRow}>
-              <dt>{t('co.total')}</dt>
-              <dd>{fmt.money(total)}</dd>
-            </div>
-          </dl>
-          <Button
-            size="lg"
-            block
-            onClick={() => void (payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
-            loading={busy}
-            disabled={!paymentChosen || !address || addressList || blocked}
-            data-place-order="1"
-          >
-            {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
-          </Button>
-          {error && (
-            <p className={styles.error} role="alert">
-              {error}
-            </p>
-          )}
-          {preLocked && preCopy?.copy.lockedText && (
-            <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
-              {preCopy.copy.lockedText}
-            </p>
-          )}
-          {undeliverable && !preLocked && (
-            <p className={styles.fine} data-testid="local-delivery-blocked">
-              {t('ld.blocked')}
-            </p>
-          )}
-          {addressList && address && <p className={styles.fine}>{t('co.confirmAddress')}</p>}
-          {busy && (
-            <ol className={styles.steps} aria-live="polite">
-              {STEPS.map((k, i) => (
-                <li key={k}>
-                  {i < placing ? <CheckCircle weight="fill" aria-hidden /> : i === placing ? <CircleNotch className={styles.spin} aria-hidden /> : <Circle aria-hidden />} {t(k)}
-                </li>
-              ))}
-            </ol>
-          )}
-          <p className={styles.fine}>
-            {t('co.agreePrefix')} <Link href="/legal/conditions-of-use">{t('co.conditions')}</Link> {t('co.and')} <Link href="/legal/privacy">{t('co.privacy')}</Link>.
-          </p>
-          <div className={styles.stripeLine}>
-            <PoweredByStripe height={24} />
-            <span>{t('co.chargeNote')}</span>
-          </div>
-        </div>
-      </aside>
+      <CheckoutOrderPanel
+        s={s}
+        packages={s.packages}
+        pickups={pickups}
+        shippingMinor={selectedShipping}
+        total={total}
+        itemCount={itemCount}
+        taxNote={taxNote}
+        payWith={payWith}
+        pmId={pmId}
+        pm={pm}
+        save={save}
+        setSave={setSave}
+        setPayWith={setPayWith}
+        setPmId={setPmId}
+        onNewMethod={onNewMethod}
+        payEl={payEl}
+        methodTypes={methodTypes}
+        paymentChosen={paymentChosen}
+        addressOk={!!address}
+        blocked={blocked}
+        preLocked={preLocked}
+        preLockedText={preCopy?.copy.lockedText}
+        undeliverable={undeliverable}
+        addressList={addressList}
+        busy={busy}
+        placing={placing}
+        error={error}
+        onPlace={() => void (payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
+        couponDraft={couponDraft}
+        setCouponDraft={setCouponDraft}
+        onApplyCoupon={() => {
+          setError(null);
+          setAppliedCoupon(couponDraft.trim().toUpperCase());
+        }}
+        onRemoveCoupon={() => {
+          setError(null);
+          setAppliedCoupon('');
+          setCouponDraft('');
+        }}
+      />
 
       <AddressDialog open={addrDialog.open} onOpenChange={(o) => setAddrDialog((d) => ({ ...d, open: o }))} address={addrDialog.address} onSaved={(a) => setAddressId(a.id)} />
       <span hidden data-testid="checkout-pay-with">

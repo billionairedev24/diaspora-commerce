@@ -27,6 +27,7 @@ public final class TestPersonas {
                             "Leave with the front desk")),
             member("seller.owner", "Ngozi", "Eze", "Owner, Mama Put Pantry", MAMA_PUT, "seller.owner"),
             member("seller.staff", "Tolu", "Bello", "Catalog manager, Mama Put Pantry", MAMA_PUT, "seller.catalog"),
+            member("seller.bamako", "Awa", "Diarra", "Owner, Bamako Home", "org_bamako_home", "seller.owner"),
             member("provider.owner", "Aminata", "Diallo", "Owner, Aminata's Braids (Provider Hub)",
                     "org_aminatas_braids", "provider.owner"),
             member("retail.operator", "Efua", "Asante", "Operator, AfroTransact Retail (1P)",

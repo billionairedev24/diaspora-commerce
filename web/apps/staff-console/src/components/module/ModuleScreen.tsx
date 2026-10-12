@@ -7,6 +7,7 @@ import { DispatchView } from '@/components/dispatch/DispatchView';
 import { ExportsView } from '@/components/exports/ExportsView';
 import { FeesView } from '@/components/fees/FeesView';
 import { InventoryHubView } from '@/components/inventory/InventoryHubView';
+import { MarketingView } from '@/components/marketing/MarketingView';
 import { MarketsView } from '@/components/markets/MarketsView';
 import { NotificationsView } from '@/components/notifications/NotificationsView';
 import { OrdersView } from '@/components/orders/OrdersView';
@@ -41,6 +42,8 @@ export function ModuleScreen({ module }: { module: StaffModuleKey }) {
       return <InventoryHubView />;
     case 'retail':
       return <RetailView />;
+    case 'marketing':
+      return <MarketingView />;
     case 'markets':
       return <MarketsView />;
     case 'plans':

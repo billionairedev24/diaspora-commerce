@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preorders';
 import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './account';
 import { CartPackageSchema } from './cart';
+import { RailSchema } from './home';
 import { MinorSchema } from './common';
 
 /* Storefront account (address input, order detail & tracking, returns, login & security), checkout, services &
@@ -256,18 +257,47 @@ export const CheckoutPackageSchema = CartPackageSchema.extend({
 });
 export type CheckoutPackage = z.infer<typeof CheckoutPackageSchema>;
 
+export const CheckoutCouponSellerShareSchema = z.object({
+  sellerOrgId: z.string(),
+  sellerName: z.string().optional(),
+  discountMinor: MinorSchema,
+  funding: z.enum(['platform', 'seller'])
+});
+export type CheckoutCouponSellerShare = z.infer<typeof CheckoutCouponSellerShareSchema>;
+
+export const CheckoutCouponSchema = z.object({
+  code: z.string(),
+  applicable: z.boolean(),
+  rejection: z.string().nullable().optional(),
+  message: z.string().optional(),
+  discountMinor: MinorSchema,
+  shippingDiscountMinor: MinorSchema,
+  funding: z.enum(['platform', 'seller']).optional(),
+  fundedByOrg: z.string().optional(),
+  offerDiscounts: z
+    .array(z.object({ offerId: z.string(), sellerOrgId: z.string().optional(), discountMinor: MinorSchema }))
+    .optional(),
+  sellerShares: z.array(CheckoutCouponSellerShareSchema).optional()
+});
+export type CheckoutCoupon = z.infer<typeof CheckoutCouponSchema>;
+
 export const CheckoutSummarySchema = z.object({
   packages: z.array(CheckoutPackageSchema),
   addresses: z.array(AddressSchema),
   paymentMethods: z.array(PaymentMethodSchema),
   subtotalMinor: MinorSchema,
   shippingMinor: MinorSchema,
+  discountMinor: MinorSchema.default(0),
+  shippingDiscountMinor: MinorSchema.default(0),
+  coupon: CheckoutCouponSchema.nullish(),
   taxMinor: MinorSchema,
   taxRateLabel: z.string(),
   totalMinor: MinorSchema,
   currency: z.string(),
   sellerCount: z.number().int(),
-  publishableKey: z.string().optional()
+  publishableKey: z.string().optional(),
+  stripeCustomerId: z.string().optional(),
+  crossSell: RailSchema.nullish()
 });
 export type CheckoutSummary = z.infer<typeof CheckoutSummarySchema>;
 

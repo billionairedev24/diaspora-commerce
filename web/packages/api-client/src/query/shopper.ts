@@ -30,7 +30,8 @@ export const securityKeys = {
 
 export const checkoutKeys = {
   all: [...accountKeys.all, 'checkout'] as const,
-  summary: (addressId: string | null) => [...checkoutKeys.all, 'summary', addressId ?? 'default'] as const
+  summary: (addressId: string | null, packageDelivery?: string, couponCode?: string) =>
+    [...checkoutKeys.all, 'summary', addressId ?? 'default', packageDelivery ?? '', couponCode ?? ''] as const
 };
 
 export const serviceKeys = {
@@ -77,8 +78,13 @@ export const shopperQueries = {
   security: (api: ApiClient) => queryOptions({ queryKey: securityKeys.overview(), queryFn: ({ signal }) => api.getSecurity(signal), staleTime: 0 }),
   notificationPreferences: (api: ApiClient) =>
     queryOptions({ queryKey: securityKeys.preferences(), queryFn: ({ signal }) => api.getNotificationPreferences(signal), staleTime: MINUTE }),
-  checkoutSummary: (api: ApiClient, addressId: string | null) =>
-    queryOptions({ queryKey: checkoutKeys.summary(addressId), queryFn: ({ signal }) => api.getCheckoutSummary(addressId ?? undefined, signal), staleTime: 0, placeholderData: keepPreviousData }),
+  checkoutSummary: (api: ApiClient, addressId: string | null, packageDelivery?: string, couponCode?: string) =>
+    queryOptions({
+      queryKey: checkoutKeys.summary(addressId, packageDelivery, couponCode),
+      queryFn: ({ signal }) => api.getCheckoutSummary(addressId ?? undefined, packageDelivery, couponCode, signal),
+      staleTime: 0,
+      placeholderData: keepPreviousData
+    }),
   serviceSearch: (api: ApiClient, q: { q?: string; category?: string; zip?: string }) =>
     queryOptions({ queryKey: serviceKeys.search(q), queryFn: ({ signal }) => api.searchServices(q, signal), staleTime: MINUTE }),
   service: (api: ApiClient, id: string) => queryOptions({ queryKey: serviceKeys.detail(id), queryFn: ({ signal }) => api.getService(id, signal), staleTime: 5 * MINUTE }),

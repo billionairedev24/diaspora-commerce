@@ -24,6 +24,7 @@ import (
 type SiteService interface {
 	SiteConfig(ctx context.Context) (domain.SiteConfig, error)
 	Home(ctx context.Context, c *domain.Caller) (domain.Home, error)
+	CheckoutCrossSell(ctx context.Context, c *domain.Caller) (*domain.Rail, error)
 	Subscribe(ctx context.Context, email string) (string, error)
 	Jobs(ctx context.Context) ([]domain.Job, error)
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)
@@ -189,6 +190,22 @@ func (s *siteServiceImpl) Home(ctx context.Context, c *domain.Caller) (domain.Ho
 		home.Tiles[i].Cells = orEmpty(home.Tiles[i].Cells)
 	}
 	return home, nil
+}
+
+// CheckoutCrossSell resolves the checkout_cross_sell slot (at most one rail) for the shopper's deliver-to ZIP.
+func (s *siteServiceImpl) CheckoutCrossSell(ctx context.Context, c *domain.Caller) (*domain.Rail, error) {
+	loc := s.d.Location.Current(ctx, c)
+	pl, err := s.d.Content.Placements(ctx, s.d.Market, loc.ZIP)
+	if err != nil || len(pl.CheckoutCrossSell) == 0 {
+		return nil, err
+	}
+	r := pl.CheckoutCrossSell[0]
+	items, err := s.railItems(ctx, r.Source)
+	if err != nil || len(items) == 0 {
+		return nil, err
+	}
+	title := strings.ReplaceAll(r.Title, "{city}", firstNonEmpty(loc.City, "you"))
+	return &domain.Rail{ID: r.ID, Title: title, Href: r.Href, Items: items}, nil
 }
 
 func orEmpty[T any](v []T) []T {

@@ -14,13 +14,17 @@ import (
 // staffResources is the registry of every table of the console.
 func staffResources() map[string]*staffResource {
 	all := []*staffResource{
-		usersResource(), rolesResource(), applicationsResource(), supportCasesResource(), auditResource(),
+		usersResource(), rolesResource(), applicationsResource(),
+	}
+	all = append(all, partnersResources()...)
+	all = append(all,
+		supportCasesResource(), auditResource(),
 		ordersResource(), productsResource(), moderationResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
 		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(), pickupLocationsResource(),
 		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(),
-		marketsResource(), siteSettingsResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"),
+		marketsResource(), siteSettingsResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"), couponsResource(),
 		identityProvidersResource(),
-	}
+	)
 	out := make(map[string]*staffResource, len(all))
 	for _, r := range all {
 		out[r.key] = r

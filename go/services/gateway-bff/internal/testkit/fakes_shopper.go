@@ -53,6 +53,19 @@ func readJSON(r *http.Request) map[string]any {
 	return m
 }
 
+var fakeGroceryProductTypes = map[string]struct{}{
+	"fresh-produce": {}, "pantry": {}, "spices": {}, "grains": {}, "frozen-food": {}, "meat-seafood": {},
+}
+
+func fakeQuoteGrocery(ln map[string]any) bool {
+	if cat, _ := ln["taxCategory"].(string); strings.EqualFold(cat, "GROCERY") {
+		return true
+	}
+	pt, _ := ln["productType"].(string)
+	_, ok := fakeGroceryProductTypes[strings.ToLower(strings.TrimSpace(pt))]
+	return ok
+}
+
 func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 	st := &shopperState{defaultPM: "pm_visa", rmas: map[string]map[string]any{}, bookingStatus: "CONFIRMED", checkouts: map[string]string{},
 		prefs:   map[string]any{"email": true, "sms": true, "push": true, "marketingOptIn": false, "locale": "fr-CA", "timeZone": "America/Toronto"},
@@ -303,6 +316,43 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		st.rmas[r.PathValue("id")] = rmaJSON(r.PathValue("id"), "CANCELLED", false)
 		writeJSON(w, 200, st.rmas[r.PathValue("id")])
 	}))
+	mux.HandleFunc("POST /v1/tax/rates/import", authed(func(w http.ResponseWriter, r *http.Request) {
+		b := readJSON(r)
+		csv, _ := b["csv"].(string)
+		if strings.TrimSpace(csv) == "" {
+			problem(w, 422, "tax-returns.import-empty", "The CSV is empty", nil)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"statesUpserted": 1, "localsUpserted": strings.Count(csv, "\n") - 1, "warnings": []any{}})
+	}))
+	mux.HandleFunc("POST /v1/tax/quotes", authed(func(w http.ResponseWriter, r *http.Request) {
+		b := readJSON(r)
+		shipTo, _ := b["shipTo"].(map[string]any)
+		state, _ := shipTo["state"].(string)
+		lines, _ := b["lines"].([]any)
+		combinedRate := 0.0
+		if state == "TX" {
+			combinedRate = 0.0825
+		}
+		var totalTax int64
+		outLines := []map[string]any{}
+		for _, raw := range lines {
+			ln, _ := raw.(map[string]any)
+			id, _ := ln["lineId"].(string)
+			ship, _ := ln["shippingMinor"].(float64)
+			qty, _ := ln["quantity"].(float64)
+			unit, _ := ln["unitPriceMinor"].(float64)
+			merch := int64(unit * qty)
+			if fakeQuoteGrocery(ln) {
+				merch = 0
+			}
+			base := merch + int64(ship)
+			tax := int64(float64(base)*combinedRate + 0.5)
+			totalTax += tax
+			outLines = append(outLines, map[string]any{"lineId": id, "taxMinor": tax, "rate": combinedRate, "jurisdiction": state, "shippingTaxMinor": 0})
+		}
+		writeJSON(w, 200, map[string]any{"currency": "USD", "jurisdiction": state, "totalTaxMinor": totalTax, "lines": outLines, "provider": "rules"})
+	}))
 
 	u.shopperIdentityRoutes(mux, st, authed)
 	u.shopperAccountRoutes(mux, st, authed)
@@ -534,10 +584,27 @@ func (u *Upstreams) shopperDeliveryRoutes(mux *http.ServeMux, authed func(http.H
 	mux.HandleFunc("GET /v1/pickup-locations", func(w http.ResponseWriter, r *http.Request) {
 		items := []map[string]any{}
 		if r.URL.Query().Get("ownerOrg") == "" {
-			items = append(items, map[string]any{"id": "pl-hou", "kind": "PLATFORM_COUNTER", "name": "AfroTransact Houston counter", "timezone": "America/Chicago",
-				"address":    map[string]any{"line1": "1 Fulfilment Way", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"},
-				"hours":      []map[string]any{{"weekday": 1, "open": "09:00", "close": "18:00"}, {"weekday": 2, "open": "09:00", "close": "18:00"}, {"weekday": 6, "open": "09:00", "close": "18:00"}},
-				"readyHours": 4, "active": true})
+			items = append(items,
+				map[string]any{"id": "pl-hou", "kind": "PLATFORM_COUNTER", "name": "AfroTransact Houston counter", "timezone": "America/Chicago",
+					"address": map[string]any{"line1": "1 Fulfilment Way", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"},
+					"position": map[string]any{"lat": 29.76, "lng": -95.37}, "hours": []map[string]any{{"weekday": 1, "open": "09:00", "close": "18:00"}},
+					"readyHours": 4, "active": true},
+				map[string]any{"id": "pl-dal", "kind": "PLATFORM_COUNTER", "name": "Dallas FC — Will Call", "timezone": "America/Chicago",
+					"address": map[string]any{"line1": "5000 Singleton Blvd", "city": "Dallas", "state": "TX", "postalCode": "75212", "country": "US"},
+					"position": map[string]any{"lat": 32.776, "lng": -96.822}, "hours": []map[string]any{{"weekday": 1, "open": "08:00", "close": "20:00"}},
+					"readyHours": 2, "active": true})
+			prefix := r.URL.Query().Get("postalPrefix")
+			if prefix != "" {
+				filtered := items[:0]
+				for _, it := range items {
+					addr, _ := it["address"].(map[string]any)
+					pc, _ := addr["postalCode"].(string)
+					if strings.HasPrefix(pc, prefix) {
+						filtered = append(filtered, it)
+					}
+				}
+				items = filtered
+			}
 		}
 		writeJSON(w, 200, map[string]any{"items": items})
 	})

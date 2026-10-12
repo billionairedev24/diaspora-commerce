@@ -298,6 +298,10 @@ func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, 
 	if err := a.run(ctx, sc, o, values); err != nil {
 		return domain.RecordDetail{}, err
 	}
+	if a.removes {
+		yes := true
+		return domain.RecordDetail{Resource: name, ID: id, Title: "Deleted", Subtitle: "", Removed: &yes}, nil
+	}
 	return s.sheet(ctx, r, sc, id)
 }
 

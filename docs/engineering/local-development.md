@@ -4,6 +4,10 @@
 their fixed ports ([infra/local/PORTS.md](../../infra/local/PORTS.md)) and the three web apps, then prints every link.
 `make dev-status`, `make dev-logs SERVICE=x`, `make dev-restart SERVICE=x` and `make down` manage what it started.
 
+**Load testing.** Read-only perf scripts (k6, Apache Bench, hey, wrk) live in [`tools/perf/README.md`](../../tools/perf/README.md).
+Quick check with the stack up: `make perf-k6-smoke` or `make perf-ab`. Override URLs and concurrency via `tools/perf/env.sh`
+or `.local/perf.env`.
+
 **Provider keys.** Your own Stripe test, Twilio, Resend, OpenRouter, … credentials go in `.local/secrets.env`
 (gitignored; template `infra/local/secrets.env.example`). `make up`, `restart` and `mobile` load it, `make secrets-check`
 shows what is set, missing or malformed (values masked), and each provider switches from its local fallback (Mailpit,
@@ -46,8 +50,8 @@ access token) or `SEED_CLIENT_ID` / `SEED_CLIENT_SECRET` (client credentials at 
 Known local limits: the catalogue owner of every seeded product is AfroTransact Retail (local security off means the
 catalog sees a staff caller; sellers sell them through their offers, which is what cards, buy boxes and PDPs show,
 but the search facet "Sold by" counts the catalogue owner); Stripe Connect accounts are not created (payouts need a
-Stripe test key and onboarding in Seller Center; on the local test payments `ops` registers a test account for Mama Put
-Pantry only); products have no ratings (there is no product-review service yet); carrier labels and tracking need
+Stripe test key and onboarding in Seller Center; on the local test payments `ops` registers test Connect account ids for
+every seeded seller org, and seller-service registers the mapping when Stripe onboarding creates an account); products have no ratings (there is no product-review service yet); carrier labels and tracking need
 carrier-gateway with carrier sandbox credentials, so drop-off returns wait for their label and carrier parcels are moved
 by staff (Orders › Update shipment status).
 
@@ -104,6 +108,41 @@ export on for every service (`TELEMETRY=0` turns it off while keeping Grafana).
 **Your own Grafana** (e.g. one already on :3000/:3001) is not this stack's: it has none of these data sources. Either
 use http://localhost:3200, or add data sources Prometheus `http://localhost:9090`, Loki `http://localhost:3300` and Tempo
 `http://localhost:3201` to it and import the dashboards from `infra/observability/grafana/dashboards`.
+
+### Request correlation id (`X-Correlation-Id`)
+
+Every browser and mobile BFF call carries one **`X-Correlation-Id`** (UUID) for the whole HTTP chain, so support and
+engineering can follow a single user action across logs without guessing from timestamps.
+
+| Hop | What happens |
+|---|---|
+| Web / customer app | `@afrotransact/api-client` sets the header on each BFF request (JSON, downloads, Lola SSE). |
+| Next.js `/api/bff` | Forwards `x-correlation-id` to gateway-bff; mints one if the caller did not send it. Returns the gateway's id on the response. |
+| gateway-bff | Reuses the incoming id (or generates one), logs `correlation_id`, forwards the same header to Java and Go upstreams. |
+| Java services | `CorrelationIdFilter` puts `correlationId` in the MDC; JSON logs include it. Outbound `RestClient` calls (via `platform-web`) forward the same value. |
+
+**Find it in logs (Loki):** pick the id from the browser network tab (response header `X-Correlation-Id`) or from a
+gateway line, then search across services, for example:
+
+```logql
+{service_name=~"gateway-bff|orders|payments|identity"} |= "550e8400-e29b-41d4-a716-446655440000"
+```
+
+On Java services the structured field is **`correlationId`**; gateway-bff access logs use **`correlation_id`**.
+
+**Manual calls:** send the header yourself and the same id appears in every service that handles the request:
+
+```bash
+CID="$(uuidgen)"
+curl -sS -H "X-Correlation-Id: $CID" -H "Cookie: …" "http://localhost:8080/v1/site-config" -D -
+# then grep $CID in .local/logs/gateway-bff.log, orders.log, …
+```
+
+**Not the same as distributed tracing:** OpenTelemetry still uses W3C `traceparent` for Tempo spans. Correlation id is
+the business key in application logs; trace id links spans in Grafana Explore. Both can appear on one request.
+
+Gaps to remember: signed **direct-to-storage uploads** (PUT to MinIO) are outside the BFF chain; **background jobs** and
+Kafka consumers only share an id if the producer copied it into the message or job payload.
 
 ## Test users
 

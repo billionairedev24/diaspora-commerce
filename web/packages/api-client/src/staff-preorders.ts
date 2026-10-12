@@ -5,6 +5,7 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
+import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
 import { absolute, type ApiClientOptions, type FetchLike, joinUrl, type Requester } from './http';
 import { tableSearchParams } from './table-query';
@@ -873,7 +874,7 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
       absolute(joinUrl(options.baseUrl, `${P}/${enc(id)}/exports/${kind}.csv`, kind === 'orders-filtered' && q ? ordersQuery(q) : undefined)),
     /** Fetches a CSV export and saves it in the browser. Returns the file name and row count (lines − header). */
     downloadCsv: async (id: string, kind: PreorderExportKind, q?: PreorderOrdersQuery): Promise<{ fileName: string; rows: number }> => {
-      const res = await doFetch(new Request(api.exportUrl(id, kind, q), { headers: { Accept: 'text/csv', ...options.headers }, credentials: 'include' }));
+      const res = await doFetch(new Request(api.exportUrl(id, kind, q), { headers: withCorrelationHeaders({ Accept: 'text/csv', ...options.headers }), credentials: 'include' }));
       if (!res.ok) throw new ApiError(await problemFrom(res));
       const text = await res.text();
       const fileName = fileNameOf(res.headers.get('content-disposition'), `${id}-${kind}.csv`);

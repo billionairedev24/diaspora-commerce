@@ -60,7 +60,7 @@ BIN="$STATE/bin"
 COMPOSE_FILE="$ROOT/infra/local/docker-compose.yml"
 OVERRIDE="$STATE/compose.external-postgres.yml"
 
-INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal minio minio-init mailpit openfga-migrate openfga"
+INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal temporal-ui minio minio-init mailpit openfga-migrate openfga"
 # Monitoring (OBS=1, the default): collector, metrics, logs (host-log-shipper tails .local/logs), traces, Grafana.
 # Postgres / Valkey exporters are added only when this stack runs those containers.
 OBS_BASE="otel-collector prometheus alertmanager loki tempo grafana host-log-shipper elasticsearch-exporter kafka-exporter"
@@ -68,7 +68,8 @@ OBS_BASE="otel-collector prometheus alertmanager loki tempo grafana host-log-shi
 # Everything the storefront (incl. services/bookings), checkout, pre-orders, AfroTransact Retail (1P), delivery dispatch,
 # returns and the staff console use. Identity first.
 DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops tax-returns seller
-  bookings retail fulfilment mcp-server geo media cart notifications search indexer promise gateway-bff"
+  bookings retail fulfilment mcp-server geo media cart notifications search indexer promise storefront gateway-bff
+  carrier-gateway"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns
   content ai-gateway mcp-server delivery-runs gateway-bff search indexer cart promise geo storefront media
@@ -320,6 +321,12 @@ services:
     ports: !reset []
     environment:
       POSTGRES_SEEDS: 127.0.0.1
+  temporal-ui:
+    depends_on: !reset {}
+    network_mode: host
+    ports: !reset []
+    environment:
+      TEMPORAL_ADDRESS: 127.0.0.1:7233
   openfga-migrate:
     depends_on: !reset {}
     network_mode: host
@@ -728,7 +735,7 @@ links() {
   echo "  Mailpit (mail, SMS)  http://localhost:8025"
   echo "  MinIO console        http://localhost:9001          minioadmin / minioadmin"
   echo "  Elasticsearch        http://localhost:9200          OpenFGA  http://localhost:8091"
-  echo "  Kafka                localhost:9092                 Temporal localhost:7233"
+  echo "  Kafka                localhost:9092                 Temporal gRPC localhost:7233 · UI http://localhost:8088"
   echo "  Postgres             localhost:5432                 Valkey   localhost:6379"
   echo "Manage"
   echo "  make dev-status | make dev-logs SERVICE=orders (or web-storefront) | make dev-links | make down"

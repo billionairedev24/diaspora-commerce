@@ -41,14 +41,16 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     }
 
     @Override
-    public List<WalletMethod> list() {
+    public Wallet list() {
         String customerId = access.customer().subject();
         Optional<StripeCustomer> customer = wallet.findCustomer(customerId);
         if (customer.isEmpty()) {
-            return List.of();
+            return new Wallet(null, List.of());
         }
         String defaultId = customer.get().defaultPaymentMethodId();
-        return wallet.methods(customerId).stream().map(m -> new WalletMethod(m, m.id().equals(defaultId))).toList();
+        List<WalletMethod> items = wallet.methods(customerId).stream()
+                .map(m -> new WalletMethod(m, m.id().equals(defaultId))).toList();
+        return new Wallet(customer.get().stripeCustomerId(), items);
     }
 
     @Override

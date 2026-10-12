@@ -55,6 +55,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"preorders", "preorders", "Pre-orders", "Open pre-order windows by city with opening, closing and delivery dates. Upload advertorials, watch every pre-order live, export and add late orders."},
 	}},
 	{"partners", "Partners", []StaffModule{
+		{"orgs", "orgs", "Sellers & providers", "Every seller and service-provider organisation on the marketplace, plus Stripe Connect compliance."},
 		{"apps", "apps", "Applications", "Seller and service-provider onboarding queue. Every application goes through two people: a reviewer, then a different approver."},
 		{"support", "", "Customer support", "Lola hand-offs, customer lookup, refunds within your limit, notifications and shipments."},
 		{"rbac", "rbac", "Users & roles", "Who can do what in every back office. Role changes are audited."},
@@ -65,7 +66,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"plans", "", "Plans & billing", "Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges."},
 	}},
 	{"growth", "Growth", []StaffModule{
-		{"marketing", "marketing", "Ads & announcements", "Announcement bar, hero carousel, display banners and sponsored placements."},
+		{"marketing", "marketing", "Marketing", "Announcements, placements & ads, and platform checkout coupons."},
 	}},
 	{"trust", "Trust & compliance", []StaffModule{
 		{"disputes", "disputes", "Disputes & returns", "A-to-z claims and returns with SLAs."},
@@ -130,9 +131,8 @@ func (a StaffAccess) Level(module string) string {
 		module = "dash"
 	}
 	matrix := a.Matrix
-	if module == PreorderModule && len(matrix[module]) == 0 {
-		// identity's matrix predates the Pre-orders column: use the seeded levels (design: Super Admin and Marketing
-		// Full, Operations Edit, Support Approve, Finance / Auditor / Product owner / Fulfilment / Retail View).
+	if (module == PreorderModule || module == "orgs") && len(matrix[module]) == 0 {
+		// identity's matrix predates the Pre-orders / Sellers & providers columns: use the seeded levels.
 		matrix = DefaultPlatformMatrix
 	}
 	best := LevelNone
@@ -275,7 +275,7 @@ func RefundLimitProblem(limit int64) *Problem {
 // ResourceKeys are the tables of the console (contract ResourceKey).
 var ResourceKeys = []string{"users", "roles", "applications", "orders", "products", "moderation", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
-	"placements", "identity-providers", "fee-schedules", "tax-rates", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events"}
+	"placements", "identity-providers", "fee-schedules", "tax-rates", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons"}
 
 // Column is one table column; Width is its share of the table in percent.
 type Column struct {
@@ -423,6 +423,8 @@ type RecordDetail struct {
 	EditForm     *Form           `json:"editForm"`
 	Links        []RecordLink    `json:"links"`
 	Version      *string         `json:"version"`
+	// Removed is set when an action deleted the record; the console closes the sheet and refreshes the table.
+	Removed *bool `json:"removed,omitempty"`
 }
 
 var statusTones = map[string]string{

@@ -64,7 +64,8 @@ class OrdersConfiguration {
     @Bean
     OrdersSettings ordersSettings(OrdersProperties props) {
         return new OrdersSettings(props.retailOrgId(), props.paymentTimeout(),
-                props.checkoutResponseTimeout(), Set.copyOf(props.perishableTypes()), props.commissionCategories(),
+                props.checkoutResponseTimeout(), props.cancellationWindow(),
+                Set.copyOf(props.perishableTypes()), props.commissionCategories(),
                 props.jobs().followUpBatch(), props.jobs().followUpMaxAttempts(), props.zone());
     }
 

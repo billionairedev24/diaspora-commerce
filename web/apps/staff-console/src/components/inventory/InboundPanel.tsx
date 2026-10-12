@@ -12,7 +12,7 @@ import {
   validateInboundLine
 } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Checkbox, cx, Select, Sheet, TextField } from '@afrotransact/ui';
+import { Button, Checkbox, cx, Select, Sheet, SheetTableScroll, TextField } from '@afrotransact/ui';
 import { Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -232,8 +232,9 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
               </div>
             ))}
           </dl>
-          <div className="overflow-x-auto rounded-md border border-border">
-            <table className="at-table w-full text-xs" aria-label="Shipment lines">
+          <div className="overflow-hidden rounded-md border border-border">
+            <SheetTableScroll>
+            <table className="at-table text-xs" aria-label="Shipment lines">
               <thead className="bg-surface-muted text-left text-muted">
                 <tr>
                   {['SKU', 'Case pack', 'Lot', 'Made', 'Expires', 'Expected', 'Good', 'Damaged', 'Short / over'].map((h) => (
@@ -244,7 +245,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
               <tbody>
                 {s.lines.map((l) => (
                   <tr key={l.lineNo} className="border-t border-border">
-                    <td className="px-2 py-1.5 font-mono">{l.sku}{l.atin ? <span className="block text-muted">{l.atin}</span> : null}</td>
+                    <td className="px-2 py-1.5 font-mono">{l.sku}{l.atin ? <span className="at-cell-stack block text-muted">{l.atin}</span> : null}</td>
                     <td className="px-2 py-1.5">{l.casePack ? `${l.casePack} × ${l.cases}` : '—'}</td>
                     <td className="px-2 py-1.5 font-mono">{l.lotNo ?? '—'}</td>
                     <td className="px-2 py-1.5">{shortDate(l.mfgDate)}</td>
@@ -259,6 +260,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
                 ))}
               </tbody>
             </table>
+            </SheetTableScroll>
           </div>
           {s.discrepancies.length ? (
             <p className="m-0 text-sm text-warning" role="status">

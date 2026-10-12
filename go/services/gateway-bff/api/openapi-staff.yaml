@@ -1186,6 +1186,27 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/tax-rates/import:
+    post:
+      tags: [Fees]
+      operationId: importStaffTaxRates
+      security: [{sessionCookie: []}]
+      summary: Bulk upsert US state rules and local ZIP rates from CSV (USA pilot)
+      description: |
+        tax-returns `POST /v1/tax/rates/import` (tax:configure and EDIT on fees). Header row
+        `kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,shippingTaxable,facilitator,localRate,appliesToGrocery`
+        with `kind=STATE|LOCAL`. Country column is stored for future markets; quotes today use US rules only.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TaxRatesImportRequest'}}}
+      responses:
+        '200': {description: Import result, content: {application/json: {schema: {$ref: '#/components/schemas/TaxRatesImportResult'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/fees/negotiated-rates:
     get:
       tags: [Fees]
@@ -4974,7 +4995,7 @@ components:
       enum: [users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, purchase-orders,
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, dispatch-shipments, sos-alerts, vehicle-defects,
-        driver-events, pickup-locations]
+        driver-events, pickup-locations, coupons]
     Tone: {type: string, enum: [good, warn, bad, info, brand]}
     CellValue:
       type: [string, number, 'null']
@@ -5133,6 +5154,7 @@ components:
         editForm: {oneOf: [{$ref: '#/components/schemas/Form'}, {type: 'null'}]}
         links: {type: array, items: {$ref: '#/components/schemas/RecordLink'}}
         version: {type: [string, 'null'], description: Optimistic-locking version to send back with edits}
+        removed: {type: boolean, description: Set when an action deleted the record; the console closes the sheet}
     RecordValues:
       type: object
       properties:
@@ -5784,6 +5806,18 @@ components:
         scheduleVersion: {type: [integer, 'null']}
         maxRadiusMiles: {type: [number, 'null']}
         currency: {type: string}
+    TaxRatesImportRequest:
+      type: object
+      required: [csv]
+      properties:
+        csv: {type: string, minLength: 1, maxLength: 2000000, description: CSV text including header row}
+    TaxRatesImportResult:
+      type: object
+      required: [statesUpserted, localsUpserted, warnings]
+      properties:
+        statesUpserted: {type: integer, minimum: 0}
+        localsUpserted: {type: integer, minimum: 0}
+        warnings: {type: array, items: {type: string}, maxItems: 500}
     # ── Dispatch: seller pickups (S255)
     PickupRow:
       type: object

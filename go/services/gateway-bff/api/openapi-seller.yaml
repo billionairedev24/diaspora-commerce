@@ -677,6 +677,49 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── coupons (offers-service, seller-funded)
+  /v1/seller/coupons:
+    get:
+      tags: [Growth]
+      operationId: listSellerCoupons
+      security: [{sessionCookie: []}]
+      summary: Seller-funded coupons for the active organisation
+      responses:
+        '200': {description: Coupons, content: {application/json: {schema: {$ref: '#/components/schemas/SellerCouponList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Growth]
+      operationId: createSellerCoupon
+      security: [{sessionCookie: []}]
+      summary: Create a seller-funded coupon (applies only to this organisation's offers)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CreateSellerCouponRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/SellerCoupon'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/coupons/{couponId}/status:
+    post:
+      tags: [Growth]
+      operationId: setSellerCouponStatus
+      security: [{sessionCookie: []}]
+      summary: Pause or activate a seller coupon
+      parameters:
+        - {name: couponId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [status], properties: {status: {type: string, enum: [ACTIVE, PAUSED, EXPIRED]}}}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/SellerCoupon'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── listings
   /v1/seller/listings:
     get:
@@ -2152,7 +2195,7 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     ModuleKey:
       type: string
-      enum: [onboarding, home, orders, listings, inventory, storefront, calendar, requests, hours, services, policy, public-page, earnings, payouts, fees, billing, account-health, team]
+      enum: [onboarding, home, orders, listings, inventory, coupons, storefront, calendar, requests, hours, services, policy, public-page, earnings, payouts, fees, billing, account-health, team]
     SellerUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -2796,6 +2839,42 @@ components:
       required: [items]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/SellerOffer'}}
+    SellerCoupon:
+      type: object
+      required: [id, code, type, value, currency, scope, minSpendMinor, status, funding, editable, version]
+      properties:
+        id: {type: string, format: uuid}
+        code: {type: string}
+        description: {type: string}
+        type: {type: string, enum: [PERCENT, FIXED, FREE_SHIPPING]}
+        value: {type: integer, format: int64}
+        currency: {type: string}
+        scope: {type: string}
+        scopeRef: {type: string}
+        minSpendMinor: {type: integer, format: int64}
+        status: {type: string, enum: [ACTIVE, PAUSED, EXPIRED]}
+        funding: {type: string, enum: [PLATFORM, SELLER]}
+        editable: {type: boolean}
+        version: {type: integer, format: int64}
+    SellerCouponList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SellerCoupon'}}
+    CreateSellerCouponRequest:
+      type: object
+      required: [code, type, value, scope]
+      properties:
+        code: {type: string, pattern: '^[A-Za-z0-9]{3,20}$'}
+        description: {type: string, maxLength: 300}
+        type: {type: string, enum: [PERCENT, FIXED, FREE_SHIPPING]}
+        value: {type: integer, format: int64}
+        currency: {type: string, default: USD}
+        scope: {type: string, enum: [CART, CATEGORY, PRODUCT, SELLER]}
+        scopeRef: {type: string}
+        minSpendMinor: {type: integer, format: int64, default: 0}
+        totalLimit: {type: integer, default: 0}
+        perCustomerLimit: {type: integer, default: 0}
     OfferFulfilmentRequest:
       type: object
       required: [fulfilment]

@@ -13,6 +13,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param retailOrgId             AfroTransact Retail organisation (1P)
  * @param paymentTimeout          how long checkout waits for the authorisation (= reservation TTL, 15 min)
  * @param checkoutResponseTimeout how long POST /v1/checkout waits for the saga before answering 202
+ * @param cancellationWindow      how long after placement a customer may cancel a shipment (default 30 min)
  * @param zone                    business time zone for promised dates
  * @param perishableTypes         catalog product types treated as perishable
  * @param commissionCategories    catalog product type → payments commission category
@@ -24,14 +25,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "at.orders")
 public record OrdersProperties(String retailOrgId, Duration paymentTimeout,
-                               Duration checkoutResponseTimeout, String zone, List<String> perishableTypes,
-                               Map<String, String> commissionCategories, Shipping shipping, Tax tax, Jobs jobs,
-                               Returns returns, ShipBy shipBy) {
+                               Duration checkoutResponseTimeout, Duration cancellationWindow, String zone,
+                               List<String> perishableTypes, Map<String, String> commissionCategories,
+                               Shipping shipping, Tax tax, Jobs jobs, Returns returns, ShipBy shipBy) {
 
     public OrdersProperties {
         retailOrgId = retailOrgId == null ? "org_afrotransact_retail" : retailOrgId;
         paymentTimeout = paymentTimeout == null ? Duration.ofMinutes(15) : paymentTimeout;
         checkoutResponseTimeout = checkoutResponseTimeout == null ? Duration.ofSeconds(20) : checkoutResponseTimeout;
+        cancellationWindow = cancellationWindow == null ? Duration.ofMinutes(30) : cancellationWindow;
         zone = zone == null ? "America/Chicago" : zone;
         perishableTypes = perishableTypes == null ? List.of("perishable") : List.copyOf(perishableTypes);
         commissionCategories = commissionCategories == null ? Map.of() : Map.copyOf(commissionCategories);

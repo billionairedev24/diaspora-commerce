@@ -139,8 +139,8 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
       request('/v1/account/notification-preferences', NotificationPreferencesSchema, { method: 'PUT', body }),
 
     /* Checkout (orders saga + Stripe) */
-    getCheckoutSummary: (addressId?: string, signal?: AbortSignal): Promise<CheckoutSummary> =>
-      request('/v1/checkout/summary', CheckoutSummarySchema, { query: { addressId }, signal }),
+    getCheckoutSummary: (addressId?: string, packageDelivery?: string, couponCode?: string, signal?: AbortSignal): Promise<CheckoutSummary> =>
+      request('/v1/checkout/summary', CheckoutSummarySchema, { query: { addressId, packageDelivery, couponCode }, signal }),
     placeOrder: (body: PlaceOrderRequest, idempotencyKey: string): Promise<OrderConfirmation> =>
       request('/v1/checkout/orders', OrderConfirmationSchema, { method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey } }),
     getCheckoutStatus: (orderNumber: string): Promise<OrderConfirmation> => request(`/v1/checkout/orders/${enc(orderNumber)}`, OrderConfirmationSchema),

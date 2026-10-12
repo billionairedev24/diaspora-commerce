@@ -74,6 +74,7 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/fees/schedules", h.staffCreateFeeSchedule)
 		route("POST /v1/staff/fees/schedules/{scheduleId}/cancel", h.staffCancelFeeSchedule)
 		route("POST /v1/staff/fees/delivery-quote", h.staffDeliveryQuote)
+		route("POST /v1/staff/tax-rates/import", h.staffTaxRatesImport)
 		route("GET /v1/staff/fees/negotiated-rates", h.staffNegotiatedRates)
 		route("POST /v1/staff/fees/negotiated-rates", h.staffCreateNegotiatedRate)
 		route("POST /v1/staff/fees/negotiated-rates/{rateId}/end", h.staffEndNegotiatedRate)
@@ -415,6 +416,22 @@ func (h *handlersImpl) staffDeliveryQuote(w http.ResponseWriter, r *http.Request
 		return
 	}
 	v, err := h.s.Staff.Fees.Quote(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTaxRatesImport(w http.ResponseWriter, r *http.Request) {
+	if h.s.Staff.Fees == nil {
+		h.reply(w, r, http.StatusNotFound, nil, domain.NewProblem(http.StatusNotFound, "NOT_FOUND", "Not available", ""))
+		return
+	}
+	var b struct {
+		Csv string `json:"csv"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.ImportTaxRates(r.Context(), callerFrom(r.Context()), b.Csv)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

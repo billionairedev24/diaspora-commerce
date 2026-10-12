@@ -172,6 +172,7 @@ func run() error {
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 		SellerOffers:    app.NewSellerOffersService(sellerDeps),
+		SellerCoupons:   app.NewSellerCouponsService(sellerDeps),
 		SellerFba:       app.NewSellerFbaService(sellerDeps),
 	}
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).

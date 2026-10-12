@@ -1,7 +1,7 @@
 'use client';
 
 import { definitiveFailure, type FieldValue, isApiError, type RecordAction, type RecordDetail, type ResourceKey, type StaffForm, staffKeys, staffQueries } from '@afrotransact/api-client';
-import { Button, Dialog, Sheet, useToast } from '@afrotransact/ui';
+import { Button, Dialog, Sheet, SheetTableScroll, useToast } from '@afrotransact/ui';
 import { LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -55,10 +55,11 @@ function Details({ record }: { record: RecordDetail }) {
           <section key={t.title} aria-label={t.title} className="flex flex-col gap-2">
             <h3 className="m-0 text-sm font-bold">{t.title}</h3>
             <div className="overflow-hidden rounded-md border border-border">
+              <SheetTableScroll>
               <table className="at-table text-xs" aria-label={t.title}>
                 <colgroup>
                   {t.columns.map((c) => (
-                    <col key={c.key} style={{ width: `${c.width}%` }} />
+                    <col key={c.key} style={{ minWidth: `${Math.max(72, c.width * 8)}px` }} />
                   ))}
                 </colgroup>
                 <thead className="bg-surface-muted text-left">
@@ -82,6 +83,7 @@ function Details({ record }: { record: RecordDetail }) {
                   ))}
                 </tbody>
               </table>
+              </SheetTableScroll>
             </div>
           </section>
         ))}
@@ -115,6 +117,15 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
     void qc.invalidateQueries({ queryKey: staffKeys.session() });
   };
   const done = (r: RecordDetail, message: string) => {
+    if (r.removed) {
+      void qc.removeQueries({ queryKey: staffKeys.record(resource, r.id) });
+      refresh();
+      setPending(null);
+      setInfo(null);
+      toast.show(message);
+      onClose();
+      return;
+    }
     qc.setQueryData(staffKeys.record(resource, r.id), r);
     refresh();
     setPending(null);
@@ -179,7 +190,7 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
   const pendingForm = pending?.kind === 'edit' ? pending.form : pending?.kind === 'action' ? pending.action.form : null;
 
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle} className="w-[min(560px,100vw)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle} className="w-[min(720px,100vw)]">
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {record ? (

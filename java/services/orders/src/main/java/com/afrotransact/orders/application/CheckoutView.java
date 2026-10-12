@@ -12,12 +12,14 @@ import java.util.List;
  * @param paymentClientSecret same as clientSecret (gateway-bff field name)
  */
 public record CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
-                           String paymentClientSecret, Long totalMinor, String currency, List<Shipment> shipments,
-                           Preorder preorder) {
+                           String paymentClientSecret, Long totalMinor, String currency,
+                           Long itemsMinor, Long shippingMinor, Long taxMinor, Long discountMinor,
+                           List<Shipment> shipments, Preorder preorder) {
 
     public CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
                         String paymentClientSecret, Long totalMinor, String currency, List<Shipment> shipments) {
-        this(orderId, orderNumber, status, clientSecret, paymentClientSecret, totalMinor, currency, shipments, null);
+        this(orderId, orderNumber, status, clientSecret, paymentClientSecret, totalMinor, currency,
+                null, null, null, null, shipments, null);
     }
 
     /**

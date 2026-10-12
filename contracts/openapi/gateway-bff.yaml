@@ -972,6 +972,18 @@ paths:
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
         - {name: addressId, in: query, schema: {type: string}}
+        - name: packageDelivery
+          in: query
+          description: |
+            Per-package delivery option keys for shipping and estimated tax (repeat the parameter or comma-separate
+            entries). Each value is `packageId:optionKey` (for example `pkg_1:ground,pkg_2:pickup`).
+          schema: {type: array, items: {type: string}}
+          style: form
+          explode: true
+        - name: couponCode
+          in: query
+          schema: {type: string, maxLength: 20}
+          description: Optional coupon to price against the cart (offers validate; does not redeem until place order).
       responses:
         '200':
           description: Summary
@@ -2709,6 +2721,7 @@ components:
         stockStatus: {$ref: '#/components/schemas/StockStatus'}
         selected: {type: boolean}
         perishable: {type: boolean, description: 'Catalog product type or attribute perishable: hand delivery with a code, no safe place'}
+        productType: {type: string, description: 'Catalog product type code for sales-tax category mapping'}
     DeliveryOption:
       type: object
       required: [key, label, eta, feeMinor, free]
@@ -3327,9 +3340,41 @@ components:
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/ReturnSummary'}}
         nextCursor: {type: [string, 'null']}
+    CheckoutCouponSellerShare:
+      type: object
+      required: [sellerOrgId, discountMinor, funding]
+      properties:
+        sellerOrgId: {type: string}
+        sellerName: {type: string}
+        discountMinor: {type: integer}
+        funding: {type: string, enum: [platform, seller], description: Who pays this slice at settlement}
+    CheckoutCouponOfferDiscount:
+      type: object
+      required: [offerId, discountMinor]
+      properties:
+        offerId: {type: string}
+        sellerOrgId: {type: string}
+        discountMinor: {type: integer}
+    CheckoutCoupon:
+      type: object
+      required: [code, applicable, discountMinor, shippingDiscountMinor]
+      properties:
+        code: {type: string}
+        applicable: {type: boolean}
+        rejection: {type: [string, 'null']}
+        message: {type: string}
+        discountMinor: {type: integer}
+        shippingDiscountMinor: {type: integer}
+        funding: {type: string, enum: [platform, seller]}
+        fundedByOrg: {type: string, description: Seller org when funding is seller}
+        offerDiscounts: {type: array, items: {$ref: '#/components/schemas/CheckoutCouponOfferDiscount'}}
+        sellerShares:
+          type: array
+          items: {$ref: '#/components/schemas/CheckoutCouponSellerShare'}
+          description: Per-seller discount totals for settlement preview
     CheckoutSummary:
       type: object
-      required: [packages, addresses, paymentMethods, subtotalMinor, shippingMinor, taxMinor, taxRateLabel, totalMinor, currency, sellerCount]
+      required: [packages, addresses, paymentMethods, subtotalMinor, shippingMinor, discountMinor, shippingDiscountMinor, taxMinor, taxRateLabel, totalMinor, currency, sellerCount]
       properties:
         packages:
           type: array
@@ -3358,12 +3403,19 @@ components:
         paymentMethods: {type: array, items: {$ref: '#/components/schemas/PaymentMethod'}}
         subtotalMinor: {type: integer}
         shippingMinor: {type: integer}
+        discountMinor: {type: integer, description: Item discount from coupon}
+        shippingDiscountMinor: {type: integer, description: Shipping discount from coupon (e.g. free shipping)}
+        coupon: {$ref: '#/components/schemas/CheckoutCoupon'}
         taxMinor: {type: integer}
         taxRateLabel: {type: string, examples: ['8.25% TX']}
         totalMinor: {type: integer}
         currency: {type: string}
         sellerCount: {type: integer}
         publishableKey: {type: string, description: Stripe publishable key for Stripe.js (Payment / Express Checkout Elements)}
+        crossSell:
+          allOf:
+            - $ref: '#/components/schemas/Rail'
+          description: Optional checkout_cross_sell placement from content (product rail)
     CheckoutLocalDelivery:
       type: object
       description: |

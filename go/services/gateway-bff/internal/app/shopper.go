@@ -30,7 +30,9 @@ type ShopperDeps struct {
 	// LocalDelivery and Offers price AfroTransact Delivery from the seller's store on the checkout page (S255; optional).
 	LocalDelivery port.LocalDeliveryClient
 	Offers        port.StorefrontOffersClient
-	Identity      port.IdentityClient
+	// Coupons validates checkout coupon codes (offers-service; optional).
+	Coupons  port.CheckoutCouponsClient
+	Identity port.IdentityClient
 	Checkout      CheckoutService
 	Carts         CartService
 	Location      LocationService
@@ -134,12 +136,12 @@ func (s *walletServiceImpl) List(ctx context.Context, c *domain.Caller) (domain.
 	if err := requireCustomer(c); err != nil {
 		return domain.Page[domain.PaymentMethod]{}, err
 	}
-	list, err := s.d.Wallet.List(ctx, c.BearerToken)
+	wallet, err := s.d.Wallet.List(ctx, c.BearerToken)
 	if err != nil {
 		return domain.Page[domain.PaymentMethod]{}, walletErr(err)
 	}
-	out := make([]domain.PaymentMethod, 0, len(list))
-	for _, m := range list {
+	out := make([]domain.PaymentMethod, 0, len(wallet.Items))
+	for _, m := range wallet.Items {
 		out = append(out, toPaymentMethod(m))
 	}
 	return domain.Page[domain.PaymentMethod]{Items: out}, nil
@@ -436,19 +438,27 @@ func (s *customerOrdersServiceImpl) Cancel(ctx context.Context, c *domain.Caller
 // (always), then confirms or polls the payment; the summary adds promise dates, pickup points and AfroTransact
 // Delivery eligibility per package (S047/S048, S238).
 type CheckoutPaymentService interface {
-	Summary(ctx context.Context, c *domain.Caller, addressID string) (domain.CheckoutSummary, error)
+	Summary(ctx context.Context, c *domain.Caller, addressID string, packageDelivery map[string]string, couponCode string) (domain.CheckoutSummary, error)
 	Place(ctx context.Context, c *domain.Caller, key string, req domain.PlaceOrderRequest) (port.PlaceOrderResult, error)
 	Status(ctx context.Context, c *domain.Caller, number string) (domain.OrderConfirmation, error)
 	Confirm(ctx context.Context, c *domain.Caller, number string) (domain.OrderConfirmation, error)
 }
 
-type checkoutPaymentServiceImpl struct{ d ShopperDeps }
+type checkoutPaymentServiceImpl struct {
+	d     ShopperDeps
+	merch CheckoutMerch
+}
 
 var _ CheckoutPaymentService = (*checkoutPaymentServiceImpl)(nil)
 
+// CheckoutMerch resolves optional checkout merchandising (content placements).
+type CheckoutMerch interface {
+	CheckoutCrossSell(ctx context.Context, c *domain.Caller) (*domain.Rail, error)
+}
+
 // NewCheckoutPaymentService returns the CheckoutPaymentService.
-func NewCheckoutPaymentService(d ShopperDeps) CheckoutPaymentService {
-	return &checkoutPaymentServiceImpl{d: d}
+func NewCheckoutPaymentService(d ShopperDeps, merch CheckoutMerch) CheckoutPaymentService {
+	return &checkoutPaymentServiceImpl{d: d, merch: merch}
 }
 
 func toConfirmation(v port.UpCheckout) domain.OrderConfirmation {

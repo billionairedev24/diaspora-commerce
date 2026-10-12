@@ -44,6 +44,11 @@ public class TransitionRefused extends RuntimeException {
                 + "; it can only be cancelled before it is packed", false);
     }
 
+    public static TransitionRefused cancelWindowExpired(Instant placedAt) {
+        return new TransitionRefused(CANCEL_WINDOW_CLOSED, "This order was placed at " + placedAt
+                + "; it can only be cancelled within the cancellation window", false);
+    }
+
     public static TransitionRefused preorderClosed(Instant closesAt) {
         return new TransitionRefused(PREORDER_CLOSED, "The pre-order closed at " + closesAt
                 + "; pre-order items can only be cancelled while the window is open", false);

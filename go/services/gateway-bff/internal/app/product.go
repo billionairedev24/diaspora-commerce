@@ -110,6 +110,15 @@ func departmentFor(ctx context.Context, catalog port.CatalogClient, categoryID s
 	return ""
 }
 
+func catalogImageURL(p port.CatalogProduct) string {
+	for _, im := range p.Images {
+		if u := strings.TrimSpace(im.URL); u != "" {
+			return u
+		}
+	}
+	return attr(p.Attributes, "imageUrl", "image", "thumbnail", "primaryImage")
+}
+
 func attr(attrs map[string]string, keys ...string) string {
 	for _, k := range keys {
 		for ak, v := range attrs {

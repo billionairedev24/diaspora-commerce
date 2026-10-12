@@ -54,6 +54,11 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
 	}
+	if h.s.SellerCoupons != nil {
+		route("GET /v1/seller/coupons", h.sellerCoupons)
+		route("POST /v1/seller/coupons", h.sellerCreateCoupon)
+		route("POST /v1/seller/coupons/{couponId}/status", h.sellerCouponStatus)
+	}
 	if h.s.SellerFba != nil {
 		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut} {
 			route(m+" /v1/seller/fba/{rest...}", h.sellerFba)
@@ -758,6 +763,33 @@ func (h *handlersImpl) offerFulfilment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.s.SellerOffers.SetFulfilment(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerCoupons(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerCoupons.List(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) sellerCreateCoupon(w http.ResponseWriter, r *http.Request) {
+	var b domain.CreateSellerCoupon
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerCoupons.Create(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) sellerCouponStatus(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Status string `json:"status"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerCoupons.SetStatus(r.Context(), callerFrom(r.Context()), r.PathValue("couponId"), b.Status)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

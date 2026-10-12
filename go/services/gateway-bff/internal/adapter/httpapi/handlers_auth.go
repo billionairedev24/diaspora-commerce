@@ -229,9 +229,24 @@ func (h *handlersImpl) startReturn(w http.ResponseWriter, r *http.Request) {
 
 // ---------------------------------------------------------------- checkout
 
+func parseCheckoutPackageDelivery(q map[string][]string) map[string]string {
+	out := map[string]string{}
+	for _, raw := range q["packageDelivery"] {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if i := strings.Index(part, ":"); i > 0 {
+				out[strings.TrimSpace(part[:i])] = strings.TrimSpace(part[i+1:])
+			}
+		}
+	}
+	return out
+}
+
 func (h *handlersImpl) checkoutSummary(w http.ResponseWriter, r *http.Request) {
+	delivery := parseCheckoutPackageDelivery(r.URL.Query())
 	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Checkout.Summary(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("addressId"))
+		v, err := h.s.Shopper.Checkout.Summary(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("addressId"), delivery,
+			r.URL.Query().Get("couponCode"))
 		h.reply(w, r, http.StatusOK, v, err)
 		return
 	}

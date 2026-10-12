@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -85,6 +86,7 @@ func (l *lolaImpl) Chat(ctx context.Context, bearer string, req domain.LolaChatR
 	if port.IsShopper(ctx) {
 		hreq.Header.Set(auth.ActingAsHeader, auth.ActingAsCustomer)
 	}
+	httpserver.PropagateCorrelation(ctx, hreq.Header)
 	res, err := l.stream.Do(hreq)
 	if err != nil {
 		cancel()

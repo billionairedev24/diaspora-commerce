@@ -49,6 +49,8 @@ type staffAction struct {
 	// the rules and answers idempotently: 200 for the same person's repeat, 409 already-decided naming who and when.
 	settled func(o jobj) bool
 	run     func(ctx context.Context, sc staffCtx, o jobj, v jobj) error
+	// removes reports that the record no longer exists after run (Act skips reload).
+	removes bool
 }
 
 type staffEdit struct {

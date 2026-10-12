@@ -7,7 +7,7 @@ export const GEO: Record<string, [number, number]> = {
 };
 
 export const FULFILMENT_CENTRES: ReadonlyArray<[name: string, city: string]> = [
-  ['Houston FC', 'Houston, TX'], ['Edison FC', 'Edison, NJ'], ['Atlanta FC', 'Atlanta, GA'], ['Los Angeles FC', 'Los Angeles, CA']
+  ['Houston FC', 'Houston, TX'], ['Edison FC', 'Edison, NJ'], ['Atlanta FC', 'Atlanta, GA'], ['Dallas FC', 'Dallas, TX'], ['Los Angeles FC', 'Los Angeles, CA']
 ];
 
 /** Longer ZIP prefixes checked before ZIP_PREFIXES: West Texas pre-order cities (S273; not next-day metros). */
@@ -54,6 +54,9 @@ export const PICKUP_POINTS: readonly FixturePickupPoint[] = [
   ['pu-hou-lock', 'AT', 'Houston, TX', 'AfroTransact Locker · Bellaire', '7100 Bellaire Blvd, Houston, TX 77074', 'Open 24/7', 'Ready tomorrow 9 am'],
   ['pu-edi-fc', 'AT', 'Edison, NJ', 'Edison FC — Will Call', '300 Raritan Center Pkwy, Edison, NJ 08837', 'Mon–Sat 8 am–8 pm', 'Ready in 2 hours'],
   ['pu-atl-fc', 'AT', 'Atlanta, GA', 'Atlanta FC — Will Call', '1600 Murphy Ave SW, Atlanta, GA 30310', 'Mon–Sat 8 am–6 pm', 'Ready in 3 hours'],
+  ['pu-dal-fc', 'AT', 'Dallas, TX', 'Dallas FC — Will Call', '5000 Singleton Blvd, Dallas, TX 75212', 'Mon–Sat 8 am–8 pm', 'Ready in 2 hours'],
+  ['pu-dal-lock', 'AT', 'Dallas, TX', 'AfroTransact Locker · Oak Lawn', '2727 Oak Lawn Ave, Dallas, TX 75219', 'Open 24/7', 'Ready tomorrow 9 am'],
+  ['pu-lagos-larder', 'Lagos Larder', 'Dallas, TX', 'Lagos Larder pickup counter', '2727 Oak Lawn Ave, Suite 12, Dallas, TX 75219', 'Wed–Sun 11 am–7 pm', 'Ready in 4 hours'],
   ['pu-mamatee', "Mama Tee's Pantry", 'Houston, TX', "Mama Tee's Pantry storefront", '7100 Bellaire Blvd, Unit 14, Houston, TX 77074', 'Tue–Sun 10 am–7 pm', 'Ready in 3 hours'],
   ['pu-lagos', 'Lagos Textile Hub', 'Houston, TX', 'Lagos Textile Hub showroom', '6655 Hillcroft Ave, Houston, TX 77081', 'Mon–Sat 11 am–6 pm', 'Ready tomorrow'],
   ['pu-patel', 'Patel Grocers', 'Edison, NJ', 'Patel Grocers counter', '1430 Oak Tree Rd, Iselin, NJ 08830', 'Daily 9 am–9 pm', 'Ready in 2 hours'],

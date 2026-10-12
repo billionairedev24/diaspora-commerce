@@ -111,6 +111,10 @@ import {
   type SellerFeesView,
   SellerFeesViewSchema,
   type SellerOffer,
+  type CreateSellerCoupon,
+  type SellerCoupon,
+  SellerCouponListSchema,
+  SellerCouponSchema,
   type SellerOfferList,
   SellerOfferListSchema,
   SellerOfferSchema,
@@ -266,6 +270,11 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/offers', SellerOfferListSchema, { query: { productId }, signal }),
     setOfferFulfilment: (offerId: string, body: OfferFulfilmentRequest): Promise<SellerOffer> =>
       request(`/v1/seller/offers/${enc(offerId)}/fulfilment`, SellerOfferSchema, { method: 'PUT', body }),
+    listCoupons: async (signal?: AbortSignal) => (await request('/v1/seller/coupons', SellerCouponListSchema, { signal })).items,
+    createCoupon: (body: CreateSellerCoupon): Promise<SellerCoupon> =>
+      request('/v1/seller/coupons', SellerCouponSchema, { method: 'POST', body }),
+    setCouponStatus: (id: string, status: 'ACTIVE' | 'PAUSED' | 'EXPIRED'): Promise<SellerCoupon> =>
+      request(`/v1/seller/coupons/${enc(id)}/status`, SellerCouponSchema, { method: 'POST', body: { status } }),
 
     /* Listings & builder */
     listListings: (q: ListingsQuery, signal?: AbortSignal): Promise<ListingPage> =>

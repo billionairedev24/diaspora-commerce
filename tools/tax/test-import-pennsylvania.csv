@@ -1,0 +1,5 @@
+kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,shippingTaxable,facilitator,localRate,appliesToGrocery
+STATE,US,PA,Pennsylvania,,0.06,0,0.06,true,true,,
+LOCAL,US,PA,Philadelphia (191*),191,,,,,,0.02,false
+LOCAL,US,PA,Allegheny County Pittsburgh (152*),152,,,,,,0.01,false
+LOCAL,US,PA,Allegheny County suburbs (151*),151,,,,,,0.01,false

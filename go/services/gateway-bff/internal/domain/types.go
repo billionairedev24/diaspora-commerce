@@ -193,6 +193,8 @@ type CartLine struct {
 	Selected       bool    `json:"selected"`
 	// Perishable (catalog product type or attribute): hand delivery with a code, no safe place.
 	Perishable bool `json:"perishable"`
+	// ProductType is the catalog product type code (tax-returns maps it to GENERAL | GROCERY | PREPARED_FOOD).
+	ProductType string `json:"productType,omitempty"`
 }
 
 // DeliveryOption is one way to ship a package.
@@ -517,6 +519,36 @@ type OrderLocalDelivery struct {
 	ChargeMinor     int64    `json:"chargeMinor"`
 }
 
+// CheckoutCouponSellerShare is how much of the coupon discount applies to one seller's offers (settlement preview).
+type CheckoutCouponSellerShare struct {
+	SellerOrgID   string `json:"sellerOrgId"`
+	SellerName    string `json:"sellerName,omitempty"`
+	DiscountMinor int64  `json:"discountMinor"`
+	// Funding is who pays this slice: platform (AfroTransact marketing) or seller (reduces their payout).
+	Funding string `json:"funding"`
+}
+
+// CheckoutCouponOfferDiscount is the coupon amount allocated to one offer line (tax and settlement preview).
+type CheckoutCouponOfferDiscount struct {
+	OfferID       string `json:"offerId"`
+	SellerOrgID   string `json:"sellerOrgId,omitempty"`
+	DiscountMinor int64  `json:"discountMinor"`
+}
+
+// CheckoutCoupon is a coupon priced against the current cart (validate only; redemption happens at place order).
+type CheckoutCoupon struct {
+	Code                  string                        `json:"code"`
+	Applicable            bool                          `json:"applicable"`
+	Rejection             *string                       `json:"rejection,omitempty"`
+	Message               string                        `json:"message,omitempty"`
+	DiscountMinor         int64                         `json:"discountMinor"`
+	ShippingDiscountMinor int64                         `json:"shippingDiscountMinor"`
+	Funding               string                        `json:"funding,omitempty"`
+	FundedByOrg           string                        `json:"fundedByOrg,omitempty"`
+	OfferDiscounts        []CheckoutCouponOfferDiscount `json:"offerDiscounts,omitempty"`
+	SellerShares          []CheckoutCouponSellerShare   `json:"sellerShares,omitempty"`
+}
+
 // CheckoutSummary is the checkout page.
 type CheckoutSummary struct {
 	Packages       []CheckoutPackage `json:"packages"`
@@ -524,13 +556,22 @@ type CheckoutSummary struct {
 	PaymentMethods []PaymentMethod   `json:"paymentMethods"`
 	SubtotalMinor  int64             `json:"subtotalMinor"`
 	ShippingMinor  int64             `json:"shippingMinor"`
-	TaxMinor       int64             `json:"taxMinor"`
-	TaxRateLabel   string            `json:"taxRateLabel"`
-	TotalMinor     int64             `json:"totalMinor"`
-	Currency       string            `json:"currency"`
-	SellerCount    int               `json:"sellerCount"`
+	// DiscountMinor is the item discount from an applied coupon (subtotal reduction before tax).
+	DiscountMinor int64 `json:"discountMinor"`
+	// ShippingDiscountMinor is free-shipping (or partial) from the coupon.
+	ShippingDiscountMinor int64 `json:"shippingDiscountMinor"`
+	TaxMinor              int64 `json:"taxMinor"`
+	TaxRateLabel          string            `json:"taxRateLabel"`
+	TotalMinor            int64             `json:"totalMinor"`
+	Currency              string            `json:"currency"`
+	SellerCount           int               `json:"sellerCount"`
+	Coupon                *CheckoutCoupon   `json:"coupon,omitempty"`
 	// PublishableKey is the Stripe key for Stripe.js (Payment Element, Express Checkout Element).
 	PublishableKey string `json:"publishableKey,omitempty"`
+	// StripeCustomerID is the shopper's Stripe Customer (cus_...); passed to the Payment Element to show saved cards.
+	StripeCustomerID string `json:"stripeCustomerId,omitempty"`
+	// CrossSell is the checkout_cross_sell placement from content (optional product rail).
+	CrossSell *Rail `json:"crossSell,omitempty"`
 }
 
 // PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).

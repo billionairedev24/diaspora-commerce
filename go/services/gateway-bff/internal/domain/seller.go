@@ -137,6 +137,7 @@ var SellerModules = []ModuleDef{
 	{"sOrders", "orders", "Orders", "commerce", "orders, shipping labels and refunds"},
 	{"sListings", "listings", "Listings", "commerce", "product listings"},
 	{"sInventory", "inventory", "Inventory & FBA", "commerce", "stock levels"},
+	{"sAds", "coupons", "Coupons", "growth", "promotional codes for your listings"},
 	{"sStorefront", "storefront", "Storefront & theme", "growth", "the storefront design"},
 	{"sPayouts", "payouts", "Payouts", "finance", "payouts and balances"},
 	{"sPayouts", "fees", "Fees & commission", "finance", "commission and fees"},
@@ -495,4 +496,35 @@ func ComplianceBanner(s *ComplianceSummary, loc *time.Location) {
 		due = " due " + s.Deadline.In(loc).Format("Jan 2")
 	}
 	s.Message = fmt.Sprintf("%d item(s)%s. Open Account health to resolve.", s.OpenItems, due)
+}
+
+// SellerCoupon is a coupon the seller can view or manage in Seller Center.
+type SellerCoupon struct {
+	ID            string `json:"id"`
+	Code          string `json:"code"`
+	Description   string `json:"description"`
+	Type          string `json:"type"`
+	Value         int64  `json:"value"`
+	Currency      string `json:"currency"`
+	Scope         string `json:"scope"`
+	ScopeRef      string `json:"scopeRef,omitempty"`
+	MinSpendMinor int64  `json:"minSpendMinor"`
+	Status        string `json:"status"`
+	Funding       string `json:"funding"`
+	Editable      bool   `json:"editable"`
+	Version       int64  `json:"version"`
+}
+
+// CreateSellerCoupon creates a seller-funded coupon (offers-service).
+type CreateSellerCoupon struct {
+	Code               string `json:"code"`
+	Description        string `json:"description"`
+	Type               string `json:"type"`
+	Value              int64  `json:"value"`
+	Currency           string `json:"currency,omitempty"`
+	Scope              string `json:"scope"`
+	ScopeRef           string `json:"scopeRef,omitempty"`
+	MinSpendMinor      int64  `json:"minSpendMinor"`
+	TotalLimit         int    `json:"totalLimit"`
+	PerCustomerLimit   int    `json:"perCustomerLimit"`
 }

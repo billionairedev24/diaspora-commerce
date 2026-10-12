@@ -39,6 +39,8 @@ export interface MockAction {
    */
   already?: (r: MockRecord, ctx: ActionCtx) => { mine: boolean; message: string } | null;
   apply: (r: MockRecord, values: Record<string, FieldValue>, ctx: ActionCtx) => void;
+  /** When true, the handler drops the record and returns a removed detail (advert:delete). */
+  removes?: boolean;
 }
 
 export interface MockResource {
@@ -628,7 +630,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'tax-rates': {
     title: 'Tax rates',
-    columns: [col('kind', 'Rule', 'status', 10), col('state', 'State', 'mono', 8), col('zipPrefix', 'ZIP prefix', 'mono', 12), col('name', 'Name', 'strong', 22), col('generalRate', 'General', 'percent', 12), col('groceryRate', 'Grocery', 'percent', 12), col('preparedFoodRate', 'Prepared food', 'percent', 14), col('version', 'Version', 'number', 10)],
+    columns: [col('kind', 'Rule', 'status', 10), col('country', 'Country', 'mono', 8), col('state', 'State', 'mono', 8), col('zipPrefix', 'ZIP prefix', 'mono', 10), col('name', 'Name', 'strong', 20), col('generalRate', 'General', 'percent', 10), col('groceryRate', 'Grocery', 'percent', 10), col('preparedFoodRate', 'Prepared food', 'percent', 12), col('version', 'Version', 'number', 8)],
     statusKey: 'kind',
     facets: facets('STATE', 'LOCAL'),
     exportable: true,
@@ -663,10 +665,60 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       ]),
       build: (v) => ({ id: `local:${str(v.state)}:${str(v.zipPrefix)}`, fields: { kind: 'LOCAL', state: str(v.state), zipPrefix: str(v.zipPrefix), name: str(v.name), generalRate: num(v.rate), groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null }, activity: [] })
     }
+  },
+  coupons: {
+    title: 'Platform coupons',
+    columns: [col('code', 'Code', 'mono', 10), col('description', 'Description', 'text', 22), col('type', 'Type', 'status', 10), col('value', 'Value', 'number', 8), col('scope', 'Scope', 'text', 12), col('status', 'Status', 'status', 10), col('redeemedCount', 'Redeemed', 'number', 8)],
+    statusKey: 'status',
+    facets: facets('ACTIVE', 'PAUSED', 'EXPIRED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.code),
+    subtitleOf: (r) => str(r.fields.description),
+    actions: [
+      { key: 'pause', label: 'Pause', tone: 'neutral', permission: 'coupons:manage', confirm: 'Pause this coupon?', when: (r) => (r.fields.status === 'ACTIVE' ? '' : 'Only active coupons can be paused'), run: (r) => { r.fields.status = 'PAUSED'; } },
+      { key: 'activate', label: 'Activate', tone: 'primary', permission: 'coupons:manage', confirm: 'Activate this coupon?', when: (r) => (r.fields.status === 'PAUSED' ? '' : 'Only paused coupons can be activated'), run: (r) => { r.fields.status = 'ACTIVE'; } }
+    ],
+    create: {
+      permission: 'coupons:manage',
+      form: form('New platform coupon', 'Create coupon', [
+        field('code', 'Code', 'text', true, { pattern: '^[A-Za-z0-9]{3,20}$', placeholder: 'WELCOME10' }),
+        field('description', 'Description', 'text', false, { maxLength: 300 }),
+        field('type', 'Type', 'select', true, { options: options('PERCENT', 'FIXED', 'FREE_SHIPPING'), value: 'PERCENT' }),
+        field('value', 'Value', 'number', true, { min: 0, value: 10 }),
+        field('scope', 'Scope', 'select', true, { options: options('CART', 'CATEGORY', 'PRODUCT', 'SELLER', 'FULFILLED_BY_AFROTRANSACT'), value: 'CART' })
+      ]),
+      build: (v, id) => ({
+        id,
+        fields: { code: str(v.code).toUpperCase(), description: str(v.description), type: str(v.type), value: num(v.value), scope: str(v.scope), status: 'ACTIVE', funding: 'PLATFORM', redeemedCount: 0, version: 1 },
+        activity: []
+      })
+    }
   }
 };
 
 function placementsDef(title: string, announcementsOnly: boolean): MockResource {
+  const baseActions: MockAction[] = [
+    { key: 'submit', label: 'Send for review', tone: 'primary', permission: 'content:placements.edit', confirm: 'Send this placement for review?', when: (r) => stateReason(r, 'DRAFT'), apply: setStatus('IN_REVIEW', 'Sent for review') },
+    { key: 'approve', label: 'Approve', tone: 'primary', permission: 'content:placements.approve', level: 'APPROVE', confirm: 'Approve and schedule?', when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('LIVE', 'Approved — live') },
+    { key: 'reject', label: 'Reject', tone: 'danger', permission: 'content:placements.approve', level: 'APPROVE', form: noteForm('Reject back to draft', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('DRAFT', 'Rejected back to draft') },
+    { key: 'end', label: 'End now', tone: 'danger', permission: 'content:placements.edit', confirm: 'End this placement now?', when: (r) => stateReason(r, 'SCHEDULED', 'LIVE'), apply: setStatus('ENDED', 'Ended') }
+  ];
+  const actions =
+    announcementsOnly
+      ? baseActions
+      : [
+          ...baseActions,
+          {
+            key: 'delete',
+            label: 'Delete',
+            tone: 'danger',
+            permission: 'advert:delete',
+            confirm: 'Permanently delete this advert?',
+            when: (r) => (r.fields.paid ? stateReason(r, 'DRAFT', 'ENDED') : 'Only paid adverts can be deleted.'),
+            removes: true,
+            apply: () => {}
+          }
+        ];
   return {
     title,
     columns: [col('name', 'Name', 'strong', 28), col('slot', 'Slot', 'mono', 18), col('advertiser', 'Advertiser', 'text', 16), col('startsAt', 'Starts', 'date', 12), col('endsAt', 'Ends', 'date', 12), col('status', 'Status', 'status', 14)],
@@ -675,12 +727,7 @@ function placementsDef(title: string, announcementsOnly: boolean): MockResource 
     exportable: true,
     titleOf: (r) => str(r.fields.name),
     subtitleOf: (r) => `${str(r.fields.slot)}${r.fields.paid ? ` · paid by ${str(r.fields.advertiser)}` : ''}`,
-    actions: [
-      { key: 'submit', label: 'Send for review', tone: 'primary', permission: 'content:placements.edit', confirm: 'Send this placement for review?', when: (r) => stateReason(r, 'DRAFT'), apply: setStatus('IN_REVIEW', 'Sent for review') },
-      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'content:placements.approve', level: 'APPROVE', confirm: 'Approve and schedule?', when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('LIVE', 'Approved — live') },
-      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'content:placements.approve', level: 'APPROVE', form: noteForm('Reject back to draft', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('DRAFT', 'Rejected back to draft') },
-      { key: 'end', label: 'End now', tone: 'danger', permission: 'content:placements.edit', confirm: 'End this placement now?', when: (r) => stateReason(r, 'SCHEDULED', 'LIVE'), apply: setStatus('ENDED', 'Ended') }
-    ],
+    actions,
     edit: {
       permission: 'content:placements.edit',
       form: (r) => form('Edit draft', 'Save draft', [

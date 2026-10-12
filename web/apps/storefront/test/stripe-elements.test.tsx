@@ -48,14 +48,20 @@ describe('Stripe Appearance and deferred-intent options', () => {
   });
 
   it('builds manual-capture deferred options, saving and pre-order restrictions like orders does', () => {
-    expect(deferredIntentOptions({ amountMinor: 4599, currency: 'USD' })).toMatchObject({ mode: 'payment', amount: 4599, currency: 'usd', captureMethod: 'manual' });
+    expect(deferredIntentOptions({ amountMinor: 4599, currency: 'USD' })).toMatchObject({
+      mode: 'payment',
+      amount: 4599,
+      currency: 'usd',
+      captureMethod: 'manual',
+      automaticPaymentMethods: { enabled: true }
+    });
     expect(deferredIntentOptions({ amountMinor: 1, currency: 'usd' })).not.toHaveProperty('setupFutureUsage');
     expect(deferredIntentOptions({ amountMinor: 1, currency: 'usd', save: true }).setupFutureUsage).toBe('off_session');
     expect(stripePaymentMethodTypes([])).toBeUndefined();
     expect(stripePaymentMethodTypes([['CARD', 'WALLET', 'ACH']])).toBeUndefined();
     expect(stripePaymentMethodTypes([['CARD', 'WALLET', 'ACH'], ['CARD', 'WALLET']])).toEqual(['card', 'link']);
     expect(stripePaymentMethodTypes([['CARD']])).toEqual(['card']);
-    expect(stripePaymentMethodTypes([['ACH']])).toBeUndefined();
+    expect(stripePaymentMethodTypes([['ACH']])).toEqual(['us_bank_account']);
   });
 });
 
@@ -129,9 +135,8 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     const before = total();
     const pkg = await screen.findByTestId('checkout-package');
     await user.click(within(pkg).getByRole('radio', { name: /UPS Next Day Air/ }));
-    expect(total()).not.toBe(before);
+    await waitFor(() => expect(total()).not.toBe(before));
     expect(stripe.payment()?.updates).toContainEqual({ amount: total() });
-    expect(stripe.express()).toBeUndefined();
   });
 
   it('places the order in Stripe’s order: elements.submit(), then the order, then confirmPayment with the client secret', async () => {

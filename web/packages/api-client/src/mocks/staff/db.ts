@@ -430,11 +430,17 @@ function seed(now: Date): MockStaffDb {
   const feeSchedules = seedFeeSchedules(now);
   const fees = feeRecords(feeSchedules, now);
 
+  const coupons = [
+    rec('cp-welcome10', { code: 'WELCOME10', description: '10% off first order', type: 'PERCENT', value: 10, scope: 'CART', status: 'ACTIVE', funding: 'PLATFORM', redeemedCount: 128, version: 2 }),
+    rec('cp-freeship', { code: 'FREESHIP', description: 'Free shipping over $35', type: 'FREE_SHIPPING', value: 0, scope: 'CART', status: 'ACTIVE', funding: 'PLATFORM', redeemedCount: 44, version: 1 }),
+    rec('cp-pause', { code: 'SUMMER24', description: 'Summer sale (paused)', type: 'PERCENT', value: 15, scope: 'CART', status: 'PAUSED', funding: 'PLATFORM', redeemedCount: 902, version: 4 })
+  ];
+
   const taxRates = [
-    rec('state:TX', { kind: 'STATE', state: 'TX', zipPrefix: null, name: 'Texas', generalRate: 0.0625, groceryRate: 0, preparedFoodRate: 0.0625, shippingTaxable: true, facilitator: true, version: 3 }),
-    rec('state:NJ', { kind: 'STATE', state: 'NJ', zipPrefix: null, name: 'New Jersey', generalRate: 0.06625, groceryRate: 0, preparedFoodRate: 0.06625, shippingTaxable: true, facilitator: true, version: 2 }),
-    rec('state:GA', { kind: 'STATE', state: 'GA', zipPrefix: null, name: 'Georgia', generalRate: 0.04, groceryRate: 0, preparedFoodRate: 0.04, shippingTaxable: true, facilitator: true, version: 1 }),
-    rec('local:TX:770', { kind: 'LOCAL', state: 'TX', zipPrefix: '770', name: 'Houston', generalRate: 0.02, groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null })
+    rec('state:TX', { kind: 'STATE', country: 'US', state: 'TX', zipPrefix: null, name: 'Texas', generalRate: 0.0625, groceryRate: 0, preparedFoodRate: 0.0625, shippingTaxable: true, facilitator: true, version: 3 }),
+    rec('state:NJ', { kind: 'STATE', country: 'US', state: 'NJ', zipPrefix: null, name: 'New Jersey', generalRate: 0.06625, groceryRate: 0, preparedFoodRate: 0.06625, shippingTaxable: true, facilitator: true, version: 2 }),
+    rec('state:GA', { kind: 'STATE', country: 'US', state: 'GA', zipPrefix: null, name: 'Georgia', generalRate: 0.04, groceryRate: 0, preparedFoodRate: 0.04, shippingTaxable: true, facilitator: true, version: 1 }),
+    rec('local:TX:770', { kind: 'LOCAL', country: 'US', state: 'TX', zipPrefix: '770', name: 'Houston', generalRate: 0.02, groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null })
   ];
 
   const notifications: MockNotification[] = customers.flatMap((c, i) => [
@@ -456,9 +462,9 @@ function seed(now: Date): MockStaffDb {
     now,
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
-      users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
+      users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations
     },
