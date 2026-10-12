@@ -31,6 +31,7 @@ import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.Owner;
 import com.afrotransact.seller.domain.PhoneNumbers;
 import com.afrotransact.seller.domain.Plan;
+import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.RuleContext;
 import com.afrotransact.seller.domain.SellerRuleViolation;
@@ -250,10 +251,11 @@ class OnboardingServiceImpl implements OnboardingService {
                 if (in.plan() == null) {
                     throw missing("plan");
                 }
-                views.checkPlanChoice(app, in.plan());
-                Optional<Plan> plan = in.plan().planCode() == null ? Optional.empty()
-                        : views.plan(data.withPlan(in.plan()));
-                yield data.withPlan(valid(rules.plan(in.plan(), plan, data, ctx, false)));
+                PlanSection section = in.plan().keepingPaymentOf(data.plan());
+                views.checkPlanChoice(app, section);
+                Optional<Plan> plan = section.planCode() == null ? Optional.empty()
+                        : views.plan(data.withPlan(section));
+                yield data.withPlan(valid(rules.plan(section, plan, data, ctx, false)));
             }
             case CATALOG_COMPLIANCE -> {
                 if (in.compliance() == null) {

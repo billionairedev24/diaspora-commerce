@@ -30,4 +30,18 @@ public record PlanSection(String planCode, Cadence cadence, PaymentMethodKind pa
         this(planCode, cadence, paymentMethodKind, stripePaymentMethodId, cardBrand, cardLast4, cardExpMonth,
                 cardExpYear, null);
     }
+
+    /**
+     * An autosave of the same plan and cadence that omits the card keeps the stored card (and promo code): changing only
+     * how the plan is paid (S298) must not drop the payment method the applicant already added.
+     */
+    public PlanSection keepingPaymentOf(PlanSection stored) {
+        if (stored == null || stripePaymentMethodId != null || stored.stripePaymentMethodId() == null
+                || planCode == null || !planCode.equals(stored.planCode()) || cadence != stored.cadence()) {
+            return this;
+        }
+        return new PlanSection(planCode, cadence, stored.paymentMethodKind(), stored.stripePaymentMethodId(),
+                stored.cardBrand(), stored.cardLast4(), stored.cardExpMonth(), stored.cardExpYear(),
+                promoCode == null ? stored.promoCode() : promoCode, planFeeCollection);
+    }
 }
