@@ -19,8 +19,10 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
   session then signs the person in to every app without another prompt. The callback exchanges the code, verifies the
   ID token (JWKS, audience, nonce), **rotates the session id**, carries the guest ZIP over, merges the guest cart
   (`POST /v1/cart/merge`) and redirects to the app origin + `returnTo` path. `POST /v1/auth/sign-out` revokes the
-  tokens, ends the session and answers `{redirectTo}`: identity's `/connect/logout` (RP-initiated logout, back to the
-  calling app's home page) so the identity session ends too. Tokens live in Valkey, **AES-256-GCM encrypted at rest** (key derived from `SESSION_SIGNING_KEY`, bound
+  tokens, ends the session and answers `{redirectTo}`: identity's `/connect/logout` (RP-initiated logout) so the
+  identity session ends too, returning to the calling app's `GET /v1/auth/signed-out/{app}` (S300): the storefront
+  page (`returnTo`, guest pages only) with `signedOut=1` for the "You're signed out" toast, or Seller Center's / the
+  staff console's own branded sign-in (`prompt=login`, `notice=signed_out`) that brings the person back there. Tokens live in Valkey, **AES-256-GCM encrypted at rest** (key derived from `SESSION_SIGNING_KEY`, bound
   to the record key); the browser only holds `at_session` = opaque id + HMAC (HttpOnly, Secure, SameSite=Lax).
   Access tokens are refreshed 30 s before expiry under a Valkey lock (identity's refresh tokens are single use);
   `invalid_grant` signs the customer out but keeps guest state. Sign-out revokes refresh and access tokens.
@@ -181,8 +183,8 @@ environment's own hosts under `platform:` as the fallback (`config/local.yaml`: 
 the CORS/CSRF origins (storefront, Seller Center, staff console), the storefront origin (`PUBLIC_WEB_URL`), the OIDC
 issuer and browser URL (`AUTH_ISSUER_URL`) and the per-app OIDC redirect URIs
 `<PUBLIC_WEB_URL|SELLER_CENTER_URL|STAFF_CONSOLE_URL>/api/bff/v1/auth/oidc/callback` (`Config.RedirectURIs`; each
-cookie stays first-party on its app's host; identity registers the same three for `gateway-bff`, plus the three home
-pages as post-logout redirect URIs). `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override
+cookie stays first-party on its app's host; identity registers the same three for `gateway-bff`, plus the three
+`<app>/api/bff/v1/auth/signed-out/<app>` landings as post-logout redirect URIs, `Config.AppOrigins`). `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override
 the derived values. Problem types are `https://developers.afrotransact.com/problems/bff.<code>` (`go/pkg/problem`).
 
 Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront `http://localhost:3000`, Seller Center

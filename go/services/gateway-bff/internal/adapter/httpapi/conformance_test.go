@@ -127,6 +127,10 @@ func TestContractConformance(t *testing.T) {
 	b.do("GET", "/v1/auth/login?returnTo=/account&prompt=create&login_hint=ada%40example.com&invitation=inv-1", nil)
 	b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/orders"), nil)
 	b.do("POST", "/v1/auth/sign-out", nil)
+	b.do("POST", "/v1/auth/sign-out", map[string]any{"returnTo": "/deals"})
+	b.do("GET", "/v1/auth/signed-out/storefront?state=%2Fdeals", nil)
+	b.do("GET", "/v1/auth/signed-out/seller-center", nil)
+	b.do("GET", "/v1/auth/signed-out/nope", nil)
 	// Account (signed in).
 	b.do("GET", "/v1/account/addresses", nil)
 	mustStatus(t, signIn(t, bff, b, "/"), 302)
@@ -162,7 +166,7 @@ func TestContractConformance(t *testing.T) {
 	for _, op := range []string{"getSiteConfig", "getHome", "subscribeNewsletter", "getDeliveryLocation", "setDeliveryLocation",
 		"suggestAddresses", "search", "suggest", "getProduct", "createStockAlert", "getCart", "addToCart", "updateCartLine",
 		"removeCartLine", "selectAllCartLines", "saveForLater", "moveToCart", "removeSaved", "getMe", "startHostedLogin",
-		"startSocialLogin", "signOut", "listAddresses",
+		"startSocialLogin", "signOut", "signedOut", "listAddresses",
 		"createAddress", "deleteAddress", "listPaymentMethods", "createSetupIntent", "getCheckoutSummary", "placeOrder",
 		"listJobs", "applyToJob", "listStockAlerts", "removeStockAlert",
 		"requestResumeUpload", "completeResumeUpload", "startPhoneVerification", "confirmPhoneVerification"} {

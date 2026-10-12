@@ -44,9 +44,16 @@ func (h *handlersImpl) callback(w http.ResponseWriter, r *http.Request) {
 }
 
 // signOut ends the BFF session and answers where the browser goes next: identity's end-session endpoint, which ends
-// the identity session as well (single sign-out) and returns to the calling app's home page.
+// the identity session as well (single sign-out) and returns to the calling app's signed-out landing.
 func (h *handlersImpl) signOut(w http.ResponseWriter, r *http.Request) {
-	to, err := h.s.Auth.SignOut(r.Context(), callerFrom(r.Context()), r.Header.Get("Origin"))
+	var in struct {
+		ReturnTo string `json:"returnTo"`
+	}
+	if err := decode(r, &in, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	to, err := h.s.Auth.SignOut(r.Context(), callerFrom(r.Context()), r.Header.Get("Origin"), in.ReturnTo)
 	var body map[string]any
 	if err == nil {
 		body = map[string]any{"redirectTo": nil}
@@ -55,6 +62,17 @@ func (h *handlersImpl) signOut(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.reply(w, r, http.StatusOK, body, err)
+}
+
+// signedOut is each web app's post-logout landing (registered at identity): the storefront signed out, or the app's
+// own sign-in for Seller Center and the staff console.
+func (h *handlersImpl) signedOut(w http.ResponseWriter, r *http.Request) {
+	to, err := h.s.Auth.SignedOut(r.Context(), callerFrom(r.Context()), r.PathValue("app"), r.URL.Query().Get("state"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.redirect(w, r, to)
 }
 
 // ---------------------------------------------------------------- account

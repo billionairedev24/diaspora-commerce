@@ -206,6 +206,32 @@ func (c *Config) RedirectURIs() map[string]string {
 	return out
 }
 
+// SignedOutPath is the BFF's post-logout landing under Web.BFFPath, followed by the app key: identity registers
+// <app origin><BFFPath>/v1/auth/signed-out/<app> as the gateway-bff client's post-logout redirect URI for each web app
+// (application-<env>.yml), so single sign-out returns each app to its own page.
+const SignedOutPath = "/v1/auth/signed-out/"
+
+// Web app keys (the {app} of SignedOutPath).
+const (
+	AppStorefront   = "storefront"
+	AppSellerCenter = "seller-center"
+	AppStaffConsole = "staff-console"
+)
+
+// AppOrigins names the web apps: storefront (Web.PublicOrigin), seller-center and staff-console (the platform URLs,
+// so a moved port or LAN mode follows SELLER_CENTER_URL / STAFF_CONSOLE_URL like identity does). Apps without a URL
+// are left out.
+func (c *Config) AppOrigins() map[string]string {
+	out := map[string]string{}
+	for app, origin := range map[string]string{AppStorefront: c.Web.PublicOrigin,
+		AppSellerCenter: c.Platform.SellerCenterURL, AppStaffConsole: c.Platform.StaffConsoleURL} {
+		if o := strings.TrimRight(strings.TrimSpace(origin), "/"); o != "" {
+			out[app] = o
+		}
+	}
+	return out
+}
+
 // Resolve fills the web and OIDC settings from the shared platform URLs; call it after Load (and ApplyUpstreamEnv),
 // before Validate. Explicit values (YAML or WEB_ORIGINS, WEB_PUBLIC_ORIGIN, OIDC_ISSUER, OIDC_REDIRECT_URI) win.
 func (c *Config) Resolve() {

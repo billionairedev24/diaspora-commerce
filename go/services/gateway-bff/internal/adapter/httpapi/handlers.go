@@ -133,6 +133,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/auth/oidc/{provider}/authorize", auth(h.socialLogin))
 	route("GET /v1/auth/oidc/callback", auth(h.callback))
 	route("POST /v1/auth/sign-out", h.signOut)
+	route("GET /v1/auth/signed-out/{app}", auth(h.signedOut))
 	// Account
 	route("GET /v1/account/addresses", h.listAddresses)
 	route("POST /v1/account/addresses", h.createAddress)

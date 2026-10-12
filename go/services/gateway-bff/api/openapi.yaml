@@ -15,7 +15,8 @@ info:
     `GET /v1/auth/oidc/{provider}/authorize` and `GET /v1/auth/login`, which redirect to identity's
     `/oauth2/authorize`. Identity's hosted pages are the only place credentials are entered (single sign-on
     across the storefront, Seller Center and the staff console); `POST /v1/auth/sign-out` also ends the identity
-    session (RP-initiated logout). Native apps send `Authorization: Bearer <access token>` instead of the cookie.
+    session (RP-initiated logout) and identity then returns the browser to `GET /v1/auth/signed-out/{app}` on the
+    app that signed out. Native apps send `Authorization: Bearer <access token>` instead of the cookie.
     Guests get an anonymous session (cart, deliver-to ZIP); on sign-in the guest cart is merged into the
     customer's cart.
 
@@ -617,10 +618,17 @@ paths:
       summary: End the session (revokes the tokens at identity) and get identity's end-session URL
       description: |
         Clears the `at_session` cookie and revokes the refresh and access tokens. For a web session `redirectTo` is
-        identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and a
-        `post_logout_redirect_uri` back to the home page of the calling app, chosen from the request's `Origin`):
-        navigating there ends the identity session too, so every app is signed out (single sign-out). `redirectTo`
-        is null when there was no signed-in web session.
+        identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and the calling
+        app's registered `post_logout_redirect_uri`, `<origin>/api/bff/v1/auth/signed-out/<app>`, chosen from the
+        request's `Origin`): navigating there ends the identity session too, so every app is signed out (single
+        sign-out), and identity then sends the browser to `GET /v1/auth/signed-out/{app}`. Without an ID token to
+        end (the session had already expired) `redirectTo` is that signed-out URL directly. `redirectTo` is null for
+        native apps (bearer token).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SignOutRequest'}
       responses:
         '200':
           description: Signed out
@@ -629,6 +637,37 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/SignOutResult'}
+  /v1/auth/signed-out/{app}:
+    get:
+      tags: [Auth]
+      operationId: signedOut
+      security: [{}]
+      summary: Where identity returns the browser after single sign-out (each app's registered post-logout URI)
+      description: |
+        Registered at identity as the `gateway-bff` client's `post_logout_redirect_uri` for each web app
+        (`<app origin>/api/bff/v1/auth/signed-out/<app>`). `state` carries the path the person signed out on
+        (from `SignOutRequest.returnTo`).
+
+        - `storefront`: back to that page (or the home page) with `signedOut=1`, where the storefront shows a
+          "You're signed out" toast. No sign-in wall.
+        - `seller-center`, `staff-console`: straight to that app's own sign-in, i.e. identity's hosted sign-in page
+          branded for the app (`prompt=login`, `notice=signed_out`), which returns to the app (that page, or its
+          home page) after signing in.
+      parameters:
+        - name: app
+          in: path
+          required: true
+          schema: {type: string, enum: [storefront, seller-center, staff-console]}
+        - name: state
+          in: query
+          description: The path on the app to come back to (a relative path; anything else is ignored).
+          schema: {type: string, maxLength: 2048}
+      responses:
+        '302':
+          description: To the storefront page with `signedOut=1`, or to identity's sign-in for Seller Center and the staff console
+          headers:
+            Location: {schema: {type: string}}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/account/addresses:
     get:
       tags: [Account]
@@ -3143,13 +3182,26 @@ components:
             returns: {type: integer}
             addresses: {type: integer}
             paymentMethods: {type: integer}
+    SignOutRequest:
+      type: object
+      properties:
+        returnTo:
+          type: string
+          maxLength: 2048
+          description: >-
+            The path to come back to on the calling app: the storefront returns there signed out (send it only for
+            pages a guest may see); Seller Center and the staff console return there after signing in again.
+            Anything but a relative path is ignored.
     SignOutResult:
       type: object
       required: [redirectTo]
       properties:
         redirectTo:
           type: [string, 'null']
-          description: Identity's end-session URL to navigate to (ends the identity session, then returns to the calling app's home page); null without a signed-in web session.
+          description: >-
+            Where the browser goes next: identity's end-session URL (ends the identity session, then
+            `GET /v1/auth/signed-out/{app}` on the calling app), or that signed-out URL directly when there is no
+            identity session to end; null for native apps.
     PhoneCodeSent:
       type: object
       required: [sentTo, expiresAt]

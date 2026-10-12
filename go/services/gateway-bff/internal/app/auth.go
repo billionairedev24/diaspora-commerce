@@ -23,9 +23,15 @@ type AuthService interface {
 	AuthorizeURL(ctx context.Context, c *domain.Caller, in LoginRequest) (string, error)
 	// Callback exchanges the code, rotates the session and returns where to send the browser.
 	Callback(ctx context.Context, c *domain.Caller, code, state, oauthError string) string
-	// SignOut revokes the tokens and ends the session; it returns identity's end-session URL (RP-initiated logout,
-	// back to the origin's home page) for the browser to visit, or "" when there is no identity session to end.
-	SignOut(ctx context.Context, c *domain.Caller, origin string) (string, error)
+	// SignOut revokes the tokens and ends the session; it returns where the browser goes next: identity's end-session
+	// URL (RP-initiated logout) whose post-logout redirect URI is the calling app's signed-out landing, or that
+	// landing directly when there is no ID token to end the identity session with; "" for native apps. returnTo is
+	// the path on the calling app to come back to (carried as the logout state).
+	SignOut(ctx context.Context, c *domain.Caller, origin, returnTo string) (string, error)
+	// SignedOut is where identity returns the browser after single sign-out (GET /v1/auth/signed-out/{app}): the
+	// storefront page with signedOut=1, or for Seller Center and the staff console that app's own sign-in (identity's
+	// hosted page branded for it, prompt=login, notice=signed_out). state is the path to come back to.
+	SignedOut(ctx context.Context, c *domain.Caller, app, state string) (string, error)
 	Me(ctx context.Context, c *domain.Caller) (domain.Me, error)
 }
 
@@ -45,6 +51,9 @@ type LoginRequest struct {
 	// Intent is the Seller Center entry point: "sell" (Start selling) or "provide" (Offer your services). Identity
 	// brands its pages for it and adds the applicant role to an account created there; other values are dropped.
 	Intent string
+	// SignedOut marks the sign-in an app starts right after signing out: identity's page says "You've been signed
+	// out" (notice=signed_out).
+	SignedOut bool
 }
 
 // AuthOptions configure sign-in.
@@ -56,11 +65,16 @@ type AuthOptions struct {
 	// RedirectURIs maps each web app origin to its own callback (<origin><BFFPath>/v1/auth/oidc/callback), so the
 	// session cookie is set on the app's own host.
 	RedirectURIs map[string]string
-	Scopes       []string
-	WebOrigin    string // storefront origin: default post-login destination and sign-in error page
-	StateTTL     time.Duration
-	Clock        Clock
-	Log          *slog.Logger
+	// AppOrigins maps each web app key (storefront, seller-center, staff-console) to its origin; the app's signed-out
+	// landing <origin><BFFPath>/v1/auth/signed-out/<app> is registered at identity as a post-logout redirect URI.
+	AppOrigins map[string]string
+	// BFFPath is the path each web app proxies to the BFF (/api/bff).
+	BFFPath   string
+	Scopes    []string
+	WebOrigin string // storefront origin: default post-login destination and sign-in error page
+	StateTTL  time.Duration
+	Clock     Clock
+	Log       *slog.Logger
 }
 
 type authServiceImpl struct {
@@ -94,6 +108,15 @@ func NewAuthService(sessions SessionService, store port.SessionStore, ephemeral 
 		uris[strings.ToLower(strings.TrimSuffix(origin, "/"))] = uri
 	}
 	o.RedirectURIs = uris
+	apps := make(map[string]string, len(o.AppOrigins))
+	for app, origin := range o.AppOrigins {
+		apps[app] = strings.TrimSuffix(origin, "/")
+	}
+	if _, ok := apps[appStorefront]; !ok && o.WebOrigin != "" {
+		apps[appStorefront] = o.WebOrigin
+	}
+	o.AppOrigins = apps
+	o.BFFPath = "/" + strings.Trim(firstNonEmpty(o.BFFPath, "/api/bff"), "/")
 	return &authServiceImpl{sessions: sessions, store: store, ephemeral: ephemeral, identity: identity, verifier: verifier,
 		cart: cart, payments: payments, o: o}
 }
@@ -104,6 +127,10 @@ var socialProviders = map[string]bool{"google": true, "apple": true, "facebook":
 const (
 	maxLoginHint  = 254
 	maxInvitation = 200
+	maxReturnTo   = 2048
+	appStorefront = "storefront"
+	// signedOutPath is the post-logout landing under BFFPath (config.SignedOutPath).
+	signedOutPath = "/v1/auth/signed-out/"
 )
 
 // appOrigin returns the origin of an absolute URL when it is one of the web apps' (an origin with a registered
@@ -195,6 +222,9 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, in
 	if in.Intent == "sell" || in.Intent == "provide" {
 		q.Set("intent", in.Intent)
 	}
+	if in.SignedOut {
+		q.Set("notice", "signed_out")
+	}
 	return strings.TrimSuffix(a.o.IdentityPublicURL, "/") + "/oauth2/authorize?" + q.Encode(), nil
 }
 
@@ -282,7 +312,7 @@ func (a *authServiceImpl) complete(ctx context.Context, c *domain.Caller, code s
 	return nil
 }
 
-func (a *authServiceImpl) SignOut(ctx context.Context, c *domain.Caller, origin string) (string, error) {
+func (a *authServiceImpl) SignOut(ctx context.Context, c *domain.Caller, origin, returnTo string) (string, error) {
 	idToken := ""
 	if c.Session != nil && c.Session.Tokens != nil {
 		idToken = c.Session.Tokens.IDToken
@@ -304,14 +334,66 @@ func (a *authServiceImpl) SignOut(ctx context.Context, c *domain.Caller, origin 
 	c.Session = nil
 	c.BearerToken, c.Subject = "", ""
 	c.SessionEnded = true
-	if idToken == "" {
-		return "", nil
+	// Identity sends the browser back to the calling app's signed-out landing (a post-logout redirect URI registered
+	// for gateway-bff per app), with the page to come back to as the logout state.
+	landing := a.signedOutURL(a.appOf(origin))
+	state := ""
+	if p := domain.SafeReturnTo(returnTo); p != "/" && len(p) <= maxReturnTo {
+		state = p
 	}
-	// RP-initiated logout ends the identity session too (single sign-out), then identity sends the browser back to
-	// the home page of the app that signed out (a post-logout redirect URI registered for gateway-bff).
-	home := firstNonEmpty(a.appOrigin(origin), a.o.WebOrigin) + "/"
-	q := url.Values{"id_token_hint": {idToken}, "client_id": {a.o.ClientID}, "post_logout_redirect_uri": {home}}
+	if idToken == "" {
+		// Nothing to end at identity (the session had expired): straight to the landing.
+		if state != "" {
+			return landing + "?" + url.Values{"state": {state}}.Encode(), nil
+		}
+		return landing, nil
+	}
+	// RP-initiated logout ends the identity session too (single sign-out).
+	q := url.Values{"id_token_hint": {idToken}, "client_id": {a.o.ClientID}, "post_logout_redirect_uri": {landing}}
+	if state != "" {
+		q.Set("state", state)
+	}
 	return strings.TrimSuffix(a.o.IdentityPublicURL, "/") + "/connect/logout?" + q.Encode(), nil
+}
+
+// appOf names the web app an Origin header belongs to; the storefront for anything else.
+func (a *authServiceImpl) appOf(origin string) string {
+	o := a.appOrigin(origin)
+	for app, appOrigin := range a.o.AppOrigins {
+		if o != "" && strings.EqualFold(appOrigin, o) {
+			return app
+		}
+	}
+	return appStorefront
+}
+
+// signedOutURL is the app's post-logout landing as registered at identity: <origin><BFFPath>/v1/auth/signed-out/<app>.
+func (a *authServiceImpl) signedOutURL(app string) string {
+	return firstNonEmpty(a.o.AppOrigins[app], a.o.WebOrigin) + a.o.BFFPath + signedOutPath + app
+}
+
+func (a *authServiceImpl) SignedOut(ctx context.Context, c *domain.Caller, app, state string) (string, error) {
+	origin, ok := a.o.AppOrigins[app]
+	if !ok {
+		return "", domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "There is no such app.")
+	}
+	path := "/"
+	if len(state) <= maxReturnTo {
+		path = domain.SafeReturnTo(state)
+	}
+	if app == appStorefront {
+		// No sign-in wall on the storefront: back to the page (or home), where "You're signed out" is shown.
+		u, err := url.Parse(path)
+		if err != nil {
+			u = &url.URL{Path: "/"}
+		}
+		q := u.Query()
+		q.Set("signedOut", "1")
+		u.RawQuery, u.Fragment = q.Encode(), ""
+		return origin + u.String(), nil
+	}
+	// Seller Center and the staff console have no signed-out page of their own: their own sign-in, at once.
+	return a.AuthorizeURL(ctx, c, LoginRequest{ReturnTo: origin + path, Prompt: "login", SignedOut: true})
 }
 
 func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, error) {

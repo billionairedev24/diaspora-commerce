@@ -26,6 +26,9 @@ const WebOrigin = "http://localhost:3000"
 // SellerCenterOrigin is the Seller Center origin the test BFF allows.
 const SellerCenterOrigin = "http://localhost:3001"
 
+// StaffConsoleOrigin is the staff console origin the test BFF allows.
+const StaffConsoleOrigin = "http://localhost:3002"
+
 func chicago() *time.Location {
 	if l, err := time.LoadLocation("America/Chicago"); err == nil {
 		return l
@@ -38,6 +41,9 @@ const RedirectURI = WebOrigin + "/api/bff/v1/auth/oidc/callback"
 
 // SellerCenterRedirectURI is Seller Center's own BFF callback (sign-ins started there return there).
 const SellerCenterRedirectURI = SellerCenterOrigin + "/api/bff/v1/auth/oidc/callback"
+
+// StaffConsoleRedirectURI is the staff console's own BFF callback.
+const StaffConsoleRedirectURI = StaffConsoleOrigin + "/api/bff/v1/auth/oidc/callback"
 
 // BFF is a fully wired BFF against fake upstreams.
 type BFF struct {
@@ -129,7 +135,10 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: base, ClientID: u.ClientID, RedirectURI: RedirectURI, WebOrigin: WebOrigin,
-			RedirectURIs: map[string]string{WebOrigin: RedirectURI, SellerCenterOrigin: SellerCenterRedirectURI}, Clock: clock.Now, Log: log}),
+			RedirectURIs: map[string]string{WebOrigin: RedirectURI, SellerCenterOrigin: SellerCenterRedirectURI,
+				StaffConsoleOrigin: StaffConsoleRedirectURI},
+			AppOrigins: map[string]string{"storefront": WebOrigin, "seller-center": SellerCenterOrigin, "staff-console": StaffConsoleOrigin},
+			BFFPath:    "/api/bff", Clock: clock.Now, Log: log}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,
@@ -164,7 +173,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	}
 	services.Shopper = shopperServices(u, client, identity, services, clock, log)
 	mux := http.NewServeMux()
-	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin}, CookieName: "at_session",
+	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin, StaffConsoleOrigin}, CookieName: "at_session",
 		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000}, log).Register(mux)
 	return &BFF{Handler: mux, Upstreams: u, Store: store, Metrics: reg, Clock: clock}
 }
