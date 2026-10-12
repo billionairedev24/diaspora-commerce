@@ -303,14 +303,15 @@ class CheckoutServiceImpl implements CheckoutService {
             default -> "processing";
         };
         if (order.isEmpty()) {
-            return new CheckoutView(r.orderId(), r.orderNumber(), status, r.clientSecret(), r.clientSecret(), null,
-                    null, List.of());
+            return new CheckoutView(r.orderId(), r.orderNumber(), status, r.clientSecret(), r.clientSecret(),
+                    null, null, null, null, null, null, List.of(), null);
         }
         Order o = order.get();
         int count = o.shipments().size();
         return new CheckoutView(o.id(), o.number(), status, r.clientSecret(), r.clientSecret(),
-                o.totals().grandTotalMinor(), o.currency(), o.shipments().stream().map(s -> shipment(s, count))
-                .toList(), preorder(o));
+                o.totals().grandTotalMinor(), o.currency(),
+                o.totals().itemsMinor(), o.totals().shippingMinor(), o.totals().taxMinor(), o.totals().discountMinor(),
+                o.shipments().stream().map(s -> shipment(s, count)).toList(), preorder(o));
     }
 
     /** The "You're in" facts (S272): the first pre-order window of the order and what ships now besides it. */

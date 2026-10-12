@@ -224,7 +224,7 @@ func taxRatesResource() *staffResource {
 		}
 		if q.Status == "" || q.Status == "LOCAL" {
 			for _, l := range objs(table, "locals") {
-				l["kind"], l["rowId"], l["generalRate"] = "LOCAL", "local:"+jstr(l, "state")+":"+jstr(l, "zipPrefix"), l["rate"]
+				l["kind"], l["rowId"], l["country"], l["generalRate"] = "LOCAL", "local:"+jstr(l, "state")+":"+jstr(l, "zipPrefix"), "US", l["rate"]
 				out = append(out, l)
 			}
 		}
@@ -239,7 +239,7 @@ func taxRatesResource() *staffResource {
 	}
 	return &staffResource{
 		key: "tax-rates", module: "fees", title: "Tax rates", statusKey: "kind", exportable: true,
-		columns: []domain.Column{col("kind", "Rule", "status", 10), col("state", "State", "mono", 8), col("zipPrefix", "ZIP prefix", "mono", 12), col("name", "Name", "strong", 22),
+		columns: []domain.Column{col("kind", "Rule", "status", 10), col("country", "Country", "mono", 8), col("state", "State", "mono", 8), col("zipPrefix", "ZIP prefix", "mono", 12), col("name", "Name", "strong", 22),
 			col("generalRate", "General", "percent", 12), col("groceryRate", "Grocery", "percent", 12), col("preparedFoodRate", "Prepared food", "percent", 14), col("version", "Version", "number", 10)},
 		facets: domain.StaffFacets("STATE", "LOCAL"),
 		idOf:   func(o jobj) string { return jstr(o, "rowId") },

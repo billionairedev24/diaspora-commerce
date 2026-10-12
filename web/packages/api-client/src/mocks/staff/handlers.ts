@@ -591,6 +591,11 @@ function requireFeesConfigure(ctx: Ctx) {
   if (!ctx.permissions.includes('payments:configure')) throw forbidden('This needs the payments:configure permission.');
 }
 
+function requireTaxConfigure(ctx: Ctx) {
+  if (!allows(ctx.roles, 'fees', 'EDIT')) throw forbidden('Your roles can’t change fees, commissions & tax.');
+  if (!ctx.permissions.includes('tax:configure')) throw forbidden('This needs the tax:configure permission.');
+}
+
 const canAssignPickups = (ctx: Ctx) => ctx.permissions.includes('delivery:dispatch') && allows(ctx.roles, 'dispatch', 'EDIT');
 
 function syncFeeRecords(ctx: Ctx) {
@@ -726,6 +731,12 @@ export const staffHandlers = [
       }
       def.apply(rec, values, ctx.action);
       audit(ctx, `${resource}.${def.key}`, rec.id, `${def.label}: ${RESOURCES[resource].titleOf(rec)}`);
+      if (def.removes) {
+        const list = records(ctx, resource);
+        const idx = list.indexOf(rec);
+        if (idx >= 0) list.splice(idx, 1);
+        return { resource, id: rec.id, title: 'Deleted', subtitle: '', status: null, tone: null, sections: [], tables: [], activity: [], notes: [], notesEnabled: false, actions: [], editForm: null, links: [], version: null, removed: true };
+      }
       return detail(ctx, resource, rec);
     })
   ),
@@ -994,6 +1005,20 @@ export const staffHandlers = [
         })
       );
       return quoteDelivery(ctx.db.feeSchedules, ctx.now, b.sellerOrgId, b.distanceMiles, b.packages ?? 1);
+    })
+  ),
+  http.post(
+    `${W}/tax-rates/import`,
+    route(async (ctx) => {
+      requireTaxConfigure(ctx);
+      const b = await json(ctx.request, z.object({ csv: z.string().trim().min(1, 'Paste or upload a CSV file') }));
+      const lines = b.csv.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('kind,'));
+      audit(ctx, 'tax-rates.import', 'csv', `Imported ${lines.length} row(s) from CSV`);
+      return {
+        statesUpserted: lines.filter((l) => /^STATE,/i.test(l)).length,
+        localsUpserted: lines.filter((l) => /^LOCAL,/i.test(l)).length,
+        warnings: []
+      };
     })
   ),
   /* ── dispatch: seller pickups (S255) ── */

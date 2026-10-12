@@ -30,15 +30,17 @@ class ShipmentServiceImpl implements ShipmentService {
     private final ShipmentTransitions transitions;
     private final CourierProofPolicy proofs;
     private final OrderViews views;
+    private final OrdersSettings settings;
     private final Clock clock;
 
     ShipmentServiceImpl(OrdersAccess access, OrderRepository orders, ShipmentTransitions transitions,
-                        CourierProofPolicy proofs, OrderViews views, Clock clock) {
+                        CourierProofPolicy proofs, OrderViews views, OrdersSettings settings, Clock clock) {
         this.access = access;
         this.orders = orders;
         this.transitions = transitions;
         this.proofs = proofs;
         this.views = views;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -61,7 +63,7 @@ class ShipmentServiceImpl implements ShipmentService {
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId,
                 ShipmentStatus.CANCELLED, (o, s) -> new TransitionActor(ActorKind.CUSTOMER, customer.subject(), null),
                 reason == null || reason.isBlank() ? "Cancelled by the customer" : reason, TransitionSource.API,
-                idempotencyKey, null, null, this::preorderStillOpen));
+                idempotencyKey, null, null, s -> cancellableByCustomer(order, s)));
         return views.of(outcome.order(), new Viewer(Viewer.Kind.CUSTOMER, null),
                 orders.history(outcome.order().id()));
     }
@@ -117,9 +119,15 @@ class ShipmentServiceImpl implements ShipmentService {
     }
 
     /** S272: a pre-order is cancelled by the customer (full refund incl. delivery fee) only until its window closes. */
-    private void preorderStillOpen(Shipment s) {
+    private void cancellableByCustomer(Order o, Shipment s) {
         if (s.preorderShipment() && !s.preorder().cancellableAt(Instant.now(clock))) {
             throw TransitionRefused.preorderClosed(s.preorder().closesAt());
+        }
+        if (!s.preorderShipment() && o.placedAt() != null) {
+            Instant expiry = o.placedAt().plus(settings.cancellationWindow());
+            if (Instant.now(clock).isAfter(expiry)) {
+                throw TransitionRefused.cancelWindowExpired(o.placedAt());
+            }
         }
     }
 

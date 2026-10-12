@@ -433,8 +433,8 @@ func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, 
 	if addrs, err := a.identity.Addresses(ctx, c.BearerToken); err == nil {
 		counts.Addresses = len(addrs)
 	}
-	if pms, err := a.payments.PaymentMethods(ctx, c.BearerToken); err == nil {
-		counts.PaymentMethods = len(pms)
+	if wallet, err := a.payments.PaymentMethods(ctx, c.BearerToken); err == nil {
+		counts.PaymentMethods = len(wallet.Items)
 	}
 	return domain.Me{Authenticated: true, User: &user, Counts: &counts}, nil
 }

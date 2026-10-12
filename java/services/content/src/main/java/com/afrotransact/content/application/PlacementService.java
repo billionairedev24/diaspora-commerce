@@ -29,4 +29,7 @@ public interface PlacementService {
     Placement reject(String id, String note);
 
     Placement end(String id);
+
+    /** Permanently removes a paid advert in DRAFT or ENDED (advert:delete). */
+    void delete(String id);
 }

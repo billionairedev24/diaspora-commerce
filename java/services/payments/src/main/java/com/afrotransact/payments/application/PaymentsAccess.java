@@ -122,7 +122,8 @@ class PaymentsAccess {
     /** Connected accounts are registered by the seller service or by Finance. */
     Actor accountRegistrar() {
         Actor actor = actors.current();
-        if (actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.SERVICE)) {
+        if (actor.type() == PrincipalType.SERVICE
+                && (actor.can(PaymentsPermissions.SERVICE) || actor.can(PaymentsPermissions.CONNECTED_ACCOUNTS))) {
             return actor;
         }
         return configure();

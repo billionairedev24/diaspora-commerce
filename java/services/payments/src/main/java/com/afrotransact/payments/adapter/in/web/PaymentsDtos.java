@@ -943,4 +943,9 @@ final class PaymentsDtos {
                                 String ephemeralKeySecret,
                                 Instant expiresAt) {
     }
+
+    record WalletResponse(@Schema(description = "The shopper's Stripe Customer", examples = "cus_Q1w2e3r4")
+                          String stripeCustomerId,
+                          List<PaymentMethodResponse> items) {
+    }
 }

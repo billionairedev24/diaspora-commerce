@@ -2,7 +2,7 @@
 
 import { inventoryHubQueries, type PoInput, type PurchaseOrder, type ShipmentDocumentStatus } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, cx, Select, Sheet, TextField } from '@afrotransact/ui';
+import { Button, cx, Select, Sheet, SheetTableScroll, TextField } from '@afrotransact/ui';
 import { ArrowRight, Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -215,8 +215,9 @@ export function PoSheet({ id, onClose }: { id: string | null; onClose: () => voi
               </div>
             ))}
           </dl>
-          <div className="overflow-x-auto rounded-md border border-border">
-            <table className="at-table w-full text-xs" aria-label="PO lines">
+          <div className="overflow-hidden rounded-md border border-border">
+            <SheetTableScroll>
+            <table className="at-table text-xs" aria-label="PO lines">
               <thead className="bg-surface-muted text-left text-muted">
                 <tr>{['SKU', 'Item', 'Ordered', 'Received', 'Damaged', 'Invoiced', 'Unit cost', 'Amount'].map((h) => <th key={h} scope="col" className="px-2 py-1.5">{h}</th>)}</tr>
               </thead>
@@ -235,6 +236,7 @@ export function PoSheet({ id, onClose }: { id: string | null; onClose: () => voi
                 ))}
               </tbody>
             </table>
+            </SheetTableScroll>
           </div>
           {retailEdit ? (
             <div className="flex flex-col gap-2">

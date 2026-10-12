@@ -40,9 +40,15 @@ type WalletEphemeralKey struct {
 	Secret     string `json:"secret"`
 }
 
+// Wallet is payments' WalletResponse.
+type Wallet struct {
+	StripeCustomerID string         `json:"stripeCustomerId"`
+	Items            []WalletMethod `json:"items"`
+}
+
 // WalletClient manages the shopper's saved Stripe payment methods (/v1/customers/me/...).
 type WalletClient interface {
-	List(ctx context.Context, bearer string) ([]WalletMethod, error)
+	List(ctx context.Context, bearer string) (Wallet, error)
 	SetupIntent(ctx context.Context, bearer string, types []string) (WalletSetupIntent, error)
 	MakeDefault(ctx context.Context, bearer, id string) (WalletMethod, error)
 	Remove(ctx context.Context, bearer, id string) error
@@ -310,6 +316,95 @@ type ReturnsClient interface {
 	ByNumber(ctx context.Context, bearer, number string) (UpRma, error)
 	Cancel(ctx context.Context, bearer, id string) (UpRma, error)
 	Quote(ctx context.Context, bearer, id string) (domain.RefundQuote, error)
+	TaxQuote(ctx context.Context, req UpTaxQuoteRequest) (UpTaxQuote, error)
+}
+
+// UpTaxQuoteLine is tax-returns' TaxQuoteLine.
+type UpTaxQuoteLine struct {
+	LineID         string `json:"lineId"`
+	ATIN           string `json:"atin"`
+	SellerOrgID    string `json:"sellerOrgId"`
+	ProductType    string `json:"productType,omitempty"`
+	Quantity       int    `json:"quantity"`
+	UnitPriceMinor int64  `json:"unitPriceMinor"`
+	DiscountMinor  int64  `json:"discountMinor"`
+	ShippingMinor  int64  `json:"shippingMinor"`
+}
+
+// UpTaxShipTo is tax-returns' TaxShipTo.
+type UpTaxShipTo struct {
+	Country    string `json:"country,omitempty"`
+	State      string `json:"state"`
+	PostalCode string `json:"postalCode"`
+	City       string `json:"city,omitempty"`
+}
+
+// UpTaxQuoteRequest is tax-returns' TaxQuoteRequest.
+type UpTaxQuoteRequest struct {
+	Currency string           `json:"currency"`
+	ShipTo   UpTaxShipTo      `json:"shipTo"`
+	Lines    []UpTaxQuoteLine `json:"lines"`
+}
+
+// UpTaxLineQuote is tax-returns' TaxLineQuote.
+type UpTaxLineQuote struct {
+	LineID            string  `json:"lineId"`
+	TaxMinor          int64   `json:"taxMinor"`
+	Jurisdiction      string  `json:"jurisdiction"`
+	LocalJurisdiction string  `json:"localJurisdiction,omitempty"`
+	ShippingTaxMinor  int64   `json:"shippingTaxMinor"`
+	Rate              float64 `json:"rate"`
+}
+
+// UpTaxQuote is tax-returns' TaxQuote.
+type UpTaxQuote struct {
+	Jurisdiction  string           `json:"jurisdiction"`
+	TotalTaxMinor int64            `json:"totalTaxMinor"`
+	Lines         []UpTaxLineQuote `json:"lines"`
+}
+
+// ---------------------------------------------------------------- offers coupons (checkout preview)
+
+// CheckoutCouponsClient validates a coupon against the cart (no redemption).
+type CheckoutCouponsClient interface {
+	Validate(ctx context.Context, bearer string, req CouponValidateRequest) (CouponQuote, error)
+}
+
+// CouponValidateLine is one offer line sent to offers-service.
+type CouponValidateLine struct {
+	OfferID  string `json:"offerId"`
+	Quantity int    `json:"quantity"`
+}
+
+// CouponValidateRequest is offers POST /v1/coupons/validate.
+type CouponValidateRequest struct {
+	Code          string               `json:"code"`
+	CustomerID    string               `json:"customerId,omitempty"`
+	Currency      string               `json:"currency"`
+	Lines         []CouponValidateLine `json:"lines"`
+	ShippingMinor int64                `json:"shippingMinor"`
+	FirstOrder    bool                 `json:"firstOrder"`
+}
+
+// CouponQuoteLine is a per-offer discount from offers-service.
+type CouponQuoteLine struct {
+	LineRef       string `json:"lineRef"`
+	SellerOrgID   string `json:"sellerOrgId"`
+	DiscountMinor int64  `json:"discountMinor"`
+}
+
+// CouponQuote is the validation result (always 200 from offers; applicable=false when it does not apply).
+type CouponQuote struct {
+	Code                  string            `json:"code"`
+	Applicable            bool              `json:"applicable"`
+	Rejection             string            `json:"rejection"`
+	Message               string            `json:"message"`
+	DiscountMinor         int64             `json:"discountMinor"`
+	ShippingDiscountMinor int64             `json:"shippingDiscountMinor"`
+	TotalDiscountMinor    int64             `json:"totalDiscountMinor"`
+	Funding               string            `json:"funding"`
+	FundedByOrg           string            `json:"fundedByOrg"`
+	Lines                 []CouponQuoteLine `json:"lines"`
 }
 
 // ---------------------------------------------------------------- identity /v1/me security (contracts/openapi/identity.yaml)

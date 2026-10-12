@@ -19,6 +19,8 @@ import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.ShipmentTransitionPolicy;
 import com.afrotransact.orders.domain.StatusChange;
 import com.afrotransact.orders.port.HandoverCodeVault;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
+import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Component;
 
 /** Builds {@link OrderView}s for a viewer. */
@@ -28,13 +30,15 @@ class OrderViews {
     private final ShipmentTransitionPolicy policy;
     private final HandoverCodeVault vault;
     private final ReturnWindowPolicy returnWindows;
+    private final OrdersAccess access;
     private final Clock clock;
 
     OrderViews(ShipmentTransitionPolicy policy, HandoverCodeVault vault, ReturnWindowPolicy returnWindows,
-               Clock clock) {
+               OrdersAccess access, Clock clock) {
         this.policy = policy;
         this.vault = vault;
         this.returnWindows = returnWindows;
+        this.access = access;
         this.clock = clock;
     }
 
@@ -46,7 +50,7 @@ class OrderViews {
                 .collect(Collectors.groupingBy(StatusChange::shipmentId));
         OrderTotals totals = visible.size() == o.shipments().size() ? o.totals() : OrderTotals.ofShipments(visible);
         int count = o.shipments().size();
-        Function<Shipment, OrderView.ShipmentView> shipmentView = s -> shipment(s, count, viewer,
+        Function<Shipment, OrderView.ShipmentView> shipmentView = s -> shipment(o, s, count, viewer,
                 byShipment.getOrDefault(s.id(), List.of()));
         boolean staff = viewer.kind() == Viewer.Kind.STAFF;
         return new OrderView(o.id(), o.number(), o.status().name().toLowerCase(Locale.ROOT),
@@ -58,12 +62,8 @@ class OrderViews {
                 viewer.kind() == Viewer.Kind.SELLER ? null : o.origin().attribution());
     }
 
-    OrderView.ShipmentView shipment(Shipment s, int count, Viewer viewer, List<StatusChange> history) {
-        ActorKind as = switch (viewer.kind()) {
-            case CUSTOMER -> ActorKind.CUSTOMER;
-            case SELLER -> ActorKind.SELLER;
-            case STAFF -> ActorKind.PLATFORM_ADMIN;
-        };
+    OrderView.ShipmentView shipment(Order order, Shipment s, int count, Viewer viewer, List<StatusChange> history) {
+        List<String> nextActions = nextActions(order, s, viewer);
         String code = viewer.kind() == Viewer.Kind.CUSTOMER && s.handoverRequired() && s.handoverCodeSealed() != null
                 && !s.status().terminal() ? vault.reveal(s.id(), s.handoverCodeSealed()) : null;
         int units = s.lines().stream().mapToInt(OrderLine::quantity).sum();
@@ -84,9 +84,7 @@ class OrderViews {
                 s.pickupLocationId(), s.preferences(), s.perishable(), s.handoverRequired(), code, s.status().wire(),
                 units + (units == 1 ? " item" : " items"), s.itemsMinor(), s.shippingMinor(), s.taxMinor(),
                 s.totalMinor(), s.carrier(), s.trackingNumber(), s.promisedFrom(), s.promisedBy(), s.deliveredAt(),
-                s.captured(), cancellable,
-                policy.nextFor(s, as).stream().sorted(Comparator.comparingInt(ShipmentStatus::rank))
-                        .map(ShipmentStatus::wire).toList(),
+                s.captured(), cancellable, nextActions,
                 s.lines().stream().map(OrderViews::line).toList(),
                 history.stream().map(h -> new OrderView.TimelineEntry(h.from() == null ? null : h.from().wire(),
                         h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt())).toList(),
@@ -100,6 +98,28 @@ class OrderViews {
                         s.preorder().windowCode(), s.preorder().windowName(), s.preorder().deliversOn(),
                         s.preorder().fulfilment().name(), s.preorder().closesAt(), s.preorder().deliveryMissed(),
                         s.preorder().missedChoice() == null ? null : s.preorder().missedChoice().name()));
+    }
+
+    private List<String> nextActions(Order order, Shipment s, Viewer viewer) {
+        ActorKind actor = switch (viewer.kind()) {
+            case CUSTOMER -> ActorKind.CUSTOMER;
+            case SELLER -> ActorKind.SELLER;
+            case STAFF -> {
+                if (order == null) {
+                    yield null;
+                }
+                try {
+                    yield access.transitionActor(order, s).kind();
+                } catch (ForbiddenActionException | NotFoundException ex) {
+                    yield null;
+                }
+            }
+        };
+        if (actor == null) {
+            return List.of();
+        }
+        return policy.nextFor(s, actor).stream().sorted(Comparator.comparingInt(ShipmentStatus::rank))
+                .map(ShipmentStatus::wire).toList();
     }
 
     private static OrderView.LineView line(OrderLine l) {

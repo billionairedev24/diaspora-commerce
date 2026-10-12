@@ -159,7 +159,7 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
   it('serves every table with columns and server-side paging', async () => {
     const api = client();
     const keys: ResourceKey[] = ['users', 'roles', 'applications', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
-      'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'pickup-locations'];
+      'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'coupons', 'pickup-locations'];
     for (const key of keys) {
       const page = await api.listResource(key, { page: 0, size: 5 });
       expect(page.columns.length).toBeGreaterThan(0);

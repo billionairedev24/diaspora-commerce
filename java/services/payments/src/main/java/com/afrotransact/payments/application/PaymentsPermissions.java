@@ -17,6 +17,8 @@ public final class PaymentsPermissions {
      * nothing else.
      */
     public static final String PLAN_FEES = "payments:plan-fees";
+    /** The seller service: map an organisation to its Stripe Connect account id for settlement transfers. */
+    public static final String CONNECTED_ACCOUNTS = "payments:connected-accounts";
     /** Seller / provider owner and finance roles (org-scoped) or Finance staff: request a payout. */
     public static final String PAYOUTS_REQUEST = "payouts:request";
     /** Payouts and statements of the organisation (owner, admin, manager, finance; Finance staff). */

@@ -48,14 +48,29 @@ export const sellerKeys = {
   services: (orgId: string) => [...sellerKeys.org(orgId), 'services'] as const,
   policy: (orgId: string) => [...sellerKeys.org(orgId), 'policy'] as const,
   earnings: (orgId: string, from?: string, to?: string) => [...sellerKeys.org(orgId), 'earnings', from ?? '', to ?? ''] as const,
-  publicPage: (orgId: string) => [...sellerKeys.org(orgId), 'public-page'] as const
+  publicPage: (orgId: string) => [...sellerKeys.org(orgId), 'public-page'] as const,
+  coupons: (orgId: string) => [...sellerKeys.org(orgId), 'coupons'] as const
 };
 
 const MINUTE = 60_000;
 
+/** Combines TanStack's abort signal with a wall-clock timeout (Seller Center session). */
+function sessionSignal(signal: AbortSignal, timeoutMs?: number): AbortSignal {
+  if (!timeoutMs || (typeof AbortSignal.any !== 'function' && typeof AbortSignal.timeout !== 'function')) {
+    return signal;
+  }
+  return AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+}
+
 /** queryOptions for every seller screen (same keys, fetchers and stale times on server and client). */
 export const sellerQueries = {
-  session: (api: SellerApiClient) => queryOptions({ queryKey: sellerKeys.session(), queryFn: ({ signal }) => api.getSession(signal), staleTime: MINUTE }),
+  session: (api: SellerApiClient, opts?: { timeoutMs?: number }) =>
+    queryOptions({
+      queryKey: sellerKeys.session(),
+      queryFn: ({ signal }) => api.getSession(sessionSignal(signal, opts?.timeoutMs)),
+      staleTime: MINUTE,
+      refetchOnWindowFocus: false
+    }),
   onboarding: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.onboarding(orgId), queryFn: ({ signal }) => api.getOnboarding(signal), staleTime: MINUTE }),
   onboardingPlans: (api: SellerApiClient, orgId: string) =>
@@ -122,5 +137,7 @@ export const sellerQueries = {
   earnings: (api: SellerApiClient, orgId: string, from?: string, to?: string) =>
     queryOptions({ queryKey: sellerKeys.earnings(orgId, from, to), queryFn: ({ signal }) => api.getEarnings(from, to, signal), staleTime: MINUTE }),
   publicPage: (api: SellerApiClient, orgId: string) =>
-    queryOptions({ queryKey: sellerKeys.publicPage(orgId), queryFn: ({ signal }) => api.getPublicPage(signal), staleTime: MINUTE })
+    queryOptions({ queryKey: sellerKeys.publicPage(orgId), queryFn: ({ signal }) => api.getPublicPage(signal), staleTime: MINUTE }),
+  coupons: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.coupons(orgId), queryFn: ({ signal }) => api.listCoupons(signal), staleTime: MINUTE })
 };

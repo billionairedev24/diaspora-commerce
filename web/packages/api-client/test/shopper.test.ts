@@ -122,6 +122,17 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect(cancelled.status).toBe('cancelled');
   });
 
+  it('prices a platform coupon on checkout summary and lowers the total (mock WELCOME10)', async () => {
+    const api = await signedIn();
+    await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 2 });
+    const base = await api.getCheckoutSummary('ad1');
+    const withCode = await api.getCheckoutSummary('ad1', undefined, 'WELCOME10');
+    expect(withCode.coupon).toMatchObject({ code: 'WELCOME10', applicable: true, funding: 'platform' });
+    expect(withCode.discountMinor).toBeGreaterThan(0);
+    expect(withCode.totalMinor).toBeLessThan(base.totalMinor);
+    expect(withCode.coupon?.sellerShares?.[0]?.funding).toBe('platform');
+  });
+
   it('quotes AfroTransact Delivery from the seller’s store per address and refuses an out-of-range one (S255)', async () => {
     const api = await signedIn();
     const product = await api.getProduct('AT00000P23');

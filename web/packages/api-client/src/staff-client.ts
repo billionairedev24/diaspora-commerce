@@ -10,6 +10,8 @@ import {
   type DeliveryQuote,
   type DeliveryQuoteRequest,
   DeliveryQuoteSchema,
+  type TaxRatesImportResult,
+  TaxRatesImportResultSchema,
   type DriverSuggestions,
   DriverSuggestionsSchema,
   type ExportRequest,
@@ -126,6 +128,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`/v1/staff/fees/schedules/${enc(id)}/cancel`, FeeScheduleViewSchema, { method: 'POST', body: { reason } }),
     quoteDelivery: (body: DeliveryQuoteRequest, signal?: AbortSignal): Promise<DeliveryQuote> =>
       request('/v1/staff/fees/delivery-quote', DeliveryQuoteSchema, { method: 'POST', body, signal }),
+    importTaxRates: (csv: string): Promise<TaxRatesImportResult> =>
+      request('/v1/staff/tax-rates/import', TaxRatesImportResultSchema, { method: 'POST', body: { csv } }),
 
     /* Dispatch: seller pickups (S255) */
     listPickups: (nodeId?: string, signal?: AbortSignal): Promise<PickupList> =>

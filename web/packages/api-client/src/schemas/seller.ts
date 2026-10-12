@@ -18,7 +18,7 @@ export type Portal = z.infer<typeof PortalSchema>;
 export const AccessLevelSchema = z.enum(['VIEW', 'EDIT', 'APPROVE', 'FULL']);
 export type AccessLevel = z.infer<typeof AccessLevelSchema>;
 export const ModuleKeySchema = z.enum([
-  'onboarding', 'home', 'orders', 'listings', 'inventory', 'storefront', 'calendar', 'requests', 'hours', 'services', 'policy',
+  'onboarding', 'home', 'orders', 'listings', 'inventory', 'coupons', 'storefront', 'calendar', 'requests', 'hours', 'services', 'policy',
   'public-page', 'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
 ]);
 export type ModuleKey = z.infer<typeof ModuleKeySchema>;
@@ -647,6 +647,38 @@ export const SellerOfferSchema = z.object({
 export type SellerOffer = z.infer<typeof SellerOfferSchema>;
 export const SellerOfferListSchema = z.object({ items: z.array(SellerOfferSchema) });
 export type SellerOfferList = z.infer<typeof SellerOfferListSchema>;
+
+export const SellerCouponSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  description: z.string(),
+  type: z.enum(['PERCENT', 'FIXED', 'FREE_SHIPPING']),
+  value: z.number().int(),
+  currency: z.string(),
+  scope: z.string(),
+  scopeRef: z.string().optional(),
+  minSpendMinor: z.number().int(),
+  status: z.enum(['ACTIVE', 'PAUSED', 'EXPIRED']),
+  funding: z.enum(['PLATFORM', 'SELLER']),
+  editable: z.boolean(),
+  version: z.number().int()
+});
+export type SellerCoupon = z.infer<typeof SellerCouponSchema>;
+export const SellerCouponListSchema = z.object({ items: z.array(SellerCouponSchema) });
+export type SellerCouponList = z.infer<typeof SellerCouponListSchema>;
+export const CreateSellerCouponSchema = z.object({
+  code: z.string(),
+  description: z.string().optional(),
+  type: z.enum(['PERCENT', 'FIXED', 'FREE_SHIPPING']),
+  value: z.number().int(),
+  currency: z.string().optional(),
+  scope: z.enum(['CART', 'CATEGORY', 'PRODUCT', 'SELLER']),
+  scopeRef: z.string().optional(),
+  minSpendMinor: z.number().int().optional(),
+  totalLimit: z.number().int().optional(),
+  perCustomerLimit: z.number().int().optional()
+});
+export type CreateSellerCoupon = z.infer<typeof CreateSellerCouponSchema>;
 export interface OfferFulfilmentRequest {
   fulfilment: FulfilmentKind;
   shipFromLocationId?: string | null;

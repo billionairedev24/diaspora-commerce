@@ -58,9 +58,10 @@ management:
     resource-attributes:
       service.namespace: afrotransact
       deployment.environment: ${APP_ENV:local}
-  otlp:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
   metrics:
     tags:
       service: identity-service

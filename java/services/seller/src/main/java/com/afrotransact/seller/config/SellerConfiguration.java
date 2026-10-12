@@ -9,7 +9,9 @@ import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeBilling;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeConnect;
 import com.afrotransact.seller.adapter.out.media.HttpMediaClient;
 import com.afrotransact.seller.adapter.out.payments.DisabledEarningsWithholding;
+import com.afrotransact.seller.adapter.out.payments.HttpConnectedAccountRegistry;
 import com.afrotransact.seller.adapter.out.payments.HttpEarningsWithholding;
+import com.afrotransact.seller.adapter.out.payments.NoOpConnectedAccountRegistry;
 import com.afrotransact.seller.adapter.out.phone.LibPhoneNumbers;
 import com.afrotransact.seller.adapter.out.stripe.StripeBillingAdapter;
 import com.afrotransact.seller.adapter.out.stripe.StripeConnectAdapter;
@@ -24,6 +26,7 @@ import com.afrotransact.seller.domain.DefaultApplicationRules;
 import com.afrotransact.seller.domain.DefaultLocalTestStripePolicy;
 import com.afrotransact.seller.domain.LocalTestStripePolicy;
 import com.afrotransact.seller.domain.PhoneNumbers;
+import com.afrotransact.seller.port.ConnectedAccountRegistry;
 import com.afrotransact.seller.port.AdSpendSource;
 import com.afrotransact.seller.port.AiUsageSource;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
@@ -172,6 +175,15 @@ class SellerConfiguration {
     @Bean
     AiUsageSource aiUsageSource(SellerProperties props, ServiceTokens tokens) {
         return new HttpAiUsageSource(props.metering().aiUrl(), props.metering().timeout(), tokens);
+    }
+
+    @Bean
+    ConnectedAccountRegistry connectedAccountRegistry(SellerProperties props, ServiceTokens tokens) {
+        SellerProperties.Billing b = props.billing();
+        if (b.paymentsUrl() == null || b.paymentsUrl().isBlank()) {
+            return new NoOpConnectedAccountRegistry();
+        }
+        return new HttpConnectedAccountRegistry(b.paymentsUrl(), b.timeout(), tokens);
     }
 
     /** Collection of plan fees from earnings: off by default (at.seller.billing.collect-from-earnings). */

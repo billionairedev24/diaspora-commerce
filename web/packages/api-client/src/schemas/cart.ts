@@ -24,6 +24,8 @@ export const CartLineSchema = z.object({
   selected: z.boolean(),
   /** Perishable (catalog): AfroTransact Delivery and pickup need a handover code, no safe place. */
   perishable: z.boolean().optional(),
+  /** Catalog product type (tax-returns category-by-product-type). */
+  productType: z.string().optional(),
   /** Catalogue: eligible for the delivery place's pre-order window (category in the window, not shipsNow). */
   preorderEligible: z.boolean().optional()
 });

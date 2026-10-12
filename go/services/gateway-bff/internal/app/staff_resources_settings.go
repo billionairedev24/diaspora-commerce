@@ -248,6 +248,33 @@ func legalResource() *staffResource {
 
 // ---------------------------------------------------------------- announcements, placements and ads (content)
 
+func placementStaffActions(key string, act func(string, func(jobj) jobj) func(context.Context, staffCtx, jobj, jobj) error) []staffAction {
+	actions := []staffAction{
+		{key: "submit", label: "Send for review", tone: "primary", permission: "content:placements.edit", confirm: "Send this placement for review?", when: inState("DRAFT", "REJECTED"), run: act("/submit", func(jobj) jobj { return nil })},
+		{key: "approve", label: "Approve", tone: "primary", permission: "content:placements.approve", level: domain.LevelApprove, confirm: "Approve and schedule?", when: inState("IN_REVIEW", "SUBMITTED"), run: act("/approve", func(jobj) jobj { return nil })},
+		{key: "reject", label: "Reject", tone: "danger", permission: "content:placements.approve", level: domain.LevelApprove, form: noteForm("Reject back to draft", "Reject", true), when: inState("IN_REVIEW", "SUBMITTED"),
+			run: act("/reject", func(v jobj) jobj { return jobj{"note": vs(v, "note")} })},
+		{key: "end", label: "End now", tone: "danger", permission: "content:placements.edit", also: []string{"content:placements.approve"}, confirm: "End this placement now?", when: inState("SCHEDULED", "LIVE"),
+			run: act("/end", func(jobj) jobj { return nil })},
+	}
+	if key != "placements" {
+		return actions
+	}
+	actions = append(actions, staffAction{
+		key: "delete", label: "Delete", tone: "danger", permission: "advert:delete", confirm: "Permanently delete this advert?",
+		when: func(_ staffCtx, o jobj) string {
+			if !boolean(o, "paid") {
+				return "Only paid adverts can be deleted."
+			}
+			return inState("DRAFT", "ENDED")(_, o)
+		}, removes: true,
+		run: func(ctx context.Context, sc staffCtx, o jobj, _ jobj) error {
+			return sc.call(ctx, sc.up.Content, port.StaffCall{Method: http.MethodDelete, Path: "/v1/placements/" + url.PathEscape(jstr(o, "id"))}, nil)
+		},
+	})
+	return actions
+}
+
 func placementsResource(key string) *staffResource {
 	announcements := key == "announcements"
 	title := "Placements & ads"
@@ -320,14 +347,7 @@ func placementsResource(key string) *staffResource {
 			return s
 		},
 		version: func(o jobj) string { return jstr(o, "version") },
-		actions: []staffAction{
-			{key: "submit", label: "Send for review", tone: "primary", permission: "content:placements.edit", confirm: "Send this placement for review?", when: inState("DRAFT", "REJECTED"), run: act("/submit", func(jobj) jobj { return nil })},
-			{key: "approve", label: "Approve", tone: "primary", permission: "content:placements.approve", level: domain.LevelApprove, confirm: "Approve and schedule?", when: inState("IN_REVIEW", "SUBMITTED"), run: act("/approve", func(jobj) jobj { return nil })},
-			{key: "reject", label: "Reject", tone: "danger", permission: "content:placements.approve", level: domain.LevelApprove, form: noteForm("Reject back to draft", "Reject", true), when: inState("IN_REVIEW", "SUBMITTED"),
-				run: act("/reject", func(v jobj) jobj { return jobj{"note": vs(v, "note")} })},
-			{key: "end", label: "End now", tone: "danger", permission: "content:placements.edit", also: []string{"content:placements.approve"}, confirm: "End this placement now?", when: inState("SCHEDULED", "LIVE"),
-				run: act("/end", func(jobj) jobj { return nil })},
-		},
+		actions: placementStaffActions(key, act),
 		edit: &staffEdit{permission: "content:placements.edit",
 			form: func(o jobj) domain.Form {
 				return domain.Form{Title: "Edit draft", SubmitLabel: "Save draft", Fields: baseFields(o)}

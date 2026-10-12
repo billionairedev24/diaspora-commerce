@@ -89,8 +89,8 @@ at:
         pantry: GROCERY
         spices: GROCERY
         grains: GROCERY
-        beverages: GROCERY
         frozen-food: GROCERY
+        # Taxable in TX (soft drinks, etc.): do not map to GROCERY — use GENERAL or a dedicated product type.
         meat-seafood: GROCERY
         prepared-meals: PREPARED_FOOD
         hot-food: PREPARED_FOOD

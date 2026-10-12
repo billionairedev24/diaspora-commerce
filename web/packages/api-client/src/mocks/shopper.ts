@@ -33,7 +33,7 @@ import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
-import { buildCart, MockProblem, sessionLocation } from './service';
+import { buildCart, isGroceryProductType, MockProblem, sessionLocation } from './service';
 import { account, type AccountState, bookingFor, MOCK_REFUND_QUOTE, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
 
 const DEMO_CODE = '246810';
@@ -164,16 +164,96 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
     });
 }
 
-function summary(ctx: Ctx, addressId: string | null): CheckoutSummary {
+function packageDeliveryFees(packages: CheckoutSummary['packages'], raw: string | null): number {
+  const byPkg = new Map<string, string>();
+  for (const part of (raw ?? '').split(',')) {
+    const i = part.indexOf(':');
+    if (i > 0) byPkg.set(part.slice(0, i).trim(), part.slice(i + 1).trim());
+  }
+  return packages.reduce((sum, p) => {
+    const key = byPkg.get(p.packageId) ?? p.deliveryOptions[0]?.key;
+    const opt = p.deliveryOptions.find((o) => o.key === key) ?? p.deliveryOptions[0];
+    return sum + (opt?.feeMinor ?? 0);
+  }, 0);
+}
+
+function mockCouponQuote(code: string, packages: CheckoutPackage[], shipping: number): CheckoutSummary['coupon'] {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return undefined;
+  if (normalized === 'EXPIRED1') {
+    return { code: normalized, applicable: false, rejection: 'EXPIRED', message: 'This coupon has expired.', discountMinor: 0, shippingDiscountMinor: 0 };
+  }
+  const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
+  const sellerShares: NonNullable<CheckoutSummary['coupon']>['sellerShares'] = [];
+  if (normalized === 'WELCOME10') {
+    const discountMinor = Math.round(subtotal * 0.1);
+    packages.forEach((p) => {
+      const amt = Math.round(p.subtotalMinor * 0.1);
+      if (amt > 0) sellerShares.push({ sellerOrgId: p.seller.id, sellerName: p.seller.name, discountMinor: amt, funding: 'platform' });
+    });
+    return {
+      code: normalized,
+      applicable: true,
+      discountMinor,
+      shippingDiscountMinor: 0,
+      funding: 'platform',
+      message: '10% off your order',
+      sellerShares
+    };
+  }
+  if (normalized === 'FREESHIP') {
+    return {
+      code: normalized,
+      applicable: shipping > 0,
+      discountMinor: 0,
+      shippingDiscountMinor: shipping,
+      funding: 'platform',
+      message: shipping > 0 ? 'Free shipping on this order' : 'Add shippable items to use this code',
+      sellerShares: []
+    };
+  }
+  return { code: normalized, applicable: false, rejection: 'NOT_FOUND', message: "We don't recognise that code.", discountMinor: 0, shippingDiscountMinor: 0 };
+}
+
+function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | null, couponCode?: string | null): CheckoutSummary {
   const a = me(ctx);
   const addr = a.addresses.find((x) => x.id === addressId) ?? a.addresses.find((x) => x.isDefault) ?? a.addresses[0];
   const packages = checkoutPackages(ctx.session, addr?.zip.slice(0, 5) ?? ctx.session.zip, ctx.now);
   if (!packages.length) throw new MockProblem(409, 'CART_EMPTY', 'Your cart is empty', 'Select at least one item to check out.', { available: 0, inCart: 0, requested: 0 });
   const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
-  const shipping = packages.reduce((s, p) => s + (p.deliveryOptions[0]?.feeMinor ?? 0), 0);
-  return { packages, addresses: a.addresses, paymentMethods: a.paymentMethods, subtotalMinor: subtotal, shippingMinor: shipping, taxMinor: 0,
-    taxRateLabel: 'Calculated when you place your order', totalMinor: subtotal + shipping, currency: 'USD',
-    sellerCount: new Set(packages.map((p) => p.seller.id)).size, publishableKey: publishableKey(ctx) };
+  const shipping = packageDeliveryFees(packages, packageDelivery ?? null);
+  const coupon = couponCode ? mockCouponQuote(couponCode, packages, shipping) : undefined;
+  const discountMinor = coupon?.applicable ? coupon.discountMinor : 0;
+  const shippingDiscountMinor = coupon?.applicable ? coupon.shippingDiscountMinor : 0;
+  const netShipping = Math.max(0, shipping - shippingDiscountMinor);
+  const tx = addr?.state === 'TX';
+  const generalSubtotal = packages.reduce(
+    (s, p) => s + p.lines.reduce((n, l) => n + (isGroceryProductType(l.productType) ? 0 : l.lineTotalMinor), 0),
+    0
+  );
+  const stateRate = 0.0625;
+  const localRate = 0.02;
+  const combinedRate = stateRate + localRate;
+  const taxableItems = Math.max(0, generalSubtotal - discountMinor);
+  const taxable = taxableItems + (tx ? netShipping : 0);
+  const taxMinor = tx ? Math.round(taxable * combinedRate) : 0;
+  const taxRateLabel = tx ? `${(combinedRate * 100).toFixed(2)}%` : addr ? 'No sales tax' : 'Add your address to see an estimate';
+  return {
+    packages,
+    addresses: a.addresses,
+    paymentMethods: a.paymentMethods,
+    subtotalMinor: subtotal,
+    shippingMinor: shipping,
+    discountMinor,
+    shippingDiscountMinor,
+    coupon,
+    taxMinor,
+    taxRateLabel,
+    totalMinor: subtotal - discountMinor + netShipping + taxMinor,
+    currency: 'USD',
+    sellerCount: new Set(packages.map((p) => p.seller.id)).size,
+    publishableKey: publishableKey(ctx)
+  };
 }
 
 function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
@@ -525,7 +605,10 @@ export const shopperHandlers = [
   })),
 
   /* Checkout */
-  http.get('*/v1/checkout/summary', route((ctx) => json(summary(ctx, new URL(ctx.request.url).searchParams.get('addressId'))))),
+  http.get('*/v1/checkout/summary', route((ctx) => {
+    const q = new URL(ctx.request.url).searchParams;
+    return json(summary(ctx, q.get('addressId'), q.get('packageDelivery'), q.get('couponCode')));
+  })),
   http.post('*/v1/checkout/orders', route(async (ctx) => {
     const a = me(ctx);
     const key = idemKey(ctx);

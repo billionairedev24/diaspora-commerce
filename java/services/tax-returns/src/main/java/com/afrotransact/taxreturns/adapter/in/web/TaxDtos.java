@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.afrotransact.taxreturns.application.LiabilityReport;
 import com.afrotransact.taxreturns.application.TaxQuoteCommand;
+import com.afrotransact.taxreturns.application.TaxRatesImportResult;
 import com.afrotransact.taxreturns.domain.tax.LiabilityRow;
 import com.afrotransact.taxreturns.domain.tax.LocalTaxRate;
 import com.afrotransact.taxreturns.domain.tax.StateTaxRule;
@@ -113,6 +114,18 @@ final class TaxDtos {
 
     @Schema(name = "TaxRateTable")
     record RatesResponse(List<StateRuleDto> states, List<LocalRateDto> locals) {
+    }
+
+    @Schema(name = "TaxRatesImportRequest", description = "CSV text: header kind,country,state,name,... (see staff console template)")
+    record ImportRequest(@NotBlank String csv) {
+    }
+
+    @Schema(name = "TaxRatesImportResult")
+    record ImportResponse(int statesUpserted, int localsUpserted, List<String> warnings) {
+
+        static ImportResponse of(TaxRatesImportResult r) {
+            return new ImportResponse(r.statesUpserted(), r.localsUpserted(), r.warnings());
+        }
     }
 
     @Schema(name = "LiabilityRow")

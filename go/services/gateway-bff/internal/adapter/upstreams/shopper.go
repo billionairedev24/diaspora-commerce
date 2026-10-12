@@ -24,13 +24,10 @@ var _ port.WalletClient = (*walletImpl)(nil)
 // NewWallet returns the payments client for the shopper's saved methods (/v1/customers/me/...).
 func NewWallet(c httpclient.Client) port.WalletClient { return &walletImpl{c: c} }
 
-func (w *walletImpl) List(ctx context.Context, bearer string) ([]port.WalletMethod, error) {
-	res, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, nil)
-	if err != nil {
-		return nil, err
-	}
-	items, _, err := itemsOf[port.WalletMethod](res.Body)
-	return items, err
+func (w *walletImpl) List(ctx context.Context, bearer string) (port.Wallet, error) {
+	var out port.Wallet
+	_, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, &out)
+	return out, err
 }
 
 func (w *walletImpl) SetupIntent(ctx context.Context, bearer string, types []string) (port.WalletSetupIntent, error) {
@@ -124,12 +121,18 @@ func (o *customerOrdersImpl) ConfirmPayment(ctx context.Context, bearer, number 
 
 // ---------------------------------------------------------------- tax-returns
 
-type returnsImpl struct{ c httpclient.Client }
+type returnsImpl struct {
+	c      httpclient.Client
+	tokens port.ServiceTokens
+}
 
 var _ port.ReturnsClient = (*returnsImpl)(nil)
 
-// NewReturns returns the tax-returns client (customer returns: eligibility, RMAs, refund quotes).
-func NewReturns(c httpclient.Client) port.ReturnsClient { return &returnsImpl{c: c} }
+// NewReturns returns the tax-returns client (customer returns: eligibility, RMAs, refund quotes). Checkout tax
+// estimates call POST /v1/tax/quotes with the gateway-bff service token (scope tax:quote).
+func NewReturns(c httpclient.Client, tokens port.ServiceTokens) port.ReturnsClient {
+	return &returnsImpl{c: c, tokens: tokens}
+}
 
 func (r *returnsImpl) Eligibility(ctx context.Context, bearer, orderID string) (port.UpReturnEligibility, error) {
 	var out port.UpReturnEligibility
@@ -178,6 +181,20 @@ func (r *returnsImpl) Cancel(ctx context.Context, bearer, id string) (port.UpRma
 func (r *returnsImpl) Quote(ctx context.Context, bearer, id string) (domain.RefundQuote, error) {
 	var out domain.RefundQuote
 	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns/" + esc(id) + "/refund-quote", Bearer: bearer}, &out)
+	return out, err
+}
+
+func (r *returnsImpl) TaxQuote(ctx context.Context, req port.UpTaxQuoteRequest) (port.UpTaxQuote, error) {
+	var out port.UpTaxQuote
+	bearer := ""
+	if r.tokens != nil {
+		t, err := r.tokens.Token(ctx, "tax:quote")
+		if err != nil {
+			return out, err
+		}
+		bearer = t
+	}
+	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/tax/quotes", Bearer: bearer, JSON: req}, &out)
 	return out, err
 }
 

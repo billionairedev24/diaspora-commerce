@@ -134,7 +134,7 @@ export function deliveryOptions(pkg: { from: ShipFrom; sellerName: string; slowe
     free: freeCarrier
   });
   if (isAT) out.push({ key: 'express', label: 'UPS Next Day Air', eta: dayLabel(pkg.expressDays, now), feeMinor: 799, free: false });
-  const zoneOk = ['Houston, TX', 'Edison, NJ', 'Newark, NJ', 'Atlanta, GA'].some(near);
+  const zoneOk = ['Houston, TX', 'Edison, NJ', 'Newark, NJ', 'Atlanta, GA', 'Dallas, TX'].some(near);
   const srcOk = isAT ? FULFILMENT_CENTRES.some(([, c]) => near(c)) : near(pkg.from.city);
   if (zoneOk && srcOk) {
     const free = isAT && pkg.subtotalMinor >= 3500;

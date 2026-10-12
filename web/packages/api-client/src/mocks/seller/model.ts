@@ -38,6 +38,7 @@ export const SELLER_MODULES: ModuleDef[] = [
   m('sOrders', 'orders', 'Orders', 'commerce', 'orders, shipping labels and refunds'),
   m('sListings', 'listings', 'Listings', 'commerce', 'product listings'),
   m('sInventory', 'inventory', 'Inventory & FBA', 'commerce', 'stock levels'),
+  m('sAds', 'coupons', 'Coupons', 'growth', 'promotional codes for your listings'),
   m('sStorefront', 'storefront', 'Storefront & theme', 'growth', 'the storefront design'),
   m('sPayouts', 'payouts', 'Payouts', 'finance', 'payouts and balances'),
   m('sPayouts', 'fees', 'Fees & commission', 'finance', 'commission and fees'),

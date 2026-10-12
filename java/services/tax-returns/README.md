@@ -133,7 +133,7 @@ transitions and stale versions, 403 permissions, 503 / 502 upstreams). Contract:
 | `POST /v1/refunds` (`Idempotency-Key`) | staff `refunds:issue`; sellers `refunds:issue` for their own lines |
 | `GET /v1/refunds?orderId=` or `?rmaId=`, `GET /v1/refunds/{id}` | staff `refunds:issue` or `returns:manage` |
 | `POST /v1/refunds/{id}/retry` | staff `refunds:issue` |
-| `POST /v1/tax/quotes` | `tax:quote` (orders-service client; staff) |
+| `POST /v1/tax/quotes` | `tax:quote` (orders-service and gateway-bff client-credentials; not the shopper JWT) |
 | `GET /v1/tax/rates` · `PUT /v1/tax/rates/states/{state}` · `PUT`/`DELETE /v1/tax/rates/local/{state}/{zip}` | `tax:read` · `tax:configure` |
 | `GET /v1/tax/liability?month=YYYY-MM`, `/v1/tax/liability/export` (CSV) | staff `tax:read` |
 | `GET /v1/tax/sellers/{orgId}/statement?month=`, `/statement/export` (CSV) | seller `payouts:read` (own org), staff `tax:read` |

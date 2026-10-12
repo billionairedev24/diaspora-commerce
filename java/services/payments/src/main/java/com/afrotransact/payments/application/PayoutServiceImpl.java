@@ -21,6 +21,7 @@ import com.afrotransact.payments.domain.PayoutRequest;
 import com.afrotransact.payments.domain.PayoutStatus;
 import com.afrotransact.payments.domain.Requester;
 import com.afrotransact.payments.domain.Settlement;
+import com.afrotransact.payments.domain.ShipmentSettlement;
 import com.afrotransact.payments.port.ConnectedAccountRepository;
 import com.afrotransact.payments.port.IdempotencyStore;
 import com.afrotransact.payments.port.LedgerRepository;
@@ -89,6 +90,19 @@ class PayoutServiceImpl implements PayoutService {
         return tx.serializable(() -> compute(org, currency(currency)));
     }
 
+    /**
+     * When the whole order is delivered, the order-level settlement holds the release date; until then multi-shipment
+     * orders use per-shipment holds (earliest release shown on the payout balance line).
+     */
+    private Instant holdReleaseAt(String orderId) {
+        Optional<Settlement> order = settlements.find(orderId);
+        if (order.isPresent()) {
+            return order.get().releaseAt();
+        }
+        return settlements.shipments(orderId).stream().map(ShipmentSettlement::releaseAt)
+                .min(Comparator.naturalOrder()).orElse(null);
+    }
+
     private PayoutBalance compute(String org, String currency) {
         Money zero = Money.zero(currency);
         if (isRetail(org)) {
@@ -120,7 +134,7 @@ class PayoutServiceImpl implements PayoutService {
             if (e.getValue() <= 0) {
                 continue;
             }
-            Instant release = settlements.find(e.getKey()).map(Settlement::releaseAt).orElse(null);
+            Instant release = holdReleaseAt(e.getKey());
             Money amount = Money.of(e.getValue(), currency);
             held.add(new HeldOrder(e.getKey(), amount, release));
             heldTotal = heldTotal.plus(amount);

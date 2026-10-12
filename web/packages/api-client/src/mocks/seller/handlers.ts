@@ -39,6 +39,8 @@ import {
   type SellerOrderDetail,
   type SellerOrderRow,
   type SellerProductDetail,
+  CreateSellerCouponSchema,
+  type SellerCoupon,
   type SellerSession,
   SellerStatusActionSchema,
   ServiceInputSchema,
@@ -2013,6 +2015,40 @@ export const sellerHandlers = [
       return o;
     })
   ),
+  http.get(`${W}/coupons`, route((ctx) => {
+    require(ctx, 'coupons', 'VIEW', 'SELLER');
+    return { items: ctx.db.coupons.filter((c) => c.funding === 'SELLER') };
+  })),
+  http.post(`${W}/coupons`, route(async (ctx) => {
+    require(ctx, 'coupons', 'EDIT', 'SELLER');
+    const b = CreateSellerCouponSchema.parse(await ctx.request.json());
+    const row: SellerCoupon = {
+      id: `cp-${ctx.db.seq++}`,
+      code: b.code.toUpperCase(),
+      description: b.description ?? '',
+      type: b.type,
+      value: b.value,
+      currency: b.currency ?? 'USD',
+      scope: b.scope,
+      scopeRef: b.scopeRef,
+      minSpendMinor: b.minSpendMinor ?? 0,
+      status: 'ACTIVE',
+      funding: 'SELLER',
+      editable: true,
+      version: 1
+    };
+    ctx.db.coupons.unshift(row);
+    return HttpResponse.json(row, { status: 201 });
+  })),
+  http.post(`${W}/coupons/:couponId/status`, route(async (ctx, p) => {
+    require(ctx, 'coupons', 'EDIT', 'SELLER');
+    const status = z.object({ status: z.enum(['ACTIVE', 'PAUSED', 'EXPIRED']) }).parse(await ctx.request.json()).status;
+    const row = ctx.db.coupons.find((c) => c.id === p.couponId);
+    if (!row || !row.editable) throw notFound('No such coupon.');
+    row.status = status;
+    row.version += 1;
+    return row;
+  })),
   /* Send to AfroTransact (S281) */
   ...sellerFbaHandlers(W, fbaGate),
   /* Anything else under /v1/seller is not part of the contract. */

@@ -111,6 +111,9 @@ func ordersResource() *staffResource {
 					if len(objs(o, "shipments")) == 0 {
 						return "This order has no shipments."
 					}
+					if len(shipmentMoves(o)) == 0 {
+						return "No shipment status changes are available for your role on this order."
+					}
 					return ""
 				},
 				run: func(ctx context.Context, sc staffCtx, _ jobj, v jobj) error {
@@ -140,9 +143,6 @@ func shipmentMoves(o jobj) []string {
 		if next[v] {
 			out = append(out, v)
 		}
-	}
-	if len(out) == 0 {
-		return shipmentLifecycle
 	}
 	return out
 }

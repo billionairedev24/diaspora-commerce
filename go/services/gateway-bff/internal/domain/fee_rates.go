@@ -469,6 +469,13 @@ type NegotiatedPlanDraft struct {
 	Reference      *string `json:"reference"`
 }
 
+// TaxRatesImportResult is the outcome of a CSV import into tax-returns' rate table.
+type TaxRatesImportResult struct {
+	StatesUpserted int      `json:"statesUpserted"`
+	LocalsUpserted int      `json:"localsUpserted"`
+	Warnings       []string `json:"warnings"`
+}
+
 // NegotiatedPlan is the private plan created for the organisation.
 type NegotiatedPlan struct {
 	PlanCode       string `json:"planCode"`

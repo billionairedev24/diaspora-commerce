@@ -112,11 +112,11 @@ test('the stand-in 3-D Secure card returns through /checkout/complete, which con
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
 });
 
-test('with a Stripe key: inline Payment Element (deferred intent), no Express Checkout, submit → order → confirmPayment', async ({ page }) => {
+test('with a Stripe key: Payment Element only (deferred intent), submit → order → confirmPayment', async ({ page }) => {
   await useFakeStripe(page);
   await signInWithCart(page);
-  await expect(page.locator('[data-fake-stripe="payment"]')).toBeVisible();
   await expect(page.locator('[data-fake-stripe="expressCheckout"]')).toHaveCount(0);
+  await expect(page.locator('[data-fake-stripe="payment"]')).toBeVisible();
   await expect(page.getByTestId('stripe-dev-notice')).toHaveCount(0);
   await expect(page.getByRole('img', { name: 'Powered by Stripe' }).first()).toBeVisible();
   const elements = (await calls(page)).filter(([k]) => k === 'elements').map(([, o]) => o as Record<string, unknown>);

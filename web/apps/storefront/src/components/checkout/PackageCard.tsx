@@ -2,8 +2,7 @@
 
 import { type CheckoutPackage, type DeliveryMethod, type DeliveryPreferences } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, Clock, House, ImagePlaceholder, Key, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
-import { type ReactNode } from 'react';
+import { Button, ImagePlaceholder, Key, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
 
 import { useT } from '@/i18n/t';
 
@@ -11,13 +10,6 @@ import styles from './Checkout.module.css';
 
 /** How one package reaches the shopper: a delivery option, or pickup at one of its pickup points. */
 export type Choice = { option: DeliveryMethod; pickupPointId?: string; preferences: DeliveryPreferences };
-
-const OPTION_ICON: Record<DeliveryMethod, ReactNode> = {
-  carrier: <Truck aria-hidden />,
-  express: <Truck weight="fill" aria-hidden />,
-  afrotransact_delivery: <House aria-hidden />,
-  pickup: <Storefront aria-hidden />
-};
 
 /** Default choice per package: its first delivery option (pickup only when that is all it has). */
 export function initialChoice(p: CheckoutPackage): Choice {
@@ -97,7 +89,8 @@ export function PackageCard({
   const t = useT();
   const points = pkg.pickupPoints ?? [];
   const deliveryOptions = pkg.deliveryOptions.filter((o) => o.key !== 'pickup');
-  const canPickup = points.length > 0 && pkg.deliveryOptions.some((o) => o.key === 'pickup');
+  const hasPickupOption = pkg.deliveryOptions.some((o) => o.key === 'pickup');
+  const canPickup = hasPickupOption && (points.length > 0 || deliveryOptions.length > 0);
   const pickup = choice.option === 'pickup';
   const undeliverable = pkg.localDelivery?.available === false;
   const perishable = pkg.lines.some((l) => l.perishable);
@@ -117,11 +110,21 @@ export function PackageCard({
   return (
     <article className={styles.package} data-testid="checkout-package" aria-labelledby={`${group}-title`}>
       <header className={styles.packageHead}>
-        <div className={styles.packageTitle}>
-          <strong id={`${group}-title`}>{pkg.seller.name}</strong>
-          <span className={styles.muted}>
-            {pkg.heading} · {t('cart.package', { n, total })}
-          </span>
+        <div className={styles.packageHeadMain}>
+          <div className={styles.packageTitle}>
+            <strong id={`${group}-title`}>{pkg.seller.name}</strong>
+            <span className={styles.muted}>
+              {pkg.heading} · {t('cart.package', { n, total })}
+            </span>
+          </div>
+          <ul className={styles.itemStrip} aria-label={t('co.itemsOf', { seller: pkg.seller.name })}>
+            {pkg.lines.map((l) => (
+              <li key={l.lineId} className={styles.itemStripCell} data-testid="checkout-item-thumb">
+                <ImagePlaceholder src={l.imageUrl} alt="" className={styles.stripThumb} />
+                {l.quantity > 1 ? <span className={styles.stripQty}>{l.quantity}</span> : null}
+              </li>
+            ))}
+          </ul>
         </div>
         <strong className={styles.arriving} data-testid="package-promise">
           {pickup ? t('co.pickupReady', { ready: promise }) : t('cart.arriving', { eta: promise })}
@@ -147,10 +150,15 @@ export function PackageCard({
         {!pickup && <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />}
 
         {pickup ? (
-          <fieldset className={styles.options} data-testid="pickup-points">
+          <fieldset className={`${styles.options} ${styles.optionsCompact}`} data-testid="pickup-points">
             <legend className={styles.legend}>{t('co.pickupChoose')}</legend>
+            {points.length === 0 ? (
+              <p className={styles.muted} role="status">
+                {t('co.pickupNoneNear')}
+              </p>
+            ) : null}
             {points.map((pt) => (
-              <label key={pt.id} className={styles.point} data-testid="pickup-point">
+              <label key={pt.id} className={`${styles.point} ${styles.pointCompact}`} data-testid="pickup-point">
                 <input type="radio" name={`pt-${pkg.packageId}`} checked={point?.id === pt.id} onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id })} />
                 <span className={styles.pointText}>
                   <span className={styles.pointName}>
@@ -160,9 +168,7 @@ export function PackageCard({
                   <span className={styles.pointLine}>
                     <MapPin aria-hidden /> {pt.address}
                     {pt.distanceMiles != null && <span className={styles.muted}> · {t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })}</span>}
-                  </span>
-                  <span className={styles.pointLine}>
-                    <Clock aria-hidden /> {pt.hours} · {pt.ready}
+                    <span className={styles.muted}> · {pt.ready}</span>
                   </span>
                 </span>
                 <span className={styles.optionFee}>{t('co.free')}</span>
@@ -170,22 +176,23 @@ export function PackageCard({
             ))}
           </fieldset>
         ) : (
-          <fieldset className={styles.options} disabled={undeliverable}>
+          <fieldset className={`${styles.options} ${styles.optionsCompact}`} disabled={undeliverable}>
             <legend className={styles.legend}>{t('co.deliveryOption')}</legend>
-            {deliveryOptions.map((o) => (
-              <label key={o.key} className={styles.option}>
-                <input type="radio" name={`opt-${pkg.packageId}`} checked={choice.option === o.key} onChange={() => onChoice({ ...choice, option: o.key })} />
-                <span className={styles.optionIcon}>{OPTION_ICON[o.key]}</span>
-                <span className={styles.optionText}>
-                  <strong className={styles.eta}>{o.eta}</strong>
-                  <span className={styles.muted}>
-                    {undeliverable ? t('ld.notAvailableOption') : o.label}
-                    {o.cutoffLabel && choice.option === o.key ? ` · ${o.cutoffLabel}` : ''}
+            <div className={styles.optionsRow}>
+              {deliveryOptions.map((o) => (
+                <label key={o.key} className={`${styles.option} ${styles.optionCompact}`}>
+                  <input type="radio" name={`opt-${pkg.packageId}`} checked={choice.option === o.key} onChange={() => onChoice({ ...choice, option: o.key })} />
+                  <span className={styles.optionText}>
+                    <strong className={styles.eta}>{o.eta}</strong>
+                    <span className={styles.muted}>
+                      {undeliverable ? t('ld.notAvailableOption') : o.label}
+                      {o.cutoffLabel && choice.option === o.key ? ` · ${o.cutoffLabel}` : ''}
+                    </span>
                   </span>
-                </span>
-                <span className={styles.optionFee}>{o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}</span>
-              </label>
-            ))}
+                  <span className={styles.optionFee}>{o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}</span>
+                </label>
+              ))}
+            </div>
           </fieldset>
         )}
 
@@ -233,22 +240,6 @@ export function PackageCard({
           </p>
         )}
 
-        <ul className={styles.items} aria-label={t('co.itemsOf', { seller: pkg.seller.name })}>
-          {pkg.lines.map((l) => (
-            <li key={l.lineId} className={styles.item} data-testid="checkout-item">
-              <ImagePlaceholder src={l.imageUrl} alt="" className={styles.thumb} />
-              <span className={styles.itemText}>
-                <span className={styles.itemTitle}>{l.title}</span>
-                <span className={styles.muted}>
-                  {l.unit ? `${l.unit} · ` : ''}
-                  {t('co.qty', { qty: l.quantity })}
-                  {l.quantity > 1 ? ` · ${t('co.each', { amount: fmt.money(l.priceMinor) })}` : ''}
-                </span>
-              </span>
-              <strong className={styles.itemPrice}>{fmt.money(l.lineTotalMinor)}</strong>
-            </li>
-          ))}
-        </ul>
       </div>
     </article>
   );

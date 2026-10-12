@@ -17,6 +17,7 @@ export { defaultProductCardLabels, type LinkLikeProps, ProductCard, type Product
 export { QuantityStepper, type QuantityStepperProps } from './commerce/QuantityStepper';
 export { Stars, type StarsProps } from './commerce/Stars';
 export { cx } from './cx';
+export { SheetTableScroll, type SheetTableScrollProps } from './layout/SheetTableScroll';
 export { Checkbox, type CheckboxProps } from './form/Checkbox';
 export { ChipGroup, type ChipGroupProps } from './form/ChipGroup';
 export { ErrorSummary, type ErrorSummaryItem, type ErrorSummaryProps } from './form/ErrorSummary';

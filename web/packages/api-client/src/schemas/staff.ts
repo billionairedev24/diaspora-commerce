@@ -12,7 +12,7 @@ const nullableString = z.string().nullable();
 /* ── Shell ─────────────────────────────────────────────── */
 
 export const StaffModuleKeySchema = z.enum([
-  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
+  'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
   'audit', 'markets', 'siteCfg', 'dev', 'notifications', 'preorders', 'plans'
 ]);
 export type StaffModuleKey = z.infer<typeof StaffModuleKeySchema>;
@@ -61,9 +61,9 @@ export type StaffDashboard = z.infer<typeof StaffDashboardSchema>;
 /* ── Resources (server-driven tables and detail sheets) ── */
 
 export const ResourceKeySchema = z.enum([
-  'users', 'roles', 'applications', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
+  'users', 'roles', 'applications', 'organisations', 'connect-accounts', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
   'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates',
-  'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations'
+  'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
 
@@ -169,7 +169,8 @@ export const RecordDetailSchema = z.object({
   actions: z.array(RecordActionSchema),
   editForm: StaffFormSchema.nullable(),
   links: z.array(RecordLinkSchema),
-  version: nullableString
+  version: nullableString,
+  removed: z.boolean().optional()
 });
 export type RecordDetail = z.infer<typeof RecordDetailSchema>;
 
@@ -369,6 +370,13 @@ export interface DeliveryQuoteRequest {
   packages?: number;
   at?: string | null;
 }
+
+export const TaxRatesImportResultSchema = z.object({
+  statesUpserted: z.number().int().nonnegative(),
+  localsUpserted: z.number().int().nonnegative(),
+  warnings: z.array(z.string())
+});
+export type TaxRatesImportResult = z.infer<typeof TaxRatesImportResultSchema>;
 
 export const FeeScheduleViewSchema = z.object({
   id: z.string(),

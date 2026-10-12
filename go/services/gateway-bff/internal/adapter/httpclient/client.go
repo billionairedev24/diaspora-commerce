@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
@@ -381,6 +382,7 @@ func (c *clientImpl) build(ctx context.Context, method string, req Request) (*ht
 	if req.BasicUser != "" {
 		hreq.SetBasicAuth(url.QueryEscape(req.BasicUser), url.QueryEscape(req.BasicPassword))
 	}
+	httpserver.PropagateCorrelation(ctx, hreq.Header)
 	return hreq, nil
 }
 

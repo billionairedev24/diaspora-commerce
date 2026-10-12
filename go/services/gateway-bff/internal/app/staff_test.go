@@ -67,8 +67,8 @@ func TestShipmentMovesFollowTheShipmentsNextActions(t *testing.T) {
 			t.Fatalf("moves = %v, want %v", got, want)
 		}
 	}
-	if all := shipmentMoves(jobj{"shipments": []any{jobj{"status": "placed"}}}); len(all) != len(shipmentLifecycle) {
-		t.Fatalf("without nextActions every move is offered, got %v", all)
+	if all := shipmentMoves(jobj{"shipments": []any{jobj{"status": "placed"}}}); len(all) != 0 {
+		t.Fatalf("without nextActions no moves are offered, got %v", all)
 	}
 	form := ordersResource().actions[0].form(nil, staffCtx{}, o)
 	if form.Fields[0].Options[0].Label != "Shipment 1 of 2 · Packed → ready, cancelled" {

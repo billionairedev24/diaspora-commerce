@@ -18,19 +18,26 @@ import com.afrotransact.seller.domain.StripeVerification;
 import com.afrotransact.seller.port.AccountSession;
 import com.afrotransact.seller.port.ApplicationRepository;
 import com.afrotransact.seller.port.ConnectAccountRepository;
+import com.afrotransact.seller.port.ConnectedAccountRegistry;
 import com.afrotransact.seller.port.CreateConnectedAccount;
+import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.StripeConnectGateway;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class StripeOnboardingServiceImpl implements StripeOnboardingService {
 
+    private static final Logger LOG = LoggerFactory.getLogger(StripeOnboardingServiceImpl.class);
+
     private final ApplicationRepository apps;
     private final ConnectAccountRepository accounts;
     private final StripeConnectGateway stripe;
+    private final ConnectedAccountRegistry paymentsAccounts;
     private final ComplianceSync sync;
     private final ApplicationViews views;
     private final AccessGuard access;
@@ -38,11 +45,13 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
     private final Clock clock;
 
     StripeOnboardingServiceImpl(ApplicationRepository apps, ConnectAccountRepository accounts,
-                                StripeConnectGateway stripe, ComplianceSync sync, ApplicationViews views,
+                                StripeConnectGateway stripe, ConnectedAccountRegistry paymentsAccounts,
+                                ComplianceSync sync, ApplicationViews views,
                                 AccessGuard access, SellerSettings settings, Clock clock) {
         this.apps = apps;
         this.accounts = accounts;
         this.stripe = stripe;
+        this.paymentsAccounts = paymentsAccounts;
         this.sync = sync;
         this.views = views;
         this.access = access;
@@ -72,6 +81,7 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
                     b.contactEmail(), businessType(b.entityType()), "connect-account-v2-" + app.orgId()));
             apps.update(app.withStripe(StripeVerification.created(accountId, now), now));
             accounts.insert(ConnectAccount.open(accountId, app.orgId(), now));
+            registerPaymentsAccount(app.orgId(), accountId);
         }
         return stripe.createAccountSession(accountId, new LinkedHashSet<>(settings.sessionComponents()));
     }
@@ -107,6 +117,15 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
         sync.apply(locked, snapshot, now.getEpochSecond(), "STRIPE_API", null, "account.retrieve");
         Application fresh = apps.findById(app.id()).orElseThrow();
         return views.view(fresh, PiiLevel.APPLICANT, apps.timeline(app.id()), List.of());
+    }
+
+    private void registerPaymentsAccount(String orgId, String accountId) {
+        try {
+            paymentsAccounts.register(orgId, accountId);
+        } catch (GatewayException ex) {
+            LOG.warn("Organisation {}: payments did not accept Connect account {} ({}); settlement transfers may "
+                    + "wait until it is registered", orgId, accountId, ex.getMessage());
+        }
     }
 
     /** Stripe business_type for the legal form. */

@@ -27,7 +27,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
     label: 'Plans & billing',
     description: 'Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges.'
   },
-  marketing: { label: 'Ads & announcements', description: 'Announcement bar, hero carousel, display banners and sponsored placements.' },
+  marketing: { label: 'Marketing', description: 'Announcements, placements & ads, and platform checkout coupons.' },
   disputes: { label: 'Disputes & returns', description: 'A-to-z claims and returns with SLAs.' },
   audit: { label: 'Audit log', description: 'Immutable, hash-chained record of every privileged action.' },
   markets: { label: 'Markets & locations', description: 'Turn AfroTransact on or off by country and by state.' },
@@ -57,7 +57,8 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   users: 'rbac', roles: 'rbac', applications: 'apps', orders: 'orders', products: 'catalog', moderation: 'catalog', claims: 'disputes', returns: 'disputes',
   payouts: 'payouts', inventory: 'inventory', 'purchase-orders': 'retail', routes: 'dispatch', 'support-cases': 'support', audit: 'audit', markets: 'markets',
   'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'help-articles': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
-  'fee-schedules': 'fees', 'tax-rates': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch'
+  'fee-schedules': 'fees', 'tax-rates': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',
+  coupons: 'marketing'
 };
 
 /** Refund ceiling per platform role in minor units (null = no limit). Roles not listed may not refund. */
@@ -85,7 +86,8 @@ export const PENDING_PERMISSIONS: Record<string, string[]> = {
   'platform.auditor': ['delivery-runs:read', 'preorders:export'],
   'platform.product_owner': ['delivery-runs:read'],
   'platform.fulfilment_ops': ['delivery-runs:read'],
-  'platform.retail_buyer': ['delivery-runs:read']
+  'platform.retail_buyer': ['delivery-runs:read'],
+  'platform.developer': ['delivery-runs:read', 'notifications:read', 'notifications:templates:write', 'preorders:manage', 'preorders:export', 'preorders:late-add', 'plans:manage', 'billing:adjust', 'seller:billing']
 };
 
 /* Pre-orders grants (identity migration V22, docs/spikes/preorder-design-implementation.md §6) until identity seeds them. */

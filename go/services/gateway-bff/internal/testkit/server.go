@@ -166,6 +166,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 		SellerOffers:    app.NewSellerOffersService(sellerDeps),
+		SellerCoupons:   app.NewSellerCouponsService(sellerDeps),
 		SellerFba:       app.NewSellerFbaService(sellerDeps),
 	}
 	// Seller Center exports: the BFF's own file store (signed links served by /v1/seller/export-files/{id}).

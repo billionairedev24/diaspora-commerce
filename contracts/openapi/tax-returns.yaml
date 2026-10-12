@@ -626,6 +626,27 @@ paths:
       responses:
         '204':
           description: No Content
+  /v1/tax/rates/import:
+    post:
+      tags:
+      - Tax
+      summary: Bulk upsert state rules and local ZIP rates from CSV (tax:configure)
+      description: 'Header: kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,shippingTaxable,facilitator,localRate,appliesToGrocery.
+        kind=STATE|LOCAL.'
+      operationId: importRates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxRatesImportRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxRatesImportResult'
   /v1/tax/rates/states/{state}:
     put:
       tags:
@@ -1415,6 +1436,29 @@ components:
         netTaxMinor:
           type: integer
           format: int64
+    TaxRatesImportRequest:
+      type: object
+      required: [csv]
+      properties:
+        csv:
+          type: string
+          minLength: 1
+          maxLength: 2000000
+    TaxRatesImportResult:
+      type: object
+      required: [statesUpserted, localsUpserted, warnings]
+      properties:
+        statesUpserted:
+          type: integer
+          minimum: 0
+        localsUpserted:
+          type: integer
+          minimum: 0
+        warnings:
+          type: array
+          items:
+            type: string
+          maxItems: 500
     TaxRateTable:
       type: object
       properties:

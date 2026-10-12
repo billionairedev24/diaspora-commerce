@@ -212,11 +212,15 @@ func (s *accountServiceImpl) PaymentMethods(ctx context.Context, c *domain.Calle
 	if err := requireCustomer(c); err != nil {
 		return domain.Page[domain.PaymentMethod]{}, err
 	}
-	pms, err := s.payments.PaymentMethods(ctx, c.BearerToken)
+	wallet, err := s.payments.PaymentMethods(ctx, c.BearerToken)
 	if err != nil {
 		return domain.Page[domain.PaymentMethod]{}, mapErr("payments", err)
 	}
-	return domain.Page[domain.PaymentMethod]{Items: orEmpty(pms)}, nil
+	out := make([]domain.PaymentMethod, 0, len(wallet.Items))
+	for _, m := range wallet.Items {
+		out = append(out, toPaymentMethod(m))
+	}
+	return domain.Page[domain.PaymentMethod]{Items: out}, nil
 }
 
 func (s *accountServiceImpl) SetupIntent(ctx context.Context, c *domain.Caller) (domain.SetupIntent, error) {

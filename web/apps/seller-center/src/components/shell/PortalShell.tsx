@@ -118,11 +118,6 @@ function useOnboardingEntry(session: SellerSession | undefined, role: ApplyRole 
 /** Longest wait for one attempt at the session (two retries follow a timeout). */
 export const SESSION_TIMEOUT_MS = 12_000;
 
-/** The query's abort signal, also aborted after `ms`. */
-function withTimeout(signal: AbortSignal, ms: number): AbortSignal {
-  return typeof AbortSignal.any === 'function' && typeof AbortSignal.timeout === 'function' ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : signal;
-}
-
 function allowed(session: SellerSession, key: ModuleKey | null): boolean {
   return key !== null && session.navGroups.some((g) => g.modules.some((m) => m.key === key));
 }
@@ -140,10 +135,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const toast = useToast();
   const q = useQuery({
-    ...sellerQueries.session(api),
-    // Each attempt gives up after SESSION_TIMEOUT_MS (the BFF proxy's own limit is longer), so a hung request ends in
-    // the error panel instead of a loader.
-    queryFn: ({ signal }) => api.getSession(withTimeout(signal, SESSION_TIMEOUT_MS)),
+    ...sellerQueries.session(api, { timeoutMs: SESSION_TIMEOUT_MS }),
     retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2
   });
   const loop = useNavLoop(navGuard);

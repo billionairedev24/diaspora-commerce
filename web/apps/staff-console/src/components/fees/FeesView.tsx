@@ -11,6 +11,7 @@ import { FeeSchedulesPanel } from './FeeSchedulesPanel';
 import { NegotiatedRatesPanel } from './NegotiatedRatesPanel';
 import { RateCalculator } from './RateCalculator';
 import { RateMatrixPanel } from './RateMatrixPanel';
+import { TaxRatesImportPanel } from './TaxRatesImportPanel';
 
 /**
  * Platform configuration → Fees & commissions: product commission and service connection fees (category × plan),
@@ -34,7 +35,16 @@ export function FeesView() {
           { value: 'connection-fees', label: t('st.rates.tab.connection'), content: <RateMatrixPanel kind="SERVICE" /> },
           { value: 'negotiated', label: t('st.rates.tab.negotiated'), content: <NegotiatedRatesPanel /> },
           { value: 'calculator', label: t('st.rates.tab.calculator'), content: <RateCalculator /> },
-          { value: 'tax-rates', label: 'Tax rates', content: <ResourceTable resource="tax-rates" urlPrefix="tax-rates" /> }
+          {
+            value: 'tax-rates',
+            label: 'Tax rates',
+            content: (
+              <div className="flex flex-col gap-6">
+                <TaxRatesImportPanel />
+                <ResourceTable resource="tax-rates" urlPrefix="tax-rates" />
+              </div>
+            )
+          }
         ]}
       />
     </ModulePage>

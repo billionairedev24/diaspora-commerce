@@ -5,7 +5,7 @@
    - checkout: the Payment Element inline, created from the cart (mode 'payment', amount, currency, manual capture,
      setupFutureUsage when the shopper saves the method) before any PaymentIntent exists; Place order runs
      elements.submit() → orders creates the PaymentIntent → stripe.confirmPayment({ elements, clientSecret });
-   - the Express Checkout Element (Apple Pay, Google Pay, Link) on the same deferred options;
+   - Pay Now only: Express Checkout Element (Apple Pay, Google Pay, Link) on the same deferred options;
    - the Payment Element on a SetupIntent for saving methods (Your Payments, booking deposits);
    - PaymentIntent confirmation with a saved method.
    Mock mode (publishable key pk_test_mock…, or none: the local BFF without STRIPE_PUBLISHABLE_KEY) renders the
@@ -50,8 +50,11 @@ export interface DeferredIntentOptions {
   captureMethod: 'manual';
   /** Must match the PaymentIntent: 'off_session' when the shopper saves the method (savePaymentMethod). */
   setupFutureUsage?: 'off_session' | null;
+  /** The shopper's Stripe Customer (cus_...); required to show saved methods in the Payment Element. */
+  customer?: string;
   /** Only when the intent is restricted (pre-order windows); otherwise automatic payment methods (Dashboard settings). */
   paymentMethodTypes?: string[];
+  automaticPaymentMethods?: { enabled: boolean };
   appearance: StripeAppearance;
   fonts: { cssSrc: string }[];
 }
@@ -201,18 +204,22 @@ export function stripePaymentMethodTypes(windows: readonly (readonly string[])[]
   const types: string[] = [];
   if (allowed.has('CARD') || allowed.has('WALLET')) types.push('card');
   if (allowed.has('WALLET')) types.push('link');
+  if (allowed.has('ACH')) types.push('us_bank_account');
   return types.length ? types : undefined;
 }
 
 /** Elements options for an order's PaymentIntent before it exists (deferred intent). */
-export function deferredIntentOptions(o: { amountMinor: number; currency: string; save?: boolean; paymentMethodTypes?: string[] }): DeferredIntentOptions {
+export function deferredIntentOptions(o: { amountMinor: number; currency: string; save?: boolean; customer?: string; paymentMethodTypes?: string[] }): DeferredIntentOptions {
   return {
     mode: 'payment',
     amount: Math.max(o.amountMinor, 0),
     currency: o.currency.toLowerCase(),
     captureMethod: 'manual',
     ...(o.save ? { setupFutureUsage: 'off_session' as const } : {}),
-    ...(o.paymentMethodTypes?.length ? { paymentMethodTypes: o.paymentMethodTypes } : {}),
+    ...(o.customer ? { customer: o.customer } : {}),
+    ...(o.paymentMethodTypes?.length
+      ? { paymentMethodTypes: o.paymentMethodTypes }
+      : { automaticPaymentMethods: { enabled: true } }),
     appearance: stripeAppearance(),
     fonts: STRIPE_FONTS
   };

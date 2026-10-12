@@ -16,7 +16,7 @@ import {
   validateInboundLine
 } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Barcode, Button, Checkbox, cx, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
+import { Barcode, Button, Checkbox, cx, Select, Sheet, SheetTableScroll, TextField, useToast } from '@afrotransact/ui';
 import { Plus, Trash } from '@phosphor-icons/react/ssr';
 import { type MutationFunction, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -210,8 +210,9 @@ function PlanSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
             </span>
           </div>
           <Timeline shipment={s} />
-          <div className="overflow-x-auto rounded-md border border-border">
-            <table className="at-table w-full text-xs" aria-label="Plan lines">
+          <div className="overflow-hidden rounded-md border border-border">
+            <SheetTableScroll>
+            <table className="at-table text-xs" aria-label="Plan lines">
               <thead className="bg-surface-muted text-left text-muted">
                 <tr>{['SKU', 'Case pack', 'Lot', 'Expires', 'Sent', 'Received', 'Damaged', 'Short'].map((h) => <th key={h} scope="col" className="px-2 py-1.5">{h}</th>)}</tr>
               </thead>
@@ -230,6 +231,7 @@ function PlanSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
                 ))}
               </tbody>
             </table>
+            </SheetTableScroll>
           </div>
           {edit && s.status === 'WORKING' ? (
             <form

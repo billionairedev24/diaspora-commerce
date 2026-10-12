@@ -37,6 +37,8 @@ type StaffFeesService interface {
 	// NegotiatePlan creates a private (invite-only) version of a catalogue plan at a negotiated price for one
 	// organisation and invites it (seller service's plan catalogue; plans:manage).
 	NegotiatePlan(ctx context.Context, c *domain.Caller, orgID string, d domain.NegotiatedPlanDraft) (domain.NegotiatedPlan, error)
+	// ImportTaxRates upserts state and local rows from CSV (tax-returns POST /v1/tax/rates/import; tax:configure).
+	ImportTaxRates(ctx context.Context, c *domain.Caller, csv string) (domain.TaxRatesImportResult, error)
 }
 
 type staffFeesImpl struct {
@@ -54,6 +56,7 @@ func NewStaffFeesService(d StaffDeps) StaffFeesService {
 const (
 	feesModule          = "fees"
 	paymentsConfigure   = "payments:configure"
+	taxConfigure        = "tax:configure"
 	feeExampleSaleMinor = 10_000
 	// orgDirectoryPages caps how much of seller's organisation directory one search or name lookup reads (200 per page).
 	orgDirectoryPages = 5
@@ -138,6 +141,17 @@ func (s *staffFeesImpl) requireConfigure(ctx context.Context, c *domain.Caller) 
 	}
 	if !sc.access.Can(paymentsConfigure) {
 		return sc, needsPermission(paymentsConfigure)
+	}
+	return sc, nil
+}
+
+func (s *staffFeesImpl) requireTaxConfigure(ctx context.Context, c *domain.Caller) (staffCtx, error) {
+	sc, err := s.r.require(ctx, c, feesModule, domain.LevelEdit)
+	if err != nil {
+		return sc, err
+	}
+	if !sc.access.Can(taxConfigure) {
+		return sc, needsPermission(taxConfigure)
 	}
 	return sc, nil
 }
@@ -617,4 +631,20 @@ func (s *staffFeesImpl) Quote(ctx context.Context, c *domain.Caller, q domain.De
 	return domain.DeliveryQuote{Available: up.Available, UnavailableReason: strPtr(strings.ToUpper(up.UnavailableReason)),
 		CustomerChargeMinor: up.CustomerChargeMinor, SellerFeeMinor: up.SellerFeeMinor, SellerFeeSource: strPtr(strings.ToUpper(up.SellerFeeSource)),
 		ScheduleVersion: up.ScheduleVersion, MaxRadiusMiles: up.MaxRadiusMiles, Currency: firstNonEmpty(up.Currency, domain.Currency)}, nil
+}
+
+func (s *staffFeesImpl) ImportTaxRates(ctx context.Context, c *domain.Caller, csv string) (domain.TaxRatesImportResult, error) {
+	sc, err := s.requireTaxConfigure(ctx, c)
+	if err != nil {
+		return domain.TaxRatesImportResult{}, err
+	}
+	csv = strings.TrimSpace(csv)
+	if csv == "" {
+		return domain.TaxRatesImportResult{}, domain.ValidationProblem(map[string]string{"csv": "Paste or upload a CSV file"})
+	}
+	var out domain.TaxRatesImportResult
+	if err := sc.post(ctx, sc.up.TaxReturns, "/v1/tax/rates/import", jobj{"csv": csv}, &out); err != nil {
+		return domain.TaxRatesImportResult{}, err
+	}
+	return out, nil
 }

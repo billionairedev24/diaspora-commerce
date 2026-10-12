@@ -27,7 +27,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	ai := client("ai-gateway", up.AIGateway)
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(sc.payments), Orders: upstreams.NewCustomerOrders(sc.orders),
-		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns)), Payments: upstreams.NewOrderPayments(sc.payments),
+		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns), sc.serviceTokens), Payments: upstreams.NewOrderPayments(sc.payments),
 		Security: upstreams.NewSecurity(sc.identity), Bookings: upstreams.NewCustomerBookings(client("bookings", up.Bookings)),
 		Pages: upstreams.NewPublishedPages(client("storefront", up.Storefront)),
 		Lola:  upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
@@ -35,13 +35,14 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 			sc.serviceTokens),
 		LocalDelivery: upstreams.NewLocalDelivery(client("seller", up.Seller), client("geo", up.Geo), sc.payments, sc.serviceTokens),
 		Offers:        sc.offers,
+		Coupons:       upstreams.NewCheckoutCoupons(client("offers", up.Offers)),
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
 	settings := app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(sc.identity),
 		Alerts: upstreams.NewAlertPreferences(client("notifications", up.Notifications))})
 	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
-		Checkout: app.NewCheckoutPaymentService(d), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d), Settings: settings,
+		Checkout: app.NewCheckoutPaymentService(d, s.Site), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d), Settings: settings,
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
 		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
 		PayLinks:     app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey)}

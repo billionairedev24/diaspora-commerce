@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -16,6 +17,29 @@ import (
 
 // CorrelationHeader carries the request correlation id across services and into logs.
 const CorrelationHeader = "X-Correlation-Id"
+
+type correlationKey struct{}
+
+// WithCorrelation stores id on ctx for outbound calls (see PropagateCorrelation).
+func WithCorrelation(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, correlationKey{}, id)
+}
+
+// CorrelationFromContext returns the inbound request correlation id, if any.
+func CorrelationFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(correlationKey{}).(string)
+	return id
+}
+
+// PropagateCorrelation sets X-Correlation-Id on h when ctx carries one and the header is not already set.
+func PropagateCorrelation(ctx context.Context, h http.Header) {
+	if h == nil || h.Get(CorrelationHeader) != "" {
+		return
+	}
+	if id := CorrelationFromContext(ctx); id != "" {
+		h.Set(CorrelationHeader, id)
+	}
+}
 
 // statusRecorder captures the response status for metrics and logs. It forwards Flush and exposes Unwrap so
 // streaming handlers (SSE) can flush per event and http.ResponseController reaches the connection beneath it.
@@ -123,7 +147,7 @@ func correlation(next http.Handler) http.Handler {
 			r.Header.Set(CorrelationHeader, id)
 		}
 		w.Header().Set(CorrelationHeader, id)
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(w, r.WithContext(WithCorrelation(r.Context(), id)))
 	})
 }
 

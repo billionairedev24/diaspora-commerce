@@ -28,6 +28,36 @@ export class MockProblem extends Error {
 
 const CURRENCY = 'USD';
 
+/** Stable product thumb for mocks (matches seller listing placeholders). */
+export function mockProductImageUrl(atin: string): string {
+  return `https://img.afrotransact.dev/products/${atin}.webp`;
+}
+
+/** Catalog product-type codes used by tax-returns' category-by-product-type mapping. */
+const GROCERY_PRODUCT_TYPES = new Set(['fresh-produce', 'pantry', 'spices', 'grains', 'frozen-food', 'meat-seafood']);
+
+export function fixtureProductType(p: FixtureProduct): string {
+  if (p.cat !== 'Groceries') {
+    const byDept: Record<string, string> = {
+      Fashion: 'dress',
+      Beauty: 'beauty',
+      Books: 'book',
+      Party: 'apparel',
+      Health: 'supplements',
+      'Home & Art': 'home-decor'
+    };
+    return byDept[p.cat] ?? 'general';
+  }
+  const n = p.name.toLowerCase();
+  if (/spice|seasoning|berbere|xawaash|jerk|epis|shito|jollof/.test(n)) return 'spices';
+  if (/rice|flour|teff|grain|ofada|basmati/.test(n)) return 'grains';
+  return 'pantry';
+}
+
+export function isGroceryProductType(productType: string | undefined): boolean {
+  return productType !== undefined && GROCERY_PRODUCT_TYPES.has(productType);
+}
+
 export function stockStatus(qty: number): StockStatus {
   return qty <= 0 ? 'OUT_OF_STOCK' : qty <= LOW_STOCK_THRESHOLD ? 'LOW_STOCK' : 'IN_STOCK';
 }
@@ -75,7 +105,7 @@ export function summarize(p: FixtureProduct, metro: string, now: Date, sponsor: 
     unit: p.unit,
     rating: p.rating,
     reviewCount: p.reviews,
-    imageUrl: null,
+    imageUrl: mockProductImageUrl(atin),
     offerId: bb.offerId,
     priceMinor: bb.priceMinor,
     listPriceMinor: bb.listPriceMinor,
@@ -365,7 +395,8 @@ export function buildCart(s: MockSession, now: Date): Cart {
         title: p.name,
         unit: p.unit,
         department: p.cat,
-        imageUrl: null,
+        productType: fixtureProductType(p),
+        imageUrl: mockProductImageUrl(offer.atin),
         priceMinor: offer.priceMinor,
         lineTotalMinor: offer.priceMinor * line.quantity,
         quantity: line.quantity,

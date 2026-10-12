@@ -2,7 +2,7 @@
 
 import { CYCLE_COUNT_REASONS, type CycleCount, type CycleCountReason, inventoryHubQueries, validateCountEntry } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Checkbox, cx, Select, Sheet, TextField } from '@afrotransact/ui';
+import { Button, Checkbox, cx, Select, Sheet, SheetTableScroll, TextField } from '@afrotransact/ui';
 import { ClipboardText } from '@phosphor-icons/react/ssr';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -87,8 +87,9 @@ function CountSheet({ id, onClose }: { id: string | null; onClose: () => void })
             </span>
             {c.blind ? <StatusPill tone="info">Blind count</StatusPill> : null}
           </div>
-          <div className="overflow-x-auto rounded-md border border-border">
-            <table className="at-table w-full text-sm" aria-label="Count lines">
+          <div className="overflow-hidden rounded-md border border-border">
+            <SheetTableScroll className="at-sheet-table-form">
+            <table className="at-table text-sm" aria-label="Count lines">
               <thead className="bg-surface-muted text-left text-xs text-muted">
                 <tr>
                   {['Bin', 'SKU · lot', 'Expires', 'System', 'Counted', 'Variance', 'Reason', 'Note'].map((h) => (
@@ -105,8 +106,8 @@ function CountSheet({ id, onClose }: { id: string | null; onClose: () => void })
                     <tr key={l.lineNo} className="border-t border-border align-top" data-testid="count-line">
                       <td className="px-2 py-1.5 font-mono text-xs">{l.bin ?? '—'}</td>
                       <td className="px-2 py-1.5">
-                        <span className="block font-mono text-xs">{l.sku}</span>
-                        <span className="font-mono text-xs text-muted">{l.lotNo}</span>
+                        <span className="at-cell-stack block font-mono text-xs">{l.sku}</span>
+                        <span className="at-cell-stack font-mono text-xs text-muted">{l.lotNo}</span>
                       </td>
                       <td className="px-2 py-1.5 text-xs">{shortDate(l.expDate)}</td>
                       <td className="px-2 py-1.5 text-end">{hideExpected ? '•••' : l.expectedQty}</td>
@@ -135,6 +136,7 @@ function CountSheet({ id, onClose }: { id: string | null; onClose: () => void })
                 })}
               </tbody>
             </table>
+            </SheetTableScroll>
           </div>
           <p className="m-0 text-sm" role="status">
             {c.countedLines} of {c.lineCount} lines counted · {c.varianceLines} variances · net {c.netVariance > 0 ? '+' : ''}
