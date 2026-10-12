@@ -1,3 +1,5 @@
+import { execSync } from 'node:child_process';
+
 import { type Browser, expect, type Page, test } from '@playwright/test';
 
 /*
@@ -6,6 +8,9 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
  * (tools/dev/local.sh moves it to :3010 when :3001 is taken, e.g. by your own Grafana; LIVE_SELLER_URL /
  * SELLER_CENTER_URL). Every main-frame navigation is recorded: the redirect chain must end on the dashboard, signed
  * in, without going round, and a shell that is sent round in circles stops with a panel instead of loading forever.
+ * The last journey approves an application while identity is stopped (its approval event waits in Kafka) and starts
+ * identity again: the applicant still reaches the dashboard (the event, the reconcile job or Seller Center's on-demand
+ * sync repair identity's copy), never "Start selling" or onboarding.
  */
 
 const STOREFRONT = process.env.LIVE_STOREFRONT_URL ?? 'http://localhost:3000';
@@ -120,5 +125,104 @@ test('a Seller Center session that never sticks stops with a panel naming the lo
   expect(chain.length).toBe(settledLength);
   const logins = chain.filter((line) => !line.startsWith('NAV') && line.split(' ')[1]?.startsWith(`${SELLER}/api/bff/v1/auth/login`));
   expect(logins.length, chain.join('\n')).toBeLessThanOrEqual(4);
+  await context.close();
+});
+
+/* ── An approval identity did not see when it happened ── */
+
+const SELLER_API = (process.env.LIVE_SELLER_API_URL ?? 'http://localhost:8106').replace(/\/+$/, '');
+const STOP_IDENTITY = process.env.LIVE_IDENTITY_STOP;
+const START_IDENTITY = process.env.LIVE_IDENTITY_START;
+const APPLICANT_PASSWORD = process.env.LIVE_APPLICANT_PASSWORD ?? 'Plantain-Jollof-2026';
+
+/** An unsigned staff token: the seller service runs with security off locally and acts as this staff member. */
+function localStaff(subject: string): string {
+  const part = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${part({ alg: 'none' })}.${part({ sub: subject, pt: 'STAFF', roles: ['platform.super_admin'] })}.`;
+}
+
+async function sellerApi(path: string, init: { method?: string; body?: object; staff?: string; key?: string } = {}) {
+  const res = await fetch(`${SELLER_API}${path}`, {
+    method: init.method ?? 'GET',
+    headers: {
+      Authorization: `Bearer ${localStaff(init.staff ?? 'live-reviewer')}`,
+      'Content-Type': 'application/json',
+      ...(init.key ? { 'Idempotency-Key': init.key } : {})
+    },
+    body: init.body ? JSON.stringify(init.body) : undefined
+  });
+  return { status: res.status, body: (await res.json().catch(() => ({}))) as Record<string, unknown> };
+}
+
+/** A submitted application of an account whose password is known (the wizard journey's wizard.*@example.com). */
+async function reviewableApplication(): Promise<{ id: string; email: string } | null> {
+  const queue = await sellerApi('/v1/applications?status=PENDING_REVIEW&size=50');
+  for (const item of (queue.body.items as Array<{ id: string }> | undefined) ?? []) {
+    const dossier = await sellerApi(`/v1/applications/${item.id}`);
+    const email = (dossier.body.business as { contactEmail?: string } | undefined)?.contactEmail ?? '';
+    if (process.env.LIVE_APPLICANT_EMAIL ? email === process.env.LIVE_APPLICANT_EMAIL : /^(wizard|new\.seller)\.\d+@example\.com$/.test(email)) {
+      return { id: item.id, email };
+    }
+  }
+  return null;
+}
+
+async function identityUp(): Promise<boolean> {
+  try {
+    return (await fetch(`${IDENTITY}/actuator/health`)).ok;
+  } catch {
+    return false;
+  }
+}
+
+test('approved while identity was stopped: once identity is back, the applicant reaches the Seller Center dashboard', async ({ browser }) => {
+  test.skip(!STOP_IDENTITY || !START_IDENTITY, 'set LIVE_IDENTITY_STOP and LIVE_IDENTITY_START (commands that stop and start identity)');
+  if (!STOP_IDENTITY || !START_IDENTITY) return;
+  test.setTimeout(300_000);
+  const app = await reviewableApplication();
+  test.skip(!app, 'no submitted application of a wizard.*@example.com account (wizard.* or new.seller.*@example.com; run the S289 wizard journey, or set LIVE_APPLICANT_EMAIL / LIVE_APPLICANT_PASSWORD)');
+  if (!app) return;
+
+  const { context, page } = await newPage(browser);
+  // The applicant is signed in to Seller Center while the application is in review.
+  await page.goto(`${SELLER}/`);
+  await page.waitForURL(new RegExp(`^${escape(IDENTITY)}/login`), { timeout: 60_000 });
+  await page.getByLabel('Email').fill(app.email);
+  await page.getByLabel('Password', { exact: true }).fill(APPLICANT_PASSWORD);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.waitForURL((u) => u.origin === SELLER, { timeout: 60_000 });
+  await expect(page.getByText(/Your seller application|Your provider application/).first()).toBeVisible({ timeout: 30_000 });
+
+  // Identity is down while AfroTransact approves the application (both review steps, two staff members).
+  execSync(STOP_IDENTITY, { stdio: 'inherit' });
+  try {
+    const reviewed = await sellerApi(`/v1/applications/${app.id}/review`, { method: 'POST', staff: 'live-reviewer',
+      body: { action: 'APPROVE', reasonCode: 'ALL_CHECKS_PASSED', actorName: 'Live Reviewer' } });
+    expect(reviewed.status, JSON.stringify(reviewed.body)).toBe(200);
+    const decided = await sellerApi(`/v1/applications/${app.id}/decision`, { method: 'POST', staff: 'live-approver',
+      key: `live-${app.id}`, body: { action: 'FINAL_APPROVE', reasonCode: 'ALL_CHECKS_PASSED', actorName: 'Live Approver' } });
+    expect(decided.status, JSON.stringify(decided.body)).toBe(200);
+    expect(decided.body.status).toBe('APPROVED');
+  } finally {
+    execSync(START_IDENTITY, { stdio: 'inherit' });
+  }
+  await expect.poll(identityUp, { timeout: 180_000, intervals: [2_000] }).toBe(true);
+
+  // Back in Seller Center: signed in again through single sign-on if needed, and on the dashboard.
+  const chain = chainOf(page);
+  await page.goto(`${SELLER}/`);
+  await expect(async () => {
+    if (new URL(page.url()).origin === IDENTITY && /\/login/.test(page.url())) {
+      await page.getByLabel('Email').fill(app.email);
+      await page.getByLabel('Password', { exact: true }).fill(APPLICANT_PASSWORD);
+      await page.getByRole('button', { name: 'Continue' }).click();
+    }
+    await expect(page.getByRole('navigation', { name: 'Back office' }).first()).toBeVisible({ timeout: 10_000 });
+  }).toPass({ timeout: 120_000 });
+  await test.info().attach('after-approval-chain.txt', { body: chain.join('\n'), contentType: 'text/plain' });
+  expect(new URL(page.url()).pathname).toBe('/');
+  await expect(page.getByText('Start selling on AfroTransact')).toHaveCount(0);
+  await expect(page.getByText(/Your seller application/)).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Seller Center keeps redirecting' })).toHaveCount(0);
   await context.close();
 });
