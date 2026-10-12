@@ -30,6 +30,7 @@ const (
 	TopicTrustOps           = "trustOps"
 	TopicRetail             = "retail"
 	TopicDeliveryRuns       = "deliveryRuns"
+	TopicCatalogImports     = "catalogImports"
 )
 
 // DefaultTopics are the AsyncAPI channel addresses (contracts/asyncapi/events.yaml) for each logical topic.
@@ -47,6 +48,7 @@ var DefaultTopics = map[string]string{
 	TopicTrustOps:           "at.trustops.events",
 	TopicRetail:             "at.retail.events",
 	TopicDeliveryRuns:       "at.delivery-runs.events",
+	TopicCatalogImports:     "at.product-import.events",
 }
 
 // ResolveTopics overlays configured addresses on DefaultTopics. Unknown names and empty addresses are errors, so a
@@ -345,12 +347,31 @@ var DefaultEventRules = map[string][]EventRule{
 	"trustops.seller.reinstated": {{Topic: TopicTrustOps, Template: "seller.reinstated", Channels: chEmail,
 		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichSellerEnforcement}},
 
+	// ---- catalog bulk uploads (at.product-import.events), S308: large imports tell the member who uploaded ----
+	"catalog.import.completed": {{Topic: TopicCatalogImports, Template: "catalog.import_completed",
+		Channels: chEmailPush, Recipient: RecipientUser, IDField: "uploadedBy", When: flagSet("notifySeller"),
+		Enrich: enrichImportCompleted}},
+
 	// ---- content (at.content.events) ----
 	"content.career-application.received": {{Topic: TopicContent, Template: "careers.application_received",
 		Channels: chEmail, Recipient: RecipientPayload,
 		Enrich: func(d map[string]any, _ Links) { setDefault(d, "firstName", firstWord(str(d, "name"))) }}},
 	"content.newsletter.confirmation_requested": {{Topic: TopicContent, Template: "newsletter.confirm",
 		Channels: chEmail, Recipient: RecipientPayload}},
+}
+
+// flagSet selects events whose boolean field is true.
+func flagSet(k string) func(map[string]any) bool {
+	return func(d map[string]any) bool { b, ok := d[k].(bool); return ok && b }
+}
+
+// enrichImportCompleted links the upload's report in Seller Center and words the outcome.
+func enrichImportCompleted(d map[string]any, l Links) {
+	d["reportUrl"] = join(l.SellerCenter, "/listings/bulk/"+str(d, "importId"))
+	failed, _ := d["failedRows"].(float64)
+	skipped, _ := d["skippedRows"].(float64)
+	d["hasProblems"] = failed+skipped > 0
+	d["problemRows"] = int(failed + skipped)
 }
 
 func setDefault(d map[string]any, k, v string) {

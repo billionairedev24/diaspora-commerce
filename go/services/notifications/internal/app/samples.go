@@ -329,7 +329,7 @@ func TemplateArea(key string) string {
 		return AreaPayouts
 	case has("claim", "listing", "seller.suspended", "seller.reinstated"):
 		return AreaTrust
-	case has("seller"):
+	case has("seller", "catalog"):
 		return AreaSeller
 	case has("booking"):
 		return AreaBookings
