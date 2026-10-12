@@ -65,7 +65,10 @@ test.describe('seller center · my account', () => {
     // Back to the defaults (the mock is shared with every later spec in this run).
     await page.getByRole('group', { name: 'Date format' }).getByRole('radio', { name: /Match my language/ }).check();
     await page.getByRole('radio', { name: /Comfortable/ }).check();
+    const saved = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith('/v1/account/preferences') && r.request().method() === 'PUT');
     await page.getByRole('button', { name: 'Save changes' }).click();
-    await expect(page.getByText('Preferences saved')).toBeVisible();
+    expect((await saved).status()).toBe(200);
+    await page.reload();
+    await expect(page.getByRole('group', { name: 'Date format' }).getByRole('radio', { name: /Match my language/ })).toBeChecked();
   });
 });
