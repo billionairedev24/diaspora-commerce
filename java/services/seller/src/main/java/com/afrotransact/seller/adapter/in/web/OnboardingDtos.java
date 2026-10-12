@@ -178,11 +178,14 @@ final class OnboardingDtos {
 
     @Schema(name = "TimelineEntry")
     record TimelineView(String action, String fromStatus, String toStatus, String actorId, String reasonCode,
-                        String note, List<String> items, Instant occurredAt) {
+                        String note, List<String> items, Instant occurredAt,
+                        @Schema(description = "The staff member's display name (staff views only)")
+                        String actorName) {
 
-        static TimelineView of(TimelineEntry t) {
+        static TimelineView of(TimelineEntry t, boolean staff) {
             return new TimelineView(t.action().name(), t.fromStatus() == null ? null : t.fromStatus().name(),
-                    t.toStatus().name(), t.actorId(), t.reasonCode(), t.note(), t.items(), t.occurredAt());
+                    t.toStatus().name(), t.actorId(), t.reasonCode(), t.note(), t.items(), t.occurredAt(),
+                    staff ? t.actorName() : null);
         }
     }
 
@@ -207,7 +210,9 @@ final class OnboardingDtos {
                                Instant updatedAt,
                                @Schema(description = "Whether the Plan step offers paying the plan from sales, and "
                                        + "the platform default (S298)")
-                               PlanFeeDtos.OptionView planFeeCollectionOption) {
+                               PlanFeeDtos.OptionView planFeeCollectionOption,
+                               @Schema(description = "When step 1 was decided") Instant reviewedAt,
+                               @Schema(description = "When the final decision was made") Instant decidedAt) {
 
         static ApplicationResponse of(ApplicationView v) {
             Application a = v.application();
@@ -235,9 +240,10 @@ final class OnboardingDtos {
                     a.prefilledFields().stream().sorted().toList(), d.business(), details, owners, d.stripe(),
                     d.payouts(), plan, d.compliance(), v.documents(), a.requestedItems(), a.failedChecks(),
                     a.reviewerId(), a.finalApproverId(), a.reasonCode(), a.submissionCount(), a.submittedAt(),
-                    v.timeline().stream().map(TimelineView::of).toList(),
+                    v.timeline().stream().map(t -> TimelineView.of(t, v.pii() != PiiLevel.APPLICANT)).toList(),
                     v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(), a.updatedAt(),
-                    v.planFeeOptions() == null ? null : PlanFeeDtos.OptionView.of(v.planFeeOptions()));
+                    v.planFeeOptions() == null ? null : PlanFeeDtos.OptionView.of(v.planFeeOptions()),
+                    a.reviewedAt(), a.decidedAt());
         }
 
         private static String dob(LocalDate d, boolean mask) {

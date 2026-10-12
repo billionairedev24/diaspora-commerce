@@ -4,9 +4,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import com.afrotransact.seller.domain.Application;
+import com.afrotransact.seller.domain.ApplicationAlreadyDecided;
 import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.BusinessDetailsSection;
 import com.afrotransact.seller.domain.DocumentAccess;
@@ -16,6 +20,7 @@ import com.afrotransact.seller.domain.OrgStatus;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.ReasonCode;
 import com.afrotransact.seller.domain.SellerRuleViolation;
+import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.TimelineEntry;
 import com.afrotransact.seller.port.ApplicationRepository;
 import com.afrotransact.seller.port.MediaClient;
@@ -102,9 +107,12 @@ class ReviewServiceImpl implements ReviewService {
         Actor actor = access.staff(SellerPermissions.APPLICATIONS_REVIEW);
         ReasonCode reason = reason(cmd);
         Application app = apps.lockById(applicationId).orElseThrow(() -> notFound(applicationId));
+        if (isReplay(app, cmd, actor)) {
+            return staffView(app, actor);
+        }
         Instant now = Instant.now(clock);
-        Application next = apps.update(app.review(cmd.action(), actor.subject(), reason.code(), cmd.failedChecks(),
-                cmd.requestedItems(), now));
+        Application next = apps.update(named(app, actor, () -> app.review(cmd.action(), actor.subject(),
+                reason.code(), cmd.failedChecks(), cmd.requestedItems(), now)));
         TimelineEntry entry = timeline(app, next, cmd, actor, reason, now);
         syncOrg(next, now);
         switch (cmd.action()) {
@@ -120,15 +128,16 @@ class ReviewServiceImpl implements ReviewService {
     public ApplicationView decide(String applicationId, ReviewCommand cmd) {
         Actor actor = access.staff(SellerPermissions.APPLICATIONS_APPROVE);
         ReasonCode reason = tx.execute(s -> reason(cmd));
-        Application decided = tx.execute(s -> decideInTx(applicationId, cmd, actor, reason));
-        if (decided.isApproved()) {
+        Decided decided = tx.execute(s -> decideInTx(applicationId, cmd, actor, reason));
+        if (!decided.replayed() && decided.application().isApproved()) {
             try {
-                billing.activate(decided.orgId());
+                billing.activate(decided.application().orgId());
             } catch (RuntimeException e) {
-                LOG.warn("Subscription activation for {} failed; the billing job will retry", decided.orgId(), e);
+                LOG.warn("Subscription activation for {} failed; the billing job will retry",
+                        decided.application().orgId(), e);
             }
         }
-        return tx.execute(s -> staffView(decided, actor));
+        return tx.execute(s -> staffView(decided.application(), actor));
     }
 
     @Override
@@ -138,10 +147,14 @@ class ReviewServiceImpl implements ReviewService {
         return reasons.findAll();
     }
 
-    private Application decideInTx(String applicationId, ReviewCommand cmd, Actor actor, ReasonCode reason) {
+    private Decided decideInTx(String applicationId, ReviewCommand cmd, Actor actor, ReasonCode reason) {
         Application app = apps.lockById(applicationId).orElseThrow(() -> notFound(applicationId));
+        if (isReplay(app, cmd, actor)) {
+            return new Decided(app, true);
+        }
         Instant now = Instant.now(clock);
-        Application next = apps.update(app.decide(cmd.action(), actor.subject(), reason.code(), now));
+        Application next = apps.update(named(app, actor, () -> app.decide(cmd.action(), actor.subject(),
+                reason.code(), now)));
         TimelineEntry entry = timeline(app, next, cmd, actor, reason, now);
         Organisation org = syncOrg(next, now);
         switch (cmd.action()) {
@@ -157,7 +170,50 @@ class ReviewServiceImpl implements ReviewService {
             default -> {
             }
         }
-        return next;
+        return new Decided(next, false);
+    }
+
+    /**
+     * A decision that already happened is answered with the current state and changes nothing (no timeline entry,
+     * no events, no email): a retry with the same Idempotency-Key, or the same person repeating the decision that put
+     * the application in its current state (a double submit, a retried request without a key).
+     */
+    private boolean isReplay(Application app, ReviewCommand cmd, Actor actor) {
+        if (cmd.requestKey() != null) {
+            Optional<TimelineEntry> first = apps.timelineEntry(app.id(), cmd.requestKey());
+            if (first.isPresent()) {
+                if (first.get().action() != cmd.action() || !actor.subject().equals(first.get().actorId())) {
+                    throw new SellerStateConflict("seller.idempotency-key-reused",
+                            "This Idempotency-Key was already used for a different decision");
+                }
+                LOG.info("Replayed {} on {} (Idempotency-Key)", cmd.action(), app.reference());
+                return true;
+            }
+        }
+        List<TimelineEntry> timeline = apps.timeline(app.id());
+        if (app.isRepeatOf(cmd.action(), actor.subject(), timeline.isEmpty() ? null : timeline.getLast())) {
+            LOG.info("Replayed {} on {}: {} repeated their own decision", cmd.action(), app.reference(),
+                    actor.subject());
+            return true;
+        }
+        return false;
+    }
+
+    /** Runs a review step; an "already decided" conflict is re-thrown naming who decided (from the timeline). */
+    private Application named(Application app, Actor actor, Supplier<Application> step) {
+        try {
+            return step.get();
+        } catch (ApplicationAlreadyDecided e) {
+            String name = apps.timeline(app.id()).reversed().stream()
+                    .filter(t -> t.toStatus() == e.status() && t.actorId() != null
+                            && t.actorId().equals(e.deciderId()))
+                    .map(TimelineEntry::actorName).filter(Objects::nonNull).findFirst().orElse(null);
+            throw e.named(name, actor.subject());
+        }
+    }
+
+    /** The application after a final decision, and whether the decision was a replay (nothing changed). */
+    private record Decided(Application application, boolean replayed) {
     }
 
     /** Mirrors the application status on the organisation; on approval also sets its legal and display names. */
@@ -187,7 +243,8 @@ class ReviewServiceImpl implements ReviewService {
             default -> List.of();
         };
         TimelineEntry entry = new TimelineEntry(UUID.randomUUID(), before.id(), cmd.action(), before.status(),
-                after.status(), actor.subject(), reason.code(), cmd.note(), items, now);
+                after.status(), actor.subject(), reason.code(), cmd.note(), items, now, cmd.actorName(),
+                cmd.requestKey());
         apps.appendTimeline(entry);
         return entry;
     }

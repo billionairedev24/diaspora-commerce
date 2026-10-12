@@ -237,11 +237,22 @@ paths:
       tags:
       - Application review
       summary: 'Step 2 — final decision: FINAL_APPROVE, SEND_BACK or REJECT (not by the reviewer)'
+      description: 'Idempotent: a retry with the same Idempotency-Key, or the same person repeating the decision that put
+        the application in its current state, answers 200 with the current application and changes nothing (no timeline entry,
+        no events, no email). A decision that is no longer possible answers 409: seller.already-decided / seller.already-reviewed
+        say what was decided, by whom and when (properties decision, decidedBy, decidedAt); seller.idempotency-key-reused
+        when the key named a different decision.'
       operationId: finalDecision
       parameters:
       - name: id
         in: path
         required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        description: Optional, 8–128 characters; the same key on every retry of one decision
+        required: false
         schema:
           type: string
       requestBody:
@@ -286,11 +297,22 @@ paths:
       tags:
       - Application review
       summary: 'Step 1 — reviewer decision: APPROVE, FLAG (failedChecks) or REQUEST_INFO (requestedItems)'
+      description: 'Idempotent: a retry with the same Idempotency-Key, or the same person repeating the decision that put
+        the application in its current state, answers 200 with the current application and changes nothing (no timeline entry,
+        no events, no email). A decision that is no longer possible answers 409: seller.already-decided / seller.already-reviewed
+        say what was decided, by whom and when (properties decision, decidedBy, decidedAt); seller.idempotency-key-reused
+        when the key named a different decision.'
       operationId: reviewApplication
       parameters:
       - name: id
         in: path
         required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        description: Optional, 8–128 characters; the same key on every retry of one decision
+        required: false
         schema:
           type: string
       requestBody:
@@ -4039,6 +4061,12 @@ components:
           type: array
           items:
             type: string
+        actorName:
+          type: string
+          description: The staff member's display name, recorded on the timeline and used in "already approved by …" messages
+            (display only)
+          maxLength: 200
+          minLength: 0
       required:
       - action
       - reasonCode
@@ -4126,6 +4154,14 @@ components:
         planFeeCollectionOption:
           $ref: '#/components/schemas/PlanFeeCollectionOption'
           description: Whether the Plan step offers paying the plan from sales, and the platform default (S298)
+        reviewedAt:
+          type: string
+          format: date-time
+          description: When step 1 was decided
+        decidedAt:
+          type: string
+          format: date-time
+          description: When the final decision was made
     BusinessDetails:
       type: object
       description: Tax ID is masked (last 4) unless the reviewer has applications:pii; dates of birth are year-only for masked
@@ -4360,6 +4396,9 @@ components:
         occurredAt:
           type: string
           format: date-time
+        actorName:
+          type: string
+          description: The staff member's display name (staff views only)
     ApplicationPrefill:
       type: object
       description: 'What the caller''s account already knows (sent by gateway-bff from identity''s profile and address book).

@@ -158,6 +158,20 @@ abstract class SellerIntegrationTest {
     /** Same, with how the plan will be paid chosen on the plan step (S298; null keeps the platform default). */
     String approvedSeller(String user, String planCode, Cadence cadence, Offering offering, String promoCode,
                           PlanFeeCollection planFeeCollection) {
+        ApplicationView submitted = submittedApplication(user, planCode, cadence, offering, promoCode,
+                planFeeCollection);
+        String appId = submitted.application().id();
+        TestActors.as(TestActors.staff("reviewer-" + user, SellerPermissions.APPLICATIONS_REVIEW));
+        reviews.review(appId, new ReviewCommand(ReviewAction.APPROVE, "ALL_CHECKS_PASSED", null, null, null));
+        TestActors.as(TestActors.staff("approver-" + user, SellerPermissions.APPLICATIONS_APPROVE));
+        reviews.decide(appId, new ReviewCommand(ReviewAction.FINAL_APPROVE, "ALL_CHECKS_PASSED", null, null, null));
+        TestActors.reset();
+        return submitted.application().orgId();
+    }
+
+    /** Drives an application through onboarding up to submission (PENDING_REVIEW); leaves the applicant signed in. */
+    ApplicationView submittedApplication(String user, String planCode, Cadence cadence, Offering offering,
+                                         String promoCode, PlanFeeCollection planFeeCollection) {
         TestActors.as(TestActors.applicant(user));
         onboarding.start(OrgKind.SELLER);
         onboarding.saveStep(OnboardingStep.BUSINESS, StepInput.business(new BusinessSection(offering,
@@ -178,14 +192,7 @@ abstract class SellerIntegrationTest {
                 : List.of();
         onboarding.saveStep(OnboardingStep.CATALOG_COMPLIANCE, StepInput.compliance(new ComplianceSection(
                 List.of("fashion"), null, null, services, null, true, true, "Ade")));
-        ApplicationView submitted = onboarding.submit();
-        String appId = submitted.application().id();
-        TestActors.as(TestActors.staff("reviewer-" + user, SellerPermissions.APPLICATIONS_REVIEW));
-        reviews.review(appId, new ReviewCommand(ReviewAction.APPROVE, "ALL_CHECKS_PASSED", null, null, null));
-        TestActors.as(TestActors.staff("approver-" + user, SellerPermissions.APPLICATIONS_APPROVE));
-        reviews.decide(appId, new ReviewCommand(ReviewAction.FINAL_APPROVE, "ALL_CHECKS_PASSED", null, null, null));
-        TestActors.reset();
-        return submitted.application().orgId();
+        return onboarding.submit();
     }
 
     String accountOf(String orgId) {
@@ -207,6 +214,11 @@ abstract class SellerIntegrationTest {
         return send("POST", path, body, null);
     }
 
+    /** POST with an Idempotency-Key header. */
+    Response post(String path, Object body, String idempotencyKey) {
+        return send("POST", path, body, null, idempotencyKey);
+    }
+
     Response put(String path, Object body) {
         return send("PUT", path, body, null);
     }
@@ -224,6 +236,10 @@ abstract class SellerIntegrationTest {
     }
 
     private Response send(String method, String path, Object body, String signature) {
+        return send(method, path, body, signature, null);
+    }
+
+    private Response send(String method, String path, Object body, String signature, String idempotencyKey) {
         try {
             String raw = body == null ? "" : body instanceof String s ? s : JSON.writeValueAsString(body);
             HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
@@ -232,6 +248,9 @@ abstract class SellerIntegrationTest {
                             : HttpRequest.BodyPublishers.ofString(raw, StandardCharsets.UTF_8));
             if (signature != null) {
                 b.header("Stripe-Signature", signature);
+            }
+            if (idempotencyKey != null) {
+                b.header("Idempotency-Key", idempotencyKey);
             }
             HttpResponse<String> r = HTTP.send(b.build(), HttpResponse.BodyHandlers.ofString());
             JsonNode json = r.body() == null || r.body().isBlank() ? JSON.createObjectNode() : JSON.readTree(r.body());

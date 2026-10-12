@@ -76,8 +76,7 @@ public record Application(String id, String reference, String orgId, String appl
             throw new SellerRuleViolation("seller.invalid-action", action + " is not a reviewer action");
         }
         if (status != ApplicationStatus.PENDING_REVIEW) {
-            throw new SellerStateConflict("seller.not-pending-review",
-                    "Application " + reference + " is " + status + ", not PENDING_REVIEW");
+            throw notReviewable(reviewer);
         }
         notApplicant(reviewer);
         return switch (action) {
@@ -106,8 +105,7 @@ public record Application(String id, String reference, String orgId, String appl
             throw new SellerRuleViolation("seller.invalid-action", action + " is not a final-approver action");
         }
         if (!status.awaitingFinalDecision()) {
-            throw new SellerStateConflict("seller.not-awaiting-final-approval",
-                    "Application " + reference + " is " + status + "; it needs a reviewer decision first");
+            throw notDecidable(approver);
         }
         notApplicant(approver);
         if (approver.equals(reviewerId)) {
@@ -125,6 +123,48 @@ public record Application(String id, String reference, String orgId, String appl
 
     public boolean isApproved() {
         return status == ApplicationStatus.APPROVED;
+    }
+
+    /**
+     * Whether {@code action} by {@code actor} is a repeat of the decision that put the application in its current
+     * state ({@code last} is the latest timeline entry): a double submit or a retried request, which changes nothing.
+     */
+    public boolean isRepeatOf(ReviewAction action, String actor, TimelineEntry last) {
+        if (action == null || actor == null || last == null || !last.decided(action, actor, status)) {
+            return false;
+        }
+        return switch (action) {
+            case FINAL_APPROVE, REJECT -> actor.equals(finalApproverId);
+            case APPROVE, FLAG, REQUEST_INFO -> actor.equals(reviewerId);
+            case SEND_BACK -> status == ApplicationStatus.PENDING_REVIEW;
+            default -> false;
+        };
+    }
+
+    /** Step 1 is not possible now: says why, naming an earlier decision when there was one. */
+    private SellerStateConflict notReviewable(String actor) {
+        return switch (status) {
+            case APPROVED, REJECTED -> ApplicationAlreadyDecided.of(status, finalApproverId, decidedAt, actor);
+            case AWAITING_FINAL_APPROVAL, FLAGGED -> ApplicationAlreadyDecided.of(status, reviewerId, reviewedAt,
+                    actor);
+            case INFO_REQUESTED -> new SellerStateConflict("seller.not-pending-review", "Application " + reference
+                    + " is waiting for the applicant to send the information requested");
+            default -> new SellerStateConflict("seller.not-pending-review",
+                    "Application " + reference + " hasn't been submitted yet");
+        };
+    }
+
+    /** Step 2 is not possible now: says why, naming the final decision when there was one. */
+    private SellerStateConflict notDecidable(String actor) {
+        return switch (status) {
+            case APPROVED, REJECTED -> ApplicationAlreadyDecided.of(status, finalApproverId, decidedAt, actor);
+            case PENDING_REVIEW -> new SellerStateConflict("seller.not-awaiting-final-approval",
+                    "Application " + reference + " needs a reviewer decision (step 1) first");
+            case INFO_REQUESTED -> new SellerStateConflict("seller.not-awaiting-final-approval", "Application "
+                    + reference + " is waiting for the applicant to send the information requested");
+            default -> new SellerStateConflict("seller.not-awaiting-final-approval",
+                    "Application " + reference + " hasn't been submitted yet");
+        };
     }
 
     private Application moved(ApplicationStatus next, String reviewer, Instant now, List<String> checks,
