@@ -17,7 +17,8 @@ tolerations: []
 extraEnv:
   MEDIA_BASE_URL: http://media:8080
   GEO_URL: http://geo:8080
-  # Plan fees collected from settlement earnings (S297): off until payments implements the withholding (S298).
+  # S298 kill switch: sellers may pay their plan from their sales (payments withholds it from the next transfers).
+  # Off here until operations switch it on for this environment; dev turns it on (values-dev.yaml).
   PAYMENTS_URL: http://payments:8080
   COLLECT_PLAN_FEES_FROM_EARNINGS: "false"
   SELLER_LIVE_COUNTRIES: US

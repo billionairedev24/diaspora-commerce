@@ -88,6 +88,15 @@ public interface StripeBillingGateway {
     /** A customer balance credit transaction (negative amount) the next invoices use first. */
     BalanceCredit creditBalance(String customerId, long amountCents, String description, String idempotencyKey);
 
+    /**
+     * A customer balance debit transaction (positive amount): takes back a credit we posted, e.g. a plan fee paid from
+     * earnings whose invoice was voided (S298).
+     */
+    BalanceCredit debitBalance(String customerId, long amountCents, String description, String idempotencyKey);
+
+    /** The invoice as Stripe has it now (status draft, open, paid, void…). */
+    InvoiceSnapshot retrieveInvoice(String invoiceId);
+
     /** A coupon of {@code percentOff} repeating for {@code durationMonths} months, with our own id. */
     String createCoupon(String couponId, BigDecimal percentOff, long durationMonths, String name,
                         String idempotencyKey);

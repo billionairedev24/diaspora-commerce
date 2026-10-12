@@ -49,6 +49,7 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
         RequirementsSnapshot accountSnapshot = null;
         InvoiceSnapshot invoice = null;
         SubscriptionSnapshot subscription = null;
+        StripeEvent.CreditNote creditNote = null;
         if (type != null) {
             switch (type) {
                 case "account.updated" -> {
@@ -80,6 +81,9 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
                         o.path("amount").asLong(0), StripeJson.text(o, "currency"),
                         StripeJson.text(o, "failure_code"), StripeJson.text(o, "failure_message"),
                         StripeJson.epoch(o.path("arrival_date")));
+                case "credit_note.created" -> creditNote = new StripeEvent.CreditNote(StripeJson.text(o, "id"),
+                        StripeJson.idOf(o.path("invoice")), StripeJson.idOf(o.path("customer")),
+                        o.path("total").asLong(0), o.path("out_of_band_amount").asLong(0));
                 default -> {
                     if (type.startsWith("invoice.")) {
                         invoice = json.invoice(o);
@@ -90,7 +94,7 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
             }
         }
         return new StripeEvent(StripeJson.text(e, "id"), type, e.path("created").asLong(0), account,
-                accountSnapshot, capability, person, bank, payout, invoice, subscription);
+                accountSnapshot, capability, person, bank, payout, invoice, subscription, creditNote);
     }
 
     private static SellerRuleViolation invalid() {

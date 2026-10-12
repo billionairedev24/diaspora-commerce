@@ -169,6 +169,20 @@ public class LocalTestStripeBilling implements StripeBillingGateway {
     }
 
     @Override
+    public BalanceCredit debitBalance(String customerId, long amountCents, String description,
+                                      String idempotencyKey) {
+        long ending = balances.merge(customerId, amountCents, Long::sum);
+        return new BalanceCredit("cbtxn_local_" + stable(idempotencyKey), ending);
+    }
+
+    /** Local stand-in: invoices stay drafts until a (simulated) webhook says otherwise. */
+    @Override
+    public InvoiceSnapshot retrieveInvoice(String invoiceId) {
+        return new InvoiceSnapshot(invoiceId, null, null, null, "draft", "subscription_cycle", 0, 0, "usd", null, null,
+                null, null, 0, null, Instant.now(clock), List.of(), null);
+    }
+
+    @Override
     public String createCoupon(String couponId, BigDecimal percentOff, long durationMonths, String name,
                                String idempotencyKey) {
         return couponId;

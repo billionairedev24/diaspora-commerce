@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.DunningState;
 import com.afrotransact.seller.domain.PaymentMethodKind;
+import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.domain.SubscriptionStatus;
 import com.afrotransact.seller.domain.TrialSource;
@@ -120,7 +121,9 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                     rs.getString("trial_override_reason"), rs.getString("trial_override_note"),
                     rs.getString("trial_override_by"), campaign == null ? null : UUID.fromString(campaign),
                     source == null ? null : TrialSource.valueOf(source), rs.getLong("credit_balance_cents"),
-                    rs.getBoolean("collect_from_earnings"));
+                    PlanFeeCollection.valueOf(rs.getString("plan_fee_collection")),
+                    rs.getString("plan_fee_collection_source"), Sql.instant(rs, "plan_fee_collection_changed_at"),
+                    rs.getString("plan_fee_collection_changed_by"));
         }).optional().orElse(SubscriptionTerms.none(orgId));
     }
 
@@ -145,8 +148,13 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
     }
 
     @Override
-    public void setCollectFromEarnings(String orgId, boolean on) {
-        jdbc.sql("update subscription set collect_from_earnings = :on where org_id = :o").param("on", on)
+    public void setPlanFeeCollection(String orgId, PlanFeeCollection mode, String source, String actor,
+                                     Instant at) {
+        jdbc.sql("""
+                update subscription set plan_fee_collection = :m, plan_fee_collection_source = :s,
+                    plan_fee_collection_changed_at = :at, plan_fee_collection_changed_by = :a
+                where org_id = :o
+                """).param("m", mode.name()).param("s", source).param("at", Sql.ts(at)).param("a", actor)
                 .param("o", orgId).update();
     }
 

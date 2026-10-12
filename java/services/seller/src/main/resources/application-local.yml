@@ -12,6 +12,10 @@ at:
     # on every other profile). STRIPE_MODE=stripe or local-test forces one or the other.
     stripe:
       mode: ${STRIPE_MODE:auto}
+    # S298 kill switch: plan fees may be paid from earnings (payments withholds them from the next transfers). On
+    # locally; COLLECT_PLAN_FEES_FROM_EARNINGS=false hides the choice and charges every plan invoice to the card.
+    billing:
+      collect-from-earnings: ${COLLECT_PLAN_FEES_FROM_EARNINGS:true}
     crypto:
       keys:
         k1: ${FIELD_ENCRYPTION_KEY:ZGV2LW9ubHktZmllbGQta2V5LTMyLWJ5dGVzLWxvbiE=}

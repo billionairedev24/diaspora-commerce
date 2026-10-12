@@ -39,15 +39,17 @@ class ApplicationViews {
     private final FieldCipher cipher;
     private final SellerSettings settings;
     private final TrialService trials;
+    private final PlanFeeCollectionService planFees;
     private final Clock clock;
 
     ApplicationViews(ApplicationRules rules, PlanRepository plans, FieldCipher cipher, SellerSettings settings,
-                     TrialService trials, Clock clock) {
+                     TrialService trials, PlanFeeCollectionService planFees, Clock clock) {
         this.rules = rules;
         this.plans = plans;
         this.cipher = cipher;
         this.settings = settings;
         this.trials = trials;
+        this.planFees = planFees;
         this.clock = clock;
     }
 
@@ -100,7 +102,7 @@ class ApplicationViews {
                 trials.decide(plan.get(), app.kind(), signupAt(app), data.plan().promoCode(), null).days()) : null;
         return new ApplicationView(app, pii, masked, full, steps(data.entityType()),
                 rules.completedSteps(data, plan, context(app)), first, plan.map(Plan::name).orElse(null),
-                documents(data), timeline, log);
+                documents(data), timeline, log, planFees.options());
     }
 
     /** The wizard's steps for the entity type (owners are not shown for sole proprietors). */

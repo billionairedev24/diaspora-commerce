@@ -8,14 +8,16 @@ import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.port.EarningsCollectionRepository;
 
 /**
- * The staff console's per-seller billing panel: plan, trial, credit balance, grants, invoices and collections from
- * earnings.
+ * The staff console's per-seller billing panel: plan, trial, credit balance, grants, invoices, how the plan is paid
+ * (S298) and the invoices paid from earnings.
  *
- * @param overview null while the organisation has no subscription yet
+ * @param overview          null while the organisation has no subscription yet
+ * @param planFeeCollection null while the organisation has no subscription yet
  */
 public record BillingPanel(String orgId, String orgName, OrgKind kind, String orgStatus, BillingOverview overview,
                            List<Invoice> invoices, List<BillingGrant> grants,
-                           List<EarningsCollectionRepository.Row> collections, boolean earningsCollectionEnabled) {
+                           List<EarningsCollectionRepository.Row> collections, boolean earningsCollectionEnabled,
+                           PlanFeeCollectionService.PlanFeeCollectionView planFeeCollection) {
 
     public BillingPanel {
         invoices = List.copyOf(invoices);

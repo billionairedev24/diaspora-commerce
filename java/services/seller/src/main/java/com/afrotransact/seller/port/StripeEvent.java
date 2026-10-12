@@ -11,7 +11,22 @@ import com.afrotransact.seller.domain.RequirementsSnapshot;
  */
 public record StripeEvent(String id, String type, long created, String accountId, RequirementsSnapshot account,
                           Capability capability, Person person, ExternalAccount externalAccount, Payout payout,
-                          InvoiceSnapshot invoice, SubscriptionSnapshot subscription) {
+                          InvoiceSnapshot invoice, SubscriptionSnapshot subscription, CreditNote creditNote) {
+
+    /** Without a credit note (every event but credit_note.*). */
+    public StripeEvent(String id, String type, long created, String accountId, RequirementsSnapshot account,
+                       Capability capability, Person person, ExternalAccount externalAccount, Payout payout,
+                       InvoiceSnapshot invoice, SubscriptionSnapshot subscription) {
+        this(id, type, created, accountId, account, capability, person, externalAccount, payout, invoice, subscription,
+                null);
+    }
+
+    /**
+     * credit_note.created (S298): a refund of a plan invoice. {@code outOfBandAmount} is the part refunded outside
+     * Stripe, which is how a fee paid from earnings is refunded (released back to the seller's next transfer).
+     */
+    public record CreditNote(String id, String invoiceId, String customerId, long total, long outOfBandAmount) {
+    }
 
     /** capability.updated */
     public record Capability(String id, String status) {

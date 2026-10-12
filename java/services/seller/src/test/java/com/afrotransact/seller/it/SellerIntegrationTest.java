@@ -31,6 +31,7 @@ import com.afrotransact.seller.domain.OnboardingStep;
 import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.domain.Owner;
 import com.afrotransact.seller.domain.PaymentMethodKind;
+import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.platform.test.PostgresTestContainer;
@@ -97,6 +98,8 @@ abstract class SellerIntegrationTest {
         registry.add("at.seller.metering.inventory-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.content-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.ai-url", STRIPE::baseUrl);
+        // payments-service plan fee withholdings (S298) are stubbed on the same WireMock.
+        registry.add("at.seller.billing.payments-url", STRIPE::baseUrl);
     }
 
     JdbcClient jdbc;
@@ -149,6 +152,12 @@ abstract class SellerIntegrationTest {
 
     /** Same, with a trial campaign's promo code on the plan step (S295). */
     String approvedSeller(String user, String planCode, Cadence cadence, Offering offering, String promoCode) {
+        return approvedSeller(user, planCode, cadence, offering, promoCode, null);
+    }
+
+    /** Same, with how the plan will be paid chosen on the plan step (S298; null keeps the platform default). */
+    String approvedSeller(String user, String planCode, Cadence cadence, Offering offering, String promoCode,
+                          PlanFeeCollection planFeeCollection) {
         TestActors.as(TestActors.applicant(user));
         onboarding.start(OrgKind.SELLER);
         onboarding.saveStep(OnboardingStep.BUSINESS, StepInput.business(new BusinessSection(offering,
@@ -162,7 +171,8 @@ abstract class SellerIntegrationTest {
         // Stripe's embedded onboarding collected identity, tax ID and the payout bank (stubbed account).
         stripeOnboarding.refreshVerification();
         onboarding.saveStep(OnboardingStep.PLAN, StepInput.plan(new PlanSection(planCode, cadence,
-                PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030, promoCode)));
+                PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030, promoCode,
+                planFeeCollection)));
         List<ComplianceSection.ServiceLicence> services = offering.includesServices()
                 ? List.of(new ComplianceSection.ServiceLicence("Gele tying", false, null, null, null, null))
                 : List.of();

@@ -21,6 +21,7 @@ import com.afrotransact.seller.domain.FirstCharge;
 import com.afrotransact.seller.domain.OnboardingStep;
 import com.afrotransact.seller.domain.Owner;
 import com.afrotransact.seller.domain.PayoutSection;
+import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.StripeVerification;
 import com.afrotransact.seller.domain.TimelineEntry;
@@ -116,11 +117,16 @@ final class OnboardingDtos {
                     @Schema(allowableValues = {"CARD", "US_BANK_ACCOUNT"}) String paymentMethodKind,
                     String stripePaymentMethodId, String cardBrand, String cardLast4, Integer cardExpMonth,
                     Integer cardExpYear,
-                    @Schema(description = "Trial campaign promo code (optional)") String promoCode) {
+                    @Schema(description = "Trial campaign promo code (optional)") String promoCode,
+                    @Schema(allowableValues = {"EARNINGS_FIRST", "CARD"}, description = "How the plan will be paid "
+                            + "(S298): from sales first or always by card; omit for the platform default")
+                    String planFeeCollection) {
 
         PlanSection toSection() {
             return new PlanSection(planCode, Inputs.cadence(cadence), Inputs.paymentMethodKind(paymentMethodKind),
-                    stripePaymentMethodId, cardBrand, cardLast4, cardExpMonth, cardExpYear, promoCode);
+                    stripePaymentMethodId, cardBrand, cardLast4, cardExpMonth, cardExpYear, promoCode,
+                    planFeeCollection == null || planFeeCollection.isBlank() ? null
+                            : PlanFeeCollection.parse(planFeeCollection, "planFeeCollection"));
         }
     }
 
@@ -165,7 +171,9 @@ final class OnboardingDtos {
     @Schema(name = "PlanSelection")
     record PlanView(String planCode, String planName, String cadence, String paymentMethodKind, String cardBrand,
                     String cardLast4, Integer cardExpMonth, Integer cardExpYear, FirstCharge firstCharge,
-                    String promoCode) {
+                    String promoCode,
+                    @Schema(allowableValues = {"EARNINGS_FIRST", "CARD"}, description = "The applicant's choice; null "
+                            + "keeps the platform default") String planFeeCollection) {
     }
 
     @Schema(name = "TimelineEntry")
@@ -196,7 +204,10 @@ final class OnboardingDtos {
                                List<String> requestedItems, List<String> failedChecks, String reviewerId,
                                String finalApproverId, String reasonCode, int submissionCount, Instant submittedAt,
                                List<TimelineView> timeline, List<AccessView> accessLog, Instant createdAt,
-                               Instant updatedAt) {
+                               Instant updatedAt,
+                               @Schema(description = "Whether the Plan step offers paying the plan from sales, and "
+                                       + "the platform default (S298)")
+                               PlanFeeDtos.OptionView planFeeCollectionOption) {
 
         static ApplicationResponse of(ApplicationView v) {
             Application a = v.application();
@@ -216,7 +227,8 @@ final class OnboardingDtos {
             PlanView plan = p == null ? null : new PlanView(p.planCode(), v.planName(),
                     p.cadence() == null ? null : p.cadence().name(),
                     p.paymentMethodKind() == null ? null : p.paymentMethodKind().name(), p.cardBrand(), p.cardLast4(),
-                    p.cardExpMonth(), p.cardExpYear(), v.firstCharge(), p.promoCode());
+                    p.cardExpMonth(), p.cardExpYear(), v.firstCharge(), p.promoCode(),
+                    p.planFeeCollection() == null ? null : p.planFeeCollection().name());
             return new ApplicationResponse(a.id(), a.reference(), a.orgId(), a.kind().name(), a.status().name(),
                     a.currentStep().key(), v.steps().stream().map(OnboardingStep::key).toList(),
                     v.completedSteps().stream().map(OnboardingStep::key).toList(),
@@ -224,7 +236,8 @@ final class OnboardingDtos {
                     d.payouts(), plan, d.compliance(), v.documents(), a.requestedItems(), a.failedChecks(),
                     a.reviewerId(), a.finalApproverId(), a.reasonCode(), a.submissionCount(), a.submittedAt(),
                     v.timeline().stream().map(TimelineView::of).toList(),
-                    v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(), a.updatedAt());
+                    v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(), a.updatedAt(),
+                    v.planFeeOptions() == null ? null : PlanFeeDtos.OptionView.of(v.planFeeOptions()));
         }
 
         private static String dob(LocalDate d, boolean mask) {

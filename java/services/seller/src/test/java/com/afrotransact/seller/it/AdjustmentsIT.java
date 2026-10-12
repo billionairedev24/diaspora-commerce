@@ -136,9 +136,6 @@ class AdjustmentsIT extends SellerIntegrationTest {
         assertThat(post("/v1/orgs/" + org + "/billing/invoices/" + invoice + "/waive",
                 Map.of("reasonCode", "BILLING_ERROR")).text("/code")).isEqualTo("seller.invoice-not-open");
 
-        // Collection from earnings is switched off on this platform.
-        assertThat(put("/v1/orgs/" + org + "/billing/earnings-collection", Map.of("enabled", true)).status())
-                .isEqualTo(409);
 
         Response panel = get("/v1/orgs/" + org + "/billing/panel");
         assertThat(panel.status()).isEqualTo(200);
@@ -146,7 +143,8 @@ class AdjustmentsIT extends SellerIntegrationTest {
         assertThat(panel.body().path("billing").path("creditBalanceCents").asLong()).isEqualTo(2500);
         assertThat(panel.body().path("grants").size()).isEqualTo(4);
         assertThat(panel.body().path("invoices").get(0).path("status").asString()).isEqualTo("void");
-        assertThat(panel.body().path("earningsCollectionEnabled").asBoolean()).isFalse();
+        assertThat(panel.body().path("earningsCollectionEnabled").asBoolean()).as("on in the local profile").isTrue();
+        assertThat(panel.text("/planFeeCollection/mode")).as("the platform default").isEqualTo("EARNINGS_FIRST");
         Response log = get("/v1/billing/grants?orgId=" + org + "&type=CREDIT");
         assertThat(log.body().path("total").asLong()).isEqualTo(1);
         assertThat(log.body().path("items").get(0).path("reasonCode").asString()).isEqualTo("SERVICE_ISSUE");

@@ -80,6 +80,7 @@ class BillingServiceImpl implements BillingService {
     private final EarningsCollectionService earnings;
     private final BillingGrantRepository grants;
     private final EarningsCollectionRepository collections;
+    private final PlanFeeCollectionService planFees;
     private final Clock clock;
 
     BillingServiceImpl(SubscriptionRepository subs, PaymentMethodRepository methods, InvoiceRepository invoices,
@@ -87,7 +88,8 @@ class BillingServiceImpl implements BillingService {
                        StripeBillingGateway stripe, UsageRepository usage, AccessGuard access,
                        DomainEventPublisher events, TransactionOperations tx, SellerSettings settings,
                        PlanSyncService sync, TrialService trials, EarningsCollectionService earnings,
-                       BillingGrantRepository grants, EarningsCollectionRepository collections, Clock clock) {
+                       BillingGrantRepository grants, EarningsCollectionRepository collections,
+                       PlanFeeCollectionService planFees, Clock clock) {
         this.subs = subs;
         this.methods = methods;
         this.invoices = invoices;
@@ -105,6 +107,7 @@ class BillingServiceImpl implements BillingService {
         this.earnings = earnings;
         this.grants = grants;
         this.collections = collections;
+        this.planFees = planFees;
         this.clock = clock;
     }
 
@@ -123,8 +126,8 @@ class BillingServiceImpl implements BillingService {
                 "Organisation " + orgId + " not found"));
         BillingOverview overview = subs.find(orgId).map(this::build).orElse(null);
         return new BillingPanel(orgId, org.displayName() == null ? org.legalName() : org.displayName(), org.kind(),
-                org.status().name(), overview, invoices.list(orgId, 100), grants.forOrg(orgId, 100),
-                collections.forOrg(orgId, 50), earnings.enabled());
+                org.status().name(), overview, withSales(invoices.list(orgId, 100)), grants.forOrg(orgId, 100),
+                collections.forOrg(orgId, 50), earnings.enabled(), overview == null ? null : planFees.view(orgId));
     }
 
     @Override
@@ -257,14 +260,14 @@ class BillingServiceImpl implements BillingService {
     @Transactional(readOnly = true)
     public List<Invoice> invoices(String orgId) {
         access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
-        return invoices.list(orgId, 100);
+        return withSales(invoices.list(orgId, 100));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Invoice invoice(String orgId, String invoiceId) {
         access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
-        return invoices.find(orgId, invoiceId).orElseThrow(() -> new NotFoundException("seller.invoice-not-found",
+        return invoices.find(orgId, invoiceId).map(i -> withSales(List.of(i)).getFirst()).orElseThrow(() -> new NotFoundException("seller.invoice-not-found",
                 "Invoice " + invoiceId + " not found"));
     }
 
@@ -417,6 +420,12 @@ class BillingServiceImpl implements BillingService {
                 upsertInvoice(inv, orgId, now);
                 return outcome.startsWith("earnings-") ? outcome : "applied";
             }
+            if ("invoice.voided".equals(e.type()) || "invoice.deleted".equals(e.type())) {
+                // A plan fee paid from sales goes back to the seller's next transfer (S298).
+                String outcome = earnings.onInvoiceVoided(orgId, inv);
+                upsertInvoice(inv, orgId, now);
+                return outcome.startsWith("earnings-") ? outcome : "applied";
+            }
             invoices.upsert(new Invoice(inv.id(), orgId, inv.number(), inv.periodStart(), inv.periodEnd(),
                     inv.amountDue(), inv.amountPaid(), inv.currency(), inv.status(), inv.billingReason(),
                     inv.hostedInvoiceUrl(), inv.invoicePdf(), inv.created() == null ? now : inv.created(),
@@ -437,6 +446,11 @@ class BillingServiceImpl implements BillingService {
                 publish(saved, "PAYMENT_SUCCEEDED", sub.planCode(), sub.cadence(), now);
             }
             return "applied";
+        }
+        if (e.creditNote() != null) {
+            Optional<Subscription> owner = subs.findByCustomer(e.creditNote().customerId());
+            return owner.isEmpty() ? "ignored-unknown-customer"
+                    : earnings.onCreditNote(owner.get().orgId(), e.creditNote());
         }
         if (e.subscription() != null) {
             SubscriptionSnapshot snap = e.subscription();
@@ -526,6 +540,8 @@ class BillingServiceImpl implements BillingService {
         Plan chosen = plans.find(p.planCode()).filter(Plan::isOpen).orElseThrow(() -> new SellerStateConflict(
                 "seller.plan-not-available", "Plan " + p.planCode() + " is not published"));
         subs.insert(Subscription.selected(orgId, p.planCode(), chosen.version(), cadence, p.paymentMethodKind(), now));
+        // How the plan is paid (S298): the Plan step's choice, else the platform default for new sellers.
+        planFees.initialise(orgId, p.planFeeCollection(), app.applicantUserId());
         if (p.stripePaymentMethodId() != null) {
             PayoutSection bank = app.data().payouts();
             PaymentMethod pm = p.paymentMethodKind() == PaymentMethodKind.CARD
@@ -711,6 +727,16 @@ class BillingServiceImpl implements BillingService {
                 inv.amountDue(), inv.amountPaid(), inv.currency(), inv.status(), inv.billingReason(),
                 inv.hostedInvoiceUrl(), inv.invoicePdf(), inv.created() == null ? now : inv.created(),
                 inv.lines().stream().map(this::resolveMeter).toList()));
+    }
+
+    /** Invoices with what the organisation's earnings paid of each (S298). */
+    private List<Invoice> withSales(List<Invoice> list) {
+        Map<String, EarningsCollectionRepository.Row> paid = collections.forInvoices(list.stream()
+                .map(Invoice::stripeInvoiceId).toList());
+        return list.stream().map(i -> {
+            EarningsCollectionRepository.Row r = paid.get(i.stripeInvoiceId());
+            return r == null ? i : i.withPaidFromSales(r.fromSalesCents());
+        }).toList();
     }
 
     private Plan plan(String code) {

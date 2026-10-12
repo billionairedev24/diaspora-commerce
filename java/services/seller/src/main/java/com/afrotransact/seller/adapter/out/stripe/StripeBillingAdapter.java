@@ -266,6 +266,23 @@ public class StripeBillingAdapter implements StripeBillingGateway {
     }
 
     @Override
+    public BalanceCredit debitBalance(String customerId, long amountCents, String description,
+                                      String idempotencyKey) {
+        CustomerBalanceTransactionCreateParams params = CustomerBalanceTransactionCreateParams.builder()
+                .setAmount(amountCents).setCurrency("usd").setDescription(description).build();
+        RequestOptions options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
+        CustomerBalanceTransaction t = StripeCalls.call("balance debit",
+                () -> client.v1().customers().balanceTransactions().create(customerId, params, options));
+        return new BalanceCredit(t.getId(), t.getEndingBalance() == null ? amountCents : t.getEndingBalance());
+    }
+
+    @Override
+    public InvoiceSnapshot retrieveInvoice(String invoiceId) {
+        Invoice i = StripeCalls.call("invoice", () -> client.v1().invoices().retrieve(invoiceId));
+        return json.invoice(json.tree(i.getLastResponse().body()));
+    }
+
+    @Override
     public String createCoupon(String couponId, BigDecimal percentOff, long durationMonths, String name,
                                String idempotencyKey) {
         CouponCreateParams params = CouponCreateParams.builder().setId(couponId).setPercentOff(percentOff)

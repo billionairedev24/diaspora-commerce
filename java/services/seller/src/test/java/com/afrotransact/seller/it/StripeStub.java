@@ -71,6 +71,11 @@ final class StripeStub {
         wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/invoices/in_[A-Za-z0-9_]+/void"))
                 .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"object\":\"invoice\",\"status\":\"void\","
                         + "\"amount_due\":0,\"amount_paid\":0,\"currency\":\"usd\"}")));
+        // S298: invoices are still drafts when read back before a credit from earnings, unless a test says otherwise.
+        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/invoices/in_[A-Za-z0-9_]+"))
+                .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"object\":\"invoice\",\"status\":"
+                        + "\"draft\",\"billing_reason\":\"subscription_cycle\",\"amount_due\":3900,\"amount_paid\":0,"
+                        + "\"currency\":\"usd\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/subscriptions"))
                 .willReturn(json(subscription("sub_" + RANDOM, "trialing"))));
         wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/subscriptions/sub_[A-Za-z0-9]+"))

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.domain.TrialSource;
 
@@ -28,7 +29,7 @@ public interface SubscriptionRepository {
     /** Subscriptions whose pending plan / cadence change is due at {@code now}. */
     List<Subscription> dueChanges(Instant now, int limit);
 
-    /** Trial override, campaign, credit balance and earnings opt-in (none when there is no subscription row). */
+    /** Trial override, campaign, credit balance and plan fee collection (none when there is no subscription row). */
     SubscriptionTerms terms(String orgId);
 
     void setTrialOverride(String orgId, Integer days, String reason, String note, String actor);
@@ -37,7 +38,8 @@ public interface SubscriptionRepository {
 
     void setCreditBalance(String orgId, long creditCents);
 
-    void setCollectFromEarnings(String orgId, boolean on);
+    /** How the organisation pays its plan (S298) and who chose it (DEFAULT, ONBOARDING, SELLER, STAFF). */
+    void setPlanFeeCollection(String orgId, PlanFeeCollection mode, String source, String actor, Instant at);
 
     /** Subscriptions on {@code planCode} at a version other than {@code version}. */
     List<Subscription> onOtherVersions(String planCode, int version);

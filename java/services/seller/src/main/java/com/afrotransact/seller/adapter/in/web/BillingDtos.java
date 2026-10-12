@@ -83,7 +83,10 @@ final class BillingDtos {
                            @Schema(description = "Stripe customer credit balance the next invoices use")
                            long creditBalanceCents,
                            @Schema(allowableValues = {"PLAN", "CAMPAIGN", "OVERRIDE", "NONE"}) String trialSource,
-                           Integer trialDaysOverride, boolean collectFromEarnings) {
+                           Integer trialDaysOverride,
+                           @Schema(allowableValues = {"EARNINGS_FIRST", "CARD"}, description = "How the plan is paid "
+                                   + "(S298); details: GET /v1/orgs/{orgId}/billing/plan-fee-collection")
+                           String planFeeCollection) {
 
         static BillingResponse of(BillingOverview b) {
             Subscription s = b.subscription();
@@ -97,7 +100,7 @@ final class BillingDtos {
                     b.paymentMethods().stream().map(PaymentMethodResponse::of).toList(), s.planVersion(),
                     b.terms().creditBalanceCents(), b.terms().trialSource() == null ? null
                             : b.terms().trialSource().name(), b.terms().trialDaysOverride(),
-                    b.terms().collectFromEarnings());
+                    b.terms().planFeeCollection().name());
         }
     }
 
@@ -136,14 +139,29 @@ final class BillingDtos {
                            long amountPaidCents, String currency, String status, String billingReason,
                            String hostedInvoiceUrl, String invoicePdf, Instant createdAt,
                            List<InvoiceLineResponse> lines,
-                           @Schema(description = "Sum of the metered usage lines") long meteredAmountCents) {
+                           @Schema(description = "Sum of the metered usage lines") long meteredAmountCents,
+                           @Schema(description = "Paid from the organisation's sales (S298): withheld from its "
+                                   + "earnings and credited to the invoice") long paidFromSalesCents,
+                           @Schema(description = "Paid (or, while open, due) by card or bank: the rest")
+                           long paidByCardCents) {
 
         static InvoiceResponse of(Invoice i) {
             return new InvoiceResponse(i.stripeInvoiceId(), i.number(), i.periodStart(), i.periodEnd(),
                     i.amountDueCents(), i.amountPaidCents(), i.currency(), i.status(), i.billingReason(),
                     i.hostedInvoiceUrl(), i.invoicePdf(), i.createdAt(),
                     i.lines().stream().map(InvoiceLineResponse::of).toList(),
-                    i.meteredLines().stream().mapToLong(InvoiceLine::amountCents).sum());
+                    i.meteredLines().stream().mapToLong(InvoiceLine::amountCents).sum(), i.paidFromSalesCents(),
+                    byCard(i));
+        }
+
+        /** Paid (or due) by card: what was paid; for a draft, what the credit from sales doesn't cover. */
+        private static long byCard(Invoice i) {
+            return switch (i.status() == null ? "" : i.status()) {
+                case "paid" -> i.amountPaidCents();
+                case "void", "uncollectible" -> 0;
+                case "draft" -> Math.max(0, i.amountDueCents() - i.paidFromSalesCents());
+                default -> i.amountDueCents();
+            };
         }
     }
 

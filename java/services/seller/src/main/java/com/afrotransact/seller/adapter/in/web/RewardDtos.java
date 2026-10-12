@@ -145,8 +145,4 @@ final class RewardDtos {
     @Schema(name = "WaiveInvoiceRequest")
     record WaiveBody(String reasonCode, String note) {
     }
-
-    @Schema(name = "EarningsCollectionRequest")
-    record EarningsBody(boolean enabled) {
-    }
 }
