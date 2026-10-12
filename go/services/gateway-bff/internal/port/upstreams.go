@@ -296,6 +296,9 @@ type IdentityMe struct {
 	// Phone is E.164; PhoneVerified says whether the SMS check (S234) passed.
 	Phone         string `json:"phone"`
 	PhoneVerified bool   `json:"phoneVerified"`
+	// PrincipalType (STAFF, SELLER_MEMBER, …) and Orgs feed the account menu's back offices.
+	PrincipalType string      `json:"principalType"`
+	Orgs          []MemberOrg `json:"orgs"`
 }
 
 // PhoneCodeSent is identity's POST /v1/me/phone/verification answer.

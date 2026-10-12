@@ -327,7 +327,7 @@ func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, 
 	switch {
 	case err == nil:
 		user = domain.MeUser{ID: firstNonEmpty(me.ID, c.Subject), FirstName: me.FirstName, LastName: me.LastName, Email: me.Email, Roles: me.Roles,
-			Phone: strPtr(maskPhone(me.Phone)), PhoneVerified: ptr(me.PhoneVerified)}
+			Phone: strPtr(maskPhone(me.Phone)), PhoneVerified: ptr(me.PhoneVerified), BackOffices: backOffices(me)}
 	case isUnauthorized(err):
 		return domain.Me{Authenticated: false}, nil
 	default:
@@ -335,6 +335,9 @@ func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, 
 	}
 	if user.Roles == nil {
 		user.Roles = []string{}
+	}
+	if user.BackOffices == nil {
+		user.BackOffices = []domain.BackOffice{}
 	}
 	user.Initials = domain.Profile{FirstName: user.FirstName, LastName: user.LastName}.Initials()
 	counts := domain.MeCounts{}

@@ -304,6 +304,8 @@ type MeUser struct {
 	// Phone is masked (•••• 0142); PhoneVerified is nil when identity's profile was unavailable.
 	Phone         *string `json:"phone,omitempty"`
 	PhoneVerified *bool   `json:"phoneVerified,omitempty"`
+	// BackOffices are the person's Seller Center / Provider Hub / staff console links (never nil).
+	BackOffices []BackOffice `json:"backOffices"`
 }
 
 // PhoneCodeSent says where the phone verification code went.

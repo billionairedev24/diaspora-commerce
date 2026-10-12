@@ -947,8 +947,11 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 		if roles == nil {
 			roles = []string{"account.customer"}
 		}
+		u.mu.Lock()
+		pt := u.accessClaims(sub)["pt"]
+		u.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"id": sub, "firstName": "Adaeze", "lastName": "Nwosu", "email": "adaeze@example.com", "roles": roles,
-			"landing": "shop", "orgId": active, "orgs": orgs, "phone": "+17135550142", "phoneVerified": verified})
+			"landing": "shop", "principalType": pt, "orgId": active, "orgs": orgs, "phone": "+17135550142", "phoneVerified": verified})
 	})
 	mux.HandleFunc("GET /v1/identity-providers", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{{"id": "google", "displayName": "Google", "authorizationPath": "/oauth2/authorization/google"}})
