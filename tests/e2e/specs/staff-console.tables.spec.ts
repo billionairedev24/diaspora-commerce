@@ -47,7 +47,7 @@ test.describe('staff console · data table', () => {
     await expect(page.getByRole('menuitem', { name: /PDF with charts/ })).toBeVisible();
     const download = page.waitForEvent('download');
     await page.getByRole('menuitem', { name: /CSV/ }).click();
-    expect((await download).suggestedFilename()).toMatch(/^inventory-.*\.csv$/);
+    expect((await download).suggestedFilename()).toMatch(/^staff-inventory-lots-.*\.csv$/);
     await expect(page.getByText(/Exported 3 rows/)).toBeVisible();
 
     await bar.getByRole('button', { name: /Clear selection/ }).click();
