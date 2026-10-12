@@ -1111,6 +1111,44 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgDirectoryPage'
+  /v1/orgs/mirror:
+    get:
+      tags:
+      - Organisations
+      summary: Organisations as identity mirrors them (status, kind, names, owners, approved applicant)
+      description: Ordered by id; the same shape as seller.org.approved / seller.org.updated. Identity's reconcile job reads
+        it to repair its copy when an event was missed or arrived late. Needs sellers:directory as a service client, or staff.
+      operationId: orgMirror
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      - name: status
+        in: query
+        description: 'Comma-separated statuses (default: all)'
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgMirrorPage'
   /v1/orgs/{id}:
     get:
       tags:
@@ -1154,6 +1192,27 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Organisation'
+  /v1/orgs/{id}/mirror:
+    get:
+      tags:
+      - Organisations
+      summary: One organisation as identity mirrors it
+      description: Identity syncs one organisation on demand (gateway-bff saw the approval before identity did). Needs sellers:directory
+        as a service client, or staff.
+      operationId: orgMirrorOne
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgEventPayload'
   /v1/orgs/{id}/public:
     get:
       tags:
@@ -4843,6 +4902,50 @@ components:
           type: string
         status:
           type: string
+    OrgEventPayload:
+      type: object
+      properties:
+        orgId:
+          type: string
+        kind:
+          type: string
+        primaryKind:
+          type: string
+        offering:
+          type: string
+        legalName:
+          type: string
+        displayName:
+          type: string
+        country:
+          type: string
+        status:
+          type: string
+        ownerUserIds:
+          type: array
+          items:
+            type: string
+        applicantUserId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    OrgMirrorPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgEventPayload'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
     OrgDirectoryEntry:
       type: object
       properties:
