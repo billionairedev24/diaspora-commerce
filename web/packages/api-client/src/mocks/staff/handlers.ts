@@ -701,7 +701,13 @@ export const staffHandlers = [
       const view = actionView(ctx, resource, rec, def);
       if (!view.allowed) {
         const permissionIssue = !ctx.permissions.includes(def.permission) || (view.reason ?? '').startsWith('Needs');
-        throw permissionIssue ? forbidden(view.reason ?? 'Not allowed.') : conflict(view.reason ?? 'Not possible now.');
+        if (permissionIssue) throw forbidden(view.reason ?? 'Not allowed.');
+        // Already past this action (a stale sheet, a second click): the caller's own repeat is answered with the
+        // record; anyone else is told who did it and when (the BFF's ALREADY_DONE).
+        const done = def.already?.(rec, ctx.action) ?? null;
+        if (done?.mine) return detail(ctx, resource, rec);
+        if (done) throw new StaffProblem(409, 'ALREADY_DONE', 'Already done', done.message);
+        throw conflict(view.reason ?? 'Not possible now.');
       }
       const { values } = await json(ctx.request, ValuesBody);
       if (view.form) {

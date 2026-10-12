@@ -136,6 +136,8 @@ export function FormFields({
   const shown = { ...serverErrors, ...errors };
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    // One request at a time: Enter or a second click while the first is in flight does nothing.
+    if (busy) return;
     const values = valuesOf(form, draft);
     const found = validateStaffForm(form, values);
     setErrors(found);

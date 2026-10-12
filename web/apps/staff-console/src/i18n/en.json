@@ -564,5 +564,8 @@
   "st.plans.metric.GROSS_SALES": "Gross sales",
   "st.plans.rewardType.CREDIT": "Fixed credit",
   "st.plans.rewardType.FREE_DAYS": "Free days",
-  "st.plans.rewardType.PERCENT_OFF": "% off N invoices"
+  "st.plans.rewardType.PERCENT_OFF": "% off N invoices",
+  "st.recordSheet.actionDone": "{action} — done.",
+  "st.recordSheet.alreadyDone": "This was already done.",
+  "st.recordSheet.alreadyDoneTitle": "Already done"
 }

@@ -571,5 +571,8 @@
   "st.plans.metric.GROSS_SALES": "إجمالي المبيعات",
   "st.plans.rewardType.CREDIT": "رصيد ثابت",
   "st.plans.rewardType.FREE_DAYS": "أيام مجانية",
-  "st.plans.rewardType.PERCENT_OFF": "% خصم على N فواتير"
+  "st.plans.rewardType.PERCENT_OFF": "% خصم على N فواتير",
+  "st.recordSheet.actionDone": "{action} — تم.",
+  "st.recordSheet.alreadyDone": "تم هذا بالفعل.",
+  "st.recordSheet.alreadyDoneTitle": "تم بالفعل"
 }

@@ -571,5 +571,8 @@
   "st.plans.metric.GROSS_SALES": "Àpapọ̀ títà",
   "st.plans.rewardType.CREDIT": "Kirẹ́dì tí a fi lélẹ̀",
   "st.plans.rewardType.FREE_DAYS": "Ọjọ́ ọ̀fẹ́",
-  "st.plans.rewardType.PERCENT_OFF": "% ẹ̀dínwó lórí ìwé-owó N"
+  "st.plans.rewardType.PERCENT_OFF": "% ẹ̀dínwó lórí ìwé-owó N",
+  "st.recordSheet.actionDone": "{action} — ó ti parí.",
+  "st.recordSheet.alreadyDone": "A ti ṣe èyí tẹ́lẹ̀.",
+  "st.recordSheet.alreadyDoneTitle": "Ó ti ṣe tẹ́lẹ̀"
 }

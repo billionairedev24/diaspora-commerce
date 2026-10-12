@@ -571,5 +571,8 @@
   "st.plans.metric.GROSS_SALES": "Ventas brutas",
   "st.plans.rewardType.CREDIT": "Crédito fijo",
   "st.plans.rewardType.FREE_DAYS": "Días gratis",
-  "st.plans.rewardType.PERCENT_OFF": "% de descuento en N facturas"
+  "st.plans.rewardType.PERCENT_OFF": "% de descuento en N facturas",
+  "st.recordSheet.actionDone": "{action}: hecho.",
+  "st.recordSheet.alreadyDone": "Esto ya estaba hecho.",
+  "st.recordSheet.alreadyDoneTitle": "Ya hecho"
 }

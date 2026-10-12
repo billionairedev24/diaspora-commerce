@@ -33,6 +33,11 @@ export interface MockAction {
   form?: (r: MockRecord) => StaffForm;
   /** null when the action is possible in the record's state, otherwise the reason it is not. */
   when: (r: MockRecord, ctx: ActionCtx) => string | null;
+  /**
+   * The record already went past this action (like the BFF's settled actions): the caller's own repeat answers 200,
+   * anyone else gets 409 ALREADY_DONE with the message (who and when).
+   */
+  already?: (r: MockRecord, ctx: ActionCtx) => { mine: boolean; message: string } | null;
   apply: (r: MockRecord, values: Record<string, FieldValue>, ctx: ActionCtx) => void;
 }
 
@@ -69,6 +74,20 @@ const num = (v: FieldValue | Scalar | undefined): number => (typeof v === 'numbe
 const is = (r: MockRecord, ...statuses: string[]) => statuses.includes(str(r.fields.status));
 const stateReason = (r: MockRecord, ...ok: string[]) => (is(r, ...ok) ? null : `Not possible while ${humanize(str(r.fields.status)).toLowerCase()}.`);
 const log = (r: MockRecord, ctx: ActionCtx, text: string) => r.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.actor, text } satisfies ActivityEntry);
+const WHEN = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' });
+/** Seller's "already decided" answer: what the application's latest decision was, by whom and when. */
+const decidedIn =
+  (...statuses: string[]) =>
+  (r: MockRecord, ctx: ActionCtx): { mine: boolean; message: string } | null => {
+    if (!is(r, ...statuses)) return null;
+    const last = r.activity[0];
+    const mine = last?.actor === ctx.actor;
+    const status = humanize(str(r.fields.status)).toLowerCase();
+    const by = last ? ` (by ${mine ? 'you' : last.actor}, ${WHEN.format(new Date(last.at)).replace(' at ', ', ')} UTC)` : '';
+    return { mine, message: `This application is already ${status}${by}` };
+  };
+const finalStep = (r: MockRecord, ctx: ActionCtx) =>
+  stateReason(r, 'AWAITING_FINAL_APPROVAL', 'FLAGGED') ?? (r.fields.reviewerId === ctx.actorId ? 'You reviewed step 1 — a different approver must decide step 2.' : null);
 const setStatus = (status: string, text: string) => (r: MockRecord, _v: Record<string, FieldValue>, ctx: ActionCtx) => {
   r.fields.status = status;
   log(r, ctx, text);
@@ -179,16 +198,12 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       ['Review', ['status', 'reviewStep', 'reviewerId', 'failedChecks', 'taxIdMasked', 'submittedAt']]
     ],
     actions: [
-      { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
-      { key: 'review-flag', label: 'Flag', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag the application', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
-      { key: 'review-request-info', label: 'Request info', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Ask the applicant for more', 'Send request', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' })]), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), apply: setStatus('INFO_REQUESTED', 'Requested more information') },
-      {
-        key: 'final-approve', label: 'Final approval', tone: 'primary', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Give final approval', 'Approve', false),
-        when: (r, ctx) => stateReason(r, 'AWAITING_FINAL_APPROVAL') ?? (r.fields.reviewerId === ctx.actorId ? 'You reviewed step 1 — a different approver must give final approval.' : null),
-        apply: setStatus('APPROVED', 'Final approval — organisation approved')
-      },
-      { key: 'send-back', label: 'Send back', tone: 'neutral', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Send back to the reviewer', 'Send back'), when: (r) => stateReason(r, 'AWAITING_FINAL_APPROVAL'), apply: setStatus('PENDING_REVIEW', 'Sent back to step 1') },
-      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Reject the application', 'Reject'), when: (r) => stateReason(r, 'AWAITING_FINAL_APPROVAL', 'FLAGGED'), apply: setStatus('REJECTED', 'Rejected') }
+      { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
+      { key: 'review-flag', label: 'Flag', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag the application', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.reviewerId = ctx.actorId; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
+      { key: 'review-request-info', label: 'Request info', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Ask the applicant for more', 'Send request', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' })]), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('INFO_REQUESTED', 'Requested more information') },
+      { key: 'final-approve', label: 'Final approval', tone: 'primary', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Give final approval', 'Approve', false), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('APPROVED', 'Final approval — organisation approved') },
+      { key: 'send-back', label: 'Send back', tone: 'neutral', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Send back to the reviewer', 'Send back'), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('PENDING_REVIEW', 'Sent back to step 1') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Reject the application', 'Reject'), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('REJECTED', 'Rejected') }
     ]
   },
   orders: {
