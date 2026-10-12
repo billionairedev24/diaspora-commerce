@@ -114,6 +114,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/delivery-location", h.getLocation)
 	route("PUT /v1/delivery-location", h.setLocation)
 	route("GET /v1/geo/address-suggestions", lookup(h.addressSuggestions))
+	route("GET /v1/geo/address-suggestions/{id}", lookup(h.resolveAddressSuggestion))
 	// Search & catalogue
 	route("GET /v1/search", h.search)
 	route("GET /v1/search/suggestions", h.suggest)
@@ -393,6 +394,11 @@ func (h *handlersImpl) addressSuggestions(w http.ResponseWriter, r *http.Request
 		return
 	}
 	v, err := h.s.Location.Suggest(r.Context(), text, q.Get("country"), q.Get("sessionToken"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) resolveAddressSuggestion(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Location.ResolveSuggestion(r.Context(), r.PathValue("id"), r.URL.Query().Get("sessionToken"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

@@ -125,6 +125,9 @@ type Upstreams struct {
 	ActiveOrgID string
 	// ServiceTokenRequests records the scopes of client-credentials token requests.
 	ServiceTokenRequests []string
+	// GeoAutocompleteQueries are the query strings geo's autocomplete received; GeoResolves "id?query" per resolve.
+	GeoAutocompleteQueries []url.Values
+	GeoResolves            []string
 	// LastClientIP is the clientIp identity's first-party API last received.
 	LastClientIP string
 	tickets      map[string]string
@@ -390,11 +393,29 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]any{"line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US", "lat": 29.7376, "lon": -95.5134})
 	})
-	mux.HandleFunc("GET /v1/addresses/autocomplete", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/addresses/autocomplete", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		u.GeoAutocompleteQueries = append(u.GeoAutocompleteQueries, r.URL.Query())
+		u.mu.Unlock()
+		// "Peckham …" answers like Google Places (resolved on pick), everything else like Nominatim.
+		if strings.HasPrefix(r.URL.Query().Get("q"), "Peckham") {
+			writeJSON(w, 200, map[string]any{"suggestions": []map[string]any{
+				{"id": "g:ChIJpeckham", "text": "27 Peckham High St, London, UK", "mainText": "27 Peckham High St", "secondaryText": "London, UK", "provider": "google-places"}},
+				"session": r.URL.Query().Get("session")})
+			return
+		}
 		writeJSON(w, 200, map[string]any{"suggestions": []map[string]any{
-			{"id": "o:1", "text": "9800 Westheimer Rd, Houston, TX", "mainText": "9800 Westheimer Rd", "secondaryText": "Houston, TX 77042", "provider": "osm-nominatim"}}})
+			{"id": "o:1", "text": "9800 Westheimer Rd, Houston, TX", "mainText": "9800 Westheimer Rd", "secondaryText": "Houston, TX 77042", "provider": "osm-nominatim"}},
+			"session": r.URL.Query().Get("session")})
 	})
-	mux.HandleFunc("GET /v1/addresses/resolve/{id}", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/addresses/resolve/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		u.GeoResolves = append(u.GeoResolves, r.PathValue("id")+"?"+r.URL.RawQuery)
+		u.mu.Unlock()
+		if r.PathValue("id") == "g:ChIJpeckham" {
+			writeJSON(w, 200, map[string]any{"line1": "27 Peckham High St", "line2": "Flat 3", "city": "London", "state": "England", "postalCode": "SE15 5EB", "country": "GB", "lat": 51.47, "lon": -0.07})
+			return
+		}
 		writeJSON(w, 200, map[string]any{"line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US", "lat": 29.73, "lon": -95.55})
 	})
 	mux.HandleFunc("POST /v1/addresses/validate", func(w http.ResponseWriter, r *http.Request) {

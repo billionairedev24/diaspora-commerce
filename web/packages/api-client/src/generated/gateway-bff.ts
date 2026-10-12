@@ -205,8 +205,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Address autocomplete (geo service — Google Places or OpenStreetMap Nominatim) */
+        /**
+         * Address autocomplete (geo service — Google Places (New) with a key, else OpenStreetMap Nominatim)
+         * @description One call per keystroke of an address field. The first answer carries a `sessionToken`; send it with every following keystroke of the same address entry and with `GET /v1/geo/address-suggestions/{id}` for the picked suggestion, then start a new entry without one (Google Places bills the keystrokes and the Place Details call as one session). Google suggestions come back with `resolved: false` (street line only) and are resolved when picked; Nominatim and fixture suggestions are resolved already. Suggestions are restricted to `country`, by default the market's.
+         */
         get: operations["suggestAddresses"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/geo/address-suggestions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Structured address of a picked suggestion (Google Place Details, closing the autocomplete session) */
+        get: operations["resolveAddressSuggestion"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2209,6 +2229,8 @@ export interface components {
             selected: boolean;
             /** @description Catalog product type or attribute perishable: hand delivery with a code, no safe place */
             perishable?: boolean;
+            /** @description Catalog product type code for sales-tax category mapping */
+            productType?: string;
         };
         DeliveryOption: {
             /** @enum {string} */
@@ -2358,9 +2380,13 @@ export interface components {
                 address: components["schemas"]["PostalAddress"];
                 /** @enum {string} */
                 source: "google" | "osm" | "fixture";
+                /** @description false: `address` holds the street line only; resolve the suggestion when picked */
+                resolved: boolean;
             }[];
             /** @description Required attribution text (e.g. © OpenStreetMap contributors) */
             attribution: string;
+            /** @description Autocomplete session of this address entry (Google Places billing) */
+            sessionToken: string;
         };
         SiteConfig: {
             revision: number;
@@ -2756,6 +2782,36 @@ export interface components {
             items: components["schemas"]["ReturnSummary"][];
             nextCursor: string | null;
         };
+        CheckoutCouponSellerShare: {
+            sellerOrgId: string;
+            sellerName?: string;
+            discountMinor: number;
+            /**
+             * @description Who pays this slice at settlement
+             * @enum {string}
+             */
+            funding: "platform" | "seller";
+        };
+        CheckoutCouponOfferDiscount: {
+            offerId: string;
+            sellerOrgId?: string;
+            discountMinor: number;
+        };
+        CheckoutCoupon: {
+            code: string;
+            applicable: boolean;
+            rejection?: string | null;
+            message?: string;
+            discountMinor: number;
+            shippingDiscountMinor: number;
+            /** @enum {string} */
+            funding?: "platform" | "seller";
+            /** @description Seller org when funding is seller */
+            fundedByOrg?: string;
+            offerDiscounts?: components["schemas"]["CheckoutCouponOfferDiscount"][];
+            /** @description Per-seller discount totals for settlement preview */
+            sellerShares?: components["schemas"]["CheckoutCouponSellerShare"][];
+        };
         CheckoutSummary: {
             packages: (components["schemas"]["CartPackage"] & {
                 localDelivery?: components["schemas"]["CheckoutLocalDelivery"];
@@ -2780,6 +2836,11 @@ export interface components {
             paymentMethods: components["schemas"]["PaymentMethod"][];
             subtotalMinor: number;
             shippingMinor: number;
+            /** @description Item discount from coupon */
+            discountMinor: number;
+            /** @description Shipping discount from coupon (e.g. free shipping) */
+            shippingDiscountMinor: number;
+            coupon?: components["schemas"]["CheckoutCoupon"];
             taxMinor: number;
             /** @example 8.25% TX */
             taxRateLabel: string;
@@ -2788,6 +2849,8 @@ export interface components {
             sellerCount: number;
             /** @description Stripe publishable key for Stripe.js (Payment / Express Checkout Elements) */
             publishableKey?: string;
+            /** @description Optional checkout_cross_sell placement from content (product rail) */
+            crossSell?: components["schemas"]["Rail"];
         };
         /**
          * @description AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the
@@ -4033,8 +4096,9 @@ export interface operations {
         parameters: {
             query: {
                 q: string;
+                /** @description ISO 3166-1 alpha-2 country; default: the market's (US) */
                 country?: string;
-                /** @description Places autocomplete session token for billing */
+                /** @description Session token of the previous answer of this address entry (omit on the first keystroke) */
                 sessionToken?: string;
             };
             header?: never;
@@ -4043,7 +4107,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Up to 5 suggestions */
+            /** @description Up to 5 suggestions and the session token */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4052,6 +4116,36 @@ export interface operations {
                     "application/json": components["schemas"]["AddressSuggestions"];
                 };
             };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resolveAddressSuggestion: {
+        parameters: {
+            query?: {
+                /** @description The session token of the suggestions */
+                sessionToken?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Suggestion id (g:…, o:…, f:…) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Street, unit, city, state, ZIP, country and coordinates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PostalAddress"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -4885,6 +4979,13 @@ export interface operations {
         parameters: {
             query?: {
                 addressId?: string;
+                /**
+                 * @description Per-package delivery option keys for shipping and estimated tax (repeat the parameter or comma-separate
+                 *     entries). Each value is `packageId:optionKey` (for example `pkg_1:ground,pkg_2:pickup`).
+                 */
+                packageDelivery?: string[];
+                /** @description Optional coupon to price against the cart (offers validate; does not redeem until place order). */
+                couponCode?: string;
             };
             header?: never;
             path?: never;

@@ -138,7 +138,9 @@ func run() error {
 	// An approval identity missed is repaired on the way (healOrg) and the session's tokens rotated.
 	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: cfg.Commerce.DefaultZip,
-		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState, Log: log})
+		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState,
+		Country: cfg.Market, // market codes are ISO countries (us): address suggestions are restricted to it
+		Log:     log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
 		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market})
 	services := httpapi.Services{

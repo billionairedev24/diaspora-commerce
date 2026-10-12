@@ -302,17 +302,43 @@ paths:
       tags: [Location]
       operationId: suggestAddresses
       security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Address autocomplete (geo service — Google Places or OpenStreetMap Nominatim)
+      summary: Address autocomplete (geo service — Google Places (New) with a key, else OpenStreetMap Nominatim)
+      description: >-
+        One call per keystroke of an address field. The first answer carries a `sessionToken`; send it with every
+        following keystroke of the same address entry and with `GET /v1/geo/address-suggestions/{id}` for the picked
+        suggestion, then start a new entry without one (Google Places bills the keystrokes and the Place Details call
+        as one session). Google suggestions come back with `resolved: false` (street line only) and are resolved when
+        picked; Nominatim and fixture suggestions are resolved already. Suggestions are restricted to `country`, by
+        default the market's.
       parameters:
         - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 120}}
-        - {name: country, in: query, schema: {type: string, default: US}}
-        - {name: sessionToken, in: query, schema: {type: string}, description: Places autocomplete session token for billing}
+        - {name: country, in: query, description: 'ISO 3166-1 alpha-2 country; default: the market''s (US)', schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
+        - {name: sessionToken, in: query, description: Session token of the previous answer of this address entry (omit on the first keystroke), schema: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}}
       responses:
         '200':
-          description: Up to 5 suggestions
+          description: Up to 5 suggestions and the session token
           content:
             application/json:
               schema: {$ref: '#/components/schemas/AddressSuggestions'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/geo/address-suggestions/{id}:
+    get:
+      tags: [Location]
+      operationId: resolveAddressSuggestion
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Structured address of a picked suggestion (Google Place Details, closing the autocomplete session)
+      parameters:
+        - {name: id, in: path, required: true, description: 'Suggestion id (g:…, o:…, f:…)', schema: {type: string, maxLength: 512}}
+        - {name: sessionToken, in: query, description: The session token of the suggestions, schema: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}}
+      responses:
+        '200':
+          description: Street, unit, city, state, ZIP, country and coordinates
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PostalAddress'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/search:
     get:
@@ -2892,20 +2918,22 @@ components:
         lon: {type: [number, 'null']}
     AddressSuggestions:
       type: object
-      required: [suggestions, attribution]
+      required: [suggestions, attribution, sessionToken]
       properties:
         suggestions:
           type: array
           items:
             type: object
-            required: [id, label, secondary, address, source]
+            required: [id, label, secondary, address, source, resolved]
             properties:
               id: {type: string}
               label: {type: string}
               secondary: {type: string}
               address: {$ref: '#/components/schemas/PostalAddress'}
               source: {type: string, enum: [google, osm, fixture]}
+              resolved: {type: boolean, description: 'false: `address` holds the street line only; resolve the suggestion when picked'}
         attribution: {type: string, description: Required attribution text (e.g. © OpenStreetMap contributors)}
+        sessionToken: {type: string, description: Autocomplete session of this address entry (Google Places billing)}
     SiteConfig:
       type: object
       required: [revision, socials, contacts, legal, identityProviders, locales, market, appLinks, paymentMethods, smsProgramName]

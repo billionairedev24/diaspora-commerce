@@ -287,12 +287,17 @@ type AddressSuggestion struct {
 	Secondary string        `json:"secondary"`
 	Address   PostalAddress `json:"address"`
 	Source    string        `json:"source"`
+	// Resolved is false when Address holds the street line only (Google Places): resolve the picked suggestion
+	// with GET /v1/geo/address-suggestions/{id} and the session token.
+	Resolved bool `json:"resolved"`
 }
 
 // AddressSuggestions is the autocomplete response.
 type AddressSuggestions struct {
 	Suggestions []AddressSuggestion `json:"suggestions"`
 	Attribution string              `json:"attribution"`
+	// SessionToken groups one address entry's keystrokes and its resolve into one Google Places billing session.
+	SessionToken string `json:"sessionToken"`
 }
 
 // MeUser is the signed-in user.

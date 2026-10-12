@@ -68,7 +68,7 @@ Each switch is decided at start-up from whether the credentials are present, and
 | One-time codes (identity) | Twilio as above: `VERIFICATION_SENDER=outbox`, codes go through notifications (SMS by Twilio, email by Resend or Mailpit) | `mailpit`: identity drops every code (email and texted) in Mailpit itself | `tools/dev/local.sh` (`verification_sender`); prints `identity: one-time codes → …`. Your own `VERIFICATION_SENDER` wins |
 | Card payments | `STRIPE_PUBLISHABLE_KEY` set: Stripe Elements | the storefront's labelled dev-only card form ("Stripe test mode is not configured") | gateway-bff hands the key to the storefront; `isMockKey` in `web/apps/storefront/src/lib/payments/stripe.ts` |
 | Payments back end | `STRIPE_SECRET_KEY` | **no fallback**: payments starts with a placeholder key and every Stripe call fails (401) | `application-local.yml` of payments |
-| Address search | `GEO_PROVIDERS=google-places,…` + `GOOGLE_PLACES_API_KEY` | fixtures + OpenStreetMap Nominatim | geo `config/local.yaml` |
+| Address search | `GOOGLE_PLACES_API_KEY` or `GOOGLE_MAPS_API_KEY`: Google Places (New) is the only autocomplete provider | fixtures + OpenStreetMap Nominatim | geo `Config.AddressProviders` (log line `address autocomplete providers`) |
 | Files | (UploadThing is never used locally) | MinIO | media `config/local.yaml` |
 
 **Test users stay local.** With Resend or Twilio switched on, the seeded test users (`@afrotransact.test`) and their
@@ -187,15 +187,40 @@ Redirect URI pattern: `{identity}/login/oauth2/code/{google|apple|facebook}`, lo
 
 ### Google Maps Platform and Smarty (optional): geo
 
-- **Powers:** address autocomplete (`google-places`), reverse geocoding (`google-geocoding`), drive-time routing
-  (`google`); Smarty for US address autocomplete (`smarty`).
-- **Create:** Google Cloud Console → **Google Maps Platform → Keys & Credentials → Create credentials → API key**;
-  enable *Places API (New)*, *Geocoding API*, *Routes API*; restrict the key to those APIs →
-  `GOOGLE_PLACES_API_KEY` / `GOOGLE_MAPS_API_KEY`. A billing account is required; there is free monthly usage per
-  API. Smarty: [smarty.com](https://www.smarty.com) → **API Keys → Secret keys** → `SMARTY_AUTH_ID`,
+- **Powers:** address autocomplete and the structured address of a picked suggestion (Google Places (New)
+  Autocomplete + Place Details, provider `google-places`) in every address field of the storefront, Seller Center,
+  staff console and customer app; reverse geocoding (`google-geocoding`, "Use my current location"); drive-time
+  routing (`google`). Smarty: US deliverability checks (`smarty`).
+- **Which provider answers:** with `GOOGLE_PLACES_API_KEY` (or, when that is blank, `GOOGLE_MAPS_API_KEY`) set,
+  Google Places is the **only** autocomplete provider in every environment, local included; OpenStreetMap
+  Nominatim (and the sample addresses locally) answer only when no key is configured. geo logs the chain at
+  start-up: `address autocomplete providers providers=[google-places]`. `GEO_PROVIDERS` only orders the no-key
+  fallbacks. One key can serve every Google feature.
+- **Create the key:** [Google Cloud Console](https://console.cloud.google.com/) → pick or create a project → **Billing**:
+  link a billing account (required, even inside the free usage) → **APIs & Services → Library**: enable
+  **Places API (New)** (`places.googleapis.com`; *not* the legacy "Places API"), and for the other features
+  **Geocoding API** and **Routes API** → **Google Maps Platform → Keys & Credentials → Create credentials → API
+  key**.
+- **Restrict the key** (Edit API key):
+  - *API restrictions* → **Restrict key** → Places API (New) (+ Geocoding API, Routes API if you use them). This is
+    the restriction that matters: geo calls Google from the server.
+  - *Application restrictions*: **HTTP referrers cannot be used** (the browser never calls Google; geo does, with
+    the key in the `X-Goog-Api-Key` header). Deployed: **IP addresses** = the cluster's egress (NAT) IPs. Locally:
+    **None**, or your public IP; use a separate key for local development and keep it out of git
+    (`.local/secrets.env`).
+  - Put the key in the environment's secret store as `GOOGLE_MAPS_API_KEY` (or `GOOGLE_PLACES_API_KEY`) for geo
+    only; no web or mobile app needs it.
+- **Cost:** autocomplete is billed per **session**: the BFF and the address fields send one session token per
+  address entry (all keystrokes) and the Place Details call of the picked suggestion closes it, so one address
+  entry is one *Autocomplete session* + one *Place Details Essentials* request (geo asks only for
+  `addressComponents,formattedAddress,location`). Suggestions are never resolved per keystroke. Typing without
+  picking is billed as autocomplete requests. Google gives a monthly free usage cap per SKU; check current prices on
+  the [Maps Platform pricing page](https://mapsplatform.google.com/pricing/) and set **budget alerts** and
+  **per-API quotas** (APIs & Services → Places API (New) → Quotas) on production and on your local key.
+- **Smarty:** [smarty.com](https://www.smarty.com) → **API Keys → Secret keys** → `SMARTY_AUTH_ID`,
   `SMARTY_AUTH_TOKEN` (free trial).
-- **Locally** geo uses fixtures + OpenStreetMap Nominatim (no key). To try Google: also set
-  `GEO_PROVIDERS=google-places,osm-nominatim,fixture` and restart geo.
+- **Locally** without a key geo uses the sample addresses + OpenStreetMap Nominatim. With a key in
+  `.local/secrets.env`, `tools/dev/local.sh restart geo` switches local autocomplete to Google.
 
 ### Carriers: UPS, USPS, FedEx, DHL Express (optional): carrier-gateway
 
@@ -426,9 +451,9 @@ access uses OIDC federation: no cloud keys in GitHub.
 | `APPLE_CLIENT_SECRET` | Apple sign-in | identity | secret | optional | Sign in with Apple: a JWT you sign with your .p8 key (expires after at most 6 months). Without: no Apple button |
 | `FACEBOOK_CLIENT_ID` | Facebook sign-in | identity | public id | optional | Continue with Facebook. Without: no Facebook button |
 | `FACEBOOK_CLIENT_SECRET` | Facebook sign-in | identity | secret | optional | Continue with Facebook. Without: no Facebook button |
-| `GOOGLE_PLACES_API_KEY` | Google Maps Platform | geo | secret | optional | address autocomplete (provider google-places). Without: OpenStreetMap Nominatim + fixtures (local default) |
-| `GOOGLE_MAPS_API_KEY` | Google Maps Platform | geo | secret | optional | reverse geocoding (google-geocoding) and drive-time routing (google). Without: straight-line distance × detour factor |
-| `GEO_PROVIDERS` | Google Maps Platform | geo | config | optional | autocomplete provider order; locally fixture,osm-nominatim (set google-places,osm-nominatim,fixture to use Google). Without: fixture,osm-nominatim |
+| `GOOGLE_MAPS_API_KEY` | Google Maps Platform | geo | secret | optional | address autocomplete + Place Details (Google Places (New), the only autocomplete provider when set), reverse geocoding (google-geocoding) and drive-time routing (google); enable Places API (New), Geocoding API, Routes API. Without: OpenStreetMap Nominatim + sample addresses; straight-line distance × detour factor |
+| `GOOGLE_PLACES_API_KEY` | Google Maps Platform | geo | secret | optional | a separate key for Google Places (New) only; wins over GOOGLE_MAPS_API_KEY for autocomplete. Without: GOOGLE_MAPS_API_KEY, else OpenStreetMap Nominatim + sample addresses |
+| `GEO_PROVIDERS` | Google Maps Platform | geo | config | optional | autocomplete providers without a Google key (locally fixture,osm-nominatim); ignored when a key is set. Without: fixture,osm-nominatim |
 | `SMARTY_AUTH_ID` | Smarty | geo | public id | optional | US address autocomplete (provider smarty). Without: not used |
 | `SMARTY_AUTH_TOKEN` | Smarty | geo | secret | optional | US address autocomplete (provider smarty). Without: not used |
 | `UPS_CLIENT_ID` | UPS | carrier-gateway | public id | optional | UPS rates, labels, tracking (sandbox locally). Without: UPS is skipped at start-up |
@@ -474,6 +499,7 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 | `BOOKINGS_CLIENT_SECRET` | bookings, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `BOOTSTRAP_ADMIN_PASSWORD` | identity | first super admin's password (identity creates the admin once) |
 | `CART_CLIENT_SECRET` | cart, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
+| `CATALOG_CLIENT_SECRET` | catalog, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `CLOUDFLARE_API_TOKEN` | GitHub Actions, storefront | storefront service: Cloudflare cache purge (also a GitHub Actions secret) |
 | `DB_PASSWORD` | ai-gateway, bookings, catalog, content, delivery-runs, fulfilment, identity, inventory, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres password (Terraform creates the role; one database per service) |
 | `DB_URL` | ai-gateway, bookings, carrier-gateway, cart, catalog, content, delivery-runs, fulfilment, geo, identity, inventory, media, notifications, offers, orders, payments, retail, seller, storefront, tax-returns, trust-ops | the service's Postgres URL (Go: DSN incl. password; Java: JDBC URL, password in DB_PASSWORD) |
@@ -502,7 +528,7 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 | `OIDC_CLIENT_SECRET` | gateway-bff | gateway-bff's confidential OIDC client at identity (= identity's GATEWAY_BFF_CLIENT_SECRET) |
 | `OPENFGA_API_TOKEN` | authz-sync | OpenFGA pre-shared key (authz-sync) |
 | `ORDERS_CLIENT_SECRET` | identity, orders | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
-| `PAYMENTS_CLIENT_SECRET` | identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
+| `PAYMENTS_CLIENT_SECRET` | identity, payments | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `RETAIL_CLIENT_SECRET` | identity, retail | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `S3_ACCESS_KEY_ID` | carrier-gateway | carrier-gateway label store (S3-compatible) when not using workload identity |
 | `S3_SECRET_ACCESS_KEY` | carrier-gateway | carrier-gateway label store secret |
@@ -532,13 +558,13 @@ Plus the Terraform-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps
 | bookings | - | `BOOKINGS_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL` |
 | carrier-gateway | `DHL_ACCOUNT`, `DHL_PASSWORD`, `DHL_USERNAME`, `DHL_WEBHOOK_SECRET`, `FEDEX_ACCOUNT`, `FEDEX_CLIENT_ID`, `FEDEX_CLIENT_SECRET`, `FEDEX_WEBHOOK_SECRET`, `UPS_ACCOUNT`, `UPS_CLIENT_ID`, `UPS_CLIENT_SECRET`, `UPS_WEBHOOK_CREDENTIAL`, `USPS_CLIENT_ID`, `USPS_CLIENT_SECRET`, `USPS_PAYMENT_TOKEN` | `DB_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
 | cart | - | `CART_CLIENT_SECRET`, `DB_URL` |
-| catalog | `GS1_API_KEY`, `GS1_ENABLED` | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN` |
+| catalog | `GS1_API_KEY`, `GS1_ENABLED` | `CATALOG_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN` |
 | content | - | `DB_PASSWORD`, `DB_URL`, `NEWSLETTER_TOKEN_KEY` |
 | delivery-runs | - | `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET` |
 | fulfilment | - | `DB_PASSWORD`, `DB_URL`, `FULFILMENT_CLIENT_SECRET` |
 | gateway-bff | `STRIPE_PUBLISHABLE_KEY` | `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY` |
 | geo | `GEO_PROVIDERS`, `GOOGLE_MAPS_API_KEY`, `GOOGLE_PLACES_API_KEY`, `SMARTY_AUTH_ID`, `SMARTY_AUTH_TOKEN` | `DB_URL` |
-| identity | `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `BFF_CLIENT_SECRET`, `BOOKINGS_CLIENT_SECRET`, `BOOTSTRAP_ADMIN_PASSWORD`, `CART_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET`, `FULFILMENT_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `IDENTITY_DATA_KEY`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_TEST_USERS_PASSWORD`, `INDEXER_CLIENT_SECRET`, `INVENTORY_CLIENT_SECRET`, `MEDIA_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `OFFERS_CLIENT_SECRET`, `ORDERS_CLIENT_SECRET`, `PAYMENTS_CLIENT_SECRET`, `RETAIL_CLIENT_SECRET`, `SEARCH_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET`, `SIGNING_KEY_PEM`, `TAX_RETURNS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET` |
+| identity | `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `BFF_CLIENT_SECRET`, `BOOKINGS_CLIENT_SECRET`, `BOOTSTRAP_ADMIN_PASSWORD`, `CART_CLIENT_SECRET`, `CATALOG_CLIENT_SECRET`, `DB_PASSWORD`, `DB_URL`, `DELIVERY_RUNS_CLIENT_SECRET`, `FULFILMENT_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `IDENTITY_DATA_KEY`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_TEST_USERS_PASSWORD`, `INDEXER_CLIENT_SECRET`, `INVENTORY_CLIENT_SECRET`, `MEDIA_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `OFFERS_CLIENT_SECRET`, `ORDERS_CLIENT_SECRET`, `PAYMENTS_CLIENT_SECRET`, `RETAIL_CLIENT_SECRET`, `SEARCH_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET`, `SIGNING_KEY_PEM`, `TAX_RETURNS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET` |
 | indexer | - | `ES_API_KEY`, `ES_PASSWORD`, `INDEXER_CLIENT_SECRET` |
 | inventory | - | `DB_PASSWORD`, `DB_URL`, `INVENTORY_CLIENT_SECRET` |
 | media | `UPLOADTHING_API_KEY`, `UPLOADTHING_APP_ID`, `UPLOADTHING_TOKEN` | `DB_URL`, `LINK_SIGNING_KEY`, `LINK_SIGNING_KEYS_PREVIOUS`, `MEDIA_CLIENT_SECRET` |
@@ -547,7 +573,7 @@ Plus the Terraform-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps
 | notifications | `APNS_KEY_ID`, `APNS_KEY_P8`, `APNS_TEAM_ID`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `FCM_PROJECT_ID`, `FCM_SERVICE_ACCOUNT_JSON`, `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, `SENDGRID_API_KEY`, `SENDGRID_WEBHOOK_PUBLIC_KEY`, `SMTP_HOST`, `SMTP_PASSWORD`, `SMTP_USERNAME`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_MESSAGING_SERVICE_SID`, `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TOKEN` | `DB_URL`, `NOTIFICATIONS_CLIENT_SECRET`, `UNSUBSCRIBE_SIGNING_KEY` |
 | offers | - | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN`, `OFFERS_CLIENT_SECRET` |
 | orders | - | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN`, `HANDOVER_CODE_KEY`, `ORDERS_CLIENT_SECRET`, `TEMPORAL_TLS_KEY` |
-| payments | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN` |
+| payments | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `DB_PASSWORD`, `DB_URL`, `FGA_API_TOKEN`, `PAYMENTS_CLIENT_SECRET` |
 | retail | - | `DB_PASSWORD`, `DB_URL`, `EDI_AS2_KEYSTORE_PATH`, `EDI_SFTP_PRIVATE_KEY_PATH`, `RETAIL_CLIENT_SECRET` |
 | search | - | `ADS_TOKEN_KEY`, `ES_API_KEY`, `ES_PASSWORD`, `SEARCH_CLIENT_SECRET` |
 | seller | `STRIPE_BILLING_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_SECRET_KEY` | `DB_PASSWORD`, `DB_URL`, `FIELD_ENCRYPTION_KEY`, `MEDIA_SERVICE_TOKEN`, `SELLER_SERVICE_CLIENT_SECRET` |

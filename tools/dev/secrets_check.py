@@ -166,14 +166,16 @@ CATALOGUE: List[Var] = [
     Var("FACEBOOK_CLIENT_SECRET", "Facebook sign-in", ("identity",), SECRET, "Continue with Facebook",
         "no Facebook button", pattern=r"^[0-9a-f]{32}$", hint="32 hex characters"),
     # Maps / geocoding -----------------------------------------------------------------------------------------------
-    Var("GOOGLE_PLACES_API_KEY", "Google Maps Platform", ("geo",), SECRET,
-        "address autocomplete (provider google-places)", "OpenStreetMap Nominatim + fixtures (local default)",
-        pattern=r"^AIza", hint="AIza…"),
     Var("GOOGLE_MAPS_API_KEY", "Google Maps Platform", ("geo",), SECRET,
-        "reverse geocoding (google-geocoding) and drive-time routing (google)",
-        "straight-line distance × detour factor", pattern=r"^AIza", hint="AIza…"),
+        "address autocomplete + Place Details (Google Places (New), the only autocomplete provider when set), reverse "
+        "geocoding (google-geocoding) and drive-time routing (google); enable Places API (New), Geocoding API, Routes API",
+        "OpenStreetMap Nominatim + sample addresses; straight-line distance × detour factor",
+        pattern=r"^AIza", hint="AIza…"),
+    Var("GOOGLE_PLACES_API_KEY", "Google Maps Platform", ("geo",), SECRET,
+        "a separate key for Google Places (New) only; wins over GOOGLE_MAPS_API_KEY for autocomplete",
+        "GOOGLE_MAPS_API_KEY, else OpenStreetMap Nominatim + sample addresses", pattern=r"^AIza", hint="AIza…"),
     Var("GEO_PROVIDERS", "Google Maps Platform", ("geo",), CONFIG,
-        "autocomplete provider order; locally fixture,osm-nominatim (set google-places,osm-nominatim,fixture to use Google)",
+        "autocomplete providers without a Google key (locally fixture,osm-nominatim); ignored when a key is set",
         "fixture,osm-nominatim"),
     Var("SMARTY_AUTH_ID", "Smarty", ("geo",), PUBLIC, "US address autocomplete (provider smarty)", "not used"),
     Var("SMARTY_AUTH_TOKEN", "Smarty", ("geo",), SECRET, "US address autocomplete (provider smarty)", "not used"),
@@ -245,6 +247,8 @@ SUMMARY: List[Tuple[str, Tuple[str, ...], str, str]] = [
     ("Resend", ("RESEND_API_KEY",), "set → real email (test users still go to Mailpit)", "missing → email to Mailpit"),
     ("OpenRouter", ("OPENROUTER_API_KEY",), "set → AI on (start ai-gateway)", "missing → AI assistant off"),
     ("Google sign-in", ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"), "set", "missing → no Google button"),
+    ("Google Maps", ("GOOGLE_MAPS_API_KEY",), "set → Google Places address suggestions",
+     "missing → OpenStreetMap + sample addresses (GOOGLE_PLACES_API_KEY alone also works)"),
 ]
 
 # ------------------------------------------------------------------------------------------------ reading the values
@@ -358,9 +362,9 @@ def cross_checks(values: Values) -> List[Finding]:
                                          "account email only)"))
     if bool(v("GOOGLE_CLIENT_ID")) != bool(v("GOOGLE_CLIENT_SECRET")):
         found.append(Finding("warn", "set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET together"))
-    if v("GOOGLE_PLACES_API_KEY") and "google-places" not in v("GEO_PROVIDERS"):
-        found.append(Finding("warn", "GOOGLE_PLACES_API_KEY is set but local geo uses fixture,osm-nominatim: set "
-                                     "GEO_PROVIDERS=google-places,osm-nominatim,fixture to use it"))
+    if v("GOOGLE_PLACES_API_KEY") and v("GOOGLE_MAPS_API_KEY") and v("GOOGLE_PLACES_API_KEY") != v("GOOGLE_MAPS_API_KEY"):
+        found.append(Finding("warn", "GOOGLE_PLACES_API_KEY and GOOGLE_MAPS_API_KEY differ: address autocomplete uses "
+                                     "GOOGLE_PLACES_API_KEY, routing GOOGLE_MAPS_API_KEY (enable Places API (New) on the first)"))
     if v("GS1_API_KEY") and v("GS1_ENABLED").lower() != "true":
         found.append(Finding("warn", "GS1_API_KEY is set but GS1_ENABLED is not true: the lookup stays off"))
     return found
