@@ -219,7 +219,7 @@ class ProviderController {
     }
 
     @Operation(summary = "Earnings: collected − connection fee − card fees − late-cancellation fees (bookings:read)",
-            description = "Commission is taken only on what the customer actually paid (after refunds).")
+            description = "The connection fee is taken only on what the customer actually paid (after refunds).")
     @GetMapping("/earnings")
     EarningsResponse earnings(@PathVariable String orgId, @RequestParam Instant from, @RequestParam Instant to) {
         return EarningsResponse.of(bookings.earnings(orgId, from, to));

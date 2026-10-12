@@ -127,7 +127,8 @@ class BookingServiceImpl implements BookingService {
         PaymentsClient.Intent intent = payments.createIntent(new PaymentsClient.CreateIntent(stored.reference(),
                 provider.orgId(), snapshot.priceMinor(), snapshot.currency(), intentLines(snapshot),
                 Map.of("bookingId", stored.id().toString(), "kind", "booking", "serviceId",
-                        offering.id().toString()), now, customer.subject(), true, snapshot.category()),
+                        offering.id().toString()), now, customer.subject(), true,
+                        fees.paymentCategory(provider.orgId(), snapshot.category())),
                 stored.reference() + ":create-intent");
         stored.attachPayment(intent.id(), intent.clientSecret());
         Booking saved = bookings.update(stored);

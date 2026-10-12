@@ -121,7 +121,7 @@ class HttpPaymentsClient implements PaymentsClient {
                     return new EffectiveFees(n.path("commissionBps").asInt(), n.path("commissionSource").asString(null),
                             n.path("cardPctBps").asInt(), n.path("cardFixedMinor").asLong(),
                             n.hasNonNull("version") ? n.path("version").asInt() : null,
-                            n.path("currency").asString(null));
+                            n.path("currency").asString(null), n.path("kind").asString(null));
                 });
     }
 

@@ -42,9 +42,17 @@ class ProviderFeesImpl implements ProviderFees {
             return hit.fees();
         }
         FeeSchedule fees;
+        boolean connectionFees = false;
         Duration ttl = settings.feesCacheTtl();
         try {
             PaymentsClient.EffectiveFees e = payments.effectiveFees(cat, orgId);
+            connectionFees = e.connectionFees();
+            if (!connectionFees && !CATEGORY.equals(cat)) {
+                // A payments without connection fees ignores kind=SERVICE and would price the service's category
+                // as a product: keep the previous behaviour, the commission of the "services" category.
+                LOG.info("payments has no connection fees yet; {} pays the '{}' commission", orgId, CATEGORY);
+                e = payments.effectiveFees(CATEGORY, orgId);
+            }
             fees = new FeeSchedule(e.commissionBps(), e.cardPctBps(), e.cardFixedMinor(), e.commissionSource(),
                     e.version());
         } catch (PaymentsClientException | IllegalArgumentException e) {
@@ -57,10 +65,19 @@ class ProviderFeesImpl implements ProviderFees {
                     + "(commission {} bps, card {} bps + {})", orgId, e.getMessage(), fees.commissionBps(),
                     fees.cardPctBps(), fees.cardFixedMinor());
         }
-        cache.put(key, new Cached(fees, now.plus(ttl)));
+        cache.put(key, new Cached(fees, now.plus(ttl), connectionFees));
         return fees;
     }
 
-    private record Cached(FeeSchedule fees, Instant expiresAt) {
+    @Override
+    public String paymentCategory(String orgId, String category) {
+        String cat = category == null || category.isBlank() ? CATEGORY : category.trim().toLowerCase(Locale.ROOT);
+        forOrg(orgId, cat);
+        Cached hit = cache.get(orgId + "|" + cat);
+        return hit != null && hit.connectionFees() ? cat : CATEGORY;
+    }
+
+    /** @param connectionFees payments answered with connection fees (it knows kind SERVICE) */
+    private record Cached(FeeSchedule fees, Instant expiresAt, boolean connectionFees) {
     }
 }

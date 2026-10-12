@@ -104,8 +104,21 @@ public interface PaymentsClient {
      * @param commissionBps    the connection fee (payments' commissionBps for kind SERVICE)
      * @param commissionSource OVERRIDE (negotiated), PLAN, CATEGORY, DEFAULT or RETAIL
      * @param version          fee-schedule version in force
+     * @param kind             SERVICE when payments priced a connection fee; null from a payments without
+     *                         connection fees (it ignores kind and answers the category's product commission)
      */
     record EffectiveFees(int commissionBps, String commissionSource, int cardPctBps, long cardFixedMinor,
-                         Integer version, String currency) {
+                         Integer version, String currency, String kind) {
+
+        /** Fees without a kind (configured fallbacks, older payments). */
+        public EffectiveFees(int commissionBps, String commissionSource, int cardPctBps, long cardFixedMinor,
+                             Integer version, String currency) {
+            this(commissionBps, commissionSource, cardPctBps, cardFixedMinor, version, currency, null);
+        }
+
+        /** payments answered for kind SERVICE (it knows connection fees). */
+        public boolean connectionFees() {
+            return "SERVICE".equals(kind);
+        }
     }
 }
