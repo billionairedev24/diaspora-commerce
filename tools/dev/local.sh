@@ -15,9 +15,10 @@
 #   tools/dev/local.sh device android customer # build + install the development build on a USB phone
 #   tools/dev/local.sh docs                    # only the developer portal (:3100) and Storybook (:6006)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
+#   tools/dev/local.sh repair-orgs             # identity re-syncs every approved seller/provider org from seller now
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
 #
-# Make targets: make up (= dev-up), make down, make dev-status, make dev-links, make dev-logs SERVICE=x,
+# Make targets: make up (= dev-up), make down, make dev-status, make dev-links, make dev-logs SERVICE=x, make repair-orgs,
 # make dev-restart SERVICE=x, make seed. Works with macOS's bash 3.2.
 #
 # `up` seeds the demo dataset when the catalog is empty (tools/seed/seed.py --if-empty; SEED=0 skips it).
@@ -1097,6 +1098,28 @@ seed_if_empty() {
     | grep -E '^(seed:|services up|image sources|  [✗!]|  [a-z ]{3,20} {2,}|  attribution)' || true
 }
 
+# `repair-orgs`: identity reconciles its copy of every approved or suspended seller/provider organisation with the
+# seller service now (what its job does on start-up and every 5 minutes): an approval whose event identity missed gets
+# its organisation, status and owner memberships. Needs identity and seller running. Uses the seller-service client
+# (SELLER_SERVICE_CLIENT_SECRET, local default), which holds orgs:manage. Signed-in people pick it up on their next
+# token refresh (Seller Center does it at once).
+cmd_repair_orgs() {
+  local issuer secret token res
+  load_secrets
+  platform_env
+  issuer="${AUTH_ISSUER_URL:-http://localhost:$(port_of identity)}"
+  secret="${SELLER_SERVICE_CLIENT_SECRET:-local-seller-secret}"
+  if ! healthy identity || ! healthy seller; then
+    echo "  ✗ identity and seller must be running (make up, or tools/dev/local.sh up identity seller)" >&2; exit 1
+  fi
+  token=$(curl -fsS -u "seller-service:$secret" -d grant_type=client_credentials -d scope=orgs:manage \
+    "$issuer/oauth2/token" | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])') || {
+    echo "  ✗ no token from $issuer for the seller-service client (SELLER_SERVICE_CLIENT_SECRET?)" >&2; exit 1; }
+  res=$(curl -fsS -X POST -H "Authorization: Bearer $token" "http://localhost:$(port_of identity)/v1/internal/orgs/reconcile") || {
+    echo "  ✗ identity did not reconcile (is it built from this checkout? tools/dev/local.sh restart identity)" >&2; exit 1; }
+  echo "$res" | python3 -c 'import json,sys; print("  ✓ organisations checked: %(scanned)s, repaired: %(repaired)s, failed: %(failed)s" % json.load(sys.stdin))'
+}
+
 cmd_status() {
   local svc app state
   printf '%-18s %-6s %-9s %s\n' SERVICE PORT STATE URL
@@ -1157,6 +1180,7 @@ case "${1:-}" in
   docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
+  repair-orgs) cmd_repair_orgs ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
     load_secrets
     platform_env
@@ -1165,5 +1189,5 @@ case "${1:-}" in
   adb-reverse) cmd_adb_reverse ;;
   device) shift; cmd_device "$@" ;;
   apk) shift; cmd_apk "$@" ;;
-  *) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

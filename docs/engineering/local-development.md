@@ -148,6 +148,15 @@ soon as `make seed` creates their organisation (identity mirrors `seller.org.app
 AfroTransact Retail exists from identity's migrations. The seeder's `users` step then signs every account in through the
 first-party API to prove it (`make seed ARGS="--only users"`). The `ops` step then places their orders.
 
+**An approved seller that identity does not show approved.** Identity's copy of an organisation (its status, and the
+owners' memberships that put the `org` claim in their tokens) normally follows `seller.org.approved` /
+`seller.org.updated` from Kafka. If identity missed or got one late (it was down or restarting, a record failed), it
+repairs itself: a reconcile job reads the seller service's organisations 30 s after identity starts and every 5 minutes
+(`at.identity.seller-sync.*`), and Seller Center asks identity to sync the organisation the moment it sees the seller
+service approve something identity does not (`POST /v1/orgs/{id}/sync`), then rotates the session's tokens, so the
+person lands on the dashboard without signing in again. `make repair-orgs` (`tools/dev/local.sh repair-orgs`) runs the
+reconcile at once against the running stack and prints how many organisations it checked and repaired.
+
 **Who a call acts as locally.** Services run with security off, so a call without a token (the seeder, curl) acts as the
 local super admin. A call that carries the token of a customer, a driver or a seller / provider member acts as that
 person and organisation, with the token's own permissions (platform-security `LocalActorResolver`, go/pkg/auth
