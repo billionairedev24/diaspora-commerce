@@ -37,10 +37,10 @@ describe('Seller Center screens (against the seller mocks)', () => {
     expect(await screen.findAllByText(/paused/i)).not.toHaveLength(0);
   });
 
-  it('shows outstanding provider fees next to commission, Stripe and late-cancel fees', async () => {
+  it('shows outstanding provider fees next to the connection fee, Stripe and late-cancel fees', async () => {
     await renderScreen(<EarningsView />, PROVIDER_ORG);
     const totals = await screen.findByLabelText('Earnings totals');
-    expect(within(totals).getByText(/Commission/)).toBeInTheDocument();
+    expect(within(totals).getByText(/Connection fee/)).toBeInTheDocument();
     expect(within(totals).getByText('Stripe card fees')).toBeInTheDocument();
     expect(within(totals).getByText('Late-cancel fees')).toBeInTheDocument();
     expect(await screen.findByText(/outstanding\./)).toBeInTheDocument();
