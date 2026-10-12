@@ -19,6 +19,8 @@ channels:
       notificationsIdentityInvitationCreated: {$ref: '#/components/messages/identityInvitationCreated'}
       notificationsIdentityUserPhoneVerified: {$ref: '#/components/messages/identityUserPhoneVerified'}
       notificationsIdentityNotificationPreferencesUpdated: {$ref: '#/components/messages/identityNotificationPreferencesUpdated'}
+      notificationsIdentityPasswordResetFederated: {$ref: '#/components/messages/identityPasswordResetFederated'}
+      notificationsIdentityPasswordChanged: {$ref: '#/components/messages/identityPasswordChanged'}
       notificationsRequestedIdentity: {$ref: '#/components/messages/notificationsRequested'}
   notificationsOrderEvents:
     address: at.order.events
@@ -109,7 +111,10 @@ operations:
     channel: {$ref: '#/channels/notificationsIdentityEvents'}
     summary: >-
       identity.verification.requested → identity.verification (email, or the payload's channel; security, never
-      resolved through identity), or identity.verification.phone for purpose PHONE_VERIFICATION (sms);
+      resolved through identity), identity.verification.phone for purpose PHONE_VERIFICATION (sms), or
+      identity.password_reset for purpose PASSWORD_RESET (the payload's channel: email, or sms to a verified phone);
+      identity.password-reset.federated → identity.password_reset.federated (email: sign in with the linked
+      provider); identity.password.changed → identity.password_changed (email);
       identity.invitation.created → org.invitation (email to recipient.email only, never resolved through identity:
       the invitee may have no account); identity.user.registered → account.welcome (email; not for STAFF);
       identity.user.phone-verified and identity.notification-preferences.updated send nothing and drop the user's

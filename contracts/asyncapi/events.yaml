@@ -317,6 +317,10 @@ channels:
         $ref: '#/components/messages/identityInvitationRevoked'
       identityInvitationAccepted:
         $ref: '#/components/messages/identityInvitationAccepted'
+      identityPasswordResetFederated:
+        $ref: '#/components/messages/identityPasswordResetFederated'
+      identityPasswordChanged:
+        $ref: '#/components/messages/identityPasswordChanged'
   indexerDeadLetters:
     address: at.indexer.dlq.events
     description: Events the indexer could not project after its retries (same key, headers and payload as the original event).
@@ -399,6 +403,10 @@ channels:
         $ref: '#/components/messages/identityUserPhoneVerified'
       notificationsIdentityNotificationPreferencesUpdated:
         $ref: '#/components/messages/identityNotificationPreferencesUpdated'
+      notificationsIdentityPasswordResetFederated:
+        $ref: '#/components/messages/identityPasswordResetFederated'
+      notificationsIdentityPasswordChanged:
+        $ref: '#/components/messages/identityPasswordChanged'
       notificationsRequestedIdentity:
         $ref: '#/components/messages/notificationsRequested'
   notificationsOrderEvents:
@@ -1534,10 +1542,12 @@ components:
         $ref: '#/components/schemas/IdentityUserEmailVerified'
     identityVerificationRequested:
       name: identity.verification.requested
-      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment, phone verification)
+      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment, phone verification, password reset)
       description: 'Contains the plain one-time code so notifications-service can render template identity.verification on
         the payload channel (email or sms; phone verification, S234, is purpose PHONE_VERIFICATION with channel sms and recipient.phone).
-        Security message: always sent, quiet hours do not apply. Never log the payload.'
+        Password reset (S300) is purpose PASSWORD_RESET: one code, published once per channel (email, and sms when the account
+        has a verified phone), rendered with identity.password_reset. Security message: always sent, quiet hours do not apply.
+        Never log the payload.'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1646,6 +1656,26 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/IdentityInvitationRevoked'
+    identityPasswordResetFederated:
+      name: identity.password-reset.federated
+      title: A password reset was asked for an account that only signs in with Google, Apple or Facebook (S300)
+      description: 'The account has no password, so no code is sent: notifications-service emails recipient.email (template
+        identity.password_reset.federated) to sign in with the linked provider instead. Security message, never resolved through
+        identity. The requester gets the same answer as for any email (no account enumeration).'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/IdentityPasswordResetFederated'
+    identityPasswordChanged:
+      name: identity.password.changed
+      title: The account's password was reset with a code (S300)
+      description: Every session and refresh token of the account was revoked (signed out everywhere) and trusted browsers
+        were forgotten, so two-step verification is asked again where it applies. notifications-service emails recipient.email
+        (template identity.password_changed). Security message, never resolved through identity.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/IdentityPasswordChanged'
     identityInvitationAccepted:
       name: identity.invitation.accepted
       title: The invitee joined the organisation, signed in or by signing up from the link (key = user id)
@@ -5352,6 +5382,7 @@ components:
           - SIGN_IN_SMS
           - SMS_ENROLMENT
           - PHONE_VERIFICATION
+          - PASSWORD_RESET
         userId:
           type: string
           format: uuid
@@ -5740,6 +5771,91 @@ components:
         at:
           type: string
           format: date-time
+    IdentityPasswordResetFederated:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required:
+      - recipient
+      - userId
+      - providers
+      - transactional
+      properties:
+        recipient:
+          type: object
+          required:
+          - id
+          - email
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type:
+          - string
+          - 'null'
+        providers:
+          type: array
+          description: Display names of the linked providers, in a stable order
+          items:
+            type: string
+            examples:
+            - Google
+            - Apple
+            - Facebook
+        transactional:
+          type: boolean
+          const: true
+    IdentityPasswordChanged:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required:
+      - recipient
+      - userId
+      - method
+      - changedAt
+      - sessionsRevoked
+      - transactional
+      properties:
+        recipient:
+          type: object
+          required:
+          - id
+          - email
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type:
+          - string
+          - 'null'
+        method:
+          type: string
+          enum:
+          - RESET
+          description: How the password was changed
+        changedAt:
+          type: string
+          format: date-time
+        sessionsRevoked:
+          type: integer
+          minimum: 0
+          description: Signed-in apps and devices that were signed out
+        transactional:
+          type: boolean
+          const: true
     InventoryInboundShipment:
       type: object
       required:
@@ -10410,10 +10526,12 @@ operations:
     channel:
       $ref: '#/channels/notificationsIdentityEvents'
     summary: 'identity.verification.requested → identity.verification (email, or the payload''s channel; security, never resolved
-      through identity), or identity.verification.phone for purpose PHONE_VERIFICATION (sms); identity.invitation.created
-      → org.invitation (email to recipient.email only, never resolved through identity: the invitee may have no account);
-      identity.user.registered → account.welcome (email; not for STAFF); identity.user.phone-verified and identity.notification-preferences.updated
-      send nothing and drop the user''s cached contact lookup.'
+      through identity), identity.verification.phone for purpose PHONE_VERIFICATION (sms), or identity.password_reset for
+      purpose PASSWORD_RESET (the payload''s channel: email, or sms to a verified phone); identity.password-reset.federated
+      → identity.password_reset.federated (email: sign in with the linked provider); identity.password.changed → identity.password_changed
+      (email); identity.invitation.created → org.invitation (email to recipient.email only, never resolved through identity:
+      the invitee may have no account); identity.user.registered → account.welcome (email; not for STAFF); identity.user.phone-verified
+      and identity.notification-preferences.updated send nothing and drop the user''s cached contact lookup.'
   consumeNotificationsOrderEvents:
     action: receive
     channel:

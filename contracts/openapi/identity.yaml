@@ -53,6 +53,12 @@ tags:
     token, scope auth:first-party). A completed sign-in returns a one-time loginTicket that the BFF redeems on GET /oauth2/authorize?…&login_ticket=…
     (authorization code + PKCE), then exchanges the code at /oauth2/token. Failed attempts count towards per-account and per-IP
     lockouts (429 identity.sign-in-locked with Retry-After).
+- name: Password reset
+  description: 'Forgotten password (public, enumeration-safe): request a 6-digit code (email, plus SMS to a verified phone; 10-minute
+    expiry, single use, hashed at rest), then set a new password with it. Requests and wrong codes are rate-limited per email and
+    per IP with escalating lockouts (429 with Retry-After). A completed reset signs the account out everywhere (refresh tokens,
+    browser sessions, trusted browsers) and emails a "your password was changed" notice. Staff still need two-step verification
+    at the next sign-in. The hosted pages /login/forgot use the same rules.'
 paths:
   /v1/accounts:
     post:
@@ -1769,6 +1775,51 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgRoleList'
+  /v1/password-reset:
+    post:
+      tags:
+      - Password reset
+      summary: Ask for a password reset code (always 202, whether or not the email has an account)
+      description: 'If the email belongs to an account with a password, a 6-digit code (10-minute expiry, single use) is sent
+        by email and, when the account has a verified phone, by text message. An account that only signs in with Google,
+        Apple or Facebook gets an email saying to sign in with that provider instead. Unknown emails get nothing, and the
+        answer is the same in every case (no account enumeration). Every request counts towards per-email and per-IP limits:
+        429 identity.reset-locked with Retry-After once they are exceeded.'
+      operationId: requestPasswordReset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PasswordResetRequested'
+      security: []
+  /v1/password-reset/confirm:
+    post:
+      tags:
+      - Password reset
+      summary: Set a new password with the emailed or texted code
+      description: 'The new password follows the sign-up policy (422 identity.invalid-password-reset with fieldErrors.newPassword
+        / confirmPassword). A wrong, expired, used or unknown code, or an email without an account, all answer 422
+        identity.invalid-reset-code (fieldErrors.code) and count towards the per-email and per-IP lockout (429
+        identity.reset-locked with Retry-After). On success every session and refresh token of the account is revoked.'
+      operationId: confirmPasswordReset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+      security: []
 components:
   schemas:
     UpsertOrgRequest:
@@ -2949,6 +3000,52 @@ components:
         codeExpiresAt:
           type: string
           format: date-time
+    PasswordResetRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 1
+      required:
+      - email
+    PasswordResetRequested:
+      type: object
+      description: The same answer whether or not the email has an account
+      properties:
+        codeTtlMinutes:
+          type: integer
+          format: int32
+          examples:
+          - 10
+      required:
+      - codeTtlMinutes
+    PasswordResetConfirmRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 1
+        code:
+          type: string
+          minLength: 1
+          pattern: ^[0-9]{6}$
+        newPassword:
+          type: string
+          maxLength: 128
+          minLength: 1
+        confirmPassword:
+          type: string
+          maxLength: 128
+          minLength: 1
+      required:
+      - code
+      - confirmPassword
+      - email
+      - newPassword
     UpdateProfileRequest:
       type: object
       description: Null fields are left unchanged
