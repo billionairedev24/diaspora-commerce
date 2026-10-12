@@ -2,7 +2,7 @@
 
 import { AccountFormatPreferences, accountSectionOf } from '@afrotransact/account';
 import { isApiError, type ModuleKey, type OnboardingStatus, sellerKeys, sellerQueries, type SellerSession } from '@afrotransact/api-client';
-import { BackofficeFrame, Button, useToast } from '@afrotransact/ui';
+import { BackofficeFrame, Button, useNavLoop, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -11,6 +11,7 @@ import { NoAccess } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { setFormatPreferences } from '@/lib/format';
+import { navGuard, useShellRedirect } from '@/lib/nav-guard';
 import { type ApplyRole, applyRoleOf, entryDecision, kindOf } from '@/lib/onboarding-entry';
 import { hrefOf, moduleOf } from '@/lib/routes';
 import { useStorefrontUrl } from '@/lib/runtime-config';
@@ -18,7 +19,7 @@ import { SellerSessionProvider } from '@/lib/session';
 
 import { ComplianceBanner, PayoutsPausedBanner } from './ComplianceBanner';
 import { Header } from './Header';
-import { AutoSignIn, clearSignInAttempt, ShellFailed, ShellLoading } from './ShellStates';
+import { AutoSignIn, clearSignInAttempt, ShellFailed, ShellLoading, ShellLooped } from './ShellStates';
 import { Sidebar, SidebarRail } from './Sidebar';
 
 function Centered({ children }: { children: ReactNode }) {
@@ -70,7 +71,7 @@ type EntryState = { phase: 'idle' | 'working' } | { phase: 'failed'; message: st
 function useOnboardingEntry(session: SellerSession | undefined, role: ApplyRole | null, done: () => void): EntryState {
   const api = sellerApi();
   const qc = useQueryClient();
-  const router = useRouter();
+  const redirect = useShellRedirect();
   const t = useT();
   const started = useRef(false);
   const [state, setState] = useState<EntryState>({ phase: role ? 'working' : 'idle' });
@@ -85,14 +86,14 @@ function useOnboardingEntry(session: SellerSession | undefined, role: ApplyRole 
         qc.setQueryData(sellerKeys.session(), next);
       }
       if (decision.action === 'home') {
-        router.replace(hrefOf(next.landing));
+        redirect(hrefOf(next.landing));
         return;
       }
       // Start, or resume: the same idempotent call (a resumed draft gets what the account knows in empty answers).
       const st: OnboardingStatus = await api.startOnboarding(kindOf(role));
       qc.setQueryData(sellerKeys.onboarding(st.orgId), st);
       await qc.invalidateQueries({ queryKey: sellerKeys.session() });
-      router.replace('/onboarding');
+      redirect('/onboarding');
     };
     run()
       .then(() => {
@@ -103,15 +104,23 @@ function useOnboardingEntry(session: SellerSession | undefined, role: ApplyRole 
         if (isApiError(e) && e.code === 'ALREADY_APPROVED') {
           // Approved in the meantime (identity had not listed the organisation yet): open the back office.
           void qc.invalidateQueries({ queryKey: sellerKeys.session() });
-          router.replace('/');
+          redirect('/');
           setState({ phase: 'idle' });
           done();
           return;
         }
         setState({ phase: 'failed', message: (isApiError(e) && e.problem.detail) || t('sc.portalShell.couldNotStartApplication') });
       });
-  }, [session, role, api, qc, router, t, done]);
+  }, [session, role, api, qc, redirect, t, done]);
   return role ? state : { phase: 'idle' };
+}
+
+/** Longest wait for one attempt at the session (two retries follow a timeout). */
+export const SESSION_TIMEOUT_MS = 12_000;
+
+/** The query's abort signal, also aborted after `ms`. */
+function withTimeout(signal: AbortSignal, ms: number): AbortSignal {
+  return typeof AbortSignal.any === 'function' && typeof AbortSignal.timeout === 'function' ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : signal;
 }
 
 function allowed(session: SellerSession, key: ModuleKey | null): boolean {
@@ -130,7 +139,15 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const toast = useToast();
-  const q = useQuery({ ...sellerQueries.session(api), retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2 });
+  const q = useQuery({
+    ...sellerQueries.session(api),
+    // Each attempt gives up after SESSION_TIMEOUT_MS (the BFF proxy's own limit is longer), so a hung request ends in
+    // the error panel instead of a loader.
+    queryFn: ({ signal }) => api.getSession(withTimeout(signal, SESSION_TIMEOUT_MS)),
+    retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2
+  });
+  const loop = useNavLoop(navGuard);
+  const redirect = useShellRedirect();
   const session = q.data;
   const active = moduleOf(pathname);
   // My account (/account/…) belongs to the person, not an organisation: open without one, but not while an
@@ -161,11 +178,26 @@ export function PortalShell({ children }: { children: ReactNode }) {
 
   const needsOnboarding = !entering && !!session?.activeOrg && !session.approved && active !== 'onboarding';
   const leaveOnboarding = !entering && !!session?.approved && active === 'onboarding';
+  // Approved: onboarding is gone, go to the landing — unless the landing is onboarding itself (a session that says
+  // approved with nothing else open), which would send the page to itself for ever.
+  const leaveTo = leaveOnboarding && session && session.landing !== 'onboarding' ? hrefOf(session.landing) : null;
   useEffect(() => {
-    if (needsOnboarding) router.replace('/onboarding');
-    else if (leaveOnboarding && session) router.replace(hrefOf(session.landing));
-  }, [needsOnboarding, leaveOnboarding, session, router]);
+    if (needsOnboarding) redirect('/onboarding');
+    else if (leaveTo) redirect(leaveTo);
+  }, [needsOnboarding, leaveTo, redirect]);
+  const showsPage = !!session && !entering && !needsOnboarding && !leaveTo && !loop;
+  useEffect(() => {
+    if (showsPage) navGuard.loaded();
+  }, [showsPage]);
 
+  if (loop) {
+    return (
+      <>
+        <Header session={session ?? null} />
+        <ShellLooped loop={loop} />
+      </>
+    );
+  }
   if (q.isPending) {
     return (
       <>
@@ -242,14 +274,14 @@ export function PortalShell({ children }: { children: ReactNode }) {
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">
           {session.approved ? <PayoutsPausedBanner /> : null}
           {session.approved ? <ComplianceBanner onAccountHealth={active === 'account-health'} /> : null}
-          {needsOnboarding || leaveOnboarding ? (
+          {needsOnboarding || leaveTo ? (
             <ShellLoading label={t('sc.portalShell.loadingYourBackOffice')} onRetry={() => window.location.reload()} />
           ) : canOpen ? (
             <AccountFormatPreferences apply={setFormatPreferences}>{children}</AccountFormatPreferences>
           ) : (
             <NoAccess role={session.activeOrg.roleLabel} />
           )}
-          {!canOpen && !needsOnboarding && !leaveOnboarding ? (
+          {!canOpen && !needsOnboarding && !leaveTo ? (
             <div className="flex justify-center">
               <Button variant="neutral" onClick={() => router.push(hrefOf(session.landing))}>
                 Go to {session.navGroups[0]?.modules[0]?.label ?? 'home'}

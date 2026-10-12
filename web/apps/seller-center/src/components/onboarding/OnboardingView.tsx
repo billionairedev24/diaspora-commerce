@@ -11,6 +11,7 @@ import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { signOutEverywhere } from '@/lib/auth';
+import { useShellRedirect } from '@/lib/nav-guard';
 import { prefillNote } from '@/lib/onboarding-form';
 import { isEditable, nextSlug, onboardingHref, prevSlug, progressOf, redirectFor } from '@/lib/onboarding-wizard';
 import { useSeller } from '@/lib/session';
@@ -105,11 +106,11 @@ function PrefillBanner({ status }: { status: OnboardingStatus }) {
  */
 export function OnboardingView() {
   const q = useOnboarding();
-  const router = useRouter();
+  const redirect = useShellRedirect();
   const target = q.data ? redirectFor(q.data, null) : null;
   useEffect(() => {
-    if (target) router.replace(target);
-  }, [target, router]);
+    if (target) redirect(target);
+  }, [target, redirect]);
   if (q.isPending || target) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   return (
@@ -135,10 +136,11 @@ export function OnboardingWizard({ slug }: { slug: string }) {
   const step = useRef<StepHandle>(null);
   const [busy, setBusy] = useState<'continue' | 'exit' | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const redirect = useShellRedirect();
   const target = q.data ? redirectFor(q.data, slug) : null;
   useEffect(() => {
-    if (target) router.replace(target);
-  }, [target, router]);
+    if (target) redirect(target);
+  }, [target, redirect]);
 
   if (q.isPending || target) return <Spinner />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
