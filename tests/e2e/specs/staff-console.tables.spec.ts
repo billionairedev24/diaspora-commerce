@@ -55,7 +55,7 @@ test.describe('staff console · data table', () => {
 
     // Columns menu: hiding a column is remembered for this table.
     await page.getByRole('button', { name: /Columns/ }).click();
-    await page.getByRole('checkbox', { name: 'Lot' }).uncheck();
+    await page.getByRole('checkbox', { name: 'Lot', exact: true }).uncheck();
     await expect(table.getByRole('columnheader', { name: /^Lot/ })).toHaveCount(0);
     await page.reload();
     await expect(bodyRows.first()).toBeVisible();
