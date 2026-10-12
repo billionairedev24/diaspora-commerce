@@ -9,5 +9,5 @@
     "tsBuildInfoFile": "node_modules/.cache/tsconfig.tsbuildinfo"
   },
   "include": ["src", "test", "*.ts"],
-  "exclude": ["node_modules", ".next", ".next-e2e", ".next-prod", "next-env.d.ts"]
+  "exclude": ["node_modules", ".next", ".next-e2e", ".next-prod", ".next-*", "next-env.d.ts"]
 }

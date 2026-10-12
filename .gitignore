@@ -42,6 +42,8 @@ __pycache__/
 *.tsbuildinfo
 .next-e2e/
 .next-prod/
+# Any other Next.js build folder (NEXT_DIST_DIR=.next-<purpose>: repro, resp, …)
+.next-*/
 .local/
 # Written by next dev (Next.js 16 agent notes)
 web/apps/*/AGENTS.md
