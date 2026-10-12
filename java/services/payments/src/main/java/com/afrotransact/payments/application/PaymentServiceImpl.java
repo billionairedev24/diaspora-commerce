@@ -75,13 +75,16 @@ class PaymentServiceImpl implements PaymentService {
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
     private final PaymentsSettings settings;
+    private final OrgPlanService orgPlans;
+    private final LineRates lineRates;
     private final Clock clock;
 
     PaymentServiceImpl(PaymentRepository payments, FeeScheduleRepository feeSchedules,
                        SettlementRepository settlements, StripeGateway stripe, PaymentSplitter splitter,
                        LedgerPoster ledger, IdempotencyStore idempotency, PaymentStatusUpdater statuses,
                        WalletSync wallet, WalletRepository savedMethods, MoneyTransactions tx, PaymentsAccess access,
-                       DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
+                       DomainEventPublisher events, PaymentsSettings settings, OrgPlanService orgPlans,
+                       LineRates lineRates, Clock clock) {
         this.payments = payments;
         this.feeSchedules = feeSchedules;
         this.settlements = settlements;
@@ -96,6 +99,8 @@ class PaymentServiceImpl implements PaymentService {
         this.access = access;
         this.events = events;
         this.settings = settings;
+        this.orgPlans = orgPlans;
+        this.lineRates = lineRates;
         this.clock = clock;
     }
 
@@ -104,6 +109,8 @@ class PaymentServiceImpl implements PaymentService {
         access.service();
         CreatePaymentCommand cmd = validate(raw);
         String fingerprint = Fingerprint.of(cmd);
+        // Plans are read before the money transaction: a first sight of an organisation may ask the seller service.
+        Map<String, String> plans = orgPlans.plansOf(LineRates.orgsOf(cmd.lines()));
         return tx.serializable(() -> {
             Optional<StoredRef> prior = idempotency.claim("payment-create", idempotencyKey, fingerprint,
                     StoredRef.class);
@@ -122,8 +129,9 @@ class PaymentServiceImpl implements PaymentService {
             UUID paymentId = Fingerprint.id("payment", cmd.orderId());
             StripeCustomer saved = cmd.offSession() ? savedCustomer(cmd.shopperId()) : null;
             String stripeCustomer = saved != null ? saved.stripeCustomerId() : stripeCustomerFor(cmd);
+            List<OrderLine> priced = lineRates.snapshot(schedule, cmd.lines(), placedAt, plans);
             Payment payment = Payment.create(paymentId, cmd.orderId(), stripeCustomer, cmd.amount(), schedule.id(),
-                    placedAt, cmd.metadata(), cmd.lines(), now);
+                    placedAt, cmd.metadata(), priced, now);
             if (!payments.claim(payment)) {
                 throw new PaymentsStateConflict("payments.payment-in-flight", "The payment of order "
                         + cmd.orderId() + " is being created; retry");
@@ -202,7 +210,7 @@ class PaymentServiceImpl implements PaymentService {
     }
 
     private PaymentResult replayCreate(Payment existing, CreatePaymentCommand cmd, String idempotencyKey) {
-        List<OrderLine> lines = existing.lines().stream().map(PaymentLine::line).toList();
+        List<OrderLine> lines = existing.lines().stream().map(pl -> pl.line().withoutRate()).toList();
         if (!existing.amount().equals(cmd.amount()) || !lines.equals(cmd.lines())) {
             throw new PaymentsStateConflict("payments.order-already-paid", "Order " + cmd.orderId()
                     + " already has a payment with different amount or lines");

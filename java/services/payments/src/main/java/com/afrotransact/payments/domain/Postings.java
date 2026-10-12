@@ -13,7 +13,8 @@ public final class Postings {
 
     /**
      * Capture of a charge: Dr 1000 Stripe clearing (charge − fee) and Dr 5000 Stripe fees (AfroTransact's share) /
-     * Cr 2000 seller payable (net), Cr 2100 sales tax payable per jurisdiction, Cr 4000 commission, Cr 4100 FBA fees,
+     * Cr 2000 seller payable (net), Cr 2100 sales tax payable per jurisdiction, Cr 4000 commission (products), Cr 4050
+     * connection fees (service bookings), Cr 4100 FBA fees,
      * Cr 4200 AfroTransact shipping, Cr 4250 local delivery fees (AfroTransact Delivery from seller stores, and the
      * pre-order delivery fees of S272, which are part of the platform's shipping but not of 4200). Sellers
      * bear their fee share through a lower payable. AfroTransact Retail's net
@@ -34,6 +35,7 @@ public final class Postings {
                 b.credit(LedgerAccount.salesTax(tax.getKey()), tax.getValue(), s.recipientId());
             }
             b.credit(LedgerAccount.of(Chart.COMMISSION_REVENUE), s.commission(), s.recipientId());
+            b.credit(LedgerAccount.of(Chart.CONNECTION_FEE_REVENUE), s.connectionFees(), s.recipientId());
             b.credit(LedgerAccount.of(Chart.FBA_FEE_REVENUE), s.fbaFees(), s.recipientId());
             b.credit(LedgerAccount.of(Chart.LOCAL_DELIVERY_FEE_REVENUE), s.deliveryFees(), s.recipientId());
         }
@@ -46,7 +48,7 @@ public final class Postings {
 
     /**
      * Refund: Dr 2100 tax, Dr 2000 seller payable (items + own shipping − commission returned), Dr 4000 commission
-     * returned, Dr 4200 AfroTransact shipping, Dr 4250 delivery fee returned (customer-fault refunds of AfroTransact
+     * returned (Dr 4050 for the connection fee of a service line), Dr 4200 AfroTransact shipping, Dr 4250 delivery fee returned (customer-fault refunds of AfroTransact
      * Delivery lines) / Cr 2200 customer refunds payable. FBA fees and Stripe fee shares are not given back. Lines of AfroTransact Retail ({@code retailOrgId}) debit 4400 Retail sales instead of a
      * payable (Retail paid no commission, so none is returned).
      */
@@ -59,7 +61,8 @@ public final class Postings {
             total = total == null ? l.total() : total.plus(l.total());
             b.debit(LedgerAccount.salesTax(l.taxJurisdiction()), l.tax(), l.sellerOrg());
             b.debit(owner(l.sellerOrg(), retailOrgId), l.sellerDebit(), l.sellerOrg());
-            b.debit(LedgerAccount.of(Chart.COMMISSION_REVENUE), l.commissionReversed(), l.sellerOrg());
+            b.debit(LedgerAccount.of(l.connectionFee() ? Chart.CONNECTION_FEE_REVENUE : Chart.COMMISSION_REVENUE),
+                    l.commissionReversed(), l.sellerOrg());
             b.debit(LedgerAccount.of(Chart.LOCAL_DELIVERY_FEE_REVENUE), l.deliveryFeeReversed(), l.sellerOrg());
             if (l.shippingToPlatform()) {
                 b.debit(LedgerAccount.of(l.preorderDeliveryFee() ? Chart.LOCAL_DELIVERY_FEE_REVENUE

@@ -10,11 +10,15 @@ import java.util.UUID;
 
 import com.afrotransact.payments.application.CaptureResult;
 import com.afrotransact.payments.application.DeliveryPricingCommand;
+import com.afrotransact.payments.application.NegotiatedRateView;
+import com.afrotransact.payments.application.NewNegotiatedRateCommand;
 import com.afrotransact.payments.application.OrderSplit;
 import com.afrotransact.payments.application.PlanFeeService;
+import com.afrotransact.payments.application.RateCard;
 import com.afrotransact.payments.application.RefundResult;
 import com.afrotransact.payments.application.WalletMethod;
 import com.afrotransact.payments.domain.AccountBalance;
+import com.afrotransact.payments.domain.AppliedRate;
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.CommissionOverride;
 import com.afrotransact.payments.domain.DeliveryMode;
@@ -22,12 +26,17 @@ import com.afrotransact.payments.domain.DeliveryPricing;
 import com.afrotransact.payments.domain.DeliveryQuote;
 import com.afrotransact.payments.domain.DeliveryTariff;
 import com.afrotransact.payments.domain.EffectiveFees;
+import com.afrotransact.payments.domain.FeeKind;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Fulfilment;
 import com.afrotransact.payments.domain.Journal;
 import com.afrotransact.payments.domain.LabelCharge;
 import com.afrotransact.payments.domain.LineSplit;
 import com.afrotransact.payments.domain.Money;
+import com.afrotransact.payments.domain.NegotiatedRate;
+import com.afrotransact.payments.domain.NegotiatedRateAudit;
+import com.afrotransact.payments.domain.NegotiatedRateStatus;
+import com.afrotransact.payments.domain.NegotiatedRateType;
 import com.afrotransact.payments.domain.OrderLine;
 import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
@@ -37,6 +46,7 @@ import com.afrotransact.payments.domain.PlanFeeDeduction;
 import com.afrotransact.payments.domain.PlanFeeWithholding;
 import com.afrotransact.payments.domain.Postings;
 import com.afrotransact.payments.domain.ProviderFee;
+import com.afrotransact.payments.domain.RateTable;
 import com.afrotransact.payments.domain.ReconciliationReport;
 import com.afrotransact.payments.domain.RecipientShare;
 import com.afrotransact.payments.domain.Refund;
@@ -107,14 +117,19 @@ final class PaymentsDtos {
             @Schema(description = "AFROTRANSACT_DELIVERY lines (S255): the seller's pickup-delivery fee allocated to "
                     + "this line, as quoted at checkout (POST /v1/delivery-pricing/quote) and snapshotted by orders. "
                     + "Credited to 4250 at capture; ignored for AfroTransact Retail; must be 0 on other lines")
-            @PositiveOrZero Long deliveryFeeMinor) {
+            @PositiveOrZero Long deliveryFeeMinor,
+            @Schema(description = "PRODUCT (default): AfroTransact charges a commission (4000). SERVICE (service "
+                    + "bookings): a connection fee (4050) under the fee schedule's connectionFee section, the category "
+                    + "being the service's category. Omitted with category 'services' = SERVICE (bookings before "
+                    + "connection fees)", allowableValues = {"PRODUCT", "SERVICE"}) String kind) {
 
         OrderLine toLine(String currency) {
             return new OrderLine(lineId, sellerOrg, category, fulfilment, quantity, Money.of(itemsMinor, currency),
                     Money.of(shippingMinor == null ? 0 : shippingMinor, currency),
                     Money.of(taxMinor == null ? 0 : taxMinor, currency), taxJurisdiction,
                     Money.of(shippingTaxMinor == null ? 0 : shippingTaxMinor, currency),
-                    Money.of(deliveryFeeMinor == null ? 0 : deliveryFeeMinor, currency));
+                    Money.of(deliveryFeeMinor == null ? 0 : deliveryFeeMinor, currency), FeeKind.of(kind, category),
+                    null);
         }
     }
 
@@ -160,16 +175,28 @@ final class PaymentsDtos {
                         @Schema(description = "Delivery fee charged at capture (0 for AfroTransact Retail)")
                         long deliveryFeeChargedMinor,
                         @Schema(description = "Delivery fee given back by customer-fault refunds")
-                        long deliveryFeeReversedMinor) {
+                        long deliveryFeeReversedMinor,
+                        @Schema(description = "PRODUCT (commissionMinor is commission) or SERVICE (commissionMinor is "
+                                + "the connection fee)", allowableValues = {"PRODUCT", "SERVICE"}) String feeKind,
+                        @Schema(description = "Rate snapshotted when the payment was created (null on older lines, "
+                                + "which keep their fee-schedule version's commission)") Integer rateBps,
+                        @Schema(allowableValues = {"OVERRIDE", "PLAN", "CATEGORY", "DEFAULT", "RETAIL"})
+                        String rateSource,
+                        @Schema(description = "The seller's plan when the rate was resolved") String ratePlanCode,
+                        @Schema(description = "The negotiated rate that applied (rateSource OVERRIDE)")
+                        UUID negotiatedRateId) {
 
         static LineResponse of(PaymentLine pl) {
             OrderLine l = pl.line();
+            AppliedRate r = l.rate();
             return new LineResponse(l.lineId(), l.sellerOrg(), l.category(), l.fulfilment().name(), l.quantity(),
                     l.items().minor(), l.shipping().minor(), l.tax().minor(), l.taxJurisdiction(), pl.captureId(),
                     pl.commission().minor(), pl.fbaFee().minor(), pl.refundedTotal().minor(),
                     l.shippingTax().minor(), l.itemsTax().minor(), pl.refundedItems().minor(),
                     pl.refundedShipping().minor(), pl.refundedTax().minor(), pl.refundable().minor(),
-                    l.deliveryFee().minor(), pl.deliveryFee().minor(), pl.deliveryFeeReversed().minor());
+                    l.deliveryFee().minor(), pl.deliveryFee().minor(), pl.deliveryFeeReversed().minor(),
+                    l.kind().name(), r == null ? null : r.bps(), r == null ? null : r.source().name(),
+                    r == null ? null : r.planCode(), r == null ? null : r.negotiatedRateId());
         }
     }
 
@@ -248,7 +275,7 @@ final class PaymentsDtos {
                     r.amount().currency(), r.status().name(), r.reason(), r.lines().stream()
                     .map(l -> new RefundLineResponse(l.lineId(), l.sellerOrg(), l.items().minor(),
                             l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor(),
-                            l.deliveryFeeReversed().minor())).toList(),
+                            l.deliveryFeeReversed().minor(), l.connectionFee())).toList(),
                     reversals, r.createdAt(), r.settledAt(), replayed);
         }
     }
@@ -256,7 +283,9 @@ final class PaymentsDtos {
     record RefundLineResponse(String lineId, String sellerOrg, long itemsMinor, long shippingMinor, long taxMinor,
                               long commissionReversedMinor,
                               @Schema(description = "AfroTransact Delivery fee returned to the seller (customer fault)")
-                              long deliveryFeeReversedMinor) {
+                              long deliveryFeeReversedMinor,
+                              @Schema(description = "A service line: commissionReversedMinor is connection fee given "
+                                      + "back (4050)") boolean connectionFee) {
     }
 
     // ------------------------------------------------------------------ split & fees
@@ -282,23 +311,33 @@ final class PaymentsDtos {
                              long itemsMinor, long shippingMinor, long taxMinor,
                              Map<String, Long> taxByJurisdiction, long commissionMinor, long fbaFeesMinor,
                              @Schema(description = "AfroTransact Delivery pickup-delivery fees (4250)")
-                             long deliveryFeesMinor, long stripeFeeMinor, long netMinor) {
+                             long deliveryFeesMinor, long stripeFeeMinor, long netMinor,
+                             @Schema(description = "Service connection fees (4050), apart from product commission")
+                             long connectionFeesMinor) {
 
         static RecipientResponse of(RecipientShare r) {
             Map<String, Long> tax = new TreeMap<>();
             r.taxByJurisdiction().forEach((k, v) -> tax.put(k, v.minor()));
             return new RecipientResponse(r.recipientId(), r.kind().name(), r.items().minor(), r.shipping().minor(),
                     r.tax().minor(), tax, r.commission().minor(), r.fbaFees().minor(), r.deliveryFees().minor(),
-                    r.stripeFee().minor(), r.net().minor());
+                    r.stripeFee().minor(), r.net().minor(), r.connectionFees().minor());
         }
     }
 
+    @Schema(description = "One line: commissionBps / commissionMinor are the line's take rate and amount: commission "
+            + "for PRODUCT lines, connection fee for SERVICE lines (also in connectionFeeMinor)")
     record LineSplitResponse(String lineId, String sellerOrg, int commissionBps, long commissionMinor,
-                             long fbaFeeMinor, boolean shippingToPlatform, long deliveryFeeMinor) {
+                             long fbaFeeMinor, boolean shippingToPlatform, long deliveryFeeMinor,
+                             @Schema(allowableValues = {"PRODUCT", "SERVICE"}) String feeKind,
+                             @Schema(description = "Where the rate came from; null on lines created before rates "
+                                     + "were snapshotted", allowableValues = {"OVERRIDE", "PLAN", "CATEGORY", "DEFAULT",
+                                     "RETAIL"}) String rateSource,
+                             long connectionFeeMinor) {
 
         static LineSplitResponse of(LineSplit l) {
             return new LineSplitResponse(l.lineId(), l.sellerOrg(), l.commissionBps(), l.commission().minor(),
-                    l.fbaFee().minor(), l.shippingToPlatform(), l.deliveryFee().minor());
+                    l.fbaFee().minor(), l.shippingToPlatform(), l.deliveryFee().minor(), l.kind().name(),
+                    l.rateSource(), l.connectionFee().minor());
         }
     }
 
@@ -318,7 +357,39 @@ final class PaymentsDtos {
             @Size(max = 500) String note,
             @Valid @Schema(description = "AfroTransact Delivery pricing (S255). Omit to carry the latest version's "
                     + "section over; send enabled=false to stop offering AfroTransact Delivery from seller stores")
-            DeliveryPricingRequest deliveryPricing) {
+            DeliveryPricingRequest deliveryPricing,
+            @Schema(description = "Product commission per plan: plan code → category → bps ('*' = the plan's rate "
+                    + "for categories it does not list). Applies after negotiated rates and before category rates. "
+                    + "Omit to carry the latest version's plan rates over; {} removes them")
+            Map<String, Map<String, @Min(0) @Max(10000) Integer>> planBps,
+            @Valid @Schema(description = "Service connection fees (on service bookings). Omit to carry the latest "
+                    + "version's section over")
+            ConnectionFeeRequest connectionFee) {
+    }
+
+    @Schema(name = "ConnectionFee", description = "The connection fee providers pay on each booking's service amount, "
+            + "on top of their plan fee: default, per service category and per plan (plan → category → bps, '*' = "
+            + "the plan's other categories). Negotiated connection fees win over all of them")
+    record ConnectionFeeRequest(
+            @Min(0) @Max(10000) @Schema(description = "Rate of service categories nobody lists", example = "1000")
+            int defaultBps,
+            Map<String, @Min(0) @Max(10000) Integer> categoryBps,
+            Map<String, Map<String, @Min(0) @Max(10000) Integer>> planBps) {
+
+        RateTable toTable() {
+            return new RateTable(defaultBps, categoryBps, planBps);
+        }
+
+        static ConnectionFeeRequest of(RateTable t) {
+            return t == null ? null : new ConnectionFeeRequest(t.defaultBps(), new TreeMap<>(t.categoryBps()),
+                    sorted(t.planBps()));
+        }
+    }
+
+    static Map<String, Map<String, Integer>> sorted(Map<String, Map<String, Integer>> plans) {
+        Map<String, Map<String, Integer>> out = new TreeMap<>();
+        plans.forEach((plan, rates) -> out.put(plan, new TreeMap<>(rates)));
+        return out;
     }
 
     @Schema(description = "AfroTransact Delivery from seller stores: the customer's delivery charge (to 4200), the "
@@ -438,7 +509,12 @@ final class PaymentsDtos {
                                @Schema(description = "Who cancelled the version") String cancelledBy,
                                @Schema(description = "Why the version was cancelled") String cancelReason,
                                @Schema(description = "AfroTransact Delivery pricing (S255)")
-                               DeliveryPricingResponse deliveryPricing) {
+                               DeliveryPricingResponse deliveryPricing,
+                               @Schema(description = "Product commission per plan (plan → category → bps)")
+                               Map<String, Map<String, Integer>> planBps,
+                               @Schema(description = "Service connection fees; null for versions created before "
+                                       + "they existed (services then paid the 'services' commission)")
+                               ConnectionFeeRequest connectionFee) {
 
         static FeeScheduleResponse of(FeeSchedule s) {
             FeeSchedule.Cancellation c = s.cancellation();
@@ -447,7 +523,8 @@ final class PaymentsDtos {
                     .map(o -> new OverrideRequest(o.orgId(), o.category(), o.commissionBps())).toList(),
                     s.cardPctBps(), s.cardFixed().minor(), s.fbaPerUnit().minor(), s.reverseCommissionOnRefund(),
                     s.note(), s.createdBy(), s.createdAt(), c == null ? null : c.at(), c == null ? null : c.by(),
-                    c == null ? null : c.reason(), DeliveryPricingResponse.of(s.deliveryPricing()));
+                    c == null ? null : c.reason(), DeliveryPricingResponse.of(s.deliveryPricing()),
+                    sorted(s.planBps()), ConnectionFeeRequest.of(s.connectionFee()));
         }
     }
 
@@ -455,22 +532,120 @@ final class PaymentsDtos {
     record CancelFeeScheduleRequest(@NotBlank @Size(max = 500) String reason) {
     }
 
-    @Schema(description = "Fees payments applies to one organisation and category (fee-schedule version in force)")
+    @Schema(description = "Fees payments applies to one organisation, kind and category (fee-schedule version in "
+            + "force). For kind SERVICE, commissionBps is the connection fee")
     record EffectiveFeesResponse(UUID feeScheduleId, int version, Instant effectiveFrom, String currency,
                                  String category, String orgId,
-                                 @Schema(description = "Commission in basis points (1000 = 10 %)") int commissionBps,
-                                 @Schema(allowableValues = {"OVERRIDE", "CATEGORY", "DEFAULT", "RETAIL"})
+                                 @Schema(description = "Commission (PRODUCT) or connection fee (SERVICE) in basis "
+                                         + "points (1000 = 10 %)") int commissionBps,
+                                 @Schema(description = "First match: OVERRIDE (negotiated), PLAN, CATEGORY, DEFAULT; "
+                                         + "RETAIL = AfroTransact Retail pays none",
+                                         allowableValues = {"OVERRIDE", "PLAN", "CATEGORY", "DEFAULT", "RETAIL"})
                                  String commissionSource,
                                  @Schema(description = "Card fee estimate per charge: percentage part in bps")
                                  int cardPctBps,
                                  @Schema(description = "Card fee estimate per charge: fixed part") long cardFixedMinor,
                                  @Schema(description = "FBA fee per unit; 0 for AfroTransact Retail")
-                                 long fbaPerUnitMinor, boolean reverseCommissionOnRefund) {
+                                 long fbaPerUnitMinor, boolean reverseCommissionOnRefund,
+                                 @Schema(allowableValues = {"PRODUCT", "SERVICE"}) String kind,
+                                 @Schema(description = "The organisation's plan (null when none or unknown)")
+                                 String planCode,
+                                 @Schema(description = "The negotiated rate that applies (source OVERRIDE)")
+                                 UUID negotiatedRateId,
+                                 @Schema(description = "When that negotiated rate ends (null = open-ended)")
+                                 Instant negotiatedUntil) {
 
         static EffectiveFeesResponse of(EffectiveFees f) {
             return new EffectiveFeesResponse(f.feeScheduleId(), f.version(), f.effectiveFrom(), f.currency(),
                     f.category(), f.orgId(), f.commissionBps(), f.commissionSource(), f.cardPctBps(),
-                    f.cardFixed().minor(), f.fbaPerUnit().minor(), f.reverseCommissionOnRefund());
+                    f.cardFixed().minor(), f.fbaPerUnit().minor(), f.reverseCommissionOnRefund(), f.kind().name(),
+                    f.planCode(), f.negotiatedRateId(), f.negotiatedUntil());
+        }
+    }
+
+    @Schema(name = "AppliedRate", description = "A commission or connection-fee rate and where it comes from")
+    record AppliedRateResponse(String category,
+                               @Schema(description = "Basis points (800 = 8 %)") int bps,
+                               @Schema(allowableValues = {"OVERRIDE", "PLAN", "CATEGORY", "DEFAULT", "RETAIL"})
+                               String source,
+                               String planCode, UUID negotiatedRateId, Instant negotiatedUntil) {
+
+        static AppliedRateResponse of(AppliedRate r) {
+            return new AppliedRateResponse(r.category(), r.bps(), r.source().name(), r.planCode(),
+                    r.negotiatedRateId(), r.negotiatedUntil());
+        }
+    }
+
+    @Schema(name = "RateCard", description = "Every rate one organisation pays on PRODUCT (commission) or SERVICE "
+            + "(connection fee) lines at a time, with the source of each and its negotiated rates")
+    record RateCardResponse(String orgId, @Schema(allowableValues = {"PRODUCT", "SERVICE"}) String kind,
+                            UUID feeScheduleId, int version, Instant effectiveFrom, Instant at, String currency,
+                            String planCode,
+                            @Schema(description = "Rate of any category not listed") AppliedRateResponse otherRate,
+                            List<AppliedRateResponse> categories, List<NegotiatedRateResponse> negotiated,
+                            int cardPctBps, long cardFixedMinor, long fbaPerUnitMinor,
+                            boolean reverseCommissionOnRefund, boolean retail) {
+
+        static RateCardResponse of(RateCard c, Instant now) {
+            return new RateCardResponse(c.orgId(), c.kind().name(), c.scheduleId(), c.version(), c.effectiveFrom(),
+                    c.at(), c.currency(), c.planCode(), AppliedRateResponse.of(c.otherRate()),
+                    c.categories().stream().map(AppliedRateResponse::of).toList(),
+                    c.negotiated().stream().map(n -> NegotiatedRateResponse.of(n, n.status(now), List.of())).toList(),
+                    c.cardPctBps(), c.cardFixed().minor(), c.fbaPerUnit().minor(), c.reverseOnRefund(), c.retail());
+        }
+    }
+
+    // ------------------------------------------------------------------ negotiated rates
+
+    @Schema(name = "NewNegotiatedRate", description = "A commission or connection fee negotiated with one organisation")
+    record NegotiatedRateRequest(
+            @NotBlank @Size(max = 80) String orgId,
+            @NotNull NegotiatedRateType type,
+            @Size(max = 80) @Schema(description = "One category; omit or '*' for every category") String category,
+            @Min(0) @Max(10000) @Schema(description = "Basis points (800 = 8 %)") int rateBps,
+            @Schema(description = "Default now; never in the past") Instant startsAt,
+            @Schema(description = "Omit for open-ended; a job records the expiry at this time") Instant endsAt,
+            @NotBlank @Size(max = 500) @Schema(description = "Why (kept in the audit trail)") String reason,
+            @Size(max = 120) @Schema(description = "Staff member who negotiated it; default the caller")
+            String negotiatedBy,
+            @Size(max = 120) @Schema(description = "Contract or ticket reference") String reference) {
+
+        NewNegotiatedRateCommand toCommand() {
+            return new NewNegotiatedRateCommand(orgId, type, category, rateBps, startsAt, endsAt, reason,
+                    negotiatedBy, reference);
+        }
+    }
+
+    @Schema(name = "EndNegotiatedRate", description = "Why a negotiated rate ends now (audited)")
+    record EndNegotiatedRateRequest(@NotBlank @Size(max = 500) String reason) {
+    }
+
+    @Schema(name = "NegotiatedRateAuditEntry")
+    record NegotiatedRateAuditResponse(@Schema(allowableValues = {"CREATED", "ENDED", "EXPIRED"}) String action,
+                                       String actor, String reason, Instant at) {
+    }
+
+    @Schema(name = "NegotiatedRate", description = "A negotiated commission or connection fee with its status now")
+    record NegotiatedRateResponse(UUID id, String orgId,
+                                  @Schema(allowableValues = {"COMMISSION", "CONNECTION_FEE"}) String type,
+                                  @Schema(description = "'*' = every category") String category, int rateBps,
+                                  Instant startsAt, Instant endsAt,
+                                  @Schema(allowableValues = {"SCHEDULED", "ACTIVE", "ENDED", "EXPIRED"}) String status,
+                                  String reason, String negotiatedBy, String reference, String createdBy,
+                                  Instant createdAt, Instant endedAt, String endedBy, String endReason,
+                                  Instant expiredAt, long rowVersion, List<NegotiatedRateAuditResponse> audit) {
+
+        static NegotiatedRateResponse of(NegotiatedRate r, NegotiatedRateStatus status,
+                                         List<NegotiatedRateAudit> audit) {
+            return new NegotiatedRateResponse(r.id(), r.orgId(), r.type().name(), r.category(), r.rateBps(),
+                    r.startsAt(), r.endsAt(), status.name(), r.reason(), r.negotiatedBy(), r.reference(),
+                    r.createdBy(), r.createdAt(), r.endedAt(), r.endedBy(), r.endReason(), r.expiredAt(), r.version(),
+                    audit.stream().map(a -> new NegotiatedRateAuditResponse(a.action(), a.actor(), a.reason(),
+                            a.at())).toList());
+        }
+
+        static NegotiatedRateResponse of(NegotiatedRateView v) {
+            return of(v.rate(), v.status(), v.audit());
         }
     }
 
@@ -606,12 +781,16 @@ final class PaymentsDtos {
                                          + "DISPUTE_WON, LABEL_CHARGE, LABEL_CREDIT, …") String kind,
                                  Instant occurredAt, String orderId, String description, long amountMinor,
                                  String currency, String labelId, String shipmentId, String trackingNumber,
-                                 String carrier) {
+                                 String carrier,
+                                 @Schema(description = "Product commission taken in this movement (negative when a "
+                                         + "refund gave it back)") long commissionMinor,
+                                 @Schema(description = "Service connection fee taken in this movement (negative when "
+                                         + "a refund gave it back), apart from commission") long connectionFeeMinor) {
 
         static StatementLineResponse of(StatementLine l) {
             return new StatementLineResponse(l.journalId(), l.kind().name(), l.occurredAt(), l.orderId(),
                     l.description(), l.amount().minor(), l.amount().currency(), l.labelId(), l.shipmentId(),
-                    l.trackingNumber(), l.carrier());
+                    l.trackingNumber(), l.carrier(), l.commission().minor(), l.connectionFee().minor());
         }
     }
 

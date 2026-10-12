@@ -8,13 +8,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.payments.domain.AppliedRate;
 import com.afrotransact.payments.domain.Capture;
+import com.afrotransact.payments.domain.FeeKind;
 import com.afrotransact.payments.domain.Fulfilment;
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.OrderLine;
 import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
 import com.afrotransact.payments.domain.PaymentStatus;
+import com.afrotransact.payments.domain.RateSource;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.RefundLine;
 import com.afrotransact.payments.domain.RefundStatus;
@@ -74,12 +77,15 @@ class JdbcPaymentRepository implements PaymentRepository {
         int lineNo = 0;
         for (PaymentLine pl : p.lines()) {
             OrderLine l = pl.line();
+            AppliedRate rate = l.rate();
             jdbc.sql("""
                     insert into payment_line (payment_id, line_no, line_id, seller_org, category, fulfilment,
                         quantity, items_minor, shipping_minor, tax_minor, tax_jurisdiction, shipping_to_platform,
-                        shipping_tax_minor, delivery_fee_minor)
+                        shipping_tax_minor, delivery_fee_minor, fee_kind, rate_bps, rate_source, rate_plan_code,
+                        negotiated_rate_id, negotiated_until)
                     values (:pid, :no, :lineId, :org, :category, :fulfilment, :qty, :items, :shipping, :tax,
-                        :jurisdiction, :toPlatform, :shippingTax, :deliveryFee)
+                        :jurisdiction, :toPlatform, :shippingTax, :deliveryFee, :kind, :rateBps, :rateSource,
+                        :ratePlan, :negotiatedId, :negotiatedUntil)
                     """)
                     .param("pid", p.id()).param("no", ++lineNo).param("lineId", l.lineId())
                     .param("org", l.sellerOrg()).param("category", l.category())
@@ -88,6 +94,13 @@ class JdbcPaymentRepository implements PaymentRepository {
                     .param("tax", l.tax().minor()).param("jurisdiction", l.taxJurisdiction())
                     .param("toPlatform", pl.shippingToPlatform()).param("shippingTax", l.shippingTax().minor())
                     .param("deliveryFee", l.deliveryFee().minor())
+                    .param("kind", l.kind().name())
+                    .param("rateBps", rate == null ? null : rate.bps())
+                    .param("rateSource", rate == null ? null : rate.source().name())
+                    .param("ratePlan", rate == null ? null : rate.planCode())
+                    .param("negotiatedId", rate == null ? null : rate.negotiatedRateId())
+                    .param("negotiatedUntil", rate == null || rate.negotiatedUntil() == null ? null
+                            : Sql.ts(rate.negotiatedUntil()))
                     .update();
         }
         return true;
@@ -181,7 +194,8 @@ class JdbcPaymentRepository implements PaymentRepository {
                             Money.of(rs.getLong("shipping_minor"), currency),
                             Money.of(rs.getLong("tax_minor"), currency), rs.getString("tax_jurisdiction"),
                             Money.of(rs.getLong("shipping_tax_minor"), currency),
-                            Money.of(rs.getLong("delivery_fee_minor"), currency));
+                            Money.of(rs.getLong("delivery_fee_minor"), currency),
+                            FeeKind.valueOf(rs.getString("fee_kind")), rate(rs));
                     return new PaymentLine(line, rs.getObject("capture_id", UUID.class),
                             Money.of(rs.getLong("commission_minor"), currency),
                             Money.of(rs.getLong("fba_fee_minor"), currency), rs.getBoolean("shipping_to_platform"),
@@ -193,6 +207,18 @@ class JdbcPaymentRepository implements PaymentRepository {
                             Money.of(rs.getLong("delivery_fee_reversed_minor"), currency));
                 })
                 .list();
+    }
+
+    /** The rate snapshotted on a line, or null for lines created before rates were snapshotted. */
+    private static AppliedRate rate(ResultSet rs) throws SQLException {
+        int bps = rs.getInt("rate_bps");
+        if (rs.wasNull()) {
+            return null;
+        }
+        return new AppliedRate(FeeKind.valueOf(rs.getString("fee_kind")), bps,
+                RateSource.valueOf(rs.getString("rate_source")), rs.getString("category"),
+                rs.getString("rate_plan_code"), rs.getObject("negotiated_rate_id", UUID.class),
+                Sql.instant(rs, "negotiated_until"));
     }
 
     private Header header(ResultSet rs, int n) throws SQLException {

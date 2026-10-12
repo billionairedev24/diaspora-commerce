@@ -78,6 +78,9 @@ abstract class PaymentsIntegrationTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("at.payments.stripe.api-base", WIREMOCK::baseUrl);
+        // The seller service's billing API (plan fallback) is WireMock too: unstubbed organisations answer 404 = no
+        // plan, so they pay category rates.
+        registry.add("at.payments.seller.base-url", WIREMOCK::baseUrl);
     }
 
     JdbcClient jdbc;

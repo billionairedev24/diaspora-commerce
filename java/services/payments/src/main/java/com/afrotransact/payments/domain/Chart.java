@@ -42,6 +42,11 @@ public enum Chart {
      */
     SUPPLIER_PAYABLE("2500", "AfroTransact Retail supplier payables", AccountType.LIABILITY, Scope.SUPPLIER),
     COMMISSION_REVENUE("4000", "Commission revenue", AccountType.REVENUE, Scope.NONE),
+    /**
+     * Connection fees providers pay on service bookings: a configurable percentage of the booking's service amount,
+     * on top of their plan fee, kept apart from product commission (4000) in postings, statements and exports.
+     */
+    CONNECTION_FEE_REVENUE("4050", "Service connection fees", AccountType.REVENUE, Scope.NONE),
     FBA_FEE_REVENUE("4100", "FBA fee revenue", AccountType.REVENUE, Scope.NONE),
     SHIPPING_REVENUE("4200", "AfroTransact shipping revenue", AccountType.REVENUE, Scope.NONE),
     /**

@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import com.afrotransact.payments.application.NegotiatedRateService;
 import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.application.ReconciliationService;
 import com.afrotransact.payments.application.SettlementService;
@@ -29,19 +30,22 @@ class PaymentsJobs {
     private final SettlementService settlements;
     private final ProviderFeeService providerFees;
     private final ReconciliationService reconciliation;
+    private final NegotiatedRateService negotiatedRates;
     private final Clock clock;
     private final int webhookBatch;
     private final int settlementBatch;
     private final ZoneId zone;
 
     PaymentsJobs(WebhookService webhooks, SettlementService settlements, ProviderFeeService providerFees,
-                 ReconciliationService reconciliation, Clock clock, @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
+                 ReconciliationService reconciliation, NegotiatedRateService negotiatedRates, Clock clock,
+                 @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
                  @Value("${at.payments.jobs.settlement-batch:200}") int settlementBatch,
                  @Value("${at.payments.zone:UTC}") String zone) {
         this.webhooks = webhooks;
         this.settlements = settlements;
         this.providerFees = providerFees;
         this.reconciliation = reconciliation;
+        this.negotiatedRates = negotiatedRates;
         this.clock = clock;
         this.webhookBatch = webhookBatch;
         this.settlementBatch = settlementBatch;
@@ -73,6 +77,17 @@ class PaymentsJobs {
     @Scheduled(cron = "${at.payments.jobs.reconciliation-cron:0 10 3 * * *}", zone = "${at.payments.zone:UTC}")
     void reconcileYesterday() {
         run("reconciliation", () -> reconciliation.runDaily(LocalDate.now(clock.withZone(zone)).minusDays(1)));
+    }
+
+    /** Records the expiry of negotiated rates that reached their end date (they stop applying at it anyway). */
+    @Scheduled(cron = "${at.payments.jobs.negotiated-rate-expiry-cron:0 */5 * * * *}")
+    void expireNegotiatedRates() {
+        run("negotiated-rate-expiry", () -> {
+            int expired = negotiatedRates.expireDue();
+            if (expired > 0) {
+                LOG.info("Expired {} negotiated rates", expired);
+            }
+        });
     }
 
     private static void run(String job, Runnable body) {

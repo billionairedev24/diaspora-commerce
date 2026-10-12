@@ -110,6 +110,15 @@ at:
     # unless retail-service sends a due date.
     supplier-payments:
       terms-days: ${SUPPLIER_PAYMENT_TERMS_DAYS:30}
+    # The seller service's billing API, read with identity's payments-service client (scope seller:billing) to learn an
+    # organisation's plan before payments received its first seller.subscription.changed (plan rates of the fee
+    # schedule). Blank SELLER_URL = no fallback: such organisations pay category rates until the event arrives.
+    seller:
+      base-url: ${SELLER_URL:}
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
+      client-id: ${PAYMENTS_CLIENT_ID:payments-service}
+      client-secret: ${PAYMENTS_CLIENT_SECRET:}
+      timeout: ${SELLER_TIMEOUT:3s}
     stripe:
       # Keys only from the environment. No default here: every profile must provide them.
       secret-key: ${STRIPE_SECRET_KEY}
@@ -134,3 +143,5 @@ at:
       settlement-cron: ${SETTLEMENT_CRON:0 */15 * * * *}
       settlement-recheck: 1h
       reconciliation-cron: ${RECONCILIATION_CRON:0 10 3 * * *}
+      # Records negotiated rates that reached their end date (they stop applying at it anyway).
+      negotiated-rate-expiry-cron: ${NEGOTIATED_RATE_EXPIRY_CRON:0 */5 * * * *}

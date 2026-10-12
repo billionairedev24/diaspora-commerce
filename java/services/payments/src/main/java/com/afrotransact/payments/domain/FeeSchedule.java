@@ -26,12 +26,18 @@ import java.util.UUID;
  *                                  stays in the history but never applies); null otherwise
  * @param deliveryPricing           AfroTransact Delivery from sellers' stores (S255): customer charge, seller fee,
  *                                  seller overrides and service radius; null when the version does not offer it
+ * @param planBps                   product commission per plan: plan code → category → bps ({@code *} = the plan's
+ *                                  rate for unlisted categories); between negotiated rates and category rates
+ * @param connectionFee             the service connection-fee section (default, per category, per plan); null for
+ *                                  versions created before it existed (service lines then pay the {@code services}
+ *                                  commission rate, as before)
  */
 public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency,
                           Map<String, Integer> categoryBps, int defaultCommissionBps,
                           List<CommissionOverride> overrides, int cardPctBps, Money cardFixed, Money fbaPerUnit,
                           boolean reverseCommissionOnRefund, String note, String createdBy, Instant createdAt,
-                          Cancellation cancellation, DeliveryPricing deliveryPricing) {
+                          Cancellation cancellation, DeliveryPricing deliveryPricing,
+                          Map<String, Map<String, Integer>> planBps, RateTable connectionFee) {
 
     /**
      * Withdrawal of a scheduled version: who, when and why (append-only, like the version itself).
@@ -49,6 +55,16 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
             }
             reason = reason.trim();
         }
+    }
+
+    /** A version without plan rates and without a connection-fee section. */
+    public FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency, Map<String, Integer> categoryBps,
+                       int defaultCommissionBps, List<CommissionOverride> overrides, int cardPctBps, Money cardFixed,
+                       Money fbaPerUnit, boolean reverseCommissionOnRefund, String note, String createdBy,
+                       Instant createdAt, Cancellation cancellation, DeliveryPricing deliveryPricing) {
+        this(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixed,
+                fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt, cancellation, deliveryPricing,
+                Map.of(), null);
     }
 
     /** A version that has not been cancelled and offers no AfroTransact Delivery pricing. */
@@ -84,6 +100,7 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         });
         categoryBps = Map.copyOf(normalised);
         overrides = List.copyOf(overrides);
+        planBps = new RateTable(defaultCommissionBps, Map.of(), planBps).planBps();
         requireBps(defaultCommissionBps, "default");
         requireBps(cardPctBps, "card fee");
         if (cardFixed.isNegative() || fbaPerUnit.isNegative()) {
@@ -141,25 +158,91 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
     }
 
     /**
-     * Fees for {@code orgId} selling in {@code category}. AfroTransact Retail ({@code retailOrgId}) is not a
-     * marketplace seller: zero commission (whatever the overrides say) and zero FBA fee, source {@code RETAIL}; only
-     * the card-fee estimate (its Stripe-fee share) applies.
+     * The rate section of {@code kind}: product commission (default, categories, plans), or the connection-fee
+     * section. A version without a connection-fee section prices services like before it existed: the commission
+     * rate of the {@code services} category (or the default), with no plan rates.
+     */
+    public RateTable section(FeeKind kind) {
+        if (kind == FeeKind.SERVICE) {
+            if (connectionFee != null) {
+                return connectionFee;
+            }
+            return new RateTable(categoryBps.getOrDefault(FeeKind.LEGACY_SERVICES_CATEGORY, defaultCommissionBps),
+                    Map.of(), Map.of());
+        }
+        return new RateTable(defaultCommissionBps, categoryBps, planBps);
+    }
+
+    /**
+     * The rate {@code orgId} pays on a {@code kind} line of {@code category} at {@code at}, first match wins:
+     * <ol>
+     *   <li>a negotiated rate of the organisation active at {@code at} (an entry of {@code negotiated}, or for
+     *       products a commission override of this version): the category's before the {@code *} one;</li>
+     *   <li>the organisation's plan rate ({@code planCode}) for the category, else the plan's {@code *} rate;</li>
+     *   <li>the section's category rate;</li>
+     *   <li>the section's default rate.</li>
+     * </ol>
+     * AfroTransact Retail ({@code retailOrgId}) always pays nothing (source RETAIL), whatever is negotiated.
+     */
+    public AppliedRate rateFor(FeeKind kind, String orgId, String category, String planCode,
+                               List<NegotiatedRate> negotiated, Instant at, String retailOrgId) {
+        String cat = category == null ? "" : category.trim().toLowerCase(Locale.ROOT);
+        String plan = planCode == null || planCode.isBlank() ? null : planCode.trim().toLowerCase(Locale.ROOT);
+        if (orgId != null && orgId.equals(retailOrgId)) {
+            return AppliedRate.retail(kind, cat);
+        }
+        if (orgId != null) {
+            NegotiatedRateType type = NegotiatedRateType.of(kind);
+            List<NegotiatedRate> live = negotiated == null ? List.of() : negotiated.stream()
+                    .filter(n -> n.orgId().equals(orgId) && n.type() == type && n.activeAt(at)).toList();
+            for (String key : cat.isEmpty() ? List.of(CommissionOverride.ANY) : List.of(cat, CommissionOverride.ANY)) {
+                Optional<NegotiatedRate> n = live.stream().filter(r -> r.category().equals(key))
+                        .max(Comparator.comparing(NegotiatedRate::startsAt));
+                if (n.isPresent()) {
+                    return new AppliedRate(kind, n.get().rateBps(), RateSource.OVERRIDE, cat, plan, n.get().id(),
+                            n.get().endsAt());
+                }
+                if (kind == FeeKind.PRODUCT) {
+                    Optional<CommissionOverride> o = overrides.stream()
+                            .filter(x -> x.orgId().equals(orgId) && x.category().equals(key)).findFirst();
+                    if (o.isPresent()) {
+                        return new AppliedRate(kind, o.get().commissionBps(), RateSource.OVERRIDE, cat, plan, null,
+                                null);
+                    }
+                }
+            }
+        }
+        RateTable table = section(kind);
+        Optional<Integer> planRate = table.planRate(plan, cat);
+        if (planRate.isPresent()) {
+            return new AppliedRate(kind, planRate.get(), RateSource.PLAN, cat, plan, null, null);
+        }
+        Integer catRate = cat.isEmpty() ? null : table.categoryBps().get(cat);
+        if (catRate != null) {
+            return new AppliedRate(kind, catRate, RateSource.CATEGORY, cat, plan, null, null);
+        }
+        return new AppliedRate(kind, table.defaultBps(), RateSource.DEFAULT, cat, plan, null, null);
+    }
+
+    /**
+     * Product fees for {@code orgId} selling in {@code category}, without plan or negotiated rates (only this
+     * version's commission overrides). AfroTransact Retail ({@code retailOrgId}) is not a marketplace seller: zero
+     * commission (whatever the overrides say) and zero FBA fee, source {@code RETAIL}; only the card-fee estimate (its
+     * Stripe-fee share) applies.
      */
     public EffectiveFees effectiveFor(String orgId, String category, String retailOrgId) {
-        String cat = category == null ? "" : category.trim().toLowerCase(Locale.ROOT);
-        boolean retail = orgId != null && orgId.equals(retailOrgId);
-        String source;
-        if (retail) {
-            source = "RETAIL";
-        } else if (orgId != null && overrides.stream().anyMatch(o -> o.orgId().equals(orgId)
-                && (o.category().equals(cat) || o.category().equals(CommissionOverride.ANY)))) {
-            source = "OVERRIDE";
-        } else {
-            source = categoryBps.containsKey(cat) ? "CATEGORY" : "DEFAULT";
-        }
-        int bps = retail ? 0 : commissionBps(orgId == null ? "" : orgId, cat);
-        return new EffectiveFees(id, version, effectiveFrom, currency, cat, orgId, bps, source, cardPctBps, cardFixed,
-                retail ? Money.zero(currency) : fbaPerUnit, reverseCommissionOnRefund, retail);
+        return effectiveFor(FeeKind.PRODUCT, orgId, category, null, List.of(), effectiveFrom, retailOrgId);
+    }
+
+    /** The fees of one organisation, kind and category at {@code at}: {@link #rateFor} plus card and FBA fees. */
+    public EffectiveFees effectiveFor(FeeKind kind, String orgId, String category, String planCode,
+                                      List<NegotiatedRate> negotiated, Instant at, String retailOrgId) {
+        AppliedRate rate = rateFor(kind, orgId, category, planCode, negotiated, at, retailOrgId);
+        boolean retail = rate.source() == RateSource.RETAIL;
+        return new EffectiveFees(id, version, effectiveFrom, currency, rate.category(), orgId, rate.bps(),
+                rate.source().name(), cardPctBps, cardFixed,
+                retail || kind == FeeKind.SERVICE ? Money.zero(currency) : fbaPerUnit, reverseCommissionOnRefund,
+                retail, kind, rate.planCode(), rate.negotiatedRateId(), rate.negotiatedUntil());
     }
 
     /** Card fee estimate (percentage + fixed) used before Stripe reports the real fee of a charge. */
@@ -189,7 +272,7 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         }
         return new FeeSchedule(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides,
                 cardPctBps, cardFixed, fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt,
-                new Cancellation(now, by, reason), deliveryPricing);
+                new Cancellation(now, by, reason), deliveryPricing, planBps, connectionFee);
     }
 
     /**
