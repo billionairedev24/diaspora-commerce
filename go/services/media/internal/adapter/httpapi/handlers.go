@@ -30,6 +30,7 @@ func New(media app.MediaService) Handlers { return &handlersImpl{media: media} }
 func (h *handlersImpl) Register(mux *http.ServeMux, authenticated func(http.Handler) http.Handler) {
 	mux.Handle("POST /v1/uploads", authenticated(http.HandlerFunc(h.request)))
 	mux.Handle("POST /v1/assets/{id}/complete", authenticated(http.HandlerFunc(h.complete)))
+	mux.Handle("POST /v1/assets/import", authenticated(http.HandlerFunc(h.importURL)))
 	mux.Handle("POST /v1/assets/{id}/review", authenticated(http.HandlerFunc(h.review)))
 	mux.Handle("GET /v1/assets/{id}", authenticated(http.HandlerFunc(h.get)))
 	mux.Handle("GET /v1/assets", authenticated(http.HandlerFunc(h.list)))
@@ -97,6 +98,29 @@ func (h *handlersImpl) request(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"asset": a, "upload": up})
+}
+
+type importRequest struct {
+	Purpose    domain.Purpose `json:"purpose"`
+	URL        string         `json:"url"`
+	OwnerOrg   string         `json:"ownerOrg"`
+	UploadedBy string         `json:"uploadedBy"`
+}
+
+// importURL copies a public image from a URL for an organisation (catalog-service, bulk product uploads).
+func (h *handlersImpl) importURL(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	var req importRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-json", "Body must be an import request"))
+		return
+	}
+	a, err := h.media.ImportFromURL(r.Context(), actor, req.Purpose, req.URL, req.OwnerOrg, req.UploadedBy)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, a)
 }
 
 func (h *handlersImpl) complete(w http.ResponseWriter, r *http.Request) {

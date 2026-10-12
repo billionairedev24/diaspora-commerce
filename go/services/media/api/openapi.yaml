@@ -69,6 +69,36 @@ paths:
                   upload: {$ref: '#/components/schemas/Upload'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
+  /v1/assets/import:
+    post:
+      tags: [Uploads]
+      operationId: importAsset
+      summary: Copy a public image from a URL for an organisation (catalog-service, scope media:import)
+      description: |
+        Images of bulk product uploads (S308). Only the importer client `catalog-service` with scope `media:import`,
+        only purpose `product-image`. media downloads the https URL itself (public addresses only: private, loopback,
+        link-local and reserved ranges are refused; at most 3 https redirects; 20 s; at most 8 MB), checks the bytes
+        are a JPG, PNG or WebP image, stores it in quarantine and completes it like an upload: inspection, metadata
+        stripping, duplicate check and AI moderation. The asset is owned by `ownerOrg`. 201 with the asset (status
+        READY, FLAGGED when held for review, or REJECTED with flags); 422 when the URL can't be fetched or isn't an
+        allowed image.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, url, ownerOrg]
+              properties:
+                purpose: {$ref: '#/components/schemas/Purpose'}
+                url: {type: string, maxLength: 2048}
+                ownerOrg: {type: string, minLength: 1, maxLength: 80}
+                uploadedBy: {type: string, maxLength: 120, description: The member who uploaded the sheet}
+      responses:
+        '201': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
   /v1/assets/{id}/complete:
     post:
       tags: [Uploads]

@@ -38,20 +38,31 @@ const (
 	ClientRetailService       = "retail-service"
 	ClientGatewayBFF          = "gateway-bff"
 	ClientDeliveryRunsService = "delivery-runs-service"
+	ClientCatalogService      = "catalog-service"
 )
 
 // PermissionMediaRead is the scope a reader client's token must carry.
 const PermissionMediaRead = "media:read"
+
+// PermissionMediaImport is the scope an importer client's token must carry (POST /v1/assets/import).
+const PermissionMediaImport = "media:import"
+
+// ImporterClients are service clients whose own tokens, with scope media:import, may copy public images from a URL
+// for an organisation (catalog-service: images of bulk product uploads, S308).
+func ImporterClients() []string { return []string{ClientCatalogService} }
+
+// ImportablePurposes are the purposes an image can be imported from a URL for: public, moderated product images.
+func ImportablePurposes() []Purpose { return []Purpose{PurposeProductImage} }
 
 // ReaderClients are service clients whose own client-credentials tokens, with scope media:read, may read public
 // assets (GET /v1/assets/{id}: delivery-runs verifies pre-order creatives and stores their size). They never upload.
 func ReaderClients() []string { return []string{ClientDeliveryRunsService} }
 
 // AcceptedServiceClients are the service clients whose own client-credentials tokens media accepts: the clients the
-// purpose rules name and the reader clients.
+// purpose rules name, the reader clients and the importer clients.
 func AcceptedServiceClients() []string {
 	out := ServiceClients()
-	for _, c := range ReaderClients() {
+	for _, c := range append(ReaderClients(), ImporterClients()...) {
 		if !slices.Contains(out, c) {
 			out = append(out, c)
 		}

@@ -35,6 +35,11 @@ type MediaService interface {
 	ResolveLink(ctx context.Context, token string) (string, error)
 	// Review releases (APPROVE) or rejects (REJECT) an image held by moderation (staff only).
 	Review(ctx context.Context, actor auth.Actor, id string, decision domain.ReviewDecision, note string) (domain.Asset, error)
+	// ImportFromURL copies a public image from an https URL for an organisation (importer clients only, scope
+	// media:import): the file is quarantined, inspected and moderated exactly like a completed upload, so the
+	// result is READY (published), FLAGGED (held for review) or REJECTED with flags. A URL that can't be fetched or
+	// isn't an allowed image is domain.ErrRejected.
+	ImportFromURL(ctx context.Context, actor auth.Actor, p domain.Purpose, rawURL, ownerOrg, uploadedBy string) (domain.Asset, error)
 }
 
 // ErrForbidden is returned when an actor touches another organisation's asset.
@@ -79,6 +84,9 @@ func WithLinks(signer port.LinkSigner, baseURL string, redirectTTL time.Duration
 	}
 }
 
+// WithFetcher enables POST /v1/assets/import (images of bulk product uploads).
+func WithFetcher(f port.URLFetcher) Option { return func(s *mediaServiceImpl) { s.fetcher = f } }
+
 // WithClock replaces time.Now (tests).
 func WithClock(now func() time.Time) Option { return func(s *mediaServiceImpl) { s.now = now } }
 
@@ -102,6 +110,8 @@ type mediaServiceImpl struct {
 	signer      port.LinkSigner
 	linkBase    string
 	redirectTTL time.Duration
+
+	fetcher port.URLFetcher
 }
 
 var _ MediaService = (*mediaServiceImpl)(nil)
@@ -195,6 +205,11 @@ func (s *mediaServiceImpl) Complete(ctx context.Context, actor auth.Actor, id st
 	if a.Status != domain.StatusPending {
 		return a, nil // idempotent: completing twice returns the stored result
 	}
+	return s.finish(ctx, a)
+}
+
+// finish inspects a pending asset's object; public images are also moderated before they are published.
+func (s *mediaServiceImpl) finish(ctx context.Context, a domain.Asset) (domain.Asset, error) {
 	st, err := s.store(a.Purpose)
 	if err != nil {
 		return domain.Asset{}, err
@@ -231,6 +246,79 @@ func (s *mediaServiceImpl) Complete(ctx context.Context, actor auth.Actor, id st
 		}
 	}
 	return s.save(ctx, a)
+}
+
+func (s *mediaServiceImpl) ImportFromURL(ctx context.Context, actor auth.Actor, p domain.Purpose, rawURL, ownerOrg,
+	uploadedBy string,
+) (domain.Asset, error) {
+	if s.fetcher == nil {
+		return domain.Asset{}, fmt.Errorf("%w: importing from links is not enabled", domain.ErrRejected)
+	}
+	if actor.Type != principalService || !slices.Contains(domain.ImporterClients(), actor.Subject) ||
+		!actor.Can(domain.PermissionMediaImport) {
+		return domain.Asset{}, fmt.Errorf("import %s: %w", p, ErrForbidden)
+	}
+	if !slices.Contains(domain.ImportablePurposes(), p) {
+		return domain.Asset{}, fmt.Errorf("%w: images can only be imported as %s", domain.ErrRejected,
+			domain.PurposeProductImage)
+	}
+	ownerOrg = strings.TrimSpace(ownerOrg)
+	if ownerOrg == "" {
+		return domain.Asset{}, fmt.Errorf("%w: ownerOrg is required", domain.ErrRejected)
+	}
+	rules, _ := domain.RulesFor(p)
+	f, err := s.fetcher.Fetch(ctx, rawURL, rules.MaxBytes)
+	if err != nil {
+		return domain.Asset{}, fmt.Errorf("import image: %w", err)
+	}
+	// The bytes decide the type, not the server's header.
+	contentType := sniff(f.Data)
+	if !slices.Contains(rules.ContentTypes, contentType) {
+		return domain.Asset{}, fmt.Errorf("%w: the link is not a JPG, PNG or WebP image", domain.ErrRejected)
+	}
+	st, err := s.store(p)
+	if err != nil {
+		return domain.Asset{}, err
+	}
+	now := s.now().UTC()
+	id := uuid.NewString()
+	ext := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}[contentType]
+	fileName := f.FileName
+	if fileName == "" || len(fileName) > 200 {
+		fileName = id + ext
+	}
+	key := domain.QuarantinePrefix + fmt.Sprintf("%s/%s/%s/%s%s", p, sanitize(ownerOrg), now.Format("2006/01"), id, ext)
+	if !s.moderated(p) {
+		key = strings.TrimPrefix(key, domain.QuarantinePrefix)
+	}
+	storedKey, _, err := st.Put(ctx, key, fileName, contentType, f.Data, false)
+	if err != nil {
+		return domain.Asset{}, fmt.Errorf("store imported image: %w", err)
+	}
+	if uploadedBy == "" {
+		uploadedBy = actor.Subject
+	}
+	a := domain.Asset{ID: id, OwnerOrg: ownerOrg, UploadedBy: uploadedBy, Purpose: p, Provider: st.Name(),
+		Key: storedKey, FileName: fileName, ContentType: contentType, Bytes: int64(len(f.Data)),
+		Status: domain.StatusPending, Flags: []string{}, CreatedAt: now}
+	if err := s.repo.Insert(ctx, a); err != nil {
+		return domain.Asset{}, fmt.Errorf("record asset: %w", err)
+	}
+	return s.finish(ctx, a)
+}
+
+// sniff returns the image type of the bytes (image/jpeg, image/png, image/webp) or "" for anything else.
+func sniff(data []byte) string {
+	switch {
+	case len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF:
+		return "image/jpeg"
+	case len(data) >= 8 && string(data[:8]) == "\x89PNG\r\n\x1a\n":
+		return "image/png"
+	case len(data) >= 12 && string(data[:4]) == "RIFF" && string(data[8:12]) == "WEBP":
+		return "image/webp"
+	default:
+		return ""
+	}
 }
 
 // save writes the asset; when another request changed it first (a concurrent completion), the stored copy wins.

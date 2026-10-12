@@ -86,3 +86,18 @@ type LinkSigner interface {
 	// Verify checks the token's signature and returns the asset id and expiry; expiry is checked by the caller.
 	Verify(token string) (assetID string, expires time.Time, err error)
 }
+
+// FetchedFile is a file downloaded from a URL: its bytes and the content type the server declared.
+type FetchedFile struct {
+	Data        []byte
+	ContentType string
+	// FileName is the last path segment of the final URL (after redirects); may be empty.
+	FileName string
+}
+
+// URLFetcher downloads public files for imports (images of bulk product uploads). Implementations refuse non-https
+// URLs and private, loopback and link-local addresses (SSRF), follow a few https redirects, time out and stop
+// reading after maxBytes (domain.ErrRejected for every refusal caused by the URL or the file).
+type URLFetcher interface {
+	Fetch(ctx context.Context, rawURL string, maxBytes int64) (FetchedFile, error)
+}
