@@ -17,7 +17,8 @@ Architecture: §7 (Sellers, payments and subscriptions) and §17d (Stripe Connec
 | `document_access_log` | every reviewer view of a document and of unmasked PII |
 | `review_reason_code` | seeded: `ALL_CHECKS_PASSED`, `PERMIT_MISSING`, `LICENCE_EXPIRED`, `IDENTITY_MISMATCH`, `TIN_MISMATCH`, `DOCUMENT_UNREADABLE`, `INSURANCE_MISSING`, `PROHIBITED_CATEGORY`, `REPUTATION_RISK`, `SANCTIONS_HIT`, `DUPLICATE_ACCOUNT`, `OTHER` |
 | `launch_list` | (country, email) for markets that are not live, with the shopping-updates opt-in |
-| `plan`, `plan_price` | seeded catalogue (Seller Essentials / Growth / Pro, Provider Solo / Studio / Business) and the Stripe Price `lookup_key` per cadence (`seller_growth_quarterly`) |
+| `plan`, `plan_version`, `plan_version_price`, `plan_invite`, `plan_migration` | the plan catalogue AfroTransact owns (S292): metadata (visibility, status, limits) per plan, immutable versions (price per cadence, default trial) with their Stripe Price ids, invite lists and staff migrations. Seeded with Seller Essentials / Growth / Pro and Provider Solo / Studio / Business as version 1 |
+| `trial_campaign`, `reward_rule`, `billing_grant`, `billing_reason_code`, `seller_metric_daily`, `seller_listing_state`, `earnings_collection` | trials (S295), reward rules and their metrics (S296), the grants log of rewards and staff adjustments with Stripe object ids, and collections of plan fees from earnings (S297, flag off) |
 | `connect_account` | Stripe requirements (`currently_due`, `eventually_due`, `past_due`, `pending_verification`, `errors`, `current_deadline`, `disabled_reason`), `charges_enabled`, `payouts_enabled`, capabilities, persons, derived status, `requirements_version`, payout hold, listings hidden |
 | `connect_account_history` | full change history (Stripe events, seller answers, staff actions) with the snapshot |
 | `org_suspension` | Trust and Safety suspension holds (V3): reason code, note, actor, previous org status, reinstated at / by / note; at most one active per organisation |
@@ -176,8 +177,31 @@ changes apply at renewal (pending change + `Pending plan changes` job, `proratio
 plan (`trial_period_days`, no proration during a trial); dunning follows Stripe Smart Retries (`invoice.payment_failed`
 → `PAST_DUE` / `RETRYING` → `FINAL_ATTEMPT_FAILED`; `invoice.paid` clears it; Stripe's own retry / cancel settings end
 it with `customer.subscription.updated|deleted`); cancellation and resume at period end; invoices listed with PDF
-download; metered usage below (S206). Stripe products, prices (`<plan>_<cadence>` lookup keys) and the three metered
-prices / meters must exist in each Stripe account (S245; the platform team's setup).
+download; metered usage below (S206). Plan Products and Prices are created by the seller service from its own catalogue (see
+below); only the three metered prices / meters must exist in each Stripe account (S245; the platform team's setup).
+
+## Plan catalogue, trials, credits and rewards (S292–S297)
+
+AfroTransact owns plans, trials, credits and rewards; Stripe Billing only executes the charges (automatic collection,
+Smart Retries, invoices, card updates, 3DS). Nobody edits plans in the Stripe Dashboard. The design, the Stripe
+mapping of free days, credits and discounts, and the idempotency keys are in
+[docs/engineering/plans-and-billing.md](https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/engineering/plans-and-billing.md).
+
+| Endpoint (staff) | |
+|---|---|
+| `GET/POST /v1/billing/plans`, `GET/PUT /v1/billing/plans/{code}` | catalogue (plans:manage writes; plans:manage, seller:billing or billing:adjust read); metadata edits use `expectedVersion` |
+| `PUT /v1/billing/plans/{code}/draft` | prices per cadence + default trial; creates the next version when they differ |
+| `POST …/{code}/publish` · `POST …/{code}/retire` · `PUT …/{code}/invites` | publish syncs Stripe; retired plans keep subscribers |
+| `GET/POST …/{code}/migration` | preview and move subscribers on older versions to the current one (next renewal, no proration) |
+| `GET/POST /v1/billing/stripe-sync` | drift report / "Sync with Stripe" (`IN_SYNC`, `ADOPTABLE`, `MISSING`, `DRIFT`, `FREE`) |
+| `GET/POST /v1/billing/trial-campaigns`, `PUT …/{id}`, `POST …/{id}/status` | promo codes and sign-up windows |
+| `GET/POST /v1/billing/reward-rules`, `PUT …/{id}`, `POST …/{id}/status`, `POST …/preview` | rules and "who qualifies now" |
+| `GET /v1/billing/grants`, `GET /v1/billing/reason-codes` | grants log, adjustment reasons |
+| `GET /v1/orgs/{orgId}/billing/panel` | per-seller billing panel |
+| `POST /v1/orgs/{orgId}/billing/{credits,free-days,trial}`, `POST …/invoices/{id}/waive`, `PUT …/earnings-collection` | billing:adjust, reason code, `Idempotency-Key` |
+
+Sellers: `GET /v1/orgs/{orgId}/billing/plans` (plans they may choose) and `GET …/billing/rewards` (rewards they can
+earn with progress, and what they received).
 
 ## Metered usage (S206)
 

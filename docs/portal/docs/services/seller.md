@@ -60,8 +60,8 @@ steps shown (no `owners` for sole proprietors); `POST /v1/applications/me/submit
 | `business` | offering products / services / both (sellers must include products, providers services), entity type, country — non-live countries → `422 seller.country-not-live` (live list: `SELLER_LIVE_COUNTRIES`, default `US`), store name, email, phone (libphonenumber, mobile, stored E.164) |
 | `business-details` | sole proprietor: legal first/last name, SSN/ITIN, DOB 18+, address. LLCs, corporation, partnership: legal name, EIN, state + date of formation, address, formation document asset id. Nonprofit: + IRS determination letter |
 | `owners` | everyone ≥ 25 % (below 25 % only with significant control), total ≤ 100 %, ≥ 1 significant-control person, multi-member LLC and partnership ≥ 2 people |
-| `stripe-verification` | `POST /v1/applications/me/stripe/account-session` creates the connected account on first use (controller: Stripe-collected requirements, fees and losses on the platform, no Stripe dashboard, manual payouts) and returns the Account Session `client_secret` for the embedded account-onboarding / account-management components; `POST …/stripe/refresh` re-reads verification results. Submission needs `details_submitted` |
-| `payouts` | ABA routing checksum, account number entered twice, last 4 + bank name stored, `externalAccountToken` attached to the connected account |
+| `stripe-verification` | `POST /v1/applications/me/stripe/account-session` creates the connected account on first use (controller: Stripe-collected requirements, Stripe-liable losses, the account pays its own fees, no Stripe dashboard, manual payouts) and returns the Account Session `client_secret` for the embedded account-onboarding / account-management / notification-banner components (no feature overrides: Stripe collects the payout bank account, and `external_account_collection` can only be false when the platform collects requirements); `POST …/stripe/refresh` re-reads verification results and the payout bank. Complete when details are submitted, nothing is currently due and the account isn't rejected |
+| `payouts` | read-only: the payout bank account Stripe holds (bank name, last 4, Stripe's status), mirrored from the account's `external_accounts` and `account.external_account.*` webhooks. Saving the step answers `422 seller.step-managed-by-stripe`: Stripe's onboarding collects the bank and its account management changes it. Complete when Stripe holds a usable (not failed) bank, `external_account` isn't due and payouts are enabled or only waiting for Stripe's checks |
 | `plan` | plan of the org's kind + cadence + payment method (`CARD` brand/last 4/expiry, or `US_BANK_ACCOUNT` = payout bank by ACH); response carries the first-charge sentence |
 | `catalog-compliance` | groceries/perishables/prepared food → food permit (number, expiry, document); beauty → labelling confirmation; regulated services → licence number, issuing state, expiry (expired rejected), licence document + insurance; agreements and W-9 certification |
 
@@ -117,7 +117,8 @@ admin and fulfilment members change; staff `seller:ship-from`). Up to 20 per org
 `com.stripe.net.Webhook.constructEvent`, de-duplicated by event id in `stripe_webhook_event` (same transaction as the
 change), `account.updated` snapshots applied only when `event.created ≥ requirements_version` (older ones are
 recorded as `stale`). Handles `account.updated`, `capability.updated`, `person.created/updated`,
-`account.external_account.updated`, `payout.failed`, `account.application.deauthorized`.
+`account.external_account.created/updated/deleted` (bank accounts only: the payout bank mirrored onto the account and
+the open application), `payout.failed`, `account.application.deauthorized`.
 
 Status: past due or disabled → `RESTRICTED`; currently due with ≤ 3 days to the deadline → `RESTRICTED_SOON`, else
 `ACTION_NEEDED`; only pending verification → `VERIFYING`; else `COMPLIANT`. Enforcement: past due → payouts paused
@@ -127,8 +128,8 @@ Status: past due or disabled → `RESTRICTED`; currently due with ≤ 3 days to 
 
 | Endpoint | Who |
 |---|---|
-| `GET /v1/orgs/{orgId}/account-health` | org owner / finance; staff and service tokens (principal type `SERVICE`) with `compliance:remind`, `compliance:hold` or `sellers:enforce`: status, flags, each requirement with a typed form (tax ID, ID number token, verification document, ownership declaration, representative DOB / title, ToS acceptance, bank account token, business URL) |
-| `POST /v1/orgs/{orgId}/account-health/requirements/{requirement} {values}` | org owner / finance: validated, documents fetched from media-service (`GET /v1/assets/{id}` → signed URL) and uploaded to Stripe Files (`account_requirement`, on the connected account), then Accounts / Persons update; the item moves to pending verification |
+| `GET /v1/orgs/{orgId}/account-health` | org owner / finance; staff and service tokens (principal type `SERVICE`) with `compliance:remind`, `compliance:hold` or `sellers:enforce`: status, flags, the payout bank Stripe holds and each requirement with its label and the embedded component that collects it (`account_management` for the payout bank, `account_onboarding` for everything else). Read-only |
+| `POST /v1/orgs/{orgId}/stripe/account-session` | org owner / finance (not staff): Account Session for Stripe's embedded components. Seller accounts are Stripe-collected, so the platform can't update identity, tax, person or bank details through the API once onboarding started; sellers answer Stripe in its components |
 | `GET /v1/compliance/accounts?status=&openOnly=` · `GET /v1/compliance/accounts/{id}` | `compliance:remind` or `compliance:hold` |
 | `POST /v1/compliance/accounts/{id}/reminders` | `compliance:remind` |
 | `POST /v1/compliance/accounts/{id}/payouts/pause` | `compliance:remind` or `compliance:hold` |
@@ -175,7 +176,15 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 
 `POST /v1/webhooks/stripe-billing` (secret `STRIPE_BILLING_WEBHOOK_SECRET`): `invoice.paid`,
 `invoice.payment_failed` (dunning `RETRYING` / `FINAL_ATTEMPT_FAILED`, status `PAST_DUE`),
-`customer.subscription.updated` / `deleted`.
+`customer.subscription.updated` / `deleted`; `invoice.created`, `invoice.voided`, `invoice.deleted` and
+`credit_note.created` for plans paid from sales (S298: 503 while collecting an invoice failed for a transient reason,
+so Stripe redelivers and keeps the draft).
+
+**How the plan is paid (S298).** `GET/PUT /v1/orgs/{orgId}/billing/plan-fee-collection` (owner / finance):
+`EARNINGS_FIRST` ("Pay your plan from your sales": payments withholds each renewal invoice from earnings, the card
+pays the rest) or `CARD` ("Charge my card"); applies from the next invoice. Staff: `PUT …/plan-fee-collection/override`
+(billing:adjust, reason code), `GET/PUT /v1/billing/settings` (the default for new sellers, plans:manage). Kill switch
+`COLLECT_PLAN_FEES_FROM_EARNINGS`. Design, timing and keys: docs/engineering/plans-and-billing.md.
 
 **S103 acceptance criteria.** Upgrades prorate immediately (`always_invoice`, previewable), downgrades and cadence
 changes apply at renewal (pending change + `Pending plan changes` job, `proration_behavior=none`); trials come from the
@@ -280,6 +289,7 @@ knows the organisation.
 | Compliance reminders | hourly `0 15 * * * *` | 7 / 3 / 1 day(s) before `current_deadline`; one per threshold (unique index) |
 | Pending plan changes | hourly `0 5 * * * *` | downgrades and cadence changes whose renewal has come |
 | Subscription activation retry | every 10 min | approvals whose Stripe subscription could not be created |
+| Plan fees from sales (S298) | every 1 min (`EARNINGS_COLLECTION_INTERVAL`) | renewal invoices still to withhold and credit (back-off, 12 attempts), and releases still to send |
 
 ## Configuration
 
@@ -288,7 +298,9 @@ knows the organisation.
 `STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` (base64 32 bytes; `FIELD_ENCRYPTION_KEY_ID`, default `k1`).
 Other: `AUTH_ISSUER_URL`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`, `GEO_URL`, `GEO_TIMEOUT`,
 `PICKUP_MAX_RADIUS_MILES` (25),
-`SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`. `at.seller.stripe.api-base` /
+`SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`,
+`COLLECT_PLAN_FEES_FROM_EARNINGS` (kill switch; on in the local and dev profiles), `PAYMENTS_URL`, `PAYMENTS_TIMEOUT`,
+`EARNINGS_COLLECTION_INTERVAL`. `at.seller.stripe.api-base` /
 `files-base` point stripe-java at another host (the ITs use WireMock). The local profile ships a well-known dev
 encryption key; every other environment must provide its own.
 
