@@ -96,11 +96,252 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Validate a GTIN and find an existing product page that already uses it */
+        /**
+         * Validate a GTIN and find an existing product page that already uses it
+         * @description Needs catalog:read (service tokens such as offers-service, any principal type) or catalog:write (sellers in the product builder).
+         */
         get: operations["check"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/identifiers/gtin/{code}/prefill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Prefill the product builder from a GTIN (GS1, Open Food Facts)
+         * @description Validates the GTIN-8/12/13/14 check digit (422 with a suggested fix), then asks the product-data providers in order (GS1 Verified when configured, then Open Food Facts for groceries) and returns title, brand, net content, images and category hints in our taxonomy. `importedFrom` marks imported fields (they stay editable); `found=false` means manual entry. When a product page already uses the GTIN, `existingAtin` is set and no provider is called. Answers are cached per GTIN. Needs catalog:write or catalog:read.
+         */
+        get: operations["prefillGtin"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The organisation's uploads, newest first (upload history) */
+        get: operations["listImports"];
+        put?: never;
+        /**
+         * Upload and validate a .xlsx or .csv file
+         * @description Every row is validated (required fields, allowed values, numbers and units, GTIN check digit, duplicate SKUs in the file and against the organisation's listings, image URL format). 422 catalog.upload-rejected when the file cannot be read (format, 10 MB, 5,000 rows, missing required columns); nothing is stored then. Starts nothing: see POST /v1/imports/{id}/start.
+         */
+        post: operations["uploadImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/imports/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download an upload template
+         * @description Generated from the product type definitions: a product type's template (productType, or the product type of categoryId) or the generic one. xlsx: Products sheet with required columns marked *, a note per column and dropdowns; Instructions, Example and hidden Lists sheets. csv: "#" comment lines and the header row.
+         */
+        get: operations["importTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/imports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An upload with its validation counts and import progress */
+        get: operations["getImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/imports/{id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the error report
+         * @description The uploaded rows with Row, Row status, Result and Errors columns; cells starting with = + - @ are prefixed with ' (formula injection)
+         */
+        get: operations["importReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/imports/{id}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rows of an upload (preview)
+         * @description In file order; status filters the preview (ERROR = errors only), outcome the import result
+         */
+        get: operations["importRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/imports/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the import
+         * @description Runs in the background (poll GET /v1/imports/{id}); resumable and idempotent per row. 409 catalog.import-has-errors when rows have errors and validOnly is false; starting again returns the upload as it is.
+         */
+        post: operations["startImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render one label
+         * @description Needs catalog:write or catalog:read. Invalid data (GTIN / SSCC check digits, GS1 AI rules, too long for the label) is a 422 with fieldErrors.
+         */
+        post: operations["renderLabel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/labels/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render a batch of labels as one PDF or ZPL
+         * @description Up to 500 labels and 2000 printed labels (copies included). Field errors are keyed labels[i].field. Needs catalog:write or catalog:read.
+         */
+        post: operations["renderLabelBatch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/labels/units/{atin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unit label of a product or variant ATIN
+         * @description Platform (AfroTransact Retail) stock with a vendor GTIN keeps the manufacturer barcode; every other unit gets the stock owner's AT-FN code (ATF + 7, Code 128), issued once per owner and variant. Sellers print for their own organisation; staff and service clients may pass orgId (default: the product's owner). Needs catalog:write; service clients (inventory-service) and staff may use catalog:read. The AT-FN code is returned as data in the X-Unit-Label-Code header (absent for manufacturer barcodes).
+         */
+        get: operations["unitLabel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The organisation's drafts, most recently saved first */
+        get: operations["listDrafts"];
+        put?: never;
+        /** Save a new draft (Save draft, or the first autosave) */
+        post: operations["createDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-drafts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a draft with its payload */
+        get: operations["getDraft"];
+        /**
+         * Autosave a draft
+         * @description 409 catalog.draft-changed when the draft was saved elsewhere since version
+         */
+        put: operations["saveDraft"];
+        post?: never;
+        /** Discard a draft */
+        delete: operations["deleteDraft"];
         options?: never;
         head?: never;
         patch?: never;
@@ -187,7 +428,11 @@ export interface paths {
         };
         /** Get a product by id */
         get: operations["get"];
-        put?: never;
+        /**
+         * Edit a product (one-step form in edit mode)
+         * @description Owner or staff. The whole content is validated again; variants are matched by sellerSku (new SKUs get ATINs; a published listing keeps its category and variants). A rejected listing goes back to review. Publishes catalog.product.updated, plus catalog.product.terms_changed when prices, quantities or listing terms changed and catalog.product.resubmitted when a rejected listing is resubmitted. 409 when version is stale.
+         */
+        put: operations["updateProduct"];
         post?: never;
         delete?: never;
         options?: never;
@@ -212,6 +457,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/{id}/flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flag a live listing for review (catalog:moderate)
+         * @description Staff flags are source STAFF; service clients (principal type SERVICE) are AUTOMATED. Publishes catalog.product.flagged; trust-ops queues it as a live-listing moderation item.
+         */
+        post: operations["flag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/products/{id}/pause": {
         parameters: {
             query?: never;
@@ -223,6 +488,26 @@ export interface paths {
         put?: never;
         /** Pause a live product */
         post: operations["pause"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{id}/preorder-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the pre-order flags of a product (S272)
+         * @description preorderEligible: may be sold in a community pre-order window (default true for food). shipsNow: always ships now by carrier, never as a pre-order. Owner or staff; publishes catalog.product.updated.
+         */
+        put: operations["preorderFlags"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -246,6 +531,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reverse a takedown (catalog:moderate)
+         * @description Returns the listing to its status before the takedown (LIVE or PAUSED) and publishes catalog.product.reinstated. Idempotent.
+         */
+        post: operations["restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/products/{id}/resume": {
         parameters: {
             query?: never;
@@ -257,6 +562,26 @@ export interface paths {
         put?: never;
         /** Resume a paused product */
         post: operations["resume"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{id}/takedown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take a live or paused listing down with a reason (catalog:moderate)
+         * @description Status becomes TAKEN_DOWN: hidden from public reads and the owner cannot resume it. Publishes catalog.product.taken_down. Idempotent.
+         */
+        post: operations["takeDown"];
         delete?: never;
         options?: never;
         head?: never;
@@ -280,6 +605,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/products/{atin}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a live listing by product ATIN (any signed-in user)
+         * @description One report per user and listing: a repeated report returns 200 with the earlier report (created=false) and publishes nothing. Listings that are not publicly visible return 404.
+         */
+        post: operations["reportListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/variants/{atin}": {
         parameters: {
             query?: never;
@@ -297,24 +642,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/variants/{atin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A variant in any status with its product, by variant ATIN
+         * @description Service clients and staff with catalog:read (retail-service links draft AfroTransact Retail products before they go live); members of the owning organisation with catalog:write. Unlike GET /v1/public/variants/{atin}, drafts, products in review, paused, rejected, taken-down and hidden products are returned with their status. 404 catalog.variant-not-found.
+         */
+        get: operations["variantAnyStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description Exactly one of categoryId or categoryRequestId */
-        CreateProductRequest: {
-            /** Format: uuid */
-            categoryId?: string;
-            /** Format: uuid */
-            categoryRequestId?: string;
-            title: string;
-            attributes?: {
-                [key: string]: string;
-            };
-            images: components["schemas"]["ProductImage"][];
-            variationTheme: string;
-            variants: components["schemas"]["VariantRequest"][];
-            currency?: string;
+        /** @description Description, condition, search keywords, fulfilment, package, handling time and ship-from */
+        ListingDetails: {
+            description?: string;
+            /** @enum {string} */
+            condition?: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
+            keywords?: string[];
+            /** @enum {string} */
+            fulfilment?: "SELLER" | "AFROTRANSACT";
+            packaging?: components["schemas"]["PackageDimensions"];
+            /**
+             * Format: int32
+             * @description Business days from order to dispatch, 1–30 (default 2)
+             */
+            handlingDays?: number;
+            shipFrom?: components["schemas"]["ShipFrom"];
+        };
+        /** @description Packed size (inches) and weight (pounds) */
+        PackageDimensions: {
+            /** Format: double */
+            lengthIn?: number;
+            /** Format: double */
+            widthIn?: number;
+            /** Format: double */
+            heightIn?: number;
+            /** Format: double */
+            weightLb?: number;
         };
         ProductImage: {
             url: string;
@@ -325,6 +702,37 @@ export interface components {
             /** Format: int64 */
             bytes?: number;
             contentType: string;
+        };
+        /** @description The seller's ship-from location (snapshot) */
+        ShipFrom: {
+            locationId?: string;
+            label?: string;
+            city?: string;
+            region?: string;
+            country?: string;
+            postalCode?: string;
+        };
+        /** @description The whole editable content of a product (one-step form in edit mode). Variants are matched by sellerSku; a published listing keeps its category and variants */
+        UpdateProductRequest: {
+            /** Format: uuid */
+            categoryId?: string;
+            title: string;
+            attributes?: {
+                [key: string]: string;
+            };
+            images: components["schemas"]["ProductImage"][];
+            variationTheme?: string;
+            variants: components["schemas"]["VariantRequest"][];
+            preorderEligible?: boolean;
+            shipsNow?: boolean;
+            listing?: components["schemas"]["ListingDetails"];
+            /**
+             * Format: int64
+             * @description The version the edit is based on (409 when the product changed since)
+             */
+            version?: number;
+            /** Format: uuid */
+            draftId?: string;
         };
         VariantRequest: {
             options: {
@@ -337,6 +745,13 @@ export interface components {
             priceMinor?: number;
             /** Format: int32 */
             quantity?: number;
+            /**
+             * Format: int64
+             * @description "Was" price shown struck through; above priceMinor
+             */
+            compareAtMinor?: number;
+            /** @description Images of this variant only (e.g. its colour) */
+            images?: components["schemas"]["ProductImage"][];
         };
         Product: {
             /** Format: uuid */
@@ -364,6 +779,9 @@ export interface components {
             updatedAt?: string;
             /** Format: int64 */
             version?: number;
+            preorderEligible?: boolean;
+            shipsNow?: boolean;
+            listing?: components["schemas"]["ListingDetails"];
         };
         Variant: {
             /** Format: uuid */
@@ -380,9 +798,233 @@ export interface components {
             currency?: string;
             /** Format: int32 */
             quantity?: number;
+            /** Format: int64 */
+            compareAtMinor?: number;
+            images?: components["schemas"]["ProductImage"][];
+        };
+        /** @description Pre-order flags of a product (S272) */
+        PreorderFlagsRequest: {
+            preorderEligible: boolean;
+            shipsNow: boolean;
+        };
+        JsonNode: {
+            empty?: boolean;
+            array?: boolean;
+            null?: boolean;
+            object?: boolean;
+            float?: boolean;
+            valueNode?: boolean;
+            container?: boolean;
+            missingNode?: boolean;
+            /** @enum {string} */
+            nodeType?: "ARRAY" | "BINARY" | "BOOLEAN" | "MISSING" | "NULL" | "NUMBER" | "OBJECT" | "POJO" | "STRING";
+            string?: boolean;
+            integralNumber?: boolean;
+            pojo?: boolean;
+            floatingPointNumber?: boolean;
+            short?: boolean;
+            int?: boolean;
+            long?: boolean;
+            double?: boolean;
+            bigDecimal?: boolean;
+            bigInteger?: boolean;
+            /** @deprecated */
+            textual?: boolean;
+            boolean?: boolean;
+            binary?: boolean;
+            number?: boolean;
+            embeddedValue?: boolean;
+        };
+        /** @description Autosave: replaces the payload when version still matches */
+        SaveDraftRequest: {
+            /** Format: int64 */
+            version?: number;
+            title?: string;
+            categoryPath?: string;
+            payload: components["schemas"]["JsonNode"];
+        };
+        ProductDraft: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            productId?: string;
+            title?: string;
+            categoryPath?: string;
+            payload?: components["schemas"]["JsonNode"];
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            version?: number;
+        };
+        /** @description Reason code required; details required for OTHER */
+        ReportListingRequest: {
+            /** @enum {string} */
+            reasonCode: "PROHIBITED_ITEM" | "UNAPPROVED_HEALTH_CLAIM" | "RESTRICTED_INGREDIENT" | "COUNTERFEIT" | "IMAGE_POLICY" | "MISLEADING_CONTENT" | "LABELLING" | "SHIPPING_METHOD" | "DUPLICATE_LISTING" | "WRONG_CATEGORY" | "OTHER";
+            details?: string;
+        };
+        /** @description A report or flag on a live listing (catalog.product.flagged) */
+        ListingFlag: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            productId?: string;
+            /** @enum {string} */
+            source?: "CUSTOMER_REPORT" | "STAFF" | "AUTOMATED";
+            /** @enum {string} */
+            reasonCode?: "PROHIBITED_ITEM" | "UNAPPROVED_HEALTH_CLAIM" | "RESTRICTED_INGREDIENT" | "COUNTERFEIT" | "IMAGE_POLICY" | "MISLEADING_CONTENT" | "LABELLING" | "SHIPPING_METHOD" | "DUPLICATE_LISTING" | "WRONG_CATEGORY" | "OTHER";
+            details?: string;
+            riskLevel?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            created?: boolean;
+        };
+        /** @description Exactly one of categoryId or categoryRequestId. variationTheme empty (or absent) = a product without variations: exactly one variant without options */
+        CreateProductRequest: {
+            /** Format: uuid */
+            categoryId?: string;
+            /** Format: uuid */
+            categoryRequestId?: string;
+            title: string;
+            attributes?: {
+                [key: string]: string;
+            };
+            images: components["schemas"]["ProductImage"][];
+            variationTheme?: string;
+            variants: components["schemas"]["VariantRequest"][];
+            currency?: string;
+            /** @description May be sold in a pre-order window; default true for food product types */
+            preorderEligible?: boolean;
+            /** @description Always ships now by carrier (never a pre-order); default false */
+            shipsNow?: boolean;
+            listing?: components["schemas"]["ListingDetails"];
+            /**
+             * Format: uuid
+             * @description The saved draft this submission comes from; deleted with the submission
+             */
+            draftId?: string;
+        };
+        /** @description Reason code required; note required for OTHER */
+        TakedownRequest: {
+            /** @enum {string} */
+            reasonCode: "PROHIBITED_ITEM" | "UNAPPROVED_HEALTH_CLAIM" | "RESTRICTED_INGREDIENT" | "COUNTERFEIT" | "IMAGE_POLICY" | "MISLEADING_CONTENT" | "LABELLING" | "SHIPPING_METHOD" | "DUPLICATE_LISTING" | "WRONG_CATEGORY" | "OTHER";
+            note?: string;
+        };
+        RestoreListingRequest: {
+            note?: string;
         };
         ModerationNote: {
             note: string;
+        };
+        /** @description Reason code required; details required for OTHER */
+        FlagListingRequest: {
+            /** @enum {string} */
+            reasonCode: "PROHIBITED_ITEM" | "UNAPPROVED_HEALTH_CLAIM" | "RESTRICTED_INGREDIENT" | "COUNTERFEIT" | "IMAGE_POLICY" | "MISLEADING_CONTENT" | "LABELLING" | "SHIPPING_METHOD" | "DUPLICATE_LISTING" | "WRONG_CATEGORY" | "OTHER";
+            details?: string;
+            riskLevel?: string;
+        };
+        /** @description A new draft; with productId it is the unsaved edit of that product (one per product: saving another replaces it) */
+        CreateDraftRequest: {
+            /** Format: uuid */
+            productId?: string;
+            title?: string;
+            categoryPath?: string;
+            /** @description The form's product input as entered (need not be valid) */
+            payload: components["schemas"]["JsonNode"];
+        };
+        /** @description One label. UNIT/SHELF/CUSTOM: Code 128 of `data` (or EAN-13 of `gtin`); RETAIL: EAN-13 / UPC-A of `gtin` (GS1-128 (01) for GTIN-8/14); CASE: GS1-128 (01) `gtin` + (10) lot, (11) production, (15) best before, (17) expiry, (21) serial; PALLET: GS1-128 (00) `sscc` + optional (02) `gtin` with (37) `count`. `symbology` overrides the default. */
+        LabelRequest: {
+            /** @enum {string} */
+            kind: "UNIT" | "RETAIL" | "SHELF" | "CASE" | "PALLET" | "CUSTOM";
+            /** @enum {string} */
+            symbology?: "CODE_128" | "GS1_128" | "EAN_13";
+            /** @example ATF3XK8P2QL */
+            data?: string;
+            /** @example 9501101530003 */
+            gtin?: string;
+            /** @example 106141411234567897 */
+            sscc?: string;
+            lot?: string;
+            /** Format: date */
+            productionDate?: string;
+            /** Format: date */
+            bestBefore?: string;
+            /** Format: date */
+            expiry?: string;
+            serial?: string;
+            /** Format: int32 */
+            count?: number;
+            caption?: string;
+            title?: string;
+            lines?: string[];
+            /**
+             * Format: int32
+             * @description 1–1000, default 1
+             */
+            copies?: number;
+        };
+        /** @description Up to 500 labels rendered as one PDF (pages or sheets) or one ZPL stream. */
+        LabelBatchRequest: {
+            labels: components["schemas"]["LabelRequest"][];
+            /**
+             * @description PDF: LABEL = one page per label (label printers, default), SHEET = tiled on paper
+             * @enum {string}
+             */
+            layout?: "LABEL" | "SHEET";
+            /**
+             * @description PDF sheets: LETTER (default) or A4
+             * @enum {string}
+             */
+            paper?: "LETTER" | "A4";
+        };
+        /** @description A bulk upload: validation counts and import progress */
+        ProductImport: {
+            /** Format: uuid */
+            id?: string;
+            reference?: string;
+            fileName?: string;
+            /** @enum {string} */
+            format?: "XLSX" | "CSV";
+            /** @enum {string} */
+            mode?: "CREATE" | "UPDATE";
+            productType?: string;
+            /** @enum {string} */
+            status?: "VALIDATED" | "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
+            validOnly?: boolean;
+            /** Format: int32 */
+            totalRows?: number;
+            /** Format: int32 */
+            validRows?: number;
+            /** Format: int32 */
+            warningRows?: number;
+            /** Format: int32 */
+            errorRows?: number;
+            /** Format: int32 */
+            productCount?: number;
+            /** Format: int32 */
+            processedRows?: number;
+            /** Format: int32 */
+            createdProducts?: number;
+            /** Format: int32 */
+            updatedProducts?: number;
+            /** Format: int32 */
+            failedRows?: number;
+            header?: string[];
+            fileWarnings?: string[];
+            uploadedBy?: string;
+            uploadedByName?: string;
+            notifySeller?: boolean;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            finishedAt?: string;
+        };
+        /** @description validOnly: import the valid and warning rows and skip the rows with errors (required when the upload has errors) */
+        StartImportRequest: {
+            validOnly?: boolean;
         };
         CreateCategoryRequest: {
             parentPath: string;
@@ -416,6 +1058,10 @@ export interface components {
             productType: string;
             note?: string;
         };
+        VariantLookup: {
+            product?: components["schemas"]["Product"];
+            variant?: components["schemas"]["Variant"];
+        };
         PublicProduct: {
             /** Format: uuid */
             id?: string;
@@ -432,6 +1078,8 @@ export interface components {
             images?: components["schemas"]["ProductImage"][];
             variationTheme?: string;
             variants?: components["schemas"]["Variant"][];
+            preorderEligible?: boolean;
+            shipsNow?: boolean;
         };
         PublicVariant: {
             product?: components["schemas"]["PublicProduct"];
@@ -452,13 +1100,27 @@ export interface components {
             options?: string[];
             required?: boolean;
             multiline?: boolean;
+            /** @enum {string} */
+            kind?: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+            units?: string[];
+            /** @enum {string} */
+            section?: "DETAILS" | "FOOD" | "REGULATED";
+            help?: string;
         };
+        /** @description Attributes carry kind (TEXT, MULTILINE, ENUM, NUMBER), units, the form section (DETAILS, FOOD, REGULATED) and a help line; traits decide the conditional form sections */
         ProductType: {
             code?: string;
             label?: string;
             identifierRule?: string;
             attributes?: components["schemas"]["AttributeDefinition"][];
             themes?: components["schemas"]["VariationTheme"][];
+            traits?: components["schemas"]["ProductTypeTraits"];
+        };
+        ProductTypeTraits: {
+            food?: boolean;
+            perishable?: boolean;
+            regulated?: boolean;
+            preorder?: boolean;
         };
         VariationDimension: {
             name?: string;
@@ -468,11 +1130,90 @@ export interface components {
             name?: string;
             dimensions?: components["schemas"]["VariationDimension"][];
         };
+        ProductDraftSummary: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            productId?: string;
+            title?: string;
+            categoryPath?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: int64 */
+            version?: number;
+        };
+        ProductImportPage: {
+            items?: components["schemas"]["ProductImport"][];
+            /** Format: int64 */
+            total?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+        };
+        /** @description column = the column key (price, attr:material); null for the row */
+        ImportRowMessage: {
+            column?: string;
+            /** Format: int32 */
+            columnIndex?: number;
+            /** @enum {string} */
+            severity?: "ERROR" | "WARNING";
+            message?: string;
+        };
+        ProductImportRow: {
+            /** Format: int32 */
+            rowNumber?: number;
+            groupKey?: string;
+            sku?: string;
+            /** @enum {string} */
+            status?: "VALID" | "WARNING" | "ERROR";
+            /** @enum {string} */
+            outcome?: "PENDING" | "CREATED" | "UPDATED" | "FAILED" | "SKIPPED";
+            outcomeNote?: string;
+            /** Format: uuid */
+            productId?: string;
+            messages?: components["schemas"]["ImportRowMessage"][];
+            cells?: string[];
+        };
+        ProductImportRowPage: {
+            items?: components["schemas"]["ProductImportRow"][];
+            /** Format: int64 */
+            total?: number;
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            size?: number;
+        };
         GtinCheck: {
             digits?: string;
             valid?: boolean;
             suggestion?: string;
             existingAtin?: string;
+            message?: string;
+        };
+        CategoryHint: {
+            /** Format: uuid */
+            categoryId?: string;
+            path?: string;
+            level?: string;
+            productTypeCode?: string;
+            matchedOn?: string;
+        };
+        GtinPrefill: {
+            gtin?: string;
+            found?: boolean;
+            existingAtin?: string;
+            title?: string;
+            brand?: string;
+            netContent?: string;
+            description?: string;
+            imageUrls?: string[];
+            importedFrom?: {
+                [key: string]: string;
+            };
+            categoryHints?: components["schemas"]["CategoryHint"][];
+            sources?: string[];
+            cached?: boolean;
             message?: string;
         };
         CategoryNode: {
@@ -656,6 +1397,408 @@ export interface operations {
             };
         };
     };
+    prefillGtin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["GtinPrefill"];
+                };
+            };
+        };
+    };
+    listImports: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductImportPage"];
+                };
+            };
+        };
+    };
+    uploadImport: {
+        parameters: {
+            query?: {
+                mode?: "CREATE" | "UPDATE";
+                productType?: string;
+                uploadedByName?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductImport"];
+                };
+            };
+        };
+    };
+    importTemplate: {
+        parameters: {
+            query?: {
+                productType?: string;
+                categoryId?: string;
+                format?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    getImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductImport"];
+                };
+            };
+        };
+    };
+    importReport: {
+        parameters: {
+            query?: {
+                format?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    importRows: {
+        parameters: {
+            query?: {
+                status?: "VALID" | "WARNING" | "ERROR";
+                outcome?: "PENDING" | "CREATED" | "UPDATED" | "FAILED" | "SKIPPED";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductImportRowPage"];
+                };
+            };
+        };
+    };
+    startImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StartImportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductImport"];
+                };
+            };
+        };
+    };
+    renderLabel: {
+        parameters: {
+            query?: {
+                /** @description SVG (vector label), PNG (bare symbol, no text), ZPL (Zebra, 203 dpi), PDF (one page per label, or a sheet) */
+                format?: "SVG" | "PNG" | "ZPL" | "PDF";
+                layout?: "LABEL" | "SHEET";
+                paper?: "LETTER" | "A4";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelRequest"];
+            };
+        };
+        responses: {
+            /** @description The label */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/svg+xml": string;
+                    "image/png": string;
+                    "text/plain": string;
+                    "application/pdf": string;
+                };
+            };
+        };
+    };
+    renderLabelBatch: {
+        parameters: {
+            query?: {
+                format?: "PDF" | "ZPL";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LabelBatchRequest"];
+            };
+        };
+        responses: {
+            /** @description The labels */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    unitLabel: {
+        parameters: {
+            query?: {
+                /** @description SVG (vector label), PNG (bare symbol, no text), ZPL (Zebra, 203 dpi), PDF (one page per label, or a sheet) */
+                format?: "SVG" | "PNG" | "ZPL" | "PDF";
+                copies?: number;
+                orgId?: string;
+            };
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The unit label */
+            200: {
+                headers: {
+                    /** @description AT-FN code of the unit label (absent for a manufacturer barcode) */
+                    "X-Unit-Label-Code"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/svg+xml": string;
+                    "image/png": string;
+                    "text/plain": string;
+                    "application/pdf": string;
+                };
+            };
+        };
+    };
+    listDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductDraftSummary"][];
+                };
+            };
+        };
+    };
+    createDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductDraft"];
+                };
+            };
+        };
+    };
+    getDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductDraft"];
+                };
+            };
+        };
+    };
+    saveDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductDraft"];
+                };
+            };
+        };
+    };
+    deleteDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     productTypes: {
         parameters: {
             query?: never;
@@ -702,7 +1845,7 @@ export interface operations {
         parameters: {
             query?: {
                 orgId?: string;
-                status?: "IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED";
+                status?: "IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED" | "TAKEN_DOWN";
                 q?: string;
                 page?: number;
                 size?: number;
@@ -792,6 +1935,32 @@ export interface operations {
             };
         };
     };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProductRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Product"];
+                };
+            };
+        };
+    };
     approve: {
         parameters: {
             query?: never;
@@ -814,6 +1983,32 @@ export interface operations {
             };
         };
     };
+    flag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FlagListingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ListingFlag"];
+                };
+            };
+        };
+    };
     pause: {
         parameters: {
             query?: never;
@@ -824,6 +2019,32 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Product"];
+                };
+            };
+        };
+    };
+    preorderFlags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreorderFlagsRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -862,6 +2083,32 @@ export interface operations {
             };
         };
     };
+    restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RestoreListingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Product"];
+                };
+            };
+        };
+    };
     resume: {
         parameters: {
             query?: never;
@@ -872,6 +2119,32 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Product"];
+                };
+            };
+        };
+    };
+    takeDown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TakedownRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -906,6 +2179,32 @@ export interface operations {
             };
         };
     };
+    reportListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportListingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ListingFlag"];
+                };
+            };
+        };
+    };
     variant: {
         parameters: {
             query?: never;
@@ -924,6 +2223,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["PublicVariant"];
+                };
+            };
+        };
+    };
+    variantAnyStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["VariantLookup"];
                 };
             };
         };

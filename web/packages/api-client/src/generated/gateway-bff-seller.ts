@@ -688,12 +688,273 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Submit the product builder (step 4) for review, or save it pending category approval
+         * Submit the one-step product form for review, or save it pending category approval
          * @description catalog `POST /v1/products`. With `categoryId` the product goes to listing review (IN_REVIEW); with
          *     `categoryRequestId` it waits for the requested category (PENDING_CATEGORY_APPROVAL) and moves to review when
-         *     the catalog team approves the category.
+         *     the catalog team approves the category. `listing.shipFromId` is resolved to the seller's ship-from address;
+         *     `draftId` deletes the saved draft with the submission.
          */
         post: operations["submitProduct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/listings/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One listing with everything the one-step form edits
+         * @description catalog `GET /v1/products/{id}` (own organisation), with the category path and the ship-from address id.
+         */
+        get: operations["getProduct"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/products/{productId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save an edited listing (one-step form in edit mode)
+         * @description catalog `PUT /v1/products/{id}`. The whole product is validated again; variants are matched by SKU (new SKUs
+         *     get ATINs). A rejected listing goes back to review; a published listing keeps its category and variants (set
+         *     a variant's quantity to 0 instead of removing it). 409 `CONFLICT` when `version` is stale.
+         */
+        put: operations["updateProduct"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/product-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's saved product drafts, most recently saved first
+         * @description catalog `GET /v1/product-drafts`.
+         */
+        get: operations["listProductDrafts"];
+        put?: never;
+        /**
+         * Save draft (the first autosave of a new product, or of an edit when productId is set)
+         * @description catalog `POST /v1/product-drafts`. A product has at most one unsaved-edit draft.
+         */
+        post: operations["createProductDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/product-drafts/{draftId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        /** A saved draft with the form's input */
+        get: operations["getProductDraft"];
+        /**
+         * Autosave a draft
+         * @description catalog `PUT /v1/product-drafts/{id}`; 409 `CONFLICT` when it was saved from another tab since `version`.
+         */
+        put: operations["saveProductDraft"];
+        post?: never;
+        /** Discard a draft */
+        delete: operations["deleteProductDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/listing-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What the product form offers this member (AI listing writer, moderation, bulk upload limits)
+         * @description The AI listing writer needs a plan that includes it (Seller Growth, Seller Pro) and the ai:use permission (organisation owners).
+         */
+        get: operations["getListingContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/listing-writer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft a title, description and bullets with the AI listing writer
+         * @description ai-gateway `POST /v1/ai/listing-writer` with the member's token. A draft for the seller to edit: nothing is
+         *     saved or published. 403 `PLAN_FEATURE_REQUIRED` when the plan doesn't include the writer.
+         */
+        post: operations["writeListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a bulk upload template (Excel or CSV)
+         * @description catalog `GET /v1/imports/template`, generated from the product type definitions: a product type's template
+         *     (`productType`, or the type of `categoryId`) with a column per attribute (dropdowns for allowed values, unit
+         *     columns, required columns marked `*`) and per variation option, or the generic template (`Category`,
+         *     `Attributes` and `Options` as "name: value" pairs) when both are omitted. xlsx: Products sheet (header notes,
+         *     dropdowns, number checks), Instructions, Example and a hidden Lists sheet. csv: `#` comment lines and the header.
+         */
+        get: operations["downloadImportTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Upload history (newest first) */
+        get: operations["listImports"];
+        put?: never;
+        /**
+         * Upload a .xlsx or .csv file and validate every row
+         * @description catalog `POST /v1/imports` (multipart). Rows are checked for required fields, allowed values, numbers and
+         *     units, GTIN check digits, duplicate SKUs in the file and against the organisation's listings, and image URL
+         *     format; images are fetched when the import runs. Nothing is imported yet: review the preview, then start it.
+         *     422 `VALIDATION_FAILED` (`errors.file`) when the file can't be read: wrong type, over 10 MB or 5,000 rows,
+         *     missing required columns. `mode` CREATE adds products; UPDATE changes listings by SKU (blank cells unchanged).
+         */
+        post: operations["uploadImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An upload with its validation counts and import progress (poll while QUEUED or RUNNING) */
+        get: operations["getImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}/rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rows of an upload for the preview (server-driven table; status ERROR = errors only) */
+        get: operations["listImportRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the error report
+         * @description The uploaded rows as they were, plus Row, Row status, Result and Errors columns. Cells that start with
+         *     = + - @ (or a tab / carriage return) are prefixed with ' so spreadsheet apps never run them as formulas.
+         *     Fix the rows in this file and upload it again (the extra columns are ignored).
+         */
+        get: operations["downloadImportReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/imports/{importId}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start the import (background, resumable, idempotent per row)
+         * @description catalog `POST /v1/imports/{id}/start`. Runs in the background: poll `GET /v1/seller/imports/{importId}`.
+         *     Images are copied from their URLs by media (quarantine and moderation like uploads). Each row is imported at
+         *     most once (key = upload id + row SKU), so retries and restarts never duplicate products. With rows in error
+         *     send `validOnly: true` to import the others; otherwise 409 `CONFLICT`. Large uploads notify the uploader when
+         *     they finish.
+         */
+        post: operations["startImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -708,7 +969,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Category tree (department › category › product type) for step 1
+         * Category tree (department › category › product type) for the product form's category picker
          * @description catalog `GET /v1/categories`, nested.
          */
         get: operations["getCategoryTree"];
@@ -728,8 +989,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Required details, variation themes and identifier rule of a product type (steps 3 and 4)
-         * @description catalog `GET /v1/product-types/{code}`.
+         * Attributes, variation themes, identifier rule and traits of a product type
+         * @description catalog `GET /v1/product-types/{code}`. Each attribute has a kind (TEXT, MULTILINE, ENUM, NUMBER with units),
+         *     the form section it belongs to (DETAILS, FOOD, REGULATED) and a help line; traits (food, perishable, regulated,
+         *     preorder) decide which conditional sections the one-step form shows.
          */
         get: operations["getProductType"];
         put?: never;
@@ -2628,6 +2891,13 @@ export interface components {
             path: string;
             children: components["schemas"]["CategoryNode"][];
         };
+        /** @enum {string} */
+        AttributeKind: "TEXT" | "MULTILINE" | "ENUM" | "NUMBER";
+        /**
+         * @description Where the form shows it: product details, the food section or the regulated-items section
+         * @enum {string}
+         */
+        AttributeSection: "DETAILS" | "FOOD" | "REGULATED";
         ProductTypeSchema: {
             code: string;
             label: string;
@@ -2639,6 +2909,11 @@ export interface components {
                 options: string[];
                 required: boolean;
                 multiline: boolean;
+                kind: components["schemas"]["AttributeKind"];
+                /** @description NUMBER only: allowed units, the first is the default (value stored as "12 months") */
+                units: string[];
+                section: components["schemas"]["AttributeSection"];
+                help: string | null;
             }[];
             themes: {
                 name: string;
@@ -2647,6 +2922,17 @@ export interface components {
                     options: string[];
                 }[];
             }[];
+            /** @description Decide the form's conditional sections and the template's columns */
+            traits: {
+                /** @description Food section: shelf life, storage, ingredients, allergens */
+                food: boolean;
+                /** @description Frozen or chilled food (storage temperature) */
+                perishable: boolean;
+                /** @description Regulated items section: permit, licence or certificate references */
+                regulated: boolean;
+                /** @description May be sold in community pre-order windows */
+                preorder: boolean;
+            };
         };
         GtinCheck: {
             digits: string;
@@ -2679,6 +2965,7 @@ export interface components {
             contentType: string;
         };
         VariantInput: {
+            /** @description Empty for a product without variations */
             options: {
                 [key: string]: string;
             };
@@ -2686,9 +2973,37 @@ export interface components {
             gtin?: string;
             gtinExempt?: boolean;
             priceMinor: number;
+            /** @description "Was" price shown struck through; above priceMinor */
+            compareAtMinor?: number | null;
             quantity: number;
+            /** @description Images of this variant only */
+            images?: components["schemas"]["ProductImageInput"][];
         };
-        /** @description Exactly one of categoryId or categoryRequestId. */
+        /** @enum {string} */
+        ItemCondition: "NEW" | "RENEWED" | "USED_LIKE_NEW" | "USED_VERY_GOOD" | "USED_GOOD" | "USED_ACCEPTABLE";
+        /**
+         * @description Ships from the seller, or Fulfilled by AfroTransact
+         * @enum {string}
+         */
+        ListingFulfilment: "SELLER" | "AFROTRANSACT";
+        PackageDimensions: {
+            lengthIn: number;
+            widthIn: number;
+            heightIn: number;
+            weightLb: number;
+        };
+        /** @description Description, condition, search keywords, fulfilment, package, handling time and ship-from */
+        ListingDetailsInput: {
+            description?: string;
+            condition?: components["schemas"]["ItemCondition"];
+            keywords?: string[];
+            fulfilment?: components["schemas"]["ListingFulfilment"];
+            packaging?: components["schemas"]["PackageDimensions"] | null;
+            handlingDays?: number;
+            /** @description A ship-from address id (GET /v1/seller/ship-from-addresses); null = the default */
+            shipFromId?: string | null;
+        };
+        /** @description Exactly one of categoryId or categoryRequestId. variationTheme "" = a product without variations (one variant without options). */
         ProductDraft: {
             categoryId?: string;
             categoryRequestId?: string;
@@ -2699,6 +3014,216 @@ export interface components {
             images: components["schemas"]["ProductImageInput"][];
             variationTheme: string;
             variants: components["schemas"]["VariantInput"][];
+            /** @description Food only: may be sold in community pre-order windows */
+            preorderEligible?: boolean;
+            listing?: components["schemas"]["ListingDetailsInput"];
+            /** @description The saved draft this submission comes from; deleted with the submission */
+            draftId?: string;
+        };
+        /** @description The whole edited product (categoryId may change only before it is published) and the version it was based on. */
+        ProductUpdate: components["schemas"]["ProductDraft"] & {
+            version?: number;
+        };
+        ProductVariant: {
+            atin: string;
+            sellerSku: string;
+            gtin: string | null;
+            gtinExempt: boolean;
+            options: {
+                [key: string]: string;
+            };
+            priceMinor: number;
+            compareAtMinor: number | null;
+            quantity: number;
+            images: components["schemas"]["ProductImageInput"][];
+        };
+        ListingDetails: {
+            description: string | null;
+            condition: components["schemas"]["ItemCondition"];
+            keywords: string[];
+            fulfilment: components["schemas"]["ListingFulfilment"];
+            packaging: components["schemas"]["PackageDimensions"] | null;
+            handlingDays: number;
+            shipFromId: string | null;
+        };
+        ProductDetail: {
+            productId: string;
+            atin: string;
+            status: components["schemas"]["ListingStatus"];
+            statusLabel: string;
+            moderationNote: string | null;
+            categoryId: string | null;
+            categoryRequestId: string | null;
+            categoryPath: string;
+            productType: string;
+            title: string;
+            attributes: {
+                [key: string]: string;
+            };
+            images: components["schemas"]["ProductImageInput"][];
+            variationTheme: string;
+            variants: components["schemas"]["ProductVariant"][];
+            preorderEligible: boolean;
+            listing: components["schemas"]["ListingDetails"];
+            currency: string;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ProductDraftSummary: {
+            id: string;
+            /** @description The listing being edited; null for a new product */
+            productId: string | null;
+            title: string;
+            categoryPath: string | null;
+            /** Format: date-time */
+            updatedAt: string;
+            version: number;
+        };
+        ProductDraftList: {
+            items: components["schemas"]["ProductDraftSummary"][];
+        };
+        SavedProductDraft: components["schemas"]["ProductDraftSummary"] & {
+            /** @description The form's input as saved (need not be valid) */
+            payload: {
+                [key: string]: unknown;
+            };
+        };
+        SaveProductDraftRequest: {
+            /** @description Create only: the listing this draft edits */
+            productId?: string;
+            title?: string;
+            categoryPath?: string;
+            payload: {
+                [key: string]: unknown;
+            };
+            /** @description Save only: the version being replaced */
+            version?: number;
+        };
+        ListingContext: {
+            aiListingWriter: {
+                available: boolean;
+                /**
+                 * @description Why not: the plan lacks it, or the member may not use AI tools
+                 * @enum {string|null}
+                 */
+                reason: "PLAN" | "ROLE" | null;
+            };
+            /** @description New listings go to review before they are live ("Submit for review") */
+            moderated: boolean;
+            importLimits: {
+                maxFileBytes: number;
+                maxRows: number;
+                maxImagesPerProduct: number;
+                maxVariantsPerProduct: number;
+            };
+        };
+        ListingWriterRequest: {
+            productType: string;
+            title: string;
+            attributes?: {
+                [key: string]: string;
+            };
+            /** @enum {string} */
+            tone?: "warm" | "concise" | "premium";
+        };
+        ListingWriterDraft: {
+            title: string;
+            description: string;
+            bullets: string[];
+        };
+        /**
+         * @default xlsx
+         * @enum {string}
+         */
+        SpreadsheetFormat: "xlsx" | "csv";
+        /**
+         * @default CREATE
+         * @enum {string}
+         */
+        ImportMode: "CREATE" | "UPDATE";
+        /** @enum {string} */
+        ImportStatus: "VALIDATED" | "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED";
+        /** @enum {string} */
+        ImportRowStatus: "VALID" | "WARNING" | "ERROR";
+        /** @enum {string} */
+        ImportRowOutcome: "PENDING" | "CREATED" | "UPDATED" | "FAILED" | "SKIPPED";
+        ProductImport: {
+            id: string;
+            /** @description e.g. BU-000123 */
+            reference: string;
+            fileName: string;
+            /** @enum {string} */
+            format: "XLSX" | "CSV";
+            mode: components["schemas"]["ImportMode"];
+            /** @description The template's product type; null for the generic template */
+            productType: string | null;
+            status: components["schemas"]["ImportStatus"];
+            validOnly: boolean;
+            totalRows: number;
+            validRows: number;
+            warningRows: number;
+            errorRows: number;
+            /** @description Products in the file (rows sharing a Parent SKU count once) */
+            productCount: number;
+            processedRows: number;
+            createdProducts: number;
+            updatedProducts: number;
+            failedRows: number;
+            /** @description The uploaded header cells (the preview's columns) */
+            header: string[];
+            fileWarnings: string[];
+            uploadedByName: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            finishedAt: string | null;
+            /** @description App-relative download of the error report (xlsx) */
+            reportUrl: string;
+        };
+        ProductImportPage: {
+            items: components["schemas"]["ProductImport"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        ImportRowMessage: {
+            /** @description Column key (sku, price, attr:material, option:Size); null for the whole row */
+            column: string | null;
+            /** @description Position in the uploaded header; -1 when the column is missing */
+            columnIndex: number;
+            /** @enum {string} */
+            severity: "ERROR" | "WARNING";
+            message: string;
+        };
+        ProductImportRow: {
+            /** @description The row number in the spreadsheet */
+            rowNumber: number;
+            /** @description Parent SKU (rows of one product share it) */
+            groupKey: string;
+            sku: string;
+            status: components["schemas"]["ImportRowStatus"];
+            outcome: components["schemas"]["ImportRowOutcome"];
+            outcomeNote: string | null;
+            productId: string | null;
+            messages: components["schemas"]["ImportRowMessage"][];
+            /** @description Cell text in header order */
+            cells: string[];
+        };
+        ProductImportRowPage: {
+            items: components["schemas"]["ProductImportRow"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        StartImportRequest: {
+            /**
+             * @description Import the valid and warning rows; rows with errors are skipped
+             * @default false
+             */
+            validOnly: boolean;
         };
         UploadRequest: {
             /** @enum {string} */
@@ -3727,6 +4252,8 @@ export interface components {
         OrderNumber: string;
         ShipmentId: string;
         ProductId: string;
+        DraftId: string;
+        ImportId: string;
         PaymentMethodId: string;
         /** @description Makes retries safe (same key = same result). */
         IdempotencyKey: string;
@@ -4763,6 +5290,480 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Product */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateProduct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductUpdate"];
+            };
+        };
+        responses: {
+            /** @description Listing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingRow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listProductDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Drafts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductDraftList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProductDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProductDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProductDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveProductDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SavedProductDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteProductDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draftId: components["parameters"]["DraftId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getListingContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingContext"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    writeListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListingWriterRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingWriterDraft"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadImportTemplate: {
+        parameters: {
+            query?: {
+                productType?: string;
+                categoryId?: string;
+                format?: components["schemas"]["SpreadsheetFormat"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listImports: {
+        parameters: {
+            query?: {
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Uploads */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImportPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    uploadImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description .xlsx or .csv, at most 10 MB
+                     */
+                    file: string;
+                    mode?: components["schemas"]["ImportMode"];
+                    /** @description The template's product type; omit for the generic template */
+                    productType?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Validated upload */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Upload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listImportRows: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ImportRowStatus"];
+                outcome?: components["schemas"]["ImportRowOutcome"];
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImportRowPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadImportReport: {
+        parameters: {
+            query?: {
+                format?: components["schemas"]["SpreadsheetFormat"];
+            };
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Report file (Content-Disposition attachment) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    startImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                importId: components["parameters"]["ImportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StartImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImport"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
