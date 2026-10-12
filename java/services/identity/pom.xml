@@ -101,6 +101,12 @@
             <artifactId>platform-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- SellerOrgSyncIT consumes seller.org.* events from a real broker (local apache/kafka image). -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

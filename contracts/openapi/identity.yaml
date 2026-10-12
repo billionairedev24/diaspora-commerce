@@ -19,6 +19,9 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Organisation sync
+  description: Repairs identity's copy of seller and provider organisations from the seller service (the source of truth)
+    when an approval event was missed or arrived late
 - name: Two-step verification
   description: Authenticator app, SMS codes and recovery codes
 - name: Data protection
@@ -760,6 +763,44 @@ paths:
                 items:
                   $ref: '#/components/schemas/IdentityProvider'
       security: []
+  /v1/internal/orgs/reconcile:
+    post:
+      tags:
+      - Organisation sync
+      summary: Reconcile every approved or suspended organisation with the seller service now
+      description: What the scheduled job does on start-up and every few minutes, on request (the local repair command, an
+        operator). Needs a service or staff token with orgs:manage.
+      operationId: reconcileAll
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgReconcileSummary'
+  /v1/orgs/{orgId}/sync:
+    post:
+      tags:
+      - Organisation sync
+      summary: Sync one organisation from the seller service now
+      description: 'gateway-bff calls it with the person''s token when the seller service shows the organisation approved
+        and identity does not yet: identity reads the seller service, corrects the status and adds the owners'' memberships,
+        so the next token carries the organisation. The caller must be an owner or the approved applicant at the seller service,
+        or a service or staff member with orgs:manage; anyone else gets 404.'
+      operationId: sync
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgSyncResult'
   /v1/internal/orgs/{orgId}/owners:
     get:
       tags:
@@ -1822,6 +1863,34 @@ paths:
       security: []
 components:
   schemas:
+    OrgSyncResult:
+      type: object
+      properties:
+        orgId:
+          type: string
+        status:
+          type: string
+          description: identity's status after the sync; null when the organisation has none yet
+          enum:
+          - PENDING
+          - APPROVED
+          - SUSPENDED
+          - REJECTED
+        repaired:
+          type: boolean
+          description: true when identity's copy was repaired
+    OrgReconcileSummary:
+      type: object
+      properties:
+        scanned:
+          type: integer
+          format: int32
+        repaired:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
     UpsertOrgRequest:
       type: object
       properties:

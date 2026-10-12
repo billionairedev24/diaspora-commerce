@@ -90,6 +90,13 @@ at:
     # STAFF_CONSOLE_URL, API_BASE_URL and PLATFORM_DOMAIN are injected per environment by the Helm library chart.
     issuer: ${AUTH_ISSUER_URL:http://localhost:8100}
     home-url: ${HOME_URL:${PUBLIC_WEB_URL:http://localhost:3000}}
+    # Reconciles identity's copy of seller and provider organisations with the seller service (the source of truth):
+    # on start-up after initial-delay, then every interval, and on demand (POST /v1/orgs/{id}/sync, /v1/internal/orgs/reconcile).
+    seller-sync:
+      enabled: ${SELLER_SYNC_ENABLED:true}
+      seller-url: ${SELLER_URL:http://localhost:8106}
+      interval: ${SELLER_SYNC_INTERVAL:5m}
+      initial-delay: ${SELLER_SYNC_INITIAL_DELAY:30s}
     invitations:
       # Seller Center page that accepts organisation invitations; ?token=… is appended (identity.invitation.created)
       accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:http://localhost:3001}/invitations/accept}

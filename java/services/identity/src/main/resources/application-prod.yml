@@ -3,6 +3,9 @@ at:
   api-docs:
     enabled: false
   identity:
+    seller-sync:
+      # In-cluster service name of seller-service (organisation reconcile).
+      seller-url: ${SELLER_URL:http://seller:8080}
     issuer: ${AUTH_ISSUER_URL:https://auth.afrotransact.com}
     home-url: ${HOME_URL:${PUBLIC_WEB_URL:https://afrotransact.com}}
     invitations:
