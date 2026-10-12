@@ -19,7 +19,7 @@
         <pdfbox.version>3.0.8</pdfbox.version>
         <zxing.version>3.5.4</zxing.version>
         <wiremock.version>3.13.2</wiremock.version>
-        <poi.version>5.4.1</poi.version>
+        <poi.version>5.5.1</poi.version>
     </properties>
 
     <dependencyManagement>
