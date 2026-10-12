@@ -76,26 +76,28 @@ export function ConnectionFeesCard({ card, t }: { card: SellerRateCard; t: T }) 
   return (
     <Card title={t('sc.fees.connectionTitle')} actions={<span className="text-xs text-muted">{t('sc.fees.versionSince', { version: String(card.version), date: shortDate(card.effectiveFrom) })}</span>}>
       <p className="m-0 text-sm text-muted">{t('sc.fees.connectionHelp')}</p>
-      <table className="at-table text-sm" aria-label={t('sc.fees.connectionTitle')}>
-        <thead className="bg-surface-muted text-left">
-          <tr>
-            <th scope="col" className="px-3 py-2">{t('sc.fees.col.category')}</th>
-            <th scope="col" className="px-3 py-2 text-right">{t('sc.fees.col.connectionFee')}</th>
-            <th scope="col" className="px-3 py-2 text-right">{t('sc.fees.col.example', { sale: money(EXAMPLE_SALE) })}</th>
-            <th scope="col" className="px-3 py-2">{t('sc.fees.col.source')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.category || 'other'} className="border-t border-border">
-              <th scope="row" className="px-3 py-2 text-left font-medium">{r.label}</th>
-              <td className="px-3 py-2 text-right font-semibold">{formatBps(r.bps)}</td>
-              <td className="px-3 py-2 text-right">{money(applyBps(EXAMPLE_SALE, r.bps))}</td>
-              <td className="px-3 py-2"><StatusPill tone={tone(r)}>{sourceLabel(t, r)}</StatusPill></td>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="at-table text-sm" aria-label={t('sc.fees.connectionTitle')}>
+          <thead className="bg-surface-muted text-left">
+            <tr>
+              <th scope="col" className="px-3 py-2">{t('sc.fees.col.category')}</th>
+              <th scope="col" className="px-3 py-2 text-right">{t('sc.fees.col.connectionFee')}</th>
+              <th scope="col" className="px-3 py-2 text-right">{t('sc.fees.col.example', { sale: money(EXAMPLE_SALE) })}</th>
+              <th scope="col" className="px-3 py-2">{t('sc.fees.col.source')}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.category || 'other'} className="border-t border-border">
+                <th scope="row" className="px-3 py-2 text-left font-medium">{r.label}</th>
+                <td className="px-3 py-2 text-right font-semibold">{formatBps(r.bps)}</td>
+                <td className="px-3 py-2 text-right">{money(applyBps(EXAMPLE_SALE, r.bps))}</td>
+                <td className="px-3 py-2"><StatusPill tone={tone(r)}>{sourceLabel(t, r)}</StatusPill></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="m-0 text-xs text-muted">{t('sc.fees.connectionRules')}</p>
     </Card>
   );
