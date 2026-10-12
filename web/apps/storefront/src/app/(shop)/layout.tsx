@@ -25,9 +25,10 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
   ]);
   return (
     <HydrationBoundary state={dehydrate(qc)}>
-      <Suspense>
-        <Header />
-      </Suspense>
+      {/* No Suspense boundary around the header: every shop route is dynamic (cookies), so useSearchParams needs none,
+          and a boundary this large is streamed out of line (React outlines big completed boundaries) — the page then
+          paints without its fixed header and the header pops in later, shifting the layout. */}
+      <Header />
       <Suspense>
         <SignedOutNotice />
       </Suspense>
