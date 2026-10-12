@@ -1,0 +1,16 @@
+{
+  "formattedAddress": "9800 Westheimer Rd #210, Houston, TX 77042, USA",
+  "addressComponents": [
+    {"longText": "210", "shortText": "210", "types": ["subpremise"], "languageCode": "en"},
+    {"longText": "9800", "shortText": "9800", "types": ["street_number"], "languageCode": "en"},
+    {"longText": "Westheimer Road", "shortText": "Westheimer Rd", "types": ["route"], "languageCode": "en"},
+    {"longText": "Westchase", "shortText": "Westchase", "types": ["neighborhood", "political"], "languageCode": "en"},
+    {"longText": "Houston", "shortText": "Houston", "types": ["locality", "political"], "languageCode": "en"},
+    {"longText": "Harris County", "shortText": "Harris County", "types": ["administrative_area_level_2", "political"], "languageCode": "en"},
+    {"longText": "Texas", "shortText": "TX", "types": ["administrative_area_level_1", "political"], "languageCode": "en"},
+    {"longText": "United States", "shortText": "US", "types": ["country", "political"], "languageCode": "en"},
+    {"longText": "77042", "shortText": "77042", "types": ["postal_code"], "languageCode": "en"},
+    {"longText": "4127", "shortText": "4127", "types": ["postal_code_suffix"], "languageCode": "en"}
+  ],
+  "location": {"latitude": 29.7365, "longitude": -95.5541}
+}
