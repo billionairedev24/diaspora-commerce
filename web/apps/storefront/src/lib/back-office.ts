@@ -23,6 +23,15 @@ export interface BackOfficeUrls {
   staffConsoleUrl: string;
 }
 
+/**
+ * The state the account currently has for `app` (GET /v1/me read when the link is followed), else the link's own:
+ * a menu rendered before the application was approved still opens the back office, not onboarding.
+ */
+export function liveState(app: string, linkState: string | null, backOffices: readonly BackOffice[] | undefined): string | null {
+  const live = backOffices?.find((b) => b.app === app);
+  return live ? live.state : linkState;
+}
+
 /** Where /back-office/<app> sends the browser, or null for an unknown app. */
 export function backOfficeUrl(app: string, state: string | null, urls: BackOfficeUrls): string | null {
   const signedIn = (origin: string, destination: string) =>
