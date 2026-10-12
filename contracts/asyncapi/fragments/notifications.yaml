@@ -92,6 +92,11 @@ channels:
       notificationsTrustOpsSellerSuspended: {$ref: '#/components/messages/trustOpsSellerSuspended'}
       notificationsTrustOpsSellerReinstated: {$ref: '#/components/messages/trustOpsSellerReinstated'}
       notificationsRequestedTrustOps: {$ref: '#/components/messages/notificationsRequested'}
+  notificationsCatalogImportEvents:
+    address: at.product-import.events
+    description: catalog bulk uploads (S308) → the member who uploaded the file (uploadedBy resolved through identity).
+    messages:
+      notificationsCatalogImportCompleted: {$ref: '#/components/messages/catalogImportCompleted'}
   notificationsInventoryEvents:
     address: at.inventory.events
     description: inventory availability → back-in-stock alerts (SKU = variant ATIN; available > 0 sends each active alert once).
@@ -158,6 +163,12 @@ operations:
       booking.declined (email, push); booking.balance_unpaid → booking.balance_unpaid to the customer (email, push:
       update the card or authenticate). booking.reminder has a template but no event yet: bookings can send it with
       notification.requested (templateKey booking.reminder).
+  consumeNotificationsCatalogImportEvents:
+    action: receive
+    channel: {$ref: '#/channels/notificationsCatalogImportEvents'}
+    summary: >-
+      catalog.import.completed with notifySeller=true (large uploads) → catalog.import_completed to the uploader
+      (email, push): created, updated and failed counts and a link to the upload's report.
   consumeNotificationsContentEvents:
     action: receive
     channel: {$ref: '#/channels/notificationsContentEvents'}

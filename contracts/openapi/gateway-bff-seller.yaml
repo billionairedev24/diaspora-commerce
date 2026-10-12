@@ -47,7 +47,12 @@ tags:
   - name: Orders
     description: Seller shipment queue, order detail, status updates and shipping labels
   - name: Listings
-    description: Listings table, 4-step product builder, category requests, uploads and stock
+    description: Listings table, one-step product form (with autosaved drafts), category requests, uploads and stock
+  - name: Bulk upload
+    description: |
+      Product templates (Excel and CSV, per product type or generic), .xlsx/.csv uploads validated row by row, preview,
+      error report and the background import (S308). Limits: 10 MB and 5,000 rows per file, 10 images and 200
+      variants per product. Mirrors catalog-service `/v1/imports` with the member's token.
   - name: Money
     description: Payouts, plan and billing
   - name: Team
@@ -720,11 +725,12 @@ paths:
       tags: [Listings]
       operationId: submitProduct
       security: [{sessionCookie: []}]
-      summary: Submit the product builder (step 4) for review, or save it pending category approval
+      summary: Submit the one-step product form for review, or save it pending category approval
       description: |
         catalog `POST /v1/products`. With `categoryId` the product goes to listing review (IN_REVIEW); with
         `categoryRequestId` it waits for the requested category (PENDING_CATEGORY_APPROVAL) and moves to review when
-        the catalog team approves the category.
+        the catalog team approves the category. `listing.shipFromId` is resolved to the seller's ship-from address;
+        `draftId` deletes the saved draft with the submission.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/ProductDraft'}}}
@@ -736,12 +742,313 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/listings/{productId}:
+    get:
+      tags: [Listings]
+      operationId: getProduct
+      security: [{sessionCookie: []}]
+      summary: One listing with everything the one-step form edits
+      description: catalog `GET /v1/products/{id}` (own organisation), with the category path and the ship-from address id.
+      parameters: [{$ref: '#/components/parameters/ProductId'}]
+      responses:
+        '200': {description: Product, content: {application/json: {schema: {$ref: '#/components/schemas/ProductDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/products/{productId}:
+    put:
+      tags: [Listings]
+      operationId: updateProduct
+      security: [{sessionCookie: []}]
+      summary: Save an edited listing (one-step form in edit mode)
+      description: |
+        catalog `PUT /v1/products/{id}`. The whole product is validated again; variants are matched by SKU (new SKUs
+        get ATINs). A rejected listing goes back to review; a published listing keeps its category and variants (set
+        a variant's quantity to 0 instead of removing it). 409 `CONFLICT` when `version` is stale.
+      parameters: [{$ref: '#/components/parameters/ProductId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ProductUpdate'}}}
+      responses:
+        '200': {description: Listing, content: {application/json: {schema: {$ref: '#/components/schemas/ListingRow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/product-drafts:
+    get:
+      tags: [Listings]
+      operationId: listProductDrafts
+      security: [{sessionCookie: []}]
+      summary: The organisation's saved product drafts, most recently saved first
+      description: catalog `GET /v1/product-drafts`.
+      responses:
+        '200': {description: Drafts, content: {application/json: {schema: {$ref: '#/components/schemas/ProductDraftList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Listings]
+      operationId: createProductDraft
+      security: [{sessionCookie: []}]
+      summary: Save draft (the first autosave of a new product, or of an edit when productId is set)
+      description: catalog `POST /v1/product-drafts`. A product has at most one unsaved-edit draft.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SaveProductDraftRequest'}}}
+      responses:
+        '201': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/SavedProductDraft'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/product-drafts/{draftId}:
+    parameters: [{$ref: '#/components/parameters/DraftId'}]
+    get:
+      tags: [Listings]
+      operationId: getProductDraft
+      security: [{sessionCookie: []}]
+      summary: A saved draft with the form's input
+      responses:
+        '200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/SavedProductDraft'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Listings]
+      operationId: saveProductDraft
+      security: [{sessionCookie: []}]
+      summary: Autosave a draft
+      description: catalog `PUT /v1/product-drafts/{id}`; 409 `CONFLICT` when it was saved from another tab since `version`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SaveProductDraftRequest'}}}
+      responses:
+        '200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/SavedProductDraft'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Listings]
+      operationId: deleteProductDraft
+      security: [{sessionCookie: []}]
+      summary: Discard a draft
+      responses:
+        '204': {description: Discarded}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/listing-context:
+    get:
+      tags: [Listings]
+      operationId: getListingContext
+      security: [{sessionCookie: []}]
+      summary: What the product form offers this member (AI listing writer, moderation, bulk upload limits)
+      description: The AI listing writer needs a plan that includes it (Seller Growth, Seller Pro) and the ai:use permission (organisation owners).
+      responses:
+        '200': {description: Context, content: {application/json: {schema: {$ref: '#/components/schemas/ListingContext'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/listing-writer:
+    post:
+      tags: [Listings]
+      operationId: writeListing
+      security: [{sessionCookie: []}]
+      summary: Draft a title, description and bullets with the AI listing writer
+      description: |
+        ai-gateway `POST /v1/ai/listing-writer` with the member's token. A draft for the seller to edit: nothing is
+        saved or published. 403 `PLAN_FEATURE_REQUIRED` when the plan doesn't include the writer.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ListingWriterRequest'}}}
+      responses:
+        '200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/ListingWriterDraft'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/imports/template:
+    get:
+      tags: [Bulk upload]
+      operationId: downloadImportTemplate
+      security: [{sessionCookie: []}]
+      summary: Download a bulk upload template (Excel or CSV)
+      description: |
+        catalog `GET /v1/imports/template`, generated from the product type definitions: a product type's template
+        (`productType`, or the type of `categoryId`) with a column per attribute (dropdowns for allowed values, unit
+        columns, required columns marked `*`) and per variation option, or the generic template (`Category`,
+        `Attributes` and `Options` as "name: value" pairs) when both are omitted. xlsx: Products sheet (header notes,
+        dropdowns, number checks), Instructions, Example and a hidden Lists sheet. csv: `#` comment lines and the header.
+      parameters:
+        - {name: productType, in: query, schema: {type: string, maxLength: 40}}
+        - {name: categoryId, in: query, schema: {type: string, maxLength: 64}}
+        - {name: format, in: query, schema: {$ref: '#/components/schemas/SpreadsheetFormat'}}
+      responses:
+        '200':
+          description: Template file (Content-Disposition attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+            text/csv: {schema: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/imports:
+    get:
+      tags: [Bulk upload]
+      operationId: listImports
+      security: [{sessionCookie: []}]
+      summary: Upload history (newest first)
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: Uploads, content: {application/json: {schema: {$ref: '#/components/schemas/ProductImportPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Bulk upload]
+      operationId: uploadImport
+      security: [{sessionCookie: []}]
+      summary: Upload a .xlsx or .csv file and validate every row
+      description: |
+        catalog `POST /v1/imports` (multipart). Rows are checked for required fields, allowed values, numbers and
+        units, GTIN check digits, duplicate SKUs in the file and against the organisation's listings, and image URL
+        format; images are fetched when the import runs. Nothing is imported yet: review the preview, then start it.
+        422 `VALIDATION_FAILED` (`errors.file`) when the file can't be read: wrong type, over 10 MB or 5,000 rows,
+        missing required columns. `mode` CREATE adds products; UPDATE changes listings by SKU (blank cells unchanged).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary, description: '.xlsx or .csv, at most 10 MB'}
+                mode: {$ref: '#/components/schemas/ImportMode'}
+                productType: {type: string, maxLength: 40, description: The template's product type; omit for the generic template}
+      responses:
+        '201': {description: Validated upload, content: {application/json: {schema: {$ref: '#/components/schemas/ProductImport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '413': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/imports/{importId}:
+    get:
+      tags: [Bulk upload]
+      operationId: getImport
+      security: [{sessionCookie: []}]
+      summary: An upload with its validation counts and import progress (poll while QUEUED or RUNNING)
+      parameters: [{$ref: '#/components/parameters/ImportId'}]
+      responses:
+        '200': {description: Upload, content: {application/json: {schema: {$ref: '#/components/schemas/ProductImport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/imports/{importId}/rows:
+    get:
+      tags: [Bulk upload]
+      operationId: listImportRows
+      security: [{sessionCookie: []}]
+      summary: Rows of an upload for the preview (server-driven table; status ERROR = errors only)
+      parameters:
+        - {$ref: '#/components/parameters/ImportId'}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ImportRowStatus'}}
+        - {name: outcome, in: query, schema: {$ref: '#/components/schemas/ImportRowOutcome'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Rows, content: {application/json: {schema: {$ref: '#/components/schemas/ProductImportRowPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/imports/{importId}/report:
+    get:
+      tags: [Bulk upload]
+      operationId: downloadImportReport
+      security: [{sessionCookie: []}]
+      summary: Download the error report
+      description: |
+        The uploaded rows as they were, plus Row, Row status, Result and Errors columns. Cells that start with
+        = + - @ (or a tab / carriage return) are prefixed with ' so spreadsheet apps never run them as formulas.
+        Fix the rows in this file and upload it again (the extra columns are ignored).
+      parameters:
+        - {$ref: '#/components/parameters/ImportId'}
+        - {name: format, in: query, schema: {$ref: '#/components/schemas/SpreadsheetFormat'}}
+      responses:
+        '200':
+          description: Report file (Content-Disposition attachment)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+            text/csv: {schema: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/imports/{importId}/start:
+    post:
+      tags: [Bulk upload]
+      operationId: startImport
+      security: [{sessionCookie: []}]
+      summary: Start the import (background, resumable, idempotent per row)
+      description: |
+        catalog `POST /v1/imports/{id}/start`. Runs in the background: poll `GET /v1/seller/imports/{importId}`.
+        Images are copied from their URLs by media (quarantine and moderation like uploads). Each row is imported at
+        most once (key = upload id + row SKU), so retries and restarts never duplicate products. With rows in error
+        send `validOnly: true` to import the others; otherwise 409 `CONFLICT`. Large uploads notify the uploader when
+        they finish.
+      parameters: [{$ref: '#/components/parameters/ImportId'}]
+      requestBody:
+        content: {application/json: {schema: {$ref: '#/components/schemas/StartImportRequest'}}}
+      responses:
+        '202': {description: Started, content: {application/json: {schema: {$ref: '#/components/schemas/ProductImport'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/catalog/categories:
     get:
       tags: [Listings]
       operationId: getCategoryTree
       security: [{sessionCookie: []}]
-      summary: Category tree (department › category › product type) for step 1
+      summary: Category tree (department › category › product type) for the product form's category picker
       description: catalog `GET /v1/categories`, nested.
       responses:
         '200': {description: Tree, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}}}}
@@ -753,8 +1060,11 @@ paths:
       tags: [Listings]
       operationId: getProductType
       security: [{sessionCookie: []}]
-      summary: Required details, variation themes and identifier rule of a product type (steps 3 and 4)
-      description: catalog `GET /v1/product-types/{code}`.
+      summary: Attributes, variation themes, identifier rule and traits of a product type
+      description: |
+        catalog `GET /v1/product-types/{code}`. Each attribute has a kind (TEXT, MULTILINE, ENUM, NUMBER with units),
+        the form section it belongs to (DETAILS, FOOD, REGULATED) and a help line; traits (food, perishable, regulated,
+        preorder) decide which conditional sections the one-step form shows.
       parameters: [{name: code, in: path, required: true, schema: {type: string}}]
       responses:
         '200': {description: Schema, content: {application/json: {schema: {$ref: '#/components/schemas/ProductTypeSchema'}}}}
@@ -1792,6 +2102,8 @@ components:
     OrderNumber: {name: orderNumber, in: path, required: true, schema: {type: string}}
     ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string}}
     ProductId: {name: productId, in: path, required: true, schema: {type: string}}
+    DraftId: {name: draftId, in: path, required: true, schema: {type: string, maxLength: 64}}
+    ImportId: {name: importId, in: path, required: true, schema: {type: string, maxLength: 64}}
     PaymentMethodId: {name: paymentMethodId, in: path, required: true, schema: {type: string}}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
     IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same label; never buys twice.}
@@ -2765,9 +3077,11 @@ components:
         productType: {type: [string, 'null']}
         path: {type: string}
         children: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}
+    AttributeKind: {type: string, enum: [TEXT, MULTILINE, ENUM, NUMBER]}
+    AttributeSection: {type: string, enum: [DETAILS, FOOD, REGULATED], description: 'Where the form shows it: product details, the food section or the regulated-items section'}
     ProductTypeSchema:
       type: object
-      required: [code, label, identifierRule, attributes, themes]
+      required: [code, label, identifierRule, attributes, themes, traits]
       properties:
         code: {type: string}
         label: {type: string}
@@ -2776,13 +3090,17 @@ components:
           type: array
           items:
             type: object
-            required: [key, label, options, required, multiline]
+            required: [key, label, options, required, multiline, kind, units, section, help]
             properties:
               key: {type: string}
               label: {type: string}
               options: {type: array, items: {type: string}}
               required: {type: boolean}
               multiline: {type: boolean}
+              kind: {$ref: '#/components/schemas/AttributeKind'}
+              units: {type: array, items: {type: string}, description: 'NUMBER only: allowed units, the first is the default (value stored as "12 months")'}
+              section: {$ref: '#/components/schemas/AttributeSection'}
+              help: {type: [string, 'null']}
         themes:
           type: array
           items:
@@ -2798,6 +3116,15 @@ components:
                   properties:
                     name: {type: string}
                     options: {type: array, items: {type: string}}
+        traits:
+          type: object
+          required: [food, perishable, regulated, preorder]
+          description: Decide the form's conditional sections and the template's columns
+          properties:
+            food: {type: boolean, description: 'Food section: shelf life, storage, ingredients, allergens'}
+            perishable: {type: boolean, description: Frozen or chilled food (storage temperature)}
+            regulated: {type: boolean, description: 'Regulated items section: permit, licence or certificate references'}
+            preorder: {type: boolean, description: May be sold in community pre-order windows}
     GtinCheck:
       type: object
       required: [digits, valid, suggestion, existingAtin, message]
@@ -2838,24 +3165,252 @@ components:
       type: object
       required: [options, sellerSku, priceMinor, quantity]
       properties:
-        options: {type: object, additionalProperties: {type: string}}
+        options: {type: object, additionalProperties: {type: string}, description: 'Empty for a product without variations'}
         sellerSku: {type: string, minLength: 1, maxLength: 64}
         gtin: {type: string}
         gtinExempt: {type: boolean}
         priceMinor: {type: integer, minimum: 1}
-        quantity: {type: integer, minimum: 0}
+        compareAtMinor: {type: [integer, 'null'], minimum: 1, description: '"Was" price shown struck through; above priceMinor'}
+        quantity: {type: integer, minimum: 0, maximum: 100000}
+        images: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/ProductImageInput'}, description: Images of this variant only}
+    ItemCondition: {type: string, enum: [NEW, RENEWED, USED_LIKE_NEW, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE]}
+    ListingFulfilment: {type: string, enum: [SELLER, AFROTRANSACT], description: 'Ships from the seller, or Fulfilled by AfroTransact'}
+    PackageDimensions:
+      type: object
+      required: [lengthIn, widthIn, heightIn, weightLb]
+      properties:
+        lengthIn: {type: number, exclusiveMinimum: 0, maximum: 108}
+        widthIn: {type: number, exclusiveMinimum: 0, maximum: 108}
+        heightIn: {type: number, exclusiveMinimum: 0, maximum: 108}
+        weightLb: {type: number, exclusiveMinimum: 0, maximum: 150}
+    ListingDetailsInput:
+      type: object
+      description: Description, condition, search keywords, fulfilment, package, handling time and ship-from
+      properties:
+        description: {type: string, maxLength: 5000}
+        condition: {$ref: '#/components/schemas/ItemCondition'}
+        keywords: {type: array, maxItems: 20, items: {type: string, maxLength: 40}}
+        fulfilment: {$ref: '#/components/schemas/ListingFulfilment'}
+        packaging:
+          oneOf:
+            - {$ref: '#/components/schemas/PackageDimensions'}
+            - {type: 'null'}
+        handlingDays: {type: integer, minimum: 1, maximum: 30}
+        shipFromId: {type: [string, 'null'], description: 'A ship-from address id (GET /v1/seller/ship-from-addresses); null = the default'}
     ProductDraft:
       type: object
       required: [title, attributes, images, variationTheme, variants]
-      description: Exactly one of categoryId or categoryRequestId.
+      description: Exactly one of categoryId or categoryRequestId. variationTheme "" = a product without variations (one variant without options).
       properties:
         categoryId: {type: string}
         categoryRequestId: {type: string}
         title: {type: string, minLength: 10, maxLength: 200}
         attributes: {type: object, additionalProperties: {type: string}}
         images: {type: array, minItems: 1, maxItems: 10, items: {$ref: '#/components/schemas/ProductImageInput'}}
-        variationTheme: {type: string, minLength: 1}
+        variationTheme: {type: string, maxLength: 60}
         variants: {type: array, minItems: 1, maxItems: 200, items: {$ref: '#/components/schemas/VariantInput'}}
+        preorderEligible: {type: boolean, description: 'Food only: may be sold in community pre-order windows'}
+        listing: {$ref: '#/components/schemas/ListingDetailsInput'}
+        draftId: {type: string, description: The saved draft this submission comes from; deleted with the submission}
+    ProductUpdate:
+      description: The whole edited product (categoryId may change only before it is published) and the version it was based on.
+      allOf:
+        - {$ref: '#/components/schemas/ProductDraft'}
+        - type: object
+          properties:
+            version: {type: integer, minimum: 0}
+    ProductVariant:
+      type: object
+      required: [atin, sellerSku, gtin, gtinExempt, options, priceMinor, compareAtMinor, quantity, images]
+      properties:
+        atin: {type: string}
+        sellerSku: {type: string}
+        gtin: {type: [string, 'null']}
+        gtinExempt: {type: boolean}
+        options: {type: object, additionalProperties: {type: string}}
+        priceMinor: {type: integer}
+        compareAtMinor: {type: [integer, 'null']}
+        quantity: {type: integer}
+        images: {type: array, items: {$ref: '#/components/schemas/ProductImageInput'}}
+    ListingDetails:
+      type: object
+      required: [description, condition, keywords, fulfilment, packaging, handlingDays, shipFromId]
+      properties:
+        description: {type: [string, 'null']}
+        condition: {$ref: '#/components/schemas/ItemCondition'}
+        keywords: {type: array, items: {type: string}}
+        fulfilment: {$ref: '#/components/schemas/ListingFulfilment'}
+        packaging:
+          oneOf:
+            - {$ref: '#/components/schemas/PackageDimensions'}
+            - {type: 'null'}
+        handlingDays: {type: integer}
+        shipFromId: {type: [string, 'null']}
+    ProductDetail:
+      type: object
+      required: [productId, atin, status, statusLabel, moderationNote, categoryId, categoryRequestId, categoryPath, productType, title,
+                 attributes, images, variationTheme, variants, preorderEligible, listing, currency, version, updatedAt]
+      properties:
+        productId: {type: string}
+        atin: {type: string}
+        status: {$ref: '#/components/schemas/ListingStatus'}
+        statusLabel: {type: string}
+        moderationNote: {type: [string, 'null']}
+        categoryId: {type: [string, 'null']}
+        categoryRequestId: {type: [string, 'null']}
+        categoryPath: {type: string}
+        productType: {type: string}
+        title: {type: string}
+        attributes: {type: object, additionalProperties: {type: string}}
+        images: {type: array, items: {$ref: '#/components/schemas/ProductImageInput'}}
+        variationTheme: {type: string}
+        variants: {type: array, items: {$ref: '#/components/schemas/ProductVariant'}}
+        preorderEligible: {type: boolean}
+        listing: {$ref: '#/components/schemas/ListingDetails'}
+        currency: {type: string}
+        version: {type: integer}
+        updatedAt: {type: string, format: date-time}
+    ProductDraftSummary:
+      type: object
+      required: [id, productId, title, categoryPath, updatedAt, version]
+      properties:
+        id: {type: string}
+        productId: {type: [string, 'null'], description: The listing being edited; null for a new product}
+        title: {type: string}
+        categoryPath: {type: [string, 'null']}
+        updatedAt: {type: string, format: date-time}
+        version: {type: integer}
+    ProductDraftList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ProductDraftSummary'}}
+    SavedProductDraft:
+      allOf:
+        - {$ref: '#/components/schemas/ProductDraftSummary'}
+        - type: object
+          required: [payload]
+          properties:
+            payload: {type: object, additionalProperties: true, description: The form's input as saved (need not be valid)}
+    SaveProductDraftRequest:
+      type: object
+      required: [payload]
+      properties:
+        productId: {type: string, description: 'Create only: the listing this draft edits'}
+        title: {type: string, maxLength: 200}
+        categoryPath: {type: string, maxLength: 400}
+        payload: {type: object, additionalProperties: true}
+        version: {type: integer, minimum: 0, description: 'Save only: the version being replaced'}
+    ListingContext:
+      type: object
+      required: [aiListingWriter, moderated, importLimits]
+      properties:
+        aiListingWriter:
+          type: object
+          required: [available, reason]
+          properties:
+            available: {type: boolean}
+            reason: {type: [string, 'null'], enum: [PLAN, ROLE, null], description: 'Why not: the plan lacks it, or the member may not use AI tools'}
+        moderated: {type: boolean, description: New listings go to review before they are live ("Submit for review")}
+        importLimits:
+          type: object
+          required: [maxFileBytes, maxRows, maxImagesPerProduct, maxVariantsPerProduct]
+          properties:
+            maxFileBytes: {type: integer}
+            maxRows: {type: integer}
+            maxImagesPerProduct: {type: integer}
+            maxVariantsPerProduct: {type: integer}
+    ListingWriterRequest:
+      type: object
+      required: [productType, title]
+      properties:
+        productType: {type: string, minLength: 1, maxLength: 40}
+        title: {type: string, minLength: 3, maxLength: 200}
+        attributes: {type: object, additionalProperties: {type: string}}
+        tone: {type: string, enum: [warm, concise, premium]}
+    ListingWriterDraft:
+      type: object
+      required: [title, description, bullets]
+      properties:
+        title: {type: string}
+        description: {type: string}
+        bullets: {type: array, items: {type: string}}
+    SpreadsheetFormat: {type: string, enum: [xlsx, csv], default: xlsx}
+    ImportMode: {type: string, enum: [CREATE, UPDATE], default: CREATE}
+    ImportStatus: {type: string, enum: [VALIDATED, QUEUED, RUNNING, COMPLETED, FAILED]}
+    ImportRowStatus: {type: string, enum: [VALID, WARNING, ERROR]}
+    ImportRowOutcome: {type: string, enum: [PENDING, CREATED, UPDATED, FAILED, SKIPPED]}
+    ProductImport:
+      type: object
+      required: [id, reference, fileName, format, mode, productType, status, validOnly, totalRows, validRows, warningRows, errorRows,
+                 productCount, processedRows, createdProducts, updatedProducts, failedRows, header, fileWarnings, uploadedByName,
+                 createdAt, startedAt, finishedAt, reportUrl]
+      properties:
+        id: {type: string}
+        reference: {type: string, description: e.g. BU-000123}
+        fileName: {type: string}
+        format: {type: string, enum: [XLSX, CSV]}
+        mode: {$ref: '#/components/schemas/ImportMode'}
+        productType: {type: [string, 'null'], description: The template's product type; null for the generic template}
+        status: {$ref: '#/components/schemas/ImportStatus'}
+        validOnly: {type: boolean}
+        totalRows: {type: integer}
+        validRows: {type: integer}
+        warningRows: {type: integer}
+        errorRows: {type: integer}
+        productCount: {type: integer, description: Products in the file (rows sharing a Parent SKU count once)}
+        processedRows: {type: integer}
+        createdProducts: {type: integer}
+        updatedProducts: {type: integer}
+        failedRows: {type: integer}
+        header: {type: array, items: {type: string}, description: The uploaded header cells (the preview's columns)}
+        fileWarnings: {type: array, items: {type: string}}
+        uploadedByName: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: [string, 'null'], format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+        reportUrl: {type: string, description: App-relative download of the error report (xlsx)}
+    ProductImportPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ProductImport'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+    ImportRowMessage:
+      type: object
+      required: [column, columnIndex, severity, message]
+      properties:
+        column: {type: [string, 'null'], description: 'Column key (sku, price, attr:material, option:Size); null for the whole row'}
+        columnIndex: {type: integer, description: Position in the uploaded header; -1 when the column is missing}
+        severity: {type: string, enum: [ERROR, WARNING]}
+        message: {type: string}
+    ProductImportRow:
+      type: object
+      required: [rowNumber, groupKey, sku, status, outcome, outcomeNote, productId, messages, cells]
+      properties:
+        rowNumber: {type: integer, description: The row number in the spreadsheet}
+        groupKey: {type: string, description: Parent SKU (rows of one product share it)}
+        sku: {type: string}
+        status: {$ref: '#/components/schemas/ImportRowStatus'}
+        outcome: {$ref: '#/components/schemas/ImportRowOutcome'}
+        outcomeNote: {type: [string, 'null']}
+        productId: {type: [string, 'null']}
+        messages: {type: array, items: {$ref: '#/components/schemas/ImportRowMessage'}}
+        cells: {type: array, items: {type: string}, description: Cell text in header order}
+    ProductImportRowPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ProductImportRow'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+    StartImportRequest:
+      type: object
+      properties:
+        validOnly: {type: boolean, default: false, description: Import the valid and warning rows; rows with errors are skipped}
     UploadRequest:
       type: object
       required: [purpose, fileName, contentType, size]

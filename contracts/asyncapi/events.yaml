@@ -115,6 +115,16 @@ channels:
         $ref: '#/components/messages/catalogProductTakenDown'
       catalogProductReinstated:
         $ref: '#/components/messages/catalogProductReinstated'
+      catalogProductTermsChanged:
+        $ref: '#/components/messages/catalogProductTermsChanged'
+      catalogProductResubmitted:
+        $ref: '#/components/messages/catalogProductResubmitted'
+  catalogProductImportEvents:
+    address: at.product-import.events
+    description: Bulk product uploads (S308, key = upload id). Headers event-id, event-type, occurred-at.
+    messages:
+      catalogImportCompleted:
+        $ref: '#/components/messages/catalogImportCompleted'
   catalogCategoryRequestEvents:
     address: at.category-request.events
     description: New-category requests (key = request id).
@@ -511,6 +521,12 @@ channels:
         $ref: '#/components/messages/trustOpsSellerReinstated'
       notificationsRequestedTrustOps:
         $ref: '#/components/messages/notificationsRequested'
+  notificationsCatalogImportEvents:
+    address: at.product-import.events
+    description: catalog bulk uploads (S308) → the member who uploaded the file (uploadedBy resolved through identity).
+    messages:
+      notificationsCatalogImportCompleted:
+        $ref: '#/components/messages/catalogImportCompleted'
   notificationsInventoryEvents:
     address: at.inventory.events
     description: inventory availability → back-in-stock alerts (SKU = variant ATIN; available > 0 sends each active alert
@@ -1064,6 +1080,31 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductTermsChanged:
+      name: catalog.product.terms_changed
+      title: Price, quantity, "was" price, condition, fulfilment, handling time or ship-from changed (S307)
+      summary: Published with catalog.product.updated when the seller edits these through the one-step product form or a bulk
+        update, or adds variants; offers-service updates the seller's offers (price, list price, seller quantity, handling
+        time, ship-from) and creates offers for new variants.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductResubmitted:
+      name: catalog.product.resubmitted
+      title: A rejected listing was edited and is back in review (S307)
+      summary: trust-ops-service queues it for moderation again, like catalog.product.created with status IN_REVIEW.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogImportCompleted:
+      name: catalog.import.completed
+      title: A bulk upload finished importing (S308)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogImportCompleted'
     catalogCategoryRequestCreated:
       name: catalog.category-request.created
       headers:
@@ -3346,6 +3387,57 @@ components:
           items:
             type: string
           description: Diaspora communities from the community / communities attribute (comma-separated there)
+        condition:
+          type: string
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+          description: The listed item condition (S307)
+        fulfilment:
+          type: string
+          enum:
+          - SELLER
+          - AFROTRANSACT
+          description: Ships from the seller, or Fulfilled by AfroTransact (S307)
+        handlingDays:
+          type: integer
+          minimum: 1
+          maximum: 30
+          description: Business days from order to dispatch
+        shipFrom:
+          type:
+          - object
+          - 'null'
+          description: The seller's ship-from location (snapshot); null = the seller's default
+          properties:
+            locationId:
+              type:
+              - string
+              - 'null'
+            label:
+              type:
+              - string
+              - 'null'
+            city:
+              type:
+              - string
+              - 'null'
+            region:
+              type:
+              - string
+              - 'null'
+            country:
+              type:
+              - string
+              - 'null'
+            postalCode:
+              type:
+              - string
+              - 'null'
         variants:
           type: array
           items:
@@ -3366,6 +3458,66 @@ components:
                 type: string
               quantity:
                 type: integer
+              compareAtMinor:
+                type:
+                - integer
+                - 'null'
+                format: int64
+                description: '"Was" price shown struck through (offers'' list price); null for none (S307)'
+    CatalogImportCompleted:
+      type: object
+      required:
+      - importId
+      - reference
+      - ownerOrgId
+      - uploadedBy
+      - fileName
+      - mode
+      - totalRows
+      - processedRows
+      - createdProducts
+      - updatedProducts
+      - failedRows
+      - skippedRows
+      - notifySeller
+      - finishedAt
+      properties:
+        importId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+          description: Shown to the seller (BU-000123)
+        ownerOrgId:
+          type: string
+        uploadedBy:
+          type: string
+          description: Token subject of the member who uploaded the file
+        fileName:
+          type: string
+        mode:
+          type: string
+          enum:
+          - CREATE
+          - UPDATE
+        totalRows:
+          type: integer
+        processedRows:
+          type: integer
+        createdProducts:
+          type: integer
+        updatedProducts:
+          type: integer
+        failedRows:
+          type: integer
+        skippedRows:
+          type: integer
+          description: Rows with errors that were not imported
+        notifySeller:
+          type: boolean
+        finishedAt:
+          type: string
+          format: date-time
     CatalogProductFlagged:
       type: object
       required:
@@ -10331,6 +10483,13 @@ operations:
       / reinstated: Trust and Safety removed a live or paused listing (POST /v1/products/{id}/takedown, status TAKEN_DOWN,
       hidden from public reads) or reversed it (POST /v1/products/{id}/restore, back to LIVE or PAUSED). Read models keep
       a product public only while its status is LIVE and sellerHidden is false.'
+  publishCatalogProductImportEvents:
+    action: send
+    channel:
+      $ref: '#/channels/catalogProductImportEvents'
+    summary: 'catalog.import.completed: a bulk upload finished importing (every importable row created, updated or failed;
+      rows with errors skipped). notifySeller is true for uploads of at least at.catalog.imports.notify-min-rows rows (100
+      by default); notifications-service then tells the member who uploaded it.'
   publishCatalogCategoryRequestEvents:
     action: send
     channel:
@@ -10569,6 +10728,12 @@ operations:
     summary: 'booking.confirmed / cancelled / rescheduled → matching templates (email, sms, push); booking.declined → booking.declined
       (email, push); booking.balance_unpaid → booking.balance_unpaid to the customer (email, push: update the card or authenticate).
       booking.reminder has a template but no event yet: bookings can send it with notification.requested (templateKey booking.reminder).'
+  consumeNotificationsCatalogImportEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsCatalogImportEvents'
+    summary: 'catalog.import.completed with notifySeller=true (large uploads) → catalog.import_completed to the uploader (email,
+      push): created, updated and failed counts and a link to the upload''s report.'
   consumeNotificationsContentEvents:
     action: receive
     channel:
