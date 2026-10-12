@@ -2945,7 +2945,7 @@ export interface components {
             /** @enum {string|null} */
             trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
         };
-        /** @description A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296). */
+        /** @description A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296). A LESS_THAN rule (low-sales relief, S299) has no progress to show: it is pending until checkAt, when it is decided once. */
         RewardProgress: {
             ruleId: string;
             name: string;
@@ -2966,6 +2966,21 @@ export interface components {
             conditionLabel: string;
             /** Format: date-time */
             endsAt?: string | null;
+            /** @enum {string} */
+            comparison: "AT_LEAST" | "LESS_THAN";
+            /** @enum {string} */
+            windowAnchor: "APPROVAL" | "SUBSCRIPTION_START";
+            /** @description The window's length (the first N days) */
+            windowDays?: number | null;
+            /** @description Decided once at window end and the check is still to come */
+            pending: boolean;
+            /**
+             * Format: date-time
+             * @description When the check runs (rules checked at window end)
+             */
+            checkAt?: string | null;
+            /** Format: date-time */
+            windowClosesAt?: string | null;
         };
         /** @description A reward or credit the organisation received (reward rules and staff adjustments). */
         EarnedReward: {
@@ -2986,6 +3001,16 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             appliedAt?: string | null;
+            /**
+             * @description The reward rule's comparison: LESS_THAN is low-sales relief
+             * @enum {string|null}
+             */
+            comparison?: "AT_LEAST" | "LESS_THAN" | null;
+            /**
+             * Format: date-time
+             * @description Free days: the new trial end, when Stripe charges next
+             */
+            nextChargeAt?: string | null;
         };
         SellerRewardsView: {
             available: components["schemas"]["RewardProgress"][];

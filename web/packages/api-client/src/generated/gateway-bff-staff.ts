@@ -3649,6 +3649,7 @@ export interface components {
         StaffBillingStatusRequest: {
             status: string;
         };
+        /** @description Reach (AT_LEAST) or stay under (LESS_THAN, S299) the threshold of a metric and get the reward, once per seller. A LESS_THAN rule, or an AT_LEAST rule with checkAtWindowEnd, is decided once, checkLeadHours before its window (the first withinDaysOfApproval days from windowAnchor) or the trial ends. */
         StaffRewardRule: {
             /** Format: uuid */
             id: string;
@@ -3666,7 +3667,16 @@ export interface components {
              */
             threshold: number;
             windowDays?: number | null;
+            /** @description The first N days from windowAnchor */
             withinDaysOfApproval?: number | null;
+            /** @enum {string} */
+            comparison: "AT_LEAST" | "LESS_THAN";
+            /** @enum {string} */
+            windowAnchor: "APPROVAL" | "SUBSCRIPTION_START";
+            /** @description Decided once when the window closes (always for LESS_THAN) */
+            checkAtWindowEnd: boolean;
+            /** @description Hours before the window (or the trial) ends that the check runs */
+            checkLeadHours: number;
             /** @enum {string} */
             rewardType: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF";
             freeDays?: number | null;
@@ -3683,7 +3693,10 @@ export interface components {
             grantsCount: number;
             /** @example 1 month free */
             rewardLabel: string;
-            /** @example $1,000 in sales within 60 days of approval */
+            /**
+             * @example $1,000 in sales within 60 days of approval
+             * @example less than $1,000 in sales in the first 30 days of the subscription
+             */
             conditionLabel: string;
             createdBy?: string | null;
             /** Format: date-time */
@@ -3704,7 +3717,22 @@ export interface components {
             /** Format: int64 */
             threshold: number;
             windowDays?: number | null;
+            /** @description The first N days from windowAnchor (required for a rule checked at window end) */
             withinDaysOfApproval?: number | null;
+            /**
+             * @description Default AT_LEAST
+             * @enum {string|null}
+             */
+            comparison?: "AT_LEAST" | "LESS_THAN" | null;
+            /**
+             * @description Default APPROVAL
+             * @enum {string|null}
+             */
+            windowAnchor?: "APPROVAL" | "SUBSCRIPTION_START" | null;
+            /** @description AT_LEAST only: decide once when the window closes */
+            checkAtWindowEnd?: boolean | null;
+            /** @description Default 24 */
+            checkLeadHours?: number | null;
             /** @enum {string} */
             rewardType: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF";
             freeDays?: number | null;
@@ -3737,10 +3765,22 @@ export interface components {
             qualifies: boolean;
             alreadyGranted: boolean;
             reason?: string | null;
+            /**
+             * @description PENDING - in the window of a rule checked at window end (decided when the window closes)
+             * @enum {string}
+             */
+            status: "GRANTED" | "QUALIFIES" | "PENDING" | "CHECKED" | "NOT_YET" | "INELIGIBLE";
+            /**
+             * Format: date-time
+             * @description Rules checked at window end - when this organisation is checked
+             */
+            checkAt?: string | null;
         };
         StaffRewardPreview: {
             evaluated: number;
             qualifying: number;
+            /** @description Rules checked at window end - organisations still in their window */
+            pending: number;
             rows: components["schemas"]["StaffRewardPreviewRow"][];
         };
         /** @description A reward or staff adjustment and the Stripe objects it produced. */

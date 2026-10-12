@@ -25,7 +25,7 @@ describe('Plan & billing (S292–S297)', () => {
     const bar = await screen.findByRole('progressbar', { name: 'First $1,000 in sales' });
     expect(bar).toHaveAttribute('aria-valuenow', '64');
     expect(bar).toHaveAttribute('aria-valuetext', '$640 of $1,000 in sales');
-    expect(screen.getByText('1 month free')).toBeInTheDocument();
+    expect(screen.getAllByText('1 month free').length).toBeGreaterThan(0);
     const earned = screen.getByRole('table', { name: 'Rewards and credits received' });
     expect(await within(earned).findByText('$25 credit')).toBeInTheDocument();
     const invoices = screen.getByRole('table', { name: 'Invoices' });
@@ -166,6 +166,40 @@ describe('how the plan is paid (S298)', () => {
     expect(within(list).getByText('Plan fee (invoice AT-1003)')).toBeInTheDocument();
     expect(within(list).getByText('Deducted from order AT-2026-400112')).toBeInTheDocument();
     expect(within(list).getAllByText('-$90.00').length).toBeGreaterThan(0);
+  });
+});
+
+describe('low-sales relief (S299)', () => {
+  configure({ asyncUtilTimeout: 5000 });
+
+  beforeEach(() => {
+    resetSellerDb(new Date());
+    asRole(null);
+  });
+
+  it('shows a "less than" reward as a neutral note with the check date, without a progress bar', async () => {
+    const db = getSellerDb();
+    const relief = db.rewards.PROVIDER.available.find((r) => r.comparison === 'LESS_THAN');
+    if (!relief) throw new Error('seeded relief');
+    db.rewards.SELLER.available.push(relief);
+    db.rewards.SELLER.earned = db.rewards.SELLER.earned.filter((e) => e.comparison !== 'LESS_THAN');
+    await renderScreen(<BillingView />);
+    const note = await screen.findByTestId('low-sales-relief');
+    expect(note).toHaveTextContent(/If your sales in your first 30 days are under \$1,000, you get 1 month free — we’ll check on \w{3} \d{1,2}, \d{4}\./);
+    expect(within(note).getByText('So far: $200.00 in sales')).toBeInTheDocument();
+    expect(within(note).queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('progressbar').map((b) => b.getAttribute('aria-label'))).not.toContain('Low-sales relief');
+    expect(screen.queryByText(/Low-sales relief applied/)).not.toBeInTheDocument();
+  });
+
+  it('says when the card is charged next once the relief was applied', async () => {
+    await renderScreen(<BillingView />);
+    const applied = await screen.findByText('Low-sales relief applied:');
+    const next = getSellerDb().rewards.SELLER.earned.find((e) => e.comparison === 'LESS_THAN')?.nextChargeAt ?? '';
+    const date = new Date(next).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    expect(applied.parentElement).toHaveTextContent(`Low-sales relief applied: your next charge is on ${date}.`);
+    const earned = screen.getByRole('table', { name: 'Rewards and credits received' });
+    expect(await within(earned).findByText('Low-sales relief')).toBeInTheDocument();
   });
 });
 

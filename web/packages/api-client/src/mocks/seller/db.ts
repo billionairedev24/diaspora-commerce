@@ -409,19 +409,32 @@ function freshDb(now: Date): MockSellerDb {
         available: [
           { ruleId: 'rr_sales', name: 'First $1,000 in sales', description: 'Reach $1,000 in delivered sales within 60 days of approval.', metric: 'GROSS_SALES', value: 64000,
             threshold: 100000, percent: 64, qualifies: false, label: '$640 of $1,000 in sales', rewardLabel: '1 month free', conditionLabel: '$1,000 in sales within 60 days of approval',
-            endsAt: null },
+            endsAt: null, comparison: 'AT_LEAST', windowAnchor: 'APPROVAL', windowDays: null, pending: false,
+            checkAt: null, windowClosesAt: null },
           { ruleId: 'rr_listings', name: '25 live listings', description: null, metric: 'ACTIVE_LISTINGS', value: 18, threshold: 25, percent: 72, qualifies: false,
-            label: '18 of 25 active listings', rewardLabel: '$25 credit', conditionLabel: '25 active listings', endsAt: iso(new Date(now.getTime() + 45 * DAY)) }
+            label: '18 of 25 active listings', rewardLabel: '$25 credit', conditionLabel: '25 active listings', endsAt: iso(new Date(now.getTime() + 45 * DAY)), comparison: 'AT_LEAST', windowAnchor: 'APPROVAL', windowDays: null, pending: false,
+            checkAt: null, windowClosesAt: null }
         ],
         earned: [
           { id: 'gr_1', source: 'RULE', type: 'CREDIT', summary: '$25 credit', reason: 'First 10 orders', status: 'APPLIED', creditMinor: 2500, freeDays: null,
-            createdAt: iso(new Date(now.getTime() - 12 * DAY)), appliedAt: iso(new Date(now.getTime() - 12 * DAY)) }
+            createdAt: iso(new Date(now.getTime() - 12 * DAY)), appliedAt: iso(new Date(now.getTime() - 12 * DAY)),
+            comparison: 'AT_LEAST', nextChargeAt: null },
+          // S299: low-sales relief applied before the first invoice: the next charge moved by a month.
+          { id: 'gr_relief', source: 'RULE', type: 'FREE_DAYS', summary: '1 month free', reason: 'Low-sales relief', status: 'APPLIED', creditMinor: null, freeDays: 30,
+            createdAt: iso(new Date(now.getTime() - 40 * DAY)), appliedAt: iso(new Date(now.getTime() - 40 * DAY)),
+            comparison: 'LESS_THAN', nextChargeAt: iso(new Date(now.getTime() + 92 * DAY)) }
         ]
       },
       PROVIDER: {
         available: [
           { ruleId: 'rr_bookings', name: '10 completed bookings', description: null, metric: 'COMPLETED_BOOKINGS', value: 3, threshold: 10, percent: 30, qualifies: false,
-            label: '3 of 10 completed bookings', rewardLabel: '20% off 3 invoices', conditionLabel: '10 completed bookings in 30 days', endsAt: null }
+            label: '3 of 10 completed bookings', rewardLabel: '20% off 3 invoices', conditionLabel: '10 completed bookings in 30 days', endsAt: null, comparison: 'AT_LEAST', windowAnchor: 'APPROVAL', windowDays: null, pending: false,
+            checkAt: null, windowClosesAt: null },
+          // S299: low-sales relief, checked once 24 h before the 30-day trial ends (in 10 days).
+          { ruleId: 'rr_relief', name: 'Low-sales relief', description: 'A quiet first month? The second one is on us.', metric: 'GROSS_SALES', value: 20000,
+            threshold: 100000, percent: 20, qualifies: false, label: '$200 in sales so far (less than $1,000 → 1 month free)', rewardLabel: '1 month free',
+            conditionLabel: 'less than $1,000 in sales in the first 30 days of the subscription', endsAt: null, comparison: 'LESS_THAN', windowAnchor: 'SUBSCRIPTION_START',
+            windowDays: 30, pending: true, checkAt: iso(new Date(now.getTime() + 9 * DAY)), windowClosesAt: iso(new Date(now.getTime() + 10 * DAY)) }
         ],
         earned: []
       }

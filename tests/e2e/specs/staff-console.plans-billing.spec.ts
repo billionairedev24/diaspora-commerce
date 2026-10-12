@@ -73,4 +73,32 @@ test.describe('staff console · plans & billing', () => {
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(defaults).toHaveValue('EARNINGS_FIRST');
   });
+
+  /* S299: "1st month free (the trial) and 2nd month free if the seller sold less than $1,000". A LESS_THAN rule anchored
+     at the subscription's start reads back in plain words, and the preview shows sellers still in their window as
+     pending (with their sales so far) until it is checked, 24 h before the trial ends. Saved as a draft. */
+  test('a low-sales relief rule in plain words, with sellers in their window pending', async ({ page }) => {
+    const run = Date.now().toString(36).toUpperCase();
+    await page.goto('/plans');
+    await page.getByRole('tab', { name: 'Rewards' }).click();
+    await expect(page.getByRole('table', { name: 'Rewards' })).toContainText('less than $1,000 in sales in the first 30 days of the subscription');
+    await page.getByRole('button', { name: 'New reward rule' }).click();
+    const rule = page.getByRole('dialog', { name: 'New reward rule' });
+    await rule.getByLabel('Name').fill(`Quiet start ${run}`);
+    await rule.getByLabel('Threshold ($ in sales)').fill('1000');
+    await rule.getByLabel('Kind').selectOption('SELLER');
+    await rule.getByLabel('Comparison').selectOption('LESS_THAN');
+    await rule.getByLabel('Window starts at').selectOption('SUBSCRIPTION_START');
+    await rule.getByLabel('First N days of the subscription').fill('30');
+    await rule.getByLabel('Seller Growth').check();
+    await expect(rule.getByTestId('rule-sentence')).toContainText(
+      'Sellers on Seller Growth who sell less than $1,000 in the first 30 days of their subscription get 30 free days (checked 24 h before the trial ends).'
+    );
+    await rule.getByRole('button', { name: 'Check now' }).click();
+    await expect(rule).toContainText(/still in their window/);
+    await expect(rule.getByRole('table', { name: 'Who qualifies now' })).toContainText(/Pending · checked/);
+    await rule.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(rule).toBeHidden();
+    await expect(page.getByRole('table', { name: 'Rewards' }).getByRole('row', { name: new RegExp(`Quiet start ${run}`) })).toContainText('Draft');
+  });
 });

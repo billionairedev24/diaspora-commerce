@@ -20,6 +20,12 @@ export const RewardMetricSchema = z.enum(['GROSS_SALES', 'ACTIVE_LISTINGS', 'COM
 export type RewardMetric = z.infer<typeof RewardMetricSchema>;
 export const RewardTypeSchema = z.enum(['FREE_DAYS', 'CREDIT', 'PERCENT_OFF']);
 export type RewardType = z.infer<typeof RewardTypeSchema>;
+/** S299: reach the threshold (AT_LEAST) or stay under it (LESS_THAN: low-sales relief, decided at window end). */
+export const RewardComparisonSchema = z.enum(['AT_LEAST', 'LESS_THAN']);
+export type RewardComparison = z.infer<typeof RewardComparisonSchema>;
+/** Where "the first N days" start: approval or the subscription's start (its trial's first day). */
+export const RewardWindowAnchorSchema = z.enum(['APPROVAL', 'SUBSCRIPTION_START']);
+export type RewardWindowAnchor = z.infer<typeof RewardWindowAnchorSchema>;
 export const GrantTypeSchema = z.enum(['FREE_DAYS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END']);
 export type GrantType = z.infer<typeof GrantTypeSchema>;
 
@@ -177,6 +183,12 @@ export const StaffRewardRuleSchema = z.object({
   threshold: z.number().int(),
   windowDays: nullableInt.default(null),
   withinDaysOfApproval: nullableInt.default(null),
+  comparison: RewardComparisonSchema.default('AT_LEAST'),
+  windowAnchor: RewardWindowAnchorSchema.default('APPROVAL'),
+  /** Decided once when the window closes (always for LESS_THAN). */
+  checkAtWindowEnd: z.boolean().default(false),
+  /** Hours before the window (or the trial) ends that the check runs. */
+  checkLeadHours: z.number().int().default(24),
   rewardType: RewardTypeSchema,
   freeDays: nullableInt.default(null),
   creditCents: nullableInt.default(null),
@@ -204,6 +216,10 @@ export interface StaffRewardRuleInput {
   threshold: number;
   windowDays?: number | null;
   withinDaysOfApproval?: number | null;
+  comparison?: RewardComparison | null;
+  windowAnchor?: RewardWindowAnchor | null;
+  checkAtWindowEnd?: boolean | null;
+  checkLeadHours?: number | null;
   rewardType: RewardType;
   freeDays?: number | null;
   creditCents?: number | null;
@@ -227,10 +243,19 @@ export const StaffRewardPreviewRowSchema = z.object({
   percent: z.number().int(),
   qualifies: z.boolean(),
   alreadyGranted: z.boolean(),
-  reason: nullableString.default(null)
+  reason: nullableString.default(null),
+  /** PENDING: in the window of a rule checked at window end (decided when it closes). */
+  status: z.enum(['GRANTED', 'QUALIFIES', 'PENDING', 'CHECKED', 'NOT_YET', 'INELIGIBLE']).default('NOT_YET'),
+  checkAt: nullableString.default(null)
 });
 export type StaffRewardPreviewRow = z.infer<typeof StaffRewardPreviewRowSchema>;
-export const StaffRewardPreviewSchema = z.object({ evaluated: z.number().int(), qualifying: z.number().int(), rows: z.array(StaffRewardPreviewRowSchema) });
+export const StaffRewardPreviewSchema = z.object({
+  evaluated: z.number().int(),
+  qualifying: z.number().int(),
+  /** Rules checked at window end: organisations still in their window. */
+  pending: z.number().int().default(0),
+  rows: z.array(StaffRewardPreviewRowSchema)
+});
 export type StaffRewardPreview = z.infer<typeof StaffRewardPreviewSchema>;
 
 export const StaffBillingGrantSchema = z.object({

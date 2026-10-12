@@ -425,8 +425,20 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
 
     const rule = { name: 'Ten orders', metric: 'COMPLETED_ORDERS' as const, threshold: 10, rewardType: 'CREDIT' as const, creditCents: 2500, eligiblePlans: [] };
     const preview = await finance.previewRule(rule);
-    expect(preview).toMatchObject({ evaluated: 3, qualifying: 2 });
+    expect(preview).toMatchObject({ evaluated: 4, qualifying: 2, pending: 0 });
     expect((await finance.createRule(rule)).rewardLabel).toBe('$25 credit');
+
+    // S299: low-sales relief - decided once at window end, so sellers in their window are pending (with their sales so far).
+    const relief = { name: 'Low-sales relief', kind: 'SELLER' as const, metric: 'GROSS_SALES' as const, threshold: 100000, comparison: 'LESS_THAN' as const,
+      windowAnchor: 'SUBSCRIPTION_START' as const, withinDaysOfApproval: 30, rewardType: 'FREE_DAYS' as const, freeDays: 30, eligiblePlans: ['seller_growth'] };
+    const reliefPreview = await finance.previewRule(relief);
+    expect(reliefPreview).toMatchObject({ qualifying: 0, pending: 1 });
+    expect(reliefPreview.rows[0]).toMatchObject({ orgId: 'org-mama-put', status: 'PENDING', value: 32000 });
+    expect(reliefPreview.rows[0]?.checkAt).toBeTruthy();
+    const saved = await finance.createRule(relief);
+    expect(saved).toMatchObject({ comparison: 'LESS_THAN', windowAnchor: 'SUBSCRIPTION_START', checkAtWindowEnd: true, checkLeadHours: 24,
+      conditionLabel: 'less than $1,000 in sales in the first 30 days of the subscription' });
+    await expect(finance.createRule({ ...relief, withinDaysOfApproval: null })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.withinDaysOfApproval);
 
     const org = (await finance.searchOrgs('ade')).items[0]?.orgId ?? '';
     await expect(finance.credit(org, 2500, { reasonCode: 'OTHER' }, 'k-1')).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.note);

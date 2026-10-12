@@ -134,9 +134,17 @@ export function seedPlans(now: Date): MockPlansState {
     }],
     rules: [{
       id: 'rr_sales', name: 'First $1,000 in sales', description: 'Reach $1,000 in delivered sales within 60 days of approval.', status: 'ACTIVE', kind: 'SELLER', metric: 'GROSS_SALES',
-      threshold: 100000, windowDays: null, withinDaysOfApproval: 60, rewardType: 'FREE_DAYS', freeDays: 30, creditCents: null, percentOff: null, durationInvoices: null,
+      threshold: 100000, windowDays: null, withinDaysOfApproval: 60, comparison: 'AT_LEAST', windowAnchor: 'APPROVAL', checkAtWindowEnd: false, checkLeadHours: 24,
+      rewardType: 'FREE_DAYS', freeDays: 30, creditCents: null, percentOff: null, durationInvoices: null,
       eligiblePlans: [], startsAt: null, endsAt: null, maxGrants: 500, grantsCount: 1, rewardLabel: '30 days free', conditionLabel: '$1,000 in sales within 60 days of approval',
       createdBy: 'Amaka Eze', createdAt: iso(-40), updatedBy: null, updatedAt: null, version: 0
+    }, {
+      // S299: low-sales relief - the 2nd month free when the first 30 days of the subscription sold less than $1,000.
+      id: 'rr_relief', name: 'Low-sales relief', description: 'A quiet first month? The second one is on us.', status: 'ACTIVE', kind: 'SELLER', metric: 'GROSS_SALES',
+      threshold: 100000, windowDays: null, withinDaysOfApproval: 30, comparison: 'LESS_THAN', windowAnchor: 'SUBSCRIPTION_START', checkAtWindowEnd: true, checkLeadHours: 24,
+      rewardType: 'FREE_DAYS', freeDays: 30, creditCents: null, percentOff: null, durationInvoices: null,
+      eligiblePlans: ['seller_growth'], startsAt: null, endsAt: null, maxGrants: null, grantsCount: 0, rewardLabel: '30 days free',
+      conditionLabel: 'less than $1,000 in sales in the first 30 days of the subscription', createdBy: 'Amaka Eze', createdAt: iso(-20), updatedBy: null, updatedAt: null, version: 0
     }],
     grants: [{
       id: 'gr_seed1', orgId: 'org-ades-kitchen', source: 'RULE', ruleId: 'rr_sales', type: 'FREE_DAYS', creditCents: null, freeDays: 30, percentOff: null, durationInvoices: null,
@@ -147,7 +155,9 @@ export function seedPlans(now: Date): MockPlansState {
     orgs: [
       org('org-ades-kitchen', 'Ade’s Kitchen', 'SELLER', 'seller_growth', 'active', facts(104500, 42, 61, 0, 40), [invoice('in_ades1', 3900, 'paid', 10, 2500), invoice('in_ades2', 3900, 'open', 1)]),
       org('org-lagos-textile', 'Lagos Textile Hub', 'SELLER', 'seller_pro', 'active', facts(64000, 18, 22, 0, 75), [invoice('in_lth1', 12900, 'paid', 5)]),
-      org('org-braids-by-bisi', 'Braids by Bisi', 'PROVIDER', 'provider_studio', 'trialing', facts(0, 0, 0, 3, 18), [])
+      org('org-braids-by-bisi', 'Braids by Bisi', 'PROVIDER', 'provider_studio', 'trialing', facts(0, 0, 0, 3, 18), []),
+      // A seller still in its 30-day trial (S299: in the window of a low-sales relief rule).
+      org('org-mama-put', 'Mama Put', 'SELLER', 'seller_growth', 'trialing', facts(32000, 6, 5, 0, 18), [])
     ],
     keys: {},
     settings: { earningsCollectionEnabled: true, planFeeCollectionDefault: 'EARNINGS_FIRST', updatedBy: 'system', updatedAt: iso(-60) },
@@ -173,7 +183,9 @@ const CampaignBody = z.object({
 const RuleBody = z.object({
   name: z.string().trim().min(1, 'Enter a name'), description: z.string().nullish(), kind: z.enum(['SELLER', 'PROVIDER']).nullish(),
   metric: z.enum(['GROSS_SALES', 'ACTIVE_LISTINGS', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'DAYS_SINCE_APPROVAL']), threshold: z.number().int().min(1, 'At least 1'),
-  windowDays: z.number().int().min(1).nullish(), withinDaysOfApproval: z.number().int().min(1).nullish(), rewardType: z.enum(['FREE_DAYS', 'CREDIT', 'PERCENT_OFF']),
+  windowDays: z.number().int().min(1).nullish(), withinDaysOfApproval: z.number().int().min(1).nullish(),
+  comparison: z.enum(['AT_LEAST', 'LESS_THAN']).nullish(), windowAnchor: z.enum(['APPROVAL', 'SUBSCRIPTION_START']).nullish(), checkAtWindowEnd: z.boolean().nullish(),
+  checkLeadHours: z.number().int().min(0).max(168).nullish(), rewardType: z.enum(['FREE_DAYS', 'CREDIT', 'PERCENT_OFF']),
   freeDays: z.number().int().min(1).nullish(), creditCents: z.number().int().min(1).nullish(), percentOff: z.number().min(1).max(100).nullish(),
   durationInvoices: z.number().int().min(1).nullish(), eligiblePlans: z.array(z.string()).default([]), startsAt: z.string().nullish(), endsAt: z.string().nullish(),
   maxGrants: z.number().int().min(1).nullish(), status: z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'ENDED']).nullish(), expectedVersion: z.number().int().nullish(), ruleId: z.string().nullish()
@@ -186,11 +198,17 @@ const metricLabel = (m: RewardMetric, v: number) =>
 
 function ruleLabels(r: z.infer<typeof RuleBody>): { rewardLabel: string; conditionLabel: string } {
   const rewardLabel = r.rewardType === 'FREE_DAYS' ? `${r.freeDays ?? 0} days free` : r.rewardType === 'CREDIT' ? `${usd(r.creditCents ?? 0)} credit` : `${r.percentOff ?? 0}% off ${r.durationInvoices ?? 1} invoices`;
-  let conditionLabel = metricLabel(r.metric, r.threshold);
+  const atEnd = atWindowEnd(r);
+  let conditionLabel = (r.comparison === 'LESS_THAN' ? 'less than ' : '') + metricLabel(r.metric, r.threshold);
   if (r.windowDays) conditionLabel += ` in ${r.windowDays} days`;
-  if (r.withinDaysOfApproval) conditionLabel += ` within ${r.withinDaysOfApproval} days of approval`;
+  const of = r.windowAnchor === 'SUBSCRIPTION_START' ? 'the subscription' : 'approval';
+  if (r.withinDaysOfApproval) conditionLabel += atEnd ? ` in the first ${r.withinDaysOfApproval} days of ${of}` : ` within ${r.withinDaysOfApproval} days of ${of}`;
   return { rewardLabel, conditionLabel };
 }
+
+/** S299: LESS_THAN rules (and AT_LEAST ones that ask) are decided once, when the window closes. */
+const atWindowEnd = (r: z.infer<typeof RuleBody>) => r.comparison === 'LESS_THAN' || !!r.checkAtWindowEnd;
+const SUMMED: RewardMetric[] = ['GROSS_SALES', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS'];
 
 export function planHandlers(W: string, deps: PreorderHandlerDeps) {
   const { route, json, problem } = deps;
@@ -285,10 +303,16 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
     if (b.rewardType === 'FREE_DAYS' && !b.freeDays) errors.freeDays = 'Enter the free days';
     if (b.rewardType === 'CREDIT' && !b.creditCents) errors.creditCents = 'Enter the credit';
     if (b.rewardType === 'PERCENT_OFF' && (!b.percentOff || !b.durationInvoices)) errors.percentOff = 'Enter the discount and the number of invoices';
+    if (atWindowEnd(b)) {
+      if (!b.withinDaysOfApproval) errors.withinDaysOfApproval = 'A “less than” rule needs a window: the first N days';
+      if (b.windowDays) errors.windowDays = 'Leave the rolling window empty: the whole window counts';
+      if (!SUMMED.includes(b.metric)) errors.metric = 'Choose sales, completed orders or completed bookings';
+    }
     if (Object.keys(errors).length) throw invalid(errors);
     return {
       id: prior?.id ?? id(ctx, 'rr'), name: b.name, description: b.description ?? null, status: b.status ?? prior?.status ?? 'DRAFT', kind: b.kind ?? null, metric: b.metric, threshold: b.threshold,
-      windowDays: b.windowDays ?? null, withinDaysOfApproval: b.withinDaysOfApproval ?? null, rewardType: b.rewardType, freeDays: b.freeDays ?? null, creditCents: b.creditCents ?? null,
+      windowDays: b.windowDays ?? null, withinDaysOfApproval: b.withinDaysOfApproval ?? null, comparison: b.comparison ?? 'AT_LEAST', windowAnchor: b.windowAnchor ?? 'APPROVAL',
+      checkAtWindowEnd: atWindowEnd(b), checkLeadHours: b.checkLeadHours ?? 24, rewardType: b.rewardType, freeDays: b.freeDays ?? null, creditCents: b.creditCents ?? null,
       percentOff: b.percentOff ?? null, durationInvoices: b.durationInvoices ?? null, eligiblePlans: b.eligiblePlans, startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null,
       maxGrants: b.maxGrants ?? null, grantsCount: prior?.grantsCount ?? 0, ...ruleLabels(b), createdBy: prior?.createdBy ?? ctx.action.actor, createdAt: prior?.createdAt ?? ctx.now.toISOString(),
       updatedBy: prior ? ctx.action.actor : null, updatedAt: prior ? ctx.now.toISOString() : null, version: (prior?.version ?? -1) + 1
@@ -422,16 +446,27 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
     http.post(`${B}/reward-rules/preview`, route(async (ctx) => {
       view(ctx);
       const b = await json(ctx.request, RuleBody);
+      const atEnd = atWindowEnd(b);
+      const lead = (b.checkLeadHours ?? 24) * 3_600_000;
       const rows: StaffRewardPreviewRow[] = st(ctx).orgs.filter((o) => !b.kind || o.kind === b.kind).map((o) => {
         const value = o.facts[b.metric];
         const eligible = b.eligiblePlans.length === 0 || b.eligiblePlans.includes(o.planCode);
-        const late = b.withinDaysOfApproval != null && o.facts.DAYS_SINCE_APPROVAL > b.withinDaysOfApproval;
+        // Days into the window: since the subscription started (a 30-day trial ending at trialEndsAt) or since approval.
+        const sinceSub = o.trialEndsAt ? 30 - Math.round((Date.parse(o.trialEndsAt) - ctx.now.getTime()) / DAY) : o.facts.DAYS_SINCE_APPROVAL;
+        const into = b.windowAnchor === 'SUBSCRIPTION_START' ? sinceSub : o.facts.DAYS_SINCE_APPROVAL;
+        const late = b.withinDaysOfApproval != null && into > b.withinDaysOfApproval;
         const already = st(ctx).grants.some((g) => g.ruleId != null && g.ruleId === b.ruleId && g.orgId === o.orgId);
-        const reason = !eligible ? 'Plan not eligible' : late ? 'Approval window closed' : already ? 'Already granted' : null;
+        const reason = !eligible ? 'Plan not eligible' : late ? (atEnd ? 'Window closed' : 'Approval window closed') : already ? 'Already granted' : null;
+        const holds = b.comparison === 'LESS_THAN' ? value < b.threshold : value >= b.threshold;
+        const pending = atEnd && !reason;
+        const checkAt = pending && b.withinDaysOfApproval != null ? new Date(ctx.now.getTime() + (b.withinDaysOfApproval - into) * DAY - lead).toISOString() : null;
+        const qualifies = !reason && !atEnd && holds;
+        const status = already ? 'GRANTED' : qualifies ? 'QUALIFIES' : pending ? 'PENDING' : reason ? 'INELIGIBLE' : 'NOT_YET';
         return { orgId: o.orgId, orgName: o.name, planCode: o.planCode, value, threshold: b.threshold, percent: Math.min(100, Math.floor((value * 100) / b.threshold)),
-          qualifies: !reason && value >= b.threshold, alreadyGranted: already, reason };
+          qualifies, alreadyGranted: already, reason, status, checkAt };
       });
-      return { evaluated: rows.length, qualifying: rows.filter((r) => r.qualifies).length, rows };
+      rows.sort((x, y) => Number(y.qualifies) - Number(x.qualifies) || Number(y.status === 'PENDING') - Number(x.status === 'PENDING') || y.value - x.value);
+      return { evaluated: rows.length, qualifying: rows.filter((r) => r.qualifies).length, pending: rows.filter((r) => r.status === 'PENDING').length, rows };
     })),
     http.post(`${B}/reward-rules`, route(async (ctx) => {
       need(ctx, 'plans:manage');

@@ -32,7 +32,7 @@ import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
-import { money, shortDate } from '@/lib/format';
+import { dollars, money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 import { appearance, getStripePayments, hasStripeKey, type PaymentElement, type StripePaymentElements, type StripePaymentInstance } from '@/lib/stripe';
 import { exportDataset, pollExport } from '@/lib/table-export';
@@ -124,8 +124,34 @@ function PlanSummary({ sub, t }: { sub: Subscription; t: T }) {
   );
 }
 
+/**
+ * S299: low-sales relief (a LESS_THAN rule) has no progress to chase: a neutral note says what happens and when it is
+ * checked, with the sales so far.
+ */
+function ReliefRow({ r, t }: { r: RewardProgress; t: T }) {
+  const threshold = r.metric === 'GROSS_SALES' ? dollars(r.threshold / 100) : String(r.threshold);
+  const soFar = r.metric === 'GROSS_SALES' ? money(r.value) : String(r.value);
+  const what = t(`sc.billing.reliefMetric.${r.metric}` as MessageKey);
+  const days = r.windowDays ?? 30;
+  return (
+    <li className="flex flex-col gap-1.5" data-testid="low-sales-relief">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <strong className="text-sm">{r.rewardLabel}</strong>
+        <span className="text-xs text-muted">{r.conditionLabel}</span>
+      </div>
+      <p className="m-0 text-sm">
+        {r.checkAt
+          ? t('sc.billing.reliefNote', { what, days, threshold, reward: r.rewardLabel.toLowerCase(), date: shortDate(r.checkAt) })
+          : t('sc.billing.reliefNoteNoDate', { what, days, threshold, reward: r.rewardLabel.toLowerCase() })}
+      </p>
+      <span className="text-xs text-muted">{t('sc.billing.reliefSoFar', { what, value: soFar })}</span>
+    </li>
+  );
+}
+
 /** One reward the organisation can earn, with its progress. */
 function RewardRow({ r, t }: { r: RewardProgress; t: T }) {
+  if (r.comparison === 'LESS_THAN') return <ReliefRow r={r} t={t} />;
   return (
     <li className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -417,6 +443,8 @@ export function BillingView() {
   const shown = cadence || sub.cadence;
   const available = rewards.data?.available ?? [];
   const earned = rewards.data?.earned ?? [];
+  // S299: applied low-sales relief moved the next charge.
+  const relief = earned.find((e) => e.comparison === 'LESS_THAN' && e.status === 'APPLIED' && e.nextChargeAt);
   return (
     <ModulePage module="billing" readOnlyNote={false}>
       {!canManage ? <Notice tone="info" icon="eye" title={t('sc.billing.ownerOnly')}>{t('sc.billing.ownerOnlyDetail')}</Notice> : null}
@@ -424,6 +452,9 @@ export function BillingView() {
       {q.data.planFeeCollection ? <PlanFeeCollectionCard v={q.data.planFeeCollection} t={t} /> : null}
 
       <Card title={t('sc.billing.rewardsTitle')}>
+        {relief?.nextChargeAt ? (
+          <Notice tone="success" title={t('sc.billing.reliefApplied')}>{t('sc.billing.reliefAppliedDetail', { date: shortDate(relief.nextChargeAt) })}</Notice>
+        ) : null}
         {rewards.isError ? <ErrorState error={rewards.error} onRetry={() => void rewards.refetch()} /> : available.length ? (
           <ul aria-label={t('sc.billing.rewardsTitle')} className="m-0 flex list-none flex-col gap-4 p-0">
             {available.map((r) => <RewardRow key={r.ruleId} r={r} t={t} />)}

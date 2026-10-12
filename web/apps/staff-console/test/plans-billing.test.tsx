@@ -67,12 +67,53 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     await user.selectOptions(within(dialog).getByLabelText('Reward'), 'CREDIT');
     await user.type(within(dialog).getByLabelText('Credit ($)'), '25');
     await user.click(within(dialog).getByRole('button', { name: 'Check now' }));
-    expect(await within(dialog).findByText('2 of 3 organisations qualify now')).toBeInTheDocument();
+    expect(await within(dialog).findByText('2 of 4 organisations qualify now')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Save and activate' }));
     const table = screen.getByRole('table', { name: 'Rewards' });
     const row = await within(table).findByRole('row', { name: /Ten orders/ });
     expect(within(row).getByText('$25 credit')).toBeInTheDocument();
     expect(within(row).getByText('Active')).toBeInTheDocument();
+  });
+
+  it('builds a low-sales relief rule: less than $1,000 in the first 30 days of the subscription, checked before the trial ends (S299)', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<RewardsPanel />);
+    await user.click(await screen.findByRole('button', { name: 'New reward rule' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New reward rule' });
+    await user.type(within(dialog).getByLabelText('Name'), 'Quiet start');
+    await user.type(within(dialog).getByLabelText('Threshold ($ in sales)'), '1000');
+    await user.selectOptions(within(dialog).getByLabelText('Kind'), 'SELLER');
+    await user.selectOptions(within(dialog).getByLabelText('Comparison'), 'LESS_THAN');
+    await user.selectOptions(within(dialog).getByLabelText('Window starts at'), 'SUBSCRIPTION_START');
+    await user.type(within(dialog).getByLabelText('First N days of the subscription'), '30');
+    expect(within(dialog).queryByLabelText('Decide once, when the window closes')).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Check (hours before the window or trial ends)')).toHaveValue('24');
+    await user.click(await within(dialog).findByLabelText('Seller Growth'));
+    expect(within(dialog).getByTestId('rule-sentence')).toHaveTextContent(
+      'Sellers on Seller Growth who sell less than $1,000 in the first 30 days of their subscription get 30 free days (checked 24 h before the trial ends).'
+    );
+    await user.click(within(dialog).getByRole('button', { name: 'Check now' }));
+    expect(await within(dialog).findByText(/0 of 3 organisations qualify now · 1 still in their window/)).toBeInTheDocument();
+    const preview = within(dialog).getByRole('table', { name: 'Who qualifies now' });
+    const mama = await within(preview).findByRole('row', { name: /Mama Put/ });
+    expect(within(mama).getByText('$320.00 so far (less than $1,000.00 qualifies)')).toBeInTheDocument();
+    expect(within(mama).getByText(/Pending · checked/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Save and activate' }));
+    const row = await within(screen.getByRole('table', { name: 'Rewards' })).findByRole('row', { name: /Quiet start/ });
+    expect(within(row).getByText('less than $1,000 in sales in the first 30 days of the subscription')).toBeInTheDocument();
+    expect(getStaffDb().plans.rules[0]).toMatchObject({ comparison: 'LESS_THAN', windowAnchor: 'SUBSCRIPTION_START', checkAtWindowEnd: true, checkLeadHours: 24 });
+  });
+
+  it('can ask an "at least" rule to wait for its window to close (S299)', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<RewardsPanel />);
+    await user.click(await screen.findByRole('button', { name: 'New reward rule' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New reward rule' });
+    await user.type(within(dialog).getByLabelText('Threshold ($ in sales)'), '5000');
+    await user.type(within(dialog).getByLabelText('Within N days of approval'), '60');
+    expect(within(dialog).getByTestId('rule-sentence')).toHaveTextContent('Sellers and providers who sell at least $5,000 in the first 60 days after approval get 30 free days (as soon as they reach it).');
+    await user.click(within(dialog).getByLabelText('Decide once, when the window closes'));
+    expect(within(dialog).getByTestId('rule-sentence')).toHaveTextContent('(checked 24 h before the window ends).');
   });
 
   it('finds a seller, credits it with a reason code and waives an open invoice', async () => {

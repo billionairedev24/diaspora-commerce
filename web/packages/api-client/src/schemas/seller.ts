@@ -1031,7 +1031,16 @@ export const RewardProgressSchema = z.object({
   label: z.string(),
   rewardLabel: z.string(),
   conditionLabel: z.string(),
-  endsAt: nullableString.default(null)
+  endsAt: nullableString.default(null),
+  /** S299: LESS_THAN is low-sales relief (no progress bar: decided once, at checkAt). */
+  comparison: z.enum(['AT_LEAST', 'LESS_THAN']).default('AT_LEAST'),
+  windowAnchor: z.enum(['APPROVAL', 'SUBSCRIPTION_START']).default('APPROVAL'),
+  /** The window's length: the first N days. */
+  windowDays: z.number().int().nullable().default(null),
+  /** Decided once at window end and the check is still to come. */
+  pending: z.boolean().default(false),
+  checkAt: nullableString.default(null),
+  windowClosesAt: nullableString.default(null)
 });
 export type RewardProgress = z.infer<typeof RewardProgressSchema>;
 export const EarnedRewardSchema = z.object({
@@ -1044,7 +1053,11 @@ export const EarnedRewardSchema = z.object({
   creditMinor: z.number().int().nullable().default(null),
   freeDays: z.number().int().nullable().default(null),
   createdAt: z.string(),
-  appliedAt: nullableString.default(null)
+  appliedAt: nullableString.default(null),
+  /** The reward rule's comparison: LESS_THAN is low-sales relief (S299). */
+  comparison: z.enum(['AT_LEAST', 'LESS_THAN']).nullable().default(null),
+  /** Free days: the new trial end, when the card is charged next. */
+  nextChargeAt: nullableString.default(null)
 });
 export type EarnedReward = z.infer<typeof EarnedRewardSchema>;
 export const SellerRewardsViewSchema = z.object({ available: z.array(RewardProgressSchema), earned: z.array(EarnedRewardSchema) });

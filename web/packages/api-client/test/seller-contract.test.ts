@@ -310,6 +310,8 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const rewards = await api.getBillingRewards();
     expect(rewards.available[0]).toMatchObject({ percent: 64, label: '$640 of $1,000 in sales', rewardLabel: '1 month free' });
     expect(rewards.earned[0]).toMatchObject({ type: 'CREDIT', summary: '$25 credit' });
+    // S299: applied low-sales relief says when the card is charged next.
+    expect(rewards.earned.find((e) => e.comparison === 'LESS_THAN')).toMatchObject({ type: 'FREE_DAYS', status: 'APPLIED', nextChargeAt: expect.any(String) });
     expect(await api.previewPlanChange('seller_pro', 'QUARTERLY')).toMatchObject({ change: 'IMMEDIATE_UPGRADE', trialing: false });
     expect((await api.previewPlanChange('seller_pro', 'QUARTERLY')).amountDueNowMinor).toBeGreaterThan(0);
     expect(await api.previewPlanChange('seller_essentials', 'QUARTERLY')).toMatchObject({ change: 'AT_RENEWAL', amountDueNowMinor: 0 });
