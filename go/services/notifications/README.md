@@ -96,7 +96,7 @@ Table `stock_alert` (migration `0004`).
 
 Every email body is a **content fragment** rendered inside the shared layout `internal/app/email/layout.html.tmpl`
 (a body that is a complete HTML document is sent as-is). The layout is table-based with inline styles, 600 px max,
-a mobile media query, `color-scheme` + `prefers-color-scheme` dark-mode refinements, a hidden preheader
+a mobile media query, light only in every client (`color-scheme: light only`, no dark variant: a white body between the black header and footer), a hidden preheader
 (`{{define "preheader"}}…{{end}}` in the body) and Figtree with a safe fallback stack. It has a black header with the
 logo, a gold rule, the content, advertorials, a green **Join our WhatsApp community** block and a black footer. The
 footer has social icons, App Store and Google Play badges when app links exist, the customer service phone, the postal
