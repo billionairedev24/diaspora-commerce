@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { BookingTakeHomeSchema, SellerNegotiatedRateSchema, SellerRateCardSchema } from '../fee-rates';
+
 /* Zod schemas for contracts/openapi/gateway-bff-seller.yaml (Seller Center & Provider Hub). Every response is
    validated at runtime; test/seller-contract.test.ts keeps them assignable to the generated contract types. */
 
@@ -862,7 +864,11 @@ export const SellerFeeCategorySchema = z.object({
   category: z.string(),
   label: z.string(),
   commissionBps: z.number().int(),
-  source: z.enum(['OVERRIDE', 'CATEGORY', 'DEFAULT', 'RETAIL'])
+  /** OVERRIDE: negotiated (until negotiatedUntil); PLAN: the rate of the organisation's plan. */
+  source: z.enum(['OVERRIDE', 'PLAN', 'CATEGORY', 'DEFAULT', 'RETAIL']),
+  planCode: nullableString.default(null),
+  planName: nullableString.default(null),
+  negotiatedUntil: nullableString.default(null)
 });
 export type SellerFeeCategory = z.infer<typeof SellerFeeCategorySchema>;
 export const SellerFeeVersionSchema = z.object({
@@ -904,7 +910,12 @@ export const SellerFeesViewSchema = z.object({
   note: z.string().nullable(),
   current: SellerFeeVersionSchema,
   upcoming: SellerFeeVersionSchema.nullable(),
-  changes: z.array(SellerFeeChangeSchema)
+  changes: z.array(SellerFeeChangeSchema),
+  planCode: nullableString.default(null),
+  planName: nullableString.default(null),
+  negotiated: z.array(SellerNegotiatedRateSchema).default([]),
+  /** What service bookings pay (connection fees), apart from product commission. */
+  connectionFees: SellerRateCardSchema.nullable().default(null)
 });
 export type SellerFeesView = z.infer<typeof SellerFeesViewSchema>;
 
@@ -1186,7 +1197,10 @@ export const BookingCardSchema = z.object({
   practitioner: nullableString,
   expiresAt: nullableString,
   proposedStartAt: nullableString,
-  allowedActions: z.array(BookingActionSchema)
+  allowedActions: z.array(BookingActionSchema),
+  serviceCategory: nullableString.default(null),
+  /** Booking requests: "You keep $X after the 8% connection fee". */
+  takeHome: BookingTakeHomeSchema.nullable().default(null)
 });
 export type BookingCard = z.infer<typeof BookingCardSchema>;
 export const DaySummarySchema = z.object({
@@ -1343,7 +1357,9 @@ export const EarningsSchema = z.object({
     heldMinor: z.number().int()
   }),
   rows: z.array(EarningsRowSchema),
-  providerFees: ProviderFeesSchema
+  providerFees: ProviderFeesSchema,
+  /** The provider's connection fee now, per service category, with its source. */
+  connectionFee: SellerRateCardSchema.nullable().default(null)
 });
 export type Earnings = z.infer<typeof EarningsSchema>;
 

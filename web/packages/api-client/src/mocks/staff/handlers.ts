@@ -42,7 +42,8 @@ import { exportFileOf, type MockExportColumn } from '../export-file';
 import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
-import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
+import { feeRateHandlers } from './fee-rates';
+import { activeFeeSchedule, createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
 import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
@@ -568,6 +569,15 @@ const FeeDraftBody = z.object({
       customerCharge: DeliveryTariffSchema.nullable(),
       sellerFee: DeliveryTariffSchema.nullable(),
       sellerOverrides: z.array(z.object({ orgId: z.string(), sellerFee: DeliveryTariffSchema }))
+    })
+    .nullable()
+    .optional(),
+  planRates: z.array(z.object({ planCode: z.string(), category: z.string(), bps: z.number().int() })).nullable().optional(),
+  connectionFee: z
+    .object({
+      defaultBps: z.number().int(),
+      categoryRates: z.array(z.object({ category: z.string(), bps: z.number().int() })),
+      planRates: z.array(z.object({ planCode: z.string(), category: z.string(), bps: z.number().int() }))
     })
     .nullable()
     .optional(),
@@ -1101,6 +1111,7 @@ export const staffHandlers = [
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Plans & billing (S292–S297): the seller service's catalogue, trials, rewards and per-seller billing */
   ...planHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  ...feeRateHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }, (ctx) => activeFeeSchedule(ctx.db.feeSchedules, ctx.now)),
   /* Inventory hub and AfroTransact Retail (1P) (S281) */
   ...inventoryHubHandlers(W, hubGate),
   /* Anything else under /v1/staff is not part of the contract. */

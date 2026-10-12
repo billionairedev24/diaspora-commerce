@@ -5,6 +5,8 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { z } from 'zod';
 
+import { type BookingTakeHome, type SellerRateCard } from '../../fee-rates';
+import { applyBps } from '../../fees';
 import { bffProblemType } from '../../problem-types';
 import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
 import {
@@ -358,6 +360,27 @@ function dashboard(ctx: Ctx, rangeDays: number): Dashboard {
 
 /* ── bookings ── */
 
+/** Provider Studio (8 %) with hair & beauty negotiated at 7 % until the end of the year, as payments' rate card says. */
+const MOCK_NEGOTIATED_UNTIL = '2026-12-31T23:59:59Z';
+export function mockConnectionFees(): SellerRateCard {
+  return {
+    kind: 'SERVICE', version: 2, effectiveFrom: '2026-08-01T05:00:00Z', planCode: 'provider_studio', planName: 'Provider Studio',
+    other: { category: '', label: 'Other services', bps: 800, source: 'PLAN', planCode: 'provider_studio', planName: 'Provider Studio', negotiatedUntil: null },
+    categories: [{ category: 'hair & beauty', label: 'Hair & beauty', bps: 700, source: 'OVERRIDE', planCode: 'provider_studio', planName: 'Provider Studio', negotiatedUntil: MOCK_NEGOTIATED_UNTIL }],
+    negotiated: [{ type: 'CONNECTION_FEE', category: 'hair & beauty', label: 'Hair & beauty', rateBps: 700, startsAt: '2026-10-01T00:00:00Z', endsAt: MOCK_NEGOTIATED_UNTIL, status: 'ACTIVE' }]
+  };
+}
+
+/** What the provider keeps at the booking's price after the connection fee and card fees (bookings' formula). */
+function bookingTakeHome(b: BookingCard): BookingTakeHome {
+  const card = mockConnectionFees();
+  const rate = card.categories.find((c) => c.category === (b.serviceCategory ?? 'services')) ?? card.other;
+  const cardFee = (charge: number) => (charge > 0 ? applyBps(charge, 290) + 30 : 0);
+  const fee = applyBps(b.priceMinor, rate.bps);
+  const cards = cardFee(b.depositMinor) + cardFee(b.priceMinor - b.depositMinor);
+  return { connectionFeeBps: rate.bps, connectionFeeMinor: fee, cardFeesMinor: cards, keepMinor: b.priceMinor - fee - cards, source: rate.source, currency: b.currency };
+}
+
 function bookingCard(b: BookingCard, now: Date): BookingCard {
   return { ...b, statusLabel: BOOKING_LABELS[b.status], allowedActions: allowedBookingActions(b.status, b.startAt, now) };
 }
@@ -371,7 +394,7 @@ function earningsRows(db: MockSellerDb, now: Date): EarningsRow[] {
     .filter((b) => new Date(b.startAt) <= now || b.status === 'CANCELLED_PROVIDER')
     .map((b) => {
       const collected = b.status === 'COMPLETED' ? b.priceMinor : b.status === 'NO_SHOW' ? b.depositMinor : 0;
-      const commission = Math.round(collected * 0.1);
+      const commission = Math.round(collected * 0.08);
       const card = collected ? Math.round(collected * 0.029) + 30 : 0;
       const late = b.status === 'CANCELLED_PROVIDER' ? 1500 : 0;
       return {
@@ -406,7 +429,11 @@ function sellerFees(kind: string, now: Date): SellerFeesView {
     defaultCommissionBps: 1000,
     categories: Object.keys(rates)
       .sort()
-      .map((k) => (k === override[0] ? { category: k, label: label(k), commissionBps: override[1], source: 'OVERRIDE' as const } : { category: k, label: label(k), commissionBps: rates[k] ?? 1000, source: 'CATEGORY' as const })),
+      .map((k) =>
+        k === override[0]
+          ? { category: k, label: label(k), commissionBps: override[1], source: 'OVERRIDE' as const, planCode: 'seller_growth', planName: 'Seller Growth', negotiatedUntil: '2026-12-31T23:59:59Z' }
+          : { category: k, label: label(k), commissionBps: rates[k] ?? 1000, source: 'PLAN' as const, planCode: 'seller_growth', planName: 'Seller Growth', negotiatedUntil: null }
+      ),
     cardPctBps: 290,
     cardFixedMinor: 30,
     fbaPerUnitMinor: fba,
@@ -433,7 +460,14 @@ function sellerFees(kind: string, now: Date): SellerFeesView {
     changes: [
       { field: 'category:fashion', label: 'Fashion commission', from: '11.50%', to: '13.00%' },
       { field: 'fbaPerUnitMinor', label: 'FBA fee per unit', from: '$3.25', to: '$3.50' }
-    ]
+    ],
+    planCode: kind === 'PROVIDER' ? 'provider_studio' : 'seller_growth',
+    planName: kind === 'PROVIDER' ? 'Provider Studio' : 'Seller Growth',
+    negotiated:
+      kind === 'PROVIDER'
+        ? []
+        : [{ type: 'COMMISSION', category: 'groceries', label: 'Groceries', rateBps: 700, startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-12-31T23:59:59Z', status: 'ACTIVE' }],
+    connectionFees: kind === 'PROVIDER' ? mockConnectionFees() : null
   };
 }
 
@@ -1425,7 +1459,7 @@ export const sellerHandlers = [
     `${W}/bookings/requests`,
     route((ctx) => {
       require(ctx, 'requests', 'VIEW', 'PROVIDER');
-      return requested(ctx.db).map((b) => bookingCard(b, ctx.now));
+      return requested(ctx.db).map((b) => ({ ...bookingCard(b, ctx.now), takeHome: bookingTakeHome(b) }));
     })
   ),
   http.post(
@@ -1507,7 +1541,7 @@ export const sellerHandlers = [
       );
       const items = providerFees(ctx.db);
       return {
-        currency: 'USD', commissionPercent: 10, payoutDay: 'Tuesday', totals, rows,
+        currency: 'USD', commissionPercent: 8, payoutDay: 'Tuesday', totals, rows, connectionFee: mockConnectionFees(),
         providerFees: { available: true, outstandingMinor: outstandingFees(ctx.db), collectedMinor: items.filter((f) => f.status === 'COLLECTED').reduce((a, f) => a + f.amountMinor, 0), items }
       };
     })

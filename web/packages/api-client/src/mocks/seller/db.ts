@@ -224,7 +224,7 @@ function booking(id: number, svc: (typeof PROVIDER_SERVICES)[number], start: Dat
     status, statusLabel: BOOKING_LABELS[status], priceMinor: svc.priceMinor, depositMinor: svc.depositMinor, currency: 'USD',
     depositState: status === 'REQUESTED' ? 'held' : status === 'COMPLETED' || status === 'CONFIRMED' ? 'captured' : status === 'DECLINED' || status === 'EXPIRED' ? 'released' : 'none',
     note, practitioner: 'Ama O.', expiresAt: status === 'REQUESTED' ? iso(new Date(now.getTime() + 3 * 3_600_000)) : null, proposedStartAt: null,
-    allowedActions: allowedBookingActions(status, iso(start), now)
+    allowedActions: allowedBookingActions(status, iso(start), now), serviceCategory: 'hair & beauty', takeHome: null
   };
 }
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { type FeeConnectionDraft, FeeConnectionFeeSchema, type FeeDraftPlanRate, FeePlanRateSchema, FeePlanSchema } from '../fee-rates';
 import { type ExportDataset, type ExportFormat, type TableExportQuery } from './exports';
 import { AccessLevelSchema, ChartSpecSchema, KpiSchema } from './seller';
 
@@ -383,6 +384,10 @@ export const FeeScheduleViewSchema = z.object({
   fbaPerUnitMinor: z.number().int(),
   reverseCommissionOnRefund: z.boolean(),
   deliveryPricing: DeliveryPricingSchema.nullable(),
+  /** Product commission per plan, after negotiated rates and before category rates. */
+  planRates: z.array(FeePlanRateSchema).default([]),
+  /** Connection fees on service bookings; null for versions created before they existed. */
+  connectionFee: FeeConnectionFeeSchema.nullable().default(null),
   note: nullableString,
   createdBy: z.string(),
   createdAt: nullableString,
@@ -409,7 +414,12 @@ export const FeesOverviewSchema = z.object({
   retail: FeeRetailSchema,
   limits: FeeLimitsSchema,
   exampleSaleMinor: z.number().int(),
-  reverseOnRefundHelp: z.string()
+  reverseOnRefundHelp: z.string(),
+  /** The plan catalogue with what each plan advertises against the configured rates. */
+  plans: z.array(FeePlanSchema).default([]),
+  plansAvailable: z.boolean().default(false),
+  planWarnings: z.array(z.string()).default([]),
+  serviceCategories: z.array(FeeCategorySchema).default([])
 });
 export type FeesOverview = z.infer<typeof FeesOverviewSchema>;
 export const FeeOrgHitSchema = z.object({
@@ -438,6 +448,10 @@ export interface FeeScheduleDraft {
   reverseCommissionOnRefund: boolean;
   /** Omitted or null = carried over from the latest live version. */
   deliveryPricing?: DeliveryPricingDraft | null;
+  /** Omitted or null = carried over from the latest live version; [] = no plan rates. */
+  planRates?: FeeDraftPlanRate[] | null;
+  /** Omitted or null = carried over from the latest live version. */
+  connectionFee?: FeeConnectionDraft | null;
   note: string;
 }
 

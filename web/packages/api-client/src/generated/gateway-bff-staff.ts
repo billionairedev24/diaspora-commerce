@@ -1017,6 +1017,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/fees/negotiated-rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Negotiated commission and connection-fee rates (server-driven table)
+         * @description payments `GET /v1/negotiated-rates` (staff payments:read), with organisation names from seller's directory. A
+         *     negotiated rate wins over the organisation's plan rate, the category rate and the default while it is active
+         *     (its category before `*`). Filters: one organisation (the seller billing panel lists its rates this way), type,
+         *     status, and `q` over organisation, reason, reference and negotiator. Needs VIEW on the fees module.
+         */
+        get: operations["listNegotiatedRates"];
+        put?: never;
+        /**
+         * Negotiate a commission or connection fee with an organisation (audited)
+         * @description payments `POST /v1/negotiated-rates` (payments:configure and EDIT on fees). One category or every category, from
+         *     `startsAt` (default now, never in the past) to `endsAt` (optional; a job records the expiry). The reason is required
+         *     and kept in the audit trail with who negotiated it and the contract or ticket reference. 409 when another rate of the
+         *     organisation, type and category overlaps; AfroTransact Retail never pays fees (422). Payments already created keep
+         *     the rate snapshotted on their lines.
+         */
+        post: operations["createNegotiatedRate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/negotiated-rates/{rateId}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End a negotiated rate now, with a reason (audited)
+         * @description payments `POST /v1/negotiated-rates/{id}/end` (payments:configure and EDIT on fees). 409 when it already ended or expired.
+         */
+        post: operations["endNegotiatedRate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/calculator": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rate calculator: what one organisation pays on one kind and category now, and why
+         * @description payments `GET /v1/fee-schedules/effective?kind=` (staff payments:read): kind PRODUCT is the commission, SERVICE the
+         *     connection fee of a service category. The first match wins: an active negotiated rate (category, then `*`), the
+         *     organisation's plan rate (category, then the plan's `*`), the category rate, the default; AfroTransact Retail pays
+         *     none (RETAIL). Needs VIEW on the fees module.
+         */
+        get: operations["calculateFeeRate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/orgs/{orgId}/negotiated-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Negotiate a plan price for one organisation (private, invite-only plan)
+         * @description Over the seller service's plan catalogue (plans:manage and EDIT on plans): copies the base plan's kind, features,
+         *     limits and trial into a new INVITE_ONLY plan `<base>_<org>` at the negotiated prices (quarterly and annual default
+         *     to the catalogue's rule), invites the organisation and publishes it (Stripe Prices are synced on publish). The
+         *     seller then chooses it in Plan & billing; it stays on its current plan until it does. 409 when that private plan
+         *     already exists.
+         */
+        post: operations["negotiatePlanPrice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/dispatch/pickups": {
         parameters: {
             query?: never;
@@ -4681,6 +4779,10 @@ export interface components {
             reverseCommissionOnRefund: boolean;
             /** @description AfroTransact Delivery from seller stores (S255); null when the version has no delivery pricing (quotes NOT_CONFIGURED) */
             deliveryPricing: components["schemas"]["DeliveryPricing"] | null;
+            /** @description Product commission per plan, after negotiated rates and before category rates */
+            planRates: components["schemas"]["FeePlanRate"][];
+            /** @description Connection fees on service bookings; null for versions created before they existed (services paid the 'services' commission) */
+            connectionFee: components["schemas"]["FeeConnectionFee"] | null;
             note: string | null;
             createdBy: string;
             /** Format: date-time */
@@ -4730,6 +4832,204 @@ export interface components {
              */
             exampleSaleMinor: number;
             reverseOnRefundHelp: string;
+            /** @description The plan catalogue (seller service), for the plan-rate matrix */
+            plans: components["schemas"]["FeePlan"][];
+            /** @description false when the plan catalogue could not be read */
+            plansAvailable: boolean;
+            /** @description Plans whose feature text advertises a fee the version in force does not charge */
+            planWarnings: string[];
+            /** @description Service categories the connection-fee sections price */
+            serviceCategories: components["schemas"]["FeeCategory"][];
+        };
+        FeePlanRate: {
+            /** @example seller_growth */
+            planCode: string;
+            planName: string;
+            /** @description '*' = the plan's rate for categories it does not list */
+            category: string;
+            label: string;
+            bps: number;
+        };
+        FeeRate: {
+            category: string;
+            label: string;
+            bps: number;
+        };
+        FeeConnectionFee: {
+            /** @description Connection fee of service categories without their own rate */
+            defaultBps: number;
+            categoryRates: components["schemas"]["FeeRate"][];
+            planRates: components["schemas"]["FeePlanRate"][];
+        };
+        FeeRange: {
+            minBps: number;
+            maxBps: number;
+        };
+        FeePlan: {
+            code: string;
+            /** @description SELLER (product commission) or PROVIDER (connection fee) */
+            kind: string;
+            name: string;
+            status: string;
+            visibility: string;
+            /** @description The feature that mentions a fee, e.g. "8–12% referral fee by category" */
+            featureText: string | null;
+            advertised: components["schemas"]["FeeRange"] | null;
+            /** @description Lowest–highest plan rate of the version in force */
+            configured: components["schemas"]["FeeRange"] | null;
+            /** @description How the feature text and the configured rates differ */
+            warning: string | null;
+        };
+        NegotiatedRateAuditEntry: {
+            /** @enum {string} */
+            action: "CREATED" | "ENDED" | "EXPIRED";
+            actor: string;
+            reason: string | null;
+            /** Format: date-time */
+            at: string;
+        };
+        NegotiatedRate: {
+            id: string;
+            orgId: string;
+            orgName: string | null;
+            /** @enum {string} */
+            type: "COMMISSION" | "CONNECTION_FEE";
+            /** @description '*' = every category */
+            category: string;
+            categoryLabel: string;
+            rateBps: number;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string | null;
+            /** @enum {string} */
+            status: "SCHEDULED" | "ACTIVE" | "ENDED" | "EXPIRED";
+            reason: string;
+            negotiatedBy: string;
+            reference: string | null;
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            endedAt: string | null;
+            endedBy: string | null;
+            endReason: string | null;
+            /** Format: date-time */
+            expiredAt: string | null;
+            audit: components["schemas"]["NegotiatedRateAuditEntry"][];
+            /** @description The caller configures fees and the rate is scheduled or active */
+            canEnd: boolean;
+        };
+        NegotiatedRatePage: {
+            items: components["schemas"]["NegotiatedRate"][];
+            total: number;
+            page: number;
+            size: number;
+            canConfigure: boolean;
+        };
+        NegotiatedRateDraft: {
+            orgId: string;
+            /** @enum {string} */
+            type: "COMMISSION" | "CONNECTION_FEE";
+            /** @description One category; null or '*' = every category */
+            category?: string | null;
+            rateBps: number;
+            /**
+             * Format: date-time
+             * @description Default now; never in the past
+             */
+            startsAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Omit for open-ended
+             */
+            endsAt?: string | null;
+            reason: string;
+            /** @description Default the caller */
+            negotiatedBy?: string | null;
+            /** @description Contract or ticket */
+            reference?: string | null;
+        };
+        NegotiatedRateEnd: {
+            reason: string;
+        };
+        FeeRateQuote: {
+            orgId: string;
+            orgName: string | null;
+            /** @enum {string} */
+            kind: "PRODUCT" | "SERVICE";
+            category: string;
+            categoryLabel: string;
+            bps: number;
+            /** @enum {string} */
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            planCode: string | null;
+            planName: string | null;
+            negotiatedRateId: string | null;
+            /** Format: date-time */
+            negotiatedUntil: string | null;
+            /** @description Fee-schedule version in force */
+            version: number;
+            /** Format: int64 */
+            exampleSaleMinor: number;
+            /**
+             * Format: int64
+             * @description The rate applied to exampleSaleMinor
+             */
+            exampleFeeMinor: number;
+            /**
+             * @example Negotiated commission until 31 Dec 2026
+             * @example Plan rate: Seller Growth
+             */
+            explanation: string;
+        };
+        NegotiatedPlanDraft: {
+            basePlanCode: string;
+            /** Format: int64 */
+            monthlyCents: number;
+            /**
+             * Format: int64
+             * @description Default 3 months less 5 %
+             */
+            quarterlyCents?: number | null;
+            /**
+             * Format: int64
+             * @description Default 10 months
+             */
+            annualCents?: number | null;
+            reason: string;
+            reference?: string | null;
+        };
+        NegotiatedPlan: {
+            planCode: string;
+            planName: string;
+            basePlanCode: string;
+            orgId: string;
+            /** @enum {string} */
+            visibility: "INVITE_ONLY";
+            published: boolean;
+            /** Format: int64 */
+            monthlyCents: number;
+            /** Format: int64 */
+            quarterlyCents: number;
+            /** Format: int64 */
+            annualCents: number;
+            note: string;
+        };
+        FeeDraftRate: {
+            category: string;
+            bps: number;
+        };
+        FeeDraftPlanRate: {
+            planCode: string;
+            /** @description '*' or empty = the plan's other categories */
+            category: string;
+            bps: number;
+        };
+        FeeConnectionDraft: {
+            defaultBps: number;
+            categoryRates: components["schemas"]["FeeDraftRate"][];
+            planRates: components["schemas"]["FeeDraftPlanRate"][];
         };
         FeeOrgHit: {
             orgId: string;
@@ -4773,6 +5073,10 @@ export interface components {
             reverseCommissionOnRefund: boolean;
             /** @description AfroTransact Delivery pricing (S255). Omitted or null = carried over from the latest live version; enabled=false stops offering it */
             deliveryPricing?: components["schemas"]["DeliveryPricingDraft"] | null;
+            /** @description Product commission per plan. Omitted or null = carried over from the latest live version; [] = no plan rates */
+            planRates?: components["schemas"]["FeeDraftPlanRate"][] | null;
+            /** @description Connection fees on service bookings. Omitted or null = carried over from the latest live version */
+            connectionFee?: components["schemas"]["FeeConnectionDraft"] | null;
             /** @description Why the fees change (required) */
             note: string;
         };
@@ -7372,6 +7676,166 @@ export interface operations {
             400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listNegotiatedRates: {
+        parameters: {
+            query?: {
+                orgId?: string;
+                type?: "COMMISSION" | "CONNECTION_FEE";
+                status?: "SCHEDULED" | "ACTIVE" | "ENDED" | "EXPIRED";
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Negotiated rates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedRatePage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createNegotiatedRate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NegotiatedRateDraft"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedRate"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    endNegotiatedRate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NegotiatedRateEnd"];
+            };
+        };
+        responses: {
+            /** @description Ended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedRate"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    calculateFeeRate: {
+        parameters: {
+            query: {
+                orgId: string;
+                category: string;
+                kind?: "PRODUCT" | "SERVICE";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Effective rate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeRateQuote"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    negotiatePlanPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NegotiatedPlanDraft"];
+            };
+        };
+        responses: {
+            /** @description Private plan created and the organisation invited */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NegotiatedPlan"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];

@@ -4,6 +4,7 @@ import { type ExportJob } from '../../schemas/exports';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
+import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { type MockMarketsState, seedMarkets } from './markets';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
@@ -50,6 +51,8 @@ export interface MockStaffDb {
   markets: MockMarketsState;
   /** seller's plan catalogue, trial campaigns, reward rules, grants and per-seller billing (S292–S297). */
   plans: MockPlansState;
+  /** payments' negotiated commission / connection-fee rates and organisations' plans. */
+  feeRates: MockFeeRatesState;
   seq: number;
 }
 
@@ -468,6 +471,7 @@ function seed(now: Date): MockStaffDb {
     preorders: seedPreorders(now),
     markets: seedMarkets(),
     plans: seedPlans(now),
+    feeRates: seedFeeRates(now),
     seq: 1
   };
 }
@@ -479,6 +483,7 @@ export function getStaffDb(): MockStaffDb {
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
   g[KEY].plans ??= seedPlans(g[KEY].now);
+  g[KEY].feeRates ??= seedFeeRates(g[KEY].now);
   return g[KEY];
 }
 

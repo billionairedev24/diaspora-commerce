@@ -983,6 +983,9 @@ export interface paths {
          *     BFF reads them with its own client-credentials token (scope `payments:service`) and always passes the active
          *     organisation: members never see other sellers' overrides. Shares the payouts module level (VIEW). Rates are basis
          *     points (1250 = 12.50 %). AfroTransact Retail reads `retail: true` (no commission, no fees).
+         *     Each rate says where it comes from: OVERRIDE (a negotiated rate, with `negotiatedUntil`), PLAN (the
+         *     organisation's plan, `planName`), CATEGORY or DEFAULT. `connectionFees` (payments `GET /v1/orgs/{orgId}/rate-card?kind=SERVICE`)
+         *     is what service bookings pay, apart from product commission; `negotiated` lists negotiated commission rates.
          */
         get: operations["getSellerFees"];
         put?: never;
@@ -3179,6 +3182,74 @@ export interface components {
             /** Format: date-time */
             proposedStartAt: string | null;
             allowedActions: components["schemas"]["BookingAction"][];
+            /** @description The service's category (selects the connection fee) */
+            serviceCategory?: string | null;
+            /** @description Booking requests: what the provider keeps at the booking's price, after the connection fee and card fees ("You keep $X after the 8% connection fee"); null when payments cannot say */
+            takeHome?: components["schemas"]["BookingTakeHome"] | null;
+        };
+        BookingTakeHome: {
+            /** @description AfroTransact's connection fee for the service category (800 = 8 %) */
+            connectionFeeBps: number;
+            /** Format: int64 */
+            connectionFeeMinor: number;
+            /**
+             * Format: int64
+             * @description Card fee estimate on the deposit charge and on the balance charge
+             */
+            cardFeesMinor: number;
+            /**
+             * Format: int64
+             * @description Price − connection fee − card fees
+             */
+            keepMinor: number;
+            /** @enum {string} */
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            currency: string;
+        };
+        SellerAppliedRate: {
+            /** @description '' for categories nobody lists */
+            category: string;
+            label: string;
+            bps: number;
+            /**
+             * @description OVERRIDE: negotiated for this organisation
+             * @enum {string}
+             */
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            planCode: string | null;
+            planName: string | null;
+            /**
+             * Format: date-time
+             * @description Source OVERRIDE: when the negotiated rate ends (null = open-ended)
+             */
+            negotiatedUntil: string | null;
+        };
+        SellerNegotiatedRate: {
+            /** @enum {string} */
+            type: "COMMISSION" | "CONNECTION_FEE";
+            /** @description '*' = every category */
+            category: string;
+            label: string;
+            rateBps: number;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            endsAt: string | null;
+            /** @enum {string} */
+            status: "SCHEDULED" | "ACTIVE" | "ENDED" | "EXPIRED";
+        };
+        /** @description What the organisation pays on one kind of line now (PRODUCT commission, SERVICE connection fee), with sources */
+        SellerRateCard: {
+            /** @enum {string} */
+            kind: "PRODUCT" | "SERVICE";
+            version: number;
+            /** Format: date-time */
+            effectiveFrom: string;
+            planCode: string | null;
+            planName: string | null;
+            other: components["schemas"]["SellerAppliedRate"];
+            categories: components["schemas"]["SellerAppliedRate"][];
+            negotiated: components["schemas"]["SellerNegotiatedRate"][];
         };
         DaySummary: {
             /** Format: date */
@@ -3343,6 +3414,8 @@ export interface components {
             };
             rows: components["schemas"]["EarningsRow"][];
             providerFees: components["schemas"]["ProviderFees"];
+            /** @description The provider's connection fee now, per service category, with where it comes from; null when payments cannot say */
+            connectionFee: components["schemas"]["SellerRateCard"] | null;
         };
         SocialLink: {
             /** @enum {string} */
@@ -3418,10 +3491,17 @@ export interface components {
             /** @description 1250 = 12.50 % */
             commissionBps: number;
             /**
-             * @description OVERRIDE: negotiated for this organisation
+             * @description OVERRIDE: negotiated for this organisation; PLAN: the rate of its plan
              * @enum {string}
              */
-            source: "OVERRIDE" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            source: "OVERRIDE" | "PLAN" | "CATEGORY" | "DEFAULT" | "RETAIL";
+            planCode: string | null;
+            planName: string | null;
+            /**
+             * Format: date-time
+             * @description Source OVERRIDE: when the negotiated rate ends
+             */
+            negotiatedUntil: string | null;
         };
         SellerFeeVersion: {
             version: number;
@@ -3491,6 +3571,13 @@ export interface components {
             upcoming: components["schemas"]["SellerFeeVersion"] | null;
             /** @description What changes for this organisation with the upcoming version */
             changes: components["schemas"]["SellerFeeChange"][];
+            /** @description The plan whose rates apply (null when none or unknown) */
+            planCode: string | null;
+            planName: string | null;
+            /** @description Negotiated commission rates (active or scheduled) */
+            negotiated: components["schemas"]["SellerNegotiatedRate"][];
+            /** @description Connection fees on service bookings (Provider Hub); null when payments cannot say */
+            connectionFees: components["schemas"]["SellerRateCard"] | null;
         };
         /** @description An upstream list answer wrapped as {items}. */
         MirroredList: {

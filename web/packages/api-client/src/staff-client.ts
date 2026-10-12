@@ -1,3 +1,4 @@
+import { createStaffFeeRatesApi } from './fee-rates';
 import { type ApiClientOptions, createRequester } from './http';
 import { createInventoryHubApi } from './inventory-hub';
 import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
@@ -155,6 +156,7 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Plans & billing (S292–S297): /v1/staff/billing/** (catalogue, trials, rewards, grants, per-seller panel) */
     plans: createStaffPlansApi(request),
+    feeRates: createStaffFeeRatesApi(request),
 
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
     preorders: createStaffPreordersApi(request, options),

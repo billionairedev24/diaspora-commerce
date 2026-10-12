@@ -1,5 +1,6 @@
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
 export { ApiError, isApiError } from './errors';
+export * from './fee-rates';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { type RequestOptions } from './http';
 export { definitiveFailure, keepIdempotencyKey } from './idempotency';
