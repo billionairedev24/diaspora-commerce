@@ -1071,3 +1071,22 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S306","Story","Staff assign a negotiated (invite-only) plan to a seller directly","Negotiate plan price creates a private invite-only plan and invites the organisation, but seller-service only lets the organisation's owner change its plan. Add a staff plan-change operation (seller:billing.manage, audited, with reason and proration rules) so staff can move the seller onto the negotiated plan.","- Seller-service staff endpoint to change an organisation's plan with a reason, audited
 - gateway-bff Negotiate plan price can assign the plan in the same step
 - Staff console shows the assignment in the seller billing panel","E14","","Medium","3","billing staff-console","billing","To Do"
+"S307","Story","One-step product form with type-driven fields, readiness panel and autosaved drafts","Sellers add and edit a product on one page instead of a multi-step builder. The category picker comes first; the product type drives the attribute fields (required/optional, enums, units) and conditional sections: variants (axes then a generated matrix with SKU, GTIN, price, compare-at, stock, images per row), food details for food, permits for regulated items, fulfilment (seller vs AfroTransact with package dimensions), pre-order and shipping (ship-from, handling time).","- One page for Add and Edit (/listings/new, /listings/{id}/edit); the old builder routes redirect
+- Category search + tree first; attribute fields from the product type (kind, units, section, required)
+- Variants: axes then a generated matrix with SKU, GTIN, price, compare-at, stock and images per row
+- Conditional food, regulated, fulfilment (package dims for AfroTransact), pre-order and shipping sections
+- Shared fields: title, brand, description with the AI listing writer on plans that include it, images (drag-drop, reorder, primary), price, compare-at, quantity, SKU, GTIN with an I don't have one path, condition, keywords
+- Inline validation and a sticky readiness panel (Ready to publish / N things missing with links)
+- Autosave as a server-side draft (versioned); Save draft and Publish / Submit for review; drafts are deleted on submit
+- Edit: rejected listings are resubmitted for review; live listings keep their variants and category; listing terms reach offers (catalog.product.terms_changed)
+- Contract first (catalog, gateway-bff-seller); BFF conformance tests; catalog ITs; component tests; Playwright mock spec; i18n in every locale","E03","","High","8","catalog seller-center listings","catalog","In Progress"
+"S308","Story","Bulk product upload from an Excel or CSV template","Sellers download an xlsx or csv template (generic or per product type), fill it and upload it. catalog-service parses it with Apache POI (streaming, zip-bomb guarded), validates every row, shows a preview with per-cell errors and an error report, and imports valid rows in a resumable background job with images copied through media.","- Templates per product type and a generic one, generated server-side: header descriptions, required marked *, instructions sheet, dropdowns, example rows; CSV variant
+- Limits: 10 MB, 5,000 rows, 200 columns, 10 images and 200 variants per product (documented)
+- Validation: required fields, enums, numbers and units, GTIN checksum, duplicate SKUs in the file and against existing listings, image URL format
+- Preview DataTable with row status, per-cell errors, an errors-only filter; downloadable error report (original columns + Errors) as xlsx or csv
+- Fix and re-upload, or import valid rows only
+- Background import: progress, resumable after a crash, idempotent per row (upload id + SKU), Create and Update modes
+- Images fetched through media (POST /v1/assets/import: SSRF guard, quarantine, moderation)
+- Upload history page; email/push when an import of 100+ rows completes
+- Formula injection guarded in reports (=+-@ prefixed)
+- Contracts first (catalog, gateway-bff-seller, media, asyncapi); unit tests for templates and parser/validator; ITs for idempotent retry and partial failure; BFF conformance; component tests; Playwright mock spec","E03","","High","13","catalog seller-center listings bulk-upload","catalog","In Progress"
