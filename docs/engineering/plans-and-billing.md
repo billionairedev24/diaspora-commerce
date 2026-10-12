@@ -5,10 +5,11 @@ console › Plans & billing, Seller Center › Plan & billing). Stripe Billing s
 collection, Smart Retries, invoices and their PDFs, card updates and 3DS. Nobody manages plans in the Stripe
 Dashboard; the seller service creates and maintains the Stripe objects it needs.
 
-Stories S292–S298 (epic E14). Code: `java/services/seller` (domain `Plan*`, `Trial*`, `Reward*`, `BillingGrant`,
+Stories S292–S299 (epic E14). Code: `java/services/seller` (domain `Plan*`, `Trial*`, `Reward*`, `BillingGrant`,
 `FreeDays`, `PlanFeeCollection`; use cases `PlanAdminService`, `PlanSyncService`, `TrialService`, `RewardService`,
 `BillingAdjustmentService`, `EarningsCollectionService`, `PlanFeeCollectionService`); Flyway
-`V70__plan_catalog_trials_rewards.sql`, `V71__plan_fee_collection.sql`; payments `PlanFeeService`,
+`V70__plan_catalog_trials_rewards.sql`, `V71__plan_fee_collection.sql`,
+`V72__reward_rule_comparison_and_window_end.sql`; payments `PlanFeeService`,
 `V14__plan_fee_withholdings.sql`.
 
 ## Plan catalogue and versions
@@ -94,6 +95,62 @@ Events are de-duplicated on their `event-id` (inbox consumer `seller.reward-metr
 the window; a gauge (listings, days) must reach the threshold while a "within N days of approval" window is open.
 Rewards apply to organisations on a paid plan with a Stripe subscription; AfroTransact Retail is never billed.
 "Preview" evaluates an unsaved or edited rule over every organisation.
+
+### "Less than" rules: low-sales relief (S299)
+
+A rule can also reward a **quiet start**: "1st month free (the trial) and 2nd month free if the seller sold less than
+$1,000". Three rule fields make that possible (existing rules keep their behaviour: the migration defaults them to
+`AT_LEAST`, `APPROVAL`, `false`, `24`):
+
+| Field | Values | Meaning |
+|---|---|---|
+| `comparison` | `AT_LEAST` (default), `LESS_THAN` | Reach the threshold, or stay **strictly** under it (exactly $1,000.00 does not qualify for "less than $1,000"). |
+| `windowAnchor` | `APPROVAL` (default), `SUBSCRIPTION_START` | Where "the first N days" (`withinDaysOfApproval`) start: final approval, or the subscription's start (`subscription.started_at`: the first day of its trial, set when the Stripe subscription is first mirrored; existing rows were backfilled from `current_period_start`). |
+| `checkAtWindowEnd`, `checkLeadHours` | `false` / `24` (0–168) | Decide **once, when the window closes**, `checkLeadHours` before it. Always on for `LESS_THAN`; optional for `AT_LEAST` ("sell $5,000 in your first 60 days": nothing is granted early). |
+
+A rule decided at window end needs a window (`withinDaysOfApproval`), counts the whole window (no rolling
+`windowDays`) and a summed metric (sales, completed orders or bookings). **Events never decide it**: the window-end job
+(`SellerJobs.rewardWindowEnds`, every `at.seller.jobs.reward-window-interval`, default 15 min) does, and the daily job
+too. For each organisation and rule:
+
+1. **When**: the window closes at `anchor + N days`; the check is due `checkLeadHours` before that. When Stripe would
+   renew (create an invoice: `trial_end` while trialing, else `current_period_end`) at or after that time but before
+   the window closes, the check moves to `checkLeadHours` before the **renewal**, so a free period is applied before
+   the invoice exists. The check stays due until `checkLeadHours` after the window closed; a check missed by then grants
+   nothing (staff can give free days by hand).
+2. **What counts**: the metric's daily buckets (UTC) from the anchor's day to the check's day, read at the check.
+   Anything recorded after the check — at most the lead's worth of the window, the last 24 h by default — is **not
+   counted**: the decision is already made. That is the price of applying the reward before Stripe invoices.
+3. **Once**: the decision is written to `reward_window_check`, unique per `(rule_id, org_id, window_start)`, in the
+   same transaction as the grant (`billing_grant` stays unique per `(rule_id, org_id)`): `QUALIFIED` with the grant,
+   or `NOT_QUALIFIED`. Replicas and re-runs find the row and decide nothing again; editing the rule afterwards does not
+   re-decide a window that was checked.
+4. **The reward** is applied like every grant (below): free days move `trial_end` with `proration_behavior=none` and
+   the grant's own key `grant-<id>-trial`.
+
+Staff see the rule in plain words while editing it ("Sellers on Seller Growth who sell less than $1,000 in the first
+30 days of their subscription get 30 free days (checked 24 h before the trial ends)"), and "Who qualifies now" lists
+sellers still in their window as **Pending · checked <date>** with their sales so far. Sellers see a neutral note
+instead of a progress bar ("If your sales in your first 30 days are under $1,000, you get 1 month free — we'll check
+on Oct 30, 2026") and, once it is applied, "Low-sales relief applied: your next charge is on <date>".
+
+**Worked example** — Seller Growth with its default 30-day trial, and the rule *less than $1,000 (`GROSS_SALES` <
+100000) in the first 30 days of the subscription → 30 free days*, lead 24 h:
+
+| | Ada (quiet) | Bola (exactly $1,000) |
+|---|---|---|
+| Subscription starts (trial) | Oct 1, 10:00 UTC | Oct 1, 10:00 UTC |
+| `trial_end` (first invoice) | Oct 31, 10:00 | Oct 31, 10:00 |
+| Window closes / check due | Oct 31, 10:00 / **Oct 30, 10:00** | same |
+| Sales Oct 1 – Oct 30 (read at the check, ~10:15) | $640.00 | $1,000.00 |
+| Decision (`reward_window_check`) | `QUALIFIED` → grant "1 month free" | `NOT_QUALIFIED` |
+| Stripe | `POST /v1/subscriptions/{id}` `trial_end=Nov 30 10:00`, `proration_behavior=none`, `Idempotency-Key: grant-<id>-trial` | nothing |
+| First invoice (`invoice.created`) | **Nov 30** (month 2 was free) | Oct 31 |
+| Seller Center | "Low-sales relief applied: your next charge is on Nov 30, 2026" | the note disappears after the check |
+
+A $500 sale Ada delivers on Oct 30 at 18:00 — after the check — is not counted; it would not have changed her outcome
+anyway, and it cannot undo a reward already applied. If the plan's trial were 14 days, the window (30 days) would close
+after the first renewal: the check stays 24 h before the window closes and the free days move the *next* renewal.
 
 ### How rewards and adjustments map to Stripe
 
