@@ -31,10 +31,14 @@ public class PlatformSecurityAutoConfiguration {
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc", "/error"
     };
 
+    /**
+     * The token's actor (local profile: {@link LocalActorResolver}), acting as a shopper when a storefront request asks
+     * for it ({@link ActingAsActorResolver}).
+     */
     @Bean
     @ConditionalOnMissingBean
     public ActorResolver actorResolver(PlatformSecurityProperties props) {
-        return props.enabled() ? new JwtActorResolver() : new LocalActorResolver();
+        return new ActingAsActorResolver(props.enabled() ? new JwtActorResolver() : new LocalActorResolver());
     }
 
     @Bean

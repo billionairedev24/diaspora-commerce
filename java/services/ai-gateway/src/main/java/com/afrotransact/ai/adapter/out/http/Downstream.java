@@ -3,6 +3,7 @@ package com.afrotransact.ai.adapter.out.http;
 import java.net.http.HttpClient;
 import java.time.Duration;
 
+import com.afrotransact.platform.security.ActingAsActorResolver;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -21,10 +22,14 @@ final class Downstream {
         return builder.clone().baseUrl(baseUrl).requestFactory(factory).build();
     }
 
-    /** Relays the caller's bearer token (token exchange is future work). */
+    /**
+     * Relays the caller's bearer token (token exchange is future work). Every relay is a Lola shopper tool, so it acts
+     * as a shopper: a person whose token carries their seller organisation still sees their own orders.
+     */
     static void relay(HttpHeaders headers, String bearerToken) {
         if (bearerToken != null && !bearerToken.isBlank()) {
             headers.setBearerAuth(bearerToken);
+            headers.set(ActingAsActorResolver.HEADER, ActingAsActorResolver.CUSTOMER);
         }
     }
 
