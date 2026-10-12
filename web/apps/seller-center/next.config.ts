@@ -21,6 +21,14 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
+  },
+  async redirects() {
+    // The multi-step product builder is gone (S307): any step URL opens the one-step form.
+    return [
+      { source: '/listings/new/:step+', destination: '/listings/new', permanent: true },
+      { source: '/listings/builder/:step*', destination: '/listings/new', permanent: true },
+      { source: '/listings/upload', destination: '/listings/bulk', permanent: true }
+    ];
   }
 };
 

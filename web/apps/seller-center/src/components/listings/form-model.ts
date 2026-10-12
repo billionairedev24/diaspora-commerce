@@ -1,0 +1,523 @@
+import {
+  type AttributeDef,
+  type CategoryNode,
+  type ItemCondition,
+  type ListingFulfilment,
+  type ProductDraft,
+  type ProductTypeSchema,
+  type SellerProductDetail,
+  type VariantInput
+} from '@afrotransact/api-client';
+
+import { type MessageKey } from '@/i18n/t';
+
+/* Pure state and rules of the one-step product form (S307): which sections a product type shows, the variant matrix,
+   validation with field ids (the readiness panel links to them), the catalog submission and the draft payload.
+   Rules mirror catalog's DefaultProductDraftPolicy and the BFF's ProductDraft checks. Messages are i18n keys. */
+
+export interface FormImage {
+  id: string;
+  /** What the form shows: a local object URL while uploading, then the stored URL. */
+  previewUrl: string;
+  url: string | null;
+  width: number;
+  height: number;
+  bytes: number;
+  contentType: string;
+  status: 'uploading' | 'ready' | 'low' | 'error';
+}
+
+export interface VariantRow {
+  sku: string;
+  gtin: string;
+  price: string;
+  compareAt: string;
+  qty: string;
+  /** id of one of the product's images ('' = the product's main image). */
+  image: string;
+}
+
+export interface PackageInput {
+  length: string;
+  width: string;
+  height: string;
+  weight: string;
+}
+
+export interface FormState {
+  categoryId: string | null;
+  categoryPath: string;
+  productType: string | null;
+  /** A requested category (the product waits for its approval). */
+  request: { id: string; path: string; reference: string } | null;
+  title: string;
+  attrs: Record<string, string>;
+  /** Unit of each NUMBER attribute with units ("months"). */
+  units: Record<string, string>;
+  description: string;
+  condition: ItemCondition;
+  keywords: string;
+  images: FormImage[];
+  /** No manufacturer barcode (handmade, private label): every variant is GTIN-exempt. */
+  noGtin: boolean;
+  hasVariants: boolean;
+  theme: string;
+  selected: Record<string, string[]>;
+  rows: Record<string, VariantRow>;
+  single: VariantRow;
+  fulfilment: ListingFulfilment;
+  pkg: PackageInput;
+  shipFromId: string;
+  handlingDays: string;
+  preorder: boolean;
+}
+
+export const emptyRow = (): VariantRow => ({ sku: '', gtin: '', price: '', compareAt: '', qty: '', image: '' });
+
+export const emptyForm = (): FormState => ({
+  categoryId: null, categoryPath: '', productType: null, request: null, title: '', attrs: {}, units: {}, description: '', condition: 'NEW', keywords: '',
+  images: [], noGtin: false, hasVariants: false, theme: '', selected: {}, rows: {}, single: emptyRow(), fulfilment: 'SELLER',
+  pkg: { length: '', width: '', height: '', weight: '' }, shipFromId: '', handlingDays: '2', preorder: false
+});
+
+export const MIN_IMAGE_PX = 1000;
+export const MAX_IMAGES = 10;
+export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const MAX_KEYWORDS = 20;
+export const MAX_DESCRIPTION = 5000;
+export const MAX_VARIANTS = 200;
+export const CONDITIONS: ItemCondition[] = ['NEW', 'RENEWED', 'USED_LIKE_NEW', 'USED_VERY_GOOD', 'USED_GOOD', 'USED_ACCEPTABLE'];
+
+/* ── Category ── */
+
+export interface CategoryLeaf {
+  id: string;
+  name: string;
+  path: string;
+  productType: string;
+}
+
+/** Every product-type leaf of the tree (what the category search finds). */
+export function leavesOf(tree: CategoryNode[]): CategoryLeaf[] {
+  const out: CategoryLeaf[] = [];
+  const walk = (nodes: CategoryNode[]) =>
+    nodes.forEach((n) => {
+      if (n.level === 'PRODUCT_TYPE' && n.productType) out.push({ id: n.id, name: n.name, path: n.path, productType: n.productType });
+      walk(n.children);
+    });
+  walk(tree);
+  return out;
+}
+
+/** Leaves whose path contains every word of the query (case- and accent-insensitive). */
+export function searchLeaves(leaves: CategoryLeaf[], query: string, limit = 8): CategoryLeaf[] {
+  const fold = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return leaves.filter((l) => words.every((w) => fold(l.path).includes(w))).slice(0, limit);
+}
+
+/** Choosing another category resets what depends on the product type. */
+export function withCategory(s: FormState, leaf: { id: string; path: string; productType: string } | null, request: FormState['request'] = null): FormState {
+  return { ...s, categoryId: leaf?.id ?? null, categoryPath: request?.path ?? leaf?.path ?? '', productType: request ? 'custom' : (leaf?.productType ?? null), request,
+    attrs: s.attrs.brand ? { brand: s.attrs.brand } : {}, units: {}, theme: '', selected: {}, rows: {}, hasVariants: false };
+}
+
+/* ── Sections ── */
+
+export type SectionKey = 'category' | 'basics' | 'images' | 'details' | 'food' | 'regulated' | 'offer' | 'variants' | 'fulfilment' | 'shipping' | 'preorder';
+
+/** The sections the form shows for a product type and the seller's choices (conditional sections included). */
+export function sectionsFor(type: ProductTypeSchema | undefined, s: FormState): SectionKey[] {
+  if (!type) return ['category', 'basics', 'images'];
+  const attrs = (section: AttributeDef['section']) => type.attributes.some((a) => a.section === section && a.key !== 'brand');
+  const out: SectionKey[] = ['category', 'basics', 'images'];
+  if (attrs('DETAILS')) out.push('details');
+  if (type.traits.food || attrs('FOOD')) out.push('food');
+  if (type.traits.regulated || attrs('REGULATED')) out.push('regulated');
+  out.push(s.hasVariants && type.themes.length ? 'variants' : 'offer', 'fulfilment');
+  if (s.fulfilment === 'SELLER') out.push('shipping');
+  if (type.traits.preorder) out.push('preorder');
+  return out;
+}
+
+/** Attributes shown in a section (brand is a basic field). */
+export const attributesIn = (type: ProductTypeSchema | undefined, section: AttributeDef['section']) =>
+  (type?.attributes ?? []).filter((a) => a.section === section && a.key !== 'brand');
+
+/* ── Variants ── */
+
+/** Variant combinations of the chosen theme (cartesian product of the selected options). */
+export function combos(type: ProductTypeSchema | undefined, s: FormState): string[][] {
+  const theme = type?.themes.find((t) => t.name === s.theme);
+  if (!theme) return [];
+  return theme.dimensions
+    .reduce<string[][]>((acc, d) => {
+      const opts = s.selected[d.name] ?? [];
+      return acc.flatMap((c) => opts.map((o) => [...c, o]));
+    }, [[]])
+    .filter((c) => c.length === theme.dimensions.length);
+}
+
+export const comboKey = (c: string[]) => c.join(' / ');
+
+const slug = (v: string) => v.normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** A SKU from the title and a variant's options ("ANKARA-WRAP-M-GOLD"), at most 40 characters. */
+export function suggestSku(title: string, options: string[] = []): string {
+  const base = slug(title).split('-').filter(Boolean).slice(0, 3).join('-') || 'SKU';
+  return [base, ...options.map((o) => slug(o).slice(0, 6))].filter(Boolean).join('-').slice(0, 40);
+}
+
+/** Fills the empty SKUs of the matrix (or of the single offer) from the title. */
+export function fillSkus(type: ProductTypeSchema | undefined, s: FormState): FormState {
+  if (!s.hasVariants) return s.single.sku.trim() ? s : { ...s, single: { ...s.single, sku: suggestSku(s.title) } };
+  const rows = { ...s.rows };
+  combos(type, s).forEach((c) => {
+    const k = comboKey(c);
+    const r = rows[k] ?? emptyRow();
+    if (!r.sku.trim()) rows[k] = { ...r, sku: suggestSku(s.title, c) };
+  });
+  return { ...s, rows };
+}
+
+/** Copies a price, compare-at price or quantity to every variant. */
+export function applyToAll(type: ProductTypeSchema | undefined, s: FormState, field: 'price' | 'compareAt' | 'qty', value: string): FormState {
+  const rows = { ...s.rows };
+  combos(type, s).forEach((c) => {
+    const k = comboKey(c);
+    rows[k] = { ...(rows[k] ?? emptyRow()), [field]: value };
+  });
+  return { ...s, rows };
+}
+
+/* ── Validation ── */
+
+/** GS1 mod-10 check digit (GTIN-8/12/13/14; ISBN-13 uses the same rule). */
+export function gtinOk(code: string): boolean {
+  if (!/^\d{8}$|^\d{12,14}$/.test(code)) return false;
+  const d = code.split('').map(Number);
+  const check = d.pop() ?? -1;
+  const sum = d.reverse().reduce((a, x, i) => a + x * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+/** Minor units of a typed price ("$1,299.50" → 129950); null when empty or not a positive amount. */
+export function priceMinor(v: string): number | null {
+  const t = v.replace(/[$,\s]/g, '');
+  if (!/^\d+(\.\d{1,2})?$/.test(t)) return null;
+  const n = Math.round(Number(t) * 100);
+  return n > 0 ? n : null;
+}
+
+const positive = (v: string) => {
+  const n = Number(v.trim());
+  return v.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null;
+};
+
+export const keywordsOf = (v: string) => v.split(',').map((k) => k.trim()).filter(Boolean);
+
+export interface Problem {
+  key: MessageKey;
+  vars?: Record<string, string | number>;
+  section: SectionKey;
+  /** Short name of the field for the readiness panel: a message, or a variant / attribute name (plus a message). */
+  label: MessageKey | { text: string; key?: MessageKey };
+}
+
+/** Field id → problem. Field ids are DOM ids, so the readiness panel can link to them. */
+export type Problems = Record<string, Problem>;
+
+export const fieldId = {
+  category: 'pf-category',
+  title: 'pf-title',
+  brand: 'pf-brand',
+  description: 'pf-description',
+  keywords: 'pf-keywords',
+  images: 'pf-images',
+  attr: (key: string) => `pf-attr-${key}`,
+  sku: 'pf-sku',
+  gtin: 'pf-gtin',
+  price: 'pf-price',
+  compareAt: 'pf-compare-at',
+  qty: 'pf-qty',
+  theme: 'pf-theme',
+  variant: (k: string, field: keyof VariantRow) => `pf-var-${slug(k).toLowerCase()}-${field}`,
+  pkg: 'pf-pkg',
+  shipFrom: 'pf-ship-from',
+  handling: 'pf-handling'
+} as const;
+
+/** Every problem of the form (empty = ready to publish). */
+export function validateForm(s: FormState, type: ProductTypeSchema | undefined, opts: { requireShipFrom?: boolean; lockedSkus?: string[] } = {}): Problems {
+  const p: Problems = {};
+  const add = (id: string, section: SectionKey, label: Problem['label'], key: MessageKey, vars?: Problem['vars']) => {
+    if (!p[id]) p[id] = { key, vars, section, label };
+  };
+  if (!s.request && (!s.categoryId || !s.productType)) add(fieldId.category, 'category', 'sc.pf.field.category', 'sc.pf.err.category');
+  const title = s.title.trim();
+  if (title.length < 10) add(fieldId.title, 'basics', 'sc.pf.field.title', title ? 'sc.pf.err.titleShort' : 'sc.pf.err.required');
+  else if (title.length > 200) add(fieldId.title, 'basics', 'sc.pf.field.title', 'sc.pf.err.titleLong');
+  const brandDef = type?.attributes.find((a) => a.key === 'brand');
+  if (brandDef?.required && !(s.attrs.brand ?? '').trim()) add(fieldId.brand, 'basics', 'sc.pf.field.brand', 'sc.pf.err.required');
+  if (s.description.length > MAX_DESCRIPTION) add(fieldId.description, 'basics', 'sc.pf.field.description', 'sc.pf.err.descriptionLong');
+  const kws = keywordsOf(s.keywords);
+  if (kws.length > MAX_KEYWORDS) add(fieldId.keywords, 'basics', 'sc.pf.field.keywords', 'sc.pf.err.keywordsMany');
+  else if (kws.some((k) => k.length > 40)) add(fieldId.keywords, 'basics', 'sc.pf.field.keywords', 'sc.pf.err.keywordLong');
+
+  if (!s.images.length) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesNone');
+  else if (s.images.some((i) => i.status === 'uploading')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesUploading');
+  else if (s.images.some((i) => i.status === 'error')) add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesFailed');
+  else if (s.images[0]?.status !== 'ready') add(fieldId.images, 'images', 'sc.pf.field.images', 'sc.pf.err.imagesMainSmall', { px: MIN_IMAGE_PX });
+
+  type?.attributes.forEach((a) => {
+    if (a.key === 'brand') return;
+    const v = (s.attrs[a.key] ?? '').trim();
+    const section: SectionKey = a.section === 'FOOD' ? 'food' : a.section === 'REGULATED' ? 'regulated' : 'details';
+    if (!v) {
+      if (a.required) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.required');
+      return;
+    }
+    if (a.kind === 'ENUM' && a.options.length && !a.options.includes(v)) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.chooseOption');
+    if (a.kind === 'NUMBER' && positive(v) === null) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.number');
+  });
+
+  // Price, stock, identifiers and fulfilment appear once the product type is known.
+  if (!type) return p;
+  const gtinRule = type?.identifierRule === 'isbn' ? 'sc.pf.err.isbn' : 'sc.pf.err.gtin';
+  const checkRow = (r: VariantRow, ids: Record<'sku' | 'gtin' | 'price' | 'compareAt' | 'qty', string>, section: SectionKey, name: string | null, skus: Set<string>) => {
+    const lbl = (k: MessageKey): Problem['label'] => (name ? { text: name, key: k } : k);
+    const sku = r.sku.trim().toUpperCase();
+    if (!sku) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuRequired');
+    else if (!/^[A-Z0-9._-]{2,40}$/.test(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuFormat');
+    else if (skus.has(sku)) add(ids.sku, section, lbl('sc.pf.field.sku'), 'sc.pf.err.skuDuplicate');
+    skus.add(sku);
+    if (!s.noGtin && !gtinOk(r.gtin.trim())) add(ids.gtin, section, lbl('sc.pf.field.gtin'), r.gtin.trim() ? gtinRule : 'sc.pf.err.gtinMissing');
+    const price = priceMinor(r.price);
+    if (price === null) add(ids.price, section, lbl('sc.pf.field.price'), r.price.trim() ? 'sc.pf.err.price' : 'sc.pf.err.priceRequired');
+    if (r.compareAt.trim()) {
+      const cmp = priceMinor(r.compareAt);
+      if (cmp === null) add(ids.compareAt, section, lbl('sc.pf.field.compareAt'), 'sc.pf.err.price');
+      else if (price !== null && cmp <= price) add(ids.compareAt, section, lbl('sc.pf.field.compareAt'), 'sc.pf.err.compareAt');
+    }
+    if (!/^\d+$/.test(r.qty.trim()) || Number(r.qty) > 100_000) add(ids.qty, section, lbl('sc.pf.field.qty'), 'sc.pf.err.qty');
+  };
+  const skus = new Set<string>();
+  if (s.hasVariants && type?.themes.length) {
+    const list = combos(type, s);
+    if (!s.theme) add(fieldId.theme, 'variants', 'sc.pf.field.theme', 'sc.pf.err.theme');
+    else if (!list.length) add(fieldId.theme, 'variants', 'sc.pf.field.theme', 'sc.pf.err.options');
+    else if (list.length > MAX_VARIANTS) add(fieldId.theme, 'variants', 'sc.pf.field.theme', 'sc.pf.err.tooManyVariants', { max: MAX_VARIANTS });
+    list.slice(0, MAX_VARIANTS).forEach((c) => {
+      const k = comboKey(c);
+      const ids = { sku: fieldId.variant(k, 'sku'), gtin: fieldId.variant(k, 'gtin'), price: fieldId.variant(k, 'price'), compareAt: fieldId.variant(k, 'compareAt'), qty: fieldId.variant(k, 'qty') };
+      checkRow(s.rows[k] ?? emptyRow(), ids, 'variants', k, skus);
+    });
+    const kept = new Set(list.map((c) => (s.rows[comboKey(c)]?.sku ?? '').trim().toUpperCase()));
+    if ((opts.lockedSkus ?? []).some((sku) => !kept.has(sku.toUpperCase()))) add(fieldId.theme, 'variants', 'sc.pf.field.theme', 'sc.pf.err.liveVariants');
+  } else {
+    checkRow(s.single, { sku: fieldId.sku, gtin: fieldId.gtin, price: fieldId.price, compareAt: fieldId.compareAt, qty: fieldId.qty }, 'offer', null, skus);
+    if ((opts.lockedSkus ?? []).length > 1) add(fieldId.theme, 'offer', 'sc.pf.field.theme', 'sc.pf.err.liveVariants');
+  }
+
+  const dims = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight];
+  const anyDim = dims.some((d) => d.trim() !== '');
+  if (s.fulfilment === 'AFROTRANSACT' || anyDim) {
+    const [l, w, h, wt] = dims.map(positive);
+    if (l == null || w == null || h == null || wt == null) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', s.fulfilment === 'AFROTRANSACT' ? 'sc.pf.err.packageFba' : 'sc.pf.err.package');
+    else if (l > 108 || w > 108 || h > 108 || wt > 150) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', 'sc.pf.err.packageLimits');
+  }
+  if (s.fulfilment === 'SELLER') {
+    if (!/^\d+$/.test(s.handlingDays.trim()) || Number(s.handlingDays) < 1 || Number(s.handlingDays) > 30) add(fieldId.handling, 'shipping', 'sc.pf.field.handling', 'sc.pf.err.handling');
+    if (opts.requireShipFrom && !s.shipFromId) add(fieldId.shipFrom, 'shipping', 'sc.pf.field.shipFrom', 'sc.pf.err.shipFrom');
+  }
+  return p;
+}
+
+/** Order of the readiness panel: the order of the sections on the page. */
+export function orderedProblems(p: Problems, sections: SectionKey[]): [string, Problem][] {
+  const rank = (k: SectionKey) => {
+    const i = sections.indexOf(k);
+    return i < 0 ? 99 : i;
+  };
+  return Object.entries(p).sort((a, b) => rank(a[1].section) - rank(b[1].section));
+}
+
+/** Server field errors ("title", "listing.packaging", "attributes.shelf", "variants") → form field ids. */
+export function serverFieldId(field: string): string {
+  if (field.startsWith('attributes.')) return fieldId.attr(field.slice('attributes.'.length));
+  const map: Record<string, string> = {
+    title: fieldId.title, images: fieldId.images, categoryId: fieldId.category, category: fieldId.category, variationTheme: fieldId.theme, variants: fieldId.theme,
+    'listing.packaging': fieldId.pkg, 'listing.description': fieldId.description, 'listing.keywords': fieldId.keywords, 'listing.handlingDays': fieldId.handling,
+    'listing.shipFromId': fieldId.shipFrom, description: fieldId.description, keywords: fieldId.keywords, handlingDays: fieldId.handling, packaging: fieldId.pkg
+  };
+  return map[field] ?? fieldId.title;
+}
+
+/* ── Submission ── */
+
+const attrValue = (a: AttributeDef | undefined, v: string, unit: string | undefined) => (a?.kind === 'NUMBER' && a.units.length ? `${v.trim()} ${unit || a.units[0]}` : v.trim());
+
+/** The catalog submission (call when validateForm is empty). */
+export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null): ProductDraft {
+  const image = (id: string) => s.images.find((i) => i.id === id && i.url);
+  const variant = (r: VariantRow, options: Record<string, string>): VariantInput => {
+    const img = r.image ? image(r.image) : undefined;
+    const compare = r.compareAt.trim() ? priceMinor(r.compareAt) : null;
+    return {
+      options,
+      sellerSku: r.sku.trim().toUpperCase(),
+      ...(s.noGtin ? { gtinExempt: true } : { gtin: r.gtin.trim(), gtinExempt: false }),
+      priceMinor: priceMinor(r.price) ?? 0,
+      ...(compare ? { compareAtMinor: compare } : {}),
+      quantity: Number(r.qty || '0'),
+      ...(img?.url ? { images: [{ url: img.url, width: img.width, height: img.height, bytes: img.bytes, contentType: img.contentType }] } : {})
+    };
+  };
+  const theme = type?.themes.find((t) => t.name === s.theme);
+  const variants =
+    s.hasVariants && theme
+      ? combos(type, s).map((c) => variant(s.rows[comboKey(c)] ?? emptyRow(), Object.fromEntries(theme.dimensions.map((d, i) => [d.name, c[i] ?? '']))))
+      : [variant(s.single, {})];
+  const dims = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight].map(positive);
+  const [l, w, h, wt] = dims;
+  return {
+    ...(s.request ? { categoryRequestId: s.request.id } : { categoryId: s.categoryId ?? '' }),
+    title: s.title.trim(),
+    attributes: Object.fromEntries(
+      Object.entries(s.attrs)
+        .filter(([, v]) => v.trim() !== '')
+        .map(([k, v]) => [k, attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k])])
+    ),
+    images: s.images.filter((i) => i.url).map((i) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType })),
+    variationTheme: s.hasVariants && theme ? theme.name : '',
+    variants,
+    ...(type?.traits.preorder ? { preorderEligible: s.preorder } : {}),
+    listing: {
+      ...(s.description.trim() ? { description: s.description.trim() } : {}),
+      condition: s.condition,
+      keywords: keywordsOf(s.keywords),
+      fulfilment: s.fulfilment,
+      packaging: l && w && h && wt ? { lengthIn: l, widthIn: w, heightIn: h, weightLb: wt } : null,
+      ...(s.fulfilment === 'SELLER' ? { handlingDays: Number(s.handlingDays) || 2, shipFromId: s.shipFromId || null } : {})
+    },
+    ...(draftId ? { draftId } : {})
+  };
+}
+
+/* ── Edit and drafts ── */
+
+const money = (minor: number | null) => (minor ? (minor / 100).toFixed(2) : '');
+
+/** The form of an existing listing (edit). */
+export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | undefined): FormState {
+  const attrs: Record<string, string> = {};
+  const units: Record<string, string> = {};
+  Object.entries(d.attributes).forEach(([k, v]) => {
+    const def = type?.attributes.find((a) => a.key === k);
+    const m = def?.kind === 'NUMBER' && def.units.length ? /^(\S+)\s+(\S+)$/.exec(v) : null;
+    if (m) {
+      attrs[k] = m[1] ?? '';
+      units[k] = m[2] ?? '';
+    } else attrs[k] = v;
+  });
+  const images: FormImage[] = d.images.map((im, i) => ({ id: `img-${i}`, previewUrl: im.url, url: im.url, width: im.width ?? 0, height: im.height ?? 0, bytes: im.bytes ?? 0,
+    contentType: im.contentType, status: (im.width ?? MIN_IMAGE_PX) < MIN_IMAGE_PX && i === 0 ? 'low' : 'ready' }));
+  const rowOf = (v: SellerProductDetail['variants'][number]): VariantRow => {
+    const img = v.images[0] ? images.find((i) => i.url === v.images[0]?.url) : undefined;
+    let image = img?.id ?? '';
+    if (v.images[0] && !img) {
+      const extra: FormImage = { id: `img-${images.length}`, previewUrl: v.images[0].url, url: v.images[0].url, width: v.images[0].width ?? 0, height: v.images[0].height ?? 0,
+        bytes: v.images[0].bytes ?? 0, contentType: v.images[0].contentType, status: 'ready' };
+      images.push(extra);
+      image = extra.id;
+    }
+    return { sku: v.sellerSku, gtin: v.gtin ?? '', price: money(v.priceMinor), compareAt: money(v.compareAtMinor), qty: String(v.quantity), image };
+  };
+  const theme = type?.themes.find((t) => t.name === d.variationTheme);
+  const hasVariants = Boolean(d.variationTheme && theme);
+  const selected: Record<string, string[]> = {};
+  const rows: Record<string, VariantRow> = {};
+  if (hasVariants && theme) {
+    theme.dimensions.forEach((dim) => {
+      selected[dim.name] = dim.options.filter((o) => d.variants.some((v) => v.options[dim.name] === o));
+    });
+    d.variants.forEach((v) => {
+      rows[comboKey(theme.dimensions.map((dim) => v.options[dim.name] ?? ''))] = rowOf(v);
+    });
+  }
+  const first = d.variants[0];
+  const pkg = d.listing.packaging;
+  return {
+    categoryId: d.categoryId, categoryPath: d.categoryPath, productType: d.productType,
+    request: d.categoryRequestId ? { id: d.categoryRequestId, path: d.categoryPath, reference: '' } : null,
+    title: d.title, attrs, units, description: d.listing.description ?? '', condition: d.listing.condition, keywords: d.listing.keywords.join(', '), images,
+    noGtin: d.variants.every((v) => v.gtinExempt), hasVariants, theme: hasVariants ? d.variationTheme : '', selected, rows,
+    single: !hasVariants && first ? rowOf(first) : emptyRow(), fulfilment: d.listing.fulfilment,
+    pkg: pkg ? { length: String(pkg.lengthIn), width: String(pkg.widthIn), height: String(pkg.heightIn), weight: String(pkg.weightLb) } : { length: '', width: '', height: '', weight: '' },
+    shipFromId: d.listing.shipFromId ?? '', handlingDays: String(d.listing.handlingDays || 2), preorder: d.preorderEligible
+  };
+}
+
+/** What a draft stores: the form without upload state (images that never finished uploading are dropped). */
+export function toDraftPayload(s: FormState): Record<string, unknown> {
+  return { v: 1, ...s, images: s.images.filter((i) => i.url).map((i) => ({ ...i, previewUrl: i.url ?? '', status: i.status === 'low' ? 'low' : 'ready' })) };
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const str = (v: unknown, d = '') => (typeof v === 'string' ? v : d);
+const strMap = (v: unknown): Record<string, string> => (isRecord(v) ? Object.fromEntries(Object.entries(v).filter((e): e is [string, string] => typeof e[1] === 'string')) : {});
+const rowFrom = (v: unknown): VariantRow => {
+  const r = isRecord(v) ? v : {};
+  return { sku: str(r.sku), gtin: str(r.gtin), price: str(r.price), compareAt: str(r.compareAt), qty: str(r.qty), image: str(r.image) };
+};
+
+/** A saved draft back into the form (unknown or damaged fields fall back to empty). */
+export function fromDraftPayload(payload: Record<string, unknown>): FormState {
+  const e = emptyForm();
+  const p = payload;
+  const images = Array.isArray(p.images)
+    ? p.images.filter(isRecord).filter((i) => typeof i.url === 'string').slice(0, MAX_IMAGES).map((i, n): FormImage => ({
+        id: str(i.id, `img-${n}`), previewUrl: str(i.url), url: str(i.url), width: Number(i.width) || 0, height: Number(i.height) || 0, bytes: Number(i.bytes) || 0,
+        contentType: str(i.contentType, 'image/jpeg'), status: i.status === 'low' ? 'low' : 'ready' }))
+    : [];
+  const req = isRecord(p.request) ? { id: str(p.request.id), path: str(p.request.path), reference: str(p.request.reference) } : null;
+  const pkg = isRecord(p.pkg) ? p.pkg : {};
+  const selected: Record<string, string[]> = {};
+  if (isRecord(p.selected)) Object.entries(p.selected).forEach(([k, v]) => {
+    if (Array.isArray(v)) selected[k] = v.filter((x): x is string => typeof x === 'string');
+  });
+  const rows: Record<string, VariantRow> = {};
+  if (isRecord(p.rows)) Object.entries(p.rows).forEach(([k, v]) => {
+    rows[k] = rowFrom(v);
+  });
+  return {
+    ...e,
+    categoryId: typeof p.categoryId === 'string' ? p.categoryId : null,
+    categoryPath: str(p.categoryPath),
+    productType: typeof p.productType === 'string' ? p.productType : null,
+    request: req?.id ? req : null,
+    title: str(p.title),
+    attrs: strMap(p.attrs),
+    units: strMap(p.units),
+    description: str(p.description),
+    condition: CONDITIONS.includes(p.condition as ItemCondition) ? (p.condition as ItemCondition) : 'NEW',
+    keywords: str(p.keywords),
+    images,
+    noGtin: p.noGtin === true,
+    hasVariants: p.hasVariants === true,
+    theme: str(p.theme),
+    selected,
+    rows,
+    single: rowFrom(p.single),
+    fulfilment: p.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
+    pkg: { length: str(pkg.length), width: str(pkg.width), height: str(pkg.height), weight: str(pkg.weight) },
+    shipFromId: str(p.shipFromId),
+    handlingDays: str(p.handlingDays, '2'),
+    preorder: p.preorder === true
+  };
+}
+
+/** Whether the form holds anything worth autosaving. */
+export const worthSaving = (s: FormState) => Boolean(s.categoryId || s.request || s.title.trim() || s.images.some((i) => i.url));
