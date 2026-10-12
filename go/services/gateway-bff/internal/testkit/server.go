@@ -117,6 +117,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	media := upstreams.NewMedia(client("media", base))
 	sellerDeps := app.SellerDeps{Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
+		Listing: upstreams.NewSellerListing(client("catalog", base)), Writer: upstreams.NewListingWriter(client("ai-gateway", base)),
 		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
 		Payouts: upstreams.NewPayouts(client("payments", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
@@ -156,6 +157,8 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
 		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
 		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
+		SellerListing:   app.NewSellerListingService(sellerDeps),
+		SellerImports:   app.NewSellerImportService(sellerDeps, "/api/bff"),
 		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
 		SellerFees:      app.NewSellerFeesService(sellerDeps),
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),

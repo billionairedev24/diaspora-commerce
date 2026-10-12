@@ -38,6 +38,9 @@ type Request struct {
 	JSON any
 	// Form is sent as application/x-www-form-urlencoded (OAuth token endpoint).
 	Form url.Values
+	// Body is sent as-is with ContentType (multipart uploads relayed to catalog, S308).
+	Body        []byte
+	ContentType string
 	// Bearer is relayed as Authorization: Bearer (never logged).
 	Bearer string
 	// BasicUser/BasicPassword authenticate a confidential OAuth client.
@@ -349,6 +352,9 @@ func (c *clientImpl) build(ctx context.Context, method string, req Request) (*ht
 		}
 		body = bytes.NewReader(b)
 		contentType = "application/json"
+	case req.Body != nil:
+		body = bytes.NewReader(req.Body)
+		contentType = req.ContentType
 	}
 	hreq, err := http.NewRequestWithContext(ctx, method, u, body)
 	if err != nil {
@@ -359,7 +365,9 @@ func (c *clientImpl) build(ctx context.Context, method string, req Request) (*ht
 			hreq.Header.Add(k, v)
 		}
 	}
-	hreq.Header.Set("Accept", "application/json, application/problem+json")
+	if hreq.Header.Get("Accept") == "" {
+		hreq.Header.Set("Accept", "application/json, application/problem+json")
+	}
 	if contentType != "" {
 		hreq.Header.Set("Content-Type", contentType)
 	}

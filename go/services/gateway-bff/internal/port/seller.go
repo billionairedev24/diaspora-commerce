@@ -558,30 +558,60 @@ type SellerServiceClient interface {
 
 // CatalogProductVariant is catalog's Variant.
 type CatalogProductVariant struct {
-	ID         string            `json:"id"`
-	ATIN       string            `json:"atin"`
-	SellerSKU  string            `json:"sellerSku"`
-	GTIN       string            `json:"gtin"`
-	Options    map[string]string `json:"options"`
-	PriceMinor int64             `json:"priceMinor"`
-	Currency   string            `json:"currency"`
-	Quantity   int               `json:"quantity"`
+	ID             string                     `json:"id"`
+	ATIN           string                     `json:"atin"`
+	SellerSKU      string                     `json:"sellerSku"`
+	GTIN           string                     `json:"gtin"`
+	GTINExempt     bool                       `json:"gtinExempt"`
+	Options        map[string]string          `json:"options"`
+	PriceMinor     int64                      `json:"priceMinor"`
+	CompareAtMinor *int64                     `json:"compareAtMinor"`
+	Currency       string                     `json:"currency"`
+	Quantity       int                        `json:"quantity"`
+	Images         []domain.ProductImageInput `json:"images"`
+}
+
+// CatalogListing is catalog's ListingDetails (S307).
+type CatalogListing struct {
+	Description  string                    `json:"description"`
+	Condition    string                    `json:"condition"`
+	Keywords     []string                  `json:"keywords"`
+	Fulfilment   string                    `json:"fulfilment"`
+	Packaging    *domain.PackageDimensions `json:"packaging"`
+	HandlingDays int                       `json:"handlingDays"`
+	ShipFrom     *CatalogShipFrom          `json:"shipFrom"`
+}
+
+// CatalogShipFrom is catalog's ShipFrom snapshot of a seller ship-from address.
+type CatalogShipFrom struct {
+	LocationID string `json:"locationId,omitempty"`
+	Label      string `json:"label,omitempty"`
+	City       string `json:"city,omitempty"`
+	Region     string `json:"region,omitempty"`
+	Country    string `json:"country,omitempty"`
+	PostalCode string `json:"postalCode,omitempty"`
 }
 
 // CatalogOwnProduct is catalog's Product.
 type CatalogOwnProduct struct {
-	ID         string `json:"id"`
-	ATIN       string `json:"atin"`
-	OwnerKind  string `json:"ownerKind"`
-	OwnerOrgID string `json:"ownerOrgId"`
-	Title      string `json:"title"`
-	Images     []struct {
-		URL string `json:"url"`
-	} `json:"images"`
-	Variants       []CatalogProductVariant `json:"variants"`
-	Status         string                  `json:"status"`
-	ModerationNote string                  `json:"moderationNote"`
-	UpdatedAt      time.Time               `json:"updatedAt"`
+	ID                string                     `json:"id"`
+	ATIN              string                     `json:"atin"`
+	OwnerKind         string                     `json:"ownerKind"`
+	OwnerOrgID        string                     `json:"ownerOrgId"`
+	CategoryID        string                     `json:"categoryId"`
+	CategoryRequestID string                     `json:"categoryRequestId"`
+	ProductType       string                     `json:"productType"`
+	Title             string                     `json:"title"`
+	Attributes        map[string]string          `json:"attributes"`
+	Images            []domain.ProductImageInput `json:"images"`
+	VariationTheme    string                     `json:"variationTheme"`
+	Variants          []CatalogProductVariant    `json:"variants"`
+	Status            string                     `json:"status"`
+	ModerationNote    string                     `json:"moderationNote"`
+	UpdatedAt         time.Time                  `json:"updatedAt"`
+	Version           int64                      `json:"version"`
+	PreorderEligible  bool                       `json:"preorderEligible"`
+	Listing           *CatalogListing            `json:"listing"`
 }
 
 // CatalogProductPage is catalog's ProductPage.
@@ -613,8 +643,13 @@ type CatalogProductType struct {
 		Options   []string `json:"options"`
 		Required  bool     `json:"required"`
 		Multiline bool     `json:"multiline"`
+		Kind      string   `json:"kind"`
+		Units     []string `json:"units"`
+		Section   string   `json:"section"`
+		Help      string   `json:"help"`
 	} `json:"attributes"`
-	Themes []domain.VariationTheme `json:"themes"`
+	Themes []domain.VariationTheme  `json:"themes"`
+	Traits domain.ProductTypeTraits `json:"traits"`
 }
 
 // CatalogGtinCheck is catalog's GtinCheck.

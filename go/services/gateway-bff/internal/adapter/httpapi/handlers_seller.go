@@ -63,6 +63,26 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/listings", h.listings)
 	route("POST /v1/seller/listings/{productId}/status", h.listingStatus)
 	route("POST /v1/seller/products", h.submitProduct)
+	if h.s.SellerListing != nil {
+		route("GET /v1/seller/listings/{productId}", h.sellerProduct)
+		route("PUT /v1/seller/products/{productId}", h.updateProduct)
+		route("GET /v1/seller/product-drafts", h.productDrafts)
+		route("POST /v1/seller/product-drafts", h.createProductDraft)
+		route("GET /v1/seller/product-drafts/{draftId}", h.productDraft)
+		route("PUT /v1/seller/product-drafts/{draftId}", h.saveProductDraft)
+		route("DELETE /v1/seller/product-drafts/{draftId}", h.deleteProductDraft)
+		route("GET /v1/seller/catalog/listing-context", h.listingContext)
+		route("POST /v1/seller/catalog/listing-writer", h.writeListing)
+	}
+	if h.s.SellerImports != nil {
+		route("GET /v1/seller/imports/template", h.importTemplate)
+		route("GET /v1/seller/imports", h.imports)
+		route("POST /v1/seller/imports", h.uploadImport)
+		route("GET /v1/seller/imports/{importId}", h.importDetail)
+		route("GET /v1/seller/imports/{importId}/rows", h.importRows)
+		route("GET /v1/seller/imports/{importId}/report", h.importReport)
+		route("POST /v1/seller/imports/{importId}/start", h.startImport)
+	}
 	route("GET /v1/seller/catalog/categories", h.categoryTree)
 	route("GET /v1/seller/catalog/product-types/{code}", h.productType)
 	route("GET /v1/seller/catalog/gtin/{code}", h.checkGTIN)
@@ -359,6 +379,11 @@ func (h *handlersImpl) submitProduct(w http.ResponseWriter, r *http.Request) {
 	var b domain.ProductDraft
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
+		return
+	}
+	if h.s.SellerListing != nil {
+		v, err := h.s.SellerListing.Submit(r.Context(), callerFrom(r.Context()), b)
+		h.reply(w, r, http.StatusCreated, v, err)
 		return
 	}
 	v, err := h.s.SellerCatalog.Submit(r.Context(), callerFrom(r.Context()), b)

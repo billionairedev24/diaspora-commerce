@@ -117,6 +117,9 @@ func run() error {
 		Fees:       upstreams.NewFees(paymentsClient, serviceTokens),
 		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
 		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
+
+		// S307/S308: product edits, form drafts and bulk uploads at catalog; the AI listing writer at ai-gateway.
+		Listing: upstreams.NewSellerListing(catalogClient), Writer: upstreams.NewListingWriter(client("ai-gateway", up.AIGateway)),
 	}
 	verifier := upstreams.NewTokenVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.ClientID,
 		&http.Client{Timeout: up.Identity.Timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)})
@@ -160,6 +163,7 @@ func run() error {
 		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
 		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
 		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
+		SellerListing:   app.NewSellerListingService(sellerDeps),
 		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
 		SellerFees:      app.NewSellerFeesService(sellerDeps),
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),
@@ -179,6 +183,8 @@ func run() error {
 	}
 	// Seller Center exports share the staff console's job store, renderer and file directory.
 	services.SellerExports = app.NewSellerExportsService(sellerDeps, exportDeps)
+	// Bulk product uploads (S308): catalog parses and imports; the BFF links reports under the same app path.
+	services.SellerImports = app.NewSellerImportService(sellerDeps, exportDeps.BasePath)
 
 	openapi, err := gatewaybff.Files.ReadFile("api/openapi.yaml")
 	if err != nil {

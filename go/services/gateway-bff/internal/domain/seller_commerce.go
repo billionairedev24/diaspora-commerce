@@ -313,13 +313,26 @@ type CategoryNode struct {
 	Children    []CategoryNode `json:"children"`
 }
 
-// AttributeDef is a product-type attribute.
+// AttributeDef is a product-type attribute: its kind (TEXT, MULTILINE, ENUM, NUMBER), units for numbers, the form
+// section it belongs to (DETAILS, FOOD, REGULATED) and a help line.
 type AttributeDef struct {
 	Key       string   `json:"key"`
 	Label     string   `json:"label"`
 	Options   []string `json:"options"`
 	Required  bool     `json:"required"`
 	Multiline bool     `json:"multiline"`
+	Kind      string   `json:"kind"`
+	Units     []string `json:"units"`
+	Section   string   `json:"section"`
+	Help      *string  `json:"help"`
+}
+
+// ProductTypeTraits decide the one-step form's conditional sections.
+type ProductTypeTraits struct {
+	Food       bool `json:"food"`
+	Perishable bool `json:"perishable"`
+	Regulated  bool `json:"regulated"`
+	Preorder   bool `json:"preorder"`
 }
 
 // VariationDimension is one variation axis.
@@ -334,13 +347,14 @@ type VariationTheme struct {
 	Dimensions []VariationDimension `json:"dimensions"`
 }
 
-// ProductTypeSchema drives steps 3 and 4 of the builder.
+// ProductTypeSchema drives the attribute fields, variant axes and conditional sections of the product form.
 type ProductTypeSchema struct {
-	Code           string           `json:"code"`
-	Label          string           `json:"label"`
-	IdentifierRule string           `json:"identifierRule"`
-	Attributes     []AttributeDef   `json:"attributes"`
-	Themes         []VariationTheme `json:"themes"`
+	Code           string            `json:"code"`
+	Label          string            `json:"label"`
+	IdentifierRule string            `json:"identifierRule"`
+	Attributes     []AttributeDef    `json:"attributes"`
+	Themes         []VariationTheme  `json:"themes"`
+	Traits         ProductTypeTraits `json:"traits"`
 }
 
 // GtinCheck is the identifier check.
@@ -379,33 +393,79 @@ type ProductImageInput struct {
 	ContentType string `json:"contentType"`
 }
 
-// VariantInput is one variant row of step 4.
+// VariantInput is one variant row (the variant matrix, or the single row of a product without variations).
 type VariantInput struct {
-	Options    map[string]string `json:"options"`
-	SellerSKU  string            `json:"sellerSku"`
-	GTIN       string            `json:"gtin,omitempty"`
-	GTINExempt bool              `json:"gtinExempt,omitempty"`
-	PriceMinor int64             `json:"priceMinor"`
-	Quantity   int               `json:"quantity"`
+	Options        map[string]string   `json:"options"`
+	SellerSKU      string              `json:"sellerSku"`
+	GTIN           string              `json:"gtin,omitempty"`
+	GTINExempt     bool                `json:"gtinExempt,omitempty"`
+	PriceMinor     int64               `json:"priceMinor"`
+	CompareAtMinor *int64              `json:"compareAtMinor,omitempty"`
+	Quantity       int                 `json:"quantity"`
+	Images         []ProductImageInput `json:"images,omitempty"`
 }
 
-// ProductDraft is the builder's submission.
+// Item conditions and fulfilment modes of a listing.
+var (
+	ItemConditions     = []string{"NEW", "RENEWED", "USED_LIKE_NEW", "USED_VERY_GOOD", "USED_GOOD", "USED_ACCEPTABLE"}
+	ListingFulfilments = []string{"SELLER", "AFROTRANSACT"}
+)
+
+// PackageDimensions is the packed size (inches) and weight (pounds).
+type PackageDimensions struct {
+	LengthIn float64 `json:"lengthIn"`
+	WidthIn  float64 `json:"widthIn"`
+	HeightIn float64 `json:"heightIn"`
+	WeightLb float64 `json:"weightLb"`
+}
+
+// ListingDetailsInput is the form's description, condition, keywords, fulfilment, package, handling and ship-from.
+type ListingDetailsInput struct {
+	Description  string             `json:"description,omitempty"`
+	Condition    string             `json:"condition,omitempty"`
+	Keywords     []string           `json:"keywords,omitempty"`
+	Fulfilment   string             `json:"fulfilment,omitempty"`
+	Packaging    *PackageDimensions `json:"packaging,omitempty"`
+	HandlingDays int                `json:"handlingDays,omitempty"`
+	ShipFromID   *string            `json:"shipFromId,omitempty"`
+}
+
+// ProductDraft is the one-step product form's submission (POST /v1/seller/products, PUT /v1/seller/products/{id}).
 type ProductDraft struct {
-	CategoryID        string              `json:"categoryId,omitempty"`
-	CategoryRequestID string              `json:"categoryRequestId,omitempty"`
-	Title             string              `json:"title"`
-	Attributes        map[string]string   `json:"attributes"`
-	Images            []ProductImageInput `json:"images"`
-	VariationTheme    string              `json:"variationTheme"`
-	Variants          []VariantInput      `json:"variants"`
+	CategoryID        string               `json:"categoryId,omitempty"`
+	CategoryRequestID string               `json:"categoryRequestId,omitempty"`
+	Title             string               `json:"title"`
+	Attributes        map[string]string    `json:"attributes"`
+	Images            []ProductImageInput  `json:"images"`
+	VariationTheme    string               `json:"variationTheme"`
+	Variants          []VariantInput       `json:"variants"`
+	PreorderEligible  *bool                `json:"preorderEligible,omitempty"`
+	Listing           *ListingDetailsInput `json:"listing,omitempty"`
+	DraftID           string               `json:"draftId,omitempty"`
+	// Version is the product version an edit is based on (PUT only).
+	Version *int64 `json:"version,omitempty"`
 }
 
-// Validate applies the builder's rules (the same ones catalog enforces).
+// Validate applies the form's rules (the same ones catalog enforces) to a new product.
 func (d ProductDraft) Validate() map[string]string {
-	errs := map[string]string{}
+	errs := d.validateContent()
 	if (d.CategoryID == "") == (d.CategoryRequestID == "") {
 		errs["categoryId"] = "Choose a category, or request a new one."
 	}
+	return errs
+}
+
+// ValidateEdit applies the form's rules to an edit (the category may be omitted: it is kept).
+func (d ProductDraft) ValidateEdit() map[string]string {
+	errs := d.validateContent()
+	if d.CategoryRequestID != "" {
+		errs["categoryRequestId"] = "A product's category request can't change."
+	}
+	return errs
+}
+
+func (d ProductDraft) validateContent() map[string]string {
+	errs := map[string]string{}
 	if n := len([]rune(strings.TrimSpace(d.Title))); n < 10 || n > 200 {
 		errs["title"] = "At least 10 characters"
 	}
@@ -414,11 +474,13 @@ func (d ProductDraft) Validate() map[string]string {
 	} else if len(d.Images) > 10 {
 		errs["images"] = "Up to 10 images."
 	}
-	if strings.TrimSpace(d.VariationTheme) == "" {
-		errs["variationTheme"] = "Choose how this product varies."
+	if strings.TrimSpace(d.VariationTheme) == "" && len(d.Variants) > 1 {
+		errs["variationTheme"] = "Choose how this product varies to list several variants."
 	}
 	if len(d.Variants) == 0 {
-		errs["variants"] = "Add at least one variation."
+		errs["variants"] = "Add the price and quantity."
+	} else if len(d.Variants) > 200 {
+		errs["variants"] = "Up to 200 variants."
 	}
 	skus := map[string]bool{}
 	for _, v := range d.Variants {
@@ -432,10 +494,37 @@ func (d ProductDraft) Validate() map[string]string {
 			errs["variants"] = "Every variation needs a price."
 		case v.Quantity < 0:
 			errs["variants"] = "Quantities can't be negative."
+		case v.Quantity > 100000:
+			errs["variants"] = "Quantities go up to 100,000."
+		case v.CompareAtMinor != nil && *v.CompareAtMinor <= v.PriceMinor:
+			errs["variants"] = "A compare-at price must be higher than the price."
 		case !v.GTINExempt && v.GTIN == "":
-			errs["variants"] = "Enter a barcode for every variation, or request a GTIN exemption."
+			errs["variants"] = "Enter a barcode for every variation, or say it has none."
 		}
 		skus[sku] = true
+	}
+	if l := d.Listing; l != nil {
+		if len([]rune(l.Description)) > 5000 {
+			errs["listing.description"] = "At most 5,000 characters"
+		}
+		if l.Condition != "" && !slices.Contains(ItemConditions, l.Condition) {
+			errs["listing.condition"] = "Unknown condition"
+		}
+		if l.Fulfilment != "" && !slices.Contains(ListingFulfilments, l.Fulfilment) {
+			errs["listing.fulfilment"] = "Unknown fulfilment"
+		}
+		if len(l.Keywords) > 20 {
+			errs["listing.keywords"] = "Up to 20 keywords"
+		}
+		if l.HandlingDays < 0 || l.HandlingDays > 30 {
+			errs["listing.handlingDays"] = "Between 1 and 30 days"
+		}
+		if p := l.Packaging; p != nil && (p.LengthIn <= 0 || p.WidthIn <= 0 || p.HeightIn <= 0 || p.WeightLb <= 0) {
+			errs["listing.packaging"] = "Give the package length, width, height and weight"
+		}
+		if l.Fulfilment == "AFROTRANSACT" && l.Packaging == nil {
+			errs["listing.packaging"] = "Package size and weight are required for Fulfilled by AfroTransact"
+		}
 	}
 	return errs
 }

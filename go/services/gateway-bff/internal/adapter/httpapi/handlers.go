@@ -37,6 +37,10 @@ type Services struct {
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
 	SellerShipFrom  app.SellerShipFromService
+
+	// SellerListing is the one-step product form (S307) and SellerImports the bulk upload (S308); registered when set.
+	SellerListing app.SellerListingService
+	SellerImports app.SellerImportService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.
 	SellerOffers app.SellerOffersService
 	// SellerFba is Seller Center's Send to AfroTransact (S281); its routes are registered when set.

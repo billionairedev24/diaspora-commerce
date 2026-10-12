@@ -52,6 +52,7 @@ func (u *Upstreams) orgByID(id string) (MemberOrg, bool) {
 }
 
 type sellerState struct {
+	drafts        map[string]map[string]any
 	plan          string
 	planFeeMode   string
 	defaultPM     string
@@ -62,7 +63,7 @@ type sellerState struct {
 }
 
 func newSellerState() *sellerState {
-	return &sellerState{plan: "seller_growth", planFeeMode: "EARNINGS_FIRST", defaultPM: "aaaaaaaa-0000-0000-0000-000000000001", listingStatus: map[string]string{"prod-1": "LIVE"},
+	return &sellerState{drafts: map[string]map[string]any{}, plan: "seller_growth", planFeeMode: "EARNINGS_FIRST", defaultPM: "aaaaaaaa-0000-0000-0000-000000000001", listingStatus: map[string]string{"prod-1": "LIVE"},
 		shipStatus: "placed", storefront: map[string]any{"orgId": SellerOrgID, "kind": "SELLER", "slug": "ade-s-kitchen", "name": "Ade's Kitchen",
 			"tagline": "Home-style Nigerian pantry", "theme": map[string]any{"primary": "#0A8264", "accent": "#FFD400"}, "status": "DRAFT",
 			"social": []any{map[string]any{"network": "instagram", "url": "https://instagram.com/adeskitchen", "status": "APPROVED"}}, "version": 3}}
@@ -81,6 +82,7 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 	u.identitySellerRoutes(mux)
 	u.sellerServiceRoutes(mux)
 	u.catalogSellerRoutes(mux)
+	u.catalogListingRoutes(mux)
 	u.moneyRoutes(mux)
 	if u.opts.SellerPending {
 		u.ordersRoutes(mux)
@@ -588,8 +590,10 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, 200, map[string]any{"code": "grocery", "label": "packaged food", "identifierRule": "GTIN",
-			"attributes": []map[string]any{{"key": "brand", "label": "Brand", "required": true}, {"key": "allergens", "label": "Allergens (FALCPA)", "options": []string{"None", "Contains peanuts"}, "required": true}},
-			"themes":     []map[string]any{{"name": "Net weight", "dimensions": []map[string]any{{"name": "Net weight", "options": []string{"1 lb", "5 lb"}}}}}})
+			"attributes": []map[string]any{{"key": "brand", "label": "Brand", "required": true}, {"key": "allergens", "label": "Allergens (FALCPA)", "options": []string{"None", "Contains peanuts"}, "required": true, "kind": "ENUM", "section": "FOOD"},
+				{"key": "shelf", "label": "Shelf life", "required": true, "kind": "NUMBER", "units": []string{"days", "months"}, "section": "FOOD", "help": "Unopened"}},
+			"themes": []map[string]any{{"name": "Net weight", "dimensions": []map[string]any{{"name": "Net weight", "options": []string{"1 lb", "5 lb"}}}}},
+			"traits": map[string]any{"food": true, "perishable": false, "regulated": false, "preorder": true}})
 	})
 	mux.HandleFunc("GET /v1/identifiers/gtin/{code}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"digits": r.PathValue("code"), "valid": true, "message": "Valid GTIN-13"})

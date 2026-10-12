@@ -220,6 +220,7 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "OFADA-5LB", "quantity": 30, "reason": "STOCK_TAKE"}), 503)
 	mustStatus(t, b.do("POST", "/v1/seller/inventory/adjustments", map[string]any{"sku": "", "quantity": -1, "reason": "?"}), 422)
 	exerciseSellerFba(t, b)
+	exerciseSellerListing(t, bff, b)
 	// Money.
 	// S298: plan invoices paid from sales are listed as "Plan fee (invoice …)" deductions; DECLINED ones took nothing.
 	if r := b.do("GET", "/v1/seller/payouts", nil); r.status != 200 || len(r.json(t)["planFeeDeductions"].([]any)) != 1 ||

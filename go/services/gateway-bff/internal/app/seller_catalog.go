@@ -11,8 +11,8 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// SellerCatalogService serves the listings table, the 4-step product builder (category tree, product-type schema,
-// GTIN checks, category requests, uploads, submit) and stock (FBA positions, seller stock adjustments).
+// SellerCatalogService serves the listings table, the product form's reference data (category tree, product-type
+// schema, GTIN checks, category requests, uploads) and stock (FBA positions, seller stock adjustments).
 type SellerCatalogService interface {
 	// Listings is the listings table: one search over every column, any sort, status (links), page and size.
 	Listings(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.ListingPage, error)
@@ -224,13 +224,29 @@ func (s *sellerCatalogImpl) ProductType(ctx context.Context, c *domain.Caller, c
 	if rule != "gtin" && rule != "isbn" {
 		rule = "none"
 	}
-	out := domain.ProductTypeSchema{Code: t.Code, Label: t.Label, IdentifierRule: rule, Attributes: []domain.AttributeDef{}, Themes: []domain.VariationTheme{}}
+	out := domain.ProductTypeSchema{Code: t.Code, Label: t.Label, IdentifierRule: rule, Attributes: []domain.AttributeDef{},
+		Themes: []domain.VariationTheme{}, Traits: t.Traits}
 	for _, a := range t.Attributes {
 		opts := a.Options
 		if opts == nil {
 			opts = []string{}
 		}
-		out.Attributes = append(out.Attributes, domain.AttributeDef{Key: a.Key, Label: a.Label, Options: opts, Required: a.Required, Multiline: a.Multiline})
+		units := a.Units
+		if units == nil {
+			units = []string{}
+		}
+		kind := strings.ToUpper(a.Kind)
+		switch {
+		case kind != "":
+		case len(opts) > 0:
+			kind = "ENUM"
+		case a.Multiline:
+			kind = "MULTILINE"
+		default:
+			kind = "TEXT"
+		}
+		out.Attributes = append(out.Attributes, domain.AttributeDef{Key: a.Key, Label: a.Label, Options: opts, Required: a.Required,
+			Multiline: a.Multiline, Kind: kind, Units: units, Section: firstNonEmpty(strings.ToUpper(a.Section), "DETAILS"), Help: strPtr(a.Help)})
 	}
 	for _, th := range t.Themes {
 		if th.Dimensions == nil {

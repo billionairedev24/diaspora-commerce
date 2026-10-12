@@ -122,12 +122,29 @@ func csrf(o SecurityOptions, log *slog.Logger) func(http.Handler) http.Handler {
 	}
 }
 
+// largeBodies are the routes whose bodies may exceed the default limit: bulk product uploads (a 10 MB file plus
+// the multipart framing, S308) and autosaved product-form drafts (256 KB of form input, S307).
+var largeBodies = []struct {
+	method, path string
+	limit        int64
+}{
+	{http.MethodPost, "/v1/seller/imports", 11 << 20},
+	{http.MethodPost, "/v1/seller/product-drafts", 320 << 10},
+	{http.MethodPut, "/v1/seller/product-drafts/", 320 << 10},
+}
+
 // bodyLimit caps request bodies (decode reports 413).
 func bodyLimit(limit int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Body != nil {
-				r.Body = http.MaxBytesReader(w, r.Body, limit)
+				max := limit
+				for _, l := range largeBodies {
+					if r.Method == l.method && (r.URL.Path == l.path || strings.HasSuffix(l.path, "/") && strings.HasPrefix(r.URL.Path, l.path)) {
+						max = l.limit
+					}
+				}
+				r.Body = http.MaxBytesReader(w, r.Body, max)
 			}
 			next.ServeHTTP(w, r)
 		})
