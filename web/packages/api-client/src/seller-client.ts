@@ -76,6 +76,9 @@ import {
   PayoutSchema,
   type PayoutsView,
   PayoutsViewSchema,
+  type PlanFeeCollectionMode,
+  type PlanFeeCollectionView,
+  PlanFeeCollectionViewSchema,
   type ProductDraft,
   type ProductTypeSchema,
   ProductTypeSchemaSchema,
@@ -276,6 +279,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** Owner only: register the payment method the SetupIntent confirmed. */
     addBillingPaymentMethod: (body: AddBillingPaymentMethodInput): Promise<BillingPaymentMethod> =>
       request('/v1/seller/billing/payment-methods', BillingPaymentMethodSchema, { method: 'POST', body }),
+    /** S298: pay the plan from sales first or always by card (owner / finance; applies from the next invoice). */
+    setPlanFeeCollection: (mode: PlanFeeCollectionMode): Promise<PlanFeeCollectionView> =>
+      request('/v1/seller/billing/plan-fee-collection', PlanFeeCollectionViewSchema, { method: 'PUT', body: { mode } }),
 
     /* Team */
     getTeam: (signal?: AbortSignal): Promise<TeamView> => request('/v1/seller/team', TeamViewSchema, { signal }),

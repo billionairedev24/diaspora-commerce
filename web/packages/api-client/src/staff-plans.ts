@@ -306,7 +306,8 @@ export const StaffBillingSubscriptionSchema = z.object({
   creditBalanceCents: z.number().int(),
   trialSource: z.enum(['PLAN', 'CAMPAIGN', 'OVERRIDE', 'NONE']).nullable().default(null),
   trialDaysOverride: nullableInt.default(null),
-  collectFromEarnings: z.boolean().default(false)
+  /** How the plan is paid (S298). */
+  planFeeCollection: z.enum(['EARNINGS_FIRST', 'CARD']).default('CARD')
 });
 export type StaffBillingSubscription = z.infer<typeof StaffBillingSubscriptionSchema>;
 
@@ -322,20 +323,73 @@ export const StaffBillingInvoiceSchema = z.object({
   billingReason: nullableString.default(null),
   hostedInvoiceUrl: nullableString.default(null),
   invoicePdf: nullableString.default(null),
-  createdAt: z.string()
+  createdAt: z.string(),
+  /** S298: paid from the organisation's sales, and by card. */
+  paidFromSalesCents: z.number().int().default(0),
+  paidByCardCents: z.number().int().default(0)
 });
 export type StaffBillingInvoice = z.infer<typeof StaffBillingInvoiceSchema>;
 
+/** One plan invoice paid (or asked to be paid) from earnings (S298). */
 export const StaffEarningsCollectionSchema = z.object({
   invoiceId: z.string(),
+  invoiceNumber: nullableString.default(null),
+  invoiceAmountCents: nullableInt.default(null),
   amountCents: z.number().int(),
-  status: z.enum(['REQUESTED', 'WITHHELD', 'CREDITED', 'DECLINED', 'FAILED']),
+  withheldCents: z.number().int().default(0),
+  creditedCents: z.number().int().default(0),
+  releasedCents: z.number().int().default(0),
+  paidFromSalesCents: z.number().int().default(0),
+  status: z.enum(['REQUESTED', 'WITHHELD', 'CREDITED', 'DECLINED', 'MISSED', 'FAILED', 'RELEASED']),
   paymentsReference: nullableString.default(null),
   stripeBalanceTransactionId: nullableString.default(null),
   reason: nullableString.default(null),
-  createdAt: nullableString.default(null)
+  attempts: z.number().int().default(0),
+  lastError: nullableString.default(null),
+  createdAt: nullableString.default(null),
+  updatedAt: nullableString.default(null)
 });
 export type StaffEarningsCollection = z.infer<typeof StaffEarningsCollectionSchema>;
+
+export const StaffPlanFeeModeSchema = z.enum(['EARNINGS_FIRST', 'CARD']);
+export type StaffPlanFeeMode = z.infer<typeof StaffPlanFeeModeSchema>;
+export const StaffPlanFeeCollectionChangeSchema = z.object({
+  id: z.string(),
+  previous: StaffPlanFeeModeSchema.nullable().default(null),
+  mode: StaffPlanFeeModeSchema,
+  source: z.enum(['ONBOARDING', 'SELLER', 'STAFF']),
+  actorId: z.string(),
+  reasonCode: nullableString.default(null),
+  note: nullableString.default(null),
+  appliesFrom: nullableString.default(null),
+  createdAt: z.string()
+});
+export type StaffPlanFeeCollectionChange = z.infer<typeof StaffPlanFeeCollectionChangeSchema>;
+/** How one organisation pays its plan, with its change log (S298). */
+export const StaffPlanFeeCollectionSchema = z.object({
+  orgId: z.string(),
+  available: z.boolean(),
+  mode: StaffPlanFeeModeSchema,
+  effective: StaffPlanFeeModeSchema,
+  source: z.enum(['DEFAULT', 'ONBOARDING', 'SELLER', 'STAFF']),
+  changedAt: nullableString.default(null),
+  changedBy: nullableString.default(null),
+  platformDefault: StaffPlanFeeModeSchema,
+  appliesFromInvoiceAt: nullableString.default(null),
+  appliesFromLabel: z.string(),
+  inProgressInvoiceId: nullableString.default(null),
+  history: z.array(StaffPlanFeeCollectionChangeSchema)
+});
+export type StaffPlanFeeCollection = z.infer<typeof StaffPlanFeeCollectionSchema>;
+/** Plans & billing › Settings (S298). */
+export const StaffBillingSettingsSchema = z.object({
+  /** The kill switch COLLECT_PLAN_FEES_FROM_EARNINGS (deployment configuration, read-only here). */
+  earningsCollectionEnabled: z.boolean(),
+  planFeeCollectionDefault: StaffPlanFeeModeSchema,
+  updatedBy: nullableString.default(null),
+  updatedAt: nullableString.default(null)
+});
+export type StaffBillingSettings = z.infer<typeof StaffBillingSettingsSchema>;
 
 export const StaffBillingPanelSchema = z.object({
   orgId: z.string(),
@@ -346,7 +400,8 @@ export const StaffBillingPanelSchema = z.object({
   invoices: z.array(StaffBillingInvoiceSchema),
   grants: z.array(StaffBillingGrantSchema),
   collections: z.array(StaffEarningsCollectionSchema),
-  earningsCollectionEnabled: z.boolean()
+  earningsCollectionEnabled: z.boolean(),
+  planFeeCollection: StaffPlanFeeCollectionSchema.nullable().default(null)
 });
 export type StaffBillingPanel = z.infer<typeof StaffBillingPanelSchema>;
 
@@ -413,8 +468,13 @@ export function createStaffPlansApi(request: Requester) {
       request(`${org(orgId)}/trial`, StaffBillingGrantSchema, { method: 'POST', body: { days, ...adj }, headers: idem(key) }),
     waiveInvoice: (orgId: string, invoiceId: string, adj: StaffAdjustment, key: string): Promise<StaffBillingGrant> =>
       request(`${org(orgId)}/invoices/${enc(invoiceId)}/waive`, StaffBillingGrantSchema, { method: 'POST', body: adj, headers: idem(key) }),
-    setEarningsCollection: (orgId: string, enabled: boolean): Promise<StaffBillingPanel> =>
-      request(`${org(orgId)}/earnings-collection`, StaffBillingPanelSchema, { method: 'PUT', body: { enabled } })
+    /** S298: per-seller override of how the plan is paid, audited with a reason (billing:adjust). */
+    overridePlanFeeCollection: (orgId: string, mode: StaffPlanFeeMode, adj: StaffAdjustment): Promise<StaffPlanFeeCollection> =>
+      request(`${org(orgId)}/plan-fee-collection`, StaffPlanFeeCollectionSchema, { method: 'PUT', body: { mode, ...adj } }),
+    billingSettings: (signal?: AbortSignal): Promise<StaffBillingSettings> => request(`${B}/settings`, StaffBillingSettingsSchema, { signal }),
+    /** The default for new sellers (plans:manage). */
+    updateBillingSettings: (planFeeCollectionDefault: StaffPlanFeeMode): Promise<StaffBillingSettings> =>
+      request(`${B}/settings`, StaffBillingSettingsSchema, { method: 'PUT', body: { planFeeCollectionDefault } })
   };
 }
 export type StaffPlansApi = ReturnType<typeof createStaffPlansApi>;
@@ -432,7 +492,8 @@ export const staffPlanKeys = {
   grants: (q: StaffGrantQuery) => [...staffPlanKeys.grantLists(), q] as const,
   reasonCodes: () => [...staffPlanKeys.all, 'reason-codes'] as const,
   orgs: (q: string) => [...staffPlanKeys.all, 'orgs', q] as const,
-  panel: (orgId: string) => [...staffPlanKeys.all, 'panel', orgId] as const
+  panel: (orgId: string) => [...staffPlanKeys.all, 'panel', orgId] as const,
+  settings: () => [...staffPlanKeys.all, 'settings'] as const
 };
 
 export const staffPlanQueries = {
@@ -456,5 +517,6 @@ export const staffPlanQueries = {
   orgs: (api: StaffPlansApi, q: string) =>
     queryOptions({ queryKey: staffPlanKeys.orgs(q), queryFn: ({ signal }) => api.searchOrgs(q, signal), enabled: q.trim().length >= 2, staleTime: 30_000 }),
   panel: (api: StaffPlansApi, orgId: string) =>
-    queryOptions({ queryKey: staffPlanKeys.panel(orgId), queryFn: ({ signal }) => api.panel(orgId, signal), enabled: Boolean(orgId), staleTime: 10_000 })
+    queryOptions({ queryKey: staffPlanKeys.panel(orgId), queryFn: ({ signal }) => api.panel(orgId, signal), enabled: Boolean(orgId), staleTime: 10_000 }),
+  settings: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.settings(), queryFn: ({ signal }) => api.billingSettings(signal), staleTime: 30_000 })
 };

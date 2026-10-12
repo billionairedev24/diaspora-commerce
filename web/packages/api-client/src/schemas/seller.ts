@@ -180,7 +180,11 @@ export const OnboardingFormSchema = z.object({
     cardLast4: nullableString,
     cardExpMonth: z.number().int().nullable(),
     cardExpYear: z.number().int().nullable(),
-    firstCharge: OnboardingFirstChargeSchema.nullable()
+    firstCharge: OnboardingFirstChargeSchema.nullable(),
+    /** S298: the applicant's choice (null keeps the platform default), whether it is offered and the default. */
+    planFeeCollection: z.enum(['EARNINGS_FIRST', 'CARD']).nullable().default(null),
+    planFeeCollectionAvailable: z.boolean().default(false),
+    planFeeCollectionDefault: z.enum(['EARNINGS_FIRST', 'CARD']).default('CARD')
   }),
   compliance: z.object({
     categories: z.array(z.string()),
@@ -277,6 +281,8 @@ export interface OnboardingPlanInput {
   cardExpYear?: number;
   /** A trial campaign's promo code (S295); 422 `promoCode` when it isn't valid for this plan. */
   promoCode?: string;
+  /** How the plan will be paid (S298); omit for the platform default. */
+  planFeeCollection?: 'EARNINGS_FIRST' | 'CARD';
 }
 
 /** PUT /v1/seller/onboarding/catalog-compliance. */
@@ -808,6 +814,8 @@ export const PayoutBalanceSchema = z.object({
   requestedOrInTransitMinor: z.number().int(),
   paidMinor: z.number().int(),
   providerFeesMinor: z.number().int(),
+  /** Plan fees paid from sales (S298) not yet deducted from a transfer; negative while one is owed back. */
+  planFeesMinor: z.number().int().default(0),
   minimumPayoutMinor: z.number().int(),
   canRequestToday: z.boolean(),
   payoutsPaused: z.boolean(),
@@ -826,7 +834,26 @@ export const PayoutSchema = z.object({
   failureMessage: nullableString
 });
 export type Payout = z.infer<typeof PayoutSchema>;
-export const PayoutsViewSchema = z.object({ balance: PayoutBalanceSchema, payouts: z.array(PayoutSchema), historyAvailable: z.boolean() });
+/** A plan invoice paid from sales (S298): "Plan fee (invoice …)", deducted from the next transfers. */
+export const PlanFeeDeductionSchema = z.object({
+  invoiceId: z.string(),
+  invoiceNumber: nullableString,
+  label: z.string(),
+  status: z.enum(['WITHHELD', 'DECLINED', 'RELEASED']),
+  requestedMinor: z.number().int(),
+  withheldMinor: z.number().int(),
+  releasedMinor: z.number().int(),
+  outstandingMinor: z.number().int(),
+  createdAt: z.string(),
+  transfers: z.array(z.object({ orderId: z.string(), amountMinor: z.number().int(), at: z.string(), label: z.string() }))
+});
+export type PlanFeeDeduction = z.infer<typeof PlanFeeDeductionSchema>;
+export const PayoutsViewSchema = z.object({
+  balance: PayoutBalanceSchema,
+  payouts: z.array(PayoutSchema),
+  historyAvailable: z.boolean(),
+  planFeeDeductions: z.array(PlanFeeDeductionSchema).default([])
+});
 export type PayoutsView = z.infer<typeof PayoutsViewSchema>;
 
 /* ── Fees (read-only; rates in basis points, 1250 = 12.50 %) ── */
@@ -931,9 +958,31 @@ export const InvoiceSchema = z.object({
   status: z.string(),
   pdfUrl: nullableString,
   hostedUrl: nullableString,
-  createdAt: z.string()
+  createdAt: z.string(),
+  /** Paid from the organisation's sales (S298); the card paid (or pays) `paidByCardMinor`. */
+  paidFromSalesMinor: z.number().int().default(0),
+  paidByCardMinor: z.number().int().default(0)
 });
 export type Invoice = z.infer<typeof InvoiceSchema>;
+/** How the plan is paid (S298): from sales first, or always by card. */
+export const PlanFeeCollectionModeSchema = z.enum(['EARNINGS_FIRST', 'CARD']);
+export type PlanFeeCollectionMode = z.infer<typeof PlanFeeCollectionModeSchema>;
+export const PlanFeeCollectionViewSchema = z.object({
+  /** The platform offers the choice; false hides it (every invoice is charged to the card). */
+  available: z.boolean(),
+  mode: PlanFeeCollectionModeSchema,
+  effective: PlanFeeCollectionModeSchema,
+  source: z.enum(['DEFAULT', 'ONBOARDING', 'SELLER', 'STAFF']),
+  platformDefault: PlanFeeCollectionModeSchema,
+  /** A change applies from the invoice of this date (the next renewal). */
+  appliesFromInvoiceAt: nullableString,
+  appliesFromLabel: z.string(),
+  inProgressInvoiceId: nullableString,
+  changedAt: nullableString,
+  /** Owner and finance roles may change it. */
+  canChange: z.boolean()
+});
+export type PlanFeeCollectionView = z.infer<typeof PlanFeeCollectionViewSchema>;
 export const SubscriptionSchema = z.object({
   planCode: z.string(),
   planName: z.string(),
@@ -961,7 +1010,8 @@ export const BillingViewSchema = z.object({
   plans: z.array(PlanSchema),
   paymentMethods: z.array(BillingPaymentMethodSchema),
   invoices: z.array(InvoiceSchema),
-  canManage: z.boolean()
+  canManage: z.boolean(),
+  planFeeCollection: PlanFeeCollectionViewSchema.nullable().default(null)
 });
 export type BillingView = z.infer<typeof BillingViewSchema>;
 export const ChangePlanResultSchema = z.object({ applied: z.enum(['IMMEDIATE_UPGRADE', 'AT_RENEWAL', 'NO_CHANGE']), billing: BillingViewSchema });

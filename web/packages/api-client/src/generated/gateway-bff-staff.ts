@@ -760,7 +760,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Per-seller billing panel: plan, trial, credit balance, grants, invoices, collections from earnings
+         * Per-seller billing panel: plan, trial, credit balance, grants, invoices, how the plan is paid and the invoices paid from earnings
          * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
          */
         get: operations["getStaffBillingPanel"];
@@ -852,7 +852,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/staff/billing/orgs/{orgId}/earnings-collection": {
+    "/v1/staff/billing/orgs/{orgId}/plan-fee-collection": {
         parameters: {
             query?: never;
             header?: never;
@@ -861,10 +861,36 @@ export interface paths {
         };
         get?: never;
         /**
-         * Opt the organisation in or out of collecting plan fees from earnings (409 while the platform flag is off)
-         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         * Override how the organisation pays its plan: from its sales first or always by card (billing:adjust, reason code; S298)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection/override`:
+         *     audited with a billing reason code (OTHER needs a note) and applied from the organisation's next invoice. 409
+         *     `seller.earnings-collection-off` while the kill switch COLLECT_PLAN_FEES_FROM_EARNINGS is off.
          */
-        put: operations["setStaffEarningsCollection"];
+        put: operations["overrideStaffPlanFeeCollection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Platform billing settings: whether sellers may pay their plan from their sales (kill switch) and the default for new sellers (S298)
+         * @description Needs VIEW on Plans & billing. seller `GET /v1/billing/settings`.
+         */
+        get: operations["getStaffBillingSettings"];
+        /**
+         * Set how new sellers pay their plan unless they choose (plans:manage; S298)
+         * @description Needs EDIT on Plans & billing and `plans:manage`. seller `PUT /v1/billing/settings`; existing sellers keep their choice.
+         */
+        put: operations["updateStaffBillingSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -3802,7 +3828,7 @@ export interface components {
             /** @enum {string|null} */
             trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
             trialDaysOverride?: number | null;
-            collectFromEarnings?: boolean;
+            planFeeCollection?: components["schemas"]["StaffPlanFeeCollectionMode"];
         };
         StaffBillingInvoice: {
             id: string;
@@ -3822,18 +3848,108 @@ export interface components {
             invoicePdf?: string | null;
             /** Format: date-time */
             createdAt: string;
+            /**
+             * Format: int64
+             * @description Paid from the organisation's sales (S298): withheld from its earnings and credited to the invoice
+             */
+            paidFromSalesCents: number;
+            /**
+             * Format: int64
+             * @description Paid (or, while open, due) by card or bank: the rest
+             */
+            paidByCardCents: number;
         };
+        /** @description One plan invoice paid (or asked to be paid) from earnings (S298). */
         StaffEarningsCollection: {
             invoiceId: string;
-            /** Format: int64 */
+            invoiceNumber?: string | null;
+            /**
+             * Format: int64
+             * @description Invoice amount when Stripe created it
+             */
+            invoiceAmountCents?: number | null;
+            /**
+             * Format: int64
+             * @description Asked from earnings (the invoice less the credit balance)
+             */
             amountCents: number;
+            /** Format: int64 */
+            withheldCents: number;
+            /** Format: int64 */
+            creditedCents: number;
+            /** Format: int64 */
+            releasedCents: number;
+            /** Format: int64 */
+            paidFromSalesCents: number;
             /** @enum {string} */
-            status: "REQUESTED" | "WITHHELD" | "CREDITED" | "DECLINED" | "FAILED";
+            status: "REQUESTED" | "WITHHELD" | "CREDITED" | "DECLINED" | "MISSED" | "FAILED" | "RELEASED";
             paymentsReference?: string | null;
             stripeBalanceTransactionId?: string | null;
             reason?: string | null;
+            attempts: number;
+            lastError?: string | null;
             /** Format: date-time */
             createdAt?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        /**
+         * @description EARNINGS_FIRST: each plan invoice is taken from pending earnings and the card pays only the rest. CARD: always charged to the card.
+         * @enum {string}
+         */
+        StaffPlanFeeCollectionMode: "EARNINGS_FIRST" | "CARD";
+        StaffPlanFeeCollectionChange: {
+            id: string;
+            previous?: components["schemas"]["StaffPlanFeeCollectionMode"] | null;
+            mode: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /** @enum {string} */
+            source: "ONBOARDING" | "SELLER" | "STAFF";
+            actorId: string;
+            reasonCode?: string | null;
+            note?: string | null;
+            /** Format: date-time */
+            appliesFrom?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        /** @description seller's PlanFeeCollection (S298) */
+        StaffPlanFeeCollection: {
+            orgId: string;
+            /** @description The kill switch is on; the choice is offered and honoured */
+            available: boolean;
+            mode: components["schemas"]["StaffPlanFeeCollectionMode"];
+            effective: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /** @enum {string} */
+            source: "DEFAULT" | "ONBOARDING" | "SELLER" | "STAFF";
+            /** Format: date-time */
+            changedAt?: string | null;
+            changedBy?: string | null;
+            platformDefault: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /**
+             * Format: date-time
+             * @description A change applies from the invoice of this date (the next renewal)
+             */
+            appliesFromInvoiceAt?: string | null;
+            appliesFromLabel: string;
+            /** @description An invoice being collected now keeps the choice it was created with */
+            inProgressInvoiceId?: string | null;
+            history: components["schemas"]["StaffPlanFeeCollectionChange"][];
+        };
+        StaffPlanFeeCollectionRequest: {
+            mode: components["schemas"]["StaffPlanFeeCollectionMode"];
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffBillingSettings: {
+            /** @description The kill switch COLLECT_PLAN_FEES_FROM_EARNINGS (deployment configuration) */
+            earningsCollectionEnabled: boolean;
+            planFeeCollectionDefault: components["schemas"]["StaffPlanFeeCollectionMode"];
+            updatedBy?: string | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        StaffBillingSettingsRequest: {
+            planFeeCollectionDefault: components["schemas"]["StaffPlanFeeCollectionMode"];
         };
         StaffBillingPanel: {
             orgId: string;
@@ -3847,6 +3963,8 @@ export interface components {
             grants: components["schemas"]["StaffBillingGrant"][];
             collections: components["schemas"]["StaffEarningsCollection"][];
             earningsCollectionEnabled: boolean;
+            /** @description How the plan is paid (S298); null before the organisation has a subscription */
+            planFeeCollection?: components["schemas"]["StaffPlanFeeCollection"] | null;
         };
         StaffCreditRequest: {
             /** Format: int64 */
@@ -3862,9 +3980,6 @@ export interface components {
         StaffWaiveRequest: {
             reasonCode: string;
             note?: string | null;
-        };
-        StaffEarningsCollectionRequest: {
-            enabled: boolean;
         };
         /**
          * @description LIVE serves orders; PLANNED is on the roadmap (shown, not serving); OFF is switched off (hidden by default).
@@ -6982,7 +7097,7 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
-    setStaffEarningsCollection: {
+    overrideStaffPlanFeeCollection: {
         parameters: {
             query?: never;
             header?: never;
@@ -6993,7 +7108,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StaffEarningsCollectionRequest"];
+                "application/json": components["schemas"]["StaffPlanFeeCollectionRequest"];
             };
         };
         responses: {
@@ -7003,13 +7118,66 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StaffBillingPanel"];
+                    "application/json": components["schemas"]["StaffPlanFeeCollection"];
                 };
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffBillingSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffBillingSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffBillingSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];

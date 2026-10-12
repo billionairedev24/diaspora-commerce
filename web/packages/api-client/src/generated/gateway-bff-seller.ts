@@ -953,7 +953,7 @@ export interface paths {
         };
         /**
          * Balance (available, on hold per order, on the way) and payout history
-         * @description payments `GET /v1/payouts/balance` (incl. payoutsPaused, payoutsPausedReason, providerFeesMinor) + `GET /v1/payouts/requests?orgId=` (history is omitted with `historyAvailable=false` when the member may not read it).
+         * @description payments `GET /v1/payouts/balance` (incl. payoutsPaused, payoutsPausedReason, providerFeesMinor, planFeesMinor) + `GET /v1/payouts/requests?orgId=` (history is omitted with `historyAvailable=false` when the member may not read it) + `GET /v1/orgs/{orgId}/plan-fee-withholdings` (plan fees paid from sales and the transfers they were deducted from, S298; empty when it can't be read).
          */
         get: operations["getPayouts"];
         put?: never;
@@ -1002,10 +1002,32 @@ export interface paths {
         };
         /**
          * Plan, cadence, next charge, credit balance, payment methods, invoices and the plans this organisation may choose
-         * @description seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/orgs/{orgId}/billing/plans` (public plans, invite-only plans it was invited to and its current plan; AfroTransact's own catalogue, S292).
+         * @description seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices`, `GET /v1/orgs/{orgId}/billing/plans` (public plans, invite-only plans it was invited to and its current plan; AfroTransact's own catalogue, S292) and `GET /v1/orgs/{orgId}/billing/plan-fee-collection` (how the plan is paid, S298; null when it can't be read).
          */
         get: operations["getBilling"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/plan-fee-collection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Pay the plan from sales first (EARNINGS_FIRST) or always by card (CARD) — owner and finance only (S298)
+         * @description seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection`. Applies from the next invoice (`appliesFromInvoiceAt`);
+         *     an invoice being collected now keeps the choice it was created with. 403 for other roles, 409
+         *     `seller.earnings-collection-off` while the platform's kill switch is off.
+         */
+        put: operations["setPlanFeeCollection"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1974,6 +1996,11 @@ export interface components {
                 cardExpMonth: number | null;
                 cardExpYear: number | null;
                 firstCharge: components["schemas"]["OnboardingFirstCharge"] | null;
+                /** @description How the applicant chose to pay the plan (S298); null keeps the platform default */
+                planFeeCollection: components["schemas"]["PlanFeeCollectionMode"] | null;
+                /** @description The platform offers paying the plan from sales (kill switch on); false hides the choice */
+                planFeeCollectionAvailable: boolean;
+                planFeeCollectionDefault: components["schemas"]["PlanFeeCollectionMode"];
             };
             compliance: {
                 categories: string[];
@@ -2057,6 +2084,7 @@ export interface components {
             cardExpYear?: number;
             /** @description A trial campaign's promo code (S295); 422 promoCode when it isn't valid for this plan */
             promoCode?: string;
+            planFeeCollection?: components["schemas"]["PlanFeeCollectionMode"];
         };
         OnboardingFoodPermitInput: {
             permitType?: components["schemas"]["OnboardingFoodPermitType"];
@@ -2734,6 +2762,8 @@ export interface components {
             paidMinor: number;
             /** @description Provider fees (late cancellations) debited from or reserved in the balance */
             providerFeesMinor: number;
+            /** @description Plan fees paid from sales (S298) not yet deducted from a transfer: they come out of the amounts on hold. Negative when a released fee is paid back with the next transfer */
+            planFeesMinor: number;
             /** @description Compliance hold: payout requests fail until it is lifted; the balance keeps accruing */
             payoutsPaused: boolean;
             payoutsPausedReason: ("AUTO_PAST_DUE" | "MANUAL" | "DEAUTHORIZED" | "CHARGES_DISABLED") | null;
@@ -2761,6 +2791,34 @@ export interface components {
             balance: components["schemas"]["PayoutBalance"];
             payouts: components["schemas"]["Payout"][];
             historyAvailable: boolean;
+            /** @description Plan invoices paid from sales, newest first (S298) */
+            planFeeDeductions: components["schemas"]["PlanFeeDeduction"][];
+        };
+        /** @description A plan invoice paid from sales: "Plan fee (invoice …)", deducted from the next transfers (S298) */
+        PlanFeeDeduction: {
+            invoiceId: string;
+            invoiceNumber: string | null;
+            /** @description Plan fee (invoice …) */
+            label: string;
+            /** @enum {string} */
+            status: "WITHHELD" | "DECLINED" | "RELEASED";
+            requestedMinor: number;
+            /** @description Paid from sales; the card paid requested − withheld */
+            withheldMinor: number;
+            /** @description Given back (voided or refunded invoice) */
+            releasedMinor: number;
+            /** @description Still to deduct from the next transfers (negative while owed back) */
+            outstandingMinor: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** @description The settlements it was deducted from (negative amounts were paid back with them) */
+            transfers: {
+                orderId: string;
+                amountMinor: number;
+                /** Format: date-time */
+                at: string;
+                label: string;
+            }[];
         };
         PayoutRequest: {
             amountMinor?: number;
@@ -2818,6 +2876,40 @@ export interface components {
             hostedUrl: string | null;
             /** Format: date-time */
             createdAt: string;
+            /** @description Paid from the organisation's sales (S298): withheld from its earnings and credited to the invoice */
+            paidFromSalesMinor: number;
+            /** @description Paid (or, while open, due) by card or bank: the rest */
+            paidByCardMinor: number;
+        };
+        /**
+         * @description EARNINGS_FIRST: "Pay your plan from your sales" — each invoice is taken from pending earnings and the card pays only what they don't cover. CARD: "Charge my card" — plan fees stay a separate card expense.
+         * @enum {string}
+         */
+        PlanFeeCollectionMode: "EARNINGS_FIRST" | "CARD";
+        PlanFeeCollectionInput: {
+            mode: components["schemas"]["PlanFeeCollectionMode"];
+        };
+        /** @description How the organisation pays its plan (S298) */
+        PlanFeeCollectionView: {
+            /** @description The platform offers the choice; false hides it and every invoice is charged to the card */
+            available: boolean;
+            mode: components["schemas"]["PlanFeeCollectionMode"];
+            effective: components["schemas"]["PlanFeeCollectionMode"];
+            /** @enum {string} */
+            source: "DEFAULT" | "ONBOARDING" | "SELLER" | "STAFF";
+            platformDefault: components["schemas"]["PlanFeeCollectionMode"];
+            /**
+             * Format: date-time
+             * @description A change applies from the invoice of this date (the next renewal)
+             */
+            appliesFromInvoiceAt: string | null;
+            appliesFromLabel: string;
+            /** @description An invoice being paid from sales right now keeps the earlier choice */
+            inProgressInvoiceId: string | null;
+            /** Format: date-time */
+            changedAt: string | null;
+            /** @description Owner and finance roles may change it */
+            canChange: boolean;
         };
         Subscription: {
             planCode: string;
@@ -2939,6 +3031,8 @@ export interface components {
             makeDefault?: boolean;
         };
         BillingView: {
+            /** @description How the plan is paid (S298); null when it can't be read */
+            planFeeCollection: components["schemas"]["PlanFeeCollectionView"] | null;
             subscription: components["schemas"]["Subscription"];
             plans: components["schemas"]["Plan"][];
             paymentMethods: components["schemas"]["BillingPaymentMethod"][];
@@ -5050,6 +5144,37 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setPlanFeeCollection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanFeeCollectionInput"];
+            };
+        };
+        responses: {
+            /** @description The choice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanFeeCollectionView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

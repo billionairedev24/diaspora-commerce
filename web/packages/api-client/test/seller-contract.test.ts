@@ -324,6 +324,24 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     await expect(finance.createBillingSetupIntent()).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
   });
 
+  it('lets owner and finance choose how the plan is paid and shows what sales paid (S298)', async () => {
+    const api = client();
+    const billing = await api.getBilling();
+    expect(billing.planFeeCollection).toMatchObject({ available: true, mode: 'EARNINGS_FIRST', canChange: true });
+    expect(billing.planFeeCollection?.appliesFromLabel).toMatch(/^Applies from your next invoice/);
+    expect(billing.invoices[0]).toMatchObject({ paidFromSalesMinor: 9000, paidByCardMinor: 2115 });
+    const finance = client(`${MOCK_ROLE_COOKIE}=seller.finance`);
+    expect(await finance.setPlanFeeCollection('CARD')).toMatchObject({ mode: 'CARD', source: 'SELLER' });
+    expect((await api.getBilling()).planFeeCollection?.mode).toBe('CARD');
+    const catalog = client(`${MOCK_ROLE_COOKIE}=seller.catalog`);
+    await expect(catalog.setPlanFeeCollection('EARNINGS_FIRST')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    getSellerDb().planFeeCollectionAvailable = false;
+    await expect(api.setPlanFeeCollection('EARNINGS_FIRST')).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
+    const payouts = await api.getPayouts();
+    expect(payouts.planFeeDeductions[0]).toMatchObject({ label: 'Plan fee (invoice AT-1003)', withheldMinor: 9000 });
+    expect(payouts.planFeeDeductions[0]?.transfers[0]?.label).toMatch(/deducted from order/);
+  });
+
   it('takes a trial campaign promo code on the Plan step (S295)', async () => {
     const api = client();
     getSellerDb().orgs = [];
@@ -333,5 +351,9 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     );
     const saved = await api.saveOnboardingPlan({ planCode: 'seller_growth', cadence: 'MONTHLY', promoCode: 'grow60' });
     expect(saved.form.plan?.firstCharge?.sentence).toMatch(/^Free for 60 days/);
+    // S298: the Plan step offers paying the plan from sales; the choice is kept with the plan.
+    expect(saved.form.plan).toMatchObject({ planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'EARNINGS_FIRST' });
+    const card = await api.saveOnboardingPlan({ planCode: 'seller_growth', cadence: 'MONTHLY', planFeeCollection: 'CARD' });
+    expect(card.form.plan?.planFeeCollection).toBe('CARD');
   });
 });

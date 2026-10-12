@@ -65,7 +65,8 @@ export function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
     },
     owners: [],
     payouts: { ...NO_BANK },
-    plan: { planCode: null, planName: null, cadence: null, paymentMethodKind: null, cardBrand: null, cardLast4: null, cardExpMonth: null, cardExpYear: null, firstCharge: null },
+    plan: { planCode: null, planName: null, cadence: null, paymentMethodKind: null, cardBrand: null, cardLast4: null, cardExpMonth: null, cardExpYear: null, firstCharge: null,
+      planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'EARNINGS_FIRST' },
     compliance: { categories: [], foodPermit: null, beautyLabellingConfirmed: null, services: [], insuranceDocumentAssetId: null, agreementsAccepted: null, w9Certified: null, w9SignerName: null },
     documents: [],
     prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],
@@ -354,11 +355,17 @@ export function savePlan(app: MockApplication, kind: OrgKind, p: OnboardingPlanI
   const amount = price?.totalMinor ?? 0;
   const dollars = `$${(amount / 100).toFixed(2)}`;
   const sentence = amount === 0 ? 'No subscription fee.' : trialDays ? `Free for ${trialDays} days. First charge of ${dollars} on ${day}.` : `First charge of ${dollars} on approval.`;
+  // The same plan saved without a card keeps the card (only how the plan is paid changed, S298).
+  const prev = app.form.plan;
+  const keep = !p.stripePaymentMethodId && prev.planCode === plan.code && prev.cadence === p.cadence && !!prev.cardLast4;
   update(app, {
     ...app.form,
     plan: {
-      planCode: plan.code, planName: plan.name, cadence: p.cadence, paymentMethodKind: p.paymentMethodKind ?? null, cardBrand: p.cardBrand ?? null, cardLast4: p.cardLast4 ?? null,
-      cardExpMonth: p.cardExpMonth ?? null, cardExpYear: p.cardExpYear ?? null, firstCharge: { chargeOn: trialEnd.toISOString().slice(0, 10), amountCents: amount, sentence }
+      planCode: plan.code, planName: plan.name, cadence: p.cadence,
+      paymentMethodKind: keep ? prev.paymentMethodKind : (p.paymentMethodKind ?? null), cardBrand: keep ? prev.cardBrand : (p.cardBrand ?? null),
+      cardLast4: keep ? prev.cardLast4 : (p.cardLast4 ?? null), cardExpMonth: keep ? prev.cardExpMonth : (p.cardExpMonth ?? null),
+      cardExpYear: keep ? prev.cardExpYear : (p.cardExpYear ?? null), firstCharge: { chargeOn: trialEnd.toISOString().slice(0, 10), amountCents: amount, sentence },
+      planFeeCollection: p.planFeeCollection ?? null, planFeeCollectionAvailable: prev.planFeeCollectionAvailable, planFeeCollectionDefault: prev.planFeeCollectionDefault
     }
   });
   return null;

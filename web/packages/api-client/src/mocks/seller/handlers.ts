@@ -28,6 +28,7 @@ import {
   type OrgSummary,
   ParcelSchema,
   PickupWindowSchema,
+  type PlanFeeCollectionView,
   ProductDraftSchema,
   PublicPageInputSchema,
   SellerAddressSchema,
@@ -458,6 +459,19 @@ const LabelBody = RatesBody.extend({ carrier: CarrierSchema, service: z.string()
 const ActiveBody = z.object({ active: z.boolean() });
 const PayoutBody = z.object({ amountMinor: z.number().int().optional(), all: z.boolean().optional() });
 const PlanBody = z.object({ planCode: z.string().min(1, 'Choose a plan'), cadence: CadenceSchema });
+const PlanFeeBody = z.object({ mode: z.enum(['EARNINGS_FIRST', 'CARD'], 'Choose EARNINGS_FIRST or CARD') });
+
+/** How the plan is paid (S298); owner and finance may change it while the platform offers it. */
+function planFeeView(ctx: { db: MockSellerDb; org: MockOrg; role: string; now: Date }): PlanFeeCollectionView {
+  const mode = ctx.db.planFeeCollection[ctx.org.kind];
+  const sub = ctx.db.subscription[ctx.org.kind];
+  const at = sub.trialEndsAt ?? sub.currentPeriodEnd;
+  const day = at ? new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : null;
+  const available = ctx.db.planFeeCollectionAvailable;
+  return { available, mode, effective: available ? mode : 'CARD', source: 'SELLER', platformDefault: 'EARNINGS_FIRST', appliesFromInvoiceAt: at,
+    appliesFromLabel: day ? `Applies from your next invoice, on ${day}` : 'Applies from your first paid invoice', inProgressInvoiceId: null,
+    changedAt: null, canChange: available && (ctx.role.endsWith('.owner') || ctx.role.endsWith('.finance')) };
+}
 const AddPaymentMethodBody = z.object({
   stripePaymentMethodId: z.string().regex(/^pm_/, 'Expected a Stripe payment method id (pm_…)'), kind: z.enum(['CARD', 'US_BANK_ACCOUNT']), brand: z.string().optional(),
   last4: z.string().regex(/^[0-9]{4}$/, 'Four digits'), expMonth: z.number().int().optional(), expYear: z.number().int().optional(), bankName: z.string().optional(),
@@ -616,7 +630,8 @@ const OwnersBody = z.object({
 const OnboardingPlanBody = z.object({
   planCode: z.string(), cadence: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']), paymentMethodKind: z.enum(['CARD']).optional(), stripePaymentMethodId: z.string().optional(),
   cardBrand: z.string().optional(), cardLast4: z.string().optional(), cardExpMonth: z.number().int().optional(), cardExpYear: z.number().int().optional(),
-  promoCode: z.string().optional()
+  promoCode: z.string().optional(),
+  planFeeCollection: z.enum(['EARNINGS_FIRST', 'CARD'], 'Choose EARNINGS_FIRST or CARD').optional()
 });
 const ComplianceBody = z.object({
   categories: z.array(z.string()).optional(),
@@ -1139,9 +1154,11 @@ export const sellerHandlers = [
           payoutsPaused: paused(ctx),
           payoutsPausedReason: paused(ctx) ? ('AUTO_PAST_DUE' as const) : null,
           payoutsPausedMessage: paused(ctx) ? 'Stripe needs overdue information. Payouts resume automatically once Account health is resolved.' : null,
-          holds: [{ orderId: 'AT-2026-400160', amountMinor: 31225, releaseAt: new Date(ctx.now.getTime() + 3 * 86_400_000).toISOString().slice(0, 10) }, { orderId: 'AT-2026-400197', amountMinor: 21500, releaseAt: null }] },
+          holds: [{ orderId: 'AT-2026-400160', amountMinor: 31225, releaseAt: new Date(ctx.now.getTime() + 3 * 86_400_000).toISOString().slice(0, 10) }, { orderId: 'AT-2026-400197', amountMinor: 21500, releaseAt: null }],
+          planFeesMinor: ctx.db.planFeeDeductions.reduce((a, d) => a + d.outstandingMinor, 0) },
         payouts: ctx.db.payouts,
-        historyAvailable: true
+        historyAvailable: true,
+        planFeeDeductions: ctx.org.kind === 'SELLER' ? ctx.db.planFeeDeductions : []
       };
     })
   ),
@@ -1166,7 +1183,19 @@ export const sellerHandlers = [
     route((ctx) => {
       require(ctx, 'billing', 'VIEW');
       const sub = ctx.db.subscription[ctx.org.kind];
-      return { subscription: sub, plans: plansFor(ctx.org.kind, sub.planCode), paymentMethods: ctx.db.paymentMethods[ctx.org.kind], invoices: ctx.db.invoices, canManage: ctx.role.endsWith('.owner') };
+      return { subscription: sub, plans: plansFor(ctx.org.kind, sub.planCode), paymentMethods: ctx.db.paymentMethods[ctx.org.kind], invoices: ctx.db.invoices,
+        canManage: ctx.role.endsWith('.owner'), planFeeCollection: planFeeView(ctx) };
+    })
+  ),
+  http.put(
+    `${W}/billing/plan-fee-collection`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, PlanFeeBody);
+      require(ctx, 'billing', 'VIEW');
+      if (!ctx.role.endsWith('.owner') && !ctx.role.endsWith('.finance')) throw forbidden('Only the owner or a finance member can change how the plan is paid.');
+      if (!ctx.db.planFeeCollectionAvailable) throw conflict('Paying plans from sales is switched off on this platform.');
+      ctx.db.planFeeCollection[ctx.org.kind] = b.mode;
+      return { ...planFeeView(ctx), source: 'SELLER' as const, changedAt: ctx.now.toISOString() };
     })
   ),
   http.post(
@@ -1189,7 +1218,8 @@ export const sellerHandlers = [
       } else {
         sub.pendingChange = { planCode: plan.code, planName: plan.name, cadence: b.cadence, effectiveAt: sub.currentPeriodEnd ?? ctx.now.toISOString() };
       }
-      return { applied, billing: { subscription: sub, plans: plansFor(ctx.org.kind, sub.planCode), paymentMethods: ctx.db.paymentMethods[ctx.org.kind], invoices: ctx.db.invoices, canManage: true } };
+      return { applied, billing: { subscription: sub, plans: plansFor(ctx.org.kind, sub.planCode), paymentMethods: ctx.db.paymentMethods[ctx.org.kind], invoices: ctx.db.invoices,
+        canManage: true, planFeeCollection: planFeeView(ctx) } };
     })
   ),
   http.get(

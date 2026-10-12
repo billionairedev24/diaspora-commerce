@@ -33,9 +33,11 @@ import {
   type StaffBillingOrgSearch,
   type StaffBillingPanel,
   type StaffBillingReasonCode,
+  type StaffBillingSettings,
   type StaffCreatePlanInput,
   type StaffDashboard,
   type StaffPlan,
+  type StaffPlanFeeCollection,
   type StaffPlanMigrationPreview,
   type StaffPlanMigrationResult,
   type StaffPlanPrices,
@@ -104,6 +106,9 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<StaffBillingReasonCode>().toExtend<S['StaffBillingReasonCode']>();
     expectTypeOf<StaffBillingOrgSearch>().toExtend<S['StaffBillingOrgSearch']>();
     expectTypeOf<StaffBillingPanel>().toExtend<S['StaffBillingPanel']>();
+    // How sellers pay their plan (S298)
+    expectTypeOf<StaffPlanFeeCollection>().toExtend<S['StaffPlanFeeCollection']>();
+    expectTypeOf<StaffBillingSettings>().toExtend<S['StaffBillingSettings']>();
   });
 
   it('generated file carries the do-not-edit banner', () => {
@@ -434,8 +439,22 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(await finance.waiveInvoice(org, open.id, { reasonCode: 'BILLING_ERROR' }, 'k-3')).toMatchObject({ type: 'WAIVE_INVOICE' });
     expect((await finance.grants({ orgId: org, type: 'CREDIT', page: 0, size: 25 })).total).toBe(1);
 
+    // How the seller pays its plan (S298): a staff override needs a reason; the default for new sellers.
+    expect(panel.planFeeCollection).toMatchObject({ mode: 'EARNINGS_FIRST', source: 'DEFAULT', available: true });
+    expect(panel.invoices.find((i) => i.paidFromSalesCents > 0)).toMatchObject({ paidFromSalesCents: 2500, paidByCardCents: 1400 });
+    expect(panel.collections[0]).toMatchObject({ status: 'CREDITED', withheldCents: 2500 });
+    await expect(finance.overridePlanFeeCollection(org, 'CARD', { reasonCode: '' })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.reasonCode);
+    const overridden = await finance.overridePlanFeeCollection(org, 'CARD', { reasonCode: 'SELLER_REQUEST', note: 'Books plan fees on the card' });
+    expect(overridden).toMatchObject({ mode: 'CARD', source: 'STAFF' });
+    expect(overridden.history[0]).toMatchObject({ previous: 'EARNINGS_FIRST', reasonCode: 'SELLER_REQUEST', note: 'Books plan fees on the card' });
+    expect(await finance.billingSettings()).toMatchObject({ earningsCollectionEnabled: true, planFeeCollectionDefault: 'EARNINGS_FIRST' });
+    expect(await finance.updateBillingSettings('CARD')).toMatchObject({ planFeeCollectionDefault: 'CARD' });
+
     const auditor = client('platform.auditor').plans;
     await expect(auditor.panel(org)).resolves.toMatchObject({ orgId: org });
+    await expect(auditor.billingSettings()).resolves.toMatchObject({ planFeeCollectionDefault: 'CARD' });
+    await expect(auditor.updateBillingSettings('EARNINGS_FIRST')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    await expect(auditor.overridePlanFeeCollection(org, 'EARNINGS_FIRST', { reasonCode: 'GOODWILL' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
     await expect(auditor.freeDays(org, 5, { reasonCode: 'GOODWILL' }, 'k-4')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
     await expect(auditor.publish('seller_pro')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
   });

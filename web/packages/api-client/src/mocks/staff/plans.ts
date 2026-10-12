@@ -12,7 +12,12 @@ import {
   type StaffBillingGrant,
   type StaffBillingInvoice,
   type StaffBillingPanel,
+  type StaffBillingSettings,
+  type StaffEarningsCollection,
   type StaffPlan,
+  type StaffPlanFeeCollection,
+  type StaffPlanFeeCollectionChange,
+  type StaffPlanFeeMode,
   type StaffPlanSyncLine,
   type StaffRewardPreviewRow,
   type StaffRewardRule,
@@ -33,7 +38,11 @@ interface MockBillingOrg {
   periodEnd: string;
   creditBalanceCents: number;
   trialDaysOverride: number | null;
-  collectFromEarnings: boolean;
+  /** How it pays its plan (S298), who chose it and the change log; invoices paid from earnings. */
+  planFeeCollection: StaffPlanFeeMode;
+  planFeeSource: StaffPlanFeeCollection['source'];
+  planFeeHistory: StaffPlanFeeCollectionChange[];
+  collections: StaffEarningsCollection[];
   /** Reward metrics the preview evaluates. */
   facts: Record<RewardMetric, number>;
   invoices: StaffBillingInvoice[];
@@ -47,6 +56,8 @@ export interface MockPlansState {
   orgs: MockBillingOrg[];
   /** Idempotency-Key → grant id. */
   keys: Record<string, string>;
+  /** Plans & billing › Settings (S298): the kill switch (deployment) and the default for new sellers. */
+  settings: StaffBillingSettings;
   seq: number;
 }
 
@@ -61,6 +72,7 @@ export const REASON_CODES = [
   { code: 'PROMOTION', label: 'Promotion or partnership agreement' },
   { code: 'RETENTION', label: 'Retention offer' },
   { code: 'ONBOARDING_DELAY', label: 'Onboarding or verification delay' },
+  { code: 'SELLER_REQUEST', label: 'Requested by the seller' },
   { code: 'OTHER', label: 'Other (see note)' }
 ];
 
@@ -98,13 +110,21 @@ const facts = (gross: number, listings: number, orders: number, bookings: number
 
 export function seedPlans(now: Date): MockPlansState {
   const iso = (d: number) => new Date(now.getTime() + d * DAY).toISOString();
-  const invoice = (id: string, cents: number, status: string, daysAgo: number): StaffBillingInvoice => ({
-    id, number: `AT-${id.slice(3).toUpperCase()}`, periodStart: iso(-daysAgo - 30), periodEnd: iso(-daysAgo), amountDueCents: cents, amountPaidCents: status === 'paid' ? cents : 0,
-    currency: 'usd', status, billingReason: 'subscription_cycle', hostedInvoiceUrl: `https://invoices.afrotransact.dev/${id}`, invoicePdf: `https://invoices.afrotransact.dev/${id}.pdf`, createdAt: iso(-daysAgo)
+  const invoice = (id: string, cents: number, status: string, daysAgo: number, fromSales = 0): StaffBillingInvoice => ({
+    id, number: `AT-${id.slice(3).toUpperCase()}`, periodStart: iso(-daysAgo - 30), periodEnd: iso(-daysAgo), amountDueCents: cents - fromSales,
+    amountPaidCents: status === 'paid' ? cents - fromSales : 0, currency: 'usd', status, billingReason: 'subscription_cycle', hostedInvoiceUrl: `https://invoices.afrotransact.dev/${id}`,
+    invoicePdf: `https://invoices.afrotransact.dev/${id}.pdf`, createdAt: iso(-daysAgo), paidFromSalesCents: fromSales, paidByCardCents: cents - fromSales
   });
   const org = (orgId: string, name: string, kind: 'SELLER' | 'PROVIDER', planCode: string, subStatus: string, f: Record<RewardMetric, number>, invoices: StaffBillingInvoice[]): MockBillingOrg => ({
     orgId, name, kind, status: 'APPROVED', planCode, cadence: 'MONTHLY', subStatus, trialEndsAt: subStatus === 'trialing' ? iso(12) : null, periodEnd: iso(subStatus === 'trialing' ? 12 : 20),
-    creditBalanceCents: 0, trialDaysOverride: null, collectFromEarnings: false, facts: f, invoices
+    creditBalanceCents: 0, trialDaysOverride: null, planFeeCollection: kind === 'SELLER' ? 'EARNINGS_FIRST' : 'CARD', planFeeSource: 'DEFAULT', planFeeHistory: [],
+    collections: invoices.filter((i) => i.paidFromSalesCents > 0).map((i) => ({
+      invoiceId: i.id, invoiceNumber: i.number, invoiceAmountCents: i.paidFromSalesCents + i.paidByCardCents, amountCents: i.paidFromSalesCents + i.paidByCardCents,
+      withheldCents: i.paidFromSalesCents, creditedCents: i.paidFromSalesCents, releasedCents: 0, paidFromSalesCents: i.paidFromSalesCents, status: 'CREDITED' as const,
+      paymentsReference: `wh_${i.id}`, stripeBalanceTransactionId: `cbtxn_${i.id}`, reason: 'Only part was available; the card paid the rest', attempts: 1, lastError: null,
+      createdAt: i.createdAt, updatedAt: i.createdAt
+    })),
+    facts: f, invoices
   });
   return {
     plans: SEED_PLANS.map((p, i) => seedPlan(p, i, now)),
@@ -125,11 +145,12 @@ export function seedPlans(now: Date): MockPlansState {
       attempts: 1, lastError: null, createdAt: iso(-3), appliedAt: iso(-3)
     }],
     orgs: [
-      org('org-ades-kitchen', 'Ade’s Kitchen', 'SELLER', 'seller_growth', 'active', facts(104500, 42, 61, 0, 40), [invoice('in_ades1', 3900, 'paid', 10), invoice('in_ades2', 3900, 'open', 1)]),
+      org('org-ades-kitchen', 'Ade’s Kitchen', 'SELLER', 'seller_growth', 'active', facts(104500, 42, 61, 0, 40), [invoice('in_ades1', 3900, 'paid', 10, 2500), invoice('in_ades2', 3900, 'open', 1)]),
       org('org-lagos-textile', 'Lagos Textile Hub', 'SELLER', 'seller_pro', 'active', facts(64000, 18, 22, 0, 75), [invoice('in_lth1', 12900, 'paid', 5)]),
       org('org-braids-by-bisi', 'Braids by Bisi', 'PROVIDER', 'provider_studio', 'trialing', facts(0, 0, 0, 3, 18), [])
     ],
     keys: {},
+    settings: { earningsCollectionEnabled: true, planFeeCollectionDefault: 'EARNINGS_FIRST', updatedBy: 'system', updatedAt: iso(-60) },
     seq: 1
   };
 }
@@ -206,12 +227,24 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
         orgId: o.orgId, planCode: o.planCode, planName: plan?.name ?? o.planCode, cadence: o.cadence, status: o.subStatus, trialEndsAt: o.trialEndsAt, currentPeriodEnd: o.periodEnd,
         nextChargeAt: o.periodEnd, nextChargeCents: cents, nextChargeLabel: `${usd(cents)} on ${new Date(o.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
         cancelAtPeriodEnd: false, dunning: null, failedPaymentAttempts: 0, planVersion: plan?.currentVersion ?? 1, creditBalanceCents: o.creditBalanceCents,
-        trialSource: o.trialDaysOverride ? 'OVERRIDE' : 'PLAN', trialDaysOverride: o.trialDaysOverride, collectFromEarnings: o.collectFromEarnings
+        trialSource: o.trialDaysOverride ? 'OVERRIDE' : 'PLAN', trialDaysOverride: o.trialDaysOverride, planFeeCollection: o.planFeeCollection
       },
       invoices: o.invoices,
       grants: st(ctx).grants.filter((g) => g.orgId === o.orgId),
-      collections: [],
-      earningsCollectionEnabled: false
+      collections: o.collections,
+      earningsCollectionEnabled: st(ctx).settings.earningsCollectionEnabled,
+      planFeeCollection: planFees(ctx, o)
+    };
+  };
+
+  /** How the organisation pays its plan (S298), as the seller service answers it. */
+  const planFees = (ctx: PreorderCtx, o: MockBillingOrg): StaffPlanFeeCollection => {
+    const on = st(ctx).settings.earningsCollectionEnabled;
+    const day = new Date(o.trialEndsAt ?? o.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    return {
+      orgId: o.orgId, available: on, mode: o.planFeeCollection, effective: on ? o.planFeeCollection : 'CARD', source: o.planFeeSource,
+      changedAt: o.planFeeHistory[0]?.createdAt ?? null, changedBy: o.planFeeHistory[0]?.actorId ?? null, platformDefault: st(ctx).settings.planFeeCollectionDefault,
+      appliesFromInvoiceAt: o.trialEndsAt ?? o.periodEnd, appliesFromLabel: `Applies from your next invoice, on ${day}`, inProgressInvoiceId: null, history: o.planFeeHistory
     };
   };
 
@@ -372,7 +405,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const b = await json(ctx.request, CampaignBody);
       if (b.expectedVersion != null && b.expectedVersion !== c.version) throw problem(409, 'CONFLICT', 'Changed by someone else', 'Refresh to see the latest.');
       Object.assign(c, { name: b.name, promoCode: b.promoCode?.trim().toUpperCase() || null, trialDays: b.trialDays, signupFrom: b.signupFrom ?? null, signupTo: b.signupTo ?? null,
-        kind: b.kind ?? null, eligiblePlans: b.eligiblePlans, maxRedemptions: b.maxRedemptions ?? null, updatedBy: ctx.action.actor, updatedAt: ctx.now.toISOString(), version: c.version + 1 });
+        kind: b.kind ?? null, eligiblePlans: b.eligiblePlans, maxRedemptions: b.maxRedemptions ?? null, updatedBy: ctx.action.actorId, updatedAt: ctx.now.toISOString(), version: c.version + 1 });
       return c;
     })),
     http.post(`${B}/trial-campaigns/:id/status`, route(async (ctx, p) => {
@@ -476,9 +509,30 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       if (inv.status !== 'open') throw problem(409, 'seller.invoice-not-open', 'Invoice not open', 'Only an open invoice can be waived.');
       return adjust(ctx, o, 'WAIVE_INVOICE', { invoiceId: inv.id }, `Invoice ${inv.number ?? inv.id} waived`, () => { inv.status = 'void'; });
     }, 201)),
-    http.put(`${B}/orgs/:orgId/earnings-collection`, route((ctx) => {
+    http.put(`${B}/orgs/:orgId/plan-fee-collection`, route(async (ctx, p) => {
       need(ctx, 'billing:adjust');
-      throw problem(409, 'seller.earnings-collection-off', 'Collection from earnings is off', 'Collecting plan fees from earnings is switched off on this platform.');
+      const o = orgOf(ctx, p.orgId);
+      const b = await json(ctx.request.clone(), z.object({
+        mode: z.enum(['EARNINGS_FIRST', 'CARD'], 'EARNINGS_FIRST or CARD'), reasonCode: z.string().nullish(), note: z.string().max(500).nullish()
+      }));
+      if (!b.reasonCode || !REASON_CODES.some((r) => r.code === b.reasonCode)) throw invalid({ reasonCode: 'Choose a reason' });
+      if (b.reasonCode === 'OTHER' && !b.note?.trim()) throw invalid({ note: 'Explain the reason' });
+      if (!st(ctx).settings.earningsCollectionEnabled) {
+        throw problem(409, 'seller.earnings-collection-off', 'Paying plans from sales is off', 'Paying plans from sales is switched off on this platform; plan fees are charged to the card.');
+      }
+      o.planFeeHistory.unshift({ id: id(ctx, 'pfc'), previous: o.planFeeCollection, mode: b.mode, source: 'STAFF', actorId: ctx.action.actorId, reasonCode: b.reasonCode,
+        note: b.note?.trim() || null, appliesFrom: o.trialEndsAt ?? o.periodEnd, createdAt: ctx.now.toISOString() });
+      Object.assign(o, { planFeeCollection: b.mode, planFeeSource: 'STAFF' });
+      audit(ctx, 'billing.plan-fee-collection', o.orgId, `${o.name}: plan fees ${b.mode === 'CARD' ? 'charged to the card' : 'paid from sales first'} (${b.reasonCode})`);
+      return planFees(ctx, o);
+    })),
+    http.get(`${B}/settings`, route((ctx) => { view(ctx); return st(ctx).settings; })),
+    http.put(`${B}/settings`, route(async (ctx) => {
+      need(ctx, 'plans:manage');
+      const b = await json(ctx.request.clone(), z.object({ planFeeCollectionDefault: z.enum(['EARNINGS_FIRST', 'CARD'], 'EARNINGS_FIRST or CARD') }));
+      Object.assign(st(ctx).settings, { planFeeCollectionDefault: b.planFeeCollectionDefault, updatedBy: ctx.action.actorId, updatedAt: ctx.now.toISOString() });
+      audit(ctx, 'billing.settings', 'plan-fee-collection-default', `New sellers: plan fees ${b.planFeeCollectionDefault === 'CARD' ? 'charged to the card' : 'paid from sales first'}`);
+      return st(ctx).settings;
     }))
   ];
 }

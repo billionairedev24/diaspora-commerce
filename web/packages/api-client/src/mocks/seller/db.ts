@@ -16,6 +16,8 @@ import {
   type OrgStatus,
   type Payout,
   type Plan,
+  type PlanFeeCollectionMode,
+  type PlanFeeDeduction,
   type ProductTypeSchema,
   type PublicPage,
   type SellerOffer,
@@ -53,6 +55,13 @@ export interface MockSellerDb {
   subscription: Record<OrgKind, Subscription>;
   paymentMethods: Record<OrgKind, BillingPaymentMethod[]>;
   invoices: Invoice[];
+  /**
+   * How each organisation pays its plan (S298): from sales first or by card; `planFeeCollectionAvailable` is the
+   * platform kill switch; `planFeeDeductions` the "Plan fee (invoice …)" lines of payouts.
+   */
+  planFeeCollection: Record<OrgKind, PlanFeeCollectionMode>;
+  planFeeCollectionAvailable: boolean;
+  planFeeDeductions: PlanFeeDeduction[];
   /** Rewards the organisation can earn and the ones it received (S296). */
   rewards: Record<OrgKind, SellerRewardsView>;
   team: Record<string, TeamMember[]>;
@@ -427,11 +436,19 @@ function freshDb(now: Date): MockSellerDb {
         { id: 'pm_p2', kind: 'card', brand: 'mastercard', last4: '5454', expMonth: 3, expYear: 2027, bankName: null, accountType: null, verified: true, receivesPayouts: false, isDefault: false, label: 'Mastercard ending in 5454' }
       ]
     },
+    // The latest invoice was paid mostly from sales (S298): $90.00 from sales, the card the remaining $21.15.
     invoices: [0, 1, 2].map((i) => ({
       id: `in_${3 - i}`, number: `AT-${String(1003 - i)}`, periodStart: iso(new Date(now.getTime() - (i + 1) * 92 * DAY)), periodEnd: iso(new Date(now.getTime() - i * 92 * DAY)),
-      amountDueMinor: i === 2 ? 0 : 11115, amountPaidMinor: i === 2 ? 0 : 11115, currency: 'USD', status: 'PAID', pdfUrl: `https://invoices.afrotransact.dev/in_${3 - i}.pdf`,
-      hostedUrl: `https://invoices.afrotransact.dev/in_${3 - i}`, createdAt: iso(new Date(now.getTime() - i * 92 * DAY))
+      amountDueMinor: i === 0 ? 2115 : i === 2 ? 0 : 11115, amountPaidMinor: i === 0 ? 2115 : i === 2 ? 0 : 11115, currency: 'USD', status: 'PAID',
+      pdfUrl: `https://invoices.afrotransact.dev/in_${3 - i}.pdf`, hostedUrl: `https://invoices.afrotransact.dev/in_${3 - i}`, createdAt: iso(new Date(now.getTime() - i * 92 * DAY)),
+      paidFromSalesMinor: i === 0 ? 9000 : 0, paidByCardMinor: i === 0 ? 2115 : i === 2 ? 0 : 11115
     })),
+    planFeeCollection: { SELLER: 'EARNINGS_FIRST', PROVIDER: 'CARD' },
+    planFeeCollectionAvailable: true,
+    planFeeDeductions: [
+      { invoiceId: 'in_3', invoiceNumber: 'AT-1003', label: 'Plan fee (invoice AT-1003)', status: 'WITHHELD', requestedMinor: 11115, withheldMinor: 9000, releasedMinor: 0,
+        outstandingMinor: 0, createdAt: iso(now), transfers: [{ orderId: 'AT-2026-400112', amountMinor: 9000, at: iso(now), label: 'Plan fee (invoice AT-1003) deducted from order AT-2026-400112' }] }
+    ],
     team: {
       [SELLER_ORG]: [
         { userId: 'user-titilayo', name: 'Titilayo Adebayo', email: 'titilayo@adeskitchen.com', roleKey: 'seller.owner', roleLabel: 'Owner', status: 'ACTIVE', isYou: true },
