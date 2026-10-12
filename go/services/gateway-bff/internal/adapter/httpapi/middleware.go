@@ -134,6 +134,23 @@ func bodyLimit(limit int64) func(http.Handler) http.Handler {
 	}
 }
 
+// backOfficePrefixes are the Seller Center / Provider Hub (/v1/seller/…) and staff console (/v1/staff/…) routes. They
+// relay the person's token as identity issued it, so a member acts for their active organisation there.
+var backOfficePrefixes = []string{"/v1/seller/", "/v1/staff/"}
+
+// actingContext marks every other route (storefront and customer app: cart, checkout, account, orders, bookings,
+// pre-orders, Lola, /v1/me, sign-in) as a shopper request (port.WithShopper): upstream calls send
+// X-Acting-As: CUSTOMER, so a person who belongs to a seller or provider organisation still shops as themselves.
+func actingContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if slices.ContainsFunc(backOfficePrefixes, func(p string) bool { return strings.HasPrefix(r.URL.Path, p) }) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(port.WithShopper(r.Context())))
+	})
+}
+
 // identify resolves the caller (cookie session with token refresh, or app bearer) for every /v1 request.
 func identify(sessions app.SessionService, o SecurityOptions, log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

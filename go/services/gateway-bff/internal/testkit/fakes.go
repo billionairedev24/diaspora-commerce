@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 )
 
 // Variant is a fake sellable variant.
@@ -113,6 +115,8 @@ type Upstreams struct {
 	AccessTTL time.Duration
 	// Calls counts requests per "METHOD path" (tests assert retries and caching).
 	Calls map[string]int
+	// actingAs is the X-Acting-As header of the last request with a bearer token per "METHOD path".
+	actingAs map[string]string
 	// FailInventory makes inventory answer 503.
 	FailInventory bool
 	opts          Options
@@ -176,7 +180,7 @@ func NewUpstreams(o Options) *Upstreams {
 	}
 	u := &Upstreams{ClientID: "gateway-bff", Secret: "test-secret", products: defaultProducts(), carts: map[string]*fakeCart{},
 		codes: map[string]issuedCode{}, refresh: map[string]string{}, addresses: map[string][]map[string]any{}, key: key,
-		AccessTTL: 5 * time.Minute, Calls: map[string]int{}, opts: o, MemberOrgs: DefaultMemberOrgs(), ActiveOrgID: SellerOrgID,
+		AccessTTL: 5 * time.Minute, Calls: map[string]int{}, actingAs: map[string]string{}, opts: o, MemberOrgs: DefaultMemberOrgs(), ActiveOrgID: SellerOrgID,
 		AccessDeniedMatrix: true, seller: newSellerState(), tickets: map[string]string{},
 		team: &teamState{removed: map[string]bool{}}}
 	mux := http.NewServeMux()
@@ -187,6 +191,9 @@ func NewUpstreams(o Options) *Upstreams {
 	u.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		u.Calls[r.Method+" "+r.URL.Path]++
+		if r.Header.Get("Authorization") != "" {
+			u.actingAs[r.Method+" "+r.URL.Path] = r.Header.Get(auth.ActingAsHeader)
+		}
 		u.mu.Unlock()
 		mux.ServeHTTP(w, r)
 	}))
@@ -198,6 +205,22 @@ func (u *Upstreams) Close() { u.Server.Close() }
 
 // URL is the base URL of every fake upstream.
 func (u *Upstreams) URL() string { return u.Server.URL }
+
+// ActingAsSent returns the X-Acting-As header of the last authenticated "METHOD path" request ("" when absent) and
+// whether there was one.
+func (u *Upstreams) ActingAsSent(key string) (string, bool) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	v, ok := u.actingAs[key]
+	return v, ok
+}
+
+// AccessClaimsOf returns the platform claims the fake identity puts on the subject's access token.
+func (u *Upstreams) AccessClaimsOf(sub string) jwt.MapClaims {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.accessClaims(sub)
+}
 
 // CallCount returns how often "METHOD path" was requested.
 func (u *Upstreams) CallCount(key string) int {
@@ -382,12 +405,12 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 		u.contentRoutes(mux)
 	}
 	if u.opts.Payments {
-		mux.HandleFunc("GET /v1/customers/me/payment-methods", func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc("GET /v1/customers/me/payment-methods", customerOnly("payments.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 200, map[string]any{"items": []map[string]any{{"id": "pm_1", "type": "card", "brand": "visa", "last4": "4242", "label": "Visa ending in 4242", "expires": "08/29", "isDefault": true}}})
-		})
-		mux.HandleFunc("POST /v1/customers/me/setup-intents", func(w http.ResponseWriter, _ *http.Request) {
+		}))
+		mux.HandleFunc("POST /v1/customers/me/setup-intents", customerOnly("payments.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 201, map[string]any{"clientSecret": "seti_123_secret_abc", "publishableKey": "pk_test_123"})
-		})
+		}))
 	}
 	if u.opts.Offers {
 		u.offersRoutes(mux)
@@ -483,7 +506,7 @@ func subjectOf(r *http.Request) string {
 }
 
 func (u *Upstreams) owner(w http.ResponseWriter, r *http.Request) string {
-	if s := subjectOf(r); s != "" {
+	if s := customerSubject(r); s != "" {
 		return "user:" + s
 	}
 	g := r.Header.Get("X-Guest-Cart")
@@ -703,7 +726,7 @@ func (u *Upstreams) cartRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/cart/merge", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
-		sub := subjectOf(r)
+		sub := customerSubject(r)
 		g := r.Header.Get("X-Guest-Cart")
 		if sub == "" || g == "" {
 			problem(w, 400, "cart.merge-invalid", "A signed-in customer and a guest cart id are required", nil)
@@ -824,11 +847,32 @@ func (u *Upstreams) Token(claims jwt.MapClaims) string {
 	return s
 }
 
+// accessClaims are the platform claims identity puts on a user's access token (IdentityTokenCustomizer,
+// DefaultAccessPolicy): a member of an organisation acts for the active one (pt SELLER_MEMBER / PROVIDER_MEMBER, org
+// and the org role), whichever app asked for the token; everyone else is a CUSTOMER. Callers hold u.mu.
+func (u *Upstreams) accessClaims(sub string) jwt.MapClaims {
+	claims := jwt.MapClaims{"sub": sub, "pt": "CUSTOMER", "roles": []string{"account.customer"}}
+	active, ok := u.orgByID(u.ActiveOrgID)
+	if !ok && len(u.MemberOrgs) > 0 {
+		active, ok = u.MemberOrgs[0], true
+	}
+	if !ok {
+		return claims
+	}
+	pt := "SELLER_MEMBER"
+	if active.Kind == "PROVIDER" || strings.HasPrefix(active.Role, "provider.") {
+		pt = "PROVIDER_MEMBER"
+	}
+	claims["pt"], claims["org"] = pt, active.ID
+	claims["roles"] = []string{"account.customer", active.Role}
+	return claims
+}
+
 func (u *Upstreams) tokens(sub, nonce string) map[string]any {
 	rt := "rt-" + newUUID()
 	u.refresh[rt] = sub
 	return map[string]any{
-		"access_token":  u.Token(jwt.MapClaims{"sub": sub, "pt": "CUSTOMER", "roles": []string{"account.customer"}}),
+		"access_token":  u.Token(u.accessClaims(sub)),
 		"refresh_token": rt,
 		"id_token": u.Token(jwt.MapClaims{"sub": sub, "aud": u.ClientID, "nonce": nonce, "given_name": "Adaeze",
 			"family_name": "Nwosu", "email": "adaeze@example.com", "roles": []string{"account.customer"}}),

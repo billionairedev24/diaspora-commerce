@@ -21,6 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
@@ -364,6 +365,10 @@ func (c *clientImpl) build(ctx context.Context, method string, req Request) (*ht
 	}
 	if req.Bearer != "" {
 		hreq.Header.Set("Authorization", "Bearer "+req.Bearer)
+		if port.IsShopper(ctx) {
+			// Storefront and customer app: the person shops as themselves, whatever organisations they belong to.
+			hreq.Header.Set(auth.ActingAsHeader, auth.ActingAsCustomer)
+		}
 	}
 	if req.BasicUser != "" {
 		hreq.SetBasicAuth(url.QueryEscape(req.BasicUser), url.QueryEscape(req.BasicPassword))

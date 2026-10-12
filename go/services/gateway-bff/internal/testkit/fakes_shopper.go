@@ -106,7 +106,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 	mux.HandleFunc("POST /v1/service/pay-links/{number}/confirm", func(w http.ResponseWriter, r *http.Request) { payLink(w, r, true) })
 
 	// ---- payments
-	mux.HandleFunc("GET /v1/customers/me/payment-methods", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/customers/me/payment-methods", customerOnly("payments.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 		st.mu.Lock()
 		defer st.mu.Unlock()
 		writeJSON(w, 200, []map[string]any{
@@ -114,10 +114,10 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 			{"id": "pm_bank", "type": "us_bank_account", "bankName": "Chase", "accountType": "checking", "last4": "6789", "verified": false, "isDefault": st.defaultPM == "pm_bank"},
 		})
 	}))
-	mux.HandleFunc("POST /v1/customers/me/setup-intents", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("POST /v1/customers/me/setup-intents", customerOnly("payments.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 201, map[string]any{"setupIntentId": "seti_1", "clientSecret": "seti_1_secret_abc", "status": "requires_payment_method"})
 	}))
-	mux.HandleFunc("POST /v1/customers/me/payment-methods/{id}/default", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/customers/me/payment-methods/{id}/default", customerOnly("payments.customer-only", func(w http.ResponseWriter, r *http.Request) {
 		id := r.PathValue("id")
 		if id != "pm_visa" && id != "pm_bank" {
 			problem(w, 404, "payments.method-not-found", "No such payment method", nil)
@@ -128,7 +128,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		st.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"id": id, "type": "card", "brand": "visa", "last4": "4242", "expMonth": 8, "expYear": 2029, "isDefault": true})
 	}))
-	mux.HandleFunc("DELETE /v1/customers/me/payment-methods/{id}", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /v1/customers/me/payment-methods/{id}", customerOnly("payments.customer-only", func(w http.ResponseWriter, r *http.Request) {
 		st.mu.Lock()
 		defer st.mu.Unlock()
 		if r.PathValue("id") == st.defaultPM {
@@ -162,7 +162,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 				"lines":    []map[string]any{{"id": ShopperLineID, "variantAtin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250, "itemsMinor": 2500}},
 				"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "at": "2026-10-01T15:00:00Z"}, {"from": "out_for_delivery", "to": "delivered", "at": "2026-10-03T17:00:00Z"}}}}}
 	}
-	mux.HandleFunc("GET /v1/orders", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/orders", customerOnly("orders.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"items": []any{order("delivered", false)}, "nextCursor": ""})
 	}))
 	mux.HandleFunc("GET /v1/orders/{number}", authed(func(w http.ResponseWriter, r *http.Request) {
@@ -172,7 +172,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		}
 		writeJSON(w, 200, order("delivered", false))
 	}))
-	mux.HandleFunc("POST /v1/orders/{number}/shipments/{id}/cancel", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/orders/{number}/shipments/{id}/cancel", customerOnly("orders.customer-only", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("number") != ShopperOrderNumber {
 			problem(w, 404, "orders.not-found", "No such order", nil)
 			return
@@ -184,7 +184,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 			"paymentClientSecret": "pi_1_secret_xyz", "totalMinor": 1250, "currency": "USD",
 			"shipments": []map[string]any{{"shipmentId": "sh-new", "label": "Shipment 1 of 1", "eta": "Tomorrow", "deliveryMethod": "CARRIER"}}}
 	}
-	mux.HandleFunc("POST /v1/checkout", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/checkout", customerOnly("orders.customer-only", func(w http.ResponseWriter, r *http.Request) {
 		key := r.Header.Get("Idempotency-Key")
 		if key == "" {
 			problem(w, 400, "orders.idempotency-key-required", "Idempotency-Key required", nil)
@@ -461,7 +461,7 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 			"social": []map[string]any{{"network": "instagram", "url": "https://instagram.com/braidsbyama", "status": "APPROVED"},
 				{"network": "tiktok", "url": "https://tiktok.com/@ama", "status": "PENDING"}}})
 	})
-	mux.HandleFunc("POST /v1/bookings", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/bookings", customerOnly("bookings.customer-only", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Idempotency-Key") == "" {
 			problem(w, 400, "bookings.idempotency-key-required", "Idempotency-Key required", nil)
 			return
@@ -475,7 +475,7 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 		bk["payment"] = map[string]any{"state": "REQUIRES_PAYMENT_METHOD", "clientSecret": "pi_bk_secret_123"}
 		writeJSON(w, 200, map[string]any{"booking": bk, "replayed": false})
 	}))
-	mux.HandleFunc("GET /v1/bookings/mine", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/bookings/mine", customerOnly("bookings.customer-only", func(w http.ResponseWriter, _ *http.Request) {
 		st.mu.Lock()
 		defer st.mu.Unlock()
 		writeJSON(w, 200, []any{booking(st.bookingStatus)})
