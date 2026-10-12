@@ -181,11 +181,20 @@ var DefaultEventRules = map[string][]EventRule{
 	// ---- identity (at.identity.events) ----
 	"identity.verification.requested": {
 		{Topic: TopicIdentity, Template: "identity.verification", Channels: chEmail, Recipient: RecipientPayload,
-			IDField: "userId", Security: true, When: fieldNot("purpose", "PHONE_VERIFICATION")},
+			IDField: "userId", Security: true, When: fieldNot("purpose", "PHONE_VERIFICATION", "PASSWORD_RESET")},
 		// Phone verification (S234): sms to the number being verified, "Your AfroTransact code is …".
 		{Topic: TopicIdentity, Template: "identity.verification.phone", Channels: chSMS, Recipient: RecipientPayload,
 			IDField: "userId", Security: true, When: fieldIs("purpose", "PHONE_VERIFICATION")},
+		// Password reset (S300): one code, published once per channel (email, and sms to a verified phone).
+		{Topic: TopicIdentity, Template: "identity.password_reset", Channels: chEmailSMS, Recipient: RecipientPayload,
+			IDField: "userId", Security: true, When: fieldIs("purpose", "PASSWORD_RESET"), Enrich: enrichAccountSecurity},
 	},
+	// S300: a reset asked for an account that only signs in with Google / Apple / Facebook: no code, use the provider.
+	"identity.password-reset.federated": {{Topic: TopicIdentity, Template: "identity.password_reset.federated",
+		Channels: chEmail, Recipient: RecipientPayload, IDField: "userId", Security: true, Enrich: enrichAccountSecurity}},
+	// S300: the password was reset and every session signed out.
+	"identity.password.changed": {{Topic: TopicIdentity, Template: "identity.password_changed", Channels: chEmail,
+		Recipient: RecipientPayload, IDField: "userId", Security: true, Enrich: enrichAccountSecurity}},
 	// The invitee usually has no account: recipient.email from the payload only, never looked up.
 	"identity.invitation.created": {{Topic: TopicIdentity, Template: "org.invitation", Channels: chEmail,
 		Recipient: RecipientPayload, Security: true, Enrich: enrichInvitation}},
@@ -348,6 +357,25 @@ func setDefault(d map[string]any, k, v string) {
 	if str(d, k) == "" && v != "" {
 		d[k] = v
 	}
+}
+
+// enrichAccountSecurity fills the account-security emails (password reset and change, S300): a greeting that works
+// without a first name, the linked providers as words, the date of the change, and links to sign in and get help.
+func enrichAccountSecurity(d map[string]any, l Links) {
+	d["greetingName"] = firstNonBlank(str(d, "firstName"), "there")
+	d["providerList"] = humanList(stringList(d, "providers"))
+	d["changedOn"] = friendlyDate(str(d, "changedAt"))
+	d["signInUrl"] = join(l.Storefront, "/signin")
+	d["helpUrl"] = join(l.Storefront, "/help")
+}
+
+func firstNonBlank(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func enrichWelcome(d map[string]any, l Links) {

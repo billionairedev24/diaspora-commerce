@@ -319,7 +319,7 @@ func TemplateArea(key string) string {
 		return slices.ContainsFunc(prefixes, func(p string) bool { return key == p || strings.HasPrefix(key, p+".") })
 	}
 	switch {
-	case has("identity.verification"):
+	case has("identity.verification", "identity.password_reset", "identity.password_changed"):
 		return AreaSecurity
 	case has("account", "org", "careers", "identity"):
 		return AreaAccount

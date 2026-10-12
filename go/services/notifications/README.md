@@ -155,6 +155,9 @@ time zone and market, and channels the user switched off in their account are dr
 |---|---|---|---|
 | `identity.verification.requested` | payload (never looked up) | `identity.verification` | email, or the payload's `channel` |
 | … with `purpose=PHONE_VERIFICATION` | payload (never looked up) | `identity.verification.phone` ("Your AfroTransact code is …") | sms, or the payload's `channel` |
+| … with `purpose=PASSWORD_RESET` (S300) | payload (never looked up) | `identity.password_reset` (reset code) | the payload's `channel`: email, or sms to a verified phone |
+| `identity.password-reset.federated` (S300) | payload (never looked up) | `identity.password_reset.federated` ("Sign in with Google") | email |
+| `identity.password.changed` (S300) | payload (never looked up) | `identity.password_changed` ("Your password was changed") | email |
 | `identity.invitation.created` | payload `recipient.email` (never looked up: the invitee may have no account) | `org.invitation` (`orgName`, `roleName`, `inviterName` or "A teammate", `acceptUrl`, `expiresInDays`) | email |
 | `identity.user.phone-verified`, `identity.notification-preferences.updated` | — | none: the user's cached contact is dropped | — |
 | `identity.user.registered` (not STAFF) | payload `email` | `account.welcome` | email |
