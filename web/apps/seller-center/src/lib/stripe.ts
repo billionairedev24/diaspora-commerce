@@ -19,6 +19,9 @@ export const hasStripeKey = (publishableKey: string | null | undefined): boolean
 /** An embedded Connect component (a custom element). */
 export interface ConnectElement extends HTMLElement {
   setOnExit?(listener: () => void): void;
+  /** The component's own loader is showing (its UI is about to render). */
+  setOnLoaderStart?(listener: () => void): void;
+  setOnLoadError?(listener: (e: { error: { type?: string; message?: string } }) => void): void;
   setCollectionOptions?(options: { fields: 'currently_due' | 'eventually_due'; futureRequirements?: 'omit' | 'include' }): void;
 }
 
@@ -33,7 +36,8 @@ export interface ConnectInstance {
 interface ConnectInitParams {
   publishableKey: string;
   fetchClientSecret: () => Promise<string>;
-  appearance?: { variables?: Record<string, string> };
+  appearance?: { overlays?: 'dialog' | 'drawer'; variables?: Record<string, string> };
+  fonts?: { cssSrc: string }[];
 }
 
 export interface CardElement {
@@ -92,9 +96,18 @@ export interface SetupConfirmation {
 
 /** The Stripe.js surface the Payment Element flow uses (deferred intent: the SetupIntent is confirmed with the method). */
 export interface StripePaymentInstance {
-  elements(options: { mode: 'setup'; currency: string; paymentMethodCreation: 'manual'; appearance?: { variables: Record<string, string> } }): StripePaymentElements;
+  elements(options: {
+    mode: 'setup';
+    currency: string;
+    paymentMethodCreation: 'manual';
+    appearance?: { variables: Record<string, string> };
+  }): StripePaymentElements;
   createPaymentMethod(options: { elements: StripePaymentElements }): Promise<ElementsPaymentMethodResult>;
-  confirmSetup(options: { clientSecret: string; confirmParams: { payment_method: string; return_url: string }; redirect: 'if_required' }): Promise<SetupConfirmation>;
+  confirmSetup(options: {
+    clientSecret: string;
+    confirmParams: { payment_method: string; return_url: string };
+    redirect: 'if_required';
+  }): Promise<SetupConfirmation>;
 }
 
 declare global {
@@ -145,6 +158,44 @@ export function appearance(): { variables: Record<string, string> } {
   };
 }
 
+/**
+ * Connect.js appearance for the embedded components, from the same tokens: Stripe's own first button ("Get started", "Add information") is our gold primary pill, the form uses Figtree and
+ * our radii, and borders stay as quiet as the rest of the wizard.
+ */
+function connectAppearance(): { overlays: 'dialog'; variables: Record<string, string> } {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name: string) => css.getPropertyValue(name).trim();
+  const vars: Record<string, string> = {
+    fontFamily: 'Figtree, system-ui, sans-serif',
+    fontSizeBase: '16px',
+    colorPrimary: v('--at-color-text'),
+    colorText: v('--at-color-text'),
+    colorSecondaryText: v('--at-color-text-muted'),
+    colorBackground: v('--at-color-surface'),
+    colorBorder: v('--at-color-border'),
+    colorDanger: v('--at-color-danger'),
+    buttonPrimaryColorBackground: v('--at-color-action-primary'),
+    buttonPrimaryColorBorder: v('--at-color-action-primary'),
+    buttonPrimaryColorText: v('--at-color-action-primary-text'),
+    buttonSecondaryColorBackground: v('--at-color-surface'),
+    buttonSecondaryColorBorder: v('--at-color-border-strong'),
+    buttonSecondaryColorText: v('--at-color-text'),
+    borderRadius: v('--at-radius-md'),
+    buttonBorderRadius: v('--at-radius-pill'),
+    formBorderRadius: v('--at-radius-sm'),
+    badgeBorderRadius: v('--at-radius-pill'),
+    overlayBorderRadius: v('--at-radius-lg'),
+    spacingUnit: '10px'
+  };
+  return {
+    overlays: 'dialog',
+    variables: Object.fromEntries(Object.entries(vars).filter(([, x]) => x))
+  };
+}
+
+/** Figtree for the components (they render in Stripe's iframe, so they load the font themselves). */
+const FONTS = [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap' }];
+
 /** Connect.js with the Account Session's client secret (fetched again by Stripe when the session expires). */
 export async function initConnect(publishableKey: string, fetchClientSecret: () => Promise<string>): Promise<ConnectInstance> {
   await loadScript(CONNECT_JS, () => !!window.StripeConnect);
@@ -153,7 +204,8 @@ export async function initConnect(publishableKey: string, fetchClientSecret: () 
   return connect.init({
     publishableKey,
     fetchClientSecret,
-    appearance: appearance()
+    appearance: connectAppearance(),
+    fonts: FONTS
   });
 }
 

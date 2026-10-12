@@ -7,7 +7,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useImperativeHandle, useState } from 'react';
 
-import { Notice } from '@/components/ui/Notice';
 import { sellerApi } from '@/lib/api';
 import { fieldId, payoutAccountLabel } from '@/lib/onboarding-form';
 import { onboardingHref } from '@/lib/onboarding-wizard';
@@ -76,9 +75,16 @@ export function PayoutsStep({ status, ref }: StepProps) {
   if (p.status === 'NOT_STARTED' || p.status === 'NEEDS_BANK') {
     return (
       <div className="flex flex-col gap-3">
-        <Notice tone="info" title="Stripe collects your payout bank account.">
-          Add it in <Link href={onboardingHref('stripe-verification')}>Stripe verification</Link>, in Stripe’s secure form. It appears here once Stripe has it.
-        </Notice>
+        <div className="flex items-start gap-3 rounded-lg bg-surface-sunken px-4 py-4 sm:px-5">
+          <Bank size={28} className="flex-none" aria-hidden />
+          <div className="flex min-w-0 flex-col gap-1 text-sm">
+            <strong className="text-md">Stripe collects your payout bank account.</strong>
+            <span className="text-muted">
+              Add it in <Link href={onboardingHref('stripe-verification')}>Stripe verification</Link>, in Stripe’s secure form. It appears here once Stripe has
+              it.
+            </span>
+          </div>
+        </div>
         {p.status === 'NEEDS_BANK' && !disabled ? (
           <div>
             <Button id={fieldId('payouts')} size="sm" variant="link" onClick={() => void refresh()} disabled={busy}>
@@ -94,7 +100,7 @@ export function PayoutsStep({ status, ref }: StepProps) {
   const failed = p.status === 'FAILED';
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg bg-surface-sunken px-4 py-4 sm:px-5">
         <Bank size={28} className="flex-none" aria-hidden />
         <div className="min-w-0 flex-1">
           <strong className="text-sm">{payoutAccountLabel(p)}</strong>

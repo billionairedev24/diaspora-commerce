@@ -21,6 +21,8 @@ export interface StepHandle {
 export interface StepProps {
   status: OnboardingStatus;
   ref?: Ref<StepHandle>;
+  /** Moves the wizard to the next step (a step that completes on its own, like Stripe verification, calls it). */
+  advance?: () => void;
 }
 
 const SPAN: Record<number, string> = {
@@ -95,7 +97,7 @@ export function ChoiceCards<V extends string>({
             key={o.value}
             className={cx(
               'flex cursor-pointer items-start gap-2.5 rounded-sm border p-3 has-focus-visible:outline-2 has-focus-visible:outline-focus',
-              value === o.value ? 'border-gold-500 bg-gold-50' : 'border-border bg-surface hover:border-border-strong',
+              value === o.value ? 'border-gold-500 bg-gold-50' : 'border-transparent bg-surface-sunken hover:bg-surface-muted',
               disabled && 'cursor-not-allowed opacity-60'
             )}
           >

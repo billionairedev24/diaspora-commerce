@@ -158,10 +158,10 @@ export function ReviewStep({ status, ref }: StepProps) {
   }));
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <div ref={box} tabIndex={-1} className="outline-none">
         {problems.length ? (
-          <div role="alert" className="flex flex-col gap-1 rounded-md border border-danger bg-danger-bg px-4 py-3 text-sm">
+          <div role="alert" className="flex flex-col gap-1 rounded-lg bg-danger-bg px-4 py-3 text-sm">
             <strong className="inline-flex items-center gap-1.5">
               <WarningCircle size={18} weight="fill" aria-hidden className="text-danger" /> Some steps still need answers
             </strong>
@@ -178,16 +178,16 @@ export function ReviewStep({ status, ref }: StepProps) {
         ) : null}
       </div>
       {sections.map((s) => (
-        <section key={s.slug} aria-label={s.label} className="overflow-hidden rounded-sm border border-border">
-          <div className="flex items-center justify-between bg-surface-muted px-4 py-2">
-            <strong className="text-sm">{s.label}</strong>
+        <section key={s.slug} aria-label={s.label} className="rounded-lg bg-surface-sunken px-4 py-3 sm:px-5">
+          <div className="flex items-center justify-between">
+            <h3 className="m-0 text-md font-bold">{s.label}</h3>
             {status.form.editable ? (
               <Link href={onboardingHref(s.slug)} className="text-sm" aria-label={`Edit ${s.label}`}>
                 Edit
               </Link>
             ) : null}
           </div>
-          <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-1 px-4 py-3 text-sm sm:grid-cols-[minmax(140px,max-content)_minmax(0,1fr)]">
+          <dl className="m-0 mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-[minmax(160px,max-content)_minmax(0,1fr)]">
             {(rows[s.slug] ?? []).map(([k, v], i) => (
               <div key={`${k}-${i}`} className="contents">
                 <dt className="text-muted">{k}</dt>
@@ -198,7 +198,7 @@ export function ReviewStep({ status, ref }: StepProps) {
         </section>
       ))}
       <p className="m-0 text-xs text-muted">
-        Our trust team reviews every application, usually within 2 business days. You can’t sell until it’s approved. Plan: {status.form.plan.planName ?? '—'}
+        Plan: {status.form.plan.planName ?? '—'}
         {status.form.plan.firstCharge?.amountCents ? ` (${usd(status.form.plan.firstCharge.amountCents)} after the trial)` : ''}.
       </p>
       {failure ? (

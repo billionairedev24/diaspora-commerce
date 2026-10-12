@@ -101,7 +101,7 @@ export function SubmittedView({ status, onRefresh, refreshing }: { status: Onboa
         ))}
       </ol>
       {status.timeline.length ? (
-        <section aria-label="History" className="flex flex-col gap-1 border-t border-border pt-3">
+        <section aria-label="History" className="flex flex-col gap-1 pt-2">
           <strong className="text-sm">History</strong>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {[...status.timeline].reverse().map((t, i) => (
