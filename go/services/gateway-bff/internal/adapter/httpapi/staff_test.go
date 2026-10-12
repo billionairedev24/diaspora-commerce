@@ -65,6 +65,8 @@ type fakePlatform struct {
 	payoutSt  string
 	bigOrders bool
 	fees      []map[string]any
+	// override answers a request before the defaults when it returns true (scenario tests).
+	override func(w http.ResponseWriter, r *http.Request, body map[string]any) bool
 }
 
 // feeSchedules fakes payments' fee-schedule routes: v1 in force, v2 scheduled (with overrides), v3 cancelled.
@@ -251,6 +253,9 @@ func order(n int) map[string]any {
 
 func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body := f.record(r)
+	if f.override != nil && f.override(w, r, body) {
+		return
+	}
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	p := r.URL.Path
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -728,7 +733,8 @@ func TestStaffContractConformance(t *testing.T) {
 		}
 	}
 	do("admin", "POST", "/v1/staff/resources/applications/app-1/actions/final-approve", map[string]any{"values": map[string]any{"reasonCode": "DOCUMENTS_VERIFIED"}}, 409)
-	do("admin", "POST", "/v1/staff/resources/applications/app-1/actions/send-back", map[string]any{"values": map[string]any{"reasonCode": "DOCUMENTS_VERIFIED", "note": "Check the EIN"}}, 200)
+	// Seller refuses every step-2 decision by the step-one reviewer, sending back included.
+	do("admin", "POST", "/v1/staff/resources/applications/app-1/actions/send-back", map[string]any{"values": map[string]any{"reasonCode": "DOCUMENTS_VERIFIED", "note": "Check the EIN"}}, 409)
 	// Claim refunds above the role's limit are refused; forms are validated.
 	do("support", "POST", "/v1/staff/resources/claims/clm-1/actions/refund", map[string]any{"values": map[string]any{"note": "ok"}}, 409)
 	do("admin", "POST", "/v1/staff/resources/claims/clm-1/actions/refund", map[string]any{"values": map[string]any{}}, 422)

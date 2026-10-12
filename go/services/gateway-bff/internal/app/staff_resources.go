@@ -44,7 +44,11 @@ type staffAction struct {
 	form    func(ctx context.Context, sc staffCtx, o jobj) *domain.Form
 	// when returns why the action is not possible in the record's state ("" when it is).
 	when func(sc staffCtx, o jobj) string
-	run  func(ctx context.Context, sc staffCtx, o jobj, v jobj) error
+	// settled reports that the record already went past this action (e.g. the application is approved). The sheet
+	// still disables the action, but a request for it (a stale sheet, a second tab) goes to the upstream, which owns
+	// the rules and answers idempotently: 200 for the same person's repeat, 409 already-decided naming who and when.
+	settled func(o jobj) bool
+	run     func(ctx context.Context, sc staffCtx, o jobj, v jobj) error
 }
 
 type staffEdit struct {

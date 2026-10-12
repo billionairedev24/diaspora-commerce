@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -220,15 +221,19 @@ func applicationsResource() *staffResource {
 			fields = append(fields, withMax(ff("note", "Note", "textarea", noteRequired), 2000))
 			return &domain.Form{Title: title, SubmitLabel: submit, Fields: fields}
 		}
+		// The console's Idempotency-Key is relayed: seller replays a retried decision instead of refusing it. Slow: a
+		// final approval activates the Stripe subscription before it answers.
 		run := func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
-			body := jobj{"action": action, "reasonCode": vs(v, "reasonCode"), "note": vs(v, "note")}
+			body := jobj{"action": action, "reasonCode": vs(v, "reasonCode"), "note": vs(v, "note"),
+				"actorName": firstNonEmpty(strings.TrimSpace(sc.me.FirstName+" "+sc.me.LastName), sc.me.Email)}
 			if l := vlist(v, "failedChecks"); len(l) > 0 {
 				body["failedChecks"] = l
 			}
 			if items := vs(v, "requestedItems"); items != "" {
 				body["requestedItems"] = strings.Split(items, "\n")
 			}
-			return sc.post(ctx, sc.up.Seller, "/v1/applications/"+url.PathEscape(jstr(o, "id"))+path, omitEmpty(body), nil)
+			return sc.call(ctx, sc.up.Seller, port.StaffCall{Method: http.MethodPost, Path: "/v1/applications/" + url.PathEscape(jstr(o, "id")) + path,
+				Body: omitEmpty(body), IdempotencyKey: sc.idem, Slow: true}, nil)
 		}
 		return form, run
 	}
@@ -240,15 +245,23 @@ func applicationsResource() *staffResource {
 	finalForm, finalRun := decision("/decision", "FINAL_APPROVE", "Give final approval (step 2)", "Approve", false)
 	backForm, backRun := decision("/decision", "SEND_BACK", "Send back to step 1", "Send back", true)
 	rejectForm, rejectRun := decision("/decision", "REJECT", "Reject the application", "Reject", true)
-	notReviewer := func(sc staffCtx, o jobj) string {
-		if r := stateReason(jstr(o, "status"), "AWAITING_FINAL_APPROVAL"); r != "" {
+	// Step 2 (final approve, send back, reject) follows seller's state machine: awaiting final approval or flagged,
+	// never by the step-one reviewer.
+	finalStep := func(sc staffCtx, o jobj) string {
+		if r := stateReason(jstr(o, "status"), "AWAITING_FINAL_APPROVAL", "FLAGGED"); r != "" {
 			return r
 		}
 		if rid := jstr(o, "reviewerId"); rid != "" && rid == sc.me.ID {
-			return "You reviewed step 1 — a different approver must give final approval."
+			return "You reviewed step 1 — a different approver must decide step 2."
 		}
 		return ""
 	}
+	// past: the application already went past the action; seller answers a repeat idempotently and names who decided.
+	past := func(statuses ...string) func(jobj) bool {
+		return func(o jobj) bool { return slices.Contains(statuses, strings.ToUpper(jstr(o, "status"))) }
+	}
+	stepOneDone := past("AWAITING_FINAL_APPROVAL", "FLAGGED", "INFO_REQUESTED", "APPROVED", "REJECTED")
+	decided := past("APPROVED", "REJECTED")
 	return &staffResource{
 		key: "applications", module: "apps", title: "Applications", statusKey: "status", exportable: true,
 		columns: []domain.Column{col("reference", "Reference", "mono", 13), col("displayName", "Business", "strong", 25), col("kind", "Kind", "text", 10),
@@ -266,12 +279,12 @@ func applicationsResource() *staffResource {
 			return strings.TrimSpace(jstr(o, "reference") + " · " + domain.Humanize(jstr(o, "kind")))
 		},
 		actions: []staffAction{
-			{key: "review-approve", label: "Approve (step 1)", tone: "primary", permission: "applications:review", level: domain.LevelApprove, form: approveForm, when: inState("PENDING_REVIEW", "FLAGGED"), run: approveRun},
-			{key: "review-flag", label: "Flag", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), run: flagRun},
-			{key: "review-request-info", label: "Request info", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW", "FLAGGED"), run: infoRun},
-			{key: "final-approve", label: "Final approval", tone: "primary", permission: "applications:approve", level: domain.LevelApprove, form: finalForm, when: notReviewer, run: finalRun},
-			{key: "send-back", label: "Send back", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: backForm, when: inState("AWAITING_FINAL_APPROVAL"), run: backRun},
-			{key: "reject", label: "Reject", tone: "danger", permission: "applications:approve", level: domain.LevelApprove, form: rejectForm, when: inState("AWAITING_FINAL_APPROVAL", "FLAGGED"), run: rejectRun},
+			{key: "review-approve", label: "Approve (step 1)", tone: "primary", permission: "applications:review", level: domain.LevelApprove, form: approveForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: approveRun},
+			{key: "review-flag", label: "Flag", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: flagRun},
+			{key: "review-request-info", label: "Request info", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: infoRun},
+			{key: "final-approve", label: "Final approval", tone: "primary", permission: "applications:approve", level: domain.LevelApprove, form: finalForm, when: finalStep, settled: decided, run: finalRun},
+			{key: "send-back", label: "Send back", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: backForm, when: finalStep, settled: decided, run: backRun},
+			{key: "reject", label: "Reject", tone: "danger", permission: "applications:approve", level: domain.LevelApprove, form: rejectForm, when: finalStep, settled: decided, run: rejectRun},
 		},
 	}
 }

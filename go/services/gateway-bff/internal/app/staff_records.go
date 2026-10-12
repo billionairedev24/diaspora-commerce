@@ -283,7 +283,9 @@ func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, 
 		if perm {
 			return domain.RecordDetail{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", reason)
 		}
-		return domain.RecordDetail{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Not possible now", reason)
+		if a.settled == nil || !a.settled(o) {
+			return domain.RecordDetail{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Not possible now", reason)
+		}
 	}
 	if values == nil {
 		values = map[string]any{}

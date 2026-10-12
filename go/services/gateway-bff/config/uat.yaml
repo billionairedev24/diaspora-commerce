@@ -86,6 +86,8 @@ upstreams:
   seller:
     url: http://seller
     timeout: 3s
+    # a final approval activates the Stripe subscription before it answers (POST /v1/applications/{id}/decision)
+    slowTimeout: 20s
     retries: 1
     breaker: {failures: 5, cooldown: 15s}
   offers:

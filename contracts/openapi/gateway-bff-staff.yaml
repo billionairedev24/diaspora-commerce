@@ -264,8 +264,13 @@ paths:
         The action must be listed on the record's sheet with `allowed: true`; otherwise 403 `FORBIDDEN` (missing
         permission or module level) or 409 `CONFLICT` (not possible in the record's current state). Examples: applications
         `review-approve` / `review-flag` / `review-request-info` (seller `POST /v1/applications/{id}/review`,
-        applications:review) and `final-approve` / `send-back` / `reject` (seller `POST /v1/applications/{id}/decision`,
-        applications:approve, never by the step-one reviewer); claims `refund` / `deny` (trust-ops
+        applications:review, while pending review) and `final-approve` / `send-back` / `reject` (seller
+        `POST /v1/applications/{id}/decision`, applications:approve, awaiting final approval or flagged, never by the
+        step-one reviewer). Review decisions are idempotent: a retry with the same `Idempotency-Key`, or the same person
+        repeating the decision that put the application in its state, answers 200 with the current sheet and changes
+        nothing; when the application already went past the action, 409 `ALREADY_DONE` says what was decided, by whom
+        and when ("This application is already approved (by Ada Obi, 12 Oct 2026, 14:03 UTC)"); show it as
+        information and refresh the sheet. Never retry a decision with a new key. Claims `refund` / `deny` (trust-ops
         `POST /v1/claims/{id}/decision`, disputes:manage, refunds capped by the role's refund limit); payouts `approve` /
         `hold` / `release` (payments, payouts:approve); orders `shipment-status` (orders `POST /v1/shipments/{id}/transitions`);
         privacy-requests `complete` / `deny` (content `POST /v1/privacy/requests/{reference}/resolution`, content:legal.edit;
@@ -4739,7 +4744,7 @@ components:
         code:
           type: string
           description: |
-            Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, NOT_STAFF, FORBIDDEN, NOT_FOUND, CONFLICT,
+            Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, NOT_STAFF, FORBIDDEN, NOT_FOUND, CONFLICT, ALREADY_DONE,
             REFUND_LIMIT, EXPORT_NOT_READY, EXPORT_EXPIRED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR.
         errors:
           type: object

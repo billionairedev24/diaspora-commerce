@@ -17,9 +17,9 @@ type Upstream struct {
 	Timeout time.Duration `yaml:"timeout"`
 	// SlowTimeout bounds calls that wait for a downstream saga or call chain (orders: POST /v1/checkout and its
 	// confirm, above orders' checkout-response-timeout; deliveryRuns: late pre-order adds, above its 15s orders
-	// timeout). Defaults to Timeout.
+	// timeout; seller: a final approval, which activates the Stripe subscription). Defaults to Timeout.
 	SlowTimeout time.Duration `yaml:"slowTimeout"`
-	Retries     int           `yaml:"retries"` // extra attempts for idempotent GETs only
+	Retries     int           `yaml:"retries"` // extra attempts for GETs and for calls that carry an Idempotency-Key
 	Breaker     struct {
 		Failures int           `yaml:"failures"` // consecutive failures that open the breaker
 		Cooldown time.Duration `yaml:"cooldown"` // open → half-open after this long
