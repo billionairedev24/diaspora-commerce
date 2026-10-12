@@ -75,6 +75,9 @@ type AuthOptions struct {
 	StateTTL  time.Duration
 	Clock     Clock
 	Log       *slog.Logger
+	// Applications reads the person's own seller or provider application (nil: /v1/me trusts identity's organisations
+	// alone): an approved application identity has not mirrored yet still opens the back office from the account menu.
+	Applications ApplicationReader
 }
 
 type authServiceImpl struct {
@@ -409,7 +412,8 @@ func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, 
 	switch {
 	case err == nil:
 		user = domain.MeUser{ID: firstNonEmpty(me.ID, c.Subject), FirstName: me.FirstName, LastName: me.LastName, Email: me.Email, Roles: me.Roles,
-			Phone: strPtr(maskPhone(me.Phone)), PhoneVerified: ptr(me.PhoneVerified), BackOffices: backOffices(me)}
+			Phone: strPtr(maskPhone(me.Phone)), PhoneVerified: ptr(me.PhoneVerified),
+			BackOffices: confirmApproved(ctx, a.o.Applications, c.BearerToken, backOffices(me))}
 	case isUnauthorized(err):
 		return domain.Me{Authenticated: false}, nil
 	default:

@@ -139,7 +139,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 			RedirectURIs: map[string]string{WebOrigin: RedirectURI, SellerCenterOrigin: SellerCenterRedirectURI,
 				StaffConsoleOrigin: StaffConsoleRedirectURI},
 			AppOrigins: map[string]string{"storefront": WebOrigin, "seller-center": SellerCenterOrigin, "staff-console": StaffConsoleOrigin},
-			BFFPath:    "/api/bff", Clock: clock.Now, Log: log}),
+			BFFPath:    "/api/bff", Applications: sellerDeps.Sellers, Clock: clock.Now, Log: log}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,

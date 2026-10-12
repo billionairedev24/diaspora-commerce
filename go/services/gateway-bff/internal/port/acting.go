@@ -17,3 +17,9 @@ func IsShopper(ctx context.Context) bool {
 	v, _ := ctx.Value(shopperKey{}).(bool)
 	return v
 }
+
+// WithoutShopper is ctx without the shopper mark: a storefront route reads the person's own back-office state (their
+// seller or provider application) with the token as identity issued it, never acting as a shopper.
+func WithoutShopper(ctx context.Context) context.Context {
+	return context.WithValue(ctx, shopperKey{}, false)
+}
