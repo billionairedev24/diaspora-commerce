@@ -46,9 +46,20 @@ function me(ctx: Ctx) {
   return {
     authenticated: true,
     user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, initials: (u.firstName[0] ?? '') + (u.lastName[0] ?? ''), roles: u.roles,
-      ...(u.phone ? { phone: '•••• ' + u.phone.slice(-4) } : {}), phoneVerified: phoneVerified.has(u.id) },
+      ...(u.phone ? { phone: '•••• ' + u.phone.slice(-4) } : {}), phoneVerified: phoneVerified.has(u.id), backOffices: mockBackOffices(u.roles) },
     counts: accountCounts(u.id)
   };
+}
+
+/** The account menu's back offices for a mock user's roles (the real BFF reads identity's organisations). */
+function mockBackOffices(roles: readonly string[]) {
+  const out: { app: 'seller-center' | 'provider-hub' | 'staff-console'; state: 'active' | 'application' }[] = [];
+  if (roles.some((r) => r.startsWith('seller.'))) out.push({ app: 'seller-center', state: 'active' });
+  else if (roles.includes('account.seller_applicant')) out.push({ app: 'seller-center', state: 'application' });
+  if (roles.some((r) => r.startsWith('provider.'))) out.push({ app: 'provider-hub', state: 'active' });
+  else if (roles.includes('account.provider_applicant')) out.push({ app: 'provider-hub', state: 'application' });
+  if (roles.some((r) => r.startsWith('platform.') && r !== 'platform.driver')) out.push({ app: 'staff-console', state: 'active' });
+  return out;
 }
 
 const safeReturn = (v: string | null | undefined): string => (v && v.startsWith('/') && !v.startsWith('//') ? v : '/');

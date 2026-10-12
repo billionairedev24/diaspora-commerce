@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   CaretDown,
   CreditCard,
+  Desktop,
   MapPin,
   Menu,
   MenuGroup,
@@ -42,6 +43,7 @@ const ICONS: Record<AccountMenuIcon, ReactNode> = {
   sparkle: <Sparkle aria-hidden />,
   store: <Storefront aria-hidden />,
   calendar: <CalendarCheck aria-hidden />,
+  desktop: <Desktop aria-hidden />,
   signin: <SignIn aria-hidden />,
   signup: <UserPlus aria-hidden />
 };

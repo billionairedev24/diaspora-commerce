@@ -10,7 +10,7 @@ import { renderWithProviders } from './render';
 const guest: Me = { authenticated: false, user: null, counts: null };
 const ada: Me = {
   authenticated: true,
-  user: { id: 'u1', firstName: 'Adaeze', lastName: 'Nwosu', email: 'adaeze@example.com', initials: 'AN', roles: ['customer'] },
+  user: { id: 'u1', firstName: 'Adaeze', lastName: 'Nwosu', email: 'adaeze@example.com', initials: 'AN', roles: ['customer'], backOffices: [] },
   counts: { orders: 2, returns: 1, addresses: 2, paymentMethods: 3 }
 };
 

@@ -22,5 +22,11 @@ export function sellerCenterUrl(): string {
   return (env('SELLER_CENTER_URL') ?? env('NEXT_PUBLIC_SELLER_CENTER_URL') ?? 'http://localhost:3001').replace(/\/+$/, '');
 }
 
+/** Staff console origin (account menu link for staff): the shared STAFF_CONSOLE_URL of the environment, resolved per
+    request on the server. */
+export function staffConsoleUrl(): string {
+  return (env('STAFF_CONSOLE_URL') ?? 'http://localhost:3002').replace(/\/+$/, '');
+}
+
 /** Path the browser uses for every BFF call (same origin; the route handler proxies or mocks). */
 export const BFF_BASE_PATH = '/api/bff';
