@@ -31,7 +31,7 @@ import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
 import styles from './AccountMenu.module.css';
-import { type AccountMenuIcon, accountMenuModel } from './accountMenuItems';
+import { type AccountMenuIcon, accountMenuModel, signOutReturnTo } from './accountMenuItems';
 
 const ICONS: Record<AccountMenuIcon, ReactNode> = {
   user: <UserCircle aria-hidden />,
@@ -71,12 +71,13 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuP
   const signOut = async () => {
     let redirectTo: string | null = null;
     try {
-      ({ redirectTo } = await browserApi().signOut());
+      ({ redirectTo } = await browserApi().signOut({ returnTo: signOutReturnTo(window.location.pathname, window.location.search) }));
     } catch {
       /* signed out locally anyway: the session cookie is gone or was never there */
     }
     if (redirectTo) {
-      // Ends the identity session too (single sign-out); identity then returns the browser to the storefront home.
+      // Ends the identity session too (single sign-out); identity then returns the browser to this page (or the home
+      // page) with signedOut=1, where SignedOutNotice says so. No sign-in wall.
       window.location.assign(redirectTo);
       return;
     }

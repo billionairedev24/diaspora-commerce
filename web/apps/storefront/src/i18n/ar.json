@@ -55,7 +55,7 @@
   "account.providerApplication": "أكمل طلب مقدم الخدمة",
   "account.staffConsole": "لوحة الموظفين",
   "account.signOut": "تسجيل الخروج",
-  "account.signedOut": "تم تسجيل الخروج",
+  "account.signedOut": "لقد سجّلت الخروج",
   "announcement.label": "الإعلانات",
   "announcement.dismiss": "إغلاق الإعلان",
   "announcement.position": "{n} / {total}",

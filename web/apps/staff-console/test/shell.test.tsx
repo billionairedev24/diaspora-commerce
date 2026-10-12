@@ -1,7 +1,7 @@
 import { resetStaffDb } from '@afrotransact/api-client/mocks/staff';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AccountEnv } from '@/components/account/AccountEnv';
 import { StaffSecurityPage } from '@/components/account/AccountPages';
@@ -55,7 +55,7 @@ describe('staff console shell', () => {
     expect(screen.getByText('You don’t have access to this page')).toBeInTheDocument();
   });
 
-  it('turns customers away and asks guests to sign in', async () => {
+  it('turns customers away and sends guests straight to identity’s sign-in (no interstitial), without looping', async () => {
     asRoles('customer');
     const { unmount } = renderWithProviders(
       <ConsoleShell>
@@ -65,12 +65,32 @@ describe('staff console shell', () => {
     expect(await screen.findByRole('heading', { name: 'Staff only' })).toBeInTheDocument();
     unmount();
     asRoles('guest');
+    const assign = vi.fn();
+    vi.stubGlobal('location', { ...window.location, href: 'http://localhost:3002/orders?tab=open', assign });
+    window.sessionStorage.clear();
+    const first = renderWithProviders(
+      <ConsoleShell>
+        <p>x</p>
+      </ConsoleShell>
+    );
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith('/api/bff/v1/auth/login?returnTo=http%3A%2F%2Flocalhost%3A3002%2Forders%3Ftab%3Dopen')
+    );
+    expect(screen.queryByRole('link', { name: 'Sign in' })).not.toBeInTheDocument();
+    first.unmount();
+    // Back from identity still signed out within two minutes: say so instead of going round again.
+    assign.mockClear();
     renderWithProviders(
       <ConsoleShell>
         <p>x</p>
       </ConsoleShell>
     );
-    expect(await screen.findByRole('heading', { name: /sign in to the staff console/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Sign-in is temporarily unavailable' })).toBeInTheDocument();
+    expect(assign).not.toHaveBeenCalled();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
+    expect(assign).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+    window.sessionStorage.clear();
   });
 });
 

@@ -528,12 +528,42 @@ export interface paths {
         /**
          * End the session (revokes the tokens at identity) and get identity's end-session URL
          * @description Clears the `at_session` cookie and revokes the refresh and access tokens. For a web session `redirectTo` is
-         *     identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and a
-         *     `post_logout_redirect_uri` back to the home page of the calling app, chosen from the request's `Origin`):
-         *     navigating there ends the identity session too, so every app is signed out (single sign-out). `redirectTo`
-         *     is null when there was no signed-in web session.
+         *     identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and the calling
+         *     app's registered `post_logout_redirect_uri`, `<origin>/api/bff/v1/auth/signed-out/<app>`, chosen from the
+         *     request's `Origin`): navigating there ends the identity session too, so every app is signed out (single
+         *     sign-out), and identity then sends the browser to `GET /v1/auth/signed-out/{app}`. Without an ID token to
+         *     end (the session had already expired) `redirectTo` is that signed-out URL directly. `redirectTo` is null for
+         *     native apps (bearer token).
          */
         post: operations["signOut"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/signed-out/{app}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Where identity returns the browser after single sign-out (each app's registered post-logout URI)
+         * @description Registered at identity as the `gateway-bff` client's `post_logout_redirect_uri` for each web app
+         *     (`<app origin>/api/bff/v1/auth/signed-out/<app>`). `state` carries the path the person signed out on
+         *     (from `SignOutRequest.returnTo`).
+         *
+         *     - `storefront`: back to that page (or the home page) with `signedOut=1`, where the storefront shows a
+         *       "You're signed out" toast. No sign-in wall.
+         *     - `seller-center`, `staff-console`: straight to that app's own sign-in, i.e. identity's hosted sign-in page
+         *       branded for the app (`prompt=login`, `notice=signed_out`), which returns to the app (that page, or its
+         *       home page) after signing in.
+         */
+        get: operations["signedOut"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2603,8 +2633,12 @@ export interface components {
                 paymentMethods: number;
             } | null;
         };
+        SignOutRequest: {
+            /** @description The path to come back to on the calling app: the storefront returns there signed out (send it only for pages a guest may see); Seller Center and the staff console return there after signing in again. Anything but a relative path is ignored. */
+            returnTo?: string;
+        };
         SignOutResult: {
-            /** @description Identity's end-session URL to navigate to (ends the identity session, then returns to the calling app's home page); null without a signed-in web session. */
+            /** @description Where the browser goes next: identity's end-session URL (ends the identity session, then `GET /v1/auth/signed-out/{app}` on the calling app), or that signed-out URL directly when there is no identity session to end; null for native apps. */
             redirectTo: string | null;
         };
         PhoneCodeSent: {
@@ -4387,7 +4421,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SignOutRequest"];
+            };
+        };
         responses: {
             /** @description Signed out */
             200: {
@@ -4399,6 +4437,31 @@ export interface operations {
                     "application/json": components["schemas"]["SignOutResult"];
                 };
             };
+        };
+    };
+    signedOut: {
+        parameters: {
+            query?: {
+                /** @description The path on the app to come back to (a relative path; anything else is ignored). */
+                state?: string;
+            };
+            header?: never;
+            path: {
+                app: "storefront" | "seller-center" | "staff-console";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description To the storefront page with `signedOut=1`, or to identity's sign-in for Seller Center and the staff console */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
         };
     };
     listAddresses: {

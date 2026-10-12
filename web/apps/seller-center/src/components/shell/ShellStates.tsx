@@ -16,9 +16,8 @@ import { useStorefrontUrl } from '@/lib/runtime-config';
 export const SLOW_AFTER_MS = 10_000;
 
 function SignOutButton() {
-  const storefrontUrl = useStorefrontUrl();
   return (
-    <Button variant="neutral" size="sm" onClick={() => void signOutEverywhere(storefrontUrl)}>
+    <Button variant="neutral" size="sm" onClick={() => void signOutEverywhere()}>
       <SignOut size={16} aria-hidden /> Sign out
     </Button>
   );

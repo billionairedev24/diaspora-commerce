@@ -55,7 +55,7 @@
   "account.providerApplication": "Poursuivre votre demande de prestataire",
   "account.staffConsole": "Console du personnel",
   "account.signOut": "Se déconnecter",
-  "account.signedOut": "Déconnecté",
+  "account.signedOut": "Vous êtes déconnecté",
   "announcement.label": "Annonces",
   "announcement.dismiss": "Fermer l’annonce",
   "announcement.position": "{n} / {total}",

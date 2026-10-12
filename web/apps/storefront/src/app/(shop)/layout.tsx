@@ -5,6 +5,7 @@ import { type ReactNode, Suspense } from 'react';
 import { CookieBanner } from '@/components/legal/CookieBanner';
 import { Footer } from '@/components/shell/Footer';
 import { Header } from '@/components/shell/Header';
+import { SignedOutNotice } from '@/components/shell/SignedOutNotice';
 import { accountQueries, cartQueries, siteQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
@@ -26,6 +27,9 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
     <HydrationBoundary state={dehydrate(qc)}>
       <Suspense>
         <Header />
+      </Suspense>
+      <Suspense>
+        <SignedOutNotice />
       </Suspense>
       <main id="main" tabIndex={-1} className="page">
         {children}

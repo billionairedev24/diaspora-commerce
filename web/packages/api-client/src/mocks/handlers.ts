@@ -186,10 +186,23 @@ export const handlers = [
     ctx.session.userId = 'u_adaeze';
     return new HttpResponse(null, { status: 302, headers: { Location: new URL(safeReturn(url.searchParams.get('returnTo')), url.origin).toString() } });
   })),
-  http.post('*/v1/auth/sign-out', route((ctx) => {
+  // Single sign-out: the real BFF sends the browser through identity's /connect/logout, which returns to the app's
+  // signed-out landing; the mock goes to the landing straight away.
+  http.post('*/v1/auth/sign-out', route(async (ctx) => {
     ctx.session.userId = null;
-    return json({ redirectTo: null });
+    const url = new URL(ctx.request.url);
+    const body = (await ctx.request.json().catch(() => ({}))) as { returnTo?: string };
+    const back = safeReturn(body.returnTo);
+    const landing = new URL(url.pathname.replace(/\/v1\/auth\/sign-out$/, '/v1/auth/signed-out/storefront'), url.origin);
+    if (back !== '/') landing.searchParams.set('state', back);
+    return json({ redirectTo: landing.toString() });
   })),
+  http.get('*/v1/auth/signed-out/storefront', ({ request }) => {
+    const url = new URL(request.url);
+    const back = new URL(safeReturn(url.searchParams.get('state')), url.origin);
+    back.searchParams.set('signedOut', '1');
+    return new HttpResponse(null, { status: 302, headers: { Location: back.toString() } });
+  }),
   http.get('*/v1/auth/oidc/:provider/authorize', route((ctx, p) => {
     const provider = p.provider ?? '';
     const idp = SITE_CONFIG.identityProviders.find((x) => x.id === provider && x.enabled);

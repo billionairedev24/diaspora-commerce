@@ -84,3 +84,16 @@ export function backOfficeEntries(backOffices: readonly BackOffice[] = []): Acco
   if (staff) out.push({ id: 'staff-console', label: 'account.staffConsole', icon: 'desktop', href: backOfficeHref(staff), external: true });
   return out;
 }
+
+/** Pages only a signed-in customer can see: signing out there lands on the home page instead (no sign-in wall). */
+const PRIVATE_PREFIXES = ['/account', '/orders', '/checkout'];
+
+/**
+ * Where the storefront comes back to after signing out (single sign-out through identity): the page the person was on
+ * when a guest may see it, else undefined (the home page).
+ */
+export function signOutReturnTo(pathname: string, search = ''): string | undefined {
+  if (!pathname.startsWith('/') || pathname === '/') return undefined;
+  if (PRIVATE_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return undefined;
+  return `${pathname}${search}`;
+}

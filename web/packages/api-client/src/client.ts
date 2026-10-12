@@ -110,8 +110,13 @@ export function createApiClient(options: ApiClientOptions) {
     startPhoneVerification: (): Promise<PhoneCodeSent> => request('/v1/account/phone/verification', PhoneCodeSentSchema, { method: 'POST' }),
     confirmPhoneVerification: (code: string): Promise<PhoneVerification> =>
       request('/v1/account/phone/verification/confirm', PhoneVerificationSchema, { method: 'POST', body: { code } }),
-    /** Ends the BFF session; navigate to redirectTo (when set) to end the identity session too (single sign-out). */
-    signOut: (): Promise<SignOutResult> => request('/v1/auth/sign-out', SignOutResultSchema, { method: 'POST' }),
+    /**
+     * Ends the BFF session; navigate to redirectTo (when set) to end the identity session too (single sign-out), after
+     * which identity returns to this app's signed-out landing. returnTo is the page to come back to (storefront: only
+     * pages a guest may see).
+     */
+    signOut: (input: { returnTo?: string } = {}): Promise<SignOutResult> =>
+      request('/v1/auth/sign-out', SignOutResultSchema, { method: 'POST', body: input.returnTo ? { returnTo: input.returnTo } : {} }),
     /**
      * URL of the BFF's hosted sign-in start (identity's sign-in page, or its sign-up page with prompt 'create').
      * returnTo is a storefront path or an absolute URL on another AfroTransact web app.

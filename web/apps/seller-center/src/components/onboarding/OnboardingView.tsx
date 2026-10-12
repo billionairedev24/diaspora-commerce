@@ -13,7 +13,6 @@ import { sellerApi } from '@/lib/api';
 import { signOutEverywhere } from '@/lib/auth';
 import { prefillNote } from '@/lib/onboarding-form';
 import { isEditable, nextSlug, onboardingHref, prevSlug, progressOf, redirectFor } from '@/lib/onboarding-wizard';
-import { useStorefrontUrl } from '@/lib/runtime-config';
 import { useSeller } from '@/lib/session';
 
 import { Stepper } from './Stepper';
@@ -133,7 +132,6 @@ export function OnboardingWizard({ slug }: { slug: string }) {
   const router = useRouter();
   const qc = useQueryClient();
   const { orgId } = useSeller();
-  const storefrontUrl = useStorefrontUrl();
   const step = useRef<StepHandle>(null);
   const [busy, setBusy] = useState<'continue' | 'exit' | null>(null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -180,7 +178,7 @@ export function OnboardingWizard({ slug }: { slug: string }) {
     if (!step.current) return;
     setBusy('exit');
     const ok = await step.current.save('draft');
-    if (ok) await signOutEverywhere(storefrontUrl);
+    if (ok) await signOutEverywhere();
     setBusy(null);
   };
 

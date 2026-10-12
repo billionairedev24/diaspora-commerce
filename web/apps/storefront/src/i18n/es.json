@@ -55,7 +55,7 @@
   "account.providerApplication": "Continúa tu solicitud de proveedor",
   "account.staffConsole": "Consola del personal",
   "account.signOut": "Cerrar sesión",
-  "account.signedOut": "Sesión cerrada",
+  "account.signedOut": "Has cerrado sesión",
   "announcement.label": "Anuncios",
   "announcement.dismiss": "Descartar anuncio",
   "announcement.position": "{n} / {total}",

@@ -48,7 +48,7 @@
   "account.providerApplication": "Continue your provider application",
   "account.staffConsole": "Staff console",
   "account.signOut": "Sign out",
-  "account.signedOut": "Signed out",
+  "account.signedOut": "You’re signed out",
   "announcement.label": "Announcements",
   "announcement.dismiss": "Dismiss announcement",
   "announcement.position": "{n} / {total}",
