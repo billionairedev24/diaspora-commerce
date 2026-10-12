@@ -1,8 +1,16 @@
 'use client';
 
-import { type StaffBillingGrant, type StaffBillingInvoice, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
+import {
+  type StaffBillingGrant,
+  type StaffBillingInvoice,
+  type StaffEarningsCollection,
+  type StaffPlanFeeCollection,
+  type StaffPlanFeeMode,
+  staffPlanKeys,
+  staffPlanQueries
+} from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { MagnifyingGlass } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -74,6 +82,75 @@ function AdjustDialog({ orgId, action, onClose, t }: { orgId: string; action: Ac
   );
 }
 
+/**
+ * Per-seller override of how the plan is paid (S298), audited with a reason code; applies from the seller's next
+ * invoice.
+ */
+function PlanFeeDialog({ orgId, orgName, current, open, onClose, t }: {
+  orgId: string;
+  orgName: string;
+  current: StaffPlanFeeCollection;
+  open: boolean;
+  onClose: () => void;
+  t: T;
+}) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [mode, setMode] = useState<StaffPlanFeeMode>(current.mode === 'CARD' ? 'EARNINGS_FIRST' : 'CARD');
+  const [reason, setReason] = useState('');
+  const [note, setNote] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const save = useMutation({
+    mutationFn: () => plansApi().overridePlanFeeCollection(orgId, mode, { reasonCode: reason, note: note.trim() || null }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: staffPlanKeys.panel(orgId) });
+      toast.show(t('st.plans.planFee.saved'));
+      onClose();
+    },
+    onError: (e) => setErrors(errorsOf(e))
+  });
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={t('st.plans.planFee.overrideTitle', { org: orgName })} description={t('st.plans.planFee.overrideHelp')}
+      width={480} closeLabel={t('st.plans.close')}>
+      <form noValidate className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); setErrors({}); save.mutate(); }}>
+        <Select id="pfc-mode" label={t('st.plans.planFee.mode')} value={mode} error={errors.mode} onChange={(e) => setMode(e.currentTarget.value as StaffPlanFeeMode)}
+          options={(['EARNINGS_FIRST', 'CARD'] as const).map((m) => ({ value: m, label: t(`st.plans.planFee.${m}`) }))} />
+        <ReasonFields idPrefix="pfc" reason={reason} note={note} onReason={setReason} onNote={setNote} errors={errors} />
+        {errors._ ? <p role="alert" className="m-0 text-sm text-danger">{errors._}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button variant="neutral" onClick={onClose}>{t('st.plans.cancel')}</Button>
+          <Button type="submit" loading={save.isPending}>{t('st.plans.apply')}</Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** How the seller pays its plan, who chose it, from which invoice a change applies, and the audited change log. */
+function PlanFeeSummary({ v, adjust, onChange, t }: { v: StaffPlanFeeCollection; adjust: boolean; onChange: () => void; t: T }) {
+  return (
+    <div className="flex flex-col gap-2" data-testid="panel-plan-fees">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <strong>{t(`st.plans.planFee.${v.mode}`)}</strong>
+        <span className="text-muted">· {t(`st.plans.planFee.source.${v.source}`)}</span>
+        {adjust && v.available ? <Button size="sm" variant="link" onClick={onChange}>{t('st.plans.planFee.change')}</Button> : null}
+      </div>
+      {!v.available ? <p className="m-0 text-xs text-muted">{t('st.plans.planFee.offPlatform')}</p>
+        : v.appliesFromInvoiceAt ? <p className="m-0 text-xs text-muted">{t('st.plans.planFee.appliesFrom', { date: shortDate(v.appliesFromInvoiceAt) })}</p> : null}
+      {v.history.length ? (
+        <ul aria-label={t('st.plans.planFee.history')} className="m-0 flex list-none flex-col gap-1 p-0 text-xs text-muted">
+          {v.history.map((h) => (
+            <li key={h.id}>
+              {t('st.plans.planFee.historyLine', { date: dateTime(h.createdAt), mode: t(`st.plans.planFee.${h.mode}`), who: h.actorId })}
+              {h.reasonCode ? ` · ${humanize(h.reasonCode)}` : ''}{h.note ? ` — ${h.note}` : ''}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function OrgFinder({ onPick, t }: { onPick: (orgId: string) => void; t: T }) {
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
@@ -112,20 +189,15 @@ function OrgFinder({ onPick, t }: { onPick: (orgId: string) => void; t: T }) {
 export function SellerBillingPanel() {
   const t = useT();
   const params = useSearchParams();
-  const qc = useQueryClient();
-  const toast = useToast();
   const { adjust } = usePlanRights();
   const [orgId, setOrgId] = useState(params.get('org') ?? '');
   const [action, setAction] = useState<Action | null>(null);
   const [actionSeq, setActionSeq] = useState(0);
+  const [planFeeOpen, setPlanFeeOpen] = useState(false);
   const panel = useQuery(staffPlanQueries.panel(plansApi(), orgId));
   const invoiceState = useTableState({ searchParams: params, prefix: 'sinv', syncUrl: false });
   const grantState = useTableState({ searchParams: params, prefix: 'sgr', syncUrl: false });
-  const earnings = useMutation({
-    mutationFn: (enabled: boolean) => plansApi().setEarningsCollection(orgId, enabled),
-    onSuccess: (p) => qc.setQueryData(staffPlanKeys.panel(orgId), p),
-    onError: (e) => toast.show(problemMessage(e), 'error')
-  });
+  const collectionState = useTableState({ searchParams: params, prefix: 'scol', syncUrl: false });
   const open = (a: Action) => {
     setActionSeq((n) => n + 1);
     setAction(a);
@@ -134,6 +206,9 @@ export function SellerBillingPanel() {
     { id: 'number', accessorFn: (i) => i.number ?? i.id, header: t('st.plans.col.invoice'), size: 150, meta: { kind: 'mono' } },
     { id: 'createdAt', accessorFn: (i) => i.createdAt, header: t('st.plans.col.date'), size: 130, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.createdAt) },
     { id: 'amountDueCents', accessorFn: (i) => i.amountDueCents, header: t('st.plans.col.amount'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountDueCents) },
+    { id: 'paidFromSalesCents', accessorFn: (i) => i.paidFromSalesCents, header: t('st.plans.col.fromSales'), size: 120, meta: { kind: 'money', align: 'end' },
+      cell: ({ row }) => (row.original.paidFromSalesCents ? money(row.original.paidFromSalesCents) : '—') },
+    { id: 'paidByCardCents', accessorFn: (i) => i.paidByCardCents, header: t('st.plans.col.card'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.paidByCardCents) },
     { id: 'status', accessorFn: (i) => i.status ?? '', header: t('st.plans.col.status'), size: 100, meta: { kind: 'status' },
       cell: ({ row }) => <StatusPill tone={row.original.status === 'paid' ? 'good' : row.original.status === 'open' ? 'warn' : 'brand'}>{row.original.status ?? '—'}</StatusPill> },
     { id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 200, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
@@ -145,6 +220,17 @@ export function SellerBillingPanel() {
       ) }
   ], [t, adjust]);
   const grantCols = useMemo(() => grantColumns(t, false), [t]);
+  const collectionColumns = useMemo<ColumnDef<StaffEarningsCollection>[]>(() => [
+    { id: 'invoice', accessorFn: (c) => c.invoiceNumber ?? c.invoiceId, header: t('st.plans.col.invoice'), size: 150, meta: { kind: 'mono' } },
+    { id: 'createdAt', accessorFn: (c) => c.createdAt ?? '', header: t('st.plans.col.date'), size: 130, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.createdAt) },
+    { id: 'amountCents', accessorFn: (c) => c.amountCents, header: t('st.plans.col.asked'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountCents) },
+    { id: 'withheldCents', accessorFn: (c) => c.withheldCents, header: t('st.plans.col.withheld'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.withheldCents) },
+    { id: 'releasedCents', accessorFn: (c) => c.releasedCents, header: t('st.plans.col.released'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.releasedCents) },
+    { id: 'status', accessorFn: (c) => c.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' },
+      cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
+    { id: 'reason', accessorFn: (c) => c.lastError ?? c.reason ?? '', header: t('st.plans.col.detail'), size: 260,
+      cell: ({ row }) => <span className="text-xs text-muted">{row.original.lastError ?? row.original.reason ?? ''}</span> }
+  ], [t]);
   const p = panel.data;
   const b = p?.billing;
   return (
@@ -166,27 +252,30 @@ export function SellerBillingPanel() {
                 <div><dt className="text-xs text-muted">{t('st.plans.trialEnds')}</dt><dd className="m-0">{b.trialEndsAt ? `${dateTime(b.trialEndsAt)}${b.trialSource ? ` · ${humanize(b.trialSource)}` : ''}` : '—'}</dd></div>
                 <div><dt className="text-xs text-muted">{t('st.plans.nextCharge')}</dt><dd className="m-0">{b.nextChargeLabel}</dd></div>
                 <div><dt className="text-xs text-muted">{t('st.plans.creditBalance')}</dt><dd className="m-0 font-semibold" data-testid="panel-credit">{money(b.creditBalanceCents)}</dd></div>
-                <div>
-                  <dt className="text-xs text-muted">{t('st.plans.collectFromEarnings')}</dt>
-                  <dd className="m-0 flex items-center gap-2">
-                    {b.collectFromEarnings ? t('st.plans.on') : t('st.plans.off')}
-                    {adjust && p.earningsCollectionEnabled ? (
-                      <Button size="sm" variant="link" loading={earnings.isPending} onClick={() => earnings.mutate(!b.collectFromEarnings)}>{b.collectFromEarnings ? t('st.plans.turnOff') : t('st.plans.turnOn')}</Button>
-                    ) : !p.earningsCollectionEnabled ? <span className="text-xs text-muted">{t('st.plans.earningsOffPlatform')}</span> : null}
-                  </dd>
-                </div>
               </dl>
             ) : <p className="m-0 text-sm text-muted">{t('st.plans.noSubscription')}</p>}
           </Card>
+          {p.planFeeCollection ? (
+            <Card title={t('st.plans.planFee')}>
+              <PlanFeeSummary v={p.planFeeCollection} adjust={adjust} onChange={() => setPlanFeeOpen(true)} t={t} />
+            </Card>
+          ) : null}
           <h3 className="m-0 text-md font-semibold">{t('st.plans.invoices')}</h3>
           <DataTable<StaffBillingInvoice> id="staff.plans.seller-invoices" label={t('st.plans.invoices')} columns={invoiceColumns} data={p.invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number ?? i.id}
             state={invoiceState} mode="client" fetching={panel.isFetching} empty={t('st.plans.noInvoices')} />
+          <h3 className="m-0 text-md font-semibold">{t('st.plans.collections')}</h3>
+          <DataTable<StaffEarningsCollection> id="staff.plans.seller-collections" label={t('st.plans.collections')} columns={collectionColumns} data={p.collections}
+            getRowId={(c) => c.invoiceId} rowLabel={(c) => c.invoiceNumber ?? c.invoiceId} state={collectionState} mode="client" fetching={panel.isFetching}
+            empty={t('st.plans.noCollections')} />
           <h3 className="m-0 text-md font-semibold">{t('st.plans.grantsForOrg')}</h3>
           <DataTable<StaffBillingGrant> id="staff.plans.seller-grants" label={t('st.plans.grantsForOrg')} columns={grantCols} data={p.grants} getRowId={(g) => g.id} rowLabel={(g) => g.summary}
             state={grantState} mode="client" fetching={panel.isFetching} empty={t('st.plans.noGrants')} />
         </>
       ) : null}
       <AdjustDialog key={actionSeq} orgId={orgId} action={action} onClose={() => setAction(null)} t={t} />
+      {p?.planFeeCollection && planFeeOpen ? (
+        <PlanFeeDialog orgId={orgId} orgName={p.orgName ?? p.orgId} current={p.planFeeCollection} open={planFeeOpen} onClose={() => setPlanFeeOpen(false)} t={t} />
+      ) : null}
     </div>
   );
 }

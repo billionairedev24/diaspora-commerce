@@ -3,10 +3,13 @@
 import {
   type BillingPaymentMethod,
   type BillingSetupIntent,
+  type BillingView as BillingViewData,
   type Cadence,
   type EarnedReward,
   type Invoice,
   type Plan,
+  type PlanFeeCollectionMode,
+  type PlanFeeCollectionView,
   type RewardProgress,
   sellerKeys,
   sellerQueries,
@@ -20,6 +23,7 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { PlanFeeChoice } from '@/components/money/PlanFeeChoice';
 import { luhn } from '@/components/onboarding/steps/PlanStep';
 import { Card } from '@/components/ui/Card';
 import { ModulePage } from '@/components/ui/ModulePage';
@@ -147,12 +151,57 @@ const invoiceColumns = (t: T): ColumnDef<Invoice>[] => [
   { id: 'number', accessorFn: (i) => i.number, header: t('sc.billing.col.invoice'), size: 160, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.number}</span> },
   { id: 'periodStart', accessorFn: (i) => i.periodStart, header: t('sc.billing.col.period'), size: 240, meta: { kind: 'date', exportValue: (i) => `${i.periodStart} – ${i.periodEnd}` }, cell: ({ row }) => `${shortDate(row.original.periodStart)} – ${shortDate(row.original.periodEnd)}` },
   { id: 'amountDueMinor', accessorFn: (i) => i.amountDueMinor, header: t('sc.billing.col.amount'), size: 130, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountDueMinor, row.original.currency) },
+  {
+    // S298: what the organisation's sales paid and what the card paid.
+    id: 'paidWith', accessorFn: (i) => paidWith(i, t), header: t('sc.billing.col.paidWith'), size: 280, enableSorting: false,
+    cell: ({ row }) => <span className={cx('text-sm', row.original.paidFromSalesMinor > 0 && 'font-semibold')}>{paidWith(row.original, t)}</span>
+  },
   { id: 'status', accessorFn: (i) => i.status, header: t('sc.billing.col.status'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> },
   {
     id: 'pdf', header: () => <span className="at-visually-hidden">{t('sc.billing.col.download')}</span>, size: 150, enableSorting: false, meta: { export: false, label: t('sc.billing.col.download') },
     cell: ({ row }) => (row.original.pdfUrl ? <a href={row.original.pdfUrl} target="_blank" rel="noreferrer">{t('sc.billing.downloadPdf')}</a> : null)
   }
 ];
+
+/** "Paid from your sales: $90.00 · Card: $21.15" (S298), or just the card's part. */
+export function paidWith(i: Invoice, t: T): string {
+  const card = money(i.paidByCardMinor, i.currency);
+  return i.paidFromSalesMinor > 0 ? t('sc.billing.paidSplit', { sales: money(i.paidFromSalesMinor, i.currency), card }) : t('sc.billing.paidCard', { card });
+}
+
+/**
+ * How the plan is paid (S298): from sales first or always by card. Owner and finance change it; it applies from the
+ * next invoice. Hidden while the platform doesn't offer it.
+ */
+function PlanFeeCollectionCard({ v, t }: { v: PlanFeeCollectionView; t: T }) {
+  const api = sellerApi();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const { orgId } = useSeller();
+  const save = useMutation({
+    mutationFn: (mode: PlanFeeCollectionMode) => api.setPlanFeeCollection(mode),
+    onSuccess: (next) => {
+      qc.setQueryData(sellerKeys.billing(orgId), (old: BillingViewData | undefined) => (old ? { ...old, planFeeCollection: next } : old));
+      toast.show(t('sc.billing.planFee.saved'));
+    },
+    onError: (e) => toast.show(problemMessage(e), 'error')
+  });
+  if (!v.available) return null;
+  return (
+    <Card title={t('sc.billing.planFee.title')}>
+      <div data-testid="plan-fee-collection" className="flex flex-col gap-3">
+        <PlanFeeChoice value={save.isPending && save.variables ? save.variables : v.mode} disabled={!v.canChange || save.isPending}
+          onChange={(m) => m !== v.mode && save.mutate(m)} t={t} />
+        <p className="m-0 text-sm text-muted">
+          {v.appliesFromInvoiceAt ? t('sc.billing.planFee.appliesFrom', { date: shortDate(v.appliesFromInvoiceAt) }) : t('sc.billing.planFee.appliesFirst')}
+          {v.inProgressInvoiceId ? ` ${t('sc.billing.planFee.inProgress')}` : ''}
+          {v.source === 'STAFF' ? ` ${t('sc.billing.planFee.setByStaff')}` : ''}
+        </p>
+        {!v.canChange ? <p className="m-0 text-xs text-muted">{t('sc.billing.planFee.readOnly')}</p> : null}
+      </div>
+    </Card>
+  );
+}
 
 /** Change plan or cadence: the preview (Stripe's proration for an upgrade) before anything changes. */
 function ChangePlanDialog({ target, onClose, t }: { target: { plan: Plan; cadence: Cadence } | null; onClose: () => void; t: T }) {
@@ -372,6 +421,7 @@ export function BillingView() {
     <ModulePage module="billing" readOnlyNote={false}>
       {!canManage ? <Notice tone="info" icon="eye" title={t('sc.billing.ownerOnly')}>{t('sc.billing.ownerOnlyDetail')}</Notice> : null}
       <PlanSummary sub={sub} t={t} />
+      {q.data.planFeeCollection ? <PlanFeeCollectionCard v={q.data.planFeeCollection} t={t} /> : null}
 
       <Card title={t('sc.billing.rewardsTitle')}>
         {rewards.isError ? <ErrorState error={rewards.error} onRetry={() => void rewards.refetch()} /> : available.length ? (

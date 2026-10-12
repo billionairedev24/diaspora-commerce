@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-/* Staff console › Finance › Plans & billing (S292–S297) against the mock BFF: the plan catalogue with the Stripe sync
-   status, a promo-code trial campaign, a reward rule with its "who qualifies now" preview, and a per-seller credit
-   with a reason code that lands in the grants log. Names are unique per run so the journey can run again. */
+/* Staff console › Finance › Plans & billing (S292–S298) against the mock BFF: the plan catalogue with the Stripe sync
+   status, a promo-code trial campaign, a reward rule with its "who qualifies now" preview, a per-seller credit with a
+   reason code that lands in the grants log, a per-seller override of how the plan is paid and the platform default
+   for new sellers (Settings). Names are unique per run so the journey can run again. */
 test.describe('staff console · plans & billing', () => {
   test('catalogue, campaign, reward preview, a seller credit and the grants log', async ({ page }) => {
     const run = Date.now().toString(36).toUpperCase();
@@ -44,7 +45,32 @@ test.describe('staff console · plans & billing', () => {
     await expect(credit).toBeHidden();
     await expect(page.getByRole('table', { name: 'Rewards and adjustments' })).toContainText('$10 credit');
 
+    // S298: how the seller pays its plan, overridden with a reason (applies from its next invoice).
+    const fees = page.getByTestId('panel-plan-fees');
+    const target = (await fees.textContent())?.includes('Card only') ? 'EARNINGS_FIRST' : 'CARD';
+    await fees.getByRole('button', { name: 'Change' }).click();
+    const override = page.getByRole('dialog', { name: 'How Ade’s Kitchen pays its plan' });
+    await override.getByLabel('Plan fees').selectOption(target);
+    await override.getByLabel('Reason').selectOption('SELLER_REQUEST');
+    await override.getByLabel('Note (optional)').fill(`E2E ${run}`);
+    await override.getByRole('button', { name: 'Apply' }).click();
+    await expect(override).toBeHidden();
+    await expect(fees).toContainText(target === 'CARD' ? 'Card only' : 'From sales first, card for the rest');
+    await expect(page.getByRole('list', { name: 'Changes' })).toContainText(`E2E ${run}`);
+    await expect(page.getByRole('table', { name: 'Invoices paid from earnings' })).toContainText('$25.00');
+
     await page.getByRole('tab', { name: 'Grants log' }).click();
     await expect(page.getByRole('table', { name: 'Grants log' })).toContainText('$10 credit');
+
+    // S298: the platform default for new sellers; the kill switch is shown, not changed here. Restored afterwards.
+    await page.getByRole('tab', { name: 'Settings' }).click();
+    await expect(page.getByTestId('kill-switch')).toContainText('On: sellers may pay their plan from their sales');
+    const defaults = page.getByLabel('Default for new sellers');
+    await defaults.selectOption('CARD');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByText('Default saved')).toBeVisible();
+    await defaults.selectOption('EARNINGS_FIRST');
+    await page.getByRole('button', { name: 'Save' }).click();
+    await expect(defaults).toHaveValue('EARNINGS_FIRST');
   });
 });

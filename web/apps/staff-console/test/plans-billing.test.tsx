@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { CataloguePanel } from '@/components/plans/CataloguePanel';
 import { RewardsPanel } from '@/components/plans/RewardsPanel';
 import { SellerBillingPanel } from '@/components/plans/SellerBillingPanel';
+import { SettingsPanel } from '@/components/plans/SettingsPanel';
 import { TrialsPanel } from '@/components/plans/TrialsPanel';
 
 import { asRoles } from './mock-api';
@@ -101,6 +102,47 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(within(screen.getByRole('table', { name: 'Rewards and adjustments' })).getAllByRole('row').length).toBeGreaterThan(2);
   });
 
+  it('overrides how a seller pays its plan with a reason, and shows the invoices paid from earnings (S298)', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<SellerBillingPanel />);
+    await user.type(screen.getByRole('searchbox'), 'ade');
+    await user.click(await screen.findByRole('button', { name: /Ade’s Kitchen/ }));
+    const fees = await screen.findByTestId('panel-plan-fees');
+    expect(within(fees).getByText('From sales first, card for the rest')).toBeInTheDocument();
+    expect(within(fees).getByText(/Platform default/)).toBeInTheDocument();
+    expect(within(fees).getByText(/^A change applies from the invoice of /)).toBeInTheDocument();
+    const collections = screen.getByRole('table', { name: 'Invoices paid from earnings' });
+    expect(within(collections).getByRole('row', { name: /AT-ADES1/ })).toHaveTextContent('$25.00');
+    expect(within(screen.getByRole('table', { name: 'Invoices' })).getByRole('row', { name: /AT-ADES1/ })).toHaveTextContent('$14.00');
+
+    await user.click(within(fees).getByRole('button', { name: 'Change' }));
+    const dialog = await screen.findByRole('dialog', { name: 'How Ade’s Kitchen pays its plan' });
+    expect(within(dialog).getByLabelText('Plan fees')).toHaveValue('CARD');
+    await user.click(within(dialog).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(within(dialog).getAllByText('Choose a reason')).toHaveLength(2));
+    await waitFor(() => expect(within(dialog).getAllByRole('option').length).toBeGreaterThan(3));
+    await user.selectOptions(within(dialog).getByLabelText('Reason'), 'SELLER_REQUEST');
+    await user.type(within(dialog).getByLabelText('Note (optional)'), 'Books plan fees as a card expense');
+    await user.click(within(dialog).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('panel-plan-fees')).toHaveTextContent('Card only'));
+    expect(screen.getByTestId('panel-plan-fees')).toHaveTextContent('Set by staff');
+    expect(within(screen.getByRole('list', { name: 'Changes' })).getByText(/Books plan fees as a card expense/)).toBeInTheDocument();
+    expect(getStaffDb().plans.orgs[0]).toMatchObject({ planFeeCollection: 'CARD', planFeeSource: 'STAFF' });
+  });
+
+  it('sets the plan fee default for new sellers in Settings; the kill switch is read-only (S298)', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<SettingsPanel />);
+    expect(await screen.findByTestId('kill-switch')).toHaveTextContent('On: sellers may pay their plan from their sales');
+    const select = screen.getByLabelText('Default for new sellers');
+    expect(select).toHaveValue('EARNINGS_FIRST');
+    await user.selectOptions(select, 'CARD');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(getStaffDb().plans.settings.planFeeCollectionDefault).toBe('CARD'));
+    expect(await screen.findByText('Default saved')).toBeInTheDocument();
+  });
+
   it('is read-only without plans:manage or billing:adjust', async () => {
     asRoles('platform.auditor');
     await renderScreen(<CataloguePanel />);
@@ -108,5 +150,12 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(screen.queryByRole('button', { name: 'New plan' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Sync with Stripe' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
+  });
+
+  it('shows the plan fee settings read-only to an auditor (S298)', async () => {
+    asRoles('platform.auditor');
+    await renderScreen(<SettingsPanel />);
+    expect(await screen.findByLabelText('Default for new sellers')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 });

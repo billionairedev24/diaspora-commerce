@@ -87,7 +87,10 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     cardLast4: null,
     cardExpMonth: null,
     cardExpYear: null,
-    firstCharge: null
+    firstCharge: null,
+    planFeeCollection: null,
+    planFeeCollectionAvailable: false,
+    planFeeCollectionDefault: 'CARD'
   },
   compliance: {
     categories: [],

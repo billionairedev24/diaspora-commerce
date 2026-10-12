@@ -1,6 +1,6 @@
 'use client';
 
-import { type Payout, sellerKeys, sellerQueries } from '@afrotransact/api-client';
+import { type Payout, type PlanFeeDeduction, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import { Card } from '@/components/ui/Card';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey, money, shortDate, toMinor } from '@/lib/format';
 import { useSeller } from '@/lib/session';
@@ -25,8 +26,46 @@ const columns: ColumnDef<Payout>[] = [
   { id: 'note', accessorFn: (p) => p.holdReason ?? p.failureMessage ?? undefined, header: 'Note', size: 260, cell: ({ row }) => <span className="text-xs text-muted">{row.original.holdReason ?? row.original.failureMessage ?? ''}</span> }
 ];
 
+/**
+ * Plan invoices paid from sales (S298): one "Plan fee (invoice …)" line each, with the settlements it was deducted
+ * from, so the seller's own books reconcile with what was transferred.
+ */
+function PlanFeeDeductions({ items, currency, t }: { items: PlanFeeDeduction[]; currency: string; t: Translator<MessageKey> }) {
+  return (
+    <Card title={t('sc.payouts.planFees.title')}>
+      <p className="m-0 text-sm text-muted">{t('sc.payouts.planFees.help')}</p>
+      <ul aria-label={t('sc.payouts.planFees.title')} className="m-0 flex list-none flex-col gap-3 p-0 text-sm">
+        {items.map((d) => (
+          <li key={d.invoiceId} className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <strong className="flex-1">{t('sc.payouts.planFees.line', { invoice: d.invoiceNumber ?? d.invoiceId })}</strong>
+              <span className="text-xs text-muted">{shortDate(d.createdAt)}</span>
+              <strong>{money(-(d.withheldMinor - d.releasedMinor), currency)}</strong>
+            </div>
+            {d.transfers.map((x) => (
+              <span key={`${x.orderId}-${x.at}`} className="flex gap-2 pl-3 text-xs text-muted">
+                <span className="flex-1">
+                  {x.amountMinor >= 0 ? t('sc.payouts.planFees.deducted', { order: x.orderId }) : t('sc.payouts.planFees.paidBack', { order: x.orderId })}
+                </span>
+                <span>{money(-x.amountMinor, currency)}</span>
+              </span>
+            ))}
+            {d.status === 'RELEASED' ? <span className="pl-3 text-xs text-muted">{t('sc.payouts.planFees.released')}</span> : null}
+            {d.outstandingMinor > 0 ? (
+              <span className="pl-3 text-xs text-warning">{t('sc.payouts.planFees.outstanding', { amount: money(d.outstandingMinor, currency) })}</span>
+            ) : d.outstandingMinor < 0 ? (
+              <span className="pl-3 text-xs text-success">{t('sc.payouts.planFees.owed', { amount: money(-d.outstandingMinor, currency) })}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 /** Payouts: available / on hold / on the way, holds per order, history and "Request payout" (payments). */
 export function PayoutsView() {
+  const t = useT();
   const api = sellerApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -90,6 +129,7 @@ export function PayoutsView() {
           </ul>
         </Card>
       ) : null}
+      {q.data.planFeeDeductions.length ? <PlanFeeDeductions items={q.data.planFeeDeductions} currency={b.currency} t={t} /> : null}
       <h2 className="m-0 text-lg font-semibold">History</h2>
       {q.data.historyAvailable ? (
         <DataTable<Payout> id="seller.payouts" label="Payouts" columns={columns} data={q.data.payouts} getRowId={(p) => p.id} rowLabel={(p) => p.id}

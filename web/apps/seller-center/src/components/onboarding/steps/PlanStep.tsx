@@ -1,11 +1,12 @@
 'use client';
 
-import { type OnboardingPlanInput, type OnboardingPlanOffer, sellerQueries } from '@afrotransact/api-client';
+import { type OnboardingPlanInput, type OnboardingPlanOffer, type PlanFeeCollectionMode, sellerQueries } from '@afrotransact/api-client';
 import { Button, cx, TextField } from '@afrotransact/ui';
 import { Check, CreditCard, Flask, LockSimple } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
+import { PlanFeeChoice } from '@/components/money/PlanFeeChoice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
@@ -216,6 +217,10 @@ export function PlanStep({ status, ref }: StepProps) {
     cadence: (saved.cadence ?? 'MONTHLY') as Cadence
   }));
   const [newCard, setNewCard] = useState(!saved.cardLast4);
+  // How the plan will be paid (S298): offered while the platform allows it, defaulting to the platform default.
+  const [feeMode, setFeeMode] = useState<PlanFeeCollectionMode>(saved.planFeeCollection ?? saved.planFeeCollectionDefault);
+  const offerFeeChoice = saved.planFeeCollectionAvailable;
+  const feeChanged = offerFeeChoice && feeMode !== (saved.planFeeCollection ?? saved.planFeeCollectionDefault);
   const card = useRef<CardHandle>(null);
   const plan = plans.data?.plans.find((p) => p.code === f.values.planCode) ?? null;
   const paid = !!plan && plan.monthlyCents > 0;
@@ -236,9 +241,12 @@ export function PlanStep({ status, ref }: StepProps) {
       let body: OnboardingPlanInput = {
         planCode: v.planCode,
         cadence: v.cadence,
-        ...(promo.trim() ? { promoCode: promo.trim().toUpperCase() } : {})
+        ...(promo.trim() ? { promoCode: promo.trim().toUpperCase() } : {}),
+        ...(paid && offerFeeChoice ? { planFeeCollection: feeMode } : {})
       };
-      if (paid && cardKept) return true;
+      // A kept card stays with the saved plan; when only how the plan is paid changed, the seller service keeps it.
+      if (paid && cardKept && !feeChanged) return true;
+      if (paid && cardKept) return f.run(mode, () => ({}), () => api.saveOnboardingPlan(body));
       if (paid) {
         if (mode === 'draft')
           return f.run(
@@ -372,6 +380,12 @@ export function PlanStep({ status, ref }: StepProps) {
           ) : (
             <LocalTestCard ref={card} />
           )}
+          {offerFeeChoice ? (
+            <div className="flex flex-col gap-2">
+              <h3 className="m-0 text-md font-bold">{t('sc.planStep.planFee.title')}</h3>
+              <PlanFeeChoice value={feeMode} onChange={setFeeMode} disabled={disabled} t={t} platformDefault={saved.planFeeCollectionDefault} />
+            </div>
+          ) : null}
           <TextField
             id={fieldId('promoCode')}
             className="max-w-xs"

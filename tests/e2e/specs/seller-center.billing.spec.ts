@@ -39,4 +39,31 @@ test.describe('seller center · plan & billing', () => {
     const invoices = page.getByRole('table', { name: 'Invoices' });
     await expect(invoices.getByRole('link', { name: 'Download PDF' }).first()).toHaveAttribute('href', /\.pdf$/);
   });
+
+  /* S298: how the plan is paid. "Pay your plan from your sales" takes each invoice from pending earnings (the card pays
+     the rest); "Charge my card" keeps plan fees a separate card expense. Invoices show the split; Payouts lists the
+     "Plan fee (invoice …)" deductions so the seller's books reconcile. The journey restores the choice it changed. */
+  test('pays the plan from sales or by card, with the split on invoices and the deduction on payouts', async ({ page }) => {
+    await page.goto('/billing');
+    const choice = page.getByTestId('plan-fee-collection');
+    const fromSales = choice.getByRole('radio', { name: /Pay your plan from your sales/ });
+    const byCard = choice.getByRole('radio', { name: /Charge my card/ });
+    await expect(choice).toContainText('Changes apply from your next invoice, on');
+    if ((await byCard.getAttribute('aria-checked')) === 'true') {
+      await fromSales.click();
+      await expect(fromSales).toHaveAttribute('aria-checked', 'true');
+    }
+    await byCard.click();
+    await expect(byCard).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByText('Saved. It applies from your next invoice.')).toBeVisible();
+    await fromSales.click();
+    await expect(fromSales).toHaveAttribute('aria-checked', 'true');
+
+    await expect(page.getByRole('table', { name: 'Invoices' })).toContainText('Paid from your sales: $90.00 · Card: $21.15');
+
+    await page.goto('/payouts');
+    const fees = page.getByRole('list', { name: 'Plan fees paid from your sales' });
+    await expect(fees).toContainText('Plan fee (invoice AT-1003)');
+    await expect(fees).toContainText('Deducted from order AT-2026-400112');
+  });
 });
