@@ -25,7 +25,8 @@ import tools.jackson.databind.json.JsonMapper;
  * {@link PaymentsClient} over payments-service's REST API (contracts/openapi/payments.yaml):
  * {@code POST /v1/payments}, {@code GET /v1/payments/{id}?refresh=}, {@code POST /v1/payments/{id}/capture},
  * {@code /cancel}, {@code /release}, {@code /off-session-charges}, {@code /refunds},
- * {@code POST /v1/settlements/{orderId}/delivered} (kind SERVICE) and {@code GET /v1/fee-schedules/effective}.
+ * {@code POST /v1/settlements/{orderId}/delivered} (kind SERVICE) and {@code GET /v1/fee-schedules/effective}
+ * (kind SERVICE: the connection fee). Booking lines are sent as kind SERVICE with the service's category.
  */
 @Component
 class HttpPaymentsClient implements PaymentsClient {
@@ -61,8 +62,8 @@ class HttpPaymentsClient implements PaymentsClient {
         }
         body.put("saveForOffSession", r.saveForOffSession());
         body.put("lines", r.lines().stream().map(l -> Map.<String, Object>of("lineId", l.lineId(),
-                "sellerOrg", r.sellerOrg(), "category", "services", "fulfilment", "SELF", "quantity", 1,
-                "itemsMinor", l.amountMinor(), "shippingMinor", 0, "taxMinor", 0)).toList());
+                "sellerOrg", r.sellerOrg(), "category", r.category(), "kind", "SERVICE", "fulfilment", "SELF",
+                "quantity", 1, "itemsMinor", l.amountMinor(), "shippingMinor", 0, "taxMinor", 0)).toList());
         return call(c -> c.post().uri("/v1/payments").headers(h -> headers(h, idempotencyKey)).body(body)
                 .retrieve().body(JsonNode.class), HttpPaymentsClient::intent);
     }
@@ -111,7 +112,8 @@ class HttpPaymentsClient implements PaymentsClient {
 
     @Override
     public EffectiveFees effectiveFees(String category, String orgId) {
-        return call(c -> c.get().uri("/v1/fee-schedules/effective?category={c}&orgId={o}", category, orgId)
+        return call(c -> c.get().uri("/v1/fee-schedules/effective?kind=SERVICE&category={c}&orgId={o}", category,
+                        orgId)
                 .headers(h -> headers(h, null)).retrieve().body(JsonNode.class), n -> {
                     if (!n.has("commissionBps")) {
                         throw new PaymentsClientException(0, null, "Payments returned no effective fees", null);

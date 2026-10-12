@@ -3,6 +3,7 @@ package com.afrotransact.bookings.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -32,16 +33,18 @@ class ProviderFeesImpl implements ProviderFees {
     }
 
     @Override
-    public FeeSchedule forOrg(String orgId) {
+    public FeeSchedule forOrg(String orgId, String category) {
+        String cat = category == null || category.isBlank() ? CATEGORY : category.trim().toLowerCase(Locale.ROOT);
+        String key = orgId + "|" + cat;
         Instant now = clock.instant();
-        Cached hit = cache.get(orgId);
+        Cached hit = cache.get(key);
         if (hit != null && now.isBefore(hit.expiresAt())) {
             return hit.fees();
         }
         FeeSchedule fees;
         Duration ttl = settings.feesCacheTtl();
         try {
-            PaymentsClient.EffectiveFees e = payments.effectiveFees(CATEGORY, orgId);
+            PaymentsClient.EffectiveFees e = payments.effectiveFees(cat, orgId);
             fees = new FeeSchedule(e.commissionBps(), e.cardPctBps(), e.cardFixedMinor(), e.commissionSource(),
                     e.version());
         } catch (PaymentsClientException | IllegalArgumentException e) {
@@ -54,7 +57,7 @@ class ProviderFeesImpl implements ProviderFees {
                     + "(commission {} bps, card {} bps + {})", orgId, e.getMessage(), fees.commissionBps(),
                     fees.cardPctBps(), fees.cardFixedMinor());
         }
-        cache.put(orgId, new Cached(fees, now.plus(ttl)));
+        cache.put(key, new Cached(fees, now.plus(ttl)));
         return fees;
     }
 
