@@ -5,8 +5,16 @@ import { enrolAuthenticator } from '../support/totp';
 
 /* My account in Seller Center against the in-process mock BFF: the account menu stays in the back office, the
    authenticator is enrolled with a real TOTP from the setup key, alerts and preferences save. Mock state lives in the
-   app server, so the journey resets what an earlier run turned on. */
+   app server, so the journey resets what an earlier run turned on, and puts the shared display preferences back to
+   their seeded values afterwards: later specs (billing, payouts…) read dates in the seeded "match my language" format. */
+const SEEDED_PREFERENCES = { locale: null, timeZone: null, dateFormat: 'AUTO', numberFormat: 'AUTO', tableDensity: 'COMFORTABLE' };
+
 test.describe('seller center · my account', () => {
+  test.afterAll(async ({ request }, testInfo) => {
+    const res = await request.put(`${String(testInfo.project.use.baseURL ?? '')}/api/bff/v1/account/preferences`, { data: SEEDED_PREFERENCES });
+    expect(res.status(), await res.text()).toBe(200);
+  });
+
   test('account menu opens My account inside Seller Center, not the storefront', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /Account menu for/ }).click();
@@ -53,5 +61,11 @@ test.describe('seller center · my account', () => {
     await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText('Preferences saved')).toBeVisible();
     expect(await page.evaluate(() => window.localStorage.getItem('at.table.defaultDensity'))).toBe('compact');
+
+    // Back to the defaults (the mock is shared with every later spec in this run).
+    await page.getByRole('group', { name: 'Date format' }).getByRole('radio', { name: /Match my language/ }).check();
+    await page.getByRole('radio', { name: /Comfortable/ }).check();
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.getByText('Preferences saved')).toBeVisible();
   });
 });
