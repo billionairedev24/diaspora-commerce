@@ -2,14 +2,15 @@
 import { localeInfo } from '@afrotransact/i18n';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { BellIcon as Bell, CalendarIcon as Calendar, CaretRightIcon as CaretRight, CheckCircleIcon as CheckCircle, GlobeIcon as Globe, type Icon, LockSimpleIcon as LockSimple, MapPinIcon as MapPin, QuestionIcon as Question, ReceiptIcon as Receipt, ShieldCheckIcon as ShieldCheck, SignOutIcon as SignOut, TruckIcon as Truck, WalletIcon as Wallet } from 'phosphor-react-native';
+import { BellIcon as Bell, CalendarIcon as Calendar, CaretRightIcon as CaretRight, CheckCircleIcon as CheckCircle, DesktopIcon as Desktop, GlobeIcon as Globe, type Icon, LockSimpleIcon as LockSimple, MapPinIcon as MapPin, QuestionIcon as Question, ReceiptIcon as Receipt, ShieldCheckIcon as ShieldCheck, SignOutIcon as SignOut, StorefrontIcon as Storefront, TruckIcon as Truck, WalletIcon as Wallet } from 'phosphor-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { useAddresses, useMyBookings, useOrders, usePaymentMethods } from '@/api/queries';
+import { useAddresses, useMe, useMyBookings, useOrders, usePaymentMethods } from '@/api/queries';
 import { useAuth } from '@/auth/AuthProvider';
 import { EnvRibbon } from '@/brand/EnvRibbon';
 import { env } from '@/config/env';
+import { backOfficeLabel, backOfficeUrl } from '@/domain/backOffices';
 import { isActive } from '@/domain/bookings';
 import { stepIndex } from '@/domain/tracking';
 import { useLocale, useT } from '@/i18n';
@@ -38,6 +39,8 @@ export default function Account() {
   const addresses = useAddresses();
   const pms = usePaymentMethods();
   const bookings = useMyBookings();
+  // Seller Center, Provider Hub, staff console: web apps, opened through the storefront's /back-office link.
+  const backOffices = useMe().data?.user?.backOffices ?? [];
   const [confirm, setConfirm] = useState(false);
   const [language, setLanguage] = useState(false);
   const locale = useLocale();
@@ -83,6 +86,15 @@ export default function Account() {
         <Row icon={MapPin} label={tr('cu.account.addresses')} value={String(addresses.data?.length ?? '')} onPress={() => router.push('/addresses')} />
         <Row icon={Wallet} label={tr('cu.account.paymentMethods')} value={String(pms.data?.length ?? '')} onPress={() => router.push('/payments')} />
       </View>
+      {backOffices.length > 0 ? (
+        <View style={styles.group}>
+          <SectionLabel>{tr('cu.account.backOffices')}</SectionLabel>
+          {backOffices.map((b) => (
+            <Row key={b.app} icon={b.app === 'staff-console' ? Desktop : b.app === 'provider-hub' ? Calendar : Storefront} label={tr(backOfficeLabel(b))}
+              onPress={() => void WebBrowser.openBrowserAsync(backOfficeUrl(env.webUrl, b))} />
+          ))}
+        </View>
+      ) : null}
       <View style={styles.group}>
         <SectionLabel>{tr('cu.account.settings')}</SectionLabel>
         <Row icon={Bell} label={tr('cu.account.notifications')} onPress={() => router.push('/settings/notifications')} />
