@@ -35,7 +35,12 @@ test.describe('staff console · plans & billing', () => {
     await rule.getByRole('button', { name: 'Close' }).click();
 
     await page.getByRole('tab', { name: 'Seller billing' }).click();
-    await page.getByRole('searchbox').fill('ade');
+    await expect(page).toHaveURL(/tab=sellers/);
+    // The search box can re-render while the tab change settles: type again until the match shows.
+    await expect(async () => {
+      await page.getByRole('searchbox').fill('ade');
+      await expect(page.getByRole('button', { name: /Ade’s Kitchen/ })).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
     await page.getByRole('button', { name: /Ade’s Kitchen/ }).click();
     await page.getByRole('button', { name: 'Add credit' }).click();
     const credit = page.getByRole('dialog', { name: 'Add credit' });
