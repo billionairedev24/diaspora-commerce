@@ -54,6 +54,13 @@ type SellerRewardProgress struct {
 	RewardLabel    string     `json:"rewardLabel"`
 	ConditionLabel string     `json:"conditionLabel"`
 	EndsAt         *time.Time `json:"endsAt"`
+	// S299: LESS_THAN rules (low-sales relief) are decided once, at CheckAt.
+	Comparison     string     `json:"comparison"`
+	WindowAnchor   string     `json:"windowAnchor"`
+	WindowDays     *int       `json:"windowDays"`
+	Pending        bool       `json:"pending"`
+	CheckAt        *time.Time `json:"checkAt"`
+	WindowClosesAt *time.Time `json:"windowClosesAt"`
 }
 
 // SellerGrant is seller's BillingGrant (the fields Seller Center shows).
@@ -68,6 +75,10 @@ type SellerGrant struct {
 	FreeDays    *int       `json:"freeDays"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	AppliedAt   *time.Time `json:"appliedAt"`
+	// NewTrialEnd is where free days moved the trial end (the next charge).
+	NewTrialEnd *time.Time `json:"newTrialEnd"`
+	// RuleComparison is the reward rule's comparison (S299; nil for staff adjustments).
+	RuleComparison *string `json:"ruleComparison"`
 }
 
 // SellerRewards is seller's SellerRewards.

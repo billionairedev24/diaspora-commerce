@@ -290,7 +290,14 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000002/default", nil), 200)
 	mustStatus(t, b.do("DELETE", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000001", nil), 200)
 	// S292–S297: rewards, the proration preview and adding a payment method with a SetupIntent.
-	mustStatus(t, b.do("GET", "/v1/seller/billing/rewards", nil), 200)
+	rewards := b.do("GET", "/v1/seller/billing/rewards", nil)
+	mustStatus(t, rewards, 200)
+	// S299: low-sales relief is pending until its check and, once applied, says when Stripe charges next.
+	if body := string(rewards.body); !strings.Contains(body, `"comparison":"LESS_THAN","windowAnchor":"SUBSCRIPTION_START","windowDays":30,"pending":true,"checkAt":"2026-11-08T10:00:00Z"`) ||
+		!strings.Contains(body, `"comparison":"LESS_THAN","nextChargeAt":"2026-11-08T10:00:00Z"`) ||
+		!strings.Contains(body, `"comparison":"AT_LEAST","nextChargeAt":null`) {
+		t.Errorf("rewards = %s", body)
+	}
 	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=seller_pro&cadence=QUARTERLY", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=nope", nil), 422)
 	mustStatus(t, b.do("GET", "/v1/seller/billing/plan/preview?planCode=seller_pro&cadence=WEEKLY", nil), 422)

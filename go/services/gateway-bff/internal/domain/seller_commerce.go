@@ -723,6 +723,14 @@ type RewardProgress struct {
 	RewardLabel    string     `json:"rewardLabel"`
 	ConditionLabel string     `json:"conditionLabel"`
 	EndsAt         *time.Time `json:"endsAt"`
+	// Comparison is AT_LEAST (progress towards the threshold) or LESS_THAN (low-sales relief, S299: no progress bar,
+	// decided once at CheckAt).
+	Comparison     string     `json:"comparison"`
+	WindowAnchor   string     `json:"windowAnchor"`
+	WindowDays     *int       `json:"windowDays"`
+	Pending        bool       `json:"pending"`
+	CheckAt        *time.Time `json:"checkAt"`
+	WindowClosesAt *time.Time `json:"windowClosesAt"`
 }
 
 // EarnedReward is a reward or credit the organisation received.
@@ -737,6 +745,10 @@ type EarnedReward struct {
 	FreeDays    *int       `json:"freeDays"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	AppliedAt   *time.Time `json:"appliedAt"`
+	// Comparison is the reward rule's comparison: LESS_THAN is low-sales relief (S299).
+	Comparison *string `json:"comparison"`
+	// NextChargeAt is the new trial end for free days: when Stripe charges next.
+	NextChargeAt *time.Time `json:"nextChargeAt"`
 }
 
 // SellerRewardsView is GET /v1/seller/billing/rewards.

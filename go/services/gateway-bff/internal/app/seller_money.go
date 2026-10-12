@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -364,7 +365,9 @@ func (s *sellerMoneyImpl) Rewards(ctx context.Context, c *domain.Caller) (domain
 	for _, p := range rw.Available {
 		out.Available = append(out.Available, domain.RewardProgress{RuleID: p.RuleID, Name: p.Name, Description: strPtr(p.Description),
 			Metric: p.Metric, Value: p.Value, Threshold: p.Threshold, Percent: min(100, max(0, p.Percent)), Qualifies: p.Qualifies,
-			Label: p.Label, RewardLabel: p.RewardLabel, ConditionLabel: p.ConditionLabel, EndsAt: p.EndsAt})
+			Label: p.Label, RewardLabel: p.RewardLabel, ConditionLabel: p.ConditionLabel, EndsAt: p.EndsAt,
+			Comparison: firstNonEmpty(p.Comparison, "AT_LEAST"), WindowAnchor: firstNonEmpty(p.WindowAnchor, "APPROVAL"), WindowDays: p.WindowDays,
+			Pending: p.Pending, CheckAt: p.CheckAt, WindowClosesAt: p.WindowClosesAt})
 	}
 	for _, g := range rw.Earned {
 		var reason *string
@@ -372,9 +375,18 @@ func (s *sellerMoneyImpl) Rewards(ctx context.Context, c *domain.Caller) (domain
 			reason = strPtr(g.Note)
 		}
 		out.Earned = append(out.Earned, domain.EarnedReward{ID: g.ID, Source: g.Source, Type: g.Type, Summary: g.Summary, Reason: reason,
-			Status: g.Status, CreditMinor: g.CreditCents, FreeDays: g.FreeDays, CreatedAt: g.CreatedAt, AppliedAt: g.AppliedAt})
+			Status: g.Status, CreditMinor: g.CreditCents, FreeDays: g.FreeDays, CreatedAt: g.CreatedAt, AppliedAt: g.AppliedAt,
+			Comparison: g.RuleComparison, NextChargeAt: nextCharge(g)})
 	}
 	return out, nil
+}
+
+// nextCharge is when Stripe charges next after free days (the moved trial end); nil for other grants.
+func nextCharge(g port.SellerGrant) *time.Time {
+	if g.Type != "FREE_DAYS" || g.Status != "APPLIED" {
+		return nil
+	}
+	return g.NewTrialEnd
 }
 
 func (s *sellerMoneyImpl) PreviewPlanChange(ctx context.Context, c *domain.Caller, planCode, cadence string) (domain.PlanChangePreview, error) {

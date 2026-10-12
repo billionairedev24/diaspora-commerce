@@ -80,7 +80,8 @@ func sampleCampaign() map[string]any {
 
 func sampleRule() map[string]any {
 	return map[string]any{"id": testRuleID, "name": "First $1,000", "description": nil, "status": "ACTIVE", "kind": "SELLER", "metric": "GROSS_SALES",
-		"threshold": 100000, "windowDays": nil, "withinDaysOfApproval": 60, "rewardType": "FREE_DAYS", "freeDays": 30, "creditCents": nil,
+		"threshold": 100000, "windowDays": nil, "withinDaysOfApproval": 60, "comparison": "AT_LEAST", "windowAnchor": "APPROVAL",
+		"checkAtWindowEnd": false, "checkLeadHours": 24, "rewardType": "FREE_DAYS", "freeDays": 30, "creditCents": nil,
 		"percentOff": nil, "durationInvoices": nil, "eligiblePlans": []string{"seller_growth"}, "startsAt": nil, "endsAt": nil, "maxGrants": 100,
 		"grantsCount": 4, "rewardLabel": "1 month free", "conditionLabel": "$1,000 in sales within 60 days of approval", "createdBy": "stf-finance",
 		"createdAt": "2026-10-01T10:00:00Z", "updatedBy": "stf-finance", "updatedAt": "2026-10-01T10:00:00Z", "version": 1}
@@ -179,11 +180,14 @@ func (f *fakeSellerBilling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case key == "POST /v1/billing/reward-rules":
 		writeJ(w, 201, sampleRule())
 	case p == "/v1/billing/reward-rules/preview":
-		writeJ(w, 200, map[string]any{"evaluated": 2, "qualifying": 1, "rows": []any{
+		writeJ(w, 200, map[string]any{"evaluated": 3, "qualifying": 1, "pending": 1, "rows": []any{
 			map[string]any{"orgId": "org_1", "orgName": "Mama Put", "planCode": "seller_growth", "value": 120000, "threshold": 100000, "percent": 100,
-				"qualifies": true, "alreadyGranted": false, "reason": nil},
+				"qualifies": true, "alreadyGranted": false, "reason": nil, "status": "QUALIFIES", "checkAt": nil},
+			// S299: in the window of a rule checked at window end.
+			map[string]any{"orgId": "org_3", "orgName": "Bisi's", "planCode": "seller_growth", "value": 20000, "threshold": 100000, "percent": 20,
+				"qualifies": false, "alreadyGranted": false, "reason": nil, "status": "PENDING", "checkAt": "2026-11-08T10:00:00Z"},
 			map[string]any{"orgId": "org_2", "orgName": "Ade's", "planCode": "seller_growth", "value": 64000, "threshold": 100000, "percent": 64,
-				"qualifies": false, "alreadyGranted": false, "reason": nil}}})
+				"qualifies": false, "alreadyGranted": false, "reason": nil, "status": "NOT_YET", "checkAt": nil}}})
 	case strings.HasPrefix(p, "/v1/billing/reward-rules/"):
 		writeJ(w, 200, sampleRule())
 	case p == "/v1/billing/grants":
@@ -378,9 +382,14 @@ func TestStaffPlansAndBilling(t *testing.T) {
 		"rewardType": "FREE_DAYS", "freeDays": 30}
 	do("finance", "POST", "/v1/staff/billing/reward-rules", rule, 201)
 	preview := do("auditor", "POST", "/v1/staff/billing/reward-rules/preview", rule, 200)
-	if preview["qualifying"] != float64(1) {
+	if preview["qualifying"] != float64(1) || preview["pending"] != float64(1) {
 		t.Errorf("preview = %v", preview)
 	}
+	// S299: low-sales relief - less than $1,000 in the first 30 days of the subscription, checked 24 h before the trial ends.
+	relief := map[string]any{"name": "Low-sales relief", "metric": "GROSS_SALES", "threshold": 100000, "comparison": "LESS_THAN",
+		"windowAnchor": "SUBSCRIPTION_START", "withinDaysOfApproval": 30, "checkLeadHours": 24, "rewardType": "FREE_DAYS", "freeDays": 30}
+	do("finance", "POST", "/v1/staff/billing/reward-rules/preview", relief, 200)
+	do("finance", "POST", "/v1/staff/billing/reward-rules", relief, 201)
 	do("finance", "PUT", "/v1/staff/billing/reward-rules/"+testRuleID, rule, 200)
 	do("finance", "POST", "/v1/staff/billing/reward-rules/"+testRuleID+"/status", map[string]any{"status": "ENDED"}, 200)
 

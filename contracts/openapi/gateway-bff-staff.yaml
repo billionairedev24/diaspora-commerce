@@ -4318,7 +4318,11 @@ components:
         status: {type: string}
     StaffRewardRule:
       type: object
-      required: [id, name, status, metric, threshold, rewardType, eligiblePlans, grantsCount, rewardLabel, conditionLabel, version]
+      description: >-
+        Reach (AT_LEAST) or stay under (LESS_THAN, S299) the threshold of a metric and get the reward, once per seller.
+        A LESS_THAN rule, or an AT_LEAST rule with checkAtWindowEnd, is decided once, checkLeadHours before its window
+        (the first withinDaysOfApproval days from windowAnchor) or the trial ends.
+      required: [id, name, status, metric, threshold, comparison, windowAnchor, checkAtWindowEnd, checkLeadHours, rewardType, eligiblePlans, grantsCount, rewardLabel, conditionLabel, version]
       properties:
         id: {type: string, format: uuid}
         name: {type: string}
@@ -4328,7 +4332,11 @@ components:
         metric: {type: string, enum: [GROSS_SALES, ACTIVE_LISTINGS, COMPLETED_ORDERS, COMPLETED_BOOKINGS, DAYS_SINCE_APPROVAL]}
         threshold: {type: integer, format: int64, description: 'Cents for GROSS_SALES, a count otherwise'}
         windowDays: {type: [integer, 'null']}
-        withinDaysOfApproval: {type: [integer, 'null']}
+        withinDaysOfApproval: {type: [integer, 'null'], description: The first N days from windowAnchor}
+        comparison: {type: string, enum: [AT_LEAST, LESS_THAN]}
+        windowAnchor: {type: string, enum: [APPROVAL, SUBSCRIPTION_START]}
+        checkAtWindowEnd: {type: boolean, description: Decided once when the window closes (always for LESS_THAN)}
+        checkLeadHours: {type: integer, minimum: 0, maximum: 168, description: Hours before the window (or the trial) ends that the check runs}
         rewardType: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF]}
         freeDays: {type: [integer, 'null']}
         creditCents: {type: [integer, 'null'], format: int64}
@@ -4340,7 +4348,7 @@ components:
         maxGrants: {type: [integer, 'null']}
         grantsCount: {type: integer}
         rewardLabel: {type: string, examples: ['1 month free']}
-        conditionLabel: {type: string, examples: ['$1,000 in sales within 60 days of approval']}
+        conditionLabel: {type: string, examples: ['$1,000 in sales within 60 days of approval', 'less than $1,000 in sales in the first 30 days of the subscription']}
         createdBy: {type: [string, 'null']}
         createdAt: {type: [string, 'null'], format: date-time}
         updatedBy: {type: [string, 'null']}
@@ -4356,7 +4364,11 @@ components:
         metric: {type: string, enum: [GROSS_SALES, ACTIVE_LISTINGS, COMPLETED_ORDERS, COMPLETED_BOOKINGS, DAYS_SINCE_APPROVAL]}
         threshold: {type: integer, format: int64, minimum: 1}
         windowDays: {type: [integer, 'null'], minimum: 1}
-        withinDaysOfApproval: {type: [integer, 'null'], minimum: 1}
+        withinDaysOfApproval: {type: [integer, 'null'], minimum: 1, description: The first N days from windowAnchor (required for a rule checked at window end)}
+        comparison: {type: [string, 'null'], enum: [AT_LEAST, LESS_THAN, null], description: Default AT_LEAST}
+        windowAnchor: {type: [string, 'null'], enum: [APPROVAL, SUBSCRIPTION_START, null], description: Default APPROVAL}
+        checkAtWindowEnd: {type: [boolean, 'null'], description: 'AT_LEAST only: decide once when the window closes'}
+        checkLeadHours: {type: [integer, 'null'], minimum: 0, maximum: 168, description: Default 24}
         rewardType: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF]}
         freeDays: {type: [integer, 'null'], minimum: 1, maximum: 365}
         creditCents: {type: [integer, 'null'], format: int64, minimum: 1}
@@ -4371,7 +4383,7 @@ components:
         ruleId: {type: [string, 'null'], description: Preview only - marks who already got this rule}
     StaffRewardPreviewRow:
       type: object
-      required: [orgId, value, threshold, percent, qualifies, alreadyGranted]
+      required: [orgId, value, threshold, percent, qualifies, alreadyGranted, status]
       properties:
         orgId: {type: string}
         orgName: {type: [string, 'null']}
@@ -4382,12 +4394,18 @@ components:
         qualifies: {type: boolean}
         alreadyGranted: {type: boolean}
         reason: {type: [string, 'null']}
+        status:
+          type: string
+          enum: [GRANTED, QUALIFIES, PENDING, CHECKED, NOT_YET, INELIGIBLE]
+          description: PENDING - in the window of a rule checked at window end (decided when the window closes)
+        checkAt: {type: [string, 'null'], format: date-time, description: Rules checked at window end - when this organisation is checked}
     StaffRewardPreview:
       type: object
-      required: [evaluated, qualifying, rows]
+      required: [evaluated, qualifying, pending, rows]
       properties:
         evaluated: {type: integer}
         qualifying: {type: integer}
+        pending: {type: integer, description: Rules checked at window end - organisations still in their window}
         rows: {type: array, items: {$ref: '#/components/schemas/StaffRewardPreviewRow'}}
     StaffBillingGrant:
       type: object

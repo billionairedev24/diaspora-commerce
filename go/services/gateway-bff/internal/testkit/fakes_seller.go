@@ -440,10 +440,22 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			"available": []any{map[string]any{"ruleId": "6d1c0b6a-0000-4000-8000-000000000001", "name": "First $1,000", "description": nil,
 				"metric": "GROSS_SALES", "value": 64000, "threshold": 100000, "percent": 64, "qualifies": false,
 				"label": "$640 of $1,000 in sales → 1 month free", "rewardLabel": "1 month free",
-				"conditionLabel": "$1,000 in sales within 60 days of approval", "endsAt": nil}},
+				"conditionLabel": "$1,000 in sales within 60 days of approval", "endsAt": nil, "comparison": "AT_LEAST",
+				"windowAnchor": "APPROVAL", "windowDays": 60, "pending": false, "checkAt": nil, "windowClosesAt": nil},
+				// S299: low-sales relief, decided once 24 h before the trial ends.
+				map[string]any{"ruleId": "6d1c0b6a-0000-4000-8000-000000000002", "name": "Low-sales relief", "description": nil,
+					"metric": "GROSS_SALES", "value": 20000, "threshold": 100000, "percent": 20, "qualifies": false,
+					"label": "$200 in sales so far (less than $1,000 → 1 month free)", "rewardLabel": "1 month free",
+					"conditionLabel": "less than $1,000 in sales in the first 30 days of the subscription", "endsAt": nil,
+					"comparison": "LESS_THAN", "windowAnchor": "SUBSCRIPTION_START", "windowDays": 30, "pending": true,
+					"checkAt": "2026-11-08T10:00:00Z", "windowClosesAt": "2026-11-09T10:00:00Z"}},
 			"earned": []any{map[string]any{"id": "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "orgId": SellerOrgID, "source": "RULE",
 				"type": "CREDIT", "summary": "$25 credit", "note": "Two orders", "status": "APPLIED", "creditCents": 2500, "freeDays": nil,
-				"createdAt": "2026-10-01T10:00:00Z", "appliedAt": "2026-10-01T10:00:01Z"}},
+				"createdAt": "2026-10-01T10:00:00Z", "appliedAt": "2026-10-01T10:00:01Z", "ruleComparison": "AT_LEAST", "newTrialEnd": nil},
+				map[string]any{"id": "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4e", "orgId": SellerOrgID, "source": "RULE",
+					"type": "FREE_DAYS", "summary": "1 month free", "note": "Low-sales relief", "status": "APPLIED", "creditCents": nil,
+					"freeDays": 30, "createdAt": "2026-10-08T10:00:00Z", "appliedAt": "2026-10-08T10:00:01Z", "ruleComparison": "LESS_THAN",
+					"previousTrialEnd": "2026-10-09T10:00:00Z", "newTrialEnd": "2026-11-08T10:00:00Z"}},
 		})
 	})
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/plan/preview", func(w http.ResponseWriter, r *http.Request) {

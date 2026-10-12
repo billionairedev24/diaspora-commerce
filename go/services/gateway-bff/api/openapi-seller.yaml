@@ -3109,8 +3109,10 @@ components:
         trialSource: {type: [string, 'null'], enum: [PLAN, CAMPAIGN, OVERRIDE, NONE, null]}
     RewardProgress:
       type: object
-      description: 'A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296).'
-      required: [ruleId, name, metric, value, threshold, percent, qualifies, label, rewardLabel, conditionLabel]
+      description: >-
+        A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296). A LESS_THAN rule
+        (low-sales relief, S299) has no progress to show: it is pending until checkAt, when it is decided once.
+      required: [ruleId, name, metric, value, threshold, percent, qualifies, label, rewardLabel, conditionLabel, comparison, windowAnchor, pending]
       properties:
         ruleId: {type: string}
         name: {type: string}
@@ -3124,6 +3126,12 @@ components:
         rewardLabel: {type: string}
         conditionLabel: {type: string}
         endsAt: {type: [string, 'null'], format: date-time}
+        comparison: {type: string, enum: [AT_LEAST, LESS_THAN]}
+        windowAnchor: {type: string, enum: [APPROVAL, SUBSCRIPTION_START]}
+        windowDays: {type: [integer, 'null'], description: The window's length (the first N days)}
+        pending: {type: boolean, description: Decided once at window end and the check is still to come}
+        checkAt: {type: [string, 'null'], format: date-time, description: When the check runs (rules checked at window end)}
+        windowClosesAt: {type: [string, 'null'], format: date-time}
     EarnedReward:
       type: object
       description: A reward or credit the organisation received (reward rules and staff adjustments).
@@ -3139,6 +3147,8 @@ components:
         freeDays: {type: [integer, 'null']}
         createdAt: {type: string, format: date-time}
         appliedAt: {type: [string, 'null'], format: date-time}
+        comparison: {type: [string, 'null'], enum: [AT_LEAST, LESS_THAN, null], description: 'The reward rule''s comparison: LESS_THAN is low-sales relief'}
+        nextChargeAt: {type: [string, 'null'], format: date-time, description: 'Free days: the new trial end, when Stripe charges next'}
     SellerRewardsView:
       type: object
       required: [available, earned]
