@@ -1186,6 +1186,125 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/negotiated-rates:
+    get:
+      tags: [Fees]
+      operationId: listNegotiatedRates
+      security: [{sessionCookie: []}]
+      summary: Negotiated commission and connection-fee rates (server-driven table)
+      description: |
+        payments `GET /v1/negotiated-rates` (staff payments:read), with organisation names from seller's directory. A
+        negotiated rate wins over the organisation's plan rate, the category rate and the default while it is active
+        (its category before `*`). Filters: one organisation (the seller billing panel lists its rates this way), type,
+        status, and `q` over organisation, reason, reference and negotiator. Needs VIEW on the fees module.
+      parameters:
+        - {name: orgId, in: query, schema: {type: string, maxLength: 80}}
+        - {name: type, in: query, schema: {type: string, enum: [COMMISSION, CONNECTION_FEE]}}
+        - {name: status, in: query, schema: {type: string, enum: [SCHEDULED, ACTIVE, ENDED, EXPIRED]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: Negotiated rates, content: {application/json: {schema: {$ref: '#/components/schemas/NegotiatedRatePage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Fees]
+      operationId: createNegotiatedRate
+      security: [{sessionCookie: []}]
+      summary: Negotiate a commission or connection fee with an organisation (audited)
+      description: |
+        payments `POST /v1/negotiated-rates` (payments:configure and EDIT on fees). One category or every category, from
+        `startsAt` (default now, never in the past) to `endsAt` (optional; a job records the expiry). The reason is required
+        and kept in the audit trail with who negotiated it and the contract or ticket reference. 409 when another rate of the
+        organisation, type and category overlaps; AfroTransact Retail never pays fees (422). Payments already created keep
+        the rate snapshotted on their lines.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NegotiatedRateDraft'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/NegotiatedRate'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/negotiated-rates/{rateId}/end:
+    post:
+      tags: [Fees]
+      operationId: endNegotiatedRate
+      security: [{sessionCookie: []}]
+      summary: End a negotiated rate now, with a reason (audited)
+      description: payments `POST /v1/negotiated-rates/{id}/end` (payments:configure and EDIT on fees). 409 when it already ended or expired.
+      parameters:
+        - {name: rateId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NegotiatedRateEnd'}}}
+      responses:
+        '200': {description: Ended, content: {application/json: {schema: {$ref: '#/components/schemas/NegotiatedRate'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/calculator:
+    get:
+      tags: [Fees]
+      operationId: calculateFeeRate
+      security: [{sessionCookie: []}]
+      summary: 'Rate calculator: what one organisation pays on one kind and category now, and why'
+      description: |
+        payments `GET /v1/fee-schedules/effective?kind=` (staff payments:read): kind PRODUCT is the commission, SERVICE the
+        connection fee of a service category. The first match wins: an active negotiated rate (category, then `*`), the
+        organisation's plan rate (category, then the plan's `*`), the category rate, the default; AfroTransact Retail pays
+        none (RETAIL). Needs VIEW on the fees module.
+      parameters:
+        - {name: orgId, in: query, required: true, schema: {type: string, maxLength: 80}}
+        - {name: category, in: query, required: true, schema: {type: string, maxLength: 80}}
+        - {name: kind, in: query, schema: {type: string, enum: [PRODUCT, SERVICE], default: PRODUCT}}
+      responses:
+        '200': {description: Effective rate, content: {application/json: {schema: {$ref: '#/components/schemas/FeeRateQuote'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/orgs/{orgId}/negotiated-plan:
+    post:
+      tags: [Fees]
+      operationId: negotiatePlanPrice
+      security: [{sessionCookie: []}]
+      summary: Negotiate a plan price for one organisation (private, invite-only plan)
+      description: |
+        Over the seller service's plan catalogue (plans:manage and EDIT on plans): copies the base plan's kind, features,
+        limits and trial into a new INVITE_ONLY plan `<base>_<org>` at the negotiated prices (quarterly and annual default
+        to the catalogue's rule), invites the organisation and publishes it (Stripe Prices are synced on publish). The
+        seller then chooses it in Plan & billing; it stays on its current plan until it does. 409 when that private plan
+        already exists.
+      parameters:
+        - {name: orgId, in: path, required: true, schema: {type: string, maxLength: 80}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NegotiatedPlanDraft'}}}
+      responses:
+        '201': {description: Private plan created and the organisation invited, content: {application/json: {schema: {$ref: '#/components/schemas/NegotiatedPlan'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── dispatch: seller pickups (S255)
   /v1/staff/dispatch/pickups:
     get:
@@ -5304,7 +5423,7 @@ components:
     FeeScheduleView:
       type: object
       required: [id, version, status, effectiveFrom, currency, defaultCommissionBps, categoryRates, overrides, cardPctBps, cardFixedMinor, fbaPerUnitMinor,
-        reverseCommissionOnRefund, deliveryPricing, note, createdBy, createdAt, cancelledAt, cancelledBy, cancelReason, cancellable]
+        reverseCommissionOnRefund, deliveryPricing, planRates, connectionFee, note, createdBy, createdAt, cancelledAt, cancelledBy, cancelReason, cancellable]
       properties:
         id: {type: string}
         version: {type: integer}
@@ -5321,6 +5440,13 @@ components:
         deliveryPricing:
           oneOf: [{$ref: '#/components/schemas/DeliveryPricing'}, {type: 'null'}]
           description: 'AfroTransact Delivery from seller stores (S255); null when the version has no delivery pricing (quotes NOT_CONFIGURED)'
+        planRates:
+          type: array
+          items: {$ref: '#/components/schemas/FeePlanRate'}
+          description: Product commission per plan, after negotiated rates and before category rates
+        connectionFee:
+          oneOf: [{$ref: '#/components/schemas/FeeConnectionFee'}, {type: 'null'}]
+          description: Connection fees on service bookings; null for versions created before they existed (services paid the 'services' commission)
         note: {type: [string, 'null']}
         createdBy: {type: string}
         createdAt: {type: [string, 'null'], format: date-time}
@@ -5338,7 +5464,7 @@ components:
     FeesOverview:
       type: object
       required: [generatedAt, currency, canConfigure, current, base, minEffectiveFrom, immediateAllowed, schedules, categories, taxonomyAvailable,
-        orgNamesAvailable, retail, limits, exampleSaleMinor, reverseOnRefundHelp]
+        orgNamesAvailable, retail, limits, exampleSaleMinor, reverseOnRefundHelp, plans, plansAvailable, planWarnings, serviceCategories]
       properties:
         generatedAt: {type: string, format: date-time}
         currency: {type: string}
@@ -5355,6 +5481,177 @@ components:
         limits: {$ref: '#/components/schemas/FeeLimits'}
         exampleSaleMinor: {type: integer, format: int64, description: Sale amount of the impact preview (10000 = $100.00)}
         reverseOnRefundHelp: {type: string}
+        plans: {type: array, items: {$ref: '#/components/schemas/FeePlan'}, description: 'The plan catalogue (seller service), for the plan-rate matrix'}
+        plansAvailable: {type: boolean, description: false when the plan catalogue could not be read}
+        planWarnings: {type: array, items: {type: string}, description: Plans whose feature text advertises a fee the version in force does not charge}
+        serviceCategories: {type: array, items: {$ref: '#/components/schemas/FeeCategory'}, description: Service categories the connection-fee sections price}
+    FeePlanRate:
+      type: object
+      required: [planCode, planName, category, label, bps]
+      properties:
+        planCode: {type: string, examples: [seller_growth]}
+        planName: {type: string}
+        category: {type: string, description: "'*' = the plan's rate for categories it does not list"}
+        label: {type: string}
+        bps: {type: integer, minimum: 0, maximum: 10000}
+    FeeRate:
+      type: object
+      required: [category, label, bps]
+      properties:
+        category: {type: string}
+        label: {type: string}
+        bps: {type: integer, minimum: 0, maximum: 10000}
+    FeeConnectionFee:
+      type: object
+      required: [defaultBps, categoryRates, planRates]
+      properties:
+        defaultBps: {type: integer, minimum: 0, maximum: 10000, description: Connection fee of service categories without their own rate}
+        categoryRates: {type: array, items: {$ref: '#/components/schemas/FeeRate'}}
+        planRates: {type: array, items: {$ref: '#/components/schemas/FeePlanRate'}}
+    FeeRange:
+      type: object
+      required: [minBps, maxBps]
+      properties:
+        minBps: {type: integer}
+        maxBps: {type: integer}
+    FeePlan:
+      type: object
+      required: [code, kind, name, status, visibility, featureText, advertised, configured, warning]
+      properties:
+        code: {type: string}
+        kind: {type: string, description: SELLER (product commission) or PROVIDER (connection fee)}
+        name: {type: string}
+        status: {type: string}
+        visibility: {type: string}
+        featureText: {type: [string, 'null'], description: 'The feature that mentions a fee, e.g. "8–12% referral fee by category"'}
+        advertised: {oneOf: [{$ref: '#/components/schemas/FeeRange'}, {type: 'null'}]}
+        configured: {oneOf: [{$ref: '#/components/schemas/FeeRange'}, {type: 'null'}], description: Lowest–highest plan rate of the version in force}
+        warning: {type: [string, 'null'], description: How the feature text and the configured rates differ}
+    NegotiatedRateAuditEntry:
+      type: object
+      required: [action, actor, reason, at]
+      properties:
+        action: {type: string, enum: [CREATED, ENDED, EXPIRED]}
+        actor: {type: string}
+        reason: {type: [string, 'null']}
+        at: {type: string, format: date-time}
+    NegotiatedRate:
+      type: object
+      required: [id, orgId, orgName, type, category, categoryLabel, rateBps, startsAt, endsAt, status, reason, negotiatedBy, reference, createdBy,
+        createdAt, endedAt, endedBy, endReason, expiredAt, audit, canEnd]
+      properties:
+        id: {type: string}
+        orgId: {type: string}
+        orgName: {type: [string, 'null']}
+        type: {type: string, enum: [COMMISSION, CONNECTION_FEE]}
+        category: {type: string, description: "'*' = every category"}
+        categoryLabel: {type: string}
+        rateBps: {type: integer, minimum: 0, maximum: 10000}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [SCHEDULED, ACTIVE, ENDED, EXPIRED]}
+        reason: {type: string}
+        negotiatedBy: {type: string}
+        reference: {type: [string, 'null']}
+        createdBy: {type: string}
+        createdAt: {type: string, format: date-time}
+        endedAt: {type: [string, 'null'], format: date-time}
+        endedBy: {type: [string, 'null']}
+        endReason: {type: [string, 'null']}
+        expiredAt: {type: [string, 'null'], format: date-time}
+        audit: {type: array, items: {$ref: '#/components/schemas/NegotiatedRateAuditEntry'}}
+        canEnd: {type: boolean, description: The caller configures fees and the rate is scheduled or active}
+    NegotiatedRatePage:
+      type: object
+      required: [items, total, page, size, canConfigure]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/NegotiatedRate'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+        canConfigure: {type: boolean}
+    NegotiatedRateDraft:
+      type: object
+      required: [orgId, type, rateBps, reason]
+      properties:
+        orgId: {type: string, maxLength: 80}
+        type: {type: string, enum: [COMMISSION, CONNECTION_FEE]}
+        category: {type: [string, 'null'], maxLength: 80, description: "One category; null or '*' = every category"}
+        rateBps: {type: integer, minimum: 0, maximum: 5000}
+        startsAt: {type: [string, 'null'], format: date-time, description: Default now; never in the past}
+        endsAt: {type: [string, 'null'], format: date-time, description: Omit for open-ended}
+        reason: {type: string, minLength: 3, maxLength: 500}
+        negotiatedBy: {type: [string, 'null'], maxLength: 120, description: Default the caller}
+        reference: {type: [string, 'null'], maxLength: 120, description: Contract or ticket}
+    NegotiatedRateEnd:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 3, maxLength: 500}
+    FeeRateQuote:
+      type: object
+      required: [orgId, orgName, kind, category, categoryLabel, bps, source, planCode, planName, negotiatedRateId, negotiatedUntil, version,
+        exampleSaleMinor, exampleFeeMinor, explanation]
+      properties:
+        orgId: {type: string}
+        orgName: {type: [string, 'null']}
+        kind: {type: string, enum: [PRODUCT, SERVICE]}
+        category: {type: string}
+        categoryLabel: {type: string}
+        bps: {type: integer}
+        source: {type: string, enum: [OVERRIDE, PLAN, CATEGORY, DEFAULT, RETAIL]}
+        planCode: {type: [string, 'null']}
+        planName: {type: [string, 'null']}
+        negotiatedRateId: {type: [string, 'null']}
+        negotiatedUntil: {type: [string, 'null'], format: date-time}
+        version: {type: integer, description: Fee-schedule version in force}
+        exampleSaleMinor: {type: integer, format: int64}
+        exampleFeeMinor: {type: integer, format: int64, description: The rate applied to exampleSaleMinor}
+        explanation: {type: string, examples: ['Negotiated commission until 31 Dec 2026', 'Plan rate: Seller Growth']}
+    NegotiatedPlanDraft:
+      type: object
+      required: [basePlanCode, monthlyCents, reason]
+      properties:
+        basePlanCode: {type: string, maxLength: 80}
+        monthlyCents: {type: integer, format: int64, minimum: 0}
+        quarterlyCents: {type: [integer, 'null'], format: int64, minimum: 0, description: Default 3 months less 5 %}
+        annualCents: {type: [integer, 'null'], format: int64, minimum: 0, description: Default 10 months}
+        reason: {type: string, minLength: 3, maxLength: 500}
+        reference: {type: [string, 'null'], maxLength: 120}
+    NegotiatedPlan:
+      type: object
+      required: [planCode, planName, basePlanCode, orgId, visibility, published, monthlyCents, quarterlyCents, annualCents, note]
+      properties:
+        planCode: {type: string}
+        planName: {type: string}
+        basePlanCode: {type: string}
+        orgId: {type: string}
+        visibility: {type: string, enum: [INVITE_ONLY]}
+        published: {type: boolean}
+        monthlyCents: {type: integer, format: int64}
+        quarterlyCents: {type: integer, format: int64}
+        annualCents: {type: integer, format: int64}
+        note: {type: string}
+    FeeDraftRate:
+      type: object
+      required: [category, bps]
+      properties:
+        category: {type: string, maxLength: 80}
+        bps: {type: integer, minimum: 0, maximum: 5000}
+    FeeDraftPlanRate:
+      type: object
+      required: [planCode, category, bps]
+      properties:
+        planCode: {type: string, maxLength: 80}
+        category: {type: string, maxLength: 80, description: "'*' or empty = the plan's other categories"}
+        bps: {type: integer, minimum: 0, maximum: 5000}
+    FeeConnectionDraft:
+      type: object
+      required: [defaultBps, categoryRates, planRates]
+      properties:
+        defaultBps: {type: integer, minimum: 0, maximum: 5000}
+        categoryRates: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/FeeDraftRate'}}
+        planRates: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/FeeDraftPlanRate'}}
     FeeOrgHit:
       type: object
       required: [orgId, name, kind, status, retail, selectable, reason]
@@ -5400,6 +5697,14 @@ components:
         deliveryPricing:
           oneOf: [{$ref: '#/components/schemas/DeliveryPricingDraft'}, {type: 'null'}]
           description: AfroTransact Delivery pricing (S255). Omitted or null = carried over from the latest live version; enabled=false stops offering it
+        planRates:
+          type: [array, 'null']
+          maxItems: 500
+          items: {$ref: '#/components/schemas/FeeDraftPlanRate'}
+          description: Product commission per plan. Omitted or null = carried over from the latest live version; [] = no plan rates
+        connectionFee:
+          oneOf: [{$ref: '#/components/schemas/FeeConnectionDraft'}, {type: 'null'}]
+          description: Connection fees on service bookings. Omitted or null = carried over from the latest live version
         note: {type: string, minLength: 3, maxLength: 500, description: Why the fees change (required)}
     FeeCancelRequest:
       type: object

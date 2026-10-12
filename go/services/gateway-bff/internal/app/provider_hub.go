@@ -143,7 +143,10 @@ func (p *providerHubImpl) Requests(ctx context.Context, c *domain.Caller) ([]dom
 	if err != nil {
 		return nil, mapErr("bookings", err)
 	}
-	return p.normalize(list), nil
+	out := p.normalize(list)
+	// "You keep $X after the 8% connection fee": the provider sees its take-home before accepting.
+	bookingTakeHomes(ctx, p.r.d.Fees, sc.org.ID, p.now(), out)
+	return out, nil
 }
 
 func (p *providerHubImpl) Act(ctx context.Context, c *domain.Caller, key, id, action, reason string, proposed *time.Time) (domain.BookingCard, error) {
@@ -316,6 +319,8 @@ func (p *providerHubImpl) Earnings(ctx context.Context, c *domain.Caller, from, 
 	)
 	wg.Go(func() { e, eErr = p.r.d.Bookings.Earnings(ctx, c.BearerToken, sc.provider(), start, end) })
 	wg.Go(func() { fees, feesErr = p.r.d.Payouts.ProviderFees(ctx, c.BearerToken, sc.org.ID) })
+	var connection *domain.SellerRateCard
+	wg.Go(func() { connection = rateCardOf(ctx, p.r.d.Fees, sc.org.ID, domain.FeeKindService, time.Time{}) })
 	wg.Wait()
 	if eErr != nil {
 		return domain.Earnings{}, mapErr("bookings", eErr)
@@ -327,6 +332,7 @@ func (p *providerHubImpl) Earnings(ctx context.Context, c *domain.Caller, from, 
 	}
 	out.Total()
 	out.ProviderFees = providerFeesOf(fees, feesErr == nil)
+	out.ConnectionFee = connection
 	return out, nil
 }
 

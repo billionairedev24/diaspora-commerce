@@ -63,6 +63,10 @@ type BookingCard struct {
 	ExpiresAt       *time.Time `json:"expiresAt"`
 	ProposedStartAt *time.Time `json:"proposedStartAt"`
 	AllowedActions  []string   `json:"allowedActions"`
+	// ServiceCategory selects the connection fee; TakeHome is what the provider keeps at the booking's price
+	// ("You keep $X after the 8% connection fee"), set on booking requests when payments can say.
+	ServiceCategory *string          `json:"serviceCategory"`
+	TakeHome        *BookingTakeHome `json:"takeHome"`
 }
 
 // Normalize fills labels, duration and allowed actions the screens rely on.
@@ -456,6 +460,9 @@ type Earnings struct {
 	Totals            EarningsTotals `json:"totals"`
 	Rows              []EarningsRow  `json:"rows"`
 	ProviderFees      ProviderFees   `json:"providerFees"`
+	// ConnectionFee is the provider's connection fee now, per service category, with where it comes from (nil when
+	// payments could not say).
+	ConnectionFee *SellerRateCard `json:"connectionFee"`
 }
 
 // Total recomputes totals from the rows (net = collected − commission − card fees − late-cancel fees). Held money

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"slices"
@@ -73,6 +74,11 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/fees/schedules", h.staffCreateFeeSchedule)
 		route("POST /v1/staff/fees/schedules/{scheduleId}/cancel", h.staffCancelFeeSchedule)
 		route("POST /v1/staff/fees/delivery-quote", h.staffDeliveryQuote)
+		route("GET /v1/staff/fees/negotiated-rates", h.staffNegotiatedRates)
+		route("POST /v1/staff/fees/negotiated-rates", h.staffCreateNegotiatedRate)
+		route("POST /v1/staff/fees/negotiated-rates/{rateId}/end", h.staffEndNegotiatedRate)
+		route("GET /v1/staff/fees/calculator", h.staffFeeCalculator)
+		route("POST /v1/staff/fees/orgs/{orgId}/negotiated-plan", h.staffNegotiatePlan)
 	}
 	if s.Dispatch != nil {
 		route("GET /v1/staff/dispatch/pickups", h.staffPickups)
@@ -410,6 +416,66 @@ func (h *handlersImpl) staffDeliveryQuote(w http.ResponseWriter, r *http.Request
 	}
 	v, err := h.s.Staff.Fees.Quote(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffNegotiatedRates(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	page, perr := intParam(q.Get("page"), 0)
+	size, serr := intParam(q.Get("size"), 25)
+	if perr != nil || serr != nil {
+		h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"page": "Use whole numbers for page and size"}))
+		return
+	}
+	v, err := h.s.Staff.Fees.NegotiatedRates(r.Context(), callerFrom(r.Context()), app.NegotiatedRateQuery{OrgID: q.Get("orgId"),
+		Type: strings.ToUpper(q.Get("type")), Status: strings.ToUpper(q.Get("status")), Q: q.Get("q"), Page: page, Size: size})
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func intParam(s string, def int) (int, error) {
+	if s == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("not a whole number: %w", err)
+	}
+	return n, nil
+}
+
+func (h *handlersImpl) staffCreateNegotiatedRate(w http.ResponseWriter, r *http.Request) {
+	var b domain.NegotiatedRateDraft
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.CreateNegotiatedRate(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) staffEndNegotiatedRate(w http.ResponseWriter, r *http.Request) {
+	var b domain.NegotiatedRateEnd
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.EndNegotiatedRate(r.Context(), callerFrom(r.Context()), r.PathValue("rateId"), b.Reason)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffFeeCalculator(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	v, err := h.s.Staff.Fees.Calculate(r.Context(), callerFrom(r.Context()), q.Get("orgId"), q.Get("category"), q.Get("kind"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffNegotiatePlan(w http.ResponseWriter, r *http.Request) {
+	var b domain.NegotiatedPlanDraft
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.NegotiatePlan(r.Context(), callerFrom(r.Context()), r.PathValue("orgId"), b)
+	h.reply(w, r, http.StatusCreated, v, err)
 }
 
 // ---------------------------------------------------------------- dispatch: seller pickups (S255)

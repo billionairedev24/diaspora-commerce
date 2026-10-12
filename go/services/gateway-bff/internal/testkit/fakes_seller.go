@@ -897,10 +897,66 @@ func (u *Upstreams) feeRoutes(mux *http.ServeMux) {
 		if q.Get("orgId") == SellerOrgID && cat == "groceries" {
 			bps, source = 600, "OVERRIDE"
 		}
+		kind, plan := strings.ToUpper(firstNonEmptyStr(q.Get("kind"), "PRODUCT")), ""
+		if kind == "SERVICE" {
+			// Connection fees: Provider Studio's plan rate (8 %) for the provider, the 10 % default otherwise.
+			bps, source, fba = 1000, "DEFAULT", 0
+			if q.Get("orgId") == ProviderOrgID {
+				bps, source, plan = 800, "PLAN", "provider_studio"
+			}
+		}
 		writeJSON(w, 200, map[string]any{"feeScheduleId": fmt.Sprintf("fee-%d", version), "version": version, "effectiveFrom": from, "currency": "USD",
 			"category": cat, "orgId": q.Get("orgId"), "commissionBps": bps, "commissionSource": source, "cardPctBps": 290, "cardFixedMinor": 30,
-			"fbaPerUnitMinor": fba, "reverseCommissionOnRefund": true})
+			"fbaPerUnitMinor": fba, "reverseCommissionOnRefund": true, "kind": kind, "planCode": nilIfEmpty(plan)})
 	})
+	// The organisation's rate card per kind: the seller is on Seller Growth with a negotiated groceries rate until the
+	// end of the year; the provider on Provider Studio (8 % connection fee, hair & beauty negotiated at 7 %).
+	mux.HandleFunc("GET /v1/orgs/{id}/rate-card", func(w http.ResponseWriter, r *http.Request) {
+		if !service(w, r) {
+			return
+		}
+		org, kind := r.PathValue("id"), strings.ToUpper(firstNonEmptyStr(r.URL.Query().Get("kind"), "PRODUCT"))
+		until := "2026-12-31T23:59:59Z"
+		rate := func(cat string, bps int, source, plan string, negotiated bool) map[string]any {
+			m := map[string]any{"category": cat, "bps": bps, "source": source, "planCode": nilIfEmpty(plan), "negotiatedRateId": nil, "negotiatedUntil": nil}
+			if negotiated {
+				m["negotiatedRateId"], m["negotiatedUntil"] = "nr-1", until
+			}
+			return m
+		}
+		card := map[string]any{"orgId": org, "kind": kind, "feeScheduleId": "fee-1", "version": 1, "effectiveFrom": "2020-01-01T00:00:00Z",
+			"at": "2026-10-12T00:00:00Z", "currency": "USD", "cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 0,
+			"reverseCommissionOnRefund": true, "retail": false}
+		if kind == "SERVICE" {
+			card["planCode"] = "provider_studio"
+			card["otherRate"] = rate("", 800, "PLAN", "provider_studio", false)
+			card["categories"] = []any{rate("hair & beauty", 700, "OVERRIDE", "provider_studio", true)}
+			card["negotiated"] = []any{map[string]any{"id": "nr-2", "orgId": org, "type": "CONNECTION_FEE", "category": "hair & beauty", "rateBps": 700,
+				"startsAt": "2026-10-01T00:00:00Z", "endsAt": until, "status": "ACTIVE"}}
+		} else {
+			card["planCode"] = "seller_growth"
+			card["fbaPerUnitMinor"] = 325
+			card["otherRate"] = rate("", 1000, "PLAN", "seller_growth", false)
+			card["categories"] = []any{rate("fashion", 1200, "PLAN", "seller_growth", false), rate("groceries", 600, "OVERRIDE", "seller_growth", true)}
+			card["negotiated"] = []any{map[string]any{"id": "nr-1", "orgId": org, "type": "COMMISSION", "category": "groceries", "rateBps": 600,
+				"startsAt": "2026-10-01T00:00:00Z", "endsAt": until, "status": "ACTIVE"}}
+		}
+		writeJSON(w, 200, card)
+	})
+}
+
+func firstNonEmptyStr(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}
+
+func nilIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }
 
 func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {

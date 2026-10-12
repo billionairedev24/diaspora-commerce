@@ -1002,6 +1002,9 @@ paths:
         BFF reads them with its own client-credentials token (scope `payments:service`) and always passes the active
         organisation: members never see other sellers' overrides. Shares the payouts module level (VIEW). Rates are basis
         points (1250 = 12.50 %). AfroTransact Retail reads `retail: true` (no commission, no fees).
+        Each rate says where it comes from: OVERRIDE (a negotiated rate, with `negotiatedUntil`), PLAN (the
+        organisation's plan, `planName`), CATEGORY or DEFAULT. `connectionFees` (payments `GET /v1/orgs/{orgId}/rate-card?kind=SERVICE`)
+        is what service bookings pay, apart from product commission; `negotiated` lists negotiated commission rates.
       responses:
         '200': {description: Fees, content: {application/json: {schema: {$ref: '#/components/schemas/SellerFeesView'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -3313,6 +3316,55 @@ components:
         expiresAt: {type: [string, 'null'], format: date-time}
         proposedStartAt: {type: [string, 'null'], format: date-time}
         allowedActions: {type: array, items: {$ref: '#/components/schemas/BookingAction'}}
+        serviceCategory: {type: [string, 'null'], description: The service's category (selects the connection fee)}
+        takeHome:
+          oneOf: [{$ref: '#/components/schemas/BookingTakeHome'}, {type: 'null'}]
+          description: 'Booking requests: what the provider keeps at the booking''s price, after the connection fee and card fees ("You keep $X after the 8% connection fee"); null when payments cannot say'
+    BookingTakeHome:
+      type: object
+      required: [connectionFeeBps, connectionFeeMinor, cardFeesMinor, keepMinor, source, currency]
+      properties:
+        connectionFeeBps: {type: integer, description: AfroTransact's connection fee for the service category (800 = 8 %)}
+        connectionFeeMinor: {type: integer, format: int64}
+        cardFeesMinor: {type: integer, format: int64, description: Card fee estimate on the deposit charge and on the balance charge}
+        keepMinor: {type: integer, format: int64, description: Price − connection fee − card fees}
+        source: {type: string, enum: [OVERRIDE, PLAN, CATEGORY, DEFAULT, RETAIL]}
+        currency: {type: string}
+    SellerAppliedRate:
+      type: object
+      required: [category, label, bps, source, planCode, planName, negotiatedUntil]
+      properties:
+        category: {type: string, description: "'' for categories nobody lists"}
+        label: {type: string}
+        bps: {type: integer, minimum: 0, maximum: 10000}
+        source: {type: string, enum: [OVERRIDE, PLAN, CATEGORY, DEFAULT, RETAIL], description: 'OVERRIDE: negotiated for this organisation'}
+        planCode: {type: [string, 'null']}
+        planName: {type: [string, 'null']}
+        negotiatedUntil: {type: [string, 'null'], format: date-time, description: 'Source OVERRIDE: when the negotiated rate ends (null = open-ended)'}
+    SellerNegotiatedRate:
+      type: object
+      required: [type, category, label, rateBps, startsAt, endsAt, status]
+      properties:
+        type: {type: string, enum: [COMMISSION, CONNECTION_FEE]}
+        category: {type: string, description: "'*' = every category"}
+        label: {type: string}
+        rateBps: {type: integer}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [SCHEDULED, ACTIVE, ENDED, EXPIRED]}
+    SellerRateCard:
+      type: object
+      required: [kind, version, effectiveFrom, planCode, planName, other, categories, negotiated]
+      description: What the organisation pays on one kind of line now (PRODUCT commission, SERVICE connection fee), with sources
+      properties:
+        kind: {type: string, enum: [PRODUCT, SERVICE]}
+        version: {type: integer}
+        effectiveFrom: {type: string, format: date-time}
+        planCode: {type: [string, 'null']}
+        planName: {type: [string, 'null']}
+        other: {$ref: '#/components/schemas/SellerAppliedRate'}
+        categories: {type: array, items: {$ref: '#/components/schemas/SellerAppliedRate'}}
+        negotiated: {type: array, items: {$ref: '#/components/schemas/SellerNegotiatedRate'}}
     DaySummary:
       type: object
       required: [date, appointments, bookedMinutes, expectedRevenueMinor, needsAction]
@@ -3484,7 +3536,7 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/ProviderFee'}}
     Earnings:
       type: object
-      required: [currency, commissionPercent, payoutDay, totals, rows, providerFees]
+      required: [currency, commissionPercent, payoutDay, totals, rows, providerFees, connectionFee]
       properties:
         currency: {type: string}
         commissionPercent: {type: number}
@@ -3501,6 +3553,9 @@ components:
             heldMinor: {type: integer}
         rows: {type: array, items: {$ref: '#/components/schemas/EarningsRow'}}
         providerFees: {$ref: '#/components/schemas/ProviderFees'}
+        connectionFee:
+          oneOf: [{$ref: '#/components/schemas/SellerRateCard'}, {type: 'null'}]
+          description: The provider's connection fee now, per service category, with where it comes from; null when payments cannot say
     SocialLink:
       type: object
       required: [network, url, status]
@@ -3580,12 +3635,15 @@ components:
     # ── fees (read-only)
     SellerFeeCategory:
       type: object
-      required: [category, label, commissionBps, source]
+      required: [category, label, commissionBps, source, planCode, planName, negotiatedUntil]
       properties:
         category: {type: string, description: payments category key (lower-case)}
         label: {type: string}
         commissionBps: {type: integer, minimum: 0, maximum: 10000, description: 1250 = 12.50 %}
-        source: {type: string, enum: [OVERRIDE, CATEGORY, DEFAULT, RETAIL], description: 'OVERRIDE: negotiated for this organisation'}
+        source: {type: string, enum: [OVERRIDE, PLAN, CATEGORY, DEFAULT, RETAIL], description: 'OVERRIDE: negotiated for this organisation; PLAN: the rate of its plan'}
+        planCode: {type: [string, 'null']}
+        planName: {type: [string, 'null']}
+        negotiatedUntil: {type: [string, 'null'], format: date-time, description: 'Source OVERRIDE: when the negotiated rate ends'}
     SellerFeeVersion:
       type: object
       required: [version, effectiveFrom, defaultCommissionBps, categories, cardPctBps, cardFixedMinor, fbaPerUnitMinor, reverseCommissionOnRefund, deliveryFee]
@@ -3639,7 +3697,7 @@ components:
         to: {type: string}
     SellerFeesView:
       type: object
-      required: [currency, retail, note, current, upcoming, changes]
+      required: [currency, retail, note, current, upcoming, changes, planCode, planName, negotiated, connectionFees]
       properties:
         currency: {type: string}
         retail: {type: boolean, description: 'AfroTransact Retail (merchant of record) — no commission, no fees'}
@@ -3647,6 +3705,12 @@ components:
         current: {$ref: '#/components/schemas/SellerFeeVersion'}
         upcoming: {oneOf: [{$ref: '#/components/schemas/SellerFeeVersion'}, {type: 'null'}], description: 'The next scheduled version, if any'}
         changes: {type: array, items: {$ref: '#/components/schemas/SellerFeeChange'}, description: What changes for this organisation with the upcoming version}
+        planCode: {type: [string, 'null'], description: The plan whose rates apply (null when none or unknown)}
+        planName: {type: [string, 'null']}
+        negotiated: {type: array, items: {$ref: '#/components/schemas/SellerNegotiatedRate'}, description: Negotiated commission rates (active or scheduled)}
+        connectionFees:
+          oneOf: [{$ref: '#/components/schemas/SellerRateCard'}, {type: 'null'}]
+          description: Connection fees on service bookings (Provider Hub); null when payments cannot say
     MirroredList:
       type: object
       required: [items]

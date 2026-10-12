@@ -87,13 +87,17 @@ type FeeScheduleView struct {
 	FbaPerUnitMinor           int64             `json:"fbaPerUnitMinor"`
 	ReverseCommissionOnRefund bool              `json:"reverseCommissionOnRefund"`
 	DeliveryPricing           *DeliveryPricing  `json:"deliveryPricing"`
-	Note                      *string           `json:"note"`
-	CreatedBy                 string            `json:"createdBy"`
-	CreatedAt                 *time.Time        `json:"createdAt"`
-	CancelledAt               *time.Time        `json:"cancelledAt"`
-	CancelledBy               *string           `json:"cancelledBy"`
-	CancelReason              *string           `json:"cancelReason"`
-	Cancellable               bool              `json:"cancellable"`
+	// PlanRates are the product commission per plan; ConnectionFee the service connection-fee section (nil for
+	// versions created before connection fees existed).
+	PlanRates     []FeePlanRate     `json:"planRates"`
+	ConnectionFee *FeeConnectionFee `json:"connectionFee"`
+	Note          *string           `json:"note"`
+	CreatedBy     string            `json:"createdBy"`
+	CreatedAt     *time.Time        `json:"createdAt"`
+	CancelledAt   *time.Time        `json:"cancelledAt"`
+	CancelledBy   *string           `json:"cancelledBy"`
+	CancelReason  *string           `json:"cancelReason"`
+	Cancellable   bool              `json:"cancellable"`
 }
 
 // FeeRetail describes AfroTransact Retail (merchant of record): never charged commission or fees, never overridden.
@@ -123,6 +127,13 @@ type FeesOverview struct {
 	Limits              FeeLimits         `json:"limits"`
 	ExampleSaleMinor    int64             `json:"exampleSaleMinor"`
 	ReverseOnRefundHelp string            `json:"reverseOnRefundHelp"`
+	// Plans of the catalogue (seller service) for the plan-rate matrix, with a warning where the feature text and the
+	// configured rate differ; PlansAvailable false when the catalogue could not be read.
+	Plans          []FeePlan `json:"plans"`
+	PlansAvailable bool      `json:"plansAvailable"`
+	PlanWarnings   []string  `json:"planWarnings"`
+	// ServiceCategories are the service categories the connection-fee section prices (plus "services").
+	ServiceCategories []FeeCategory `json:"serviceCategories"`
 }
 
 // FeeOrgHit is a seller or provider organisation found for an override.
@@ -155,7 +166,11 @@ type FeeScheduleDraft struct {
 	ReverseCommissionOnRefund bool                   `json:"reverseCommissionOnRefund"`
 	// DeliveryPricing nil = carried over from the latest live version (payments' rule).
 	DeliveryPricing *DeliveryPricingDraft `json:"deliveryPricing"`
-	Note            string                `json:"note"`
+	// PlanRates nil = carried over from the latest live version; [] = no plan rates.
+	PlanRates []FeeDraftPlanRate `json:"planRates"`
+	// ConnectionFee nil = carried over from the latest live version.
+	ConnectionFee *FeeConnectionDraft `json:"connectionFee"`
+	Note          string              `json:"note"`
 }
 
 // FeeDraftCategoryRate is one category row of a draft.
@@ -287,6 +302,9 @@ func ValidateFeeDraft(d FeeScheduleDraft, r FeeDraftRules) map[string]string {
 	for k, v := range ValidateDeliveryDraft(d.DeliveryPricing, r.RetailOrgID, l) {
 		errs[k] = v
 	}
+	for k, v := range ValidateRateSections(d, l) {
+		errs[k] = v
+	}
 	return errs
 }
 
@@ -311,8 +329,11 @@ type SellerFeeCategory struct {
 	Category      string `json:"category"`
 	Label         string `json:"label"`
 	CommissionBps int    `json:"commissionBps"`
-	// Source: OVERRIDE (negotiated for this organisation), CATEGORY, DEFAULT or RETAIL.
-	Source string `json:"source"`
+	// Source: OVERRIDE (negotiated for this organisation), PLAN, CATEGORY, DEFAULT or RETAIL.
+	Source          string     `json:"source"`
+	PlanCode        *string    `json:"planCode"`
+	PlanName        *string    `json:"planName"`
+	NegotiatedUntil *time.Time `json:"negotiatedUntil"`
 }
 
 // SellerFeeVersion is the fees one fee-schedule version applies to the organisation.
@@ -379,6 +400,13 @@ type SellerFeesView struct {
 	Current  SellerFeeVersion  `json:"current"`
 	Upcoming *SellerFeeVersion `json:"upcoming"`
 	Changes  []SellerFeeChange `json:"changes"`
+	// PlanCode / PlanName: the organisation's plan whose rates apply (nil when none or unknown).
+	PlanCode *string `json:"planCode"`
+	PlanName *string `json:"planName"`
+	// Negotiated are the organisation's negotiated commission rates (active or scheduled).
+	Negotiated []SellerNegotiatedRate `json:"negotiated"`
+	// ConnectionFees is what the organisation pays on service bookings (nil when payments could not say).
+	ConnectionFees *SellerRateCard `json:"connectionFees"`
 }
 
 // FormatBps renders basis points as a percentage with two decimals ("12.50%").

@@ -1041,6 +1041,64 @@ type EffectiveFeesResponse struct {
 	CardFixedMinor            int64     `json:"cardFixedMinor"`
 	FbaPerUnitMinor           int64     `json:"fbaPerUnitMinor"`
 	ReverseCommissionOnRefund bool      `json:"reverseCommissionOnRefund"`
+	// Kind PRODUCT (commission) or SERVICE (connection fee); empty from a payments without connection fees.
+	Kind             string     `json:"kind"`
+	PlanCode         string     `json:"planCode"`
+	NegotiatedRateID string     `json:"negotiatedRateId"`
+	NegotiatedUntil  *time.Time `json:"negotiatedUntil"`
+}
+
+// AppliedRateResponse is payments' AppliedRate: one rate with where it comes from.
+type AppliedRateResponse struct {
+	Category         string     `json:"category"`
+	Bps              int        `json:"bps"`
+	Source           string     `json:"source"`
+	PlanCode         string     `json:"planCode"`
+	NegotiatedRateID string     `json:"negotiatedRateId"`
+	NegotiatedUntil  *time.Time `json:"negotiatedUntil"`
+}
+
+// NegotiatedRateResponse is payments' NegotiatedRate.
+type NegotiatedRateResponse struct {
+	ID           string     `json:"id"`
+	OrgID        string     `json:"orgId"`
+	Type         string     `json:"type"`
+	Category     string     `json:"category"`
+	RateBps      int        `json:"rateBps"`
+	StartsAt     time.Time  `json:"startsAt"`
+	EndsAt       *time.Time `json:"endsAt"`
+	Status       string     `json:"status"`
+	Reason       string     `json:"reason"`
+	NegotiatedBy string     `json:"negotiatedBy"`
+	Reference    *string    `json:"reference"`
+	CreatedBy    string     `json:"createdBy"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	EndedAt      *time.Time `json:"endedAt"`
+	EndedBy      *string    `json:"endedBy"`
+	EndReason    *string    `json:"endReason"`
+	ExpiredAt    *time.Time `json:"expiredAt"`
+	Audit        []struct {
+		Action string    `json:"action"`
+		Actor  string    `json:"actor"`
+		Reason *string   `json:"reason"`
+		At     time.Time `json:"at"`
+	} `json:"audit"`
+}
+
+// RateCardResponse is payments' RateCard: every rate of one organisation and kind.
+type RateCardResponse struct {
+	OrgID          string                   `json:"orgId"`
+	Kind           string                   `json:"kind"`
+	Version        int                      `json:"version"`
+	EffectiveFrom  time.Time                `json:"effectiveFrom"`
+	Currency       string                   `json:"currency"`
+	PlanCode       string                   `json:"planCode"`
+	OtherRate      AppliedRateResponse      `json:"otherRate"`
+	Categories     []AppliedRateResponse    `json:"categories"`
+	Negotiated     []NegotiatedRateResponse `json:"negotiated"`
+	CardPctBps     int                      `json:"cardPctBps"`
+	CardFixedMinor int64                    `json:"cardFixedMinor"`
+	Retail         bool                     `json:"retail"`
 }
 
 // FeesClient reads payments' fee schedules. payments lets only staff and services (payments:service) read them, so
@@ -1049,6 +1107,10 @@ type FeesClient interface {
 	Schedules(ctx context.Context) ([]FeeScheduleSummary, error)
 	// Effective is GET /v1/fee-schedules/effective?category=&orgId=&at=.
 	Effective(ctx context.Context, category, orgID string, at time.Time) (EffectiveFeesResponse, error)
+	// EffectiveKind is the same for one kind (PRODUCT commission or SERVICE connection fee).
+	EffectiveKind(ctx context.Context, kind, category, orgID string, at time.Time) (EffectiveFeesResponse, error)
+	// RateCard is GET /v1/orgs/{orgId}/rate-card?kind=&at=.
+	RateCard(ctx context.Context, orgID, kind string, at time.Time) (RateCardResponse, error)
 }
 
 // ---------------------------------------------------------------- storefront

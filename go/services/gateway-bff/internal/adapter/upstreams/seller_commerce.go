@@ -394,11 +394,35 @@ func (f *feesImpl) Schedules(ctx context.Context) ([]port.FeeScheduleSummary, er
 }
 
 func (f *feesImpl) Effective(ctx context.Context, category, orgID string, at time.Time) (port.EffectiveFeesResponse, error) {
+	return f.EffectiveKind(ctx, "", category, orgID, at)
+}
+
+func (f *feesImpl) RateCard(ctx context.Context, orgID, kind string, at time.Time) (port.RateCardResponse, error) {
+	t, err := f.token(ctx)
+	if err != nil {
+		return port.RateCardResponse{}, err
+	}
+	q := url.Values{}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
+	if !at.IsZero() {
+		q.Set("at", at.UTC().Format(time.RFC3339))
+	}
+	var out port.RateCardResponse
+	_, err = call(ctx, f.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/rate-card", Query: q, Bearer: t}, &out)
+	return out, err
+}
+
+func (f *feesImpl) EffectiveKind(ctx context.Context, kind, category, orgID string, at time.Time) (port.EffectiveFeesResponse, error) {
 	t, err := f.token(ctx)
 	if err != nil {
 		return port.EffectiveFeesResponse{}, err
 	}
 	q := url.Values{"category": {category}, "orgId": {orgID}}
+	if kind != "" {
+		q.Set("kind", kind)
+	}
 	if !at.IsZero() {
 		q.Set("at", at.UTC().Format(time.RFC3339))
 	}

@@ -25,6 +25,9 @@ tags:
 - name: Plan fees from earnings
   description: 'Seller plan invoices paid from earnings instead of the card (S298): withheld from the next transfers, released
     when the invoice is voided or refunded'
+- name: Negotiated rates
+  description: 'Commission and connection fees negotiated with one organisation: dated, with a required reason, audited and
+    expired by a job; they win over plan, category and default rates while active'
 - name: Finance
   description: 'Staff views and configuration: payment split, fees & commissions, ledger, reconciliation, connected accounts'
 - name: Payments
@@ -266,10 +269,12 @@ paths:
     get:
       tags:
       - Finance
-      summary: Effective fees for an organisation and category (payments:service or payments:read)
-      description: 'Commission (seller override, then category, then default), card-fee estimate (cardPctBps + cardFixedMinor
-        per charge) and FBA fee of the version in force at `at` (default now). AfroTransact Retail gets zero commission and
-        zero FBA fee (source RETAIL): only its card fee share applies. Callers such as bookings use it instead of hard-coding
+      summary: Effective fees for an organisation, kind and category (payments:service, payments:fees.read or payments:read)
+      description: 'The commission (kind PRODUCT, default) or connection fee (kind SERVICE: category = the service''s category)
+        of the version in force at `at` (default now), first match wins: an active negotiated rate of the organisation (its
+        category, then ''*''), the organisation''s plan rate (category, then the plan''s ''*''), the category rate, the default.
+        Plus the card-fee estimate (cardPctBps + cardFixedMinor per charge) and the FBA fee (products only). AfroTransact
+        Retail pays none (source RETAIL): only its card fee share applies. Callers such as bookings use it instead of hard-coding
         fees. Fee schedules are per currency; there is no market dimension.'
       operationId: effectiveFees
       parameters:
@@ -289,6 +294,14 @@ paths:
         schema:
           type: string
           format: date-time
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
       responses:
         '200':
           description: OK
@@ -384,6 +397,125 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BalanceResponse'
+  /v1/negotiated-rates:
+    get:
+      tags:
+      - Negotiated rates
+      summary: Negotiated rates, newest first
+      description: 'Staff fee readers (payments:read) and services (payments:fees.read) see every organisation (filter with
+        orgId); organisation members only their own. Filters: type (COMMISSION, CONNECTION_FEE), status (SCHEDULED, ACTIVE,
+        ENDED, EXPIRED); limit ≤ 500.'
+      operationId: listNegotiatedRates
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - COMMISSION
+          - CONNECTION_FEE
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - SCHEDULED
+          - ACTIVE
+          - ENDED
+          - EXPIRED
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NegotiatedRate'
+    post:
+      tags:
+      - Negotiated rates
+      summary: Negotiate a rate with an organisation (Super Admin / Finance, payments:configure)
+      description: A commission (products) or connection fee (services) for one category or '*', from startsAt (default now,
+        never in the past) to endsAt (optional). The reason is required and audited with negotiatedBy and the reference. 409
+        payments.negotiated-rate-overlap when another rate of the organisation, type and category overlaps; 422 payments.retail-no-fees
+        for AfroTransact Retail. Payments created before it starts keep their snapshotted rate.
+      operationId: createNegotiatedRate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewNegotiatedRate'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NegotiatedRate'
+  /v1/negotiated-rates/{id}:
+    get:
+      tags:
+      - Negotiated rates
+      summary: One negotiated rate with its audit trail
+      operationId: negotiatedRate
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NegotiatedRate'
+  /v1/negotiated-rates/{id}/end:
+    post:
+      tags:
+      - Negotiated rates
+      summary: End a negotiated rate now (Super Admin / Finance, payments:configure)
+      description: With a reason (audited). The organisation's plan, category or default rate applies to payments created
+        afterwards. 409 payments.negotiated-rate-ended when it already ended or expired.
+      operationId: endNegotiatedRate
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndNegotiatedRate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NegotiatedRate'
   /v1/orders/{orderId}/refunds:
     post:
       tags:
@@ -542,6 +674,43 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PlanFeeWithholdingResponse'
+  /v1/orgs/{orgId}/rate-card:
+    get:
+      tags:
+      - Finance
+      summary: Every commission or connection-fee rate of an organisation, with its source
+      description: 'kind PRODUCT (default): product commission per category; SERVICE: connection fee per service category.
+        Each rate says where it comes from (OVERRIDE = negotiated, PLAN, CATEGORY, DEFAULT, RETAIL), plus the rate of unlisted
+        categories, the organisation''s plan and its negotiated rates that are active or scheduled at `at` (default now).
+        Staff fee readers and services (payments:read, payments:fees.read), or the organisation''s members who see payouts.'
+      operationId: rateCard
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+      - name: at
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RateCard'
   /v1/payments:
     get:
       tags:
@@ -1895,6 +2064,14 @@ components:
             at checkout (POST /v1/delivery-pricing/quote) and snapshotted by orders. Credited to 4250 at capture; ignored
             for AfroTransact Retail; must be 0 on other lines'
           minimum: 0
+        kind:
+          type: string
+          description: 'PRODUCT (default): AfroTransact charges a commission (4000). SERVICE (service bookings): a connection
+            fee (4050) under the fee schedule''s connectionFee section, the category being the service''s category. Omitted
+            with category ''services'' = SERVICE (bookings before connection fees)'
+          enum:
+          - PRODUCT
+          - SERVICE
       required:
       - fulfilment
       - itemsMinor
@@ -1972,6 +2149,32 @@ components:
           type: integer
           format: int64
           description: Delivery fee given back by customer-fault refunds
+        feeKind:
+          type: string
+          description: PRODUCT (commissionMinor is commission) or SERVICE (commissionMinor is the connection fee)
+          enum:
+          - PRODUCT
+          - SERVICE
+        rateBps:
+          type: integer
+          format: int32
+          description: Rate snapshotted when the payment was created (null on older lines, which keep their fee-schedule version's
+            commission)
+        rateSource:
+          type: string
+          enum:
+          - OVERRIDE
+          - PLAN
+          - CATEGORY
+          - DEFAULT
+          - RETAIL
+        ratePlanCode:
+          type: string
+          description: The seller's plan when the rate was resolved
+        negotiatedRateId:
+          type: string
+          format: uuid
+          description: The negotiated rate that applied (rateSource OVERRIDE)
     PaymentResponse:
       type: object
       properties:
@@ -2105,6 +2308,9 @@ components:
           type: integer
           format: int64
           description: AfroTransact Delivery fee returned to the seller (customer fault)
+        connectionFee:
+          type: boolean
+          description: 'A service line: commissionReversedMinor is connection fee given back (4050)'
     RefundResponse:
       type: object
       properties:
@@ -2386,6 +2592,169 @@ components:
           - CUSTOMER
       required:
       - lineIds
+    NewNegotiatedRate:
+      type: object
+      description: A commission or connection fee negotiated with one organisation
+      properties:
+        orgId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        type:
+          type: string
+          enum:
+          - COMMISSION
+          - CONNECTION_FEE
+        category:
+          type: string
+          description: One category; omit or '*' for every category
+          maxLength: 80
+          minLength: 0
+        rateBps:
+          type: integer
+          format: int32
+          description: Basis points (800 = 8 %)
+          maximum: 10000
+          minimum: 0
+        startsAt:
+          type: string
+          format: date-time
+          description: Default now; never in the past
+        endsAt:
+          type: string
+          format: date-time
+          description: Omit for open-ended; a job records the expiry at this time
+        reason:
+          type: string
+          description: Why (kept in the audit trail)
+          maxLength: 500
+          minLength: 0
+        negotiatedBy:
+          type: string
+          description: Staff member who negotiated it; default the caller
+          maxLength: 120
+          minLength: 0
+        reference:
+          type: string
+          description: Contract or ticket reference
+          maxLength: 120
+          minLength: 0
+      required:
+      - orgId
+      - reason
+      - type
+    NegotiatedRate:
+      type: object
+      description: A negotiated commission or connection fee with its status now
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        type:
+          type: string
+          enum:
+          - COMMISSION
+          - CONNECTION_FEE
+        category:
+          type: string
+          description: '''*'' = every category'
+        rateBps:
+          type: integer
+          format: int32
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - SCHEDULED
+          - ACTIVE
+          - ENDED
+          - EXPIRED
+        reason:
+          type: string
+        negotiatedBy:
+          type: string
+        reference:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        endedBy:
+          type: string
+        endReason:
+          type: string
+        expiredAt:
+          type: string
+          format: date-time
+        rowVersion:
+          type: integer
+          format: int64
+        audit:
+          type: array
+          items:
+            $ref: '#/components/schemas/NegotiatedRateAuditEntry'
+    NegotiatedRateAuditEntry:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - CREATED
+          - ENDED
+          - EXPIRED
+        actor:
+          type: string
+        reason:
+          type: string
+        at:
+          type: string
+          format: date-time
+    EndNegotiatedRate:
+      type: object
+      description: Why a negotiated rate ends now (audited)
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    ConnectionFee:
+      type: object
+      description: 'The connection fee providers pay on each booking''s service amount, on top of their plan fee: default,
+        per service category and per plan (plan → category → bps, ''*'' = the plan''s other categories). Negotiated connection
+        fees win over all of them'
+      properties:
+        defaultBps:
+          type: integer
+          format: int32
+          description: Rate of service categories nobody lists
+          example: 1000
+          maximum: 10000
+          minimum: 0
+        categoryBps:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        planBps:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+              format: int32
     DeliveryBand:
       type: object
       description: Trips of fromMiles (inclusive) up to toMiles (exclusive) cost feeMinor
@@ -2519,6 +2888,19 @@ components:
           $ref: '#/components/schemas/DeliveryPricingRequest'
           description: AfroTransact Delivery pricing (S255). Omit to carry the latest version's section over; send enabled=false
             to stop offering AfroTransact Delivery from seller stores
+        planBps:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+              format: int32
+          description: 'Product commission per plan: plan code → category → bps (''*'' = the plan''s rate for categories it
+            does not list). Applies after negotiated rates and before category rates. Omit to carry the latest version''s
+            plan rates over; {} removes them'
+        connectionFee:
+          $ref: '#/components/schemas/ConnectionFee'
+          description: Service connection fees (on service bookings). Omit to carry the latest version's section over
       required:
       - categoryBps
     OverrideRequest:
@@ -2622,6 +3004,18 @@ components:
         deliveryPricing:
           $ref: '#/components/schemas/DeliveryPricing'
           description: AfroTransact Delivery pricing (S255)
+        planBps:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: integer
+              format: int32
+          description: Product commission per plan (plan → category → bps)
+        connectionFee:
+          $ref: '#/components/schemas/ConnectionFee'
+          description: Service connection fees; null for versions created before they existed (services then paid the 'services'
+            commission)
     CancelFeeScheduleRequest:
       type: object
       description: Why a scheduled fee schedule version is withdrawn (audited)
@@ -2801,6 +3195,14 @@ components:
           type: string
         carrier:
           type: string
+        commissionMinor:
+          type: integer
+          format: int64
+          description: Product commission taken in this movement (negative when a refund gave it back)
+        connectionFeeMinor:
+          type: integer
+          format: int64
+          description: Service connection fee taken in this movement (negative when a refund gave it back), apart from commission
     ProviderFeeResponse:
       type: object
       description: A fee a provider owes (late provider cancellation), collected by a Stripe account debit
@@ -2964,8 +3366,88 @@ components:
           - MANUAL
           - DEAUTHORIZED
           - CHARGES_DISABLED
+    AppliedRate:
+      type: object
+      description: A commission or connection-fee rate and where it comes from
+      properties:
+        category:
+          type: string
+        bps:
+          type: integer
+          format: int32
+          description: Basis points (800 = 8 %)
+        source:
+          type: string
+          enum:
+          - OVERRIDE
+          - PLAN
+          - CATEGORY
+          - DEFAULT
+          - RETAIL
+        planCode:
+          type: string
+        negotiatedRateId:
+          type: string
+          format: uuid
+        negotiatedUntil:
+          type: string
+          format: date-time
+    RateCard:
+      type: object
+      description: Every rate one organisation pays on PRODUCT (commission) or SERVICE (connection fee) lines at a time, with
+        the source of each and its negotiated rates
+      properties:
+        orgId:
+          type: string
+        kind:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+        feeScheduleId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int32
+        effectiveFrom:
+          type: string
+          format: date-time
+        at:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        planCode:
+          type: string
+        otherRate:
+          $ref: '#/components/schemas/AppliedRate'
+          description: Rate of any category not listed
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedRate'
+        negotiated:
+          type: array
+          items:
+            $ref: '#/components/schemas/NegotiatedRate'
+        cardPctBps:
+          type: integer
+          format: int32
+        cardFixedMinor:
+          type: integer
+          format: int64
+        fbaPerUnitMinor:
+          type: integer
+          format: int64
+        reverseCommissionOnRefund:
+          type: boolean
+        retail:
+          type: boolean
     LineSplitResponse:
       type: object
+      description: 'One line: commissionBps / commissionMinor are the line''s take rate and amount: commission for PRODUCT
+        lines, connection fee for SERVICE lines (also in connectionFeeMinor)'
       properties:
         lineId:
           type: string
@@ -2983,6 +3465,23 @@ components:
         shippingToPlatform:
           type: boolean
         deliveryFeeMinor:
+          type: integer
+          format: int64
+        feeKind:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+        rateSource:
+          type: string
+          description: Where the rate came from; null on lines created before rates were snapshotted
+          enum:
+          - OVERRIDE
+          - PLAN
+          - CATEGORY
+          - DEFAULT
+          - RETAIL
+        connectionFeeMinor:
           type: integer
           format: int64
     RecipientResponse:
@@ -3030,6 +3529,10 @@ components:
         netMinor:
           type: integer
           format: int64
+        connectionFeesMinor:
+          type: integer
+          format: int64
+          description: Service connection fees (4050), apart from product commission
     SplitResponse:
       type: object
       properties:
@@ -3129,7 +3632,8 @@ components:
             $ref: '#/components/schemas/JournalLineResponse'
     EffectiveFeesResponse:
       type: object
-      description: Fees payments applies to one organisation and category (fee-schedule version in force)
+      description: Fees payments applies to one organisation, kind and category (fee-schedule version in force). For kind
+        SERVICE, commissionBps is the connection fee
       properties:
         feeScheduleId:
           type: string
@@ -3149,11 +3653,13 @@ components:
         commissionBps:
           type: integer
           format: int32
-          description: Commission in basis points (1000 = 10 %)
+          description: Commission (PRODUCT) or connection fee (SERVICE) in basis points (1000 = 10 %)
         commissionSource:
           type: string
+          description: 'First match: OVERRIDE (negotiated), PLAN, CATEGORY, DEFAULT; RETAIL = AfroTransact Retail pays none'
           enum:
           - OVERRIDE
+          - PLAN
           - CATEGORY
           - DEFAULT
           - RETAIL
@@ -3171,6 +3677,22 @@ components:
           description: FBA fee per unit; 0 for AfroTransact Retail
         reverseCommissionOnRefund:
           type: boolean
+        kind:
+          type: string
+          enum:
+          - PRODUCT
+          - SERVICE
+        planCode:
+          type: string
+          description: The organisation's plan (null when none or unknown)
+        negotiatedRateId:
+          type: string
+          format: uuid
+          description: The negotiated rate that applies (source OVERRIDE)
+        negotiatedUntil:
+          type: string
+          format: date-time
+          description: When that negotiated rate ends (null = open-ended)
   securitySchemes:
     bearer:
       type: http

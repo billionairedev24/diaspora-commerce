@@ -74,6 +74,27 @@ func (s *sellerFeesImpl) Fees(ctx context.Context, c *domain.Caller) (domain.Sel
 	if out.Retail {
 		out.Note = strPtr(domain.RetailFeesNote)
 	}
+	out.Negotiated = []domain.SellerNegotiatedRate{}
+	for _, c := range cur.Categories {
+		if c.PlanCode != nil {
+			out.PlanCode, out.PlanName = c.PlanCode, c.PlanName
+			break
+		}
+	}
+	if !out.Retail {
+		var wg sync.WaitGroup
+		var products, services *domain.SellerRateCard
+		wg.Go(func() { products = rateCardOf(ctx, fees, orgID, domain.FeeKindProduct, time.Time{}) })
+		wg.Go(func() { services = rateCardOf(ctx, fees, orgID, domain.FeeKindService, time.Time{}) })
+		wg.Wait()
+		if products != nil {
+			out.Negotiated = products.Negotiated
+			if products.PlanCode != nil {
+				out.PlanCode, out.PlanName = products.PlanCode, products.PlanName
+			}
+		}
+		out.ConnectionFees = services
+	}
 	if upcoming != nil {
 		next, err := s.version(ctx, orgID, cats, upcoming.EffectiveFrom)
 		if err != nil {
@@ -144,7 +165,8 @@ func (s *sellerFeesImpl) version(ctx context.Context, orgID string, cats []strin
 	for i, k := range cats {
 		r := res[i]
 		v.Categories = append(v.Categories, domain.SellerFeeCategory{Category: k, Label: domain.FeeCategoryLabel(k), CommissionBps: r.CommissionBps,
-			Source: strings.ToUpper(firstNonEmpty(r.CommissionSource, "DEFAULT"))})
+			Source: strings.ToUpper(firstNonEmpty(r.CommissionSource, "DEFAULT")), PlanCode: optStr(r.PlanCode), PlanName: planNameOf(r.PlanCode),
+			NegotiatedUntil: r.NegotiatedUntil})
 	}
 	return v, nil
 }

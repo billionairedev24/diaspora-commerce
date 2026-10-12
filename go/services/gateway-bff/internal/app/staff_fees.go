@@ -26,6 +26,17 @@ type StaffFeesService interface {
 	Cancel(ctx context.Context, c *domain.Caller, id, reason string) (domain.FeeScheduleView, error)
 	// Quote prices one AfroTransact Delivery trip under the live schedule (payments POST /v1/delivery-pricing/quote).
 	Quote(ctx context.Context, c *domain.Caller, q domain.DeliveryQuoteRequest) (domain.DeliveryQuote, error)
+	// NegotiatedRates lists negotiated commission / connection-fee rates (server-driven table; orgId for one seller).
+	NegotiatedRates(ctx context.Context, c *domain.Caller, q NegotiatedRateQuery) (domain.NegotiatedRatePage, error)
+	// CreateNegotiatedRate negotiates a rate with an organisation (payments:configure, a reason is required; audited).
+	CreateNegotiatedRate(ctx context.Context, c *domain.Caller, d domain.NegotiatedRateDraft) (domain.NegotiatedRateView, error)
+	// EndNegotiatedRate ends a scheduled or active rate now, with a reason (audited).
+	EndNegotiatedRate(ctx context.Context, c *domain.Caller, id, reason string) (domain.NegotiatedRateView, error)
+	// Calculate is the rate calculator: what one organisation pays on one kind and category now, and why.
+	Calculate(ctx context.Context, c *domain.Caller, orgID, category, kind string) (domain.FeeRateQuote, error)
+	// NegotiatePlan creates a private (invite-only) version of a catalogue plan at a negotiated price for one
+	// organisation and invites it (seller service's plan catalogue; plans:manage).
+	NegotiatePlan(ctx context.Context, c *domain.Caller, orgID string, d domain.NegotiatedPlanDraft) (domain.NegotiatedPlan, error)
 }
 
 type staffFeesImpl struct {
@@ -61,17 +72,23 @@ type paymentsSchedule struct {
 		Category      string `json:"category"`
 		CommissionBps int    `json:"commissionBps"`
 	} `json:"overrides"`
-	CardPctBps                int                     `json:"cardPctBps"`
-	CardFixedMinor            int64                   `json:"cardFixedMinor"`
-	FbaPerUnitMinor           int64                   `json:"fbaPerUnitMinor"`
-	ReverseCommissionOnRefund bool                    `json:"reverseCommissionOnRefund"`
-	DeliveryPricing           *domain.DeliveryPricing `json:"deliveryPricing"`
-	Note                      string                  `json:"note"`
-	CreatedBy                 string                  `json:"createdBy"`
-	CreatedAt                 *time.Time              `json:"createdAt"`
-	CancelledAt               *time.Time              `json:"cancelledAt"`
-	CancelledBy               string                  `json:"cancelledBy"`
-	CancelReason              string                  `json:"cancelReason"`
+	CardPctBps                int                       `json:"cardPctBps"`
+	CardFixedMinor            int64                     `json:"cardFixedMinor"`
+	FbaPerUnitMinor           int64                     `json:"fbaPerUnitMinor"`
+	ReverseCommissionOnRefund bool                      `json:"reverseCommissionOnRefund"`
+	DeliveryPricing           *domain.DeliveryPricing   `json:"deliveryPricing"`
+	PlanBps                   map[string]map[string]int `json:"planBps"`
+	ConnectionFee             *struct {
+		DefaultBps  int                       `json:"defaultBps"`
+		CategoryBps map[string]int            `json:"categoryBps"`
+		PlanBps     map[string]map[string]int `json:"planBps"`
+	} `json:"connectionFee"`
+	Note         string     `json:"note"`
+	CreatedBy    string     `json:"createdBy"`
+	CreatedAt    *time.Time `json:"createdAt"`
+	CancelledAt  *time.Time `json:"cancelledAt"`
+	CancelledBy  string     `json:"cancelledBy"`
+	CancelReason string     `json:"cancelReason"`
 }
 
 func (p paymentsSchedule) cancelled() bool { return p.CancelledAt != nil }
@@ -153,6 +170,7 @@ func (s *staffFeesImpl) Overview(ctx context.Context, c *domain.Caller) (domain.
 		labels[c.Key] = c.Label
 	}
 	canConfigure := canConfigureFees(sc.access)
+	plans, plansErr := s.catalogue(ctx, sc)
 	out := domain.FeesOverview{GeneratedAt: sc.now, Currency: domain.Currency, CanConfigure: canConfigure, Schedules: []domain.FeeScheduleView{},
 		Categories: cats, TaxonomyAvailable: taxErr == nil, OrgNamesAvailable: namesOK, Limits: domain.DefaultFeeLimits, ExampleSaleMinor: feeExampleSaleMinor,
 		Retail:              domain.FeeRetail{OrgID: s.retail, Name: PlatformSellerName, Note: domain.RetailFeesNote},
@@ -165,6 +183,9 @@ func (s *staffFeesImpl) Overview(ctx context.Context, c *domain.Caller) (domain.
 			out.Current = &cur
 		}
 	}
+	out.Plans, out.PlanWarnings = planChecks(plans, out.Current)
+	out.PlansAvailable = plansErr == nil
+	out.ServiceCategories = serviceCategories(t.all)
 	out.MinEffectiveFrom, out.ImmediateAllowed = sc.now, true
 	if t.latest != nil {
 		base := s.view(*t.latest, t, sc.now, labels, names, canConfigure)
@@ -189,7 +210,19 @@ func (s *staffFeesImpl) view(p paymentsSchedule, t feeTimeline, now time.Time, l
 		DefaultCommissionBps: p.DefaultCommissionBps, CategoryRates: []domain.FeeCategoryRate{}, Overrides: []domain.FeeOverride{}, CardPctBps: p.CardPctBps,
 		CardFixedMinor: p.CardFixedMinor, FbaPerUnitMinor: p.FbaPerUnitMinor, ReverseCommissionOnRefund: p.ReverseCommissionOnRefund, Note: strPtr(p.Note),
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, CancelledAt: p.CancelledAt, CancelledBy: strPtr(p.CancelledBy), CancelReason: strPtr(p.CancelReason),
-		Cancellable: canConfigure && status == domain.FeeStatusScheduled}
+		Cancellable: canConfigure && status == domain.FeeStatusScheduled, PlanRates: domain.PlanRatesOf(p.PlanBps, label)}
+	if cf := p.ConnectionFee; cf != nil {
+		section := &domain.FeeConnectionFee{DefaultBps: cf.DefaultBps, CategoryRates: []domain.FeeRate{}, PlanRates: domain.PlanRatesOf(cf.PlanBps, label)}
+		keys := make([]string, 0, len(cf.CategoryBps))
+		for k := range cf.CategoryBps {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			section.CategoryRates = append(section.CategoryRates, domain.FeeRate{Category: k, Label: label(k), Bps: cf.CategoryBps[k]})
+		}
+		v.ConnectionFee = section
+	}
 	keys := make([]string, 0, len(p.CategoryBps))
 	for k := range p.CategoryBps {
 		keys = append(keys, k)
@@ -423,6 +456,16 @@ func (s *staffFeesImpl) Create(ctx context.Context, c *domain.Caller, d domain.F
 		"reverseCommissionOnRefund": d.ReverseCommissionOnRefund, "note": strings.TrimSpace(d.Note)}
 	if !d.Immediate {
 		body["effectiveFrom"] = d.EffectiveFrom.UTC().Format(time.RFC3339)
+	}
+	if d.PlanRates != nil { // omitted = payments carries the latest live version's plan rates over
+		body["planBps"] = domain.PlanBpsBody(d.PlanRates)
+	}
+	if cf := d.ConnectionFee; cf != nil {
+		cats := map[string]int{}
+		for _, r := range cf.CategoryRates {
+			cats[domain.NormalizeFeeCategory(r.Category)] = *r.Bps
+		}
+		body["connectionFee"] = jobj{"defaultBps": *cf.DefaultBps, "categoryBps": cats, "planBps": domain.PlanBpsBody(cf.PlanRates)}
 	}
 	if dp := d.DeliveryPricing; dp != nil { // omitted = payments carries the latest live version's section over
 		section := jobj{"enabled": dp.Enabled, "maxRadiusMiles": *dp.MaxRadiusMiles, "sellerOverrides": []jobj{}}
