@@ -5,11 +5,19 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 import { ModulePage } from '@/components/module/ModulePage';
 import { ResourceTable } from '@/components/resources/ResourceTable';
+import { useT } from '@/i18n/t';
 
 import { FeeSchedulesPanel } from './FeeSchedulesPanel';
+import { NegotiatedRatesPanel } from './NegotiatedRatesPanel';
+import { RateCalculator } from './RateCalculator';
+import { RateMatrixPanel } from './RateMatrixPanel';
 
-/** Platform configuration → Fees: the fee-schedule editor and marketplace-facilitator tax rates. */
+/**
+ * Platform configuration → Fees & commissions: product commission and service connection fees (category × plan),
+ * negotiated rates, the rate calculator, the fee-schedule versions and marketplace-facilitator tax rates.
+ */
 export function FeesView() {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -22,6 +30,10 @@ export function FeesView() {
         onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
         items={[
           { value: 'fee-schedules', label: 'Fee schedules', content: <FeeSchedulesPanel /> },
+          { value: 'commission', label: t('st.rates.tab.commission'), content: <RateMatrixPanel kind="PRODUCT" /> },
+          { value: 'connection-fees', label: t('st.rates.tab.connection'), content: <RateMatrixPanel kind="SERVICE" /> },
+          { value: 'negotiated', label: t('st.rates.tab.negotiated'), content: <NegotiatedRatesPanel /> },
+          { value: 'calculator', label: t('st.rates.tab.calculator'), content: <RateCalculator /> },
           { value: 'tax-rates', label: 'Tax rates', content: <ResourceTable resource="tax-rates" urlPrefix="tax-rates" /> }
         ]}
       />

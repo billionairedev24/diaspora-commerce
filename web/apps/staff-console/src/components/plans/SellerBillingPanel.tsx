@@ -17,6 +17,8 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
+import { NegotiatedRatesPanel } from '@/components/fees/NegotiatedRatesPanel';
+import { NegotiatePlanDialog } from '@/components/fees/NegotiatePlanDialog';
 import { Card } from '@/components/ui/Card';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
@@ -189,7 +191,8 @@ function OrgFinder({ onPick, t }: { onPick: (orgId: string) => void; t: T }) {
 export function SellerBillingPanel() {
   const t = useT();
   const params = useSearchParams();
-  const { adjust } = usePlanRights();
+  const { adjust, manage } = usePlanRights();
+  const [planDealOpen, setPlanDealOpen] = useState(false);
   const [orgId, setOrgId] = useState(params.get('org') ?? '');
   const [action, setAction] = useState<Action | null>(null);
   const [actionSeq, setActionSeq] = useState(0);
@@ -238,11 +241,12 @@ export function SellerBillingPanel() {
       <OrgFinder onPick={setOrgId} t={t} />
       {!orgId ? <p className="m-0 text-sm text-muted">{t('st.plans.pickOrg')}</p> : panel.isPending ? <Spinner /> : panel.isError ? <ErrorState error={panel.error} onRetry={() => void panel.refetch()} /> : p ? (
         <>
-          <Card title={p.orgName ?? p.orgId} actions={adjust && b ? (
+          <Card title={p.orgName ?? p.orgId} actions={(adjust && b) || manage ? (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="neutral" onClick={() => open({ kind: 'credit' })}>{t('st.plans.addCredit')}</Button>
-              <Button size="sm" variant="neutral" onClick={() => open({ kind: 'freeDays' })}>{t('st.plans.giveFreeDays')}</Button>
-              {b.status === 'trialing' ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'trial' })}>{t('st.plans.changeTrial')}</Button> : null}
+              {manage ? <Button size="sm" variant="neutral" onClick={() => setPlanDealOpen(true)}>{t('st.rates.negotiatePlan')}</Button> : null}
+              {adjust && b ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'credit' })}>{t('st.plans.addCredit')}</Button> : null}
+              {adjust && b ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'freeDays' })}>{t('st.plans.giveFreeDays')}</Button> : null}
+              {adjust && b?.status === 'trialing' ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'trial' })}>{t('st.plans.changeTrial')}</Button> : null}
             </div>
           ) : null}>
             {b ? (
@@ -260,6 +264,8 @@ export function SellerBillingPanel() {
               <PlanFeeSummary v={p.planFeeCollection} adjust={adjust} onChange={() => setPlanFeeOpen(true)} t={t} />
             </Card>
           ) : null}
+          <h3 className="m-0 text-md font-semibold">{t('st.rates.negotiatedForOrg')}</h3>
+          <NegotiatedRatesPanel org={{ orgId: p.orgId, name: p.orgName ?? p.orgId }} />
           <h3 className="m-0 text-md font-semibold">{t('st.plans.invoices')}</h3>
           <DataTable<StaffBillingInvoice> id="staff.plans.seller-invoices" label={t('st.plans.invoices')} columns={invoiceColumns} data={p.invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number ?? i.id}
             state={invoiceState} mode="client" fetching={panel.isFetching} empty={t('st.plans.noInvoices')} />
@@ -271,6 +277,9 @@ export function SellerBillingPanel() {
           <DataTable<StaffBillingGrant> id="staff.plans.seller-grants" label={t('st.plans.grantsForOrg')} columns={grantCols} data={p.grants} getRowId={(g) => g.id} rowLabel={(g) => g.summary}
             state={grantState} mode="client" fetching={panel.isFetching} empty={t('st.plans.noGrants')} />
         </>
+      ) : null}
+      {p && planDealOpen ? (
+        <NegotiatePlanDialog orgId={p.orgId} orgName={p.orgName ?? p.orgId} kind={p.kind} open={planDealOpen} onClose={() => setPlanDealOpen(false)} t={t} />
       ) : null}
       <AdjustDialog key={actionSeq} orgId={orgId} action={action} onClose={() => setAction(null)} t={t} />
       {p?.planFeeCollection && planFeeOpen ? (

@@ -26,7 +26,8 @@ const base: FeeScheduleView = {
     sellerFee: { mode: 'FLAT', flatPerPackageMinor: 200, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null },
     sellerOverrides: [{ orgId: 'org-kente', orgName: 'Kente Naturals', sellerFee: { mode: 'FLAT', flatPerPackageMinor: 150, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null } }]
   },
-  cancelledAt: null, cancelledBy: null, cancelReason: null, cancellable: false
+  cancelledAt: null, cancelledBy: null, cancelReason: null, cancellable: false,
+  planRates: [], connectionFee: null
 };
 
 const overview: Pick<FeesOverview, 'minEffectiveFrom' | 'immediateAllowed' | 'retail' | 'limits'> = {

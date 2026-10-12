@@ -28,7 +28,7 @@ const ROUTES: AuditRoute[] = [
   ...tabs('/support', 'support', ['cases', 'customer']),
   ...tabs('/users', 'users', ['users', 'roles']),
   { label: 'payouts', path: '/payouts' },
-  ...tabs('/fees', 'fees', ['fee-schedules', 'tax-rates']),
+  ...tabs('/fees', 'fees', ['fee-schedules', 'commission', 'connection-fees', 'negotiated', 'calculator', 'tax-rates']),
   ...tabs('/marketing', 'marketing', ['announcements', 'placements']),
   ...tabs('/disputes', 'disputes', ['claims', 'returns']),
   { label: 'audit', path: '/audit' },
