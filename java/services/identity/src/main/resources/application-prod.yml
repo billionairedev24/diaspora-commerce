@@ -110,7 +110,7 @@ at:
         type: confidential
         secret: ${PAYMENTS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [orgs:read]
+        scopes: [orgs:read, "seller:billing"]
       - client-id: notifications-service
         name: Notifications service
         type: confidential
