@@ -1,4 +1,4 @@
-import { type FeePlan, type FeesOverview, type FeeScheduleView } from '@afrotransact/api-client';
+import { type FeePlan, type FeeScheduleView,type FeesOverview } from '@afrotransact/api-client';
 import { resetStaffDb } from '@afrotransact/api-client/mocks/staff';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
