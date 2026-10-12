@@ -73,7 +73,7 @@ at:
         type: confidential
         secret: ${SELLER_SERVICE_CLIENT_SECRET:}
         grant-types: [client_credentials]
-        scopes: [orgs:manage, users:read, "inventory:storage.read", "ads:spend.read", "ai:usage.read"]
+        scopes: [orgs:manage, users:read, "inventory:storage.read", "ads:spend.read", "ai:usage.read", "payments:plan-fees"]
       - client-id: orders-service
         name: Orders service
         type: confidential

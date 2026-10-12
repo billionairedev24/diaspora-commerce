@@ -58,6 +58,12 @@ public enum Chart {
     RETAIL_SALES("4400", "AfroTransact Retail sales", AccountType.REVENUE, Scope.NONE),
     /** Handling markup charged to sellers on top of the carrier cost of labels bought through AfroTransact. */
     LABEL_HANDLING_REVENUE("4500", "Shipping label handling revenue", AccountType.REVENUE, Scope.NONE),
+    /**
+     * Seller and provider plan fees collected from their earnings instead of their card (S298): credited when a plan
+     * invoice is withheld from the seller payable, debited back when it is released (invoice voided or refunded).
+     * Plan fees paid by card never reach this ledger (Stripe Billing collects them on the platform account).
+     */
+    PLAN_FEE_REVENUE("4600", "Seller plan fees collected from earnings", AccountType.REVENUE, Scope.NONE),
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
     CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE);
 

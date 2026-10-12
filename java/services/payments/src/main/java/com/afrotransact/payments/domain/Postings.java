@@ -203,6 +203,57 @@ public final class Postings {
     }
 
     /**
+     * A seller plan invoice paid from earnings (S298): Dr 2000:org seller payable / Cr 4600 plan fee revenue. Like a
+     * label charge the debit carries no order, so it never changes what one order's settlement owes; the
+     * organisation's next transfers recover it ({@link #planFeeSettled}). No money moves (the seller service credits
+     * the Stripe customer balance instead of charging the card), so 1000 and reconciliation are untouched.
+     */
+    public static Journal planFeeWithheld(UUID id, Instant at, String key, PlanFeeWithholding w) {
+        return Journal.builder(JournalType.PLAN_FEE_WITHHELD, key)
+                .description(planFeeLabel(w))
+                .debit(LedgerAccount.sellerPayable(w.orgId()), w.withheld(), w.orgId())
+                .credit(LedgerAccount.of(Chart.PLAN_FEE_REVENUE), w.withheld(), w.orgId())
+                .build(id, at);
+    }
+
+    /** A withheld plan fee credited back (voided or refunded invoice): the reverse of {@link #planFeeWithheld}. */
+    public static Journal planFeeReleased(UUID id, Instant at, String key, PlanFeeWithholding w, Money amount,
+                                          String why) {
+        return Journal.builder(JournalType.PLAN_FEE_RELEASED, key)
+                .description(planFeeLabel(w) + " released" + (why == null || why.isBlank() ? "" : " (" + why + ")"))
+                .debit(LedgerAccount.of(Chart.PLAN_FEE_REVENUE), amount, w.orgId())
+                .credit(LedgerAccount.sellerPayable(w.orgId()), amount, w.orgId())
+                .build(id, at);
+    }
+
+    /**
+     * Settles a plan fee against an order's payable before that order is transferred: a positive {@code amount} is
+     * recovered from the order (Dr 2000:org on the order / Cr 2000:org unattributed), so the transfer is smaller by the
+     * fee; a negative one pays a released fee back with the transfer (the opposite lines). Both lines stay on 2000:org,
+     * so the seller's total payable is unchanged.
+     */
+    public static Journal planFeeSettled(UUID id, Instant at, String key, String orderId, PlanFeeWithholding w,
+                                         Money amount) {
+        Journal.Builder b = Journal.builder(JournalType.PLAN_FEE_SETTLED, key)
+                .description(planFeeLabel(w) + (amount.isNegative() ? " paid back with order " : " deducted from order ")
+                        + orderId);
+        if (amount.isNegative()) {
+            b.debit(LedgerAccount.sellerPayable(w.orgId()), amount.negate(), w.orgId())
+                    .creditOrder(LedgerAccount.sellerPayable(w.orgId()), amount.negate(), w.orgId(), orderId);
+        } else {
+            b.debitOrder(LedgerAccount.sellerPayable(w.orgId()), amount, w.orgId(), orderId)
+                    .credit(LedgerAccount.sellerPayable(w.orgId()), amount, w.orgId());
+        }
+        return b.build(id, at);
+    }
+
+    /** "Plan fee (invoice INV-0042)": the line sellers see on statements and payouts. */
+    public static String planFeeLabel(PlanFeeWithholding w) {
+        return "Plan fee (invoice " + (w.invoiceNumber() == null || w.invoiceNumber().isBlank() ? w.invoiceId()
+                : w.invoiceNumber()) + ")";
+    }
+
+    /**
      * Dispute opened: Stripe withdraws the amount (Dr 1100 chargeback receivable / Cr 1000) and each responsible
      * seller's payable is debited into a chargeback reserve (Dr 2000 / Cr 2300) until the outcome. Stripe's dispute fee
      * is AfroTransact's cost (Dr 5100). AfroTransact Retail's part has no payable to reserve: it stays in 1100 until

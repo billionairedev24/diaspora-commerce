@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.afrotransact.payments.application.CaptureResult;
 import com.afrotransact.payments.application.DeliveryPricingCommand;
 import com.afrotransact.payments.application.OrderSplit;
+import com.afrotransact.payments.application.PlanFeeService;
 import com.afrotransact.payments.application.RefundResult;
 import com.afrotransact.payments.application.WalletMethod;
 import com.afrotransact.payments.domain.AccountBalance;
@@ -32,6 +33,9 @@ import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
 import com.afrotransact.payments.domain.PayoutBalance;
 import com.afrotransact.payments.domain.PayoutRequest;
+import com.afrotransact.payments.domain.PlanFeeDeduction;
+import com.afrotransact.payments.domain.PlanFeeWithholding;
+import com.afrotransact.payments.domain.Postings;
 import com.afrotransact.payments.domain.ProviderFee;
 import com.afrotransact.payments.domain.ReconciliationReport;
 import com.afrotransact.payments.domain.RecipientShare;
@@ -532,6 +536,12 @@ final class PaymentsDtos {
                                          + "negative. Negative when voided labels are owed back (paid with the next "
                                          + "transfer). Details: GET /v1/payouts/label-charges")
                                  long labelChargesMinor,
+                                 @Schema(description = "Seller plan fees withheld from earnings (S298) and not yet "
+                                         + "recovered from a transfer: they come out of onHoldMinor; only the part the "
+                                         + "amounts on hold no longer cover reduces availableMinor. Negative when a "
+                                         + "released fee is paid back with the next transfer. Details: GET "
+                                         + "/v1/orgs/{orgId}/plan-fee-withholdings")
+                                 long planFeesMinor,
                                  @Schema(description = "AfroTransact Delivery pickup fees paid on captured lines, net "
                                          + "of fees given back by customer-fault refunds (S259); already deducted from "
                                          + "the order nets, shown for earnings")
@@ -549,7 +559,8 @@ final class PaymentsDtos {
             return new PayoutBalanceResponse(b.orgId(), b.currency(), b.available().minor(), b.onHoldTotal().minor(),
                     b.onHold().stream().map(h -> new HeldOrderResponse(h.orderId(), h.amount().minor(),
                             h.releaseAt())).toList(), b.inFlight().minor(), b.paid().minor(),
-                    b.providerFees().minor(), b.labelCharges().minor(), b.deliveryFees().minor(),
+                    b.providerFees().minor(), b.labelCharges().minor(), b.planFees().minor(),
+                    b.deliveryFees().minor(),
                     b.minimum().minor(), b.canRequestToday(),
                     b.payoutsPaused(),
                     b.payoutsPausedReason());
@@ -606,6 +617,64 @@ final class PaymentsDtos {
 
     @Schema(description = "Net on settlement hold for one order; releaseAt null until delivered / completed")
     record HeldOrderResponse(String orderId, long amountMinor, Instant releaseAt) {
+    }
+
+    @Schema(description = "Withhold a seller plan invoice from the organisation's earnings (S298)")
+    record PlanFeeWithholdingRequest(@Schema(description = "Stripe invoice id (in_…)") @NotBlank @Size(max = 80)
+                                     String invoiceId,
+                                     @Schema(description = "Invoice number, when Stripe assigned one") @Size(max = 80)
+                                     String invoiceNumber,
+                                     @Schema(description = "What the invoice still needs after the customer's credit "
+                                             + "balance") @Positive long amountMinor,
+                                     @Pattern(regexp = CURRENCY) String currency) {
+    }
+
+    @Schema(description = "Release a withheld plan fee (voided invoice, refund out of band)")
+    record PlanFeeReleaseRequest(@Schema(description = "At most what is still withheld; omit to release all of it")
+                                 @Positive Long amountMinor,
+                                 @Schema(description = "Why, e.g. invoice voided") @Size(max = 200) String reason) {
+    }
+
+    @Schema(description = "Part of a plan fee settled with one order's transfer: positive when deducted from it, "
+            + "negative when a released fee was paid back with it")
+    record PlanFeeDeductionResponse(String orderId, long amountMinor, Instant at,
+                                    @Schema(description = "e.g. Plan fee (invoice INV-0042) deducted from order …")
+                                    String label) {
+
+        static PlanFeeDeductionResponse of(PlanFeeWithholding w, PlanFeeDeduction d) {
+            return new PlanFeeDeductionResponse(d.orderId(), d.amount().minor(), d.at(), Postings.planFeeLabel(w)
+                    + (d.amount().isNegative() ? " paid back with order " : " deducted from order ") + d.orderId());
+        }
+    }
+
+    @Schema(description = "A seller plan invoice paid from earnings: what was asked, withheld (possibly less: the card "
+            + "pays the rest; DECLINED when nothing was available), released and settled with transfers")
+    record PlanFeeWithholdingResponse(UUID id, String orgId, String invoiceId, String invoiceNumber, String currency,
+                                      long requestedMinor,
+                                      @Schema(description = "Taken from earnings; the card pays requested − withheld")
+                                      long withheldMinor, long releasedMinor,
+                                      @Schema(description = "Recovered from transfers minus paid back with them")
+                                      long settledMinor,
+                                      @Schema(description = "Still to settle with the next transfers: positive "
+                                              + "deducted from them, negative paid back with them")
+                                      long outstandingMinor,
+                                      @Schema(allowableValues = {"WITHHELD", "DECLINED", "RELEASED"}) String status,
+                                      String reason,
+                                      @Schema(description = "Plan fee (invoice …)") String label,
+                                      Instant createdAt, Instant updatedAt,
+                                      List<PlanFeeDeductionResponse> deductions) {
+
+        static PlanFeeWithholdingResponse of(PlanFeeWithholding w, List<PlanFeeDeduction> deductions) {
+            return new PlanFeeWithholdingResponse(w.id(), w.orgId(), w.invoiceId(), w.invoiceNumber(),
+                    w.requested().currency(), w.requested().minor(), w.withheld().minor(), w.released().minor(),
+                    w.settled().minor(), w.outstanding().minor(), w.status().name(), w.reason(),
+                    Postings.planFeeLabel(w), w.createdAt(), w.updatedAt(),
+                    deductions.stream().map(d -> PlanFeeDeductionResponse.of(w, d)).toList());
+        }
+
+        static PlanFeeWithholdingResponse of(PlanFeeService.View v) {
+            return of(v.withholding(), v.deductions());
+        }
     }
 
     @Schema(description = "Request a payout: an amount, or all=true for everything available")

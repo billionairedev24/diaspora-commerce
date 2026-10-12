@@ -16,6 +16,7 @@ import com.afrotransact.payments.domain.Journal;
 import com.afrotransact.payments.domain.JournalLine;
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.Payment;
+import com.afrotransact.payments.domain.PlanFeeWithholding;
 import com.afrotransact.payments.domain.Postings;
 import com.afrotransact.payments.domain.Settlement;
 import com.afrotransact.payments.domain.SettlementKind;
@@ -25,6 +26,7 @@ import com.afrotransact.payments.port.ConnectedAccountRepository;
 import com.afrotransact.payments.port.LedgerRepository;
 import com.afrotransact.payments.port.PaymentRepository;
 import com.afrotransact.payments.port.PaymentsMetrics;
+import com.afrotransact.payments.port.PlanFeeWithholdingRepository;
 import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.payments.port.StripeGatewayException;
@@ -51,12 +53,14 @@ class SettlementServiceImpl implements SettlementService {
     private final DomainEventPublisher events;
     private final PaymentsMetrics metrics;
     private final PaymentsSettings settings;
+    private final PlanFeeWithholdingRepository planFees;
     private final Clock clock;
 
     SettlementServiceImpl(SettlementRepository settlements, PaymentRepository payments, LedgerRepository ledgerReader,
                           ConnectedAccountRepository accounts, StripeGateway stripe, LedgerPoster ledger,
                           MoneyTransactions tx, PaymentsAccess access, DomainEventPublisher events,
-                          PaymentsMetrics metrics, PaymentsSettings settings, Clock clock) {
+                          PaymentsMetrics metrics, PaymentsSettings settings, PlanFeeWithholdingRepository planFees,
+                          Clock clock) {
         this.settlements = settlements;
         this.payments = payments;
         this.ledgerReader = ledgerReader;
@@ -68,6 +72,7 @@ class SettlementServiceImpl implements SettlementService {
         this.events = events;
         this.metrics = metrics;
         this.settings = settings;
+        this.planFees = planFees;
         this.clock = clock;
     }
 
@@ -247,7 +252,7 @@ class SettlementServiceImpl implements SettlementService {
     private enum Outcome {
         CREATED,
         BLOCKED,
-        /** Nothing left to transfer once the organisation's label charges were recovered from the payable. */
+        /** Nothing left to transfer once the organisation's plan fees and label charges were recovered. */
         RECOVERED
     }
 
@@ -258,10 +263,10 @@ class SettlementServiceImpl implements SettlementService {
             metrics.transfer("no_account");
             return Outcome.BLOCKED;
         }
-        Money amount = settleLabels(orderId, org, payable, now);
+        Money amount = settleOrgCharges(orderId, org, payable, now);
         if (!amount.isPositive()) {
-            LOG.info("Order {}: {}'s payable went to its outstanding label charges; nothing to transfer", orderId,
-                    org);
+            LOG.info("Order {}: {}'s payable went to its outstanding plan fees and label charges; nothing to "
+                    + "transfer", orderId, org);
             metrics.transfer("label_recovered");
             return Outcome.RECOVERED;
         }
@@ -288,17 +293,60 @@ class SettlementServiceImpl implements SettlementService {
     }
 
     /**
-     * Label charges (S256) are the organisation's, not an order's: they sit on 2000:org without an order. Before an
-     * order's payable is transferred, outstanding charges are recovered from it (the transfer is smaller) and credits
-     * from labels voided after their charge was recovered are paid with it (the transfer is larger). A pure ledger
-     * reclass between the order's and the organisation's unattributed payable; returns what to transfer.
+     * Plan fees withheld from earnings (S298) and label charges (S256) are the organisation's, not an order's: they sit
+     * on 2000:org without an order. Before an order's payable is transferred they are settled against it: released plan
+     * fees are paid back with it first (the transfer is larger), then withheld plan fees are recovered from it, oldest
+     * first (the transfer is smaller, one "Plan fee (invoice …)" deduction each), then outstanding label charges are
+     * recovered and credits from voided labels paid. Pure ledger reclasses between the order's and the organisation's
+     * unattributed payable; returns what to transfer.
      */
-    private Money settleLabels(String orderId, String org, Money payable, Instant now) {
-        long labels = ledgerReader.unattributedPayable(org, payable.currency());
+    private Money settleOrgCharges(String orderId, String org, Money payable, Instant now) {
+        String currency = payable.currency();
+        long unattributed = ledgerReader.unattributedPayable(org, currency);
+        if (unattributed == 0 && planFees.outstanding(org, currency) == 0) {
+            return payable;
+        }
+        List<PlanFeeWithholding> open = planFees.lockOutstanding(org, currency);
+        long planOutstanding = open.stream().mapToLong(w -> w.outstanding().minor()).sum();
+        // What is left on the unattributed payable once plan fees are taken out: label charges (negative) or credits
+        // from voided labels (positive).
+        long labels = unattributed + planOutstanding;
+        Money remaining = payable;
+        for (PlanFeeWithholding w : open) {
+            if (w.outstanding().isNegative()) {
+                remaining = remaining.plus(settlePlanFee(orderId, w, w.outstanding(), now));
+            }
+        }
+        for (PlanFeeWithholding w : open) {
+            if (w.outstanding().isPositive() && remaining.isPositive()) {
+                remaining = remaining.minus(settlePlanFee(orderId, w, w.outstanding().min(remaining), now));
+            }
+        }
+        return settleLabels(orderId, org, remaining, labels, now);
+    }
+
+    /** Posts one plan fee settlement (signed) against the order and records the deduction; returns its amount. */
+    private Money settlePlanFee(String orderId, PlanFeeWithholding w, Money amount, Instant now) {
+        UUID id = UUID.randomUUID();
+        UUID journal = Fingerprint.id("journal", "plan-fee-settled", id.toString());
+        ledger.post(Postings.planFeeSettled(journal, now, "plan-fee-settled:" + id, orderId, w, amount), SYSTEM);
+        planFees.insertDeduction(id, w.id(), orderId, amount, journal, now);
+        planFees.update(w.settledBy(amount, now));
+        LOG.info("Order {}: {} of plan fee {} settled with {}'s transfer", orderId, amount, w.invoiceId(),
+                w.orgId());
+        return amount.abs();
+    }
+
+    /**
+     * Label charges (S256): outstanding charges ({@code labels} negative) are recovered from the payable (the transfer
+     * is smaller) and credits from labels voided after their charge was recovered ({@code labels} positive) are paid
+     * with it (the transfer is larger).
+     */
+    private Money settleLabels(String orderId, String org, Money payable, long labels, Instant now) {
         if (labels == 0) {
             return payable;
         }
-        long recovered = labels < 0 ? Math.min(payable.minor(), -labels) : -labels;
+        long recovered = labels < 0 ? Math.min(Math.max(0, payable.minor()), -labels) : -labels;
         if (recovered == 0) {
             return payable;
         }

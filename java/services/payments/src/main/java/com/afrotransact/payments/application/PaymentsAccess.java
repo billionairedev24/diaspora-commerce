@@ -99,6 +99,26 @@ class PaymentsAccess {
         return actor;
     }
 
+    /** Plan fees from earnings (S298): only the seller service (SERVICE principal with payments:plan-fees). */
+    Actor planFeeCollector() {
+        Actor actor = actors.current();
+        if (actor.permissions().contains("*")
+                || actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.PLAN_FEES)) {
+            return actor;
+        }
+        throw new ForbiddenActionException("payments.service-only", "Plan fees are withheld and released by the "
+                + "seller service (payments:plan-fees), not by " + actor.type());
+    }
+
+    /** Plan fees of one organisation: the seller service, or whoever may see the organisation's balance. */
+    Actor planFeeViewer(String orgId) {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.PLAN_FEES)) {
+            return actor;
+        }
+        return balanceViewer(orgId);
+    }
+
     /** Connected accounts are registered by the seller service or by Finance. */
     Actor accountRegistrar() {
         Actor actor = actors.current();

@@ -26,6 +26,7 @@ import com.afrotransact.payments.port.IdempotencyStore;
 import com.afrotransact.payments.port.LedgerRepository;
 import com.afrotransact.payments.port.PayoutHoldRepository;
 import com.afrotransact.payments.port.PayoutRepository;
+import com.afrotransact.payments.port.PlanFeeWithholdingRepository;
 import com.afrotransact.payments.port.ProviderFeeRepository;
 import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
@@ -55,13 +56,15 @@ class PayoutServiceImpl implements PayoutService {
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
     private final PaymentsSettings settings;
+    private final PlanFeeWithholdingRepository planFees;
     private final Clock clock;
 
     PayoutServiceImpl(PayoutRepository payouts, SettlementRepository settlements, LedgerRepository ledger,
                       ConnectedAccountRepository accounts, PayoutHoldRepository holds,
                       ProviderFeeRepository providerFees, StripeGateway stripe, PayoutPolicy policy,
                       IdempotencyStore idempotency, MoneyTransactions tx, PaymentsAccess access,
-                      DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
+                      DomainEventPublisher events, PaymentsSettings settings, PlanFeeWithholdingRepository planFees,
+                      Clock clock) {
         this.payouts = payouts;
         this.settlements = settlements;
         this.ledger = ledger;
@@ -75,6 +78,7 @@ class PayoutServiceImpl implements PayoutService {
         this.access = access;
         this.events = events;
         this.settings = settings;
+        this.planFees = planFees;
         this.clock = clock;
     }
 
@@ -90,7 +94,7 @@ class PayoutServiceImpl implements PayoutService {
         if (isRetail(org)) {
             // AfroTransact Retail is the merchant of record: its sales are AfroTransact revenue (4400), nothing is
             // held, transferred or paid out, and compliance holds do not apply.
-            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero, zero,
+            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero, zero, zero,
                     policy.minimum(currency), false, false, null);
         }
         Money transferred = settlements.transferredTo(org, currency);
@@ -106,9 +110,10 @@ class PayoutServiceImpl implements PayoutService {
         // Label charges not yet recovered from a transfer (S256) are owed out of what was already transferred, so they
         // reserve it and may take available below zero; payouts never exceed available. Credits from voided labels
         // (negative) are paid with the next transfer, not from the connected account.
-        Money labelCharges = Money.of(-ledger.unattributedPayable(org, currency), currency);
-        Money available = transferred.minus(Money.of(consumed, currency)).minus(fees).max(zero)
-                .minus(labelCharges.max(zero));
+        // Plan fees withheld from earnings (S298) sit on the same unattributed payable; they were taken from earnings
+        // still on hold, so they reserve available only for the part the amounts on hold no longer cover.
+        long planOutstanding = planFees.outstanding(org, currency);
+        Money labelCharges = Money.of(-(ledger.unattributedPayable(org, currency) + planOutstanding), currency);
         List<HeldOrder> held = new ArrayList<>();
         Money heldTotal = zero;
         for (Map.Entry<String, Long> e : ledger.payableByOrder(org, currency).entrySet()) {
@@ -122,10 +127,13 @@ class PayoutServiceImpl implements PayoutService {
         }
         held.sort(Comparator.comparing(HeldOrder::releaseAt, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(HeldOrder::orderId));
+        Money planFeesOwed = Money.of(planOutstanding, currency);
+        Money available = transferred.minus(Money.of(consumed, currency)).minus(fees).max(zero)
+                .minus(labelCharges.max(zero)).minus(planFeesOwed.minus(heldTotal).max(zero));
         List<PayoutRequest> today = payouts.requestsOn(org, today());
         Optional<PayoutHold> hold = holds.find(org).filter(PayoutHold::paused);
         return new PayoutBalance(org, currency, available, held, heldTotal, Money.of(inFlight, currency),
-                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, labelCharges,
+                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, labelCharges, planFeesOwed,
                 Money.of(ledger.deliveryFeesPaid(org, currency), currency), policy.minimum(currency),
                 policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null));
     }

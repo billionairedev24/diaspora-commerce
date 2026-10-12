@@ -3,8 +3,11 @@ package com.afrotransact.payments.adapter.out.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.payments.domain.Money;
@@ -193,6 +196,18 @@ class JdbcSettlementRepository implements SettlementRepository {
                         + "where org_id = :org and currency = :currency")
                 .param("org", orgId).param("currency", currency).query(Long.class).single();
         return Money.of(sum, currency);
+    }
+
+    @Override
+    public Set<String> delivered(Collection<String> orderIds) {
+        if (orderIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(jdbc.sql("""
+                select order_id from settlement where order_id in (:ids)
+                union
+                select order_id from shipment_settlement where order_id in (:ids)
+                """).param("ids", List.copyOf(orderIds)).query(String.class).list());
     }
 
     private static Settlement settlement(ResultSet rs, int n) throws SQLException {
