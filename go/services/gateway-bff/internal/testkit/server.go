@@ -129,6 +129,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	sellers := app.SellerDirectory{RetailOrgID: "org_afrotransact_retail", Names: map[string]string{"org_kente": "Kente Naturals"}}
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: "test-signing-key-0123456789abcdef0123",
 		VerifyBearer: true, Clock: clock.Now, Log: log})
+	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: "77042", DefaultCity: "Houston", DefaultState: "TX", Log: log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store, Sessions: sessions,
 		Estimator: estimator, Clock: clock.Now, Log: log})
@@ -139,7 +140,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 			RedirectURIs: map[string]string{WebOrigin: RedirectURI, SellerCenterOrigin: SellerCenterRedirectURI,
 				StaffConsoleOrigin: StaffConsoleRedirectURI},
 			AppOrigins: map[string]string{"storefront": WebOrigin, "seller-center": SellerCenterOrigin, "staff-console": StaffConsoleOrigin},
-			BFFPath:    "/api/bff", Applications: sellerDeps.Sellers, Clock: clock.Now, Log: log}),
+			BFFPath:    "/api/bff", Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Clock: clock.Now, Log: log}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,

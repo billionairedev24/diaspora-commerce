@@ -28,6 +28,13 @@ func (o *orgAccessImpl) Member(ctx context.Context, bearer string) (port.Member,
 	return m, err
 }
 
+func (o *orgAccessImpl) SyncOrg(ctx context.Context, bearer, orgID string) (port.OrgSync, error) {
+	var out port.OrgSync
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/sync",
+		Bearer: bearer, RetryUnsafe: true}, &out)
+	return out, err
+}
+
 func (o *orgAccessImpl) BecomeApplicant(ctx context.Context, bearer, kind string) error {
 	path := "/v1/me/roles/seller-applicant"
 	if kind == "PROVIDER" {

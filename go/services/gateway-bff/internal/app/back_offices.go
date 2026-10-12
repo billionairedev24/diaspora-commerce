@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -13,6 +14,13 @@ import (
 // /v1/applications/me; port.SellerClient implements it).
 type ApplicationReader interface {
 	Application(ctx context.Context, bearer string) (port.SellerApplication, error)
+}
+
+// orgHealer is what repairing identity's copy of an organisation needs (see healOrg); zero value: no repair.
+type orgHealer struct {
+	orgs     OrgSyncer
+	sessions TokenRefresher
+	log      *slog.Logger
 }
 
 // applicationCheckTimeout bounds the seller-service lookup /v1/me makes for an application in progress (best effort).
@@ -30,11 +38,13 @@ func backOffices(me port.IdentityMe) []domain.BackOffice {
 // confirmApproved turns a back office identity still shows as an application into the back office itself when the
 // seller service has approved that application: identity mirrors the approval asynchronously (and the person keeps
 // the applicant role), so for a while an approved seller would otherwise be sent to onboarding from the account menu
-// ("Continue your seller application") instead of their Seller Center. Best effort: without an answer nothing changes.
-func confirmApproved(ctx context.Context, apps ApplicationReader, bearer string, offices []domain.BackOffice) []domain.BackOffice {
-	if apps == nil || bearer == "" {
+// ("Continue your seller application") instead of their Seller Center. Identity is then asked to repair its copy
+// (healOrg) so the next tokens carry the organisation. Best effort: without an answer nothing changes.
+func confirmApproved(ctx context.Context, apps ApplicationReader, h orgHealer, c *domain.Caller, offices []domain.BackOffice) []domain.BackOffice {
+	if apps == nil || c == nil || c.BearerToken == "" {
 		return offices
 	}
+	bearer := c.BearerToken
 	pending := false
 	for _, o := range offices {
 		pending = pending || (o.State == domain.BackOfficeApplication && (o.App == domain.BackOfficeSellerCenter || o.App == domain.BackOfficeProviderHub))
@@ -50,6 +60,8 @@ func confirmApproved(ctx context.Context, apps ApplicationReader, bearer string,
 		return offices
 	}
 	kind := strings.ToUpper(a.Kind)
+	// Not acting as a shopper: identity checks the person is the organisation's owner or approved applicant.
+	healOrg(port.WithoutShopper(ctx), h.orgs, h.sessions, h.log, c, a.OrgID)
 	out := make([]domain.BackOffice, len(offices))
 	for i, o := range offices {
 		seller := o.App == domain.BackOfficeSellerCenter && (kind == "SELLER" || kind == "BOTH" || kind == "")

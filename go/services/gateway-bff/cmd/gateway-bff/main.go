@@ -135,6 +135,8 @@ func run() error {
 	sellers := app.SellerDirectory{RetailOrgID: cfg.Commerce.RetailOrgID, Names: cfg.Commerce.SellerNames}
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: cfg.Session.SigningKey,
 		IdleTTL: cfg.Session.IdleTTL, VerifyBearer: cfg.OIDC.VerifyBearer, Log: log})
+	// An approval identity missed is repaired on the way (healOrg) and the session's tokens rotated.
+	sellerDeps.Sessions = sessions
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: cfg.Commerce.DefaultZip,
 		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState, Log: log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
@@ -144,7 +146,7 @@ func run() error {
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: cfg.OIDC.PublicURL, ClientID: cfg.OIDC.ClientID, RedirectURI: cfg.OIDC.RedirectURI,
 			RedirectURIs: cfg.RedirectURIs(), AppOrigins: cfg.AppOrigins(), BFFPath: cfg.Web.BFFPath,
-			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Applications: sellerDeps.Sellers, Log: log}),
+			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Log: log}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
 			Offers: storefrontOffers, Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
 		Location: location,

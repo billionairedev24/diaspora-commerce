@@ -630,19 +630,23 @@ func (s *sellerShellImpl) Onboarding(ctx context.Context, c *domain.Caller) (dom
 }
 
 // applicantSession is the session of someone whose application is not approved yet: identity does not list the
-// DRAFT organisation, so it comes from the seller service's application (only Onboarding is open).
-func (s *sellerShellImpl) applicantSession(ctx context.Context, c *domain.Caller, out domain.SellerSession) (domain.SellerSession, bool) {
+// DRAFT organisation, so it comes from the seller service's application (only Onboarding is open). approvedOrg is
+// the organisation of an application the seller service approved that identity does not list yet (to repair).
+func (s *sellerShellImpl) applicantSession(ctx context.Context, c *domain.Caller, out domain.SellerSession) (domain.SellerSession, bool, string) {
 	a, err := s.r.d.Sellers.Application(ctx, c.BearerToken)
 	if err != nil || a.OrgID == "" {
-		return out, false
+		return out, false, ""
 	}
 	kind := normalizeKind(a.Kind)
 	if kind == "" {
 		kind = domain.OrgKindSeller
 	}
 	status := orgStatus(a.Status)
-	if status == domain.OrgApproved || status == "REJECTED" {
-		return out, false // approved: identity lists it once the approval event arrives; rejected: nothing to resume
+	if status == domain.OrgApproved {
+		return out, false, a.OrgID // approved: identity lists it once it has the approval (repaired on the way)
+	}
+	if status == "REJECTED" {
+		return out, false, "" // nothing to resume
 	}
 	role := "seller.owner"
 	if kind == domain.OrgKindProvider {
@@ -659,5 +663,5 @@ func (s *sellerShellImpl) applicantSession(ctx context.Context, c *domain.Caller
 	out.AccessNote = "Token scope: onboarding only"
 	out.NavGroups = domain.Navigation(domain.Access{Kind: kind, Role: role}, false, nil)
 	out.Landing = domain.Landing(out.NavGroups)
-	return out, true
+	return out, true, ""
 }

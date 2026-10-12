@@ -139,6 +139,9 @@ type Upstreams struct {
 	MemberRoles []string
 	// NoApplication makes GET /v1/applications/me answer 404 until an application is started.
 	NoApplication bool
+	// SellerTruth is the seller service's state of organisations identity's POST /v1/orgs/{id}/sync repairs from:
+	// syncing one puts it into MemberOrgs (and makes it the active organisation when there is none). Absent: 404.
+	SellerTruth map[string]MemberOrg
 	// DefaultAddresses is the address book of members who saved none themselves.
 	DefaultAddresses []map[string]any
 	ApplicantRoles   []string

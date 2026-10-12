@@ -87,9 +87,19 @@ type AcceptedInvitation struct {
 	AlreadyMember bool   `json:"alreadyMember"`
 }
 
+// OrgSync is identity's copy of an organisation after POST /v1/orgs/{id}/sync.
+type OrgSync struct {
+	OrgID    string `json:"orgId"`
+	Status   string `json:"status"`
+	Repaired bool   `json:"repaired"`
+}
+
 // OrgAccessClient reads and changes organisation membership at identity.
 type OrgAccessClient interface {
 	Member(ctx context.Context, bearer string) (Member, error)
+	// SyncOrg asks identity to repair its copy of the organisation (status, the owners' memberships) from the seller
+	// service, the source of truth (POST /v1/orgs/{id}/sync): the caller saw the seller service approve it first.
+	SyncOrg(ctx context.Context, bearer, orgID string) (OrgSync, error)
 	SelectOrg(ctx context.Context, bearer, orgID string) (Member, error)
 	// ModuleMatrix reads GET /v1/admin/module-access?portal= (needs access:read; sellers usually get 403).
 	ModuleMatrix(ctx context.Context, bearer, portal string) (domain.ModuleMatrix, error)

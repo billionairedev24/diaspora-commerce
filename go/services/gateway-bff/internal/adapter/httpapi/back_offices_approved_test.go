@@ -17,6 +17,8 @@ func TestMeBackOfficesOpenSellerCenterOnceTheApplicationIsApproved(t *testing.T)
 	u.ActiveOrgID = testkit.PendingOrgID
 	u.MemberRoles = []string{"account.customer", "account.seller_applicant"}
 	u.Application = map[string]any{"id": "app-1", "reference": "APP-30200", "orgId": testkit.PendingOrgID, "kind": "SELLER", "status": "APPROVED"}
+	u.SellerTruth = map[string]testkit.MemberOrg{testkit.PendingOrgID: {ID: testkit.PendingOrgID, Kind: "SELLER", Name: "Malo Branding",
+		Status: "APPROVED", Role: "seller.owner"}}
 	mustStatus(t, signIn(t, bff, b, "/"), 302)
 	user := b.do("GET", "/v1/me", nil).json(t)["user"].(map[string]any)
 	if got := fmt.Sprint(user["backOffices"]); got != "[map[app:seller-center state:active]]" {
@@ -24,6 +26,10 @@ func TestMeBackOfficesOpenSellerCenterOnceTheApplicationIsApproved(t *testing.T)
 	}
 	if v, ok := u.ActingAsSent("GET /v1/applications/me"); !ok || v != "" {
 		t.Fatalf("the application lookup must relay the person's own token, got X-Acting-As %q (sent %v)", v, ok)
+	}
+	// Identity is asked to repair its copy at once (its approval event was missed or is late).
+	if n := u.CallCount("POST /v1/orgs/" + testkit.PendingOrgID + "/sync"); n != 1 {
+		t.Fatalf("identity sync calls = %d, want 1", n)
 	}
 
 	// Still in review: the menu keeps continuing the application.

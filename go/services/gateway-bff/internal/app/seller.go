@@ -41,6 +41,8 @@ type SellerDeps struct {
 	PublishableKey string
 	// InventoryAPI relays Seller Center's FBA inbound plans and lots to inventory-service with the member's token (S281).
 	InventoryAPI port.StaffUpstream
+	// Sessions rotates the session's tokens after identity repaired an approval it had missed (nil: never).
+	Sessions TokenRefresher
 	// Cache holds identity's module matrix per portal (not personal data).
 	Cache     port.Cache
 	MatrixTTL time.Duration
@@ -268,7 +270,22 @@ func (s *sellerShellImpl) Session(ctx context.Context, c *domain.Caller) (domain
 	if err != nil {
 		return domain.SellerSession{}, mapErr("identity", err)
 	}
-	return s.session(ctx, c, m)
+	out, stale, err := s.session(ctx, c, m)
+	if err != nil || stale == "" {
+		return out, err
+	}
+	// The seller service approved an organisation identity does not show approved yet (its approval event was missed
+	// or is late): identity syncs it now and the session's tokens are rotated, then the session is read again.
+	if !healOrg(ctx, s.r.d.Orgs, s.r.d.Sessions, s.r.d.Log, c, stale) {
+		return out, nil
+	}
+	// Best effort: when identity cannot be read again, the session read before the repair still answers.
+	if m2, merr := s.r.d.Orgs.Member(ctx, c.BearerToken); merr == nil {
+		if healed, _, herr := s.session(ctx, c, m2); herr == nil {
+			return healed, nil
+		}
+	}
+	return out, nil
 }
 
 func (s *sellerShellImpl) SetActiveOrg(ctx context.Context, c *domain.Caller, orgID string) (domain.SellerSession, error) {
@@ -297,7 +314,8 @@ func (s *sellerShellImpl) SetActiveOrg(ctx context.Context, c *domain.Caller, or
 		m2 = m
 	}
 	m2.OrgID = orgID
-	return s.session(ctx, c, m2)
+	out, _, err := s.session(ctx, c, m2)
+	return out, err
 }
 
 func userOf(m port.Member) domain.SellerUser {
@@ -311,8 +329,10 @@ func summaryOf(o port.MemberOrg) domain.OrgSummary {
 		RoleKey: o.Role, RoleLabel: domain.RoleLabel(o.Role)}
 }
 
-func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.Member) (domain.SellerSession, error) {
-	out := domain.SellerSession{User: userOf(m), Orgs: []domain.OrgSummary{}, NavGroups: []domain.NavGroup{}, Landing: "onboarding",
+// session builds the shell's session; stale names an organisation the seller service shows approved while identity
+// does not (PENDING there, or not listed at all although the application was approved), which the caller may repair.
+func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.Member) (out domain.SellerSession, stale string, err error) {
+	out = domain.SellerSession{User: userOf(m), Orgs: []domain.OrgSummary{}, NavGroups: []domain.NavGroup{}, Landing: "onboarding",
 		AccessNote: "Least-privilege by role · enforced server-side"}
 	for _, o := range memberOrgs(m) {
 		out.Orgs = append(out.Orgs, summaryOf(o))
@@ -321,15 +341,20 @@ func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.
 	if err != nil {
 		if p, ok := domain.AsProblem(err); ok && p.Code == domain.CodeNoOrganisation {
 			// An applicant whose DRAFT organisation identity does not know yet, or a customer who has not applied.
-			out, _ = s.applicantSession(ctx, c, out)
-			return out, nil
+			var approvedOrg string
+			out, _, approvedOrg = s.applicantSession(ctx, c, out)
+			return out, approvedOrg, nil
 		}
-		return out, err
+		return out, "", err
 	}
 	// The seller service has the detailed application status (identity mirrors only PENDING/APPROVED/…).
+	identityApproved := sc.approved
 	if org, err := s.r.d.Sellers.Org(ctx, c.BearerToken, sc.org.ID); err == nil && org.Status != "" {
 		sc.org.Status = orgStatus(org.Status)
 		sc.approved = sc.org.Status == domain.OrgApproved
+	}
+	if sc.approved && !identityApproved {
+		stale = sc.org.ID
 	}
 	active := summaryOf(sc.org)
 	active.Status, active.Approved = sc.org.Status, sc.approved
@@ -348,7 +373,7 @@ func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.
 	}
 	out.NavGroups = domain.Navigation(sc.access, sc.approved, badges)
 	out.Landing = domain.Landing(out.NavGroups)
-	return out, nil
+	return out, stale, nil
 }
 
 // badges counts what needs attention: orders to ship, booking requests, open compliance items. Each source is

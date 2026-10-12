@@ -93,6 +93,32 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 func (u *Upstreams) identitySellerRoutes(mux *http.ServeMux) {
 	u.teamRoutes(mux)
 	u.phoneRoutes(mux)
+	mux.HandleFunc("POST /v1/orgs/{id}/sync", func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := bearerSub(w, r); !ok {
+			return
+		}
+		id := r.PathValue("id")
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		truth, ok := u.SellerTruth[id]
+		if !ok {
+			problem(w, 404, "identity.org-not-found", "Organisation not found", nil)
+			return
+		}
+		repaired := true
+		for i, o := range u.MemberOrgs {
+			if o.ID == id {
+				repaired = o != truth
+				u.MemberOrgs = append(u.MemberOrgs[:i:i], u.MemberOrgs[i+1:]...)
+				break
+			}
+		}
+		u.MemberOrgs = append(u.MemberOrgs, truth)
+		if u.ActiveOrgID == "" {
+			u.ActiveOrgID = id
+		}
+		writeJSON(w, 200, map[string]any{"orgId": id, "status": truth.Status, "repaired": repaired})
+	})
 	mux.HandleFunc("PUT /v1/me/active-org", func(w http.ResponseWriter, r *http.Request) {
 		sub, ok := bearerSub(w, r)
 		if !ok {
@@ -130,6 +156,7 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/orgs/{id}", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		o, ok := u.orgByID(r.PathValue("id"))
+		truth, known := u.SellerTruth[r.PathValue("id")]
 		u.mu.Unlock()
 		if !ok {
 			problem(w, 404, "seller.org-not-found", "No such organisation", nil)
@@ -138,6 +165,9 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		status := o.Status
 		if status == "PENDING" {
 			status = "INFO_REQUESTED"
+		}
+		if known {
+			status = truth.Status // the seller service is ahead of identity's copy
 		}
 		writeJSON(w, 200, map[string]any{"id": o.ID, "kind": o.Kind, "displayName": o.Name, "legalName": o.Name + " LLC", "country": "US", "status": status,
 			"members": []map[string]any{{"userId": "user-1", "roleKey": o.Role, "createdAt": "2026-04-10T12:00:00Z"},
