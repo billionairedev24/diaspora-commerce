@@ -701,12 +701,31 @@ export const CategoryNodeSchema: z.ZodType<CategoryNode> = z.lazy(() =>
   z.object({ id: z.string(), name: z.string(), level: z.string(), productType: nullableString, path: z.string(), children: z.array(CategoryNodeSchema) })
 );
 
+export const AttributeKindSchema = z.enum(['TEXT', 'MULTILINE', 'ENUM', 'NUMBER']);
+export type AttributeKind = z.infer<typeof AttributeKindSchema>;
+export const AttributeSectionSchema = z.enum(['DETAILS', 'FOOD', 'REGULATED']);
+export type AttributeSection = z.infer<typeof AttributeSectionSchema>;
+export const AttributeDefSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  options: z.array(z.string()),
+  required: z.boolean(),
+  multiline: z.boolean(),
+  kind: AttributeKindSchema,
+  units: z.array(z.string()),
+  section: AttributeSectionSchema,
+  help: nullableString
+});
+export type AttributeDef = z.infer<typeof AttributeDefSchema>;
+export const ProductTypeTraitsSchema = z.object({ food: z.boolean(), perishable: z.boolean(), regulated: z.boolean(), preorder: z.boolean() });
+export type ProductTypeTraits = z.infer<typeof ProductTypeTraitsSchema>;
 export const ProductTypeSchemaSchema = z.object({
   code: z.string(),
   label: z.string(),
   identifierRule: z.enum(['gtin', 'isbn', 'none']),
-  attributes: z.array(z.object({ key: z.string(), label: z.string(), options: z.array(z.string()), required: z.boolean(), multiline: z.boolean() })),
-  themes: z.array(z.object({ name: z.string(), dimensions: z.array(z.object({ name: z.string(), options: z.array(z.string()) })) }))
+  attributes: z.array(AttributeDefSchema),
+  themes: z.array(z.object({ name: z.string(), dimensions: z.array(z.object({ name: z.string(), options: z.array(z.string()) })) })),
+  traits: ProductTypeTraitsSchema
 });
 export type ProductTypeSchema = z.infer<typeof ProductTypeSchemaSchema>;
 
@@ -744,19 +763,205 @@ export const VariantInputSchema = z.object({
   gtin: z.string().optional(),
   gtinExempt: z.boolean().optional(),
   priceMinor: z.number().int().min(1),
-  quantity: z.number().int().min(0)
+  compareAtMinor: z.number().int().min(1).nullable().optional(),
+  quantity: z.number().int().min(0).max(100_000),
+  images: z.array(ProductImageInputSchema).max(5).optional()
 });
 export type VariantInput = z.infer<typeof VariantInputSchema>;
+export const ItemConditionSchema = z.enum(['NEW', 'RENEWED', 'USED_LIKE_NEW', 'USED_VERY_GOOD', 'USED_GOOD', 'USED_ACCEPTABLE']);
+export type ItemCondition = z.infer<typeof ItemConditionSchema>;
+export const ListingFulfilmentSchema = z.enum(['SELLER', 'AFROTRANSACT']);
+export type ListingFulfilment = z.infer<typeof ListingFulfilmentSchema>;
+export const PackageDimensionsSchema = z.object({
+  lengthIn: z.number().positive().max(108),
+  widthIn: z.number().positive().max(108),
+  heightIn: z.number().positive().max(108),
+  weightLb: z.number().positive().max(150)
+});
+export type PackageDimensions = z.infer<typeof PackageDimensionsSchema>;
+export const ListingDetailsInputSchema = z.object({
+  description: z.string().max(5000).optional(),
+  condition: ItemConditionSchema.optional(),
+  keywords: z.array(z.string().max(40)).max(20).optional(),
+  fulfilment: ListingFulfilmentSchema.optional(),
+  packaging: PackageDimensionsSchema.nullable().optional(),
+  handlingDays: z.number().int().min(1).max(30).optional(),
+  shipFromId: nullableString.optional()
+});
+export type ListingDetailsInput = z.infer<typeof ListingDetailsInputSchema>;
 export const ProductDraftSchema = z.object({
   categoryId: z.string().optional(),
   categoryRequestId: z.string().optional(),
   title: z.string().min(10).max(200),
   attributes: z.record(z.string(), z.string()),
   images: z.array(ProductImageInputSchema).min(1).max(10),
-  variationTheme: z.string().min(1),
-  variants: z.array(VariantInputSchema).min(1).max(200)
+  variationTheme: z.string().max(60),
+  variants: z.array(VariantInputSchema).min(1).max(200),
+  preorderEligible: z.boolean().optional(),
+  listing: ListingDetailsInputSchema.optional(),
+  draftId: z.string().optional()
 });
 export type ProductDraft = z.infer<typeof ProductDraftSchema>;
+export type ProductUpdate = ProductDraft & { version?: number };
+
+export const ProductVariantSchema = z.object({
+  atin: z.string(),
+  sellerSku: z.string(),
+  gtin: nullableString,
+  gtinExempt: z.boolean(),
+  options: z.record(z.string(), z.string()),
+  priceMinor: z.number().int(),
+  compareAtMinor: z.number().int().nullable(),
+  quantity: z.number().int(),
+  images: z.array(ProductImageInputSchema)
+});
+export type ProductVariant = z.infer<typeof ProductVariantSchema>;
+export const ListingDetailsSchema = z.object({
+  description: nullableString,
+  condition: ItemConditionSchema,
+  keywords: z.array(z.string()),
+  fulfilment: ListingFulfilmentSchema,
+  packaging: PackageDimensionsSchema.nullable(),
+  handlingDays: z.number().int(),
+  shipFromId: nullableString
+});
+export type ListingDetails = z.infer<typeof ListingDetailsSchema>;
+export const SellerProductDetailSchema = z.object({
+  productId: z.string(),
+  atin: z.string(),
+  status: ListingStatusSchema,
+  statusLabel: z.string(),
+  moderationNote: nullableString,
+  categoryId: nullableString,
+  categoryRequestId: nullableString,
+  categoryPath: z.string(),
+  productType: z.string(),
+  title: z.string(),
+  attributes: z.record(z.string(), z.string()),
+  images: z.array(ProductImageInputSchema),
+  variationTheme: z.string(),
+  variants: z.array(ProductVariantSchema),
+  preorderEligible: z.boolean(),
+  listing: ListingDetailsSchema,
+  currency: z.string(),
+  version: z.number().int(),
+  updatedAt: z.string()
+});
+export type SellerProductDetail = z.infer<typeof SellerProductDetailSchema>;
+
+export const ProductDraftSummarySchema = z.object({
+  id: z.string(),
+  productId: nullableString,
+  title: z.string(),
+  categoryPath: nullableString,
+  updatedAt: z.string(),
+  version: z.number().int()
+});
+export type ProductDraftSummary = z.infer<typeof ProductDraftSummarySchema>;
+export const ProductDraftListSchema = z.object({ items: z.array(ProductDraftSummarySchema) });
+export type ProductDraftList = z.infer<typeof ProductDraftListSchema>;
+export const SavedProductDraftSchema = ProductDraftSummarySchema.extend({ payload: z.record(z.string(), z.unknown()) });
+export type SavedProductDraft = z.infer<typeof SavedProductDraftSchema>;
+export interface SaveProductDraftRequest {
+  productId?: string;
+  title?: string;
+  categoryPath?: string;
+  payload: Record<string, unknown>;
+  version?: number;
+}
+
+export const ListingContextSchema = z.object({
+  aiListingWriter: z.object({ available: z.boolean(), reason: z.enum(['PLAN', 'ROLE']).nullable() }),
+  moderated: z.boolean(),
+  importLimits: z.object({
+    maxFileBytes: z.number().int(),
+    maxRows: z.number().int(),
+    maxImagesPerProduct: z.number().int(),
+    maxVariantsPerProduct: z.number().int()
+  })
+});
+export type ListingContext = z.infer<typeof ListingContextSchema>;
+export interface ListingWriterRequest {
+  productType: string;
+  title: string;
+  attributes?: Record<string, string>;
+  tone?: 'warm' | 'concise' | 'premium';
+}
+export const ListingWriterDraftSchema = z.object({ title: z.string(), description: z.string(), bullets: z.array(z.string()) });
+export type ListingWriterDraft = z.infer<typeof ListingWriterDraftSchema>;
+
+/* ── Bulk upload (S308) ─────────────────────────────────── */
+
+export const SpreadsheetFormatSchema = z.enum(['xlsx', 'csv']);
+export type SpreadsheetFormat = z.infer<typeof SpreadsheetFormatSchema>;
+export const ImportModeSchema = z.enum(['CREATE', 'UPDATE']);
+export type ImportMode = z.infer<typeof ImportModeSchema>;
+export const ImportStatusSchema = z.enum(['VALIDATED', 'QUEUED', 'RUNNING', 'COMPLETED', 'FAILED']);
+export type ImportStatus = z.infer<typeof ImportStatusSchema>;
+export const ImportRowStatusSchema = z.enum(['VALID', 'WARNING', 'ERROR']);
+export type ImportRowStatus = z.infer<typeof ImportRowStatusSchema>;
+export const ImportRowOutcomeSchema = z.enum(['PENDING', 'CREATED', 'UPDATED', 'FAILED', 'SKIPPED']);
+export type ImportRowOutcome = z.infer<typeof ImportRowOutcomeSchema>;
+export const ProductImportSchema = z.object({
+  id: z.string(),
+  reference: z.string(),
+  fileName: z.string(),
+  format: z.enum(['XLSX', 'CSV']),
+  mode: ImportModeSchema,
+  productType: nullableString,
+  status: ImportStatusSchema,
+  validOnly: z.boolean(),
+  totalRows: z.number().int(),
+  validRows: z.number().int(),
+  warningRows: z.number().int(),
+  errorRows: z.number().int(),
+  productCount: z.number().int(),
+  processedRows: z.number().int(),
+  createdProducts: z.number().int(),
+  updatedProducts: z.number().int(),
+  failedRows: z.number().int(),
+  header: z.array(z.string()),
+  fileWarnings: z.array(z.string()),
+  uploadedByName: nullableString,
+  createdAt: z.string(),
+  startedAt: nullableString,
+  finishedAt: nullableString,
+  reportUrl: z.string()
+});
+export type ProductImport = z.infer<typeof ProductImportSchema>;
+export const ProductImportPageSchema = z.object({
+  items: z.array(ProductImportSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int()
+});
+export type ProductImportPage = z.infer<typeof ProductImportPageSchema>;
+export const ImportRowMessageSchema = z.object({
+  column: nullableString,
+  columnIndex: z.number().int(),
+  severity: z.enum(['ERROR', 'WARNING']),
+  message: z.string()
+});
+export type ImportRowMessage = z.infer<typeof ImportRowMessageSchema>;
+export const ProductImportRowSchema = z.object({
+  rowNumber: z.number().int(),
+  groupKey: z.string(),
+  sku: z.string(),
+  status: ImportRowStatusSchema,
+  outcome: ImportRowOutcomeSchema,
+  outcomeNote: nullableString,
+  productId: nullableString,
+  messages: z.array(ImportRowMessageSchema),
+  cells: z.array(z.string())
+});
+export type ProductImportRow = z.infer<typeof ProductImportRowSchema>;
+export const ProductImportRowPageSchema = z.object({
+  items: z.array(ProductImportRowSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int()
+});
+export type ProductImportRowPage = z.infer<typeof ProductImportRowPageSchema>;
 
 export const UploadRequestSchema = z.object({
   purpose: z.enum(['product-image', 'storefront']),

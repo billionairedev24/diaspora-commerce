@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type Cadence } from '../schemas/seller';
-import { type ListingsQuery, type SellerApiClient, type SellerOrdersQuery } from '../seller-client';
+import { type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerOrdersQuery } from '../seller-client';
 
 /* TanStack Query key factories for the Seller Center & Provider Hub. Everything hangs off ['seller', orgId] so
    switching organisation (org switcher) or signing out invalidates a whole family at once. */
@@ -25,6 +25,14 @@ export const sellerKeys = {
   listingPage: (orgId: string, q: ListingsQuery) => [...sellerKeys.listings(orgId), 'page', q] as const,
   categories: () => [...sellerKeys.all, 'catalog', 'categories'] as const,
   productType: (code: string) => [...sellerKeys.all, 'catalog', 'product-type', code] as const,
+  product: (orgId: string, productId: string) => [...sellerKeys.listings(orgId), 'product', productId] as const,
+  productDrafts: (orgId: string) => [...sellerKeys.org(orgId), 'product-drafts'] as const,
+  productDraft: (orgId: string, id: string) => [...sellerKeys.productDrafts(orgId), id] as const,
+  listingContext: (orgId: string) => [...sellerKeys.org(orgId), 'listing-context'] as const,
+  imports: (orgId: string) => [...sellerKeys.org(orgId), 'imports'] as const,
+  importPage: (orgId: string, page: number, size: number) => [...sellerKeys.imports(orgId), 'page', page, size] as const,
+  importJob: (orgId: string, id: string) => [...sellerKeys.imports(orgId), 'detail', id] as const,
+  importRows: (orgId: string, id: string, q: ImportRowsQuery) => [...sellerKeys.importJob(orgId, id), 'rows', q] as const,
   categoryRequests: (orgId: string) => [...sellerKeys.org(orgId), 'category-requests'] as const,
   inventory: (orgId: string, lowStock: boolean) => [...sellerKeys.org(orgId), 'inventory', lowStock] as const,
   payouts: (orgId: string) => [...sellerKeys.org(orgId), 'payouts'] as const,
@@ -72,6 +80,20 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.categories(), queryFn: ({ signal }) => api.getCategoryTree(signal), staleTime: 30 * MINUTE }),
   productType: (api: SellerApiClient, code: string) =>
     queryOptions({ queryKey: sellerKeys.productType(code), queryFn: ({ signal }) => api.getProductType(code, signal), staleTime: 30 * MINUTE, enabled: code !== '' }),
+  product: (api: SellerApiClient, orgId: string, productId: string) =>
+    queryOptions({ queryKey: sellerKeys.product(orgId, productId), queryFn: ({ signal }) => api.getProduct(productId, signal), staleTime: 0, enabled: productId !== '' }),
+  productDrafts: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.productDrafts(orgId), queryFn: ({ signal }) => api.listProductDrafts(signal), staleTime: 15_000 }),
+  productDraft: (api: SellerApiClient, orgId: string, id: string) =>
+    queryOptions({ queryKey: sellerKeys.productDraft(orgId, id), queryFn: ({ signal }) => api.getProductDraft(id, signal), staleTime: 0, enabled: id !== '' }),
+  listingContext: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.listingContext(orgId), queryFn: ({ signal }) => api.getListingContext(signal), staleTime: 5 * MINUTE }),
+  imports: (api: SellerApiClient, orgId: string, page: number, size: number) =>
+    queryOptions({ queryKey: sellerKeys.importPage(orgId, page, size), queryFn: ({ signal }) => api.listImports(page, size, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  importJob: (api: SellerApiClient, orgId: string, id: string) =>
+    queryOptions({ queryKey: sellerKeys.importJob(orgId, id), queryFn: ({ signal }) => api.getImport(id, signal), staleTime: 0 }),
+  importRows: (api: SellerApiClient, orgId: string, id: string, q: ImportRowsQuery) =>
+    queryOptions({ queryKey: sellerKeys.importRows(orgId, id, q), queryFn: ({ signal }) => api.listImportRows(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
   categoryRequests: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.categoryRequests(orgId), queryFn: ({ signal }) => api.listCategoryRequests(signal), staleTime: MINUTE }),
   inventory: (api: SellerApiClient, orgId: string, lowStock: boolean) =>

@@ -38,6 +38,7 @@ import {
   type SellerFeeVersion,
   type SellerOrderDetail,
   type SellerOrderRow,
+  type SellerProductDetail,
   type SellerSession,
   SellerStatusActionSchema,
   ServiceInputSchema,
@@ -54,6 +55,23 @@ import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
+import {
+  advanceImport,
+  categoryLeaves,
+  detailOf,
+  draftView,
+  IMPORT_LIMITS,
+  importSummary,
+  importView,
+  listingProblems,
+  type MockImport,
+  parseCsv,
+  productDetail,
+  reportCsv,
+  SAMPLE_UPLOAD,
+  templateCsv,
+  validateSheet
+} from './listing-form';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
 import {
   accountForm,
@@ -205,6 +223,7 @@ function route(fn: Resolver, status = 200) {
     });
     try {
       const out = await fn(context(request), flat);
+      if (status === 204) return new HttpResponse(null, { status });
       return HttpResponse.json(out as JsonBodyType, { status });
     } catch (e) {
       if (e instanceof SellerProblem) return problemResponse(e);
@@ -491,6 +510,45 @@ const StatusBody = z.object({ status: z.string() });
 const RatesBody = z.object({ parcel: ParcelSchema, shipFrom: SellerAddressSchema });
 const LabelBody = RatesBody.extend({ carrier: CarrierSchema, service: z.string().min(1, 'Choose a rate') });
 const ActiveBody = z.object({ active: z.boolean() });
+const DraftBody = z.object({
+  productId: z.string().max(80).optional(),
+  title: z.string().max(200).optional(),
+  categoryPath: z.string().max(300).optional(),
+  payload: z.record(z.string(), z.unknown()),
+  version: z.number().int().optional()
+});
+const WriterBody = z.object({
+  productType: z.string().min(1).max(40),
+  title: z.string().min(3).max(200),
+  attributes: z.record(z.string(), z.string()).optional(),
+  tone: z.enum(['warm', 'concise', 'premium']).optional()
+});
+/** Plans whose features include the AI listing writer (gateway-bff AIListingWriterPlans). */
+const AI_PLANS = ['seller_growth', 'seller_pro'];
+
+const SPREADSHEET_TYPES: Record<string, string> = { csv: 'text/csv; charset=utf-8', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
+/** A generated file (the mock writes CSV text even for .xlsx names: it isn't parsed back except as a download). */
+const fileResponse = (text: string, fileName: string, format: string) =>
+  new HttpResponse(text, { status: 200, headers: { 'Content-Type': SPREADSHEET_TYPES[format] ?? 'text/csv', 'Content-Disposition': `attachment; filename="${fileName}"` } });
+
+/** The import job creates (or, in Update mode, finds) the listing of one product's rows. */
+function importedListing(ctx: Ctx, imp: MockImport, rows: MockImport['rows']): string {
+  const col = (r: MockImport['rows'][number], label: string) => r.cells[imp.header.findIndex((h) => h.replace(/\s*\*$/, '').trim() === label)] ?? '';
+  if (imp.mode === 'UPDATE') {
+    const l = ctx.db.listings.find((x) => x.variants.some((v) => v.sku.toUpperCase() === rows[0]?.sku));
+    return l?.productId ?? '';
+  }
+  const first = rows[0];
+  const productId = nextId(ctx.db, 'prod');
+  const variants = rows.map((r) => ({ sku: r.sku, quantity: Number(col(r, 'Quantity')) || 0 }));
+  ctx.db.listings.unshift({
+    productId, atin: null, title: first ? col(first, 'Title') : 'Imported product', sku: variants[0]?.sku ?? '', variantCount: variants.length,
+    priceMinor: Math.round(Math.min(...rows.map((r) => Number(col(r, 'Price (USD)')) || 0)) * 100), currency: 'USD',
+    stock: variants.reduce((a, v) => a + v.quantity, 0), fulfilment: 'SELLER', status: 'IN_REVIEW', statusLabel: 'In review', moderationNote: null,
+    imageUrl: null, updatedAt: ctx.now.toISOString(), variants
+  });
+  return productId;
+}
 const PayoutBody = z.object({ amountMinor: z.number().int().optional(), all: z.boolean().optional() });
 const PlanBody = z.object({ planCode: z.string().min(1, 'Choose a plan'), cadence: CadenceSchema });
 const PlanFeeBody = z.object({ mode: z.enum(['EARNINGS_FIRST', 'CARD'], 'Choose EARNINGS_FIRST or CARD') });
@@ -1070,24 +1128,263 @@ export const sellerHandlers = [
       return row;
     })
   ),
+  http.get(
+    `${W}/listings/:productId`,
+    route((ctx, p) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const l = ctx.db.listings.find((x) => x.productId === p.productId);
+      if (!l) throw notFound('No such listing.');
+      return productDetail(ctx.db, l);
+    })
+  ),
   http.post(
     `${W}/products`,
     route(async (ctx) => {
       const d = await body(ctx.request, ProductDraftSchema);
       if (!d.categoryId === !d.categoryRequestId) throw invalid({ categoryId: 'Choose a category, or request a new one.' });
-      const skus = d.variants.map((v) => v.sellerSku);
+      const skus = d.variants.map((v) => v.sellerSku.toUpperCase());
       if (new Set(skus).size !== skus.length) throw invalid({ variants: 'SKUs must be unique.' });
+      const problems = listingProblems(d);
+      if (Object.keys(problems).length) throw invalid(problems);
       require(ctx, 'listings', 'EDIT', 'SELLER');
+      const taken = skus.find((s) => ctx.db.listings.some((l) => l.variants.some((v) => v.sku.toUpperCase() === s)));
+      if (taken) throw invalid({ variants: `You already have a listing with SKU ${taken}.` });
       const status = d.categoryRequestId ? ('PENDING_CATEGORY_APPROVAL' as const) : ('IN_REVIEW' as const);
-      const row = {
-        productId: nextId(ctx.db, 'prod'), atin: null, title: d.title, sku: d.variants[0]?.sellerSku ?? '', variantCount: d.variants.length,
-        priceMinor: Math.min(...d.variants.map((v) => v.priceMinor)), currency: 'USD', stock: d.variants.reduce((a, v) => a + v.quantity, 0), fulfilment: 'SELLER' as const,
+      const leaf = categoryLeaves().find((c) => c.id === d.categoryId);
+      const row: ListingRow = {
+        productId: nextId(ctx.db, 'prod'), atin: null, title: d.title, sku: skus[0] ?? '', variantCount: d.variants.length,
+        priceMinor: Math.min(...d.variants.map((v) => v.priceMinor)), currency: 'USD', stock: d.variants.reduce((a, v) => a + v.quantity, 0),
+        fulfilment: d.listing?.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
         status, statusLabel: status === 'IN_REVIEW' ? 'In review' : 'Waiting for category approval', moderationNote: null, imageUrl: d.images[0]?.url ?? null,
         updatedAt: ctx.now.toISOString()
       };
-      ctx.db.listings.unshift({ ...row, variants: d.variants.map((v) => ({ sku: v.sellerSku, quantity: v.quantity })) });
+      ctx.db.listings.unshift({ ...row, variants: d.variants.map((v) => ({ sku: v.sellerSku.toUpperCase(), quantity: v.quantity })) });
+      ctx.db.productDetails[row.productId] = detailOf(row.productId, d, row, 1, leaf?.path ?? 'Requested category', leaf?.productType ?? 'custom');
+      if (d.draftId) ctx.db.drafts = ctx.db.drafts.filter((x) => x.id !== d.draftId);
       return row;
     }, 201)
+  ),
+  http.put(
+    `${W}/products/:productId`,
+    route(async (ctx, p) => {
+      const d = await body(ctx.request, ProductDraftSchema.extend({ version: z.number().int().optional() }));
+      const skus = d.variants.map((v) => v.sellerSku.toUpperCase());
+      if (new Set(skus).size !== skus.length) throw invalid({ variants: 'SKUs must be unique.' });
+      const problems = listingProblems(d);
+      if (Object.keys(problems).length) throw invalid(problems);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const l = ctx.db.listings.find((x) => x.productId === p.productId);
+      if (!l) throw notFound('No such listing.');
+      if (l.status === 'TAKEN_DOWN') throw conflict('This listing was taken down and can’t be edited.');
+      const current = productDetail(ctx.db, l);
+      if (d.version !== undefined && d.version !== current.version) throw conflict('This listing changed since you opened it. Reload to see the latest version.');
+      const live = l.status === 'LIVE' || l.status === 'PAUSED';
+      if (live && current.variants.some((v) => !skus.includes(v.sellerSku.toUpperCase()))) throw invalid({ variants: 'A live listing keeps its variants; set the stock to 0 instead of removing one.' });
+      if (live && d.categoryId && d.categoryId !== current.categoryId) throw invalid({ category: 'A live listing can’t move to another category.' });
+      if (l.status === 'REJECTED') Object.assign(l, { status: 'IN_REVIEW', statusLabel: 'In review', moderationNote: null });
+      Object.assign(l, {
+        title: d.title, sku: skus[0] ?? l.sku, variantCount: d.variants.length, priceMinor: Math.min(...d.variants.map((v) => v.priceMinor)),
+        stock: d.variants.reduce((a, v) => a + v.quantity, 0), imageUrl: d.images[0]?.url ?? l.imageUrl, updatedAt: ctx.now.toISOString(),
+        fulfilment: d.listing?.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : l.fulfilment === 'AFROTRANSACT' ? 'SELLER' : l.fulfilment,
+        variants: d.variants.map((v) => ({ sku: v.sellerSku.toUpperCase(), quantity: v.quantity }))
+      });
+      const { variants: _v, ...row } = l;
+      ctx.db.productDetails[l.productId] = { ...detailOf(l.productId, { ...d, categoryId: d.categoryId ?? current.categoryId ?? undefined }, row, current.version + 1, current.categoryPath, current.productType),
+        variants: d.variants.map((v, i) => ({ ...(detailOf(l.productId, d, row, 0, '', '').variants[i] as SellerProductDetail['variants'][number]),
+          atin: current.variants.find((c) => c.sellerSku.toUpperCase() === v.sellerSku.toUpperCase())?.atin ?? '' })) };
+      if (d.draftId) ctx.db.drafts = ctx.db.drafts.filter((x) => x.id !== d.draftId);
+      return row;
+    })
+  ),
+  http.get(
+    `${W}/product-drafts`,
+    route((ctx) => {
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      return { items: ctx.db.drafts.filter((x) => x.orgId === ctx.org.id).map(({ orgId: _o, payload: _p, ...s }) => s) };
+    })
+  ),
+  http.post(
+    `${W}/product-drafts`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, DraftBody);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const existing = b.productId ? ctx.db.drafts.find((x) => x.orgId === ctx.org.id && x.productId === b.productId) : undefined;
+      if (existing) {
+        Object.assign(existing, { title: b.title ?? existing.title, categoryPath: b.categoryPath ?? existing.categoryPath, payload: b.payload, version: existing.version + 1, updatedAt: ctx.now.toISOString() });
+        return draftView(existing);
+      }
+      const d = { id: nextId(ctx.db, 'draft'), orgId: ctx.org.id, productId: b.productId ?? null, title: b.title ?? '', categoryPath: b.categoryPath ?? null,
+        payload: b.payload, version: 0, updatedAt: ctx.now.toISOString() };
+      ctx.db.drafts.unshift(d);
+      return draftView(d);
+    }, 201)
+  ),
+  http.get(
+    `${W}/product-drafts/:id`,
+    route((ctx, p) => {
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const d = ctx.db.drafts.find((x) => x.id === p.id && x.orgId === ctx.org.id);
+      if (!d) throw notFound('No such draft.');
+      return draftView(d);
+    })
+  ),
+  http.put(
+    `${W}/product-drafts/:id`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, DraftBody);
+      if (b.version === undefined) throw invalid({ version: 'Required' });
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const d = ctx.db.drafts.find((x) => x.id === p.id && x.orgId === ctx.org.id);
+      if (!d) throw notFound('No such draft.');
+      if (d.version !== b.version) throw conflict('This draft was saved somewhere else. Reload it to continue.');
+      Object.assign(d, { title: b.title ?? d.title, categoryPath: b.categoryPath ?? d.categoryPath, payload: b.payload, version: d.version + 1, updatedAt: ctx.now.toISOString() });
+      return draftView(d);
+    })
+  ),
+  http.delete(
+    `${W}/product-drafts/:id`,
+    route((ctx, p) => {
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      ctx.db.drafts = ctx.db.drafts.filter((x) => !(x.id === p.id && x.orgId === ctx.org.id));
+      return undefined;
+    }, 204)
+  ),
+  http.get(
+    `${W}/catalog/listing-context`,
+    route((ctx) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const planOk = AI_PLANS.includes(ctx.db.subscription.SELLER.planCode);
+      const roleOk = ctx.role === 'seller.owner' || ctx.role === 'seller.admin' || ctx.role === 'seller.catalog';
+      return { aiListingWriter: { available: planOk && roleOk, reason: !roleOk ? 'ROLE' : !planOk ? 'PLAN' : null }, moderated: true, importLimits: IMPORT_LIMITS };
+    })
+  ),
+  http.post(
+    `${W}/catalog/listing-writer`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, WriterBody);
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      if (!AI_PLANS.includes(ctx.db.subscription.SELLER.planCode)) throw new SellerProblem(403, 'PLAN_FEATURE_REQUIRED', 'Upgrade your plan', 'The AI listing writer is part of Seller Growth and Seller Pro.');
+      const details = Object.entries(b.attributes ?? {}).filter(([k, v]) => v && k !== 'brand').map(([k, v]) => `${PRODUCT_TYPES[b.productType]?.attributes.find((a) => a.key === k)?.label ?? k}: ${v}`);
+      return { title: b.title, description: `${b.title} — made for everyday cooking and gifting, packed with care and shipped quickly.${details.length ? ` ${details.slice(0, 3).join('. ')}.` : ''}`,
+        bullets: details.slice(0, 5) };
+    })
+  ),
+
+  /* ── Bulk upload (S308) ── */
+  http.get(`${W}/imports/template`, async ({ request }) => {
+    try {
+      const ctx = context(request);
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const q = query(ctx);
+      const format = q.get('format') ?? 'xlsx';
+      if (format !== 'xlsx' && format !== 'csv') throw invalid({ format: 'xlsx or csv' });
+      const type = q.get('productType') ?? categoryLeaves().find((l) => l.id === q.get('categoryId'))?.productType ?? undefined;
+      if (type && !PRODUCT_TYPES[type]) throw notFound('Unknown product type.');
+      return fileResponse(templateCsv(type), `afrotransact-${type ?? 'products'}-template.${format}`, format);
+    } catch (e) {
+      if (e instanceof SellerProblem) return problemResponse(e);
+      throw e;
+    }
+  }),
+  http.get(
+    `${W}/imports`,
+    route((ctx) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const q = query(ctx);
+      const page = Number(q.get('page') ?? '0');
+      const size = Number(q.get('size') ?? '25');
+      if (size < 1 || size > 100 || page < 0) throw invalid({ size: 'Between 1 and 100' });
+      const mine = ctx.db.imports.filter((i) => i.orgId === ctx.org.id);
+      return { items: mine.slice(page * size, page * size + size).map(importView), total: mine.length, page, size };
+    })
+  ),
+  http.post(
+    `${W}/imports`,
+    route(async (ctx) => {
+      let form: FormData;
+      try {
+        form = await ctx.request.formData();
+      } catch {
+        throw invalid({ file: 'Choose an Excel (.xlsx) or CSV (.csv) file' });
+      }
+      const file = form.get('file');
+      const mode = String(form.get('mode') ?? 'CREATE').toUpperCase();
+      if (mode !== 'CREATE' && mode !== 'UPDATE') throw invalid({ mode: 'CREATE or UPDATE' });
+      // Duck-typed: test runners mix Blob implementations (jsdom's and Node's).
+      if (typeof file === 'string' || file === null || file.size === 0) throw invalid({ file: 'Choose an Excel (.xlsx) or CSV (.csv) file' });
+      const name = file.name || 'upload.csv';
+      const ext = name.toLowerCase().split('.').pop();
+      if (ext !== 'xlsx' && ext !== 'csv') throw invalid({ file: 'Upload an Excel (.xlsx) or CSV (.csv) file; save .xls workbooks as .xlsx' });
+      if (file.size > IMPORT_LIMITS.maxFileBytes) throw invalid({ file: 'The file is larger than 10 MB; split it into several files' });
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const sheet = ext === 'csv' ? parseCsv(await file.text()) : SAMPLE_UPLOAD;
+      const existing = new Set(ctx.db.listings.flatMap((l) => l.variants.map((v) => v.sku.toUpperCase())));
+      const v = validateSheet(sheet, mode, existing);
+      if (v.fileProblem) throw invalid({ file: v.fileProblem });
+      const id = nextId(ctx.db, 'imp');
+      const imp: MockImport = {
+        id, orgId: ctx.org.id, reference: `UPL-${String(1000 + ctx.db.seq)}`, fileName: name, format: ext === 'csv' ? 'CSV' : 'XLSX', mode,
+        productType: String(form.get('productType') ?? '') || null, status: 'VALIDATED', validOnly: false, ...importSummary(v.rows),
+        processedRows: 0, createdProducts: 0, updatedProducts: 0, failedRows: 0, header: v.header, fileWarnings: [],
+        uploadedByName: `${ctx.db.user.firstName} ${ctx.db.user.lastName}`, createdAt: ctx.now.toISOString(), startedAt: null, finishedAt: null,
+        reportUrl: `/api/bff/v1/seller/imports/${id}/report?format=xlsx`, rows: v.rows
+      };
+      ctx.db.imports.unshift(imp);
+      return importView(imp);
+    }, 201)
+  ),
+  http.get(
+    `${W}/imports/:id`,
+    route((ctx, p) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const imp = ctx.db.imports.find((i) => i.id === p.id && i.orgId === ctx.org.id);
+      if (!imp) throw notFound('No such upload.');
+      advanceImport(imp, ctx.now, (rows) => importedListing(ctx, imp, rows));
+      return importView(imp);
+    })
+  ),
+  http.get(
+    `${W}/imports/:id/rows`,
+    route((ctx, p) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const imp = ctx.db.imports.find((i) => i.id === p.id && i.orgId === ctx.org.id);
+      if (!imp) throw notFound('No such upload.');
+      const q = query(ctx);
+      const status = q.get('status');
+      const outcome = q.get('outcome');
+      const page = Number(q.get('page') ?? '0');
+      const size = Number(q.get('size') ?? '50');
+      if (size < 1 || size > 200 || page < 0) throw invalid({ size: 'Between 1 and 200' });
+      const rows = imp.rows.filter((r) => (!status || r.status === status) && (!outcome || r.outcome === outcome));
+      return { items: rows.slice(page * size, page * size + size), total: rows.length, page, size };
+    })
+  ),
+  http.get(`${W}/imports/:id/report`, ({ request, params }) => {
+    try {
+      const ctx = context(request);
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const imp = ctx.db.imports.find((i) => i.id === params.id && i.orgId === ctx.org.id);
+      if (!imp) throw notFound('No such upload.');
+      const format = query(ctx).get('format') ?? 'xlsx';
+      return fileResponse(reportCsv(imp), `${imp.fileName.replace(/\.[^.]+$/, '')}-report.${format === 'csv' ? 'csv' : 'xlsx'}`, format);
+    } catch (e) {
+      if (e instanceof SellerProblem) return problemResponse(e);
+      throw e;
+    }
+  }),
+  http.post(
+    `${W}/imports/:id/start`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, z.object({ validOnly: z.boolean().optional() }));
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const imp = ctx.db.imports.find((i) => i.id === p.id && i.orgId === ctx.org.id);
+      if (!imp) throw notFound('No such upload.');
+      if (imp.status !== 'VALIDATED') return importView(imp);
+      if (imp.errorRows > 0 && !b.validOnly) throw new SellerProblem(409, 'CONFLICT', 'The file has errors', `${imp.errorRows} rows have errors. Fix them and upload again, or import the valid rows only.`);
+      if (imp.validRows + imp.warningRows === 0) throw new SellerProblem(409, 'CONFLICT', 'Nothing to import', 'No row of this file can be imported.');
+      Object.assign(imp, { status: 'QUEUED', validOnly: b.validOnly ?? false, startedAt: ctx.now.toISOString() });
+      return importView(imp);
+    }, 202)
   ),
   http.get(`${W}/catalog/categories`, route(() => CATEGORY_TREE)),
   http.get(

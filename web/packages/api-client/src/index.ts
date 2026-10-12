@@ -2,7 +2,7 @@ export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike,
 export { ApiError, isApiError } from './errors';
 export * from './fee-rates';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
-export { type RequestOptions } from './http';
+export { type DownloadedFile, type RequestOptions } from './http';
 export { definitiveFailure, keepIdempotencyKey } from './idempotency';
 export * from './inventory-hub';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';
@@ -34,7 +34,7 @@ export * from './schemas/shopper';
 export * from './schemas/site';
 export * from './schemas/staff';
 export { fromApiSearchParams, parseSearchUrl, searchHref, toApiSearchParams, toSearchUrl } from './search-params';
-export { createSellerApiClient, type ListingsQuery, type SellerApiClient, type SellerExportRequest, type SellerOrdersQuery } from './seller-client';
+export { createSellerApiClient, type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerExportRequest, type SellerOrdersQuery } from './seller-client';
 export { createSettingsApiClient, type SettingsApiClient } from './settings-client';
 export { type SlotQuery } from './shopper-client';
 export { createStaffApiClient, type ResourceQuery, type StaffApiClient } from './staff-client';

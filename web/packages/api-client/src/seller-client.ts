@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { type ApiClientOptions, createRequester } from './http';
+import { type ApiClientOptions, createDownloader, createRequester, type DownloadedFile } from './http';
 import { createSellerFbaApi } from './inventory-hub';
 import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
 import { type AddressSuggestions, AddressSuggestionsSchema } from './schemas/location';
@@ -46,17 +46,25 @@ import {
   EarningsSchema,
   type GtinCheck,
   GtinCheckSchema,
+  type ImportMode,
+  type ImportRowOutcome,
+  type ImportRowStatus,
   type InventoryView,
   InventoryViewSchema,
   type InvitationPreview,
   InvitationPreviewSchema,
   type LabelPurchase,
   LabelPurchaseSchema,
+  type ListingContext,
+  ListingContextSchema,
   type ListingPage,
   ListingPageSchema,
   type ListingRow,
   ListingRowSchema,
   type ListingStatus,
+  type ListingWriterDraft,
+  ListingWriterDraftSchema,
+  type ListingWriterRequest,
   type OfferFulfilmentRequest,
   type OnboardingBusinessInput,
   type OnboardingComplianceInput,
@@ -80,13 +88,25 @@ import {
   type PlanFeeCollectionView,
   PlanFeeCollectionViewSchema,
   type ProductDraft,
+  type ProductDraftList,
+  ProductDraftListSchema,
+  type ProductImport,
+  type ProductImportPage,
+  ProductImportPageSchema,
+  type ProductImportRowPage,
+  ProductImportRowPageSchema,
+  ProductImportSchema,
   type ProductTypeSchema,
   ProductTypeSchemaSchema,
+  type ProductUpdate,
   type PublicPage,
   type PublicPageInput,
   PublicPageSchema,
   type RateQuotes,
   RateQuotesSchema,
+  type SavedProductDraft,
+  SavedProductDraftSchema,
+  type SaveProductDraftRequest,
   type SellerAddress,
   type SellerFeesView,
   SellerFeesViewSchema,
@@ -98,6 +118,8 @@ import {
   SellerOrderDetailSchema,
   type SellerOrderPage,
   SellerOrderPageSchema,
+  type SellerProductDetail,
+  SellerProductDetailSchema,
   type SellerRewardsView,
   SellerRewardsViewSchema,
   type SellerSession,
@@ -111,6 +133,7 @@ import {
   type ShipFromInput,
   ShipFromListSchema,
   type ShipmentStatus,
+  type SpreadsheetFormat,
   type StockAdjustment,
   type StockAdjustmentRequest,
   StockAdjustmentSchema,
@@ -120,8 +143,7 @@ import {
   TeamViewSchema,
   type UploadRequest,
   type UploadTicket,
-  UploadTicketSchema
-} from './schemas/seller';
+  UploadTicketSchema} from './schemas/seller';
 import { tableSearchParams } from './table-query';
 
 /** Server-driven orders table query: one search over every column, the sort (`<column>,asc|desc`), cursor, limit. */
@@ -152,9 +174,18 @@ export interface SellerExportRequest extends Partial<TableExportQuery> {
 const enc = encodeURIComponent;
 const num = (n: number | undefined): string | undefined => (n === undefined ? undefined : String(n));
 
+/** Bulk upload preview query (server-driven rows table). */
+export interface ImportRowsQuery {
+  status?: ImportRowStatus;
+  outcome?: ImportRowOutcome;
+  page: number;
+  size: number;
+}
+
 /** Typed client for the Seller Center & Provider Hub routes (contracts/openapi/gateway-bff-seller.yaml). */
 export function createSellerApiClient(options: ApiClientOptions) {
   const request = createRequester(options);
+  const download = createDownloader(options);
   const idem = (key?: string): Record<string, string> | undefined => (key ? { 'Idempotency-Key': key } : undefined);
   const shipment = (orderNumber: string, shipmentId: string) => `/v1/seller/orders/${enc(orderNumber)}/shipments/${enc(shipmentId)}`;
 
@@ -242,6 +273,47 @@ export function createSellerApiClient(options: ApiClientOptions) {
     setListingActive: (productId: string, active: boolean): Promise<ListingRow> =>
       request(`/v1/seller/listings/${enc(productId)}/status`, ListingRowSchema, { method: 'POST', body: { active } }),
     submitProduct: (draft: ProductDraft): Promise<ListingRow> => request('/v1/seller/products', ListingRowSchema, { method: 'POST', body: draft }),
+    /** One listing with everything the one-step form edits (S307). */
+    getProduct: (productId: string, signal?: AbortSignal): Promise<SellerProductDetail> =>
+      request(`/v1/seller/listings/${enc(productId)}`, SellerProductDetailSchema, { signal }),
+    updateProduct: (productId: string, body: ProductUpdate): Promise<ListingRow> =>
+      request(`/v1/seller/products/${enc(productId)}`, ListingRowSchema, { method: 'PUT', body }),
+    listProductDrafts: (signal?: AbortSignal): Promise<ProductDraftList> => request('/v1/seller/product-drafts', ProductDraftListSchema, { signal }),
+    getProductDraft: (id: string, signal?: AbortSignal): Promise<SavedProductDraft> =>
+      request(`/v1/seller/product-drafts/${enc(id)}`, SavedProductDraftSchema, { signal }),
+    createProductDraft: (body: SaveProductDraftRequest): Promise<SavedProductDraft> =>
+      request('/v1/seller/product-drafts', SavedProductDraftSchema, { method: 'POST', body }),
+    saveProductDraft: (id: string, body: SaveProductDraftRequest): Promise<SavedProductDraft> =>
+      request(`/v1/seller/product-drafts/${enc(id)}`, SavedProductDraftSchema, { method: 'PUT', body }),
+    deleteProductDraft: (id: string): Promise<void> =>
+      request(`/v1/seller/product-drafts/${enc(id)}`, z.undefined(), { method: 'DELETE' }),
+    getListingContext: (signal?: AbortSignal): Promise<ListingContext> => request('/v1/seller/catalog/listing-context', ListingContextSchema, { signal }),
+    writeListing: (body: ListingWriterRequest): Promise<ListingWriterDraft> =>
+      request('/v1/seller/catalog/listing-writer', ListingWriterDraftSchema, { method: 'POST', body }),
+
+    /* Bulk upload (S308) */
+    downloadImportTemplate: (opts: { productType?: string; categoryId?: string; format: SpreadsheetFormat }): Promise<DownloadedFile> =>
+      download('/v1/seller/imports/template', { productType: opts.productType, categoryId: opts.categoryId, format: opts.format },
+        `afrotransact-products.${opts.format}`),
+    uploadImport: (file: File, mode: ImportMode, productType?: string): Promise<ProductImport> => {
+      const body = new FormData();
+      body.set('file', file, file.name);
+      body.set('mode', mode);
+      if (productType) body.set('productType', productType);
+      return request('/v1/seller/imports', ProductImportSchema, { method: 'POST', body });
+    },
+    listImports: (page: number, size: number, signal?: AbortSignal): Promise<ProductImportPage> =>
+      request('/v1/seller/imports', ProductImportPageSchema, { query: { page: String(page), size: String(size) }, signal }),
+    getImport: (id: string, signal?: AbortSignal): Promise<ProductImport> => request(`/v1/seller/imports/${enc(id)}`, ProductImportSchema, { signal }),
+    listImportRows: (id: string, q: ImportRowsQuery, signal?: AbortSignal): Promise<ProductImportRowPage> =>
+      request(`/v1/seller/imports/${enc(id)}/rows`, ProductImportRowPageSchema, {
+        query: { status: q.status, outcome: q.outcome, page: String(q.page), size: String(q.size) },
+        signal
+      }),
+    downloadImportReport: (id: string, format: SpreadsheetFormat): Promise<DownloadedFile> =>
+      download(`/v1/seller/imports/${enc(id)}/report`, { format }, `upload-report.${format}`),
+    startImport: (id: string, validOnly: boolean): Promise<ProductImport> =>
+      request(`/v1/seller/imports/${enc(id)}/start`, ProductImportSchema, { method: 'POST', body: { validOnly } }),
     getCategoryTree: (signal?: AbortSignal): Promise<CategoryNode[]> => request('/v1/seller/catalog/categories', z.array(CategoryNodeSchema), { signal }),
     getProductType: (code: string, signal?: AbortSignal): Promise<ProductTypeSchema> =>
       request(`/v1/seller/catalog/product-types/${enc(code)}`, ProductTypeSchemaSchema, { signal }),

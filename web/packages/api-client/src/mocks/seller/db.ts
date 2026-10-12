@@ -22,6 +22,7 @@ import {
   type PublicPage,
   type SellerOffer,
   type SellerOrderDetail,
+  type SellerProductDetail,
   type SellerRewardsView,
   type ServiceOffer,
   type ShipFromAddress,
@@ -29,6 +30,7 @@ import {
   type Subscription,
   type TeamMember
 } from '../../schemas/seller';
+import { type MockDraft, type MockImport } from './listing-form';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
 import { type MockApplication } from './onboarding';
 
@@ -79,6 +81,12 @@ export interface MockSellerDb {
   offers: SellerOffer[];
   /** Export jobs (the file body is CSV text in the mock). */
   exports: (ExportJob & { owner: string; orgId: string; body: string })[];
+  /** What the one-step form stored per product (S307); seeded listings derive theirs from the row. */
+  productDetails: Record<string, SellerProductDetail>;
+  /** Autosaved drafts of the product form (S307). */
+  drafts: MockDraft[];
+  /** Bulk uploads with their validated rows (S308). */
+  imports: MockImport[];
   seq: number;
 }
 
@@ -311,42 +319,52 @@ export const CATEGORY_TREE: CategoryNode[] = [
 
 const COLORS = ['Black', 'White', 'Gold', 'Royal blue', 'Emerald', 'Wine'];
 
+type Attr = ProductTypeSchema['attributes'][number];
+/** An attribute of a mock product type (kind follows the options unless given). */
+const attr = (key: string, label: string, options: string[] = [], extra: Partial<Attr> = {}): Attr => ({
+  key, label, options, required: true, multiline: false, kind: options.length ? 'ENUM' : 'TEXT', units: [], section: 'DETAILS', help: null, ...extra
+});
+const NO_TRAITS = { food: false, perishable: false, regulated: false, preorder: false };
+
 export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
-  grocery: { code: 'grocery', label: 'packaged food', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'ingredients', label: 'Ingredients', options: [], required: true, multiline: true },
-    { key: 'allergens', label: 'Allergens (FALCPA)', options: ['None', 'Contains peanuts', 'Contains shellfish', 'Contains fish', 'Contains wheat', 'Contains soy'], required: true, multiline: false },
-    { key: 'storage', label: 'Storage', options: ['Room temperature', 'Refrigerate after opening'], required: true, multiline: false },
-    { key: 'origin', label: 'Country of origin', options: [], required: true, multiline: false }
+  grocery: { code: 'grocery', label: 'packaged food', identifierRule: 'gtin', traits: { food: true, perishable: false, regulated: false, preorder: true }, attributes: [
+    attr('brand', 'Brand'),
+    attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
+    attr('allergens', 'Allergens (FALCPA)', ['None', 'Contains peanuts', 'Contains shellfish', 'Contains fish', 'Contains wheat', 'Contains soy'], { section: 'FOOD' }),
+    attr('shelf', 'Shelf life', [], { kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'From the date of manufacture, unopened' }),
+    attr('storage', 'Storage', ['Room temperature', 'Refrigerate after opening'], { section: 'FOOD' }),
+    attr('origin', 'Country of origin')
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['8 oz', '1 lb', '2 lb', '5 lb', '10 lb'] }] }, { name: 'Net weight × Pack', dimensions: [{ name: 'Net weight', options: ['1 lb', '5 lb'] }, { name: 'Pack', options: ['1', '2', '4'] }] }] },
-  perishable: { code: 'perishable', label: 'frozen & perishable food', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'ingredients', label: 'Ingredients', options: [], required: true, multiline: true },
-    { key: 'temp', label: 'Storage temperature', options: ['Frozen (≤ 0°F)', 'Chilled (33–40°F)'], required: true, multiline: false },
-    { key: 'permit', label: 'Food facility / permit no.', options: [], required: true, multiline: false }
+  perishable: { code: 'perishable', label: 'frozen & perishable food', identifierRule: 'gtin', traits: { food: true, perishable: true, regulated: true, preorder: true }, attributes: [
+    attr('brand', 'Brand'),
+    attr('ingredients', 'Ingredients', [], { multiline: true, kind: 'MULTILINE', section: 'FOOD' }),
+    attr('temp', 'Storage temperature', ['Frozen (≤ 0°F)', 'Chilled (33–40°F)'], { section: 'FOOD', help: 'How the product must be kept until it reaches the shopper' }),
+    attr('shelf', 'Shelf life', [], { required: false, kind: 'NUMBER', units: ['days', 'months'], section: 'FOOD', help: 'Frozen: from the date of freezing' }),
+    attr('permit', 'Food facility / permit no.', [], { section: 'REGULATED', help: 'FDA food facility registration or state permit number' })
   ], themes: [{ name: 'Net weight', dimensions: [{ name: 'Net weight', options: ['1 lb', '2 lb', '5 lb'] }] }] },
-  dress: { code: 'dress', label: 'women’s dresses', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'material', label: 'Material', options: ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend'], required: true, multiline: false },
-    { key: 'fit', label: 'Fit', options: ['Regular', 'Fitted', 'Relaxed', 'Plus size'], required: true, multiline: false },
-    { key: 'length', label: 'Length', options: ['Mini', 'Knee', 'Midi', 'Maxi'], required: true, multiline: false },
-    { key: 'care', label: 'Care', options: [], required: true, multiline: false }
+  dress: { code: 'dress', label: 'women’s dresses', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
+    attr('brand', 'Brand'),
+    attr('material', 'Material', ['Cotton wax print', 'Cotton', 'Lace', 'Silk', 'Polyester blend']),
+    attr('fit', 'Fit', ['Regular', 'Fitted', 'Relaxed', 'Plus size']),
+    attr('length', 'Length', ['Mini', 'Knee', 'Midi', 'Maxi']),
+    attr('care', 'Care', [], { required: false, help: 'e.g. Cold wash, line dry' })
   ], themes: [{ name: 'Size × Color', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }, { name: 'Color', options: COLORS }] }, { name: 'Size', dimensions: [{ name: 'Size', options: ['XS', 'S', 'M', 'L', 'XL', '2XL'] }] }] },
-  beauty: { code: 'beauty', label: 'beauty & personal care', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'inci', label: 'Ingredients (INCI)', options: [], required: true, multiline: true },
-    { key: 'skin', label: 'Skin / hair type', options: ['All', 'Dry', 'Oily', 'Sensitive'], required: true, multiline: false },
-    { key: 'mocra', label: 'MoCRA product listing no.', options: [], required: true, multiline: false }
+  beauty: { code: 'beauty', label: 'beauty & personal care', identifierRule: 'gtin', traits: { ...NO_TRAITS, regulated: true }, attributes: [
+    attr('brand', 'Brand'),
+    attr('inci', 'Ingredients (INCI)', [], { multiline: true, kind: 'MULTILINE' }),
+    attr('skin', 'Skin / hair type', ['All', 'Dry', 'Oily', 'Sensitive']),
+    attr('mocra', 'MoCRA product listing no.', [], { section: 'REGULATED', help: 'FDA Cosmetics Direct product listing number (MoCRA)' })
   ], themes: [{ name: 'Size', dimensions: [{ name: 'Size', options: ['4 oz', '8 oz', '16 oz'] }] }] },
-  book: { code: 'book', label: 'books', identifierRule: 'isbn', attributes: [
-    { key: 'author', label: 'Author', options: [], required: true, multiline: false },
-    { key: 'publisher', label: 'Publisher', options: [], required: true, multiline: false },
-    { key: 'language', label: 'Language', options: ['English', 'French', 'Yoruba', 'Swahili', 'Amharic'], required: true, multiline: false }
+  book: { code: 'book', label: 'books', identifierRule: 'isbn', traits: NO_TRAITS, attributes: [
+    attr('author', 'Author'),
+    attr('publisher', 'Publisher'),
+    attr('language', 'Language', ['English', 'French', 'Yoruba', 'Swahili', 'Amharic']),
+    attr('pages', 'Pages', [], { kind: 'NUMBER' })
   ], themes: [{ name: 'Format', dimensions: [{ name: 'Format', options: ['Hardcover', 'Paperback'] }] }] },
-  custom: { code: 'custom', label: 'your requested category', identifierRule: 'gtin', attributes: [
-    { key: 'brand', label: 'Brand', options: [], required: true, multiline: false },
-    { key: 'material', label: 'Material / main ingredient', options: [], required: true, multiline: false },
-    { key: 'details', label: 'Key details shoppers need', options: [], required: true, multiline: true }
+  custom: { code: 'custom', label: 'your requested category', identifierRule: 'gtin', traits: NO_TRAITS, attributes: [
+    attr('brand', 'Brand'),
+    attr('material', 'Material / main ingredient'),
+    attr('details', 'Key details shoppers need', [], { multiline: true, kind: 'MULTILINE' })
   ], themes: [{ name: 'Option', dimensions: [{ name: 'Option', options: ['Standard', 'Small', 'Medium', 'Large'] }] }, { name: 'Size × Color', dimensions: [{ name: 'Size', options: ['S', 'M', 'L', 'XL'] }, { name: 'Color', options: ['Black', 'White', 'Gold', 'Multicolour'] }] }] }
 };
 
@@ -385,6 +403,9 @@ function freshDb(now: Date): MockSellerDb {
     orders: seedOrders(now),
     labels: {},
     exports: [],
+    productDetails: {},
+    drafts: [],
+    imports: [],
     listings: seedListings(now),
     categoryRequests: [{ id: 'cr-1', reference: 'REQ-4821', path: 'Fashion › Women › Bridal aso-ebi sets', status: 'PENDING_REVIEW', decisionNote: null, createdAt: iso(new Date(now.getTime() - 2 * DAY)) }],
     payouts: [

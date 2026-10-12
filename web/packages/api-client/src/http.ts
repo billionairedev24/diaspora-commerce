@@ -47,11 +47,13 @@ export function createRequester(options: ApiClientOptions): Requester {
   const doFetch: FetchLike = options.fetch ?? ((req) => fetch(req));
   return async function request<S extends z.ZodType>(path: string, schema: S, opts: RequestOptions = {}): Promise<z.infer<S>> {
     const headers: Record<string, string> = { Accept: 'application/json', ...options.headers, ...opts.headers };
-    if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+    // FormData (file uploads) sets its own multipart Content-Type with the boundary.
+    const form = typeof FormData !== 'undefined' && opts.body instanceof FormData;
+    if (opts.body !== undefined && !form) headers['Content-Type'] = 'application/json';
     const req = new Request(absolute(joinUrl(options.baseUrl, path, opts.query)), {
       method: opts.method ?? 'GET',
       headers,
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      body: opts.body === undefined ? undefined : form ? (opts.body as FormData) : JSON.stringify(opts.body),
       credentials: 'include',
       signal: opts.signal
     });
@@ -61,3 +63,28 @@ export function createRequester(options: ApiClientOptions): Requester {
     return schema.parse(await res.json());
   };
 }
+
+/** A downloaded file (templates, reports): its bytes and the name from Content-Disposition. */
+export interface DownloadedFile {
+  blob: Blob;
+  fileName: string;
+}
+
+export type Downloader = (path: string, query?: RequestOptions['query'], fallbackName?: string) => Promise<DownloadedFile>;
+
+/** File-download helper: same credentials and problem handling as JSON requests, the body read as a Blob. */
+export function createDownloader(options: ApiClientOptions): Downloader {
+  const doFetch: FetchLike = options.fetch ?? ((req) => fetch(req));
+  return async (path, query, fallbackName = 'download') => {
+    const req = new Request(absolute(joinUrl(options.baseUrl, path, query)), {
+      headers: { Accept: '*/*', ...options.headers },
+      credentials: 'include'
+    });
+    const res = await doFetch(req);
+    if (!res.ok) throw new ApiError(await problemFrom(res));
+    const disposition = res.headers.get('Content-Disposition') ?? '';
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+    return { blob: await res.blob(), fileName: match?.[1] ? decodeURIComponent(match[1]) : fallbackName };
+  };
+}
+

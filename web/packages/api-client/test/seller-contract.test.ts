@@ -19,8 +19,10 @@ import {
   type InventoryView,
   isApiError,
   type LabelPurchase,
+  type ListingContext,
   type ListingPage,
   type ListingRow,
+  type ListingWriterDraft,
   type OnboardingBusinessInput,
   type OnboardingComplianceInput,
   type OnboardingDetailsInput,
@@ -31,13 +33,20 @@ import {
   type OnboardingStripeSession,
   type OnboardingUploadRequest,
   type PayoutsView,
+  type ProductDraft,
+  type ProductDraftList,
+  type ProductImport,
+  type ProductImportPage,
+  type ProductImportRowPage,
   type ProductTypeSchema,
   type PublicPage,
   type RateQuotes,
+  type SavedProductDraft,
   type SellerFeesView,
   type SellerOfferList,
   type SellerOrderDetail,
   type SellerOrderPage,
+  type SellerProductDetail,
   type SellerRewardsView,
   type SellerSession,
   type ServiceOffer,
@@ -94,6 +103,16 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<CancellationPolicy>().toExtend<S['CancellationPolicy']>();
     expectTypeOf<Earnings>().toExtend<S['Earnings']>();
     expectTypeOf<PublicPage>().toExtend<S['PublicPage']>();
+    // One-step product form (S307) and bulk upload (S308)
+    expectTypeOf<ProductDraft>().toExtend<S['ProductDraft']>();
+    expectTypeOf<SellerProductDetail>().toExtend<S['ProductDetail']>();
+    expectTypeOf<SavedProductDraft>().toExtend<S['SavedProductDraft']>();
+    expectTypeOf<ProductDraftList>().toExtend<S['ProductDraftList']>();
+    expectTypeOf<ListingContext>().toExtend<S['ListingContext']>();
+    expectTypeOf<ListingWriterDraft>().toExtend<S['ListingWriterDraft']>();
+    expectTypeOf<ProductImport>().toExtend<S['ProductImport']>();
+    expectTypeOf<ProductImportPage>().toExtend<S['ProductImportPage']>();
+    expectTypeOf<ProductImportRowPage>().toExtend<S['ProductImportRowPage']>();
   });
 
   it('generated file carries the do-not-edit banner', () => {
@@ -171,7 +190,79 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     };
     await expect(api.submitProduct({ ...base, categoryId: 'pt-dresses' })).resolves.toMatchObject({ status: 'IN_REVIEW' });
     const req = await api.requestCategory({ parentPath: 'Fashion › Women', name: 'Bridal aso-ebi sets', exampleProduct: '6-piece set', detailsNeeded: 'Pieces, colour' });
-    await expect(api.submitProduct({ ...base, categoryRequestId: req.id })).resolves.toMatchObject({ status: 'PENDING_CATEGORY_APPROVAL' });
+    const other = { ...base, variants: [{ options: { Size: 'L' }, sellerSku: 'ANK-L', gtinExempt: true, priceMinor: 3900, quantity: 10 }] };
+    await expect(api.submitProduct({ ...other, categoryRequestId: req.id })).resolves.toMatchObject({ status: 'PENDING_CATEGORY_APPROVAL' });
+    await expect(api.submitProduct({ ...other, categoryId: 'pt-dresses' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+  });
+
+  it('adds a product in one step with listing details, edits it and autosaves drafts (S307)', async () => {
+    const api = client();
+    const ctx = await api.getListingContext();
+    expect(ctx.importLimits).toMatchObject({ maxRows: 5000, maxFileBytes: 10 * 1024 * 1024 });
+    expect(ctx.aiListingWriter.available).toBe(getSellerDb().subscription.SELLER.planCode !== 'seller_essentials');
+    const draft = await api.createProductDraft({ title: 'Suya Pepper', payload: { title: 'Suya Pepper' } });
+    const saved = await api.saveProductDraft(draft.id, { title: 'Suya Pepper Spice', payload: { title: 'Suya Pepper Spice' }, version: draft.version });
+    await expect(api.saveProductDraft(draft.id, { payload: {}, version: draft.version })).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
+    expect((await api.listProductDrafts()).items.map((d) => d.id)).toContain(saved.id);
+
+    const input: ProductDraft = {
+      categoryId: 'pt-spices', title: 'Suya Pepper Spice Blend from Kano', attributes: { brand: 'Mama Kano', shelf: '12 months' },
+      images: [{ url: 'https://img.afrotransact.dev/suya.webp', contentType: 'image/webp' }], variationTheme: '',
+      variants: [{ options: {}, sellerSku: 'suya-1', gtinExempt: true, priceMinor: 899, compareAtMinor: 1199, quantity: 40 }],
+      listing: { description: 'Hand-ground in Kano.', condition: 'NEW', keywords: ['suya'], fulfilment: 'AFROTRANSACT', handlingDays: 2 }, draftId: saved.id
+    };
+    await expect(api.submitProduct(input)).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+    const row = await api.submitProduct({ ...input, listing: { ...input.listing, packaging: { lengthIn: 6, widthIn: 4, heightIn: 2, weightLb: 0.5 } } });
+    expect(row).toMatchObject({ status: 'IN_REVIEW', sku: 'SUYA-1', fulfilment: 'AFROTRANSACT' });
+    expect((await api.listProductDrafts()).items).toHaveLength(0);
+    const detail = await api.getProduct(row.productId);
+    expect(detail).toMatchObject({ productType: 'grocery', categoryPath: 'Groceries › Pantry › Spices & seasonings', variationTheme: '' });
+    expect(detail.variants[0]).toMatchObject({ compareAtMinor: 1199, sellerSku: 'SUYA-1' });
+    const edited = await api.updateProduct(row.productId, { ...input, draftId: undefined, title: 'Suya Pepper Spice Blend, Kano Style', version: detail.version,
+      listing: { ...input.listing, fulfilment: 'SELLER' } });
+    expect(edited.title).toBe('Suya Pepper Spice Blend, Kano Style');
+    await expect(api.updateProduct(row.productId, { ...input, draftId: undefined, version: detail.version, listing: { fulfilment: 'SELLER' } })).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
+
+    const live = getSellerDb().listings.find((l) => l.status === 'LIVE' && l.variants.length > 1);
+    if (!live) throw new Error('fixture has a live listing with variants');
+    const liveDetail = await api.getProduct(live.productId);
+    await expect(api.updateProduct(live.productId, { categoryId: liveDetail.categoryId ?? undefined, title: liveDetail.title, attributes: liveDetail.attributes, images: liveDetail.images,
+      variationTheme: liveDetail.variationTheme, variants: liveDetail.variants.slice(0, 1).map((v) => ({ ...v, gtin: v.gtin ?? undefined })) })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+  });
+
+  it('bulk uploads a CSV: template, preview with per-row errors, error report, import of valid rows (S308)', async () => {
+    const api = client();
+    const template = await api.downloadImportTemplate({ format: 'csv', productType: 'grocery' });
+    expect(template.fileName).toBe('afrotransact-grocery-template.csv');
+    const text = await template.blob.text();
+    expect(text).toContain('SKU *,');
+    const csv = [
+      'SKU *,Category,Title *,Description,Image URLs *,Price (USD) *,Quantity *,Barcode (GTIN/UPC/EAN),No barcode',
+      'JOLLOF-4,Groceries › Pantry › Spices & seasonings,Jollof Seasoning Smoky 4 oz,Our blend,https://example.com/j.jpg,6.99,40,,Yes',
+      'EGUSI-1,"Groceries › Pantry › Rice, grains & flours",Egusi Ground 1 lb,Ground melon seed,https://example.com/e.jpg,12.5O,25,4006381333932,No',
+      'JOLLOF-4,Groceries › Pantry › Spices & seasonings,Jollof Seasoning Mild 4 oz,,http://example.com/m.jpg,5.99,10,,Yes',
+      'ZOBO-8,Groceries › Pantry › Spices & seasonings,"Zobo Leaves, Dried, 8 oz",Hibiscus,https://example.com/z.jpg,7.50,30,,Yes'
+    ].join('\n');
+    const file = new File([csv], 'products.csv', { type: 'text/csv' });
+    const upload = await api.uploadImport(file, 'CREATE');
+    expect(upload).toMatchObject({ status: 'VALIDATED', totalRows: 4, errorRows: 3, validRows: 1, format: 'CSV' });
+    const errors = await api.listImportRows(upload.id, { status: 'ERROR', page: 0, size: 50 });
+    expect(errors.items.map((r) => r.rowNumber)).toEqual([2, 3, 4]);
+    const messages = errors.items.flatMap((r) => r.messages.map((m) => m.message)).join(' / ');
+    expect(messages).toContain('more than once');
+    expect(messages).toContain('not a price');
+    expect(messages).toContain('check digit');
+    expect(messages).toContain('https image link');
+    const report = await api.downloadImportReport(upload.id, 'csv');
+    expect(await report.blob.text()).toContain('Errors');
+    await expect(api.startImport(upload.id, false)).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
+    await expect(api.startImport(upload.id, true)).resolves.toMatchObject({ status: 'QUEUED', validOnly: true });
+    let job = await api.getImport(upload.id);
+    for (let i = 0; i < 5 && job.status !== 'COMPLETED'; i++) job = await api.getImport(upload.id);
+    expect(job).toMatchObject({ status: 'COMPLETED', createdProducts: 1, processedRows: 4 });
+    expect((await api.listImports(0, 25)).items[0]?.id).toBe(upload.id);
+    expect(getSellerDb().listings[0]?.title).toBe('Zobo Leaves, Dried, 8 oz');
+    await expect(api.uploadImport(new File(['x'], 'products.xls'), 'CREATE')).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
   });
 
   it('switches organisations: Provider Hub tools and onboarding-only before approval', async () => {
