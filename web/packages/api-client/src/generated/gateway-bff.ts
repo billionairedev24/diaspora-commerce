@@ -2561,6 +2561,19 @@ export interface components {
              */
             dueAt: string;
         };
+        /** @description A back office the signed-in person can open from the storefront (links use each app's configured URL). */
+        BackOffice: {
+            /**
+             * @description Seller Center and Provider Hub are the Seller Center app (SELLER_CENTER_URL); the staff console is STAFF_CONSOLE_URL.
+             * @enum {string}
+             */
+            app: "seller-center" | "provider-hub" | "staff-console";
+            /**
+             * @description `active`: an approved (or suspended) organisation, or staff. `application`: a seller or provider application still in progress ("Continue your seller application"), which opens Seller Center onboarding.
+             * @enum {string}
+             */
+            state: "active" | "application";
+        };
         Me: {
             authenticated: boolean;
             user: {
@@ -2574,6 +2587,13 @@ export interface components {
                 phone?: string;
                 /** @description Whether the account phone passed SMS verification */
                 phoneVerified?: boolean;
+                /**
+                 * @description The person's back offices, for the storefront account menu and the customer app's account screen:
+                 *     Seller Center for a seller organisation, Provider Hub for a provider organisation, the staff console
+                 *     for staff. A person is always also a shopper; this only adds links (the storefront acts as the person,
+                 *     never as their organisation). Empty for shoppers only.
+                 */
+                backOffices: components["schemas"]["BackOffice"][];
             } | null;
             /** @description Badges for the account menu. */
             counts: {

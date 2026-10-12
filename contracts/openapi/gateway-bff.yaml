@@ -3094,6 +3094,21 @@ components:
         status: {type: string, enum: [RECEIVED, COMPLETED, DENIED]}
         submittedAt: {type: string, format: date-time}
         dueAt: {type: string, format: date-time, description: Response deadline (45 days)}
+    BackOffice:
+      type: object
+      description: A back office the signed-in person can open from the storefront (links use each app's configured URL).
+      required: [app, state]
+      properties:
+        app:
+          type: string
+          enum: [seller-center, provider-hub, staff-console]
+          description: Seller Center and Provider Hub are the Seller Center app (SELLER_CENTER_URL); the staff console is STAFF_CONSOLE_URL.
+        state:
+          type: string
+          enum: [active, application]
+          description: >-
+            `active`: an approved (or suspended) organisation, or staff. `application`: a seller or provider application
+            still in progress ("Continue your seller application"), which opens Seller Center onboarding.
     Me:
       type: object
       required: [authenticated, user, counts]
@@ -3101,7 +3116,7 @@ components:
         authenticated: {type: boolean}
         user:
           type: [object, 'null']
-          required: [id, firstName, lastName, email, initials, roles]
+          required: [id, firstName, lastName, email, initials, roles, backOffices]
           properties:
             id: {type: string}
             firstName: {type: string}
@@ -3111,6 +3126,14 @@ components:
             roles: {type: array, items: {type: string}}
             phone: {type: string, description: 'Masked account phone (•••• 0142); absent when identity is unavailable or no phone is set'}
             phoneVerified: {type: boolean, description: Whether the account phone passed SMS verification}
+            backOffices:
+              type: array
+              description: |
+                The person's back offices, for the storefront account menu and the customer app's account screen:
+                Seller Center for a seller organisation, Provider Hub for a provider organisation, the staff console
+                for staff. A person is always also a shopper; this only adds links (the storefront acts as the person,
+                never as their organisation). Empty for shoppers only.
+              items: {$ref: '#/components/schemas/BackOffice'}
         counts:
           type: [object, 'null']
           description: Badges for the account menu.
