@@ -185,6 +185,11 @@ type Asset struct {
 	PHash *uint64 `json:"-"`
 	// Version guards updates (optimistic locking): an update of a stale copy fails with ErrConflict.
 	Version int `json:"-"`
+	// Library marks a product image of the organisation's image library (S310); SKU and Slot are parsed from its
+	// file name (empty when the name has no slot).
+	Library bool        `json:"library,omitempty"`
+	SKU     string      `json:"sku,omitempty"`
+	Slot    LibrarySlot `json:"slot,omitempty"`
 }
 
 // ErrConflict is returned when an asset changed since it was read (concurrent completion or review).

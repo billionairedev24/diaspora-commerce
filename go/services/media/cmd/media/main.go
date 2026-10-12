@@ -96,7 +96,8 @@ func run() error {
 	}
 	repo := pgrepo.New(pool)
 	// S308: catalog-service imports the images of bulk product uploads from their URLs (public addresses only).
-	opts := []app.Option{app.WithLogger(log), moderation(cfg, log), app.WithFetcher(urlfetch.New(urlfetch.Options{}))}
+	opts := []app.Option{app.WithLogger(log), moderation(cfg, log), app.WithFetcher(urlfetch.New(urlfetch.Options{})),
+		app.WithLibrary(repo)}
 	if o, err := links(cfg, log); err != nil {
 		return err
 	} else if o != nil {

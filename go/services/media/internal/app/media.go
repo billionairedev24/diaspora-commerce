@@ -40,13 +40,29 @@ type MediaService interface {
 	// result is READY (published), FLAGGED (held for review) or REJECTED with flags. A URL that can't be fetched or
 	// isn't an allowed image is domain.ErrRejected.
 	ImportFromURL(ctx context.Context, actor auth.Actor, p domain.Purpose, rawURL, ownerOrg, uploadedBy string) (domain.Asset, error)
+	// RequestLibraryUpload is RequestUpload of a product image that joins the organisation's image library: the SKU
+	// and slot are parsed from the file name (S310). Organisation members only.
+	RequestLibraryUpload(ctx context.Context, actor auth.Actor, fileName, contentType string, size int64) (domain.Asset, port.Upload, error)
+	// ListLibrary pages the caller's organisation's completed library images, newest first.
+	ListLibrary(ctx context.Context, actor auth.Actor, q domain.LibraryQuery) ([]domain.LibraryImage, int, error)
+	// LookupLibrary returns an organisation's usable library images by SKU (the newest of each slot) and by file name
+	// (the newest with that name) for catalog (importer clients with media:import).
+	LookupLibrary(ctx context.Context, actor auth.Actor, ownerOrg string, skus, fileNames []string) ([]domain.LibraryImage, error)
+	// RemoveFromLibrary takes an image out of the library; the file stays because listings may use it.
+	RemoveFromLibrary(ctx context.Context, actor auth.Actor, id string) error
 }
+
+// MaxLibraryLookup bounds the SKUs and the file names of one library lookup (a bulk upload has at most 5,000 rows).
+const MaxLibraryLookup = 5000
 
 // ErrForbidden is returned when an actor touches another organisation's asset.
 var ErrForbidden = errors.New("forbidden")
 
 // ErrState is returned for an action that doesn't fit the asset status.
 var ErrState = errors.New("invalid state")
+
+// ErrNotInLibrary is returned for an asset that is not (or no longer) in an image library.
+var ErrNotInLibrary = errors.New("not in the image library")
 
 // ErrLinkInvalid is returned for a link token that is malformed, forged or names an asset that can't be served.
 var ErrLinkInvalid = errors.New("link not found")
@@ -87,6 +103,11 @@ func WithLinks(signer port.LinkSigner, baseURL string, redirectTTL time.Duration
 // WithFetcher enables POST /v1/assets/import (images of bulk product uploads).
 func WithFetcher(f port.URLFetcher) Option { return func(s *mediaServiceImpl) { s.fetcher = f } }
 
+// WithLibrary enables the image library (S310).
+func WithLibrary(lib port.LibraryRepository) Option {
+	return func(s *mediaServiceImpl) { s.library = lib }
+}
+
 // WithClock replaces time.Now (tests).
 func WithClock(now func() time.Time) Option { return func(s *mediaServiceImpl) { s.now = now } }
 
@@ -112,6 +133,7 @@ type mediaServiceImpl struct {
 	redirectTTL time.Duration
 
 	fetcher port.URLFetcher
+	library port.LibraryRepository
 }
 
 var _ MediaService = (*mediaServiceImpl)(nil)
@@ -162,6 +184,24 @@ func (s *mediaServiceImpl) moderated(p domain.Purpose) bool {
 func (s *mediaServiceImpl) RequestUpload(ctx context.Context, actor auth.Actor, p domain.Purpose, fileName,
 	contentType string, size int64,
 ) (domain.Asset, port.Upload, error) {
+	return s.requestUpload(ctx, actor, p, fileName, contentType, size, false)
+}
+
+func (s *mediaServiceImpl) RequestLibraryUpload(ctx context.Context, actor auth.Actor, fileName, contentType string,
+	size int64,
+) (domain.Asset, port.Upload, error) {
+	if s.library == nil {
+		return domain.Asset{}, port.Upload{}, fmt.Errorf("%w: the image library is not enabled", domain.ErrRejected)
+	}
+	if actor.OrgID == "" || actor.Type == principalService {
+		return domain.Asset{}, port.Upload{}, fmt.Errorf("image library: %w", ErrForbidden)
+	}
+	return s.requestUpload(ctx, actor, domain.PurposeProductImage, domain.LibraryFileName(fileName), contentType, size, true)
+}
+
+func (s *mediaServiceImpl) requestUpload(ctx context.Context, actor auth.Actor, p domain.Purpose, fileName,
+	contentType string, size int64, library bool,
+) (domain.Asset, port.Upload, error) {
 	if err := domain.CheckDeclared(p, fileName, contentType, size); err != nil {
 		return domain.Asset{}, port.Upload{}, fmt.Errorf("request upload: %w", err)
 	}
@@ -190,11 +230,130 @@ func (s *mediaServiceImpl) RequestUpload(ctx context.Context, actor auth.Actor, 
 	}
 	a := domain.Asset{ID: id, OwnerOrg: ownerOf(actor), UploadedBy: actor.Subject, Purpose: p, Provider: st.Name(),
 		Key: up.Key, URL: up.PublicURL, FileName: fileName, ContentType: contentType, Bytes: size,
-		Status: domain.StatusPending, Flags: []string{}, CreatedAt: now}
+		Status: domain.StatusPending, Flags: []string{}, CreatedAt: now, Library: library}
+	if library {
+		if n, ok := domain.ParseLibraryName(fileName); ok {
+			a.SKU, a.Slot = n.SKU, n.Slot
+		}
+	}
 	if err := s.repo.Insert(ctx, a); err != nil {
 		return domain.Asset{}, port.Upload{}, fmt.Errorf("record asset: %w", err)
 	}
 	return a, up, nil
+}
+
+func (s *mediaServiceImpl) ListLibrary(ctx context.Context, actor auth.Actor, q domain.LibraryQuery,
+) ([]domain.LibraryImage, int, error) {
+	if s.library == nil {
+		return nil, 0, fmt.Errorf("%w: the image library is not enabled", domain.ErrRejected)
+	}
+	if actor.OrgID == "" || actor.Type == principalService {
+		return nil, 0, fmt.Errorf("image library: %w", ErrForbidden)
+	}
+	if q.Size <= 0 {
+		q.Size = 50
+	}
+	if q.Page < 0 || q.Size > 200 || len(q.Q) > 120 {
+		return nil, 0, fmt.Errorf("%w: page must be 0 or more, size 1 to 200, q at most 120 characters", domain.ErrRejected)
+	}
+	as, total, err := s.library.ListLibrary(ctx, actor.OrgID, q)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list library: %w", err)
+	}
+	out := make([]domain.LibraryImage, 0, len(as))
+	for _, a := range as {
+		out = append(out, domain.ToLibraryImage(a))
+	}
+	return out, total, nil
+}
+
+func (s *mediaServiceImpl) LookupLibrary(ctx context.Context, actor auth.Actor, ownerOrg string, skus,
+	fileNames []string,
+) ([]domain.LibraryImage, error) {
+	if s.library == nil {
+		return nil, fmt.Errorf("%w: the image library is not enabled", domain.ErrRejected)
+	}
+	if actor.Type != principalService || !slices.Contains(domain.ImporterClients(), actor.Subject) ||
+		!actor.Can(domain.PermissionMediaImport) {
+		return nil, fmt.Errorf("lookup library: %w", ErrForbidden)
+	}
+	ownerOrg = strings.TrimSpace(ownerOrg)
+	if ownerOrg == "" || len(skus) > MaxLibraryLookup || len(fileNames) > MaxLibraryLookup {
+		return nil, fmt.Errorf("%w: ownerOrg is required; at most %d SKUs and %d file names", domain.ErrRejected,
+			MaxLibraryLookup, MaxLibraryLookup)
+	}
+	upper := make([]string, 0, len(skus))
+	for _, k := range skus {
+		if k = strings.ToUpper(strings.TrimSpace(k)); k != "" {
+			upper = append(upper, k)
+		}
+	}
+	names := make([]string, 0, len(fileNames))
+	for _, f := range fileNames {
+		if f = domain.LibraryFileName(f); f != "" {
+			names = append(names, f)
+		}
+	}
+	if len(upper) == 0 && len(names) == 0 {
+		return []domain.LibraryImage{}, nil
+	}
+	as, err := s.library.LookupLibrary(ctx, ownerOrg, upper, names)
+	if err != nil {
+		return nil, fmt.Errorf("lookup library: %w", err)
+	}
+	return newestPerKey(as, upper, names), nil
+}
+
+// newestPerKey keeps, from images sorted newest first, the newest of each requested SKU and slot and the newest of
+// each requested file name (an image counts once even when it answers both).
+func newestPerKey(as []domain.Asset, skus, names []string) []domain.LibraryImage {
+	wantSKU := map[string]bool{}
+	for _, k := range skus {
+		wantSKU[k] = true
+	}
+	wantName := map[string]bool{}
+	for _, n := range names {
+		wantName[strings.ToLower(n)] = true
+	}
+	seenSlot, seenName, kept := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	out := []domain.LibraryImage{}
+	for _, a := range as {
+		keep := false
+		if a.SKU != "" && wantSKU[a.SKU] {
+			key := a.SKU + "|" + string(a.Slot)
+			if !seenSlot[key] {
+				seenSlot[key], keep = true, true
+			}
+		}
+		if name := strings.ToLower(a.FileName); wantName[name] && !seenName[name] {
+			seenName[name], keep = true, true
+		}
+		if keep && !kept[a.ID] {
+			kept[a.ID] = true
+			out = append(out, domain.ToLibraryImage(a))
+		}
+	}
+	return out
+}
+
+func (s *mediaServiceImpl) RemoveFromLibrary(ctx context.Context, actor auth.Actor, id string) error {
+	if s.library == nil {
+		return fmt.Errorf("%w: the image library is not enabled", domain.ErrRejected)
+	}
+	a, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get asset: %w", err)
+	}
+	if !a.Library {
+		return fmt.Errorf("asset %s is not in the library: %w", id, ErrNotInLibrary)
+	}
+	if actor.Type == principalService || (actor.OrgID != a.OwnerOrg && actor.Subject != a.UploadedBy) {
+		return ErrForbidden
+	}
+	if err := s.library.RemoveFromLibrary(ctx, id); err != nil {
+		return fmt.Errorf("remove from library: %w", err)
+	}
+	return nil
 }
 
 func (s *mediaServiceImpl) Complete(ctx context.Context, actor auth.Actor, id string) (domain.Asset, error) {

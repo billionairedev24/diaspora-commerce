@@ -56,6 +56,18 @@ type AssetRepository interface {
 	Ping(ctx context.Context) error
 }
 
+// LibraryRepository persists the image library flag and serves the library's lists and SKU lookups (S310).
+type LibraryRepository interface {
+	// ListLibrary returns an organisation's completed library images (READY, FLAGGED, REJECTED; newest first) and
+	// how many match in total.
+	ListLibrary(ctx context.Context, org string, q domain.LibraryQuery) ([]domain.Asset, int, error)
+	// LookupLibrary returns the organisation's usable library images (READY or FLAGGED, newest first) whose SKU is
+	// one of skus (upper case) or whose file name is one of fileNames (case-insensitive).
+	LookupLibrary(ctx context.Context, org string, skus, fileNames []string) ([]domain.Asset, error)
+	// RemoveFromLibrary clears an asset's library flag (the file stays: listings may use it).
+	RemoveFromLibrary(ctx context.Context, id string) error
+}
+
 // ProcessedImage is an image after metadata stripping, with what moderation needs.
 type ProcessedImage struct {
 	// Data is the image without EXIF / XMP / IPTC / text metadata (the original bytes when there was none).

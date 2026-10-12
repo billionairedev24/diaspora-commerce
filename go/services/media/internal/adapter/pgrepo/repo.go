@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,10 +24,19 @@ type repoImpl struct {
 	pool *pgxpool.Pool
 }
 
-var _ port.AssetRepository = (*repoImpl)(nil)
+var (
+	_ port.AssetRepository   = (*repoImpl)(nil)
+	_ port.LibraryRepository = (*repoImpl)(nil)
+)
 
-// New returns an AssetRepository.
-func New(pool *pgxpool.Pool) port.AssetRepository { return &repoImpl{pool: pool} }
+// Repository is the asset store and the image library index.
+type Repository interface {
+	port.AssetRepository
+	port.LibraryRepository
+}
+
+// New returns the repository (assets and the image library).
+func New(pool *pgxpool.Pool) Repository { return &repoImpl{pool: pool} }
 
 // Migrate applies the embedded SQL migrations in order.
 func Migrate(ctx context.Context, pool *pgxpool.Pool, files fs.FS) error {
@@ -48,7 +58,8 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool, files fs.FS) error {
 }
 
 const cols = `id::text, owner_org, uploaded_by, purpose, provider, object_key, coalesce(url, ''), file_name,
-	content_type, bytes, coalesce(width, 0), coalesce(height, 0), status, flags, created_at, moderation, phash, version`
+	content_type, bytes, coalesce(width, 0), coalesce(height, 0), status, flags, created_at, moderation, phash, version,
+	library, coalesce(library_sku, ''), coalesce(library_slot, '')`
 
 func (r *repoImpl) Insert(ctx context.Context, a domain.Asset) error {
 	flags, moderation, err := encode(a)
@@ -56,10 +67,11 @@ func (r *repoImpl) Insert(ctx context.Context, a domain.Asset) error {
 		return err
 	}
 	_, err = r.pool.Exec(ctx, `insert into asset (id, owner_org, uploaded_by, purpose, provider, object_key, url,
-		file_name, content_type, bytes, status, flags, created_at, moderation, phash, version)
-		values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0)`,
+		file_name, content_type, bytes, status, flags, created_at, moderation, phash, version, library, library_sku,
+		library_slot)
+		values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,0,$16,nullif($17,''),nullif($18,''))`,
 		a.ID, a.OwnerOrg, a.UploadedBy, a.Purpose, a.Provider, a.Key, a.URL, a.FileName, a.ContentType, a.Bytes,
-		a.Status, flags, a.CreatedAt, moderation, phash(a.PHash))
+		a.Status, flags, a.CreatedAt, moderation, phash(a.PHash), a.Library, a.SKU, string(a.Slot))
 	if err != nil {
 		return fmt.Errorf("insert asset: %w", err)
 	}
@@ -163,6 +175,83 @@ func (r *repoImpl) ListByOrg(ctx context.Context, org string, purpose domain.Pur
 	return collect(rows)
 }
 
+// libraryWhere filters an organisation's completed library images ($1 = org) by the query; args continue at $2.
+func libraryWhere(q domain.LibraryQuery) (string, []any) {
+	where := `owner_org = $1 and library and status <> 'PENDING'`
+	var args []any
+	if s := strings.TrimSpace(q.Q); s != "" {
+		args = append(args, "%"+strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(strings.ToLower(s))+"%")
+		n := len(args) + 1
+		where += fmt.Sprintf(` and (lower(file_name) like $%d or lower(coalesce(library_sku, '')) like $%d)`, n, n)
+	}
+	switch q.Status {
+	case string(domain.StatusRejected):
+		where += ` and status = 'REJECTED'`
+	case string(domain.StatusReady):
+		// Published (quality flags do not stop that).
+		where += ` and status <> 'REJECTED' and coalesce(url, '') <> ''`
+	case string(domain.StatusFlagged):
+		where += ` and status <> 'REJECTED' and coalesce(url, '') = ''`
+	}
+	if q.Matched != nil {
+		if *q.Matched {
+			where += ` and library_sku is not null`
+		} else {
+			where += ` and library_sku is null`
+		}
+	}
+	return where, args
+}
+
+func (r *repoImpl) ListLibrary(ctx context.Context, org string, q domain.LibraryQuery) ([]domain.Asset, int, error) {
+	where, args := libraryWhere(q)
+	var total int
+	if err := r.pool.QueryRow(ctx, `select count(*) from asset where `+where, append([]any{org}, args...)...).
+		Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count library: %w", err)
+	}
+	n := len(args) + 2
+	rows, err := r.pool.Query(ctx, `select `+cols+` from asset where `+where+
+		fmt.Sprintf(` order by created_at desc, id limit $%d offset $%d`, n, n+1),
+		append(append([]any{org}, args...), q.Size, q.Page*q.Size)...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list library: %w", err)
+	}
+	as, err := collect(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return as, total, nil
+}
+
+func (r *repoImpl) LookupLibrary(ctx context.Context, org string, skus, fileNames []string) ([]domain.Asset, error) {
+	lower := make([]string, 0, len(fileNames))
+	for _, f := range fileNames {
+		lower = append(lower, strings.ToLower(f))
+	}
+	if skus == nil {
+		skus = []string{}
+	}
+	rows, err := r.pool.Query(ctx, `select `+cols+` from asset where owner_org = $1 and library
+		and status in ('READY', 'FLAGGED') and (library_sku = any($2) or lower(file_name) = any($3))
+		order by created_at desc, id`, org, skus, lower)
+	if err != nil {
+		return nil, fmt.Errorf("lookup library: %w", err)
+	}
+	return collect(rows)
+}
+
+func (r *repoImpl) RemoveFromLibrary(ctx context.Context, id string) error {
+	tag, err := r.pool.Exec(ctx, `update asset set library = false, updated_at = now() where id = $1 and library`, id)
+	if err != nil {
+		return fmt.Errorf("remove from library: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *repoImpl) Ping(ctx context.Context) error {
 	if err := r.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("ping: %w", err)
@@ -179,7 +268,7 @@ func collect(rows pgx.Rows) ([]domain.Asset, error) {
 		var hash *int64
 		if err := rows.Scan(&a.ID, &a.OwnerOrg, &a.UploadedBy, &a.Purpose, &a.Provider, &a.Key, &a.URL, &a.FileName,
 			&a.ContentType, &a.Bytes, &a.Width, &a.Height, &a.Status, &flags, &a.CreatedAt, &moderation, &hash,
-			&a.Version); err != nil {
+			&a.Version, &a.Library, &a.SKU, &a.Slot); err != nil {
 			return nil, fmt.Errorf("scan asset: %w", err)
 		}
 		if err := json.Unmarshal(flags, &a.Flags); err != nil {
