@@ -88,7 +88,11 @@ func TestEveryEmailRendersOnTheBrandedLayout(t *testing.T) {
 		check(strings.Contains(h, "tel:&#43;18335550199") && strings.Contains(h, "1001 Texas Ave"), "no phone or address in the footer")
 		check(strings.Contains(h, "/legal/privacy") && strings.Contains(h, "/account/security"), "no legal or preferences links")
 		check(strings.Contains(h, "app-store.png") && strings.Contains(h, "google-play.png"), "no app store badges")
-		check(strings.Contains(h, `name="color-scheme"`) && strings.Contains(h, "prefers-color-scheme: dark"), "no dark-mode support")
+		// Light only in every client: a white body between the black header and footer, never a dark-grey variant.
+		check(strings.Contains(h, `<meta name="color-scheme" content="light only">`) && strings.Contains(h, `<meta name="supported-color-schemes" content="light">`),
+			"not declared light-only")
+		check(!strings.Contains(h, "prefers-color-scheme") && !strings.Contains(h, "data-ogsc"), "a dark-mode variant")
+		check(strings.Contains(h, `class="at-card at-pad" style="background-color:#FFFFFF;`), "the body is not white")
 		check(strings.Contains(h, "max-width:600px") && strings.Contains(h, "@media only screen and (max-width: 620px)"), "not 600px / responsive")
 		check(strings.Contains(h, "display:none;font-size:1px"), "no hidden preheader")
 		check(!linkCSS.MatchString(h) && !scriptTag.MatchString(h), "external CSS or a script")
