@@ -23,34 +23,37 @@ tags:
 - name: Billing adjustments
   description: Staff per-seller billing panel and audited adjustments (credits, free days, waived invoices, trial overrides)
     with reason codes; billing:adjust to change. The Idempotency-Key header makes a retried request return the first grant.
+- name: Plan fee collection
+  description: 'How each organisation pays its plan (S298): from its sales first (EARNINGS_FIRST) or always by card (CARD).
+    Changes apply from the next invoice.'
 - name: Ship-from addresses
   description: Where a seller ships its own orders from (label purchase, rates, AfroTransact Delivery pickup). Members read;
     owner, admin and fulfilment members change them. Addresses are geocoded with geo-service when saved (position).
 - name: Plan catalogue
   description: AfroTransact owns plans, versions (prices per cadence and the default trial) and trial campaigns; Stripe only
     executes the charges. Staff with plans:manage change them; plans:manage, seller:billing or billing:adjust read them.
-- name: Onboarding
-  description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
-    Stripe verification, submit. No back-office access until final approval.'
 - name: Application review
   description: 'Two-step staff review. Step 1 (applications:review): approve → AWAITING_FINAL_APPROVAL, flag → FLAGGED, request
     info → INFO_REQUESTED. Step 2 (applications:approve, a different person): final approve → APPROVED (seller.org.approved),
     send back → PENDING_REVIEW, reject.'
-- name: Enforcement
-  description: 'Trust and Safety suspension of an organisation (sellers:enforce; staff or the trust-ops-service client). Separate
-    from Stripe compliance payout holds: reinstating releases only the suspension hold.'
 - name: Plans & billing
   description: Plan catalogue (public) and each organisation's Stripe Billing subscription. Owner and finance can view; only
     the owner changes billing.
 - name: Stripe compliance
   description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
     Stripe is the source of truth and collects every answer in its embedded components; Account health is read-only.
+- name: Stripe webhooks
+  description: Signature-verified (Stripe-Signature) and de-duplicated by event id
+- name: Onboarding
+  description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
+    Stripe verification, submit. No back-office access until final approval.'
+- name: Enforcement
+  description: 'Trust and Safety suspension of an organisation (sellers:enforce; staff or the trust-ops-service client). Separate
+    from Stripe compliance payout holds: reinstating releases only the suspension hold.'
 - name: Organisations
   description: Seller and provider organisations
 - name: Metered usage
   description: FBA storage, sponsored-products spend and AI credits billed on Stripe Billing meters (S206)
-- name: Stripe webhooks
-  description: Signature-verified (Stripe-Signature) and de-duplicated by event id
 - name: Rewards
   description: Reward rules (staff with plans:manage), the grants log, and the rewards an organisation can earn (owner / finance)
 paths:
@@ -704,6 +707,37 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/RewardRule'
+  /v1/billing/settings:
+    get:
+      tags:
+      - Plan fee collection
+      summary: 'Platform billing settings: the kill switch and the default for new sellers (billing staff)'
+      operationId: billingSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingSettings'
+    put:
+      tags:
+      - Plan fee collection
+      summary: Set how new sellers pay their plan unless they choose (plans:manage)
+      operationId: updateBillingSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BillingSettingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BillingSettings'
   /v1/billing/stripe-sync:
     get:
       tags:
@@ -1204,32 +1238,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/BillingGrant'
-  /v1/orgs/{orgId}/billing/earnings-collection:
-    put:
-      tags:
-      - Billing adjustments
-      summary: Opt the organisation in or out of collecting plan fees from earnings (billing:adjust)
-      description: 409 seller.earnings-collection-off while the platform flag is off.
-      operationId: setEarningsCollection
-      parameters:
-      - name: orgId
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EarningsCollectionRequest'
-        required: true
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/BillingPanel'
   /v1/orgs/{orgId}/billing/free-days:
     post:
       tags:
@@ -1483,6 +1491,78 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ChangePlanResponse'
+  /v1/orgs/{orgId}/billing/plan-fee-collection:
+    get:
+      tags:
+      - Plan fee collection
+      summary: How the organisation pays its plan, with the change log (owner / finance, billing staff)
+      operationId: planFeeCollection
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeCollection'
+    put:
+      tags:
+      - Plan fee collection
+      summary: Pay the plan from sales (EARNINGS_FIRST) or always by card (CARD) (owner / finance)
+      description: Applies from the next invoice. 409 seller.earnings-collection-off while the kill switch COLLECT_PLAN_FEES_FROM_EARNINGS
+        is off.
+      operationId: choosePlanFeeCollection
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeeCollectionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeCollection'
+  /v1/orgs/{orgId}/billing/plan-fee-collection/override:
+    put:
+      tags:
+      - Plan fee collection
+      summary: Staff override of how the organisation pays its plan (billing:adjust)
+      description: Audited with a billing reason code (OTHER needs a note). Applies from the next invoice. 409 seller.earnings-collection-off
+        while the kill switch is off.
+      operationId: overridePlanFeeCollection
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanFeeCollectionOverrideRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlanFeeCollection'
   /v1/orgs/{orgId}/billing/plan/preview:
     get:
       tags:
@@ -1984,7 +2064,10 @@ paths:
     post:
       tags:
       - Stripe webhooks
-      summary: 'Billing events: invoice.paid, invoice.payment_failed, customer.subscription.updated/deleted'
+      summary: 'Billing events: invoice.created/finalized/paid/payment_failed/voided/deleted, credit_note.created, customer.subscription.created/updated/deleted'
+      description: 'invoice.created claims a renewal invoice of an organisation that pays its plan from its sales and collects
+        it at once (S298). 503 while that collection failed for a transient reason: Stripe redelivers and keeps the invoice
+        a draft until we acknowledge it.'
       operationId: stripeBillingWebhook
       parameters:
       - name: Stripe-Signature
@@ -2000,7 +2083,13 @@ paths:
         required: true
       responses:
         '200':
-          description: OK
+          description: Applied (or a duplicate)
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WebhookResult'
+        '503':
+          description: 'Retry later: paying the invoice from sales is still pending'
           content:
             '*/*':
               schema:
@@ -2226,354 +2315,116 @@ components:
           description: Version being edited; 409 when it changed
       required:
       - enabled
-    EarningsCollectionRequest:
+    PlanFeeCollectionRequest:
       type: object
       properties:
-        enabled:
-          type: boolean
-    Billing:
-      type: object
-      properties:
-        orgId:
-          type: string
-        planCode:
-          type: string
-        planName:
-          type: string
-        cadence:
-          type: string
-        status:
-          type: string
-        price:
-          $ref: '#/components/schemas/PlanPrice'
-        trialEndsAt:
-          type: string
-          format: date-time
-        currentPeriodEnd:
-          type: string
-          format: date-time
-        nextChargeAt:
-          type: string
-          format: date-time
-        nextChargeCents:
-          type: integer
-          format: int64
-        nextChargeLabel:
-          type: string
-        cancelAtPeriodEnd:
-          type: boolean
-        pendingChange:
-          $ref: '#/components/schemas/PendingPlanChange'
-        dunning:
-          type: string
-        failedPaymentAttempts:
-          type: integer
-          format: int32
-        paymentMethods:
-          type: array
-          items:
-            $ref: '#/components/schemas/PaymentMethod'
-        planVersion:
-          type: integer
-          format: int32
-          description: Plan version (prices) the organisation is on
-        creditBalanceCents:
-          type: integer
-          format: int64
-          description: Stripe customer credit balance the next invoices use
-        trialSource:
+        mode:
           type: string
           enum:
-          - PLAN
-          - CAMPAIGN
-          - OVERRIDE
-          - NONE
-        trialDaysOverride:
-          type: integer
-          format: int32
-        collectFromEarnings:
-          type: boolean
-    BillingGrant:
+          - EARNINGS_FIRST
+          - CARD
+    PlanFeeCollection:
       type: object
-      description: A reward or staff adjustment and the Stripe objects it produced
+      description: 'How the organisation pays its plan: EARNINGS_FIRST takes each invoice from pending earnings and charges
+        the card only for the rest; CARD always charges the card'
       properties:
-        id:
-          type: string
         orgId:
           type: string
+        available:
+          type: boolean
+          description: 'The kill switch is on: the choice is offered and honoured'
+        mode:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        effective:
+          type: string
+          description: What the next invoice uses (CARD while the kill switch is off)
+          enum:
+          - EARNINGS_FIRST
+          - CARD
         source:
           type: string
           enum:
-          - RULE
-          - MANUAL
-        ruleId:
+          - DEFAULT
+          - ONBOARDING
+          - SELLER
+          - STAFF
+        changedAt:
           type: string
-        type:
+          format: date-time
+        changedBy:
+          type: string
+        platformDefault:
           type: string
           enum:
-          - FREE_DAYS
-          - CREDIT
-          - PERCENT_OFF
-          - WAIVE_INVOICE
-          - TRIAL_END
-        creditCents:
-          type: integer
-          format: int64
-        freeDays:
-          type: integer
-          format: int32
-        percentOff:
-          type: number
-        durationInvoices:
-          type: integer
-          format: int32
-        invoiceId:
-          type: string
-        status:
-          type: string
-          enum:
-          - PENDING
-          - APPLIED
-          - FAILED
-        reasonCode:
-          type: string
-        note:
-          type: string
-        summary:
-          type: string
-        actorId:
-          type: string
-        metric:
-          type: string
-        metricValue:
-          type: integer
-          format: int64
-        stripeCustomerId:
-          type: string
-        stripeSubscriptionId:
-          type: string
-        stripeBalanceTransactionId:
-          type: string
-        stripeCouponId:
-          type: string
-        previousTrialEnd:
+          - EARNINGS_FIRST
+          - CARD
+        appliesFromInvoiceAt:
           type: string
           format: date-time
-        newTrialEnd:
+          description: A change applies from the invoice of this date (next renewal); null without a paid plan
+        appliesFromLabel:
           type: string
-          format: date-time
-        attempts:
-          type: integer
-          format: int32
-        lastError:
+          description: e.g. Applies from your next invoice, on Nov 9, 2026
+        inProgressInvoiceId:
           type: string
-        createdAt:
-          type: string
-          format: date-time
-        appliedAt:
-          type: string
-          format: date-time
-    BillingPanel:
-      type: object
-      description: Staff per-seller billing panel; billing is null before the organisation has a subscription
-      properties:
-        orgId:
-          type: string
-        orgName:
-          type: string
-        kind:
-          type: string
-        orgStatus:
-          type: string
-        billing:
-          $ref: '#/components/schemas/Billing'
-        invoices:
+          description: An invoice being collected now keeps the choice it was created with
+        history:
           type: array
           items:
-            $ref: '#/components/schemas/Invoice'
-        grants:
-          type: array
-          items:
-            $ref: '#/components/schemas/BillingGrant'
-        collections:
-          type: array
-          items:
-            $ref: '#/components/schemas/EarningsCollection'
-        earningsCollectionEnabled:
-          type: boolean
-    EarningsCollection:
+            $ref: '#/components/schemas/PlanFeeCollectionChange'
+    PlanFeeCollectionChange:
       type: object
-      properties:
-        invoiceId:
-          type: string
-        amountCents:
-          type: integer
-          format: int64
-        status:
-          type: string
-          enum:
-          - REQUESTED
-          - WITHHELD
-          - CREDITED
-          - DECLINED
-          - FAILED
-        paymentsReference:
-          type: string
-        stripeBalanceTransactionId:
-          type: string
-        reason:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-    FirstCharge:
-      type: object
-      properties:
-        chargeOn:
-          type: string
-          format: date
-        amountCents:
-          type: integer
-          format: int64
-        sentence:
-          type: string
-    Invoice:
-      type: object
-      properties:
-        id:
-          type: string
-        number:
-          type: string
-        periodStart:
-          type: string
-          format: date-time
-        periodEnd:
-          type: string
-          format: date-time
-        amountDueCents:
-          type: integer
-          format: int64
-        amountPaidCents:
-          type: integer
-          format: int64
-        currency:
-          type: string
-        status:
-          type: string
-        billingReason:
-          type: string
-        hostedInvoiceUrl:
-          type: string
-        invoicePdf:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        lines:
-          type: array
-          items:
-            $ref: '#/components/schemas/InvoiceLine'
-        meteredAmountCents:
-          type: integer
-          format: int64
-          description: Sum of the metered usage lines
-    InvoiceLine:
-      type: object
-      description: Plan, proration or metered usage line (S206)
-      properties:
-        description:
-          type: string
-        amountCents:
-          type: integer
-          format: int64
-        quantity:
-          type: integer
-          format: int64
-        metered:
-          type: boolean
-        meter:
-          type: string
-          description: Usage meter of a metered line
-          enum:
-          - FBA_STORAGE
-          - ADS_SPEND
-          - AI_CREDITS
-        periodStart:
-          type: string
-          format: date-time
-        periodEnd:
-          type: string
-          format: date-time
-    PaymentMethod:
-      type: object
-      description: Card (brand, last 4, expiry) or bank (name, type, last 4)
+      description: One change of an organisation's choice
       properties:
         id:
           type: string
           format: uuid
-        kind:
+        previous:
           type: string
-        brand:
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        mode:
           type: string
-        last4:
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        source:
           type: string
-        expMonth:
-          type: integer
-          format: int32
-        expYear:
-          type: integer
-          format: int32
-        bankName:
+          enum:
+          - ONBOARDING
+          - SELLER
+          - STAFF
+        actorId:
           type: string
-        accountType:
+        reasonCode:
           type: string
-        verified:
-          type: boolean
-        receivesPayouts:
-          type: boolean
-        isDefault:
-          type: boolean
-        label:
+          description: 'Staff overrides: billing reason code'
+        note:
           type: string
-    PendingPlanChange:
-      type: object
-      description: Downgrade or cadence change applied at renewal
-      properties:
-        planCode:
-          type: string
-        planName:
-          type: string
-        cadence:
-          type: string
-        effectiveAt:
+        appliesFrom:
           type: string
           format: date-time
-    PlanPrice:
+          description: The next invoice when it changed
+        createdAt:
+          type: string
+          format: date-time
+    PlanFeeCollectionOverrideRequest:
       type: object
-      description: Price of a plan for one cadence; amounts in cents (USD)
+      description: Staff override, audited with a reason code (OTHER needs a note)
       properties:
-        cadence:
+        mode:
           type: string
-        months:
-          type: integer
-          format: int32
-        totalCents:
-          type: integer
-          format: int64
-        perMonthCents:
-          type: integer
-          format: int64
-        savingCents:
-          type: integer
-          format: int64
-        perMonthLabel:
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        reasonCode:
           type: string
-        billedLabel:
+        note:
           type: string
-        savingLabel:
-          type: string
-        firstCharge:
-          $ref: '#/components/schemas/FirstCharge'
     TrialCampaignRequest:
       type: object
       description: A promo code, a sign-up window, or both
@@ -2657,6 +2508,32 @@ components:
         version:
           type: integer
           format: int64
+    BillingSettingsRequest:
+      type: object
+      properties:
+        planFeeCollectionDefault:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+    BillingSettings:
+      type: object
+      description: Platform billing settings (staff console › Plans & billing)
+      properties:
+        earningsCollectionEnabled:
+          type: boolean
+          description: The kill switch COLLECT_PLAN_FEES_FROM_EARNINGS
+        planFeeCollectionDefault:
+          type: string
+          description: How new sellers pay their plan unless they choose
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
     RewardRuleRequest:
       type: object
       description: Reach threshold of metric (optionally in the last windowDays days and/or within withinDaysOfApproval days
@@ -3101,6 +2978,12 @@ components:
         promoCode:
           type: string
           description: Trial campaign promo code (optional)
+        planFeeCollection:
+          type: string
+          description: 'How the plan will be paid (S298): from sales first or always by card; omit for the platform default'
+          enum:
+          - EARNINGS_FIRST
+          - CARD
     CatalogComplianceStep:
       type: object
       description: Step 'catalog-compliance'
@@ -3187,6 +3070,8 @@ components:
           type: boolean
         outcome:
           type: string
+        retryLater:
+          type: boolean
     ProvisionOrgRequest:
       type: object
       properties:
@@ -3373,6 +3258,86 @@ components:
           type: string
         note:
           type: string
+    BillingGrant:
+      type: object
+      description: A reward or staff adjustment and the Stripe objects it produced
+      properties:
+        id:
+          type: string
+        orgId:
+          type: string
+        source:
+          type: string
+          enum:
+          - RULE
+          - MANUAL
+        ruleId:
+          type: string
+        type:
+          type: string
+          enum:
+          - FREE_DAYS
+          - CREDIT
+          - PERCENT_OFF
+          - WAIVE_INVOICE
+          - TRIAL_END
+        creditCents:
+          type: integer
+          format: int64
+        freeDays:
+          type: integer
+          format: int32
+        percentOff:
+          type: number
+        durationInvoices:
+          type: integer
+          format: int32
+        invoiceId:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPLIED
+          - FAILED
+        reasonCode:
+          type: string
+        note:
+          type: string
+        summary:
+          type: string
+        actorId:
+          type: string
+        metric:
+          type: string
+        metricValue:
+          type: integer
+          format: int64
+        stripeCustomerId:
+          type: string
+        stripeSubscriptionId:
+          type: string
+        stripeBalanceTransactionId:
+          type: string
+        stripeCouponId:
+          type: string
+        previousTrialEnd:
+          type: string
+          format: date-time
+        newTrialEnd:
+          type: string
+          format: date-time
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        appliedAt:
+          type: string
+          format: date-time
     BillingSetupIntent:
       type: object
       properties:
@@ -3383,6 +3348,153 @@ components:
         clientSecret:
           type: string
           description: Confirm with Stripe.js / PaymentSheet
+    Billing:
+      type: object
+      properties:
+        orgId:
+          type: string
+        planCode:
+          type: string
+        planName:
+          type: string
+        cadence:
+          type: string
+        status:
+          type: string
+        price:
+          $ref: '#/components/schemas/PlanPrice'
+        trialEndsAt:
+          type: string
+          format: date-time
+        currentPeriodEnd:
+          type: string
+          format: date-time
+        nextChargeAt:
+          type: string
+          format: date-time
+        nextChargeCents:
+          type: integer
+          format: int64
+        nextChargeLabel:
+          type: string
+        cancelAtPeriodEnd:
+          type: boolean
+        pendingChange:
+          $ref: '#/components/schemas/PendingPlanChange'
+        dunning:
+          type: string
+        failedPaymentAttempts:
+          type: integer
+          format: int32
+        paymentMethods:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethod'
+        planVersion:
+          type: integer
+          format: int32
+          description: Plan version (prices) the organisation is on
+        creditBalanceCents:
+          type: integer
+          format: int64
+          description: Stripe customer credit balance the next invoices use
+        trialSource:
+          type: string
+          enum:
+          - PLAN
+          - CAMPAIGN
+          - OVERRIDE
+          - NONE
+        trialDaysOverride:
+          type: integer
+          format: int32
+        planFeeCollection:
+          type: string
+          description: 'How the plan is paid (S298); details: GET /v1/orgs/{orgId}/billing/plan-fee-collection'
+          enum:
+          - EARNINGS_FIRST
+          - CARD
+    FirstCharge:
+      type: object
+      properties:
+        chargeOn:
+          type: string
+          format: date
+        amountCents:
+          type: integer
+          format: int64
+        sentence:
+          type: string
+    PaymentMethod:
+      type: object
+      description: Card (brand, last 4, expiry) or bank (name, type, last 4)
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        brand:
+          type: string
+        last4:
+          type: string
+        expMonth:
+          type: integer
+          format: int32
+        expYear:
+          type: integer
+          format: int32
+        bankName:
+          type: string
+        accountType:
+          type: string
+        verified:
+          type: boolean
+        receivesPayouts:
+          type: boolean
+        isDefault:
+          type: boolean
+        label:
+          type: string
+    PendingPlanChange:
+      type: object
+      description: Downgrade or cadence change applied at renewal
+      properties:
+        planCode:
+          type: string
+        planName:
+          type: string
+        cadence:
+          type: string
+        effectiveAt:
+          type: string
+          format: date-time
+    PlanPrice:
+      type: object
+      description: Price of a plan for one cadence; amounts in cents (USD)
+      properties:
+        cadence:
+          type: string
+        months:
+          type: integer
+          format: int32
+        totalCents:
+          type: integer
+          format: int64
+        perMonthCents:
+          type: integer
+          format: int64
+        savingCents:
+          type: integer
+          format: int64
+        perMonthLabel:
+          type: string
+        billedLabel:
+          type: string
+        savingLabel:
+          type: string
+        firstCharge:
+          $ref: '#/components/schemas/FirstCharge'
     ChangePlanRequest:
       type: object
       properties:
@@ -3948,6 +4060,9 @@ components:
         updatedAt:
           type: string
           format: date-time
+        planFeeCollectionOption:
+          $ref: '#/components/schemas/PlanFeeCollectionOption'
+          description: Whether the Plan step offers paying the plan from sales, and the platform default (S298)
     BusinessDetails:
       type: object
       description: Tax ID is masked (last 4) unless the reviewer has applications:pii; dates of birth are year-only for masked
@@ -4094,6 +4209,17 @@ components:
           type: boolean
         bankStatus:
           type: string
+    PlanFeeCollectionOption:
+      type: object
+      description: What the onboarding Plan step offers
+      properties:
+        available:
+          type: boolean
+        platformDefault:
+          type: string
+          enum:
+          - EARNINGS_FIRST
+          - CARD
     PlanSelection:
       type: object
       properties:
@@ -4119,6 +4245,12 @@ components:
           $ref: '#/components/schemas/FirstCharge'
         promoCode:
           type: string
+        planFeeCollection:
+          type: string
+          description: The applicant's choice; null keeps the platform default
+          enum:
+          - EARNINGS_FIRST
+          - CARD
     StripeVerification:
       type: object
       properties:
@@ -4411,6 +4543,168 @@ components:
           format: date-time
         trialing:
           type: boolean
+    BillingPanel:
+      type: object
+      description: Staff per-seller billing panel; billing is null before the organisation has a subscription
+      properties:
+        orgId:
+          type: string
+        orgName:
+          type: string
+        kind:
+          type: string
+        orgStatus:
+          type: string
+        billing:
+          $ref: '#/components/schemas/Billing'
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invoice'
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingGrant'
+        collections:
+          type: array
+          items:
+            $ref: '#/components/schemas/EarningsCollection'
+        earningsCollectionEnabled:
+          type: boolean
+        planFeeCollection:
+          $ref: '#/components/schemas/PlanFeeCollection'
+          description: How the plan is paid (S298); null before the subscription exists
+    EarningsCollection:
+      type: object
+      description: One plan invoice paid (or asked to be paid) from earnings
+      properties:
+        invoiceId:
+          type: string
+        invoiceNumber:
+          type: string
+        invoiceAmountCents:
+          type: integer
+          format: int64
+          description: Invoice amount when Stripe created it
+        amountCents:
+          type: integer
+          format: int64
+          description: Asked from earnings (the invoice less the credit balance)
+        withheldCents:
+          type: integer
+          format: int64
+        creditedCents:
+          type: integer
+          format: int64
+        releasedCents:
+          type: integer
+          format: int64
+        paidFromSalesCents:
+          type: integer
+          format: int64
+          description: 'Paid from sales: credited less released'
+        status:
+          type: string
+          enum:
+          - REQUESTED
+          - WITHHELD
+          - CREDITED
+          - DECLINED
+          - MISSED
+          - FAILED
+          - RELEASED
+        paymentsReference:
+          type: string
+        stripeBalanceTransactionId:
+          type: string
+        reason:
+          type: string
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        amountDueCents:
+          type: integer
+          format: int64
+        amountPaidCents:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+        billingReason:
+          type: string
+        hostedInvoiceUrl:
+          type: string
+        invoicePdf:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLine'
+        meteredAmountCents:
+          type: integer
+          format: int64
+          description: Sum of the metered usage lines
+        paidFromSalesCents:
+          type: integer
+          format: int64
+          description: 'Paid from the organisation''s sales (S298): withheld from its earnings and credited to the invoice'
+        paidByCardCents:
+          type: integer
+          format: int64
+          description: 'Paid (or, while open, due) by card or bank: the rest'
+    InvoiceLine:
+      type: object
+      description: Plan, proration or metered usage line (S206)
+      properties:
+        description:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+          format: int64
+        metered:
+          type: boolean
+        meter:
+          type: string
+          description: Usage meter of a metered line
+          enum:
+          - FBA_STORAGE
+          - ADS_SPEND
+          - AI_CREDITS
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
     OrgPublicView:
       type: object
       properties:
