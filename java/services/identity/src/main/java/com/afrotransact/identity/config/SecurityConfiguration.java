@@ -89,7 +89,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 class SecurityConfiguration {
 
     private static final String[] PUBLIC_BROWSER_PATHS = {
-        "/", "/login", "/login/mfa", "/login/mfa/**", "/login/forgot", "/signup", "/signup/**", "/assets/**",
+        "/", "/login", "/login/mfa", "/login/mfa/**", "/login/forgot", "/login/forgot/**", "/signup", "/signup/**", "/assets/**",
         "/error", "/favicon.ico", "/.well-known/appspecific/**",
         "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc"
@@ -143,7 +143,8 @@ class SecurityConfiguration {
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.POST, "/v1/accounts", "/v1/accounts/verification",
-                                "/v1/accounts/verification/resend", "/v1/invitations/lookup").permitAll()
+                                "/v1/accounts/verification/resend", "/v1/invitations/lookup", "/v1/password-reset",
+                                "/v1/password-reset/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/v1/identity-providers").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs.jwt(j -> j.jwtAuthenticationConverter(jwtConverter())));

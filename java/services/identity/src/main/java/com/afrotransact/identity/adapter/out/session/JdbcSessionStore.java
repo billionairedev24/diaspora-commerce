@@ -67,6 +67,13 @@ class JdbcSessionStore implements SessionStore {
                 .param("u", userId.toString()).param("keep", keep).update();
     }
 
+    /** Spring Session JDBC indexes the signed-in principal (the user id); attributes go with the row (cascade). */
+    @Override
+    public int endBrowserSessions(UUID userId) {
+        return jdbc.sql("delete from spring_session where principal_name = :u")
+                .param("u", userId.toString()).update();
+    }
+
     private String authorizationId(String accessToken) {
         OAuth2Authorization a = authorizations.findByToken(accessToken, OAuth2TokenType.ACCESS_TOKEN);
         return a == null ? null : a.getId();

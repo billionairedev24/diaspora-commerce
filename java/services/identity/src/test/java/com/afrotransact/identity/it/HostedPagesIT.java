@@ -6,6 +6,7 @@ import java.net.URLEncoder;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -47,6 +48,9 @@ class HostedPagesIT {
     private static final String SELLER_CALLBACK = "http://localhost:3001/api/bff/v1/auth/oidc/callback";
     private static final String STAFF_CALLBACK = "http://localhost:3002/api/bff/v1/auth/oidc/callback";
     private static final String PASSWORD = "Plantain-Jollof-2026";
+    private static final String STOREFRONT_SIGNED_OUT = "http://localhost:3000/api/bff/v1/auth/signed-out/storefront";
+    private static final String SELLER_SIGNED_OUT = "http://localhost:3001/api/bff/v1/auth/signed-out/seller-center";
+    private static final String STAFF_SIGNED_OUT = "http://localhost:3002/api/bff/v1/auth/signed-out/staff-console";
 
     @LocalServerPort
     private int port;
@@ -84,7 +88,34 @@ class HostedPagesIT {
 
         assertThat(new BrowserSession(base()).get(base() + "/assets/tokens.css").body()).contains("--at-gold-500");
         assertThat(new BrowserSession(base()).get(base() + "/login/forgot").body())
-                .contains("Forgot your password?", "Contact support", "http://localhost:3000/help");
+                .contains("Forgot your password?", "Send code", "Contact support", "http://localhost:3000/help");
+    }
+
+    /**
+     * Pages opened without an authorization request (a bookmark, a stale logout, the "forgot password" link of a page
+     * whose request expired) are neutral AfroTransact pages: never the staff console's (nor another app's) branding.
+     */
+    @Test
+    void pagesWithoutAnAppAreNeutralAndStaffBrandingNeedsTheStaffConsole() {
+        for (String path : List.of("/login", "/login?logout", "/login/forgot", "/signup")) {
+            String page = new BrowserSession(base()).get(base() + path).body();
+            assertThat(page).as(path).contains("data-app=\"neutral\"", "One account for all of AfroTransact.")
+                    .doesNotContain("Staff console", "@afrotransact.com account", "Seller Center");
+        }
+        // Each app's pages, all the way to "forgot password", keep that app's branding.
+        BrowserSession seller = new BrowserSession(base());
+        seller.get(login(seller, authorize(SELLER_CALLBACK, "", "f1")));
+        assertThat(seller.get(base() + "/login/forgot").body()).contains("data-app=\"seller\"", "Seller Center")
+                .doesNotContain("Staff console");
+        BrowserSession staff = new BrowserSession(base());
+        staff.get(login(staff, authorize(STAFF_CALLBACK, "", "f2")));
+        assertThat(staff.get(base() + "/login/forgot").body()).contains("data-app=\"staff\"", "Staff console",
+                "Two-step verification is still required", "ask an access administrator");
+        assertThat(staff.get(base() + "/signup").body()).contains("data-app=\"staff\"")
+                .doesNotContain("Create account");
+        // The error page carries no app branding at all.
+        assertThat(new BrowserSession(base()).get(base() + "/oauth2/authorize?response_type=code&client_id=nope")
+                .body()).contains("Something went wrong").doesNotContain("Staff console", "data-app");
     }
 
     @Test
@@ -205,10 +236,10 @@ class HostedPagesIT {
                 sellerVerifier).status()).isEqualTo(200);
 
         // RP-initiated logout (what the BFF's sign-out sends the browser to) ends the identity session and returns
-        // to the app that signed out.
+        // to the signed-out landing of the app that signed out, with the BFF's state (the page to come back to).
         HttpResponse<String> logout = s.get(base() + "/connect/logout?id_token_hint=" + enc(shop.idToken())
-                + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc("http://localhost:3002/"));
-        assertThat(BrowserSession.location(logout)).isEqualTo("http://localhost:3002/");
+                + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc(STAFF_SIGNED_OUT) + "&state=%2Forders");
+        assertThat(BrowserSession.location(logout)).isEqualTo(STAFF_SIGNED_OUT + "?state=%2Forders");
         assertThat(BrowserSession.location(s.get(authorizeUrl(STAFF_CALLBACK, "", BrowserSession.randomVerifier()))))
                 .endsWith("/login");
 
@@ -229,10 +260,63 @@ class HostedPagesIT {
         // A logout whose ID token no longer matches the session (it was rotated by signing in again) still signs
         // out and returns to a registered page.
         HttpResponse<String> stale = s.get(base() + "/connect/logout?id_token_hint=" + enc(shop.idToken())
-                + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc("http://localhost:3001/"));
-        assertThat(BrowserSession.location(stale)).isEqualTo("http://localhost:3001/");
+                + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc(SELLER_SIGNED_OUT));
+        assertThat(BrowserSession.location(stale)).isEqualTo(SELLER_SIGNED_OUT);
         assertThat(BrowserSession.location(s.get(authorizeUrl(SELLER_CALLBACK, "", BrowserSession.randomVerifier()))))
                 .endsWith("/login");
+    }
+
+    /**
+     * Single sign-out from each web app: identity validates the post-logout URI registered for that app and sends the
+     * browser there (the BFF then shows the storefront signed out, or starts that app's own sign-in). The sign-in the
+     * BFF starts right after (prompt=login, notice=signed_out) is that app's branded page saying so.
+     */
+    @Test
+    void eachAppSignsOutToItsOwnRegisteredLandingAndItsOwnBrandedSignIn() {
+        String email = verifiedAccount();
+        Map<String, String> apps = Map.of(STOREFRONT_CALLBACK, STOREFRONT_SIGNED_OUT, SELLER_CALLBACK,
+                SELLER_SIGNED_OUT, STAFF_CALLBACK, STAFF_SIGNED_OUT);
+        apps.forEach((callback, signedOut) -> {
+            BrowserSession s = new BrowserSession(base());
+            Tokens t = signInTo(s, email, callback);
+            HttpResponse<String> logout = s.get(base() + "/connect/logout?id_token_hint=" + enc(t.idToken())
+                    + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc(signedOut));
+            assertThat(BrowserSession.location(logout)).as(callback).isEqualTo(signedOut);
+            // Signed out of identity too: the next authorization asks for credentials again.
+            assertThat(BrowserSession.location(s.get(authorizeUrl(callback, "", BrowserSession.randomVerifier()))))
+                    .endsWith("/login");
+        });
+
+        BrowserSession seller = new BrowserSession(base());
+        String page = seller.get(login(seller, authorize(SELLER_CALLBACK, "&prompt=login&notice=signed_out", "so")))
+                .body();
+        assertThat(page).contains("Sign in to Seller Center", "You’ve been signed out.").doesNotContain("Staff console");
+        BrowserSession staff = new BrowserSession(base());
+        assertThat(staff.get(login(staff, authorize(STAFF_CALLBACK, "&prompt=login&notice=signed_out", "st"))).body())
+                .contains("Sign in to the staff console", "You’ve been signed out.");
+
+        // A post-logout URI that is not registered for the client (the old home pages) is never followed: the
+        // browser is signed out and lands on identity's neutral signed-out page.
+        BrowserSession other = new BrowserSession(base());
+        Tokens t = signInTo(other, email, SELLER_CALLBACK);
+        HttpResponse<String> foreign = other.get(base() + "/connect/logout?id_token_hint=" + enc(t.idToken())
+                + "&client_id=" + BFF + "&post_logout_redirect_uri=" + enc("http://localhost:3001/"));
+        assertThat(BrowserSession.location(foreign)).endsWith("/login?logout");
+        assertThat(other.get(base() + "/login?logout").body()).contains("You’ve been signed out.",
+                "data-app=\"neutral\"").doesNotContain("Staff console");
+    }
+
+    private Tokens signInTo(BrowserSession s, String email, String callback) {
+        String verifier = BrowserSession.randomVerifier();
+        String loginPage = BrowserSession.location(s.get(authorizeUrl(callback, "", verifier)));
+        HttpResponse<String> page = s.get(absolute(loginPage));
+        HttpResponse<String> posted = s.form("/login", Map.of("username", email, "password", PASSWORD,
+                "_csrf", BrowserSession.csrfOf(page.body())));
+        String issued = BrowserSession.location(s.get(absolute(BrowserSession.location(posted))));
+        assertThat(issued).startsWith(callback + "?code=");
+        Tokens t = s.exchangeConfidential(BFF, BFF_SECRET, callback, BrowserSession.code(issued), verifier);
+        assertThat(t.status()).as(t.body()).isEqualTo(200);
+        return t;
     }
 
     @Test

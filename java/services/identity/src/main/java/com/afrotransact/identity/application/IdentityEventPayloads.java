@@ -36,6 +36,16 @@ public final class IdentityEventPayloads {
     public record Recipient(String id, String email, String phone) {
     }
 
+    /** {@code identity.password-reset.federated}: sign in with the linked provider (display names) instead. */
+    public record PasswordResetFederated(Recipient recipient, String userId, String firstName, List<String> providers,
+                                         boolean transactional) {
+    }
+
+    /** {@code identity.password.changed}: method RESET; sessionsRevoked = apps and devices signed out. */
+    public record PasswordChanged(Recipient recipient, String userId, String firstName, String method,
+                                  Instant changedAt, int sessionsRevoked, boolean transactional) {
+    }
+
     /**
      * {@code identity.role.granted} / {@code identity.role.revoked}.
      *

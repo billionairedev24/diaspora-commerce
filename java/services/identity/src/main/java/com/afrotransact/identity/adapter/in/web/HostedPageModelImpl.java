@@ -58,7 +58,7 @@ class HostedPageModelImpl implements HostedPageModel {
             points.add(new HostedBrand.Point(text(p + "point" + i + ".icon", locale),
                     text(p + "point" + i + ".title", locale), text(p + "point" + i + ".text", locale)));
         }
-        String badge = app == HostedApp.SHOP ? null : text(p + "badge", locale);
+        String badge = app == HostedApp.SHOP || app == HostedApp.NEUTRAL ? null : text(p + "badge", locale);
         String specific = intent == null ? null : p + intent + "." + mode + ".";
         return new HostedBrand(app.key(), badge, copy(specific, p + mode + ".", "title", locale),
                 copy(specific, p + mode + ".", "tag", locale), copy(specific, p + mode + ".", "head", locale),
