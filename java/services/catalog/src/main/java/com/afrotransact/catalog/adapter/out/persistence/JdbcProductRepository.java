@@ -4,11 +4,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.Atin;
@@ -28,7 +31,7 @@ class JdbcProductRepository implements ProductRepository {
     private static final String SELECT = """
             select id, atin, owner_kind, owner_org, category_id, category_request_id, product_type, title,
                    attributes::text as attributes, images::text as images, variation_theme, status, moderation_note,
-                   created_at, updated_at, version, preorder_eligible, ships_now
+                   created_at, updated_at, version, preorder_eligible, ships_now, listing::text as listing
             from product
             """;
 
@@ -45,10 +48,10 @@ class JdbcProductRepository implements ProductRepository {
         jdbc.sql("""
                 insert into product (id, atin, owner_kind, owner_org, category_id, category_request_id, product_type,
                                      title, attributes, images, variation_theme, status, moderation_note,
-                                     created_at, updated_at, version, preorder_eligible, ships_now)
+                                     created_at, updated_at, version, preorder_eligible, ships_now, listing)
                 values (:id, :atin, :ownerKind, :ownerOrg, :categoryId, :categoryRequestId, :productType, :title,
                         cast(:attributes as jsonb), cast(:images as jsonb), :theme, :status, :note,
-                        :createdAt, :updatedAt, 0, :preorderEligible, :shipsNow)
+                        :createdAt, :updatedAt, 0, :preorderEligible, :shipsNow, cast(:listing as jsonb))
                 """)
                 .params(params(p))
                 .update();
@@ -65,7 +68,7 @@ class JdbcProductRepository implements ProductRepository {
                        attributes = cast(:attributes as jsonb), images = cast(:images as jsonb),
                        variation_theme = :theme, status = :status, moderation_note = :note,
                        preorder_eligible = :preorderEligible, ships_now = :shipsNow,
-                       updated_at = :updatedAt, version = version + 1
+                       listing = cast(:listing as jsonb), updated_at = :updatedAt, version = version + 1
                 where id = :id and version = :version
                 """)
                 .params(params)
@@ -75,6 +78,37 @@ class JdbcProductRepository implements ProductRepository {
                     "Product " + p.id() + " was changed by someone else; reload and try again");
         }
         return findById(p.id()).orElseThrow();
+    }
+
+    @Override
+    public Product updateWithVariants(Product p) {
+        Product current = findById(p.id()).orElseThrow();
+        Set<UUID> kept = new HashSet<>();
+        p.variants().forEach(v -> kept.add(v.id()));
+        for (Variant old : current.variants()) {
+            if (!kept.contains(old.id())) {
+                jdbc.sql("delete from product_variant where id = :id").param("id", old.id()).update();
+            }
+        }
+        Set<UUID> existing = new HashSet<>();
+        current.variants().forEach(v -> existing.add(v.id()));
+        int position = 0;
+        for (Variant v : p.variants()) {
+            if (existing.contains(v.id())) {
+                jdbc.sql("""
+                        update product_variant set seller_sku = :sku, gtin = :gtin, gtin_exempt = :exempt,
+                               options = cast(:options as jsonb), price_minor = :price, currency = :currency,
+                               quantity = :quantity, position = :position, compare_at_minor = :compareAt,
+                               images = cast(:images as jsonb)
+                        where id = :id
+                        """)
+                        .params(variantParams(p, v, position++))
+                        .update();
+            } else {
+                insertVariant(p, v, position++);
+            }
+        }
+        return update(p);
     }
 
     @Override
@@ -146,6 +180,48 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public Optional<Product> findBySellerSku(String orgId, String sellerSku) {
+        return one(SELECT + " where id = (select product_id from product_variant where owner_org = :org and seller_sku = :v)",
+                "org", orgId, sellerSku);
+    }
+
+    @Override
+    public Map<String, SkuOwner> productsBySku(String orgId, Collection<String> sellerSkus) {
+        Map<String, SkuOwner> out = new HashMap<>();
+        List<String> all = List.copyOf(sellerSkus);
+        for (int from = 0; from < all.size(); from += 1000) {
+            jdbc.sql("""
+                    select v.seller_sku, v.product_id, p.product_type from product_variant v
+                    join product p on p.id = v.product_id
+                    where v.owner_org = :org and v.seller_sku in (:skus)
+                    """)
+                    .param("org", orgId).param("skus", all.subList(from, Math.min(all.size(), from + 1000)))
+                    .query((rs, n) -> out.put(rs.getString("seller_sku"),
+                            new SkuOwner(rs.getObject("product_id", UUID.class), rs.getString("product_type"))))
+                    .list();
+        }
+        return out;
+    }
+
+    @Override
+    public Set<String> takenSellerSkus(String orgId, Collection<String> sellerSkus) {
+        if (sellerSkus.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(jdbc.sql("select seller_sku from product_variant where owner_org = :org and seller_sku in (:skus)")
+                .param("org", orgId).param("skus", List.copyOf(sellerSkus)).query(String.class).list());
+    }
+
+    @Override
+    public Set<String> existingGtins(Collection<String> gtins) {
+        if (gtins.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(jdbc.sql("select distinct gtin from product_variant where gtin in (:gtins)")
+                .param("gtins", List.copyOf(gtins)).query(String.class).list());
+    }
+
+    @Override
     public boolean sellerSkuTaken(String orgId, String sellerSku) {
         return jdbc.sql("select exists(select 1 from product_variant where owner_org = :org and seller_sku = :sku)")
                 .param("org", orgId).param("sku", sellerSku).query(Boolean.class).single();
@@ -153,6 +229,11 @@ class JdbcProductRepository implements ProductRepository {
 
     private Optional<Product> one(String sql, Object value) {
         List<Product> found = jdbc.sql(sql).param("v", value).query(this::mapProduct).list();
+        return withVariants(found).stream().findFirst();
+    }
+
+    private Optional<Product> one(String sql, String name, Object param, Object value) {
+        List<Product> found = jdbc.sql(sql).param(name, param).param("v", value).query(this::mapProduct).list();
         return withVariants(found).stream().findFirst();
     }
 
@@ -175,32 +256,46 @@ class JdbcProductRepository implements ProductRepository {
         m.put("updatedAt", Timestamp.from(p.updatedAt()));
         m.put("preorderEligible", p.preorderEligible());
         m.put("shipsNow", p.shipsNow());
+        m.put("listing", json.write(p.details()));
         return m;
     }
 
     private void insertVariants(Product p) {
         int position = 0;
         for (Variant v : p.variants()) {
-            jdbc.sql("""
-                    insert into product_variant (id, product_id, atin, owner_org, seller_sku, gtin, gtin_exempt,
-                                                 options, price_minor, currency, quantity, position)
-                    values (:id, :productId, :atin, :org, :sku, :gtin, :exempt, cast(:options as jsonb),
-                            :price, :currency, :quantity, :position)
-                    """)
-                    .param("id", v.id())
-                    .param("productId", p.id())
-                    .param("atin", v.atin().value())
-                    .param("org", p.owner().orgId())
-                    .param("sku", v.sellerSku())
-                    .param("gtin", v.gtin())
-                    .param("exempt", v.gtinExempt())
-                    .param("options", json.write(v.options()))
-                    .param("price", v.priceMinor())
-                    .param("currency", v.currency())
-                    .param("quantity", v.quantity())
-                    .param("position", position++)
-                    .update();
+            insertVariant(p, v, position++);
         }
+    }
+
+    private void insertVariant(Product p, Variant v, int position) {
+        jdbc.sql("""
+                insert into product_variant (id, product_id, atin, owner_org, seller_sku, gtin, gtin_exempt,
+                                             options, price_minor, currency, quantity, position, compare_at_minor,
+                                             images)
+                values (:id, :productId, :atin, :org, :sku, :gtin, :exempt, cast(:options as jsonb),
+                        :price, :currency, :quantity, :position, :compareAt, cast(:images as jsonb))
+                """)
+                .params(variantParams(p, v, position))
+                .update();
+    }
+
+    private Map<String, Object> variantParams(Product p, Variant v, int position) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", v.id());
+        m.put("productId", p.id());
+        m.put("atin", v.atin().value());
+        m.put("org", p.owner().orgId());
+        m.put("sku", v.sellerSku());
+        m.put("gtin", v.gtin());
+        m.put("exempt", v.gtinExempt());
+        m.put("options", json.write(v.options()));
+        m.put("price", v.priceMinor());
+        m.put("currency", v.currency());
+        m.put("quantity", v.quantity());
+        m.put("position", position);
+        m.put("compareAt", v.compareAtMinor());
+        m.put("images", json.write(v.images()));
+        return m;
     }
 
     private List<Product> withVariants(List<Product> products) {
@@ -210,7 +305,7 @@ class JdbcProductRepository implements ProductRepository {
         Map<UUID, List<Variant>> byProduct = new LinkedHashMap<>();
         jdbc.sql("""
                 select id, product_id, atin, seller_sku, gtin, gtin_exempt, options::text as options, price_minor,
-                       currency, quantity
+                       currency, quantity, compare_at_minor, images::text as images
                 from product_variant where product_id in (:ids) order by position
                 """)
                 .param("ids", products.stream().map(Product::id).toList())
@@ -218,7 +313,8 @@ class JdbcProductRepository implements ProductRepository {
                     Variant v = new Variant(rs.getObject("id", UUID.class), new Atin(rs.getString("atin")),
                             rs.getString("seller_sku"), rs.getString("gtin"), rs.getBoolean("gtin_exempt"),
                             json.stringMap(rs.getString("options")), rs.getLong("price_minor"),
-                            rs.getString("currency"), rs.getInt("quantity"));
+                            rs.getString("currency"), rs.getInt("quantity"),
+                            rs.getObject("compare_at_minor", Long.class), json.images(rs.getString("images")));
                     byProduct.computeIfAbsent(rs.getObject("product_id", UUID.class), k -> new ArrayList<>()).add(v);
                     return v;
                 })
@@ -247,6 +343,7 @@ class JdbcProductRepository implements ProductRepository {
                 rs.getTimestamp("updated_at").toInstant(),
                 rs.getLong("version"),
                 rs.getBoolean("preorder_eligible"),
-                rs.getBoolean("ships_now"));
+                rs.getBoolean("ships_now"),
+                json.listing(rs.getString("listing")));
     }
 }

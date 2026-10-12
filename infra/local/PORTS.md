@@ -42,6 +42,7 @@ identity's local clients (`application-local.yml`), whose secrets default to the
 | cart | `DELIVERY_RUNS_URL` (`deliveryRuns.url`) | `http://localhost:8115` | `cart-service` (`CART_CLIENT_SECRET`, `local-cart-service-secret`) | `delivery-runs:reserve` |
 | notifications | `deliveryRuns.baseUrl` | `http://localhost:8115` | `notifications-service` | `delivery-runs:audience.read` |
 | delivery-runs → media / orders / geo | `MEDIA_URL` / `ORDERS_URL` / `GEO_URL` | `:8207` / `:8104` / `:8205` | `delivery-runs-service` (`DELIVERY_RUNS_CLIENT_SECRET`, `local-delivery-runs-service-secret`) | `media:read`, `orders:on-behalf`, `geo:zones:write` |
+| catalog → media (bulk-upload images, S308) | `MEDIA_URL` (`at.catalog.media.base-url`) | `http://localhost:8207` | `catalog-service` (`CATALOG_CLIENT_SECRET`, `local-catalog-service-secret`) | `media:import` |
 
 The web apps need none of this with `API_MOCKS=1` (storefront and staff console serve the BFF from MSW mocks).
 

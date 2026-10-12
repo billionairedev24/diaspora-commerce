@@ -13,6 +13,16 @@ public final class CatalogEvents {
     public static final String PRODUCT_RESUMED = "catalog.product.resumed";
     /** Listing settings changed without a status change (S272: pre-order flags). */
     public static final String PRODUCT_UPDATED = "catalog.product.updated";
+    /**
+     * The seller changed price, quantity, compare-at price, condition, fulfilment, handling time or ship-from (one-step
+     * form or bulk update), or added variants: offers-service updates the seller's offers (S307).
+     */
+    public static final String PRODUCT_TERMS_CHANGED = "catalog.product.terms_changed";
+    /** A rejected listing was edited and is back in review (trust-ops queues it like a new listing). */
+    public static final String PRODUCT_RESUBMITTED = "catalog.product.resubmitted";
+    public static final String AGGREGATE_IMPORT = "product-import";
+    /** A bulk upload finished importing (S308): counts and whether the seller is notified. */
+    public static final String IMPORT_COMPLETED = "catalog.import.completed";
     /** The owner's listings were hidden by seller-service compliance enforcement (payload sellerHidden=true). */
     public static final String PRODUCT_HIDDEN = "catalog.product.hidden";
     /** The owner's listings were restored (payload sellerHidden=false, status unchanged). */

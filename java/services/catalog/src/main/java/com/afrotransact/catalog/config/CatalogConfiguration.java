@@ -1,7 +1,10 @@
 package com.afrotransact.catalog.config;
 
 import java.time.Duration;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import com.afrotransact.catalog.application.ImportSettings;
 import com.afrotransact.catalog.application.LabelSettings;
 import com.afrotransact.catalog.application.ListingEnforcementSettings;
 import com.afrotransact.catalog.application.OwnerResolver;
@@ -55,6 +58,18 @@ class CatalogConfiguration {
             @Value("${at.catalog.listing-enforcement.page-size:500}") int pageSize,
             @Value("${at.catalog.listing-enforcement.stall-after:2m}") Duration stallAfter) {
         return new ListingEnforcementSettings(pageSize, stallAfter);
+    }
+
+    @Bean
+    ImportSettings importSettings(@Value("${at.catalog.imports.notify-min-rows:100}") int notifyMinRows,
+                                  @Value("${at.catalog.imports.stall-after:2m}") Duration stallAfter) {
+        return new ImportSettings(notifyMinRows, stallAfter);
+    }
+
+    /** Runs bulk-upload imports in the background (one virtual thread per started upload). */
+    @Bean(destroyMethod = "close")
+    ExecutorService importExecutor() {
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Bean

@@ -6,10 +6,16 @@ import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.Variant;
 
-/** Product use cases: create (submit for review), read, moderate. */
+/** Product use cases: create (submit for review), edit, read, moderate. */
 public interface ProductService {
 
     Product create(CreateProductCommand command);
+
+    /**
+     * Edits a product (owner or staff): the whole content is validated again; a rejected listing goes back to review.
+     * Variants are matched by seller SKU (S307).
+     */
+    Product update(UUID id, UpdateProductCommand command);
 
     Product get(UUID id);
 

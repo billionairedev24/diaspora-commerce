@@ -8,6 +8,7 @@ import com.afrotransact.catalog.domain.AttributeDefinition;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.CategoryRequest;
 import com.afrotransact.catalog.domain.ProductType;
+import com.afrotransact.catalog.domain.ProductTypeTraits;
 import com.afrotransact.catalog.domain.VariationTheme;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -29,12 +30,14 @@ final class CategoryDtos {
         }
     }
 
-    @Schema(name = "ProductType")
+    @Schema(name = "ProductType", description = "Attributes carry kind (TEXT, MULTILINE, ENUM, NUMBER), units, the "
+            + "form section (DETAILS, FOOD, REGULATED) and a help line; traits decide the conditional form sections")
     record ProductTypeResponse(String code, String label, String identifierRule, List<AttributeDefinition> attributes,
-                               List<VariationTheme> themes) {
+                               List<VariationTheme> themes, ProductTypeTraits traits) {
 
         static ProductTypeResponse of(ProductType t) {
-            return new ProductTypeResponse(t.code(), t.label(), t.identifierRule().name(), t.attributes(), t.themes());
+            return new ProductTypeResponse(t.code(), t.label(), t.identifierRule().name(), t.attributes(), t.themes(),
+                    t.traits());
         }
     }
 
