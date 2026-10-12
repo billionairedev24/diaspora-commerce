@@ -153,6 +153,13 @@ at:
         secret: ${OFFERS_CLIENT_SECRET}
         grant-types: [client_credentials]
         scopes: [catalog:read, "sellers:ship-from.read"]
+      # S308: catalog-service copies the images of bulk product uploads through media (POST /v1/assets/import).
+      - client-id: catalog-service
+        name: Catalog service
+        type: confidential
+        secret: ${CATALOG_CLIENT_SECRET:}
+        grant-types: [client_credentials]
+        scopes: ["media:import"]
       - client-id: retail-service
         name: AfroTransact Retail service
         type: confidential

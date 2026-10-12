@@ -53,6 +53,8 @@ monitoring:
 #   - INVENTORY_CLIENT_SECRET (inventory-service, scopes catalog:read catalog:write shipping:label)
 #   - GATEWAY_BFF_CLIENT_SECRET, OFFERS_CLIENT_SECRET, INDEXER_CLIENT_SECRET, MEDIA_CLIENT_SECRET, DELIVERY_RUNS_CLIENT_SECRET, TRUSTOPS_CLIENT_SECRET,
 #     TAX_RETURNS_CLIENT_SECRET
+#   - CATALOG_CLIENT_SECRET (catalog-service, scope media:import: images of bulk product uploads, S308; optional —
+#     without it the client is not registered and bulk uploads fail their image rows)
 #   - BOOTSTRAP_ADMIN_EMAIL
 #   - BOOTSTRAP_ADMIN_PASSWORD
 #   - BOOTSTRAP_ADMIN_PHONE
