@@ -45,7 +45,7 @@ describe('one-step product form (S307)', () => {
     expect(screen.getByRole('heading', { name: 'Shipping' })).toBeInTheDocument();
 
     // AfroTransact fulfilment: package dimensions become required and the shipping section goes away.
-    fireEvent.click(screen.getByLabelText(/Fulfilled by AfroTransact/));
+    fireEvent.click(screen.getByRole('radio', { name: /Fulfilled by AfroTransact/ }));
     expect(screen.queryByRole('heading', { name: 'Shipping' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Change' }));
