@@ -11,9 +11,17 @@ export interface TokenSource {
   onSessionExpired(): void;
 }
 
+/** The customer app always shops as the signed-in person. Their token may carry a seller or provider organisation
+    (identity issues one token per person); services that only serve shoppers (bookings, called directly) then
+    answer for the person, not the organisation (X-Acting-As, go/pkg/auth ActingAs). */
+export const ACTING_AS_HEADER = 'X-Acting-As';
+
 function withBearer(req: Request, token: string | null): Request {
   const headers = new Headers(req.headers);
-  if (token) headers.set('Authorization', `Bearer ${token}`);
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+    headers.set(ACTING_AS_HEADER, 'CUSTOMER');
+  }
   headers.set('X-Client', 'customer-app');
   return new Request(req, { headers });
 }
