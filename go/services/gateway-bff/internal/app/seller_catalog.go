@@ -23,7 +23,8 @@ type SellerCatalogService interface {
 	CheckGTIN(ctx context.Context, c *domain.Caller, code string, isbn bool) (domain.GtinCheck, error)
 	CategoryRequests(ctx context.Context, c *domain.Caller) ([]domain.CategoryRequest, error)
 	RequestCategory(ctx context.Context, c *domain.Caller, in domain.CategoryRequestInput) (domain.CategoryRequest, error)
-	Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64) (domain.UploadTicket, error)
+	// Upload signs a direct image upload; library adds a product image to the image library (S310).
+	Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64, library bool) (domain.UploadTicket, error)
 	CompleteUpload(ctx context.Context, c *domain.Caller, assetID string) (domain.Asset, error)
 	Inventory(ctx context.Context, c *domain.Caller, lowStock bool) (domain.InventoryView, error)
 	AdjustStock(ctx context.Context, c *domain.Caller, idempotencyKey, sku string, quantity int, reason string) (domain.StockAdjustment, error)
@@ -320,10 +321,12 @@ func (s *sellerCatalogImpl) RequestCategory(ctx context.Context, c *domain.Calle
 
 var imageTypes = []string{"image/jpeg", "image/png", "image/webp"}
 
-func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64) (domain.UploadTicket, error) {
+func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpose, fileName, contentType string, size int64, library bool) (domain.UploadTicket, error) {
 	errs := map[string]string{}
 	if purpose != "product-image" && purpose != "storefront" {
 		errs["purpose"] = "Unknown purpose"
+	} else if library && purpose != "product-image" {
+		errs["library"] = "Only product images go into the image library"
 	}
 	if strings.TrimSpace(fileName) == "" {
 		errs["fileName"] = "Required"
@@ -340,7 +343,13 @@ func (s *sellerCatalogImpl) Upload(ctx context.Context, c *domain.Caller, purpos
 	if err := requireCustomer(c); err != nil {
 		return domain.UploadTicket{}, err
 	}
-	u, err := s.r.d.Media.RequestUpload(ctx, c.BearerToken, purpose, fileName, contentType, size)
+	var u port.MediaUpload
+	var err error
+	if library {
+		u, err = s.r.d.Media.RequestLibraryUpload(ctx, c.BearerToken, fileName, contentType, size)
+	} else {
+		u, err = s.r.d.Media.RequestUpload(ctx, c.BearerToken, purpose, fileName, contentType, size)
+	}
 	if err != nil {
 		return domain.UploadTicket{}, mapErr("media", err)
 	}

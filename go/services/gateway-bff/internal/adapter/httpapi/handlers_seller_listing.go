@@ -193,3 +193,41 @@ func (h *handlersImpl) startImport(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerImports.Start(r.Context(), callerFrom(r.Context()), r.PathValue("importId"), b.ValidOnly)
 	h.reply(w, r, http.StatusAccepted, v, err)
 }
+
+func (h *handlersImpl) imageLibrary(w http.ResponseWriter, r *http.Request) {
+	page, err := intQuery(r, "page", 0)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	size, err := intQuery(r, "size", 50)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	q := r.URL.Query()
+	v, err := h.s.SellerImports.ImageLibrary(r.Context(), callerFrom(r.Context()), q.Get("q"), q.Get("status"), q.Get("matched"), page, size)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) removeLibraryImage(w http.ResponseWriter, r *http.Request) {
+	err := h.s.SellerImports.RemoveLibraryImage(r.Context(), callerFrom(r.Context()), r.PathValue("assetId"))
+	h.reply(w, r, http.StatusNoContent, nil, err)
+}
+
+func (h *handlersImpl) attachLibraryImages(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		SKUs []string `json:"skus"`
+	}
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerImports.AttachLibraryImages(r.Context(), callerFrom(r.Context()), b.SKUs)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) brands(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerImports.Brands(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
+	h.reply(w, r, http.StatusOK, v, err)
+}

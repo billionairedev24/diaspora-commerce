@@ -23,6 +23,11 @@ type SellerImportService interface {
 	Rows(ctx context.Context, c *domain.Caller, id, status, outcome string, page, size int) (domain.ProductImportRowPage, error)
 	Report(ctx context.Context, c *domain.Caller, id, format string) (domain.FileDownload, error)
 	Start(ctx context.Context, c *domain.Caller, id string, validOnly bool) (domain.ProductImport, error)
+	// ImageLibrary is the organisation's image library (media) with the SKUs that use each image (catalog), S310.
+	ImageLibrary(ctx context.Context, c *domain.Caller, q, status, matched string, page, size int) (domain.ImageLibraryPage, error)
+	RemoveLibraryImage(ctx context.Context, c *domain.Caller, assetID string) error
+	AttachLibraryImages(ctx context.Context, c *domain.Caller, skus []string) (domain.AttachLibraryImagesResult, error)
+	Brands(ctx context.Context, c *domain.Caller, q string) (domain.BrandList, error)
 }
 
 type sellerImportImpl struct {
@@ -224,6 +229,11 @@ func (s *sellerImportImpl) Rows(ctx context.Context, c *domain.Caller, id, statu
 		for _, m := range r.Messages {
 			row.Messages = append(row.Messages, domain.ImportRowMessage{Column: m.Column, ColumnIndex: m.ColumnIndex,
 				Severity: strings.ToUpper(m.Severity), Message: m.Message})
+		}
+		row.Images = make([]domain.ImportRowImage, 0, len(r.Images))
+		for _, i := range r.Images {
+			row.Images = append(row.Images, domain.ImportRowImage{Slot: i.Slot, Source: i.Source, Ref: i.Ref, State: i.State,
+				URL: i.URL, Message: i.Message})
 		}
 		out.Items = append(out.Items, row)
 	}

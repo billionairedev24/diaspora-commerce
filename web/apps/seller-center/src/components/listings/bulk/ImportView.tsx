@@ -1,9 +1,9 @@
 'use client';
 
-import { isApiError, type ProductImport, type ProductImportRow, type ProductImportRowPage, sellerKeys, sellerQueries, type SpreadsheetFormat } from '@afrotransact/api-client';
+import { type ImportRowImage, isApiError, type ProductImport, type ProductImportRow, type ProductImportRowPage, sellerKeys, sellerQueries, type SpreadsheetFormat } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Checkbox, cx, Menu, MenuItem, useToast } from '@afrotransact/ui';
-import { CaretDown, CheckCircle, DownloadSimple, FileCsv, MicrosoftExcelLogo, WarningCircle, XCircle } from '@phosphor-icons/react/ssr';
+import { CaretDown, CheckCircle, DownloadSimple, FileCsv, ImageBroken, LinkSimple, MicrosoftExcelLogo, WarningCircle, XCircle } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -102,6 +102,10 @@ export function ImportView({ importId }: { importId: string }) {
     const fixed: ColumnDef<ProductImportRow>[] = [
       { id: 'rowNumber', accessorFn: (r) => r.rowNumber, header: t('sc.bulk.col.row'), size: 84, meta: { kind: 'number', label: t('sc.bulk.col.row') } },
       { id: 'status', accessorFn: statusLabel, header: t('sc.bulk.col.status'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={tone(row.original)}>{statusLabel(row.original)}</StatusPill> },
+      {
+        id: 'images', accessorFn: (r) => r.images.length, header: t('sc.bulk.col.images'), size: 170, enableSorting: false, meta: { label: t('sc.bulk.col.images') },
+        cell: ({ row }) => <RowImages images={row.original.images} t={t} />
+      },
       {
         id: 'problems', accessorFn: (r) => r.messages.map((m) => `${m.column ?? ''} ${m.message}`).join(' '), header: t('sc.bulk.col.problems'), size: 320, enableSorting: false,
         cell: ({ row }) => row.original.messages.length || row.original.outcomeNote ? (
@@ -222,5 +226,32 @@ export function ImportView({ importId }: { importId: string }) {
         noMatches={t('sc.bulk.noMatches')}
       />
     </>
+  );
+}
+
+const IMAGE_TONE: Record<ImportRowImage['state'], string> = {
+  FOUND: 'border-success', LINK: 'border-border', HELD: 'border-warning', MISSING: 'border-danger', BAD_LINK: 'border-danger'
+};
+
+/** The row's images: library thumbnails, links copied at import, and what is held, missing or broken. */
+function RowImages({ images, t }: { images: readonly ImportRowImage[]; t: ReturnType<typeof useT> }) {
+  if (!images.length) return <span className="text-xs text-muted">{t('sc.bulk.img.none')}</span>;
+  const shown = images.slice(0, 4);
+  const problem = images.find((i) => i.state === 'MISSING' || i.state === 'BAD_LINK' || i.state === 'HELD');
+  return (
+    <span className="flex flex-col gap-1">
+      <span className="flex items-center gap-1">
+        {shown.map((i) => (
+          <span key={`${i.slot}-${i.ref}`} title={`${i.slot} · ${i.ref} · ${t(`sc.bulk.img.${i.state}`)}${i.message ? ` · ${i.message}` : ''}`}
+            className={cx('flex h-9 w-9 items-center justify-center overflow-hidden rounded-xs border-2 bg-surface-sunken text-muted', IMAGE_TONE[i.state])}>
+            {i.url
+              ? <img src={i.url} alt="" loading="lazy" className="h-full w-full object-cover" />
+              : i.state === 'LINK' ? <LinkSimple size={14} aria-hidden /> : <ImageBroken size={14} aria-hidden />}
+          </span>
+        ))}
+        {images.length > shown.length ? <span className="text-xs text-muted">+{images.length - shown.length}</span> : null}
+      </span>
+      {problem ? <span className="text-2xs text-danger">{t(`sc.bulk.img.${problem.state}`)}: {problem.ref}</span> : null}
+    </span>
   );
 }

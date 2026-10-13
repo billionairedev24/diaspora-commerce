@@ -221,6 +221,68 @@ type ProductImportRow struct {
 	ProductID   *string            `json:"productId"`
 	Messages    []ImportRowMessage `json:"messages"`
 	Cells       []string           `json:"cells"`
+	Images      []ImportRowImage   `json:"images"`
+}
+
+// ImportRowImage is one image of a preview row (S310): a library image FOUND (thumbnail), a LINK copied at import,
+// HELD by moderation, MISSING from the library or a BAD_LINK.
+type ImportRowImage struct {
+	Slot    string  `json:"slot"`
+	Source  string  `json:"source"`
+	Ref     string  `json:"ref"`
+	State   string  `json:"state"`
+	URL     *string `json:"url"`
+	Message *string `json:"message"`
+}
+
+// ImageLibraryItem is one image of the organisation's image library with the SKUs that use it.
+type ImageLibraryItem struct {
+	AssetID   string    `json:"assetId"`
+	FileName  string    `json:"fileName"`
+	SKU       *string   `json:"sku"`
+	Slot      *string   `json:"slot"`
+	Status    string    `json:"status"`
+	URL       *string   `json:"url"`
+	Width     int       `json:"width"`
+	Height    int       `json:"height"`
+	Bytes     int64     `json:"bytes"`
+	Flags     []string  `json:"flags"`
+	CreatedAt time.Time `json:"createdAt"`
+	UsedBy    []string  `json:"usedBy"`
+	SKUKnown  bool      `json:"skuKnown"`
+}
+
+// ImageLibraryPage is one page of the image library.
+type ImageLibraryPage struct {
+	Items []ImageLibraryItem `json:"items"`
+	Total int64              `json:"total"`
+	Page  int                `json:"page"`
+	Size  int                `json:"size"`
+}
+
+// AttachLibraryImagesResult is what "attach matching images" changed.
+type AttachLibraryImagesResult struct {
+	ProductsUpdated int                    `json:"productsUpdated"`
+	ImagesAttached  int                    `json:"imagesAttached"`
+	Skipped         []AttachLibrarySkipped `json:"skipped"`
+}
+
+// AttachLibrarySkipped is a listing "attach matching images" left unchanged, with the reason.
+type AttachLibrarySkipped struct {
+	SKU    string `json:"sku"`
+	Reason string `json:"reason"`
+}
+
+// BrandList is the product form's brand suggestions.
+type BrandList struct {
+	Brands []Brand `json:"brands"`
+}
+
+// Brand is one brand suggestion: OWN (used by the organisation's products) or CATALOG.
+type Brand struct {
+	Name     string `json:"name"`
+	Source   string `json:"source"`
+	Products int    `json:"products"`
 }
 
 // ProductImportRowPage is one page of the preview.

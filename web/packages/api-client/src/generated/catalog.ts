@@ -129,6 +129,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/image-library/attach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach matching library images to the organisation's listings by SKU
+         * @description Looks up the organisation's library images (media) for the SKUs of its listings (all, or those in skus) and applies them: SKU.MAIN and SKU.PT01-PT08 of the first of a product's SKUs that has a MAIN image replace the product images in that order; on products with several variants a variant SKU's MAIN sets that variant's image. Images held by moderation are skipped. Each changed product is validated again like an edit (catalog.product.updated); taken-down listings and products whose new main image is under 1000 px are skipped with a reason. Products without matches are left unchanged. 503 catalog.media-unavailable when media cannot be reached.
+         */
+        post: operations["attachLibraryImages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/image-library/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Which of the organisation's SKUs use these image URLs, and which of these SKUs exist
+         * @description For the image library page (used by). An image counts for every SKU of a product whose images include it and for the variant whose image or swatch it is.
+         */
+        post: operations["imageUsage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Brands for the product form's brand combobox
+         * @description The organisation's brands (from its products' brand attribute) with how many of its products use each, most used first; q filters by prefix of the name or of a word (case-insensitive).
+         */
+        get: operations["listBrands"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/imports": {
         parameters: {
             query?: never;
@@ -1174,6 +1234,26 @@ export interface components {
             productId?: string;
             messages?: components["schemas"]["ImportRowMessage"][];
             cells?: string[];
+            /** @description The row's images as the preview shows them (S310) */
+            images?: components["schemas"]["ImportRowImage"][];
+        };
+        /** @description One image of an upload row: where it comes from (LINK = an https URL cell, FILE = a library file name in an image cell, SKU = a library file named after the SKU) and what was found (FOUND = a library image, LINK = a link copied when the import runs, HELD = a library image held by moderation, MISSING = no such library image, BAD_LINK = not a usable https link) */
+        ImportRowImage: {
+            /** @enum {string} */
+            slot: "MAIN" | "PT01" | "PT02" | "PT03" | "PT04" | "PT05" | "PT06" | "PT07" | "PT08" | "SWCH";
+            /** @enum {string} */
+            source: "LINK" | "FILE" | "SKU";
+            /** @description The link, the file name or the matched library file name */
+            ref: string;
+            /** @enum {string} */
+            state: "FOUND" | "LINK" | "HELD" | "MISSING" | "BAD_LINK";
+            /** @description Thumbnail of a FOUND library image */
+            url?: string;
+            /** Format: int32 */
+            width?: number;
+            /** Format: int32 */
+            height?: number;
+            message?: string;
         };
         ProductImportRowPage: {
             items?: components["schemas"]["ProductImportRow"][];
@@ -1225,6 +1305,47 @@ export interface components {
             level?: string;
             productType?: string;
             path?: string;
+        };
+        AttachLibraryImagesRequest: {
+            /** @description Only listings with one of these SKUs (any variant); empty = every listing of the organisation */
+            skus?: string[];
+        };
+        AttachLibraryImagesResult: {
+            /** Format: int32 */
+            productsUpdated: number;
+            /** Format: int32 */
+            imagesAttached: number;
+            skipped: components["schemas"]["AttachSkipped"][];
+        };
+        AttachSkipped: {
+            sku: string;
+            reason: string;
+        };
+        ImageUsageRequest: {
+            urls?: string[];
+            skus?: string[];
+        };
+        ImageUsage: {
+            usage: components["schemas"]["ImageUse"][];
+            /** @description The requested SKUs that are SKUs of the organisation's listings (as stored) */
+            knownSkus: string[];
+        };
+        ImageUse: {
+            url: string;
+            skus: string[];
+        };
+        BrandList: {
+            brands: components["schemas"]["Brand"][];
+        };
+        Brand: {
+            name: string;
+            /**
+             * @description OWN = used by the organisation's products, CATALOG = live products of other sellers
+             * @enum {string}
+             */
+            source: "OWN" | "CATALOG";
+            /** Format: int32 */
+            products: number;
         };
     };
     responses: never;
@@ -1415,6 +1536,77 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["GtinPrefill"];
+                };
+            };
+        };
+    };
+    attachLibraryImages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AttachLibraryImagesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AttachLibraryImagesResult"];
+                };
+            };
+        };
+    };
+    imageUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImageUsageRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ImageUsage"];
+                };
+            };
+        };
+    };
+    listBrands: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["BrandList"];
                 };
             };
         };

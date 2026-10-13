@@ -244,6 +244,36 @@ func (k *sellerListingImpl) ImportRows(ctx context.Context, bearer, id, status, 
 	return out, err
 }
 
+func (k *sellerListingImpl) ImageUsage(ctx context.Context, bearer string, urls, skus []string) (port.CatalogImageUsage, error) {
+	var out port.CatalogImageUsage
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/image-library/usage", Bearer: bearer,
+		JSON: map[string]any{"urls": urls, "skus": skus}}, &out)
+	return out, err
+}
+
+func (k *sellerListingImpl) AttachLibraryImages(ctx context.Context, bearer string, skus []string) (domain.AttachLibraryImagesResult, error) {
+	var out domain.AttachLibraryImagesResult
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/image-library/attach", Bearer: bearer,
+		JSON: map[string]any{"skus": skus}}, &out)
+	if out.Skipped == nil {
+		out.Skipped = []domain.AttachLibrarySkipped{}
+	}
+	return out, err
+}
+
+func (k *sellerListingImpl) Brands(ctx context.Context, bearer, q string) (domain.BrandList, error) {
+	v := url.Values{"limit": {"20"}}
+	if q != "" {
+		v.Set("q", q)
+	}
+	var out domain.BrandList
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/brands", Query: v, Bearer: bearer}, &out)
+	if out.Brands == nil {
+		out.Brands = []domain.Brand{}
+	}
+	return out, err
+}
+
 func (k *sellerListingImpl) ImportReport(ctx context.Context, bearer, id, format string) (domain.FileDownload, error) {
 	return k.download(ctx, bearer, importPath(id)+"/report", url.Values{"format": {format}}, "upload-report."+format)
 }

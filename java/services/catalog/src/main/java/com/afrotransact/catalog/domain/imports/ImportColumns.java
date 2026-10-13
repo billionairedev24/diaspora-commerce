@@ -171,8 +171,9 @@ public final class ImportColumns {
                 new ImportColumn(CONDITION, "Condition", "New unless stated.", false, ColumnKind.ENUM,
                         conditionLabels(), "New", true),
                 new ImportColumn(IMAGES, "Image URLs", "Public https links to JPG, PNG or WebP images (at least "
-                        + "1000 × 1000 px for the first), separated by spaces, new lines or \"|\". The first is the "
-                        + "main image; up to 10. We copy them into AfroTransact and check them like uploads.", true,
+                        + "1000 × 1000 px for the first), or file names from your image library, separated by spaces, "
+                        + "new lines or \"|\". The first is the main image; up to 10. Leave empty to use the library "
+                        + "images named after the SKU (SKU.MAIN.jpg, SKU.PT01.jpg …).", true,
                         ColumnKind.URLS, List.of(), "https://example.com/ankara-front.jpg", true),
                 new ImportColumn(KEYWORDS, "Search keywords", "Words shoppers might search for, separated by commas "
                         + "(up to 20).", false, ColumnKind.TEXT, List.of(), "ankara, wax print, owambe", true));

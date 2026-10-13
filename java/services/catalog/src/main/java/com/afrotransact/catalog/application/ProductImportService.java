@@ -1,9 +1,12 @@
 package com.afrotransact.catalog.application;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.imports.ImportMode;
 import com.afrotransact.catalog.domain.imports.ProductImport;
+import com.afrotransact.catalog.domain.imports.RowImage;
 import com.afrotransact.catalog.domain.imports.RowOutcome;
 import com.afrotransact.catalog.domain.imports.RowStatus;
 import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
@@ -37,6 +40,12 @@ public interface ProductImportService {
 
     /** Rows of an upload in file order, optionally one status (preview filter) or outcome. */
     PageView<StoredRow> rows(UUID id, RowStatus status, RowOutcome outcome, int page, int size);
+
+    /**
+     * The images of these rows as the preview shows them (S310), by row number: image cell links and library file
+     * names, or the library images named after the row's SKU or Parent SKU, resolved against the image library now.
+     */
+    Map<Integer, List<RowImage>> rowImages(UUID id, List<StoredRow> rows);
 
     /** The uploaded rows with "Row status", "Result" and "Errors" columns, formula-injection safe. */
     FileContent report(UUID id, SpreadsheetFormat format);

@@ -53,6 +53,8 @@ tags:
       Product templates (Excel and CSV, per product type or generic), .xlsx/.csv uploads validated row by row, preview,
       error report and the background import (S308). Limits: 10 MB and 5,000 rows per file, 10 images and 200
       variants per product. Mirrors catalog-service `/v1/imports` with the member's token.
+  - name: Image library
+    description: The organisation's product image library (files, folders, ZIPs) matched to listings by SKU file names (S310)
   - name: Money
     description: Payouts, plan and billing
   - name: Team
@@ -1164,7 +1166,7 @@ paths:
       operationId: requestUpload
       security: [{sessionCookie: []}]
       summary: Direct upload ticket for a product or storefront image
-      description: media `POST /v1/uploads` (JPG, PNG or WebP, ≤ 8 MB).
+      description: media `POST /v1/uploads` (JPG, PNG or WebP, ≤ 8 MB). `library` adds a product image to the image library.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/UploadRequest'}}}
@@ -1187,6 +1189,79 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/image-library:
+    get:
+      tags: [Image library]
+      operationId: listImageLibrary
+      security: [{sessionCookie: []}]
+      summary: The organisation's image library with the SKUs that use each image (server-driven table)
+      description: |
+        media `GET /v1/library` (the member's token) plus catalog `POST /v1/image-library/usage` for "used by" and for
+        whether the SKU in the file name belongs to a listing. File names `SKU.MAIN`, `SKU.PT01`…`SKU.PT08` and
+        `SKU.SWCH` (any image extension, case-insensitive, `.`, `_`, `-` or a space before the slot) are matched to the
+        listing with that SKU (variant SKUs too). Images are uploaded with `POST /v1/seller/uploads` and `library: true`.
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: File name or SKU contains}
+        - {name: status, in: query, schema: {type: string, enum: [READY, FLAGGED, REJECTED]}}
+        - {name: matched, in: query, schema: {type: boolean}, description: 'true = named after a SKU, false = other names'}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Library page, content: {application/json: {schema: {$ref: '#/components/schemas/ImageLibraryPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/image-library/{assetId}:
+    delete:
+      tags: [Image library]
+      operationId: removeLibraryImage
+      security: [{sessionCookie: []}]
+      summary: Remove an image from the library (listings that use it keep it)
+      description: media `DELETE /v1/library/{id}`.
+      parameters: [{name: assetId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '204': {description: Removed}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/image-library/attach:
+    post:
+      tags: [Image library]
+      operationId: attachLibraryImages
+      security: [{sessionCookie: []}]
+      summary: Attach matching library images to existing listings by SKU
+      description: |
+        catalog `POST /v1/image-library/attach`. `SKU.MAIN` and `SKU.PT01`–`PT08` replace the product images in that
+        order; on products with several variants a variant SKU's `MAIN` sets the variant image. Listings without
+        matching images are left as they are; skipped listings come back with a reason.
+      requestBody:
+        content: {application/json: {schema: {$ref: '#/components/schemas/AttachLibraryImagesRequest'}}}
+      responses:
+        '200': {description: Result, content: {application/json: {schema: {$ref: '#/components/schemas/AttachLibraryImagesResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/brands:
+    get:
+      tags: [Listings]
+      operationId: listBrands
+      security: [{sessionCookie: []}]
+      summary: Brands for the product form's brand combobox (the organisation's, most used first)
+      description: catalog `GET /v1/brands`.
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 80}}
+      responses:
+        '200': {description: Brands, content: {application/json: {schema: {$ref: '#/components/schemas/BrandList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/inventory:
@@ -3467,7 +3542,7 @@ components:
         message: {type: string}
     ProductImportRow:
       type: object
-      required: [rowNumber, groupKey, sku, status, outcome, outcomeNote, productId, messages, cells]
+      required: [rowNumber, groupKey, sku, status, outcome, outcomeNote, productId, messages, cells, images]
       properties:
         rowNumber: {type: integer, description: The row number in the spreadsheet}
         groupKey: {type: string, description: Parent SKU (rows of one product share it)}
@@ -3478,6 +3553,77 @@ components:
         productId: {type: [string, 'null']}
         messages: {type: array, items: {$ref: '#/components/schemas/ImportRowMessage'}}
         cells: {type: array, items: {type: string}, description: Cell text in header order}
+        images: {type: array, items: {$ref: '#/components/schemas/ImportRowImage'}, description: "The row's images: found in the library (thumbnail), links, missing or bad links"}
+    ImageSlot: {type: string, enum: [MAIN, PT01, PT02, PT03, PT04, PT05, PT06, PT07, PT08, SWCH]}
+    ImportRowImage:
+      type: object
+      required: [slot, source, ref, state, url, message]
+      properties:
+        slot: {$ref: '#/components/schemas/ImageSlot'}
+        source: {type: string, enum: [LINK, FILE, SKU], description: 'An https URL cell, a library file name in an image cell, or a library file named after the SKU'}
+        ref: {type: string, description: The link or file name}
+        state: {type: string, enum: [FOUND, LINK, HELD, MISSING, BAD_LINK], description: 'FOUND in the library, a LINK copied when the import runs, HELD by moderation, MISSING from the library, or a BAD_LINK'}
+        url: {type: [string, 'null'], description: Thumbnail of a FOUND library image}
+        message: {type: [string, 'null']}
+    ImageLibraryItem:
+      type: object
+      required: [assetId, fileName, sku, slot, status, url, width, height, bytes, flags, createdAt, usedBy, skuKnown]
+      properties:
+        assetId: {type: string}
+        fileName: {type: string}
+        sku: {type: [string, 'null'], description: SKU parsed from the file name (upper case); null when the name has no slot}
+        slot:
+          oneOf:
+            - {$ref: '#/components/schemas/ImageSlot'}
+            - {type: 'null'}
+        status: {type: string, enum: [READY, FLAGGED, REJECTED], description: 'READY, held for review (FLAGGED) or REJECTED (reasons in flags)'}
+        url: {type: [string, 'null'], description: Public URL (thumbnail) when READY}
+        width: {type: integer}
+        height: {type: integer}
+        bytes: {type: integer}
+        flags: {type: array, items: {type: string}}
+        createdAt: {type: string, format: date-time}
+        usedBy: {type: array, items: {type: string}, description: SKUs of listings that use this image}
+        skuKnown: {type: boolean, description: The SKU in the file name belongs to one of the organisation's listings}
+    ImageLibraryPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ImageLibraryItem'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+    AttachLibraryImagesRequest:
+      type: object
+      properties:
+        skus: {type: array, maxItems: 5000, items: {type: string, maxLength: 64}, description: 'Only listings with one of these SKUs; omit for every listing'}
+    AttachLibraryImagesResult:
+      type: object
+      required: [productsUpdated, imagesAttached, skipped]
+      properties:
+        productsUpdated: {type: integer}
+        imagesAttached: {type: integer}
+        skipped:
+          type: array
+          items:
+            type: object
+            required: [sku, reason]
+            properties:
+              sku: {type: string}
+              reason: {type: string}
+    BrandList:
+      type: object
+      required: [brands]
+      properties:
+        brands:
+          type: array
+          items:
+            type: object
+            required: [name, source, products]
+            properties:
+              name: {type: string}
+              source: {type: string, enum: [OWN, CATALOG], description: 'Used by your products, or by live products of other sellers'}
+              products: {type: integer}
     ProductImportRowPage:
       type: object
       required: [items, total, page, size]
@@ -3498,6 +3644,7 @@ components:
         fileName: {type: string, minLength: 1, maxLength: 200}
         contentType: {type: string, enum: [image/jpeg, image/png, image/webp]}
         size: {type: integer, minimum: 1, maximum: 8388608}
+        library: {type: boolean, default: false, description: 'product-image only: add it to the image library (matched to SKUs by file name)'}
     UploadTicket:
       type: object
       required: [assetId, method, url, headers, publicUrl, expiresAt]

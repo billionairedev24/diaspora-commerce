@@ -2,6 +2,8 @@ package com.afrotransact.catalog.adapter.in.web;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.adapter.in.web.ImportDtos.ImportPage;
@@ -15,6 +17,7 @@ import com.afrotransact.catalog.application.ProductImportService.FileContent;
 import com.afrotransact.catalog.domain.imports.ImportLimits;
 import com.afrotransact.catalog.domain.imports.ImportMode;
 import com.afrotransact.catalog.domain.imports.ProductImport;
+import com.afrotransact.catalog.domain.imports.RowImage;
 import com.afrotransact.catalog.domain.imports.RowOutcome;
 import com.afrotransact.catalog.domain.imports.RowStatus;
 import com.afrotransact.catalog.domain.imports.SpreadsheetFormat;
@@ -106,7 +109,9 @@ class ImportController {
                  @RequestParam(required = false) RowOutcome outcome, @RequestParam(defaultValue = "0") int page,
                  @RequestParam(defaultValue = "50") int size) {
         PageView<StoredRow> p = imports.rows(id, status, outcome, page, size);
-        return new RowPage(p.items().stream().map(RowResponse::of).toList(), p.total(), p.page(), p.size());
+        Map<Integer, List<RowImage>> images = imports.rowImages(id, p.items());
+        return new RowPage(p.items().stream().map(r -> RowResponse.of(r, images.get(r.rowNumber()))).toList(),
+                p.total(), p.page(), p.size());
     }
 
     @Operation(operationId = "importReport", summary = "Download the error report",

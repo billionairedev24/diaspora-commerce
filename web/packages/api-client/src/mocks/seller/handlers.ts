@@ -93,6 +93,25 @@ import { sellerSettingsHandlers } from './settings';
 
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
 
+/** Mock image library (S310): file names SKU.MAIN / SKU.PT01…PT08 / SKU.SWCH match listings by SKU. */
+interface MockLibraryImage {
+  assetId: string;
+  orgId: string;
+  fileName: string;
+  sku: string | null;
+  slot: 'MAIN' | 'PT01' | 'PT02' | 'PT03' | 'PT04' | 'PT05' | 'PT06' | 'PT07' | 'PT08' | 'SWCH' | null;
+  status: 'READY' | 'FLAGGED' | 'REJECTED';
+  url: string | null;
+  width: number;
+  height: number;
+  bytes: number;
+  flags: string[];
+  createdAt: string;
+}
+const MOCK_LIBRARY: MockLibraryImage[] = [];
+const MOCK_PENDING_LIBRARY = new Map<string, { orgId: string; fileName: string; bytes: number }>();
+const LIBRARY_NAME = /^(.+?)[._\- ](MAIN|PT0[1-8]|SWCH)\.(?:jpe?g|png|webp)$/i;
+
 class SellerProblem extends Error {
   constructor(
     readonly status: number,
@@ -1424,11 +1443,71 @@ export const sellerHandlers = [
       return req;
     }, 201)
   ),
+  http.get(
+    `${W}/image-library`,
+    route((ctx) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const q = query(ctx);
+      const page = Number(q.get('page') ?? '0');
+      const size = Number(q.get('size') ?? '50');
+      const text = (q.get('q') ?? '').toLowerCase();
+      const status = q.get('status');
+      const matched = q.get('matched');
+      const skus = new Set(ctx.db.listings.flatMap((l) => l.variants.map((v) => v.sku.toUpperCase())));
+      const mine = MOCK_LIBRARY.filter((i) => i.orgId === ctx.org.id)
+        .filter((i) => !text || i.fileName.toLowerCase().includes(text) || (i.sku ?? '').toLowerCase().includes(text))
+        .filter((i) => !status || i.status === status)
+        .filter((i) => matched === null || (matched === 'true') === (i.sku !== null));
+      return {
+        items: mine.slice(page * size, page * size + size).map(({ orgId: _org, ...i }) => ({ ...i, usedBy: [], skuKnown: i.sku !== null && skus.has(i.sku) })),
+        total: mine.length, page, size
+      };
+    })
+  ),
+  http.delete(
+    `${W}/image-library/:assetId`,
+    route((ctx, p) => {
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const at = MOCK_LIBRARY.findIndex((i) => i.assetId === p.assetId && i.orgId === ctx.org.id);
+      if (at < 0) throw notFound('No such library image.');
+      MOCK_LIBRARY.splice(at, 1);
+      return undefined;
+    }, 204)
+  ),
+  http.post(
+    `${W}/image-library/attach`,
+    route((ctx) => {
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const skus = new Set(ctx.db.listings.flatMap((l) => l.variants.map((v) => v.sku.toUpperCase())));
+      const found = MOCK_LIBRARY.filter((i) => i.orgId === ctx.org.id && i.status === 'READY' && i.sku !== null && skus.has(i.sku) && i.slot !== 'SWCH');
+      const products = new Set(found.map((i) => i.sku));
+      return { productsUpdated: products.size, imagesAttached: found.length, skipped: [] };
+    })
+  ),
+  http.get(
+    `${W}/catalog/brands`,
+    route((ctx) => {
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      const q = (query(ctx).get('q') ?? '').toLowerCase();
+      const counts = new Map<string, number>();
+      for (const l of ctx.db.listings) {
+        const brand = (l as { attributes?: Record<string, string> }).attributes?.brand;
+        if (brand) counts.set(brand, (counts.get(brand) ?? 0) + 1);
+      }
+      for (const b of ['Ankara House', 'Mama Africa', 'Shea Gold', 'Lagos Kitchen']) if (!counts.has(b)) counts.set(b, 0);
+      const brands = [...counts.entries()]
+        .filter(([name]) => !q || name.toLowerCase().startsWith(q) || name.toLowerCase().includes(` ${q}`))
+        .sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))
+        .map(([name, products]) => ({ name, source: products > 0 ? 'OWN' : 'CATALOG', products }));
+      return { brands };
+    })
+  ),
   http.post(
     `${W}/uploads`,
     route(async (ctx) => {
       const b = await body(ctx.request, UploadRequestSchema);
       const id = nextId(ctx.db, 'asset');
+      if (b.library === true) MOCK_PENDING_LIBRARY.set(id, { orgId: ctx.org.id, fileName: b.fileName, bytes: b.size });
       return { assetId: id, method: 'PUT', url: `${new URL(ctx.request.url).origin}/api/bff/mock-uploads/${id}`, headers: { 'Content-Type': b.contentType },
         publicUrl: `https://img.afrotransact.dev/${id}.webp`, expiresAt: new Date(ctx.now.getTime() + 15 * 60_000).toISOString() };
     }, 201)
@@ -1436,7 +1515,18 @@ export const sellerHandlers = [
   http.put('*/mock-uploads/:id', () => new HttpResponse(null, { status: 200 })),
   http.post(
     `${W}/uploads/:assetId/complete`,
-    route((_ctx, p) => ({ id: p.assetId ?? '', url: `https://img.afrotransact.dev/${p.assetId ?? ''}.webp`, width: 1600, height: 1600, bytes: 182000, contentType: 'image/webp', status: 'READY' }))
+    route((ctx, p) => {
+      const id = p.assetId ?? '';
+      const pending = MOCK_PENDING_LIBRARY.get(id);
+      if (pending) {
+        MOCK_PENDING_LIBRARY.delete(id);
+        const m = LIBRARY_NAME.exec(pending.fileName);
+        MOCK_LIBRARY.unshift({ assetId: id, orgId: pending.orgId, fileName: pending.fileName, sku: m?.[1]?.toUpperCase() ?? null,
+          slot: (m?.[2]?.toUpperCase() as MockLibraryImage['slot']) ?? null, status: 'READY', url: `https://img.afrotransact.dev/${id}.webp`,
+          width: 1600, height: 1600, bytes: pending.bytes, flags: [], createdAt: ctx.now.toISOString() });
+      }
+      return { id, url: `https://img.afrotransact.dev/${id}.webp`, width: 1600, height: 1600, bytes: 182000, contentType: 'image/webp', status: 'READY' };
+    })
   ),
   http.get(
     `${W}/inventory`,

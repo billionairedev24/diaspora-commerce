@@ -141,7 +141,7 @@ public final class ImportValidator {
         for (ImportColumn c : columns) {
             boolean needed = ctx.mode() == ImportMode.CREATE ? c.required() : ImportColumns.SKU.equals(c.key());
             if (needed && !index.containsKey(c.key()) && !c.key().startsWith(ImportColumns.ATTR_PREFIX)
-                    && !ImportColumns.BRAND.equals(c.key())) {
+                    && !ImportColumns.BRAND.equals(c.key()) && !ImportColumns.IMAGES.equals(c.key())) {
                 missing.add(c.header());
             }
         }
@@ -403,21 +403,44 @@ public final class ImportValidator {
         return out;
     }
 
+    /**
+     * The product's images: links and library file names from the image cell, or, when the cell is empty, the library
+     * images named after the Parent SKU or a row's SKU ({@code SKU.MAIN.jpg}, {@code SKU.PT01.jpg} …). Library images
+     * are returned as {@code library:<assetId>} references.
+     */
     private List<String> images(List<SheetRow> rows, boolean required) {
         SheetRow first = rows.getFirst();
         String raw = productText(rows, ImportColumns.IMAGES);
         if (raw.isEmpty()) {
-            if (required) {
-                add(first, err(ImportColumns.IMAGES, "Add at least one image URL"));
+            if (!required) {
+                return List.of();
             }
-            return List.of();
+            List<String> matched = skuImages(rows);
+            if (matched.isEmpty()) {
+                add(first, err(ImportColumns.IMAGES, "Add image links or library file names, or upload images "
+                        + "named after the SKU (SKU.MAIN.jpg) to your image library"));
+            }
+            return matched;
         }
-        List<String> urls = Arrays.stream(URL_SPLIT.split(raw)).map(String::strip).filter(s -> !s.isEmpty())
+        List<String> entries = Arrays.stream(URL_SPLIT.split(raw)).map(String::strip).filter(s -> !s.isEmpty())
                 .distinct().toList();
-        if (urls.size() > ImportLimits.MAX_IMAGES) {
+        if (entries.size() > ImportLimits.MAX_IMAGES) {
             add(first, err(ImportColumns.IMAGES, "Up to " + ImportLimits.MAX_IMAGES + " images per product"));
         }
-        for (String u : urls) {
+        List<String> out = new ArrayList<>();
+        for (String u : entries) {
+            if (ImageLibrary.isFileName(u)) {
+                LibraryImage img = ctx.library().byFileName(u).orElse(null);
+                if (img == null) {
+                    add(first, err(ImportColumns.IMAGES, "Not in your image library: " + abbreviate(u)
+                            + " (upload it on the Images page)"));
+                } else if (img.held()) {
+                    add(first, err(ImportColumns.IMAGES, abbreviate(u) + " is held for review by moderation"));
+                } else if (img.ready()) {
+                    out.add(ImageLibrary.ref(img));
+                }
+                continue;
+            }
             String problem = urlProblem(u);
             if (problem != null) {
                 add(first, err(ImportColumns.IMAGES, problem + ": " + abbreviate(u)));
@@ -428,13 +451,34 @@ public final class ImportValidator {
                     add(first, RowMessage.warning(ImportColumns.IMAGES, idx(ImportColumns.IMAGES),
                             "Not a JPG, PNG or WebP link; it may be refused: " + abbreviate(u)));
                 }
+                out.add(u);
             }
         }
-        return urls;
+        return out;
+    }
+
+    /** Library images named after the Parent SKU, else the first row SKU that has some; held images are skipped. */
+    private List<String> skuImages(List<SheetRow> rows) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(productText(rows, ImportColumns.PARENT_SKU));
+        rows.forEach(r -> candidates.add(text(r, ImportColumns.SKU)));
+        for (String sku : candidates) {
+            List<LibraryImage> found = ctx.library().productImages(sku);
+            if (found.isEmpty()) {
+                continue;
+            }
+            if (found.stream().noneMatch(LibraryImage::ready)) {
+                add(rows.getFirst(), err(ImportColumns.IMAGES, "The library images of " + sku
+                        + " are held for review by moderation"));
+                return List.of();
+            }
+            return found.stream().filter(LibraryImage::ready).map(ImageLibrary::ref).toList();
+        }
+        return List.of();
     }
 
     /** Why a URL can't be fetched, or null. Reachability is checked when the image is copied during the import. */
-    static String urlProblem(String url) {
+    public static String urlProblem(String url) {
         URI uri;
         try {
             uri = new URI(url);

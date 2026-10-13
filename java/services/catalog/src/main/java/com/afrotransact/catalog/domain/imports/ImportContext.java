@@ -15,12 +15,21 @@ import com.afrotransact.catalog.domain.ProductType;
  * @param takenSkus     the file's SKUs (upper case) that the organisation already lists
  * @param existingGtins the file's GTINs that already have a product page
  * @param existing      Update mode: the organisation's listings by SKU (upper case)
+ * @param library       the organisation's library images for the file's SKUs and image file names (S310)
  */
 public record ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
                             List<ImportCategory> categories, Set<String> takenSkus, Set<String> existingGtins,
-                            Map<String, ExistingListing> existing) {
+                            Map<String, ExistingListing> existing, ImageLibrary library) {
+
+    /** Without library images. */
+    public ImportContext(ImportMode mode, ProductType fixedType, Map<String, ProductType> types,
+                         List<ImportCategory> categories, Set<String> takenSkus, Set<String> existingGtins,
+                         Map<String, ExistingListing> existing) {
+        this(mode, fixedType, types, categories, takenSkus, existingGtins, existing, ImageLibrary.EMPTY);
+    }
 
     public ImportContext {
+        library = library == null ? ImageLibrary.EMPTY : library;
         types = Map.copyOf(types);
         categories = List.copyOf(categories);
         takenSkus = Set.copyOf(takenSkus);

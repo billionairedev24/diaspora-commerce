@@ -4,6 +4,7 @@ import java.util.Map;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
 import com.afrotransact.catalog.domain.imports.SpreadsheetRejected;
+import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -34,6 +35,16 @@ class CatalogErrorAdvice {
         pd.setTitle("The file cannot be imported");
         pd.setProperty("code", "catalog.upload-rejected");
         pd.setProperty("fieldErrors", Map.of("file", ex.getMessage()));
+        return pd;
+    }
+
+    @ExceptionHandler(ImageServiceUnavailable.class)
+    ProblemDetail imageServiceUnavailable(ImageServiceUnavailable ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "The image library is unavailable; try again in a minute");
+        pd.setType(ProblemTypes.of("catalog.media-unavailable"));
+        pd.setTitle("Image library unavailable");
+        pd.setProperty("code", "catalog.media-unavailable");
         return pd;
     }
 

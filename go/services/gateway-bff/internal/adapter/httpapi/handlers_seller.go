@@ -87,6 +87,10 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/imports/{importId}/rows", h.importRows)
 		route("GET /v1/seller/imports/{importId}/report", h.importReport)
 		route("POST /v1/seller/imports/{importId}/start", h.startImport)
+		route("GET /v1/seller/image-library", h.imageLibrary)
+		route("DELETE /v1/seller/image-library/{assetId}", h.removeLibraryImage)
+		route("POST /v1/seller/image-library/attach", h.attachLibraryImages)
+		route("GET /v1/seller/catalog/brands", h.brands)
 	}
 	route("GET /v1/seller/catalog/categories", h.categoryTree)
 	route("GET /v1/seller/catalog/product-types/{code}", h.productType)
@@ -432,12 +436,13 @@ func (h *handlersImpl) requestUpload(w http.ResponseWriter, r *http.Request) {
 		FileName    string `json:"fileName"`
 		ContentType string `json:"contentType"`
 		Size        int64  `json:"size"`
+		Library     bool   `json:"library"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	v, err := h.s.SellerCatalog.Upload(r.Context(), callerFrom(r.Context()), b.Purpose, b.FileName, b.ContentType, b.Size)
+	v, err := h.s.SellerCatalog.Upload(r.Context(), callerFrom(r.Context()), b.Purpose, b.FileName, b.ContentType, b.Size, b.Library)
 	h.reply(w, r, http.StatusCreated, v, err)
 }
 

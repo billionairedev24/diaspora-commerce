@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.catalog.domain.imports.ProductImport;
+import com.afrotransact.catalog.domain.imports.RowImage;
 import com.afrotransact.catalog.domain.imports.RowMessage;
 import com.afrotransact.catalog.domain.imports.StoredRow;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -54,11 +55,26 @@ final class ImportDtos {
                        @Schema(allowableValues = {"VALID", "WARNING", "ERROR"}) String status,
                        @Schema(allowableValues = {"PENDING", "CREATED", "UPDATED", "FAILED", "SKIPPED"})
                        String outcome,
-                       String outcomeNote, UUID productId, List<MessageDto> messages, List<String> cells) {
+                       String outcomeNote, UUID productId, List<MessageDto> messages, List<String> cells,
+                       List<RowImageDto> images) {
 
-        static RowResponse of(StoredRow r) {
+        static RowResponse of(StoredRow r, List<RowImage> images) {
             return new RowResponse(r.rowNumber(), r.groupKey(), r.sku(), r.status().name(), r.outcome().name(),
-                    r.outcomeNote(), r.productId(), r.messages().stream().map(MessageDto::of).toList(), r.cells());
+                    r.outcomeNote(), r.productId(), r.messages().stream().map(MessageDto::of).toList(), r.cells(),
+                    images == null ? List.of() : images.stream().map(RowImageDto::of).toList());
+        }
+    }
+
+    @Schema(name = "ImportRowImage", description = "One image of an upload row (S310)")
+    record RowImageDto(@Schema(allowableValues = {"MAIN", "PT01", "PT02", "PT03", "PT04", "PT05", "PT06", "PT07",
+                               "PT08", "SWCH"}) String slot,
+                       @Schema(allowableValues = {"LINK", "FILE", "SKU"}) String source, String ref,
+                       @Schema(allowableValues = {"FOUND", "LINK", "HELD", "MISSING", "BAD_LINK"}) String state,
+                       String url, Integer width, Integer height, String message) {
+
+        static RowImageDto of(RowImage i) {
+            return new RowImageDto(i.slot(), i.source(), i.ref(), i.state(), i.url(), i.width(), i.height(),
+                    i.message());
         }
     }
 

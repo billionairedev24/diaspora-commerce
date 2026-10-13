@@ -1,6 +1,6 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
-import { type Cadence } from '../schemas/seller';
+import { type Cadence, type ImageLibraryQuery } from '../schemas/seller';
 import { type ImportRowsQuery, type ListingsQuery, type SellerApiClient, type SellerOrdersQuery } from '../seller-client';
 
 /* TanStack Query key factories for the Seller Center & Provider Hub. Everything hangs off ['seller', orgId] so
@@ -33,6 +33,9 @@ export const sellerKeys = {
   importPage: (orgId: string, page: number, size: number) => [...sellerKeys.imports(orgId), 'page', page, size] as const,
   importJob: (orgId: string, id: string) => [...sellerKeys.imports(orgId), 'detail', id] as const,
   importRows: (orgId: string, id: string, q: ImportRowsQuery) => [...sellerKeys.importJob(orgId, id), 'rows', q] as const,
+  imageLibrary: (orgId: string) => [...sellerKeys.org(orgId), 'image-library'] as const,
+  imageLibraryPage: (orgId: string, q: ImageLibraryQuery) => [...sellerKeys.imageLibrary(orgId), q] as const,
+  brands: (orgId: string, q: string) => [...sellerKeys.org(orgId), 'brands', q] as const,
   categoryRequests: (orgId: string) => [...sellerKeys.org(orgId), 'category-requests'] as const,
   inventory: (orgId: string, lowStock: boolean) => [...sellerKeys.org(orgId), 'inventory', lowStock] as const,
   payouts: (orgId: string) => [...sellerKeys.org(orgId), 'payouts'] as const,
@@ -109,6 +112,10 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.importJob(orgId, id), queryFn: ({ signal }) => api.getImport(id, signal), staleTime: 0 }),
   importRows: (api: SellerApiClient, orgId: string, id: string, q: ImportRowsQuery) =>
     queryOptions({ queryKey: sellerKeys.importRows(orgId, id, q), queryFn: ({ signal }) => api.listImportRows(id, q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  imageLibrary: (api: SellerApiClient, orgId: string, q: ImageLibraryQuery) =>
+    queryOptions({ queryKey: sellerKeys.imageLibraryPage(orgId, q), queryFn: ({ signal }) => api.listImageLibrary(q, signal), placeholderData: keepPreviousData, staleTime: 5_000 }),
+  brands: (api: SellerApiClient, orgId: string, q: string) =>
+    queryOptions({ queryKey: sellerKeys.brands(orgId, q), queryFn: ({ signal }) => api.listBrands(q, signal), placeholderData: keepPreviousData, staleTime: 60_000 }),
   categoryRequests: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.categoryRequests(orgId), queryFn: ({ signal }) => api.listCategoryRequests(signal), staleTime: MINUTE }),
   inventory: (api: SellerApiClient, orgId: string, lowStock: boolean) =>

@@ -1,8 +1,8 @@
 'use client';
 
 import { type ImportMode, sellerKeys, sellerQueries, type SpreadsheetFormat } from '@afrotransact/api-client';
-import { Button, ChipGroup, cx, Select, useToast } from '@afrotransact/ui';
-import { DownloadSimple, FileArrowUp, FileCsv, MicrosoftExcelLogo } from '@phosphor-icons/react/ssr';
+import { Button, buttonClassName, ChipGroup, cx, Select, useToast } from '@afrotransact/ui';
+import { DownloadSimple, FileArrowUp, FileCsv, ImagesSquare, MicrosoftExcelLogo } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -79,9 +79,18 @@ export function BulkUploadView() {
     <>
       <PageHeader title={t('sc.bulk.title')} description={t('sc.bulk.description')}
         actions={<>
+          <Link href="/listings/images" className="text-sm">{t('sc.listings.images')}</Link>
           <Link href="/listings/bulk/history" className="text-sm">{t('sc.bulk.historyLink')}</Link>
           <Link href="/listings/new" className="text-sm">{t('sc.bulk.oneLink')}</Link>
         </>} />
+      <section aria-labelledby="bulk-photos" className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface px-4 py-3 sm:px-5">
+        <ImagesSquare size={28} aria-hidden className="shrink-0 text-muted" />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h2 id="bulk-photos" className="m-0 text-base font-semibold">{t('sc.bulk.photosTitle')}</h2>
+          <p className="m-0 text-sm text-muted">{t('sc.bulk.photosHint')}</p>
+        </div>
+        <Link href="/listings/images" className={buttonClassName({ variant: 'neutral', size: 'sm' })}>{t('sc.bulk.photosLink')}</Link>
+      </section>
       <div className="grid items-start gap-4 lg:grid-cols-2">
         <section aria-labelledby="bulk-step1" className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:p-5">
           <h2 id="bulk-step1" className="m-0 text-lg font-semibold">{t('sc.bulk.step1')}</h2>

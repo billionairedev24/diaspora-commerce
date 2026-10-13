@@ -5,7 +5,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -20,14 +22,18 @@ import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.catalog.domain.imports.ExistingListing;
+import com.afrotransact.catalog.domain.imports.ImageLibrary;
 import com.afrotransact.catalog.domain.imports.ImportCategory;
+import com.afrotransact.catalog.domain.imports.ImportColumns;
 import com.afrotransact.catalog.domain.imports.ImportContext;
 import com.afrotransact.catalog.domain.imports.ImportMode;
 import com.afrotransact.catalog.domain.imports.ImportValidator;
 import com.afrotransact.catalog.domain.imports.ImportedProduct;
 import com.afrotransact.catalog.domain.imports.ImportedVariant;
+import com.afrotransact.catalog.domain.imports.LibraryImage;
 import com.afrotransact.catalog.domain.imports.ParsedSheet;
 import com.afrotransact.catalog.domain.imports.ProductImport;
+import com.afrotransact.catalog.domain.imports.RowImages;
 import com.afrotransact.catalog.domain.imports.RowOutcome;
 import com.afrotransact.catalog.domain.imports.RowStatus;
 import com.afrotransact.catalog.domain.imports.SheetRow;
@@ -38,6 +44,7 @@ import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.ImageImporter;
 import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
 import com.afrotransact.catalog.port.ImageImporter.ImportedImage;
+import com.afrotransact.catalog.port.ImageLibraryLookup;
 import com.afrotransact.catalog.port.ProductImportRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -68,19 +75,21 @@ class ImportJobImpl implements ImportJob {
     private final CategoryRepository categories;
     private final ProductWriter writer;
     private final ImageImporter images;
+    private final ImageLibraryLookup library;
     private final DomainEventPublisher events;
     private final Clock clock;
     private final TransactionTemplate tx;
     private final TransactionTemplate savepoint;
 
     ImportJobImpl(ProductImportRepository imports, ProductRepository products, CategoryRepository categories,
-                  ProductWriter writer, ImageImporter images, DomainEventPublisher events, Clock clock,
-                  PlatformTransactionManager transactions) {
+                  ProductWriter writer, ImageImporter images, ImageLibraryLookup library,
+                  DomainEventPublisher events, Clock clock, PlatformTransactionManager transactions) {
         this.imports = imports;
         this.products = products;
         this.categories = categories;
         this.writer = writer;
         this.images = images;
+        this.library = library;
         this.events = events;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
@@ -142,16 +151,18 @@ class ImportJobImpl implements ImportJob {
             return new Prepared(numbers, null, null, null, null, null);
         }
         try {
-            ImportedProduct p = remap(u, rows);
+            Remapped r = remap(u, rows);
+            ImportedProduct p = r.product();
             if (u.mode() == ImportMode.CREATE) {
                 List<String> notes = new ArrayList<>();
-                List<ProductImage> imgs = fetchImages(u, p.imageUrls(), notes);
+                List<ProductImage> imgs = fetchImages(u, p.imageUrls(), r.library(), notes);
                 return new Prepared(numbers, toCreate(p, imgs), null, null, null, String.join("; ", notes));
             }
             Product current = products.findById(p.productId())
                     .orElseThrow(() -> new NotFoundException("catalog.product-not-found", "The listing was deleted"));
             List<String> notes = new ArrayList<>();
-            List<ProductImage> imgs = p.imageUrls().isEmpty() ? current.images() : fetchImages(u, p.imageUrls(), notes);
+            List<ProductImage> imgs = p.imageUrls().isEmpty() ? current.images()
+                    : fetchImages(u, p.imageUrls(), r.library(), notes);
             return new Prepared(numbers, null, toUpdate(current, p, imgs), current.id(), null, String.join("; ", notes));
         } catch (ImageServiceUnavailable ex) {
             return new Prepared(numbers, null, null, null, "Images could not be copied (image service unavailable); "
@@ -163,8 +174,12 @@ class ImportJobImpl implements ImportJob {
         }
     }
 
+    /** A product read again from its stored rows, with the library images its rows can use. */
+    private record Remapped(ImportedProduct product, ImageLibrary library) {
+    }
+
     /** Reads the product from its stored rows with the catalog as it is now (a category may have changed). */
-    private ImportedProduct remap(ProductImport u, List<StoredRow> rows) {
+    private Remapped remap(ProductImport u, List<StoredRow> rows) {
         Map<String, ProductType> types = new HashMap<>();
         categories.findAllProductTypes().forEach(t -> types.put(t.code(), t));
         ProductType fixed = u.productTypeCode() == null ? null : types.get(u.productTypeCode());
@@ -183,8 +198,9 @@ class ImportJobImpl implements ImportJob {
                     .orElseThrow(() -> new ImportRefused("The listing was deleted"));
             rows.forEach(r -> existing.put(r.sku(), new ExistingListing(productId, current.productTypeCode())));
         }
+        ImageLibrary lib = libraryFor(u, fixed, types, cats, rows);
         ImportContext ctx = new ImportContext(u.mode(), fixed, types, cats, Set.of(), Set.of(),
-                existing);
+                existing, lib);
         ParsedSheet sheet = new ParsedSheet(u.header(),
                 rows.stream().map(r -> new SheetRow(r.rowNumber(), r.cells())).toList());
         ValidationResult result = ImportValidator.validate(sheet, ctx);
@@ -193,12 +209,49 @@ class ImportJobImpl implements ImportJob {
                     .map(ValidatedRow::summary).findFirst().orElse("The rows are no longer valid");
             throw new ImportRefused(why);
         }
-        return result.products().getFirst();
+        return new Remapped(result.products().getFirst(), lib);
     }
 
-    private List<ProductImage> fetchImages(ProductImport u, List<String> urls, List<String> notes) {
+    /** The library images named by the rows' image cells or after their SKUs (throws when media is unavailable). */
+    private ImageLibrary libraryFor(ProductImport u, ProductType fixed, Map<String, ProductType> types,
+                                    List<ImportCategory> cats, List<StoredRow> rows) {
+        ImportContext probe = new ImportContext(u.mode(), fixed, types, cats, Set.of(), Set.of(), Map.of());
+        Map<String, Integer> index = ImportColumns.resolve(u.header(), probe.columns());
+        Integer imageCol = index.get(ImportColumns.IMAGES);
+        Integer parentCol = index.get(ImportColumns.PARENT_SKU);
+        Set<String> skus = new LinkedHashSet<>();
+        Set<String> fileNames = new LinkedHashSet<>();
+        for (StoredRow r : rows) {
+            if (r.sku() != null) {
+                skus.add(r.sku().toUpperCase(Locale.ROOT));
+            }
+            String parent = cell(r, parentCol);
+            if (!parent.isBlank()) {
+                skus.add(parent.strip().toUpperCase(Locale.ROOT));
+            }
+            fileNames.addAll(RowImages.fileNames(cell(r, imageCol)));
+        }
+        return library.lookup(u.owner().orgId(), skus, fileNames);
+    }
+
+    private static String cell(StoredRow r, Integer col) {
+        return col == null || col >= r.cells().size() || r.cells().get(col) == null ? "" : r.cells().get(col);
+    }
+
+    private List<ProductImage> fetchImages(ProductImport u, List<String> urls, ImageLibrary lib, List<String> notes) {
         List<ProductImage> out = new ArrayList<>();
         for (int i = 0; i < urls.size(); i++) {
+            if (ImageLibrary.isRef(urls.get(i))) {
+                LibraryImage li = lib.byRef(urls.get(i)).filter(LibraryImage::ready).orElse(null);
+                if (li != null) {
+                    out.add(li.toProductImage());
+                } else if (i == 0) {
+                    throw new ImportRefused("The main library image was removed or is held for review");
+                } else {
+                    notes.add("Image " + (i + 1) + " skipped: removed from the library or held for review");
+                }
+                continue;
+            }
             ImportedImage img = images.importImage(urls.get(i), u.owner().orgId(), u.uploadedBy());
             if (img.ready()) {
                 out.add(new ProductImage(img.url(), img.width(), img.height(), img.bytes(), img.contentType()));

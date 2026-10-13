@@ -987,6 +987,47 @@ export const ImportRowImageSchema = z.object({
   message: nullableString
 });
 export type ImportRowImage = z.infer<typeof ImportRowImageSchema>;
+/** One image of the organisation's image library with the SKUs of the listings that use it (S310). */
+export const ImageLibraryItemSchema = z.object({
+  assetId: z.string(),
+  fileName: z.string(),
+  sku: nullableString,
+  slot: ImageSlotSchema.nullable(),
+  status: z.enum(['READY', 'FLAGGED', 'REJECTED']),
+  url: nullableString,
+  width: z.number().int(),
+  height: z.number().int(),
+  bytes: z.number().int(),
+  flags: z.array(z.string()),
+  createdAt: z.string(),
+  usedBy: z.array(z.string()),
+  skuKnown: z.boolean()
+});
+export type ImageLibraryItem = z.infer<typeof ImageLibraryItemSchema>;
+export const ImageLibraryPageSchema = z.object({
+  items: z.array(ImageLibraryItemSchema),
+  total: z.number().int(),
+  page: z.number().int(),
+  size: z.number().int()
+});
+export type ImageLibraryPage = z.infer<typeof ImageLibraryPageSchema>;
+export interface ImageLibraryQuery {
+  q?: string;
+  status?: ImageLibraryItem['status'];
+  matched?: boolean;
+  page: number;
+  size: number;
+}
+export const AttachLibraryImagesResultSchema = z.object({
+  productsUpdated: z.number().int(),
+  imagesAttached: z.number().int(),
+  skipped: z.array(z.object({ sku: z.string(), reason: z.string() }))
+});
+export type AttachLibraryImagesResult = z.infer<typeof AttachLibraryImagesResultSchema>;
+export const BrandSchema = z.object({ name: z.string(), source: z.enum(['OWN', 'CATALOG']), products: z.number().int() });
+export type Brand = z.infer<typeof BrandSchema>;
+export const BrandListSchema = z.object({ brands: z.array(BrandSchema) });
+export type BrandList = z.infer<typeof BrandListSchema>;
 export const ProductImportRowSchema = z.object({
   rowNumber: z.number().int(),
   groupKey: z.string(),
@@ -1012,7 +1053,9 @@ export const UploadRequestSchema = z.object({
   purpose: z.enum(['product-image', 'storefront']),
   fileName: z.string().min(1).max(200),
   contentType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-  size: z.number().int().min(1).max(8 * 1024 * 1024)
+  size: z.number().int().min(1).max(8 * 1024 * 1024),
+  /** product-image only: also add it to the image library (matched to SKUs by file name). */
+  library: z.boolean().optional()
 });
 export type UploadRequest = z.infer<typeof UploadRequestSchema>;
 export const UploadTicketSchema = z.object({

@@ -636,6 +636,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/coupons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Seller-funded coupons for the active organisation */
+        get: operations["listSellerCoupons"];
+        put?: never;
+        /** Create a seller-funded coupon (applies only to this organisation's offers) */
+        post: operations["createSellerCoupon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/coupons/{couponId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause or activate a seller coupon */
+        post: operations["setSellerCouponStatus"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/listings": {
         parameters: {
             query?: never;
@@ -1058,7 +1093,7 @@ export interface paths {
         put?: never;
         /**
          * Direct upload ticket for a product or storefront image
-         * @description media `POST /v1/uploads` (JPG, PNG or WebP, ≤ 8 MB).
+         * @description media `POST /v1/uploads` (JPG, PNG or WebP, ≤ 8 MB). `library` adds a product image to the image library.
          */
         post: operations["requestUpload"];
         delete?: never;
@@ -1081,6 +1116,91 @@ export interface paths {
          * @description media `POST /v1/assets/{id}/complete`.
          */
         post: operations["completeUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/image-library": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's image library with the SKUs that use each image (server-driven table)
+         * @description media `GET /v1/library` (the member's token) plus catalog `POST /v1/image-library/usage` for "used by" and for
+         *     whether the SKU in the file name belongs to a listing. File names `SKU.MAIN`, `SKU.PT01`…`SKU.PT08` and
+         *     `SKU.SWCH` (any image extension, case-insensitive, `.`, `_`, `-` or a space before the slot) are matched to the
+         *     listing with that SKU (variant SKUs too). Images are uploaded with `POST /v1/seller/uploads` and `library: true`.
+         */
+        get: operations["listImageLibrary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/image-library/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an image from the library (listings that use it keep it)
+         * @description media `DELETE /v1/library/{id}`.
+         */
+        delete: operations["removeLibraryImage"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/image-library/attach": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach matching library images to existing listings by SKU
+         * @description catalog `POST /v1/image-library/attach`. `SKU.MAIN` and `SKU.PT01`–`PT08` replace the product images in that
+         *     order; on products with several variants a variant SKU's `MAIN` sets the variant image. Listings without
+         *     matching images are left as they are; skipped listings come back with a reason.
+         */
+        post: operations["attachLibraryImages"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/catalog/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Brands for the product form's brand combobox (the organisation's, most used first)
+         * @description catalog `GET /v1/brands`.
+         */
+        get: operations["listBrands"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2045,7 +2165,7 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /** @enum {string} */
-        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "storefront" | "calendar" | "requests" | "hours" | "services" | "policy" | "public-page" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
+        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "coupons" | "storefront" | "calendar" | "requests" | "hours" | "services" | "policy" | "public-page" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
         SellerUser: {
             id: string;
             firstName: string;
@@ -2641,6 +2761,53 @@ export interface components {
         SellerOfferList: {
             items: components["schemas"]["SellerOffer"][];
         };
+        SellerCoupon: {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            description?: string;
+            /** @enum {string} */
+            type: "PERCENT" | "FIXED" | "FREE_SHIPPING";
+            /** Format: int64 */
+            value: number;
+            currency: string;
+            scope: string;
+            scopeRef?: string;
+            /** Format: int64 */
+            minSpendMinor: number;
+            /** @enum {string} */
+            status: "ACTIVE" | "PAUSED" | "EXPIRED";
+            /** @enum {string} */
+            funding: "PLATFORM" | "SELLER";
+            editable: boolean;
+            /** Format: int64 */
+            version: number;
+        };
+        SellerCouponList: {
+            items: components["schemas"]["SellerCoupon"][];
+        };
+        CreateSellerCouponRequest: {
+            code: string;
+            description?: string;
+            /** @enum {string} */
+            type: "PERCENT" | "FIXED" | "FREE_SHIPPING";
+            /** Format: int64 */
+            value: number;
+            /** @default USD */
+            currency: string;
+            /** @enum {string} */
+            scope: "CART" | "CATEGORY" | "PRODUCT" | "SELLER";
+            scopeRef?: string;
+            /**
+             * Format: int64
+             * @default 0
+             */
+            minSpendMinor: number;
+            /** @default 0 */
+            totalLimit: number;
+            /** @default 0 */
+            perCustomerLimit: number;
+        };
         OfferFulfilmentRequest: {
             fulfilment: components["schemas"]["Fulfilment"];
             /** @description Required for AFROTRANSACT_DELIVERY */
@@ -3211,6 +3378,81 @@ export interface components {
             messages: components["schemas"]["ImportRowMessage"][];
             /** @description Cell text in header order */
             cells: string[];
+            /** @description The row's images: found in the library (thumbnail), links, missing or bad links */
+            images: components["schemas"]["ImportRowImage"][];
+        };
+        /** @enum {string} */
+        ImageSlot: "MAIN" | "PT01" | "PT02" | "PT03" | "PT04" | "PT05" | "PT06" | "PT07" | "PT08" | "SWCH";
+        ImportRowImage: {
+            slot: components["schemas"]["ImageSlot"];
+            /**
+             * @description An https URL cell, a library file name in an image cell, or a library file named after the SKU
+             * @enum {string}
+             */
+            source: "LINK" | "FILE" | "SKU";
+            /** @description The link or file name */
+            ref: string;
+            /**
+             * @description FOUND in the library, a LINK copied when the import runs, HELD by moderation, MISSING from the library, or a BAD_LINK
+             * @enum {string}
+             */
+            state: "FOUND" | "LINK" | "HELD" | "MISSING" | "BAD_LINK";
+            /** @description Thumbnail of a FOUND library image */
+            url: string | null;
+            message: string | null;
+        };
+        ImageLibraryItem: {
+            assetId: string;
+            fileName: string;
+            /** @description SKU parsed from the file name (upper case); null when the name has no slot */
+            sku: string | null;
+            slot: components["schemas"]["ImageSlot"] | null;
+            /**
+             * @description READY, held for review (FLAGGED) or REJECTED (reasons in flags)
+             * @enum {string}
+             */
+            status: "READY" | "FLAGGED" | "REJECTED";
+            /** @description Public URL (thumbnail) when READY */
+            url: string | null;
+            width: number;
+            height: number;
+            bytes: number;
+            flags: string[];
+            /** Format: date-time */
+            createdAt: string;
+            /** @description SKUs of listings that use this image */
+            usedBy: string[];
+            /** @description The SKU in the file name belongs to one of the organisation's listings */
+            skuKnown: boolean;
+        };
+        ImageLibraryPage: {
+            items: components["schemas"]["ImageLibraryItem"][];
+            total: number;
+            page: number;
+            size: number;
+        };
+        AttachLibraryImagesRequest: {
+            /** @description Only listings with one of these SKUs; omit for every listing */
+            skus?: string[];
+        };
+        AttachLibraryImagesResult: {
+            productsUpdated: number;
+            imagesAttached: number;
+            skipped: {
+                sku: string;
+                reason: string;
+            }[];
+        };
+        BrandList: {
+            brands: {
+                name: string;
+                /**
+                 * @description Used by your products, or by live products of other sellers
+                 * @enum {string}
+                 */
+                source: "OWN" | "CATALOG";
+                products: number;
+            }[];
         };
         ProductImportRowPage: {
             items: components["schemas"]["ProductImportRow"][];
@@ -3232,6 +3474,11 @@ export interface components {
             /** @enum {string} */
             contentType: "image/jpeg" | "image/png" | "image/webp";
             size: number;
+            /**
+             * @description product-image only: add it to the image library (matched to SKUs by file name)
+             * @default false
+             */
+            library: boolean;
         };
         UploadTicket: {
             assetId: string;
@@ -5196,6 +5443,90 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    listSellerCoupons: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Coupons */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCouponList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createSellerCoupon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSellerCouponRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCoupon"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setSellerCouponStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                couponId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    status: "ACTIVE" | "PAUSED" | "EXPIRED";
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerCoupon"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listListings: {
         parameters: {
             query?: {
@@ -5947,6 +6278,119 @@ export interface operations {
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listImageLibrary: {
+        parameters: {
+            query?: {
+                /** @description File name or SKU contains */
+                q?: string;
+                status?: "READY" | "FLAGGED" | "REJECTED";
+                /** @description true = named after a SKU, false = other names */
+                matched?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Library page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageLibraryPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removeLibraryImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    attachLibraryImages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AttachLibraryImagesRequest"];
+            };
+        };
+        responses: {
+            /** @description Result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachLibraryImagesResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listBrands: {
+        parameters: {
+            query?: {
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Brands */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BrandList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

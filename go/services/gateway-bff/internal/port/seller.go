@@ -793,10 +793,37 @@ type MediaUpload struct {
 	} `json:"upload"`
 }
 
-// MediaClient signs and finalises uploads.
+// MediaLibraryImage is media's LibraryImage.
+type MediaLibraryImage struct {
+	AssetID   string    `json:"assetId"`
+	FileName  string    `json:"fileName"`
+	SKU       *string   `json:"sku"`
+	Slot      *string   `json:"slot"`
+	Status    string    `json:"status"`
+	URL       *string   `json:"url"`
+	Width     int       `json:"width"`
+	Height    int       `json:"height"`
+	Bytes     int64     `json:"bytes"`
+	Flags     []string  `json:"flags"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// MediaLibraryPage is media's LibraryPage.
+type MediaLibraryPage struct {
+	Items []MediaLibraryImage `json:"items"`
+	Total int64               `json:"total"`
+	Page  int                 `json:"page"`
+	Size  int                 `json:"size"`
+}
+
+// MediaClient signs and finalises uploads and reads the organisation's image library (S310).
 type MediaClient interface {
 	RequestUpload(ctx context.Context, bearer, purpose, fileName, contentType string, size int64) (MediaUpload, error)
+	// RequestLibraryUpload is RequestUpload of a product image that also goes into the image library.
+	RequestLibraryUpload(ctx context.Context, bearer, fileName, contentType string, size int64) (MediaUpload, error)
 	Complete(ctx context.Context, bearer, assetID string) (MediaAsset, error)
+	Library(ctx context.Context, bearer, q, status, matched string, page, size int) (MediaLibraryPage, error)
+	RemoveFromLibrary(ctx context.Context, bearer, assetID string) error
 }
 
 // ---------------------------------------------------------------- orders (seller side)

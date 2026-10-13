@@ -3,7 +3,7 @@
 import { type ListingRow, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Badge, Button, buttonClassName, useToast } from '@afrotransact/ui';
-import { FileArrowUp, PencilSimple, Plus, Trash } from '@phosphor-icons/react/ssr';
+import { FileArrowUp, ImagesSquare, PencilSimple, Plus, Trash } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -113,6 +113,9 @@ export function ListingsView() {
       module="listings"
       actions={editable ? (
         <>
+          <Link href="/listings/images" className={buttonClassName({ variant: 'neutral' })}>
+            <ImagesSquare size={18} aria-hidden /> {t('sc.listings.images')}
+          </Link>
           <Link href="/listings/bulk" className={buttonClassName({ variant: 'neutral' })}>
             <FileArrowUp size={18} aria-hidden /> {t('sc.listings.bulk')}
           </Link>

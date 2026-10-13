@@ -17,6 +17,7 @@ import com.afrotransact.catalog.domain.Gtin;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.imports.ExistingListing;
+import com.afrotransact.catalog.domain.imports.ImageLibrary;
 import com.afrotransact.catalog.domain.imports.ImportCategory;
 import com.afrotransact.catalog.domain.imports.ImportColumns;
 import com.afrotransact.catalog.domain.imports.ImportContext;
@@ -27,6 +28,8 @@ import com.afrotransact.catalog.domain.imports.ImportValidator;
 import com.afrotransact.catalog.domain.imports.ParsedSheet;
 import com.afrotransact.catalog.domain.imports.ProductImport;
 import com.afrotransact.catalog.domain.imports.ReportRow;
+import com.afrotransact.catalog.domain.imports.RowImage;
+import com.afrotransact.catalog.domain.imports.RowImages;
 import com.afrotransact.catalog.domain.imports.RowOutcome;
 import com.afrotransact.catalog.domain.imports.RowStatus;
 import com.afrotransact.catalog.domain.imports.Severity;
@@ -37,6 +40,8 @@ import com.afrotransact.catalog.domain.imports.StoredRow;
 import com.afrotransact.catalog.domain.imports.TemplateSpec;
 import com.afrotransact.catalog.domain.imports.ValidationResult;
 import com.afrotransact.catalog.port.CategoryRepository;
+import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
+import com.afrotransact.catalog.port.ImageLibraryLookup;
 import com.afrotransact.catalog.port.ProductImportRepository;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.catalog.port.SpreadsheetReader;
@@ -69,6 +74,7 @@ class ProductImportServiceImpl implements ProductImportService {
     private final ResourceAccessChecker access;
     private final OwnerResolver owners;
     private final ImportSettings settings;
+    private final ImageLibraryLookup library;
     private final Executor executor;
     private final Clock clock;
     private final TransactionTemplate tx;
@@ -76,7 +82,7 @@ class ProductImportServiceImpl implements ProductImportService {
     ProductImportServiceImpl(ProductImportRepository imports, ProductRepository products,
                              CategoryRepository categories, SpreadsheetReader reader, SpreadsheetWriter writer,
                              ImportJob job, PermissionChecker permissions, ResourceAccessChecker access,
-                             OwnerResolver owners, ImportSettings settings,
+                             OwnerResolver owners, ImportSettings settings, ImageLibraryLookup library,
                              @Qualifier("importExecutor") Executor executor, Clock clock,
                              PlatformTransactionManager transactions) {
         this.imports = imports;
@@ -89,6 +95,7 @@ class ProductImportServiceImpl implements ProductImportService {
         this.access = access;
         this.owners = owners;
         this.settings = settings;
+        this.library = library;
         this.executor = executor;
         this.clock = clock;
         this.tx = new TransactionTemplate(transactions);
@@ -141,12 +148,22 @@ class ProductImportServiceImpl implements ProductImportService {
         ImportContext probe = new ImportContext(mode, fixed, types, cats, Set.of(), Set.of(), Map.of());
         Map<String, Integer> index = ImportColumns.resolve(sheet.header(), probe.columns());
         Set<String> skus = new LinkedHashSet<>();
+        Set<String> parents = new LinkedHashSet<>();
+        Set<String> fileNames = new LinkedHashSet<>();
         Set<String> gtins = new LinkedHashSet<>();
         Integer skuCol = index.get(ImportColumns.SKU);
+        Integer parentCol = index.get(ImportColumns.PARENT_SKU);
+        Integer imageCol = index.get(ImportColumns.IMAGES);
         Integer gtinCol = index.get(ImportColumns.GTIN);
         for (SheetRow r : sheet.rows()) {
             if (skuCol != null && !r.cell(skuCol).isBlank()) {
                 skus.add(r.cell(skuCol).strip().toUpperCase(Locale.ROOT));
+            }
+            if (parentCol != null && !r.cell(parentCol).isBlank()) {
+                parents.add(r.cell(parentCol).strip().toUpperCase(Locale.ROOT));
+            }
+            if (imageCol != null) {
+                fileNames.addAll(RowImages.fileNames(r.cell(imageCol)));
             }
             if (gtinCol != null && !r.cell(gtinCol).isBlank()) {
                 gtins.add(Gtin.digits(r.cell(gtinCol)));
@@ -156,7 +173,58 @@ class ProductImportServiceImpl implements ProductImportService {
         Map<String, ExistingListing> existing = new HashMap<>();
         owned.forEach((sku, o) -> existing.put(sku, new ExistingListing(o.productId(), o.productTypeCode())));
         Set<String> existingGtins = mode == ImportMode.CREATE ? products.existingGtins(gtins) : Set.of();
-        return new ImportContext(mode, fixed, types, cats, owned.keySet(), existingGtins, existing);
+        Set<String> librarySkus = new LinkedHashSet<>(skus);
+        librarySkus.addAll(parents);
+        return new ImportContext(mode, fixed, types, cats, owned.keySet(), existingGtins, existing,
+                libraryFor(orgId, librarySkus, fileNames));
+    }
+
+    /** The library images for these SKUs and file names; empty (rows then need links) when media is unavailable. */
+    private ImageLibrary libraryFor(String orgId, Set<String> skus, Set<String> fileNames) {
+        try {
+            return library.lookup(orgId, skus, fileNames);
+        } catch (ImageServiceUnavailable ex) {
+            LOG.warn("Image library unavailable for {}: {}", orgId, ex.getMessage());
+            return ImageLibrary.EMPTY;
+        }
+    }
+
+    @Override
+    public Map<Integer, List<RowImage>> rowImages(UUID id, List<StoredRow> rows) {
+        ProductImport u = owned(id, owner());
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, ProductType> types = new HashMap<>();
+        categories.findAllProductTypes().forEach(t -> types.put(t.code(), t));
+        ProductType fixed = u.productTypeCode() == null ? null : types.get(u.productTypeCode());
+        ImportContext probe = new ImportContext(u.mode(), fixed, types, leaves(fixed == null ? null : fixed.code()),
+                Set.of(), Set.of(), Map.of());
+        Map<String, Integer> index = ImportColumns.resolve(u.header(), probe.columns());
+        Integer imageCol = index.get(ImportColumns.IMAGES);
+        Integer parentCol = index.get(ImportColumns.PARENT_SKU);
+        Set<String> skus = new LinkedHashSet<>();
+        Set<String> fileNames = new LinkedHashSet<>();
+        for (StoredRow r : rows) {
+            if (r.sku() != null) {
+                skus.add(r.sku().toUpperCase(Locale.ROOT));
+            }
+            String parent = cell(r, parentCol);
+            if (!parent.isBlank()) {
+                skus.add(parent.strip().toUpperCase(Locale.ROOT));
+            }
+            fileNames.addAll(RowImages.fileNames(cell(r, imageCol)));
+        }
+        ImageLibrary lib = libraryFor(u.owner().orgId(), skus, fileNames);
+        Map<Integer, List<RowImage>> out = new HashMap<>();
+        for (StoredRow r : rows) {
+            out.put(r.rowNumber(), RowImages.of(lib, cell(r, imageCol), r.sku(), cell(r, parentCol)));
+        }
+        return out;
+    }
+
+    private static String cell(StoredRow r, Integer col) {
+        return col == null || col >= r.cells().size() || r.cells().get(col) == null ? "" : r.cells().get(col);
     }
 
     @Override

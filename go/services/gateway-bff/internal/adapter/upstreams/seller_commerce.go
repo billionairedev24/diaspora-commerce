@@ -217,6 +217,34 @@ func (m *mediaImpl) RequestUpload(ctx context.Context, bearer, purpose, fileName
 	return out, err
 }
 
+func (m *mediaImpl) RequestLibraryUpload(ctx context.Context, bearer, fileName, contentType string, size int64) (port.MediaUpload, error) {
+	var out port.MediaUpload
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/uploads", Bearer: bearer,
+		JSON: map[string]any{"purpose": "product-image", "fileName": fileName, "contentType": contentType, "size": size, "library": true}}, &out)
+	return out, err
+}
+
+func (m *mediaImpl) Library(ctx context.Context, bearer, q, status, matched string, page, size int) (port.MediaLibraryPage, error) {
+	v := url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}
+	if q != "" {
+		v.Set("q", q)
+	}
+	if status != "" {
+		v.Set("status", status)
+	}
+	if matched != "" {
+		v.Set("matched", matched)
+	}
+	var out port.MediaLibraryPage
+	_, err := call(ctx, m.c, httpclient.Request{Path: "/v1/library", Query: v, Bearer: bearer}, &out)
+	return out, err
+}
+
+func (m *mediaImpl) RemoveFromLibrary(ctx context.Context, bearer, assetID string) error {
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer}, nil)
+	return err
+}
+
 func (m *mediaImpl) Complete(ctx context.Context, bearer, assetID string) (port.MediaAsset, error) {
 	var a port.MediaAsset
 	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(assetID) + "/complete", Bearer: bearer}, &a)

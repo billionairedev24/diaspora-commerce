@@ -12,6 +12,8 @@ import {
   type AfrotransactPickupRequest,
   type Asset,
   AssetSchema,
+  type AttachLibraryImagesResult,
+  AttachLibraryImagesResultSchema,
   type Availability,
   AvailabilitySchema,
   type BillingPaymentMethod,
@@ -25,6 +27,8 @@ import {
   type BookingAction,
   type BookingCard,
   BookingCardSchema,
+  type BrandList,
+  BrandListSchema,
   type Cadence,
   type CalendarView,
   CalendarViewSchema,
@@ -48,6 +52,9 @@ import {
   EarningsSchema,
   type GtinCheck,
   GtinCheckSchema,
+  type ImageLibraryPage,
+  ImageLibraryPageSchema,
+  type ImageLibraryQuery,
   type ImportMode,
   type ImportRowOutcome,
   type ImportRowStatus,
@@ -328,6 +335,23 @@ export function createSellerApiClient(options: ApiClientOptions) {
       download(`/v1/seller/imports/${enc(id)}/report`, { format }, `upload-report.${format}`),
     startImport: (id: string, validOnly: boolean): Promise<ProductImport> =>
       request(`/v1/seller/imports/${enc(id)}/start`, ProductImportSchema, { method: 'POST', body: { validOnly } }),
+    listImageLibrary: (q: ImageLibraryQuery, signal?: AbortSignal): Promise<ImageLibraryPage> =>
+      request('/v1/seller/image-library', ImageLibraryPageSchema, {
+        query: {
+          q: q.q || undefined,
+          status: q.status,
+          matched: q.matched === undefined ? undefined : String(q.matched),
+          page: String(q.page),
+          size: String(q.size)
+        },
+        signal
+      }),
+    removeLibraryImage: (assetId: string): Promise<undefined> =>
+      request(`/v1/seller/image-library/${enc(assetId)}`, z.undefined(), { method: 'DELETE' }),
+    attachLibraryImages: (skus?: string[]): Promise<AttachLibraryImagesResult> =>
+      request('/v1/seller/image-library/attach', AttachLibraryImagesResultSchema, { method: 'POST', body: { skus: skus ?? [] } }),
+    listBrands: (q: string, signal?: AbortSignal): Promise<BrandList> =>
+      request('/v1/seller/catalog/brands', BrandListSchema, { query: { q: q || undefined }, signal }),
     getCategoryTree: (signal?: AbortSignal): Promise<CategoryNode[]> => request('/v1/seller/catalog/categories', z.array(CategoryNodeSchema), { signal }),
     getProductType: (code: string, signal?: AbortSignal): Promise<ProductTypeSchema> =>
       request(`/v1/seller/catalog/product-types/${enc(code)}`, ProductTypeSchemaSchema, { signal }),

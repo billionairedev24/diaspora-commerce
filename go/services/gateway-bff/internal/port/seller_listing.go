@@ -71,7 +71,15 @@ type CatalogImportRow struct {
 		Severity    string  `json:"severity"`
 		Message     string  `json:"message"`
 	} `json:"messages"`
-	Cells []string `json:"cells"`
+	Cells  []string `json:"cells"`
+	Images []struct {
+		Slot    string  `json:"slot"`
+		Source  string  `json:"source"`
+		Ref     string  `json:"ref"`
+		State   string  `json:"state"`
+		URL     *string `json:"url"`
+		Message *string `json:"message"`
+	} `json:"images"`
 }
 
 // CatalogImportRowPage is catalog's ProductImportRowPage.
@@ -108,6 +116,21 @@ type SellerListingClient interface {
 	ImportRows(ctx context.Context, bearer, id, status, outcome string, page, size int) (CatalogImportRowPage, error)
 	ImportReport(ctx context.Context, bearer, id, format string) (domain.FileDownload, error)
 	StartImport(ctx context.Context, bearer, id string, validOnly bool) (CatalogImport, error)
+	// ImageUsage is catalog POST /v1/image-library/usage: the SKUs using each URL, and which SKUs exist.
+	ImageUsage(ctx context.Context, bearer string, urls, skus []string) (CatalogImageUsage, error)
+	// AttachLibraryImages is catalog POST /v1/image-library/attach.
+	AttachLibraryImages(ctx context.Context, bearer string, skus []string) (domain.AttachLibraryImagesResult, error)
+	// Brands is catalog GET /v1/brands.
+	Brands(ctx context.Context, bearer, q string) (domain.BrandList, error)
+}
+
+// CatalogImageUsage is catalog's ImageUsage.
+type CatalogImageUsage struct {
+	Usage []struct {
+		URL  string   `json:"url"`
+		SKUs []string `json:"skus"`
+	} `json:"usage"`
+	KnownSKUs []string `json:"knownSkus"`
 }
 
 // ListingWriterClient is ai-gateway's listing writer (POST /v1/ai/listing-writer) with the member's token.

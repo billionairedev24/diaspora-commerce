@@ -20,7 +20,9 @@ public final class ImportTemplates {
                     + "details are read from its first row; variant rows only need SKU, options, price, quantity "
                     + "and barcode.",
             "Images: public https links to JPG, PNG or WebP files, the first being the main image (at least "
-                    + "1000 × 1000 px). We copy each image into AfroTransact and check it like an upload.",
+                    + "1000 × 1000 px). We copy each image into AfroTransact and check it like an upload. Or upload "
+                    + "your photos to Products → Images first, named after the SKU (SKU.MAIN.jpg for the main image, "
+                    + "SKU.PT01.jpg to SKU.PT08.jpg for more) and leave the cell empty, or type their file names.",
             "Upload as .xlsx or .csv: at most 10 MB and 5,000 rows per file. Create mode adds new products; Update "
                     + "mode changes listings by SKU and leaves blank cells unchanged.",
             "Keep the header row: columns are matched by their names, so you can hide or reorder them. Rows whose "

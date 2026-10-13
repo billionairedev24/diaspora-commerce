@@ -32,6 +32,8 @@ tags:
   description: GTIN / ISBN checks and GTIN prefill for the product builder, GTIN lookups by service clients
 - name: Listing reports
   description: Shoppers report a live listing (signed in); reports reach the trust-ops moderation queue through catalog.product.flagged
+- name: Image library
+  description: 'Library images (media) matched to listings by SKU file names: attach matching images, image usage (S310)'
 - name: Bulk upload
   description: 'Upload templates, .xlsx/.csv uploads with row validation, preview, error report and the background import
     (S308). Limits: 10 MB and 5,000 rows per file'
@@ -212,6 +214,83 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/GtinPrefill'
+  /v1/image-library/attach:
+    post:
+      tags:
+      - Image library
+      summary: Attach matching library images to the organisation's listings by SKU
+      description: 'Looks up the organisation''s library images (media) for the SKUs of its listings (all, or those in
+        skus) and applies them: SKU.MAIN and SKU.PT01-PT08 of the first of a product''s SKUs that has a MAIN image
+        replace the product images in that order; on products with several variants a variant SKU''s MAIN sets that
+        variant''s image. Images held by moderation are skipped. Each changed product is validated again like an edit
+        (catalog.product.updated); taken-down listings and products whose new main image is under 1000 px are skipped
+        with a reason. Products without matches are left unchanged. 503 catalog.media-unavailable when media cannot
+        be reached.'
+      operationId: attachLibraryImages
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachLibraryImagesRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AttachLibraryImagesResult'
+  /v1/image-library/usage:
+    post:
+      tags:
+      - Image library
+      summary: Which of the organisation's SKUs use these image URLs, and which of these SKUs exist
+      description: For the image library page (used by). An image counts for every SKU of a product whose images
+        include it and for the variant whose image or swatch it is.
+      operationId: imageUsage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImageUsageRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ImageUsage'
+  /v1/brands:
+    get:
+      tags:
+      - Products
+      summary: Brands for the product form's brand combobox
+      description: The organisation's brands (from its products' brand attribute) with how many of its products use
+        each, most used first; q filters by prefix of the name or of a word (case-insensitive).
+      operationId: listBrands
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 80
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+          maximum: 50
+          minimum: 1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BrandList'
   /v1/imports:
     get:
       tags:
@@ -2289,6 +2368,64 @@ components:
           type: array
           items:
             type: string
+        images:
+          type: array
+          description: The row's images as the preview shows them (S310)
+          items:
+            $ref: '#/components/schemas/ImportRowImage'
+    ImportRowImage:
+      type: object
+      description: 'One image of an upload row: where it comes from (LINK = an https URL cell, FILE = a library file name
+        in an image cell, SKU = a library file named after the SKU) and what was found (FOUND = a library image, LINK = a
+        link copied when the import runs, HELD = a library image held by moderation, MISSING = no such library image,
+        BAD_LINK = not a usable https link)'
+      properties:
+        slot:
+          type: string
+          enum:
+          - MAIN
+          - PT01
+          - PT02
+          - PT03
+          - PT04
+          - PT05
+          - PT06
+          - PT07
+          - PT08
+          - SWCH
+        source:
+          type: string
+          enum:
+          - LINK
+          - FILE
+          - SKU
+        ref:
+          type: string
+          description: The link, the file name or the matched library file name
+        state:
+          type: string
+          enum:
+          - FOUND
+          - LINK
+          - HELD
+          - MISSING
+          - BAD_LINK
+        url:
+          type: string
+          description: Thumbnail of a FOUND library image
+        width:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+        message:
+          type: string
+      required:
+      - ref
+      - slot
+      - source
+      - state
     ProductImportRowPage:
       type: object
       properties:
@@ -2386,6 +2523,112 @@ components:
           type: string
         path:
           type: string
+    AttachLibraryImagesRequest:
+      type: object
+      properties:
+        skus:
+          type: array
+          description: Only listings with one of these SKUs (any variant); empty = every listing of the organisation
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 5000
+    AttachLibraryImagesResult:
+      type: object
+      properties:
+        productsUpdated:
+          type: integer
+          format: int32
+        imagesAttached:
+          type: integer
+          format: int32
+        skipped:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttachSkipped'
+      required:
+      - imagesAttached
+      - productsUpdated
+      - skipped
+    AttachSkipped:
+      type: object
+      properties:
+        sku:
+          type: string
+        reason:
+          type: string
+      required:
+      - reason
+      - sku
+    ImageUsageRequest:
+      type: object
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+            maxLength: 2048
+          maxItems: 500
+        skus:
+          type: array
+          items:
+            type: string
+            maxLength: 64
+          maxItems: 500
+    ImageUsage:
+      type: object
+      properties:
+        usage:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageUse'
+        knownSkus:
+          type: array
+          description: The requested SKUs that are SKUs of the organisation's listings (as stored)
+          items:
+            type: string
+      required:
+      - knownSkus
+      - usage
+    ImageUse:
+      type: object
+      properties:
+        url:
+          type: string
+        skus:
+          type: array
+          items:
+            type: string
+      required:
+      - skus
+      - url
+    BrandList:
+      type: object
+      properties:
+        brands:
+          type: array
+          items:
+            $ref: '#/components/schemas/Brand'
+      required:
+      - brands
+    Brand:
+      type: object
+      properties:
+        name:
+          type: string
+        source:
+          type: string
+          description: OWN = used by the organisation's products, CATALOG = live products of other sellers
+          enum:
+          - OWN
+          - CATALOG
+        products:
+          type: integer
+          format: int32
+      required:
+      - name
+      - products
+      - source
   securitySchemes:
     bearer:
       type: http
