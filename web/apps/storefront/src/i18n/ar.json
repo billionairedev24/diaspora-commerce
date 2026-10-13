@@ -1138,5 +1138,7 @@
   "co.handoverLabel": "طريقة التسليم",
   "pay.expired": "منتهية",
   "pay.verificationPending": "التحقق قيد الانتظار",
-  "co.addPaymentMethod": "إضافة بطاقة أو حساب مصرفي"
+  "co.useAnotherMethod": "استخدام طريقة دفع أخرى",
+  "co.useThisMethod": "استخدام طريقة الدفع هذه",
+  "co.newMethodEntered": "أُدخلت لهذا الطلب"
 }

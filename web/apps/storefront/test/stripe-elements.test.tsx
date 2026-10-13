@@ -52,7 +52,7 @@ describe('Stripe Appearance and deferred-intent options', () => {
       mode: 'payment',
       amount: 4599,
       currency: 'usd',
-      captureMethod: 'manual',
+      captureMethod: 'automatic_async',
       automaticPaymentMethods: { enabled: true }
     });
     expect(deferredIntentOptions({ amountMinor: 1, currency: 'usd' })).not.toHaveProperty('setupFutureUsage');
@@ -117,7 +117,7 @@ describe('checkout with Stripe Elements (fake Stripe.js)', () => {
     await chooseNewMethod(user);
     expect(stripe.factory).toHaveBeenCalledWith('pk_test_fake');
     const opts = stripe.payment()?.options;
-    expect(opts).toMatchObject({ mode: 'payment', amount: total(), currency: 'usd', captureMethod: 'manual' });
+    expect(opts).toMatchObject({ mode: 'payment', amount: total(), currency: 'usd', captureMethod: 'automatic_async' });
     expect(opts).not.toHaveProperty('setupFutureUsage');
     expect(opts).not.toHaveProperty('clientSecret');
     expect(screen.queryByTestId('mock-payment-element')).not.toBeInTheDocument();

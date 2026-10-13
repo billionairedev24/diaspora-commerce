@@ -48,6 +48,8 @@ import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -58,6 +60,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 class PaymentServiceImpl implements PaymentService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PaymentServiceImpl.class);
 
     private static final int MAX_LINES = 200;
 
@@ -319,7 +323,11 @@ class PaymentServiceImpl implements PaymentService {
             boolean finalCapture = plan.finalCapture();
             UUID captureId = Fingerprint.id("capture", p.id().toString(), cmd.shipmentId());
             Payment capturable = p;
-            IntentSnapshot captured = stripe.capture(p.stripePaymentIntentId(), amount, plan.stripeFinalCapture(),
+            // A method charged when confirmed (US bank account / ACH: no manual capture) has nothing to capture at
+            // Stripe; the shipment's capture is then recorded against the charge that already settled.
+            IntentSnapshot live = stripe.retrieveIntent(p.stripePaymentIntentId());
+            IntentSnapshot captured = chargedUpfront(live, p) ? live
+                    : stripe.capture(p.stripePaymentIntentId(), amount, plan.stripeFinalCapture(),
                     Map.of("order_id", p.orderId(), "shipment_id", cmd.shipmentId()),
                     p.stripeKeyPrefix() + ":capture:" + cmd.shipmentId());
             FeeSchedule schedule = schedule(p);
@@ -444,7 +452,11 @@ class PaymentServiceImpl implements PaymentService {
             Payment released = p.releaseRemaining(now);
             if (p.stripePaymentIntentId() != null) {
                 IntentSnapshot intent = stripe.retrieveIntent(p.stripePaymentIntentId());
-                if (p.captured().isZero()) {
+                if (chargedUpfront(intent, p)) {
+                    // Charged when confirmed (ACH): nothing is held at Stripe; giving the money back is a refund.
+                    LOG.warn("Payment {} of order {} was charged up front; releasing {} needs a refund",
+                            p.id(), p.orderId(), p.uncaptured());
+                } else if (p.captured().isZero()) {
                     if (!"canceled".equals(intent.status())) {
                         stripe.cancel(p.stripePaymentIntentId(), p.stripeKeyPrefix() + ":cancel");
                     }
@@ -658,5 +670,11 @@ class PaymentServiceImpl implements PaymentService {
 
     /** Stripe fee of a capture. */
     private record Fee(Money amount, boolean estimated) {
+    }
+
+    /** The intent was charged in full when confirmed (a method without manual capture, e.g. US bank account). */
+    private static boolean chargedUpfront(IntentSnapshot intent, Payment p) {
+        return intent != null && "succeeded".equals(intent.status()) && intent.amountCapturable() == 0
+                && intent.amountReceived() >= p.amount().minor();
     }
 }

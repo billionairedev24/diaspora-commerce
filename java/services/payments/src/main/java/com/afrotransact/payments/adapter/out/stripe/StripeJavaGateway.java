@@ -123,18 +123,41 @@ public class StripeJavaGateway implements StripeGateway {
         PaymentIntentCreateParams.Builder params = PaymentIntentCreateParams.builder()
                 .setAmount(request.amount().minor())
                 .setCurrency(lower(request.amount().currency()))
-                .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.MANUAL)
+                // Capture per shipment where the method can hold funds (manual capture per method below); methods that
+                // cannot (US bank account / ACH) are charged when confirmed and settle in a few days. A top-level
+                // manual capture would hide them from the Payment Element and refuse saved bank accounts.
+                .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.AUTOMATIC_ASYNC)
                 .setDescription(request.description())
                 .setTransferGroup(request.transferGroup())
                 .putAllMetadata(request.metadata());
+        PaymentIntentCreateParams.PaymentMethodOptions.Card.Builder card = PaymentIntentCreateParams.PaymentMethodOptions
+                .Card.builder().setCaptureMethod(PaymentIntentCreateParams.PaymentMethodOptions.Card.CaptureMethod.MANUAL);
         if (multicapture) {
-            params.setPaymentMethodOptions(PaymentIntentCreateParams.PaymentMethodOptions.builder()
-                    .setCard(PaymentIntentCreateParams.PaymentMethodOptions.Card.builder()
-                            .setRequestMulticapture(PaymentIntentCreateParams.PaymentMethodOptions.Card
-                                    .RequestMulticapture.IF_AVAILABLE)
-                            .build())
-                    .build());
+            card.setRequestMulticapture(PaymentIntentCreateParams.PaymentMethodOptions.Card.RequestMulticapture
+                    .IF_AVAILABLE);
         }
+        params.setPaymentMethodOptions(PaymentIntentCreateParams.PaymentMethodOptions.builder()
+                .setCard(card.build())
+                .setKlarna(PaymentIntentCreateParams.PaymentMethodOptions.Klarna.builder()
+                        .setCaptureMethod(PaymentIntentCreateParams.PaymentMethodOptions.Klarna.CaptureMethod.MANUAL)
+                        .build())
+                .setAffirm(PaymentIntentCreateParams.PaymentMethodOptions.Affirm.builder()
+                        .setCaptureMethod(PaymentIntentCreateParams.PaymentMethodOptions.Affirm.CaptureMethod.MANUAL)
+                        .build())
+                .setAfterpayClearpay(PaymentIntentCreateParams.PaymentMethodOptions.AfterpayClearpay.builder()
+                        .setCaptureMethod(PaymentIntentCreateParams.PaymentMethodOptions.AfterpayClearpay.CaptureMethod
+                                .MANUAL)
+                        .build())
+                .setAmazonPay(PaymentIntentCreateParams.PaymentMethodOptions.AmazonPay.builder()
+                        .setCaptureMethod(PaymentIntentCreateParams.PaymentMethodOptions.AmazonPay.CaptureMethod.MANUAL)
+                        .build())
+                .setCashapp(PaymentIntentCreateParams.PaymentMethodOptions.Cashapp.builder()
+                        .setCaptureMethod(PaymentIntentCreateParams.PaymentMethodOptions.Cashapp.CaptureMethod.MANUAL)
+                        .build())
+                .setLink(PaymentIntentCreateParams.PaymentMethodOptions.Link.builder()
+                        .setCaptureMethod(PaymentIntentCreateParams.PaymentMethodOptions.Link.CaptureMethod.MANUAL)
+                        .build())
+                .build());
         if (request.customerId() != null && !request.customerId().isBlank()) {
             params.setCustomer(request.customerId());
             if (request.saveForOffSession()) {

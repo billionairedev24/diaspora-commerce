@@ -2,7 +2,7 @@
 
 /* Stripe.js without an npm dependency: the official script from js.stripe.com (what @stripe/stripe-js loads) plus the
    small typed surface the storefront uses (S282, Stripe's recommended deferred-intent integration):
-   - checkout: the Payment Element inline, created from the cart (mode 'payment', amount, currency, manual capture,
+   - checkout: the Payment Element inline, created from the cart (mode 'payment', amount, currency, capture per method,
      setupFutureUsage when the shopper saves the method) before any PaymentIntent exists; Place order runs
      elements.submit() → orders creates the PaymentIntent → stripe.confirmPayment({ elements, clientSecret });
    - Pay Now only: Express Checkout Element (Apple Pay, Google Pay, Link) on the same deferred options;
@@ -46,8 +46,10 @@ export interface DeferredIntentOptions {
   amount: number;
   /** Lower-case ISO currency. */
   currency: string;
-  /** Must match the PaymentIntent: payments always creates order intents with manual capture (captured per shipment). */
-  captureMethod: 'manual';
+  /** Must match the PaymentIntent: payments creates order intents with capture_method automatic_async and manual capture
+      per method (cards, Klarna, Affirm, Afterpay, Amazon Pay, Cash App, Link are captured per shipment; US bank accounts,
+      which cannot hold funds, are charged on confirmation). A top-level 'manual' would hide ACH from the element. */
+  captureMethod: 'automatic_async';
   /** Must match the PaymentIntent: 'off_session' when the shopper saves the method (savePaymentMethod). */
   setupFutureUsage?: 'off_session' | null;
   /** The shopper's Stripe Customer (cus_...); required to show saved methods in the Payment Element. */
@@ -214,7 +216,7 @@ export function deferredIntentOptions(o: { amountMinor: number; currency: string
     mode: 'payment',
     amount: Math.max(o.amountMinor, 0),
     currency: o.currency.toLowerCase(),
-    captureMethod: 'manual',
+    captureMethod: 'automatic_async',
     ...(o.save ? { setupFutureUsage: 'off_session' as const } : {}),
     ...(o.customer ? { customer: o.customer } : {}),
     ...(o.paymentMethodTypes?.length

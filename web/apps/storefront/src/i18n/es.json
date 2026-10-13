@@ -1138,5 +1138,7 @@
   "co.handoverLabel": "Cómo lo entregamos",
   "pay.expired": "Vencida",
   "pay.verificationPending": "Verificación pendiente",
-  "co.addPaymentMethod": "Añadir una tarjeta o cuenta bancaria"
+  "co.useAnotherMethod": "Usar otro método de pago",
+  "co.useThisMethod": "Usar este método de pago",
+  "co.newMethodEntered": "introducido para este pedido"
 }

@@ -1138,5 +1138,7 @@
   "co.handoverLabel": "Bí a ṣe máa fi lé ọ lọ́wọ́",
   "pay.expired": "Ti parí",
   "pay.verificationPending": "Ìfọwọ́sí ń dúró",
-  "co.addPaymentMethod": "Ṣàfikún káàdì tàbí àkáǹtì báńkì"
+  "co.useAnotherMethod": "Lo ọ̀nà ìsanwó míràn",
+  "co.useThisMethod": "Lo ọ̀nà ìsanwó yìí",
+  "co.newMethodEntered": "tí a tẹ̀ fún àṣẹ yìí"
 }

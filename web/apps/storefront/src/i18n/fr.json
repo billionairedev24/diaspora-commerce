@@ -1138,5 +1138,7 @@
   "co.handoverLabel": "Comment nous le remettons",
   "pay.expired": "Expirée",
   "pay.verificationPending": "Vérification en attente",
-  "co.addPaymentMethod": "Ajouter une carte ou un compte bancaire"
+  "co.useAnotherMethod": "Utiliser un autre moyen de paiement",
+  "co.useThisMethod": "Utiliser ce moyen de paiement",
+  "co.newMethodEntered": "saisi pour cette commande"
 }

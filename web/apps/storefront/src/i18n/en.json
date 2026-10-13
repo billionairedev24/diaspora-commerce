@@ -1144,5 +1144,7 @@
   "co.handoverLabel": "How we hand it over",
   "pay.expired": "Expired",
   "pay.verificationPending": "Verification pending",
-  "co.addPaymentMethod": "Add a credit or debit card or bank account"
+  "co.useAnotherMethod": "Use another payment method",
+  "co.useThisMethod": "Use this payment method",
+  "co.newMethodEntered": "entered for this order"
 }

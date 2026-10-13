@@ -257,3 +257,15 @@
 .paymentFoot { display: flex; flex-wrap: wrap; gap: var(--at-space-2) var(--at-space-4); align-items: center; justify-content: space-between; padding-top: var(--at-space-2); border-top: 1px solid var(--at-color-border); }
 .payingWith { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); text-align: center; }
 .legalBlock { display: flex; flex-direction: column; gap: var(--at-space-2); padding-top: var(--at-space-2); border-top: 1px solid var(--at-color-border); }
+
+/* "Use another payment method" modal: stays mounted (hidden) after closing so Place order confirms its element. */
+.newMark { display: inline-flex; flex: none; align-items: center; justify-content: center; min-width: 52px; height: 34px; }
+.modalLayer { position: fixed; inset: 0; z-index: var(--at-z-dialog); display: grid; place-items: center; padding: var(--at-space-4); }
+.modalLayer[hidden] { display: none; }
+.modalBackdrop { position: absolute; inset: 0; background: var(--at-color-overlay); }
+.modal { position: relative; display: flex; flex-direction: column; width: min(100%, 34rem); max-height: calc(100dvh - 2 * var(--at-space-4)); border-radius: var(--at-radius-md); background: var(--at-color-surface); box-shadow: var(--at-shadow-lg); outline: none; }
+.modalHead { display: flex; align-items: center; justify-content: space-between; gap: var(--at-space-3); padding: var(--at-space-4) var(--at-space-5) var(--at-space-2); }
+.modalTitle { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
+.modalClose { display: inline-flex; padding: var(--at-space-1); border: 0; border-radius: var(--at-radius-sm); background: none; color: var(--at-color-text-muted); font-size: var(--at-text-xl); cursor: pointer; }
+.modalBody { display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-2) var(--at-space-5) var(--at-space-4); overflow-y: auto; }
+.modalFoot { display: flex; justify-content: flex-end; gap: var(--at-space-2); padding: var(--at-space-3) var(--at-space-5) var(--at-space-4); border-top: 1px solid var(--at-color-border); }

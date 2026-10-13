@@ -120,7 +120,7 @@ test('with a Stripe key: Payment Element only (deferred intent), submit → orde
   await expect(page.getByTestId('stripe-dev-notice')).toHaveCount(0);
   await expect(page.getByRole('img', { name: 'Powered by Stripe' }).first()).toBeVisible();
   const elements = (await calls(page)).filter(([k]) => k === 'elements').map(([, o]) => o as Record<string, unknown>);
-  expect(elements.at(-1)).toMatchObject({ mode: 'payment', currency: 'usd', captureMethod: 'manual' });
+  expect(elements.at(-1)).toMatchObject({ mode: 'payment', currency: 'usd', captureMethod: 'automatic_async' });
   await page.getByLabel('Fake Stripe card number').fill('4242 4242 4242 4242');
   await page.getByRole('button', { name: 'Place your order' }).click();
   await expect(page).toHaveURL(/\/orders\?placed=AT-2026-/);
