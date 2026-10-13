@@ -456,7 +456,7 @@
   "sc.pf.keywordsHelp": "Palabras que los compradores podrían buscar, separadas por comas (hasta 20).",
   "sc.pf.compareAtHelp": "Se muestra tachado; debe ser mayor que el precio.",
   "sc.pf.gtinHelp": "El número bajo el código de barras del envase: 8, 12, 13 o 14 dígitos.",
-  "sc.pf.qtyFba": "Gestionado por AfroTransact: el stock viene de tus envíos entrantes.",
+  "sc.pf.qtyFba": "Enviado por AfroTransact: son las unidades que nos enviarás. Al aprobarse abrimos el envío por ti; el stock cuenta al recibirlo.",
   "sc.pf.handlingHelp": "Del pedido al despacho, de 1 a 30 días.",
   "sc.pf.noGtin": "No tengo código de barras (hecho a mano, a medida o marca propia)",
   "sc.pf.noIsbn": "Los libros necesitan un ISBN-13",

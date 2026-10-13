@@ -61,6 +61,19 @@ public final class InboundCommands {
     public record BoxItem(String sku, int qty) {
     }
 
+    /**
+     * A listing that was approved as Fulfilled by AfroTransact: what the seller said they will send.
+     *
+     * @param productAtin the product page
+     * @param lines       one per variant with units: ATIN, the seller SKU (= the offer's inventory SKU) and quantity
+     */
+    public record ApprovedListing(String ownerOrg, String productAtin, List<PlanLine> lines) {
+
+        public ApprovedListing {
+            lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+    }
+
     /** Buy the inbound label from carrier-gateway (one parcel per box). */
     public record BuyLabel(String carrier, String service, LocalDate shipDate) {
     }

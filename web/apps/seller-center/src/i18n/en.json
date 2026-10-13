@@ -469,7 +469,7 @@
   "sc.pf.keywordsHelp": "Words shoppers might search for, separated by commas (up to 20).",
   "sc.pf.compareAtHelp": "Shown struck through; must be higher than the price.",
   "sc.pf.gtinHelp": "The number under the barcode on the pack: 8, 12, 13 or 14 digits.",
-  "sc.pf.qtyFba": "Fulfilled by AfroTransact: stock comes from your inbound shipments.",
+  "sc.pf.qtyFba": "Fulfilled by AfroTransact: these are the units you will send us. Once approved we open the shipment for you; the stock counts after we receive it.",
   "sc.pf.handlingHelp": "From order to dispatch, 1–30 days.",
   "sc.pf.noGtin": "I don’t have a barcode (handmade, tailored or private label)",
   "sc.pf.noIsbn": "Books need an ISBN-13",

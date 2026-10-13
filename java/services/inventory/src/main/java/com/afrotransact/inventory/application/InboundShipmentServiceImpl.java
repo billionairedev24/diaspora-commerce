@@ -57,6 +57,7 @@ import org.springframework.transaction.annotation.Transactional;
 class InboundShipmentServiceImpl implements InboundShipmentService {
 
     static final String CONSUMER_RETAIL = "inventory-retail-shipments";
+    static final String CONSUMER_LISTINGS = "inventory-approved-listings";
     static final int MAX_LINES = 200;
     static final int MAX_CASE_PACK = 10_000;
     private static final Pattern PLAN_LOT_NO = Pattern.compile("[A-Z0-9][A-Z0-9._/-]{0,58}");
@@ -126,6 +127,37 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
         inbounds.insert(plan);
         publish(InventoryEvents.INBOUND_CREATED, plan);
         return plan;
+    }
+
+    @Override
+    @Transactional
+    public Optional<InboundShipment> listingApproved(UUID eventId, InboundCommands.ApprovedListing l) {
+        if (!inbox.firstDelivery(CONSUMER_LISTINGS, eventId) || l.ownerOrg() == null || l.lines().isEmpty()) {
+            return Optional.empty();
+        }
+        List<InboundLine> lines;
+        try {
+            lines = planLines(l.lines(), l.ownerOrg());
+        } catch (InventoryRuleViolation ex) {
+            LOG.warn("No inbound plan for approved listing {} of {}: {} {}", l.productAtin(), l.ownerOrg(),
+                    ex.getMessage(), ex.fieldErrors());
+            return Optional.empty();
+        }
+        boolean planned = inbounds.search(new InboundShipmentRepository.InboundQuery(l.ownerOrg(), null, null,
+                InboundSource.FBA, lines.getFirst().sku(), 0, 5)).items().stream()
+                .anyMatch(s -> s.status() != InboundStatus.CANCELLED);
+        if (planned) {
+            return Optional.empty();
+        }
+        FcAssignment fc = assign(l.ownerOrg(), lines, null, null);
+        Instant now = Instant.now(clock);
+        InboundShipment plan = new InboundShipment(UUID.randomUUID(), inbounds.nextFbaNumber(), InboundSource.FBA,
+                null, l.ownerOrg(), fc.nodeId(), null, fc.reason(), "New listing " + l.productAtin(),
+                InboundStatus.WORKING, null, null, null, null, null, null, null, null, null, 0,
+                lines, List.of(), "system:listing-approved", now, null, null, now, 0);
+        inbounds.insert(plan);
+        publish(InventoryEvents.INBOUND_CREATED, plan);
+        return Optional.of(plan);
     }
 
     @Override

@@ -456,7 +456,7 @@
   "sc.pf.keywordsHelp": "Mots que les acheteurs pourraient chercher, séparés par des virgules (20 maximum).",
   "sc.pf.compareAtHelp": "Affiché barré ; doit être supérieur au prix.",
   "sc.pf.gtinHelp": "Le numéro sous le code-barres de l’emballage : 8, 12, 13 ou 14 chiffres.",
-  "sc.pf.qtyFba": "Expédié par AfroTransact : le stock provient de vos envois entrants.",
+  "sc.pf.qtyFba": "Expédié par AfroTransact : ce sont les unités que vous nous enverrez. Après approbation, nous ouvrons l’expédition ; le stock compte à la réception.",
   "sc.pf.handlingHelp": "De la commande à l’expédition, 1 à 30 jours.",
   "sc.pf.noGtin": "Je n’ai pas de code-barres (fait main, sur mesure ou marque propre)",
   "sc.pf.noIsbn": "Les livres exigent un ISBN-13",
