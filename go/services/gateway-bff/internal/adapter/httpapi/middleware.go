@@ -17,7 +17,10 @@ import (
 
 // SecurityOptions configure CORS, CSRF, rate limits and body limits.
 type SecurityOptions struct {
-	AllowedOrigins  []string
+	AllowedOrigins []string
+	// LocalDev (APP_ENV=local only) also accepts any http://localhost:<port> or http://127.0.0.1:<port> origin, so a web
+	// app that moved to another port (3001 taken by Grafana → 3010) is never refused as "not an AfroTransact page".
+	LocalDev        bool
 	CookieName      string
 	CookieSecure    bool
 	CookieDomain    string
@@ -73,12 +76,31 @@ func clientIP(r *http.Request, trustForwarded bool) string {
 	return host
 }
 
+// originAllowed reports whether a browser Origin may call the BFF with its cookies.
+func (o SecurityOptions) originAllowed(origin string) bool {
+	if origin == "" {
+		return false
+	}
+	if slices.Contains(o.AllowedOrigins, origin) {
+		return true
+	}
+	if !o.LocalDev {
+		return false
+	}
+	for _, p := range []string{"http://localhost:", "http://127.0.0.1:"} {
+		if port, ok := strings.CutPrefix(origin, p); ok && port != "" && strings.Trim(port, "0123456789") == "" {
+			return true
+		}
+	}
+	return false
+}
+
 // cors answers preflights and decorates responses for the configured web origins (credentials allowed).
 func cors(o SecurityOptions) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			allowed := origin != "" && slices.Contains(o.AllowedOrigins, origin)
+			allowed := o.originAllowed(origin)
 			if allowed {
 				h := w.Header()
 				h.Set("Access-Control-Allow-Origin", origin)
@@ -112,7 +134,7 @@ func csrf(o SecurityOptions, log *slog.Logger) func(http.Handler) http.Handler {
 			origin := r.Header.Get("Origin")
 			_, cookieErr := r.Cookie(o.CookieName)
 			hasCookie := cookieErr == nil
-			if (origin != "" && !slices.Contains(o.AllowedOrigins, origin)) || (origin == "" && hasCookie) {
+			if (origin != "" && !o.originAllowed(origin)) || (origin == "" && hasCookie) {
 				writeProblem(w, r, log, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden",
 					"This request did not come from an AfroTransact page."))
 				return

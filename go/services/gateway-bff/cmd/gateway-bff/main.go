@@ -202,7 +202,7 @@ func run() error {
 	mediaFrom, mediaTo := cfg.MediaRewrite()
 	httpapi.New(services, store, httpapi.SecurityOptions{
 		MediaRewriteFrom: mediaFrom, MediaRewriteTo: mediaTo,
-		AllowedOrigins: cfg.Web.Origins, CookieName: cfg.Session.CookieName, CookieSecure: cfg.Session.CookieSecure,
+		AllowedOrigins: cfg.Web.Origins, LocalDev: loader.Env() == "local", CookieName: cfg.Session.CookieName, CookieSecure: cfg.Session.CookieSecure,
 		CookieDomain: cfg.Session.CookieDomain, TrustForwarded: cfg.RateLimit.TrustForwarded, MaxBodyBytes: int64(cfg.RateLimit.MaxBodyBytes),
 		AuthPerMinute: cfg.RateLimit.AuthPerMinute, LookupPerMinute: cfg.RateLimit.LookupPerMinute,
 	}, log).Register(srv.Mux())
