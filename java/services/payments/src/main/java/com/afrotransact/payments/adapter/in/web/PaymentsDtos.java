@@ -911,16 +911,19 @@ final class PaymentsDtos {
 
     @Schema(description = "A saved payment method (display data only — never full numbers)")
     record PaymentMethodResponse(String id,
-                                 @Schema(allowableValues = {"card", "us_bank_account", "cashapp", "link"}) String type,
+                                 @Schema(allowableValues = {"card", "us_bank_account", "cashapp", "link",
+                                     "amazon_pay"}) String type,
                                  String brand, String last4, Integer expMonth, Integer expYear, String bankName,
                                  String accountType,
+                                 @Schema(description = "Wallet a card was saved from (card.wallet.type), null for "
+                                         + "a card typed in", examples = "apple_pay") String wallet,
                                  @Schema(description = "false = bank account pending verification") boolean verified,
                                  boolean isDefault) {
 
         static PaymentMethodResponse of(WalletMethod w) {
             return new PaymentMethodResponse(w.method().id(), w.method().type().stripe(), w.method().brand(),
                     w.method().last4(), w.method().expMonth(), w.method().expYear(), w.method().bankName(),
-                    w.method().accountType(), w.method().verified(), w.isDefault());
+                    w.method().accountType(), w.method().wallet(), w.method().verified(), w.isDefault());
         }
     }
 

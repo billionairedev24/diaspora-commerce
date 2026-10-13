@@ -342,7 +342,7 @@ class StripeEventHandlers {
         StripeGateway.PaymentMethodSnapshot pm = stripe.retrievePaymentMethod(pmId);
         String customer = pm.customer() != null ? pm.customer() : text(si, "customer");
         wallet.upsert(new StripeGateway.PaymentMethodSnapshot(pm.id(), pm.type(), customer, pm.brand(), pm.last4(),
-                pm.expMonth(), pm.expYear(), pm.bankName(), pm.accountType()), succeeded);
+                pm.expMonth(), pm.expYear(), pm.bankName(), pm.accountType(), pm.wallet()), succeeded);
     }
 
     /** Display data of a PaymentMethod object in a webhook payload. */
@@ -356,7 +356,8 @@ class StripeEventHandlers {
                 isCard && card.hasNonNull("exp_month") ? card.path("exp_month").asInt() : null,
                 isCard && card.hasNonNull("exp_year") ? card.path("exp_year").asInt() : null,
                 bank.isObject() ? text(bank, "bank_name") : null,
-                bank.isObject() ? text(bank, "account_type") : null);
+                bank.isObject() ? text(bank, "account_type") : null,
+                isCard ? text(card.path("wallet"), "type") : null);
     }
 
     private static String text(JsonNode node, String field) {

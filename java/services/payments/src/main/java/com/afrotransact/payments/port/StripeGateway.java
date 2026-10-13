@@ -90,6 +90,14 @@ public interface StripeGateway {
 
     PaymentMethodSnapshot retrievePaymentMethod(String paymentMethodId);
 
+    /**
+     * The payment methods attached to a Stripe Customer now (every page) and its
+     * {@code invoice_settings.default_payment_method}. The shopper's saved methods are read from here, so a method
+     * saved at checkout ({@code setup_future_usage}) or on Your Payments shows at once, whether or not the
+     * {@code payment_method.attached} / {@code setup_intent.succeeded} webhooks were delivered.
+     */
+    CustomerWalletSnapshot customerWallet(String stripeCustomerId);
+
     void detachPaymentMethod(String paymentMethodId, String idempotencyKey);
 
     /** Sets {@code invoice_settings.default_payment_method} of the customer. */
@@ -110,9 +118,30 @@ public interface StripeGateway {
     record SetupIntentSnapshot(String id, String clientSecret, String status) {
     }
 
-    /** Display data of a payment method (never the full number). */
+    /**
+     * Display data of a payment method (never the full number).
+     *
+     * @param wallet the wallet a card came from ({@code card.wallet.type}: apple_pay, google_pay, link, samsung_pay
+     *               …), null for a card typed in
+     */
     record PaymentMethodSnapshot(String id, String type, String customer, String brand, String last4,
-                                 Integer expMonth, Integer expYear, String bankName, String accountType) {
+                                 Integer expMonth, Integer expYear, String bankName, String accountType,
+                                 String wallet) {
+    }
+
+    /**
+     * A Stripe Customer's payment methods.
+     *
+     * @param authoritative true when {@code methods} is everything the customer has (Stripe): a saved method missing
+     *                      from it was detached. False for the local stand-in, which keeps methods in memory only:
+     *                      what it lists is added, nothing is removed
+     */
+    record CustomerWalletSnapshot(String defaultPaymentMethodId, List<PaymentMethodSnapshot> methods,
+                                  boolean authoritative) {
+
+        public CustomerWalletSnapshot {
+            methods = methods == null ? List.of() : List.copyOf(methods);
+        }
     }
 
     /**

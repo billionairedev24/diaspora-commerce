@@ -30,6 +30,7 @@ import com.stripe.net.RequestOptions;
 import com.stripe.param.BalanceTransactionListParams;
 import com.stripe.param.ChargeCreateParams;
 import com.stripe.param.CustomerCreateParams;
+import com.stripe.param.CustomerPaymentMethodListParams;
 import com.stripe.param.CustomerUpdateParams;
 import com.stripe.param.EphemeralKeyCreateParams;
 import com.stripe.param.PaymentIntentCancelParams;
@@ -59,6 +60,8 @@ import org.slf4j.LoggerFactory;
 public class StripeJavaGateway implements StripeGateway {
 
     private static final Logger LOG = LoggerFactory.getLogger(StripeJavaGateway.class);
+    /** Payment methods per page when listing a customer's wallet (Stripe's maximum). */
+    private static final long WALLET_PAGE = 100L;
 
     /** Suffix of the idempotency key of a single-capture intent. */
     static final String SINGLE_CAPTURE_KEY = ":single";
@@ -330,17 +333,36 @@ public class StripeJavaGateway implements StripeGateway {
 
     @Override
     public PaymentMethodSnapshot retrievePaymentMethod(String paymentMethodId) {
+        return call(() -> paymentMethod(client.v1().paymentMethods().retrieve(paymentMethodId)));
+    }
+
+    @Override
+    public CustomerWalletSnapshot customerWallet(String stripeCustomerId) {
         return call(() -> {
-            PaymentMethod pm = client.v1().paymentMethods().retrieve(paymentMethodId);
-            PaymentMethod.Card card = pm.getCard();
-            PaymentMethod.UsBankAccount bank = pm.getUsBankAccount();
-            return new PaymentMethodSnapshot(pm.getId(), pm.getType(), pm.getCustomer(),
-                    card == null ? null : card.getBrand(),
-                    card != null ? card.getLast4() : bank == null ? null : bank.getLast4(),
-                    card == null || card.getExpMonth() == null ? null : card.getExpMonth().intValue(),
-                    card == null || card.getExpYear() == null ? null : card.getExpYear().intValue(),
-                    bank == null ? null : bank.getBankName(), bank == null ? null : bank.getAccountType());
+            Customer customer = client.v1().customers().retrieve(stripeCustomerId);
+            String defaultMethod = customer.getInvoiceSettings() == null ? null
+                    : customer.getInvoiceSettings().getDefaultPaymentMethod();
+            List<PaymentMethodSnapshot> methods = new ArrayList<>();
+            CustomerPaymentMethodListParams params = CustomerPaymentMethodListParams.builder()
+                    .setLimit(WALLET_PAGE).build();
+            for (PaymentMethod pm : client.v1().customers().paymentMethods().list(stripeCustomerId, params)
+                    .autoPagingIterable()) {
+                methods.add(paymentMethod(pm));
+            }
+            return new CustomerWalletSnapshot(defaultMethod, methods, true);
         });
+    }
+
+    private static PaymentMethodSnapshot paymentMethod(PaymentMethod pm) {
+        PaymentMethod.Card card = pm.getCard();
+        PaymentMethod.UsBankAccount bank = pm.getUsBankAccount();
+        return new PaymentMethodSnapshot(pm.getId(), pm.getType(), pm.getCustomer(),
+                card == null ? null : card.getBrand(),
+                card != null ? card.getLast4() : bank == null ? null : bank.getLast4(),
+                card == null || card.getExpMonth() == null ? null : card.getExpMonth().intValue(),
+                card == null || card.getExpYear() == null ? null : card.getExpYear().intValue(),
+                bank == null ? null : bank.getBankName(), bank == null ? null : bank.getAccountType(),
+                card == null || card.getWallet() == null ? null : card.getWallet().getType());
     }
 
     @Override

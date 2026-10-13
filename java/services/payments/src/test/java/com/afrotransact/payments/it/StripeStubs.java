@@ -139,6 +139,27 @@ final class StripeStubs {
                         + "_secret_abc\",\"status\":\"requires_payment_method\"}");
     }
 
+    /**
+     * What Stripe holds for a Customer: {@code GET /v1/customers/{id}} with its default payment method and
+     * {@code GET /v1/customers/{id}/payment_methods} with the attached methods (one page).
+     */
+    void customerWallet(String stripeCustomerId, String defaultPaymentMethodId, String... methodsJson) {
+        json(WireMock.get(WireMock.urlPathEqualTo("/v1/customers/" + stripeCustomerId)),
+                "{\"id\":\"" + stripeCustomerId + "\",\"object\":\"customer\",\"invoice_settings\":"
+                        + "{\"default_payment_method\":" + (defaultPaymentMethodId == null ? "null"
+                        : "\"" + defaultPaymentMethodId + "\"") + "}}");
+        json(WireMock.get(WireMock.urlPathEqualTo("/v1/customers/" + stripeCustomerId + "/payment_methods")),
+                "{\"object\":\"list\",\"url\":\"/v1/customers/" + stripeCustomerId + "/payment_methods\","
+                        + "\"has_more\":false,\"data\":[" + String.join(",", methodsJson) + "]}");
+    }
+
+    /** Stripe cannot be reached for the Customer's payment methods. */
+    void customerWalletDown(String stripeCustomerId) {
+        server.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/customers/" + stripeCustomerId + "/payment_methods"))
+                .willReturn(WireMock.aResponse().withStatus(500).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"api_error\",\"message\":\"Stripe is down\"}}")));
+    }
+
     void paymentMethod(String pmJson, String pmId) {
         json(WireMock.get(WireMock.urlPathEqualTo("/v1/payment_methods/" + pmId)), pmJson);
         json(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_methods/" + pmId + "/detach")), pmJson);

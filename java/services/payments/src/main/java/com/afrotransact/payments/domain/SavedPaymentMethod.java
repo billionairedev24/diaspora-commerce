@@ -7,11 +7,12 @@ import java.util.Objects;
  * A payment method saved on the shopper's Stripe Customer. Only display data is kept (brand, last 4, expiry, bank
  * name) — never full numbers.
  *
+ * @param wallet   the wallet a card was saved from (apple_pay, google_pay, link …), null for a card typed in
  * @param verified false while a bank account waits for microdeposit verification ("pending verification")
  */
 public record SavedPaymentMethod(String id, String customerId, PaymentMethodType type, String brand, String last4,
                                  Integer expMonth, Integer expYear, String bankName, String accountType,
-                                 boolean verified, Instant createdAt) {
+                                 String wallet, boolean verified, Instant createdAt) {
 
     public SavedPaymentMethod {
         Objects.requireNonNull(id, "id");

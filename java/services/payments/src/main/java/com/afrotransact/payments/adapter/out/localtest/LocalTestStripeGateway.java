@@ -6,6 +6,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import com.afrotransact.payments.domain.LocalTestPaymentsPolicy;
 import com.afrotransact.payments.domain.Money;
@@ -20,6 +21,11 @@ import org.slf4j.LoggerFactory;
  * and the first status read after that finds it authorised ({@code requires_capture}). Captures, refunds, transfers
  * and payouts succeed at once. Ids start with {@code _localtest_} ({@code pi_localtest_…}) so they are never mistaken
  * for Stripe's. After a restart an unknown intent reads as authorised; payments keeps the amounts itself.
+ *
+ * <p>Saving at checkout works like Stripe's {@code setup_future_usage}: when an intent created to save the method
+ * reads as authorised, the test Visa ending 4242 is attached to the shopper's customer and listed by
+ * {@link #customerWallet}. The stand-in remembers methods only until it restarts, so its wallet is not authoritative:
+ * payments adds what it lists and removes nothing.
  */
 public class LocalTestStripeGateway implements StripeGateway {
 
@@ -32,6 +38,11 @@ public class LocalTestStripeGateway implements StripeGateway {
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Intent> intents = new ConcurrentHashMap<>();
     private final Map<String, String> byIdempotencyKey = new ConcurrentHashMap<>();
+    /** Intents created to save the method (setup_future_usage) → the customer it is attached to once authorised. */
+    private final Map<String, String> savingFor = new ConcurrentHashMap<>();
+    /** Methods attached per customer, in attachment order. */
+    private final Map<String, List<PaymentMethodSnapshot>> wallets = new ConcurrentHashMap<>();
+    private final Map<String, String> defaults = new ConcurrentHashMap<>();
 
     public LocalTestStripeGateway() {
         LOG.warn("[local] Payments use the local test stand-in for Stripe: every payment is authorised like test card "
@@ -76,18 +87,35 @@ public class LocalTestStripeGateway implements StripeGateway {
 
     @Override
     public IntentSnapshot createIntent(CreateIntent request, String idempotencyKey) {
-        return create(request.amount().minor(), REQUIRES_PAYMENT_METHOD, idempotencyKey).snapshot();
+        Intent intent = create(request.amount().minor(), REQUIRES_PAYMENT_METHOD, idempotencyKey);
+        if (request.saveForOffSession() && request.customerId() != null && !request.customerId().isBlank()) {
+            savingFor.put(intent.id(), request.customerId());
+        }
+        return intent.snapshot();
     }
 
     /** The shopper confirmed with the test card: the first read after creation finds the intent authorised. */
     @Override
     public IntentSnapshot retrieveIntent(String intentId) {
-        return intents.compute(intentId, (id, i) -> {
+        IntentSnapshot snapshot = intents.compute(intentId, (id, i) -> {
             if (i == null) {
                 return new Intent(id, 0, REQUIRES_CAPTURE, 0);
             }
             return REQUIRES_PAYMENT_METHOD.equals(i.status()) ? i.with(REQUIRES_CAPTURE, 0) : i;
         }).snapshot();
+        String customer = REQUIRES_CAPTURE.equals(snapshot.status()) ? savingFor.remove(intentId) : null;
+        if (customer != null) {
+            attach(customer);
+        }
+        return snapshot;
+    }
+
+    /** The test Visa ending 4242, attached to the customer (the first one becomes its default). */
+    private void attach(String customer) {
+        PaymentMethodSnapshot pm = new PaymentMethodSnapshot(id("pm"), "card", customer, "visa", "4242", 12, 2034,
+                null, null, null);
+        wallets.computeIfAbsent(customer, c -> new CopyOnWriteArrayList<>()).add(pm);
+        defaults.putIfAbsent(customer, pm.id());
     }
 
     @Override
@@ -173,17 +201,27 @@ public class LocalTestStripeGateway implements StripeGateway {
     /** Every saved method reads as the test Visa ending 4242. */
     @Override
     public PaymentMethodSnapshot retrievePaymentMethod(String paymentMethodId) {
-        return new PaymentMethodSnapshot(paymentMethodId, "card", null, "visa", "4242", 12, 2034, null, null);
+        return wallets.values().stream().flatMap(List::stream).filter(pm -> pm.id().equals(paymentMethodId))
+                .findFirst()
+                .orElseGet(() -> new PaymentMethodSnapshot(paymentMethodId, "card", null, "visa", "4242", 12, 2034,
+                        null, null, null));
+    }
+
+    @Override
+    public CustomerWalletSnapshot customerWallet(String stripeCustomerId) {
+        return new CustomerWalletSnapshot(defaults.get(stripeCustomerId),
+                List.copyOf(wallets.getOrDefault(stripeCustomerId, List.of())), false);
     }
 
     @Override
     public void detachPaymentMethod(String paymentMethodId, String idempotencyKey) {
-        // nothing is stored outside payments' own wallet
+        wallets.values().forEach(w -> w.removeIf(pm -> pm.id().equals(paymentMethodId)));
+        defaults.values().removeIf(paymentMethodId::equals);
     }
 
     @Override
     public void setDefaultPaymentMethod(String stripeCustomerId, String paymentMethodId, String idempotencyKey) {
-        // nothing is stored outside payments' own wallet
+        defaults.put(stripeCustomerId, paymentMethodId);
     }
 
     @Override

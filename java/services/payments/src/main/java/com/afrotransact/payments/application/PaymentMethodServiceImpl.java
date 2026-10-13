@@ -15,13 +15,18 @@ import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.PaymentsStateConflict;
 import com.afrotransact.payments.domain.SavedPaymentMethod;
 import com.afrotransact.payments.port.StripeGateway;
+import com.afrotransact.payments.port.StripeGatewayException;
 import com.afrotransact.payments.port.WalletRepository;
 import com.afrotransact.payments.port.WalletRepository.StripeCustomer;
 import com.afrotransact.platform.web.error.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 class PaymentMethodServiceImpl implements PaymentMethodService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PaymentMethodServiceImpl.class);
 
     private final WalletRepository wallet;
     private final WalletSync sync;
@@ -40,17 +45,41 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
         this.clock = clock;
     }
 
+    /**
+     * The shopper's saved methods as Stripe holds them now: the Customer's attached payment methods are read from
+     * Stripe and reconciled into the local copy before answering, so a method saved a moment ago (at checkout or on
+     * Your Payments) is listed even when its webhook is late or never delivered (no {@code stripe listen} locally).
+     * When Stripe cannot be reached the local copy is listed as it is.
+     */
     @Override
     public Wallet list() {
         String customerId = access.customer().subject();
-        Optional<StripeCustomer> customer = wallet.findCustomer(customerId);
-        if (customer.isEmpty()) {
+        Optional<StripeCustomer> found = wallet.findCustomer(customerId);
+        if (found.isEmpty()) {
             return new Wallet(null, List.of());
         }
-        String defaultId = customer.get().defaultPaymentMethodId();
+        Optional<StripeGateway.CustomerWalletSnapshot> live = live(found.get().stripeCustomerId());
+        if (live.isPresent()) {
+            tx.serializable(() -> {
+                sync.reconcile(wallet.lockCustomer(customerId).orElseThrow(), live.get());
+                return null;
+            });
+        }
+        StripeCustomer customer = wallet.findCustomer(customerId).orElseThrow();
+        String defaultId = customer.defaultPaymentMethodId();
         List<WalletMethod> items = wallet.methods(customerId).stream()
                 .map(m -> new WalletMethod(m, m.id().equals(defaultId))).toList();
-        return new Wallet(customer.get().stripeCustomerId(), items);
+        return new Wallet(customer.stripeCustomerId(), items);
+    }
+
+    private Optional<StripeGateway.CustomerWalletSnapshot> live(String stripeCustomerId) {
+        try {
+            return Optional.of(stripe.customerWallet(stripeCustomerId));
+        } catch (StripeGatewayException e) {
+            LOG.warn("Could not read the payment methods of Stripe customer {}; listing the local copy: {}",
+                    stripeCustomerId, e.getMessage());
+            return Optional.empty();
+        }
     }
 
     @Override
@@ -133,7 +162,7 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
             String code = t == null ? "" : t.trim().toLowerCase(Locale.ROOT);
             if (PaymentMethodType.ofStripe(code).isEmpty()) {
                 throw new PaymentsRuleViolation("payments.invalid-method-type", "Unsupported payment method type "
-                        + t, Map.of("types", "card, us_bank_account, cashapp or link"));
+                        + t, Map.of("types", "card, us_bank_account, cashapp, link or amazon_pay"));
             }
             out.add(code);
         }
