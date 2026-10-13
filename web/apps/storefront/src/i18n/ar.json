@@ -1133,5 +1133,7 @@
   "paynow.viewOrders": "عرض طلباتك",
   "paynow.error": "تعذر تحميل هذا الدفع. حاول مرة أخرى بعد قليل.",
   "paynow.or": "أو ادفع بطريقة أخرى",
-  "co.otherAddresses": "عناوينك الأخرى"
+  "co.otherAddresses": "عناوينك الأخرى",
+  "co.addInstructions": "أضف تعليمات التوصيل",
+  "co.handoverLabel": "طريقة التسليم"
 }

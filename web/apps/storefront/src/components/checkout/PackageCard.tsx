@@ -3,6 +3,7 @@
 import { type CheckoutPackage, type DeliveryMethod, type DeliveryPreferences } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, ImagePlaceholder, Key, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
+import { useState } from 'react';
 
 import { useT } from '@/i18n/t';
 
@@ -63,8 +64,8 @@ function LocalDeliveryQuote({ pkg, onRemove, onChangeAddress, removing }: { pkg:
 }
 
 /**
- * One seller group: Delivery or Pickup (pickup lists the group's pickup points with address, hours, ready time and
- * distance), the delivery options or preferences, and every item with image, title, unit, quantity and price.
+ * One seller group, compact: the items as thumbnails, Delivery | Pickup, and the chosen option or pickup point on one
+ * line with Change (the other options or nearby points as a short list). Delivery instructions stay behind a link.
  */
 export function PackageCard({
   pkg,
@@ -106,6 +107,8 @@ export function PackageCard({
       : onChoice({ ...choice, option: deliveryOptions[0]?.key ?? 'carrier' });
   const promise = pickup ? (point?.ready ?? selected?.eta ?? '') : (selected?.eta ?? pkg.delivery.label);
   const group = `pkg-${pkg.packageId}`;
+  const [listOpen, setListOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(!!(choice.preferences.instructions || choice.preferences.safePlace));
 
   return (
     <article className={styles.package} data-testid="checkout-package" aria-labelledby={`${group}-title`}>
@@ -133,14 +136,13 @@ export function PackageCard({
 
       <div className={styles.packageBody}>
         {canPickup && (
-          <div className={styles.segmented} role="radiogroup" aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
+          <div className={styles.toggle} role="radiogroup" aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
             {(['delivery', 'pickup'] as const).map((m) => {
               const on = (m === 'pickup') === pickup;
               return (
-                <button key={m} type="button" role="radio" aria-checked={on} className={on ? styles.segmentOn : styles.segment} onClick={() => setMode(m)} data-testid={`fulfil-${m}`}>
+                <button key={m} type="button" role="radio" aria-checked={on} className={on ? styles.toggleOn : styles.toggleOff} onClick={() => { setMode(m); setListOpen(false); }} data-testid={`fulfil-${m}`}>
                   {m === 'pickup' ? <Storefront aria-hidden /> : <Truck aria-hidden />}
-                  <span>{m === 'pickup' ? t('co.fulfil.pickup') : t('co.fulfil.delivery')}</span>
-                  <small>{m === 'pickup' ? t('co.free') : deliveryOptions.some((o) => o.free || o.feeMinor === 0) ? t('co.free') : t('co.fromFee', { amount: fmt.money(Math.min(...deliveryOptions.map((o) => o.feeMinor))) })}</small>
+                  {m === 'pickup' ? t('co.fulfil.pickup') : t('co.fulfil.delivery')}
                 </button>
               );
             })}
@@ -150,96 +152,139 @@ export function PackageCard({
         {!pickup && <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />}
 
         {pickup ? (
-          <fieldset className={`${styles.options} ${styles.optionsCompact}`} data-testid="pickup-points">
-            <legend className={styles.legend}>{t('co.pickupChoose')}</legend>
-            {points.length === 0 ? (
-              <p className={styles.muted} role="status">
-                {t('co.pickupNoneNear')}
-              </p>
-            ) : null}
-            {points.map((pt) => (
-              <label key={pt.id} className={`${styles.point} ${styles.pointCompact}`} data-testid="pickup-point">
-                <input type="radio" name={`pt-${pkg.packageId}`} checked={point?.id === pt.id} onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id })} />
-                <span className={styles.pointText}>
-                  <span className={styles.pointName}>
-                    <strong>{pt.name}</strong>
-                    <span className={styles.tag}>{pt.setBy === 'seller' ? t('co.setBySeller') : t('co.setByPlatform')}</span>
-                  </span>
-                  <span className={styles.pointLine}>
-                    <MapPin aria-hidden /> {pt.address}
-                    {pt.distanceMiles != null && <span className={styles.muted}> · {t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })}</span>}
-                    <span className={styles.muted}> · {pt.ready}</span>
-                  </span>
-                </span>
-                <span className={styles.optionFee}>{t('co.free')}</span>
-              </label>
-            ))}
-          </fieldset>
-        ) : (
-          <fieldset className={`${styles.options} ${styles.optionsCompact}`} disabled={undeliverable}>
-            <legend className={styles.legend}>{t('co.deliveryOption')}</legend>
-            <div className={styles.optionsRow}>
-              {deliveryOptions.map((o) => (
-                <label key={o.key} className={`${styles.option} ${styles.optionCompact}`}>
-                  <input type="radio" name={`opt-${pkg.packageId}`} checked={choice.option === o.key} onChange={() => onChoice({ ...choice, option: o.key })} />
-                  <span className={styles.optionText}>
-                    <strong className={styles.eta}>{o.eta}</strong>
+          points.length === 0 ? (
+            <p className={styles.muted} role="status">
+              {t('co.pickupNoneNear')}
+            </p>
+          ) : (
+            <div className={styles.choiceBlock} data-testid="pickup-points">
+              {point && (
+                <div className={styles.choiceLine} data-testid="pickup-point">
+                  <MapPin aria-hidden className={styles.choiceIcon} />
+                  <span className={styles.choiceText}>
+                    <strong>{point.name}</strong>
                     <span className={styles.muted}>
-                      {undeliverable ? t('ld.notAvailableOption') : o.label}
-                      {o.cutoffLabel && choice.option === o.key ? ` · ${o.cutoffLabel}` : ''}
+                      {point.address}
+                      {point.distanceMiles != null ? ` · ${t('co.distance', { miles: fmt.number(point.distanceMiles, { maximumFractionDigits: 1 }) })}` : ''} · {point.ready}
                     </span>
                   </span>
-                  <span className={styles.optionFee}>{o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}</span>
-                </label>
-              ))}
+                  <span className={styles.optionFee}>{t('co.free')}</span>
+                  {points.length > 1 && (
+                    <button type="button" className="link-button" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)}>
+                      {listOpen ? t('common.cancel') : t('co.change')}
+                    </button>
+                  )}
+                </div>
+              )}
+              {listOpen && (
+                <fieldset className={styles.choiceList}>
+                  <legend className="at-visually-hidden">{t('co.pickupChoose')}</legend>
+                  {points.map((pt) => (
+                    <label key={pt.id} className={styles.choiceRow}>
+                      <input type="radio" name={`pt-${pkg.packageId}`} checked={point?.id === pt.id} onChange={() => { onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id }); setListOpen(false); }} />
+                      <span className={styles.choiceText}>
+                        <strong>{pt.name}</strong>
+                        <span className={styles.muted}>
+                          {pt.address}
+                          {pt.distanceMiles != null ? ` · ${t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })}` : ''} · {pt.ready}
+                        </span>
+                      </span>
+                      <span className={styles.tag}>{pt.setBy === 'seller' ? t('co.setBySeller') : t('co.setByPlatform')}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              )}
             </div>
-          </fieldset>
+          )
+        ) : (
+          <div className={styles.choiceBlock}>
+            {selected && (
+              <div className={styles.choiceLine} data-testid="delivery-choice">
+                <Truck aria-hidden className={styles.choiceIcon} />
+                <span className={styles.choiceText}>
+                  <strong>{selected.eta}</strong>
+                  <span className={styles.muted}>
+                    {undeliverable ? t('ld.notAvailableOption') : selected.label}
+                    {selected.cutoffLabel ? ` · ${selected.cutoffLabel}` : ''}
+                  </span>
+                </span>
+                <span className={styles.optionFee}>{selected.free || selected.feeMinor === 0 ? t('co.free') : fmt.money(selected.feeMinor)}</span>
+                {deliveryOptions.length > 1 && !undeliverable && (
+                  <button type="button" className="link-button" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)} aria-label={t('co.changeAria', { step: t('co.deliveryOption') })}>
+                    {listOpen ? t('common.cancel') : t('co.change')}
+                  </button>
+                )}
+              </div>
+            )}
+            {listOpen && (
+              <fieldset className={styles.choiceList} disabled={undeliverable}>
+                <legend className="at-visually-hidden">{t('co.deliveryOption')}</legend>
+                {deliveryOptions.map((o) => (
+                  <label key={o.key} className={styles.choiceRow}>
+                    <input type="radio" name={`opt-${pkg.packageId}`} checked={choice.option === o.key} onChange={() => { onChoice({ ...choice, option: o.key }); setListOpen(false); }} />
+                    <span className={styles.choiceText}>
+                      <strong>{o.eta}</strong>
+                      <span className={styles.muted}>{o.label}</span>
+                    </span>
+                    <span className={styles.optionFee}>{o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}</span>
+                  </label>
+                ))}
+              </fieldset>
+            )}
+          </div>
         )}
 
         {atd && !undeliverable && (
-          <fieldset className={styles.prefs}>
-            <legend className={styles.legend}>{t('co.prefs')}</legend>
-            <div className={styles.prefChoices}>
-              {(['hand', 'door', 'desk'] as const).map((h) => (
-                <label key={h} className={styles.option} aria-label={t(`co.handover.${h}`)}>
-                  <input type="radio" name={`ho-${pkg.packageId}`} checked={handover === h} disabled={perishable && h !== 'hand'} onChange={() => prefs({ handover: h })} />
-                  <span className={styles.optionText}>
-                    <strong>{t(`co.handover.${h}`)}</strong>
-                    <span className={styles.muted}>{t(`co.handover.${h}.hint`)}</span>
-                  </span>
+          prefsOpen ? (
+            <fieldset className={styles.prefs}>
+              <legend className={styles.legend}>{t('co.prefs')}</legend>
+              <label className={styles.field}>
+                {t('co.handoverLabel')}
+                <select value={handover} onChange={(e) => prefs({ handover: e.target.value as DeliveryPreferences['handover'] })}>
+                  {(['hand', 'door', 'desk'] as const).map((h) => (
+                    <option key={h} value={h} disabled={perishable && h !== 'hand'}>
+                      {t(`co.handover.${h}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {handover === 'door' && (
+                <label className={styles.field}>
+                  {t('co.safePlace')}
+                  <select value={choice.preferences.safePlace ?? ''} onChange={(e) => prefs({ safePlace: e.target.value })}>
+                    <option value="">{t('co.safePlace')}</option>
+                    {['Front door', 'Back porch', 'Garage', 'Mailroom'].map((pl) => (
+                      <option key={pl} value={pl}>
+                        {pl}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-              ))}
-            </div>
-            {handover === 'door' && (
-              <select aria-label={t('co.safePlace')} value={choice.preferences.safePlace ?? ''} onChange={(e) => prefs({ safePlace: e.target.value })}>
-                <option value="">{t('co.safePlace')}</option>
-                {['Front door', 'Back porch', 'Garage', 'Mailroom'].map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            )}
-            <label className={styles.field}>
-              {t('co.instructions')}
-              <textarea rows={2} maxLength={240} placeholder={t('co.instructionsPlaceholder')} value={choice.preferences.instructions ?? ''} onChange={(e) => prefs({ instructions: e.target.value })} />
-            </label>
-            <label className={styles.field}>
-              {t('co.contact')}
-              <select value={choice.preferences.contact ?? 'text'} onChange={(e) => prefs({ contact: e.target.value as DeliveryPreferences['contact'] })}>
-                <option value="text">{t('co.contact.text')}</option>
-                <option value="call">{t('co.contact.call')}</option>
-                <option value="none">{t('co.contact.none')}</option>
-              </select>
-            </label>
-          </fieldset>
+              )}
+              <label className={styles.field}>
+                {t('co.instructions')}
+                <textarea rows={2} maxLength={240} placeholder={t('co.instructionsPlaceholder')} value={choice.preferences.instructions ?? ''} onChange={(e) => prefs({ instructions: e.target.value })} />
+              </label>
+              <label className={styles.field}>
+                {t('co.contact')}
+                <select value={choice.preferences.contact ?? 'text'} onChange={(e) => prefs({ contact: e.target.value as DeliveryPreferences['contact'] })}>
+                  <option value="text">{t('co.contact.text')}</option>
+                  <option value="call">{t('co.contact.call')}</option>
+                  <option value="none">{t('co.contact.none')}</option>
+                </select>
+              </label>
+            </fieldset>
+          ) : (
+            <button type="button" className={`link-button ${styles.prefsLink}`} onClick={() => setPrefsOpen(true)} data-testid="add-instructions">
+              {t('co.addInstructions')}
+            </button>
+          )
         )}
         {needsCode && (
           <p className={styles.codeNote}>
             <Key aria-hidden /> {perishable ? t('co.codePerishable') : t('co.codeHand')}
           </p>
         )}
-
       </div>
     </article>
   );

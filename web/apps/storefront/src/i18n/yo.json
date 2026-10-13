@@ -1133,5 +1133,7 @@
   "paynow.viewOrders": "Wo àwọn ìbéèrè rẹ",
   "paynow.error": "A kò lè gbé ìsanwó yìí wá. Gbìyànjú lẹ́ẹ̀kan sí i láìpẹ́.",
   "paynow.or": "tàbí san ní ọ̀nà mìíràn",
-  "co.otherAddresses": "Àwọn àdírẹ́sì rẹ míràn"
+  "co.otherAddresses": "Àwọn àdírẹ́sì rẹ míràn",
+  "co.addInstructions": "Fi ìtọ́sọ́nà ìfijíṣẹ́ kún un",
+  "co.handoverLabel": "Bí a ṣe máa fi lé ọ lọ́wọ́"
 }

@@ -1133,5 +1133,7 @@
   "paynow.viewOrders": "Ver tus pedidos",
   "paynow.error": "No pudimos cargar este pago. Inténtalo de nuevo en un momento.",
   "paynow.or": "o paga de otra forma",
-  "co.otherAddresses": "Tus otras direcciones"
+  "co.otherAddresses": "Tus otras direcciones",
+  "co.addInstructions": "Añadir instrucciones de entrega",
+  "co.handoverLabel": "Cómo lo entregamos"
 }

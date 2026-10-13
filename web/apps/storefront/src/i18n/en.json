@@ -1139,5 +1139,7 @@
   "paynow.viewOrders": "View your orders",
   "paynow.error": "We couldn’t load this payment. Try again in a moment.",
   "paynow.or": "or pay another way",
-  "co.otherAddresses": "Your other addresses"
+  "co.otherAddresses": "Your other addresses",
+  "co.addInstructions": "Add delivery instructions",
+  "co.handoverLabel": "How we hand it over"
 }
