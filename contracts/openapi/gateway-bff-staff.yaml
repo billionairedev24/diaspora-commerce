@@ -5087,7 +5087,7 @@ components:
       properties:
         label: {type: string}
         value: {type: string}
-        kind: {type: string, enum: [text, mono, money, date, datetime, status, link]}
+        kind: {type: string, enum: [text, mono, money, date, datetime, status, link, image]}
         href: {type: string}
     DetailSection:
       type: object

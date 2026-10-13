@@ -60,6 +60,24 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public boolean mirrorVariantQuantity(String ownerOrg, String variantAtin, int quantity) {
+        int rows = jdbc.sql("""
+                update product_variant set quantity = :quantity
+                where atin = :atin and quantity <> :quantity
+                  and product_id in (select id from product where owner_org = :org)
+                """)
+                .param("quantity", quantity).param("atin", variantAtin).param("org", ownerOrg).update();
+        if (rows == 0) {
+            return false;
+        }
+        jdbc.sql("""
+                update product set version = version + 1, updated_at = now()
+                where id = (select product_id from product_variant where atin = :atin)
+                """).param("atin", variantAtin).update();
+        return true;
+    }
+
+    @Override
     public Product update(Product p) {
         Map<String, Object> params = params(p);
         params.put("version", p.version());

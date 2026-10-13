@@ -61,6 +61,13 @@ public interface ProductRepository {
 
     ProductPage search(ProductQuery query);
 
+    /**
+     * Sets the quantity of the owner's variant with this ATIN to what the offers service holds (it changes with
+     * every sale, cancellation and stock count) and bumps the product's version, so a form opened before the change
+     * is refused instead of saving a stale number. Returns false when nothing changed. Publishes no event.
+     */
+    boolean mirrorVariantQuantity(String ownerOrg, String variantAtin, int quantity);
+
     boolean sellerSkuTaken(String orgId, String sellerSku);
 
     /** The product a seller SKU belongs to. */

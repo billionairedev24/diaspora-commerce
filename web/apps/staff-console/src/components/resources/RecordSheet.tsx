@@ -29,6 +29,17 @@ function Details({ record }: { record: RecordDetail }) {
       {record.sections.map((s) => (
         <section key={s.title} aria-label={s.title} className="flex flex-col gap-2">
           <h3 className="m-0 text-sm font-bold">{s.title}</h3>
+          {s.fields.length > 0 && s.fields.every((f) => f.kind === 'image') ? (
+            <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+              {s.fields.map((f) => (
+                <li key={f.label}>
+                  <a href={f.value} target="_blank" rel="noreferrer" aria-label={f.label}>
+                    <img src={f.value} alt={f.label} loading="lazy" className="size-24 rounded-sm border border-border object-cover" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
           <dl className="m-0 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1.5 text-sm">
             {s.fields.map((f) => (
               <div key={f.label} className="contents">
@@ -47,6 +58,7 @@ function Details({ record }: { record: RecordDetail }) {
               </div>
             ))}
           </dl>
+          )}
         </section>
       ))}
       {record.tables

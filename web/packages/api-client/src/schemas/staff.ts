@@ -128,7 +128,7 @@ export type ResourcePage = z.infer<typeof ResourcePageSchema>;
 export const DetailFieldSchema = z.object({
   label: z.string(),
   value: z.string(),
-  kind: z.enum(['text', 'mono', 'money', 'date', 'datetime', 'status', 'link']),
+  kind: z.enum(['text', 'mono', 'money', 'date', 'datetime', 'status', 'link', 'image']),
   href: z.string().optional()
 });
 export type DetailField = z.infer<typeof DetailFieldSchema>;

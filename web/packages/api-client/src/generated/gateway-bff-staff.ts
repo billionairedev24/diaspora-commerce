@@ -4421,7 +4421,7 @@ export interface components {
             label: string;
             value: string;
             /** @enum {string} */
-            kind: "text" | "mono" | "money" | "date" | "datetime" | "status" | "link";
+            kind: "text" | "mono" | "money" | "date" | "datetime" | "status" | "link" | "image";
             href?: string;
         };
         DetailSection: {

@@ -168,9 +168,23 @@ func productsResource() *staffResource {
 		get:        getByPath("/v1/products/", upCatalog),
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
 		subtitleOf: func(o jobj) string { return jstr(o, "atin") + " · " + jstr(o, "ownerOrgId") },
-		sections:   func(o jobj) []domain.DetailSection { return autoSections(o, "status", "variants", "images") },
+		sections: func(o jobj) []domain.DetailSection {
+			secs := autoSections(o, "status", "variants", "images")
+			// What the shopper sees first: the listing's photos (reviewers cannot judge a listing without them).
+			photos := domain.DetailSection{Title: "Photos", Fields: []domain.DetailField{}}
+			for i, img := range objs(o, "images") {
+				if u := jstr(img, "url"); strings.HasPrefix(u, "https://") || strings.HasPrefix(u, "http://") {
+					photos.Fields = append(photos.Fields, domain.DetailField{Label: "Photo " + strconv.Itoa(i+1), Value: u, Kind: "image"})
+				}
+			}
+			if len(photos.Fields) > 0 {
+				secs = append([]domain.DetailSection{photos}, secs...)
+			}
+			return secs
+		},
 		tables: func(o jobj) []domain.DetailTable {
-			return []domain.DetailTable{tableOf("Variants", objs(o, "variants"), []domain.Column{col("atin", "ATIN", "mono", 30), col("sku", "SKU", "mono", 30), col("status", "Status", "status", 40)}, "atin")}
+			return []domain.DetailTable{tableOf("Variants", objs(o, "variants"), []domain.Column{col("atin", "ATIN", "mono", 22), col("sellerSku", "SKU", "mono", 22),
+				col("priceMinor", "Price", "money", 16), col("quantity", "In stock", "number", 14)}, "atin")}
 		},
 		actions: []staffAction{
 			{key: "approve", label: "Approve", tone: "primary", permission: "catalog:moderate", confirm: "Approve this product and make it live?", when: inState("IN_REVIEW"),

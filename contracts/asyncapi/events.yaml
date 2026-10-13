@@ -6633,6 +6633,10 @@ components:
           type: string
           description: 'Inventory SKU of the offer''s stock (Fulfilled by AfroTransact: the FBA stock it sells). Inventory
             keeps a projection of AFROTRANSACT offers by (sellerOrgId, inventorySku) to flag stranded FBA stock (S067).'
+        sellerQuantity:
+          type: integer
+          description: Units the seller declared and still has (SELLER and AFROTRANSACT_DELIVERY offers; 0 for Fulfilled by
+            AfroTransact, whose stock is inventory's). Catalog mirrors it on the variant so every screen shows the same number.
     OffersBuyBoxChanged:
       type: object
       required:
