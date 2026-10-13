@@ -1190,6 +1190,16 @@ case "${1:-}" in
   repair-orgs) cmd_repair_orgs ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
     load_secrets
+    # Keep the address the stack runs on: a service restarted without MOBILE_HOST while the rest runs in LAN mode would
+    # validate tokens against http://localhost:8100 and reject every phone's (iss = the LAN address): sign-in works,
+    # everything after it fails.
+    if [[ -z "${MOBILE_HOST:-}" && -f "$PIDS/identity.env" ]]; then
+      stack_host=$(cat "$PIDS/identity.env" 2>/dev/null || true)
+      if [[ -n "$stack_host" && "$stack_host" != localhost ]]; then
+        MOBILE_HOST="$stack_host"; export MOBILE_HOST
+        echo "  · the stack runs on $stack_host: restarting $2 with it (MOBILE_HOST=$stack_host)"
+      fi
+    fi
     platform_env
     stop "$2"; build "$2"; start "$2"; wait_healthy "$2" 240 ;;
   lan-env) cmd_lan_env ;;
