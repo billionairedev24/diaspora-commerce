@@ -59,8 +59,9 @@ class CatalogSyncServiceImpl implements CatalogSyncService {
         Set<String> touched = new TreeSet<>();
         for (ProductSnapshot.VariantSnapshot v : p.variants()) {
             String sku = v.sellerSku() == null ? v.atin() : v.sellerSku().trim().toUpperCase(Locale.ROOT);
-            if (offers.findOpen(p.ownerOrgId(), v.atin(), OfferCondition.NEW, platform).isPresent()
-                    || offers.sellerSkuTaken(p.ownerOrgId(), sku, platform)) {
+            boolean fba = platform || "AFROTRANSACT".equals(p.fulfilment());
+            if (offers.findOpen(p.ownerOrgId(), v.atin(), OfferCondition.NEW, fba).isPresent()
+                    || offers.sellerSkuTaken(p.ownerOrgId(), sku, fba)) {
                 LOG.debug("Offer for {} / {} already exists; skipping", p.ownerOrgId(), v.atin());
                 continue;
             }
@@ -102,9 +103,25 @@ class CatalogSyncServiceImpl implements CatalogSyncService {
                 continue;
             }
             for (Offer o : open) {
+                Fulfilment wanted = wantedFulfilment(p, o);
+                if (wanted.fulfilledByAfroTransact() != o.fulfilment().fulfilledByAfroTransact()) {
+                    // The seller moved the listing to the other channel (ships themselves ⇄ Fulfilled by
+                    // AfroTransact): the old channel's offer is withdrawn and the new one is created below.
+                    try {
+                        Offer withdrawn = offers.update(o.withdraw(now));
+                        events.publish(OffersEvents.OFFER_WITHDRAWN, OffersEvents.AGGREGATE, withdrawn.atin(),
+                                OfferEventPayload.of(withdrawn));
+                        touched.add(withdrawn.atin());
+                        missing = true;
+                    } catch (IllegalStateException ex) {
+                        LOG.warn("Could not withdraw offer {} ({}) on a fulfilment change: {}", o.id(), v.atin(),
+                                ex.getMessage());
+                    }
+                    continue;
+                }
                 Offer.Terms t = o.terms();
                 Offer.Terms next = new Offer.Terms(t.condition(), v.priceMinor(), listPrice(v), t.shippingMinor(),
-                        t.fulfilment(), o.fulfilment().sellerStock() ? Math.max(0, v.quantity()) : t.sellerQuantity(),
+                        wanted, wanted.sellerStock() ? Math.max(0, v.quantity()) : t.sellerQuantity(),
                         p.handlingDays() == null || p.handlingDays() <= 0 ? t.handlingDays() : handlingDays(p),
                         o.fulfilment().sellerStock() && p.shipFrom() != null ? shipFrom(p, o.fulfilment()) : t.shipFrom(),
                         t.inventorySku());
@@ -128,6 +145,24 @@ class CatalogSyncServiceImpl implements CatalogSyncService {
             // Variants added by an edit get their offers the way new products do.
             productCreated(UUID.nameUUIDFromBytes(("terms-" + eventId).getBytes(StandardCharsets.UTF_8)), p);
         }
+    }
+
+    /**
+     * The fulfilment the listing asks for: Fulfilled by AfroTransact, or seller-fulfilled (an AfroTransact Delivery
+     * offer stays AfroTransact Delivery, which is seller-fulfilled too). AfroTransact Retail is always fulfilled by
+     * AfroTransact; a snapshot without fulfilment keeps the offer's.
+     */
+    private Fulfilment wantedFulfilment(ProductSnapshot p, Offer o) {
+        if ("PLATFORM".equals(p.ownerKind()) || p.ownerOrgId().equals(settings.retailOrgId())) {
+            return Fulfilment.AFROTRANSACT;
+        }
+        if (p.fulfilment() == null || p.fulfilment().isBlank()) {
+            return o.fulfilment();
+        }
+        if ("AFROTRANSACT".equals(p.fulfilment())) {
+            return Fulfilment.AFROTRANSACT;
+        }
+        return o.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY ? Fulfilment.AFROTRANSACT_DELIVERY : Fulfilment.SELLER;
     }
 
     private static OfferCondition condition(ProductSnapshot p) {
