@@ -742,5 +742,8 @@
   "sc.bulk.photosTitle": "D’abord les photos",
   "sc.bulk.photosHint": "Importez vos photos nommées d’après le SKU (ANK-001.MAIN.jpg, ANK-001.PT01.jpg) et laissez « Image URLs » vide : les lignes les utilisent automatiquement.",
   "sc.bulk.photosLink": "Ouvrir les images produits",
-  "sc.listings.images": "Images"
+  "sc.listings.images": "Images",
+  "sc.pf.category.recent": "Récente",
+  "sc.pf.moreDetails": "Plus de détails (facultatif, {count})",
+  "sc.pf.handlingDays": "{count} jour(s) ouvré(s)"
 }

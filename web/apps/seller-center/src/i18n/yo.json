@@ -742,5 +742,8 @@
   "sc.bulk.photosTitle": "Fọ́tò ní àkọ́kọ́",
   "sc.bulk.photosHint": "Gbé fọ́tò rẹ tí a fi SKU sọ lórúkọ sókè (ANK-001.MAIN.jpg, ANK-001.PT01.jpg) kí o sì fi Image URLs sílẹ̀ lófo: àwọn ìlà yóò lò wọ́n fúnra wọn.",
   "sc.bulk.photosLink": "Ṣí àwọn àwòrán ọjà",
-  "sc.listings.images": "Àwòrán"
+  "sc.listings.images": "Àwòrán",
+  "sc.pf.category.recent": "Àìpẹ́",
+  "sc.pf.moreDetails": "Àlàyé síi (àṣàyàn, {count})",
+  "sc.pf.handlingDays": "Ọjọ́ iṣẹ́ {count}"
 }

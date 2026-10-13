@@ -1,6 +1,6 @@
 'use client';
 
-import { type ApiError, isApiError, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries } from '@afrotransact/api-client';
+import { type ApiError, type AttributeDef, isApiError, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries } from '@afrotransact/api-client';
 import { Button, Checkbox, Field, fieldStyles, Select, TextField, useToast } from '@afrotransact/ui';
 import { Sparkle } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +17,7 @@ import { money, time } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
 import { AttributeField } from './form/AttributeField';
+import { BrandField } from './form/BrandField';
 import { CategoryPicker } from './form/CategoryPicker';
 import { ImagesField } from './form/ImagesField';
 import { goToField, ReadinessPanel } from './form/ReadinessPanel';
@@ -48,6 +49,7 @@ import {
 } from './form-model';
 
 const AUTOSAVE_MS = 1500;
+const HANDLING_DAYS = [1, 2, 3, 4, 5, 7, 10, 14, 21, 30];
 
 function Section({ id, title, hint, children }: { id: SectionKey; title: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -255,14 +257,30 @@ export function ProductForm({ productId }: { productId?: string }) {
     </div>
   );
   const brandDef = type?.attributes.find((a) => a.key === 'brand');
-  const attrField = (key: SectionKey, section: 'DETAILS' | 'FOOD' | 'REGULATED') => (
-    <div className="grid gap-x-3 sm:grid-cols-2" data-attrs={key}>
-      {attributesIn(type, section).map((a) => (
-        <AttributeField key={a.key} def={a} value={s.attrs[a.key] ?? ''} unit={s.units[a.key] ?? ''} error={err(fieldId.attr(a.key))}
-          onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, [a.key]: v } }))} onUnit={(u) => update((prev) => ({ ...prev, units: { ...prev.units, [a.key]: u } }))} />
-      ))}
-    </div>
+  const attrInput = (a: AttributeDef) => (
+    <AttributeField key={a.key} def={a} value={s.attrs[a.key] ?? ''} unit={s.units[a.key] ?? ''} error={err(fieldId.attr(a.key))}
+      onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, [a.key]: v } }))} onUnit={(u) => update((prev) => ({ ...prev, units: { ...prev.units, [a.key]: u } }))} />
   );
+  const attrField = (key: SectionKey, section: 'DETAILS' | 'FOOD' | 'REGULATED') => {
+    const all = attributesIn(type, section);
+    const required = all.filter((a) => a.required);
+    // Optional fields stay folded unless one is filled in or has a problem.
+    const optional = all.filter((a) => !a.required);
+    const openByDefault = optional.some((a) => (s.attrs[a.key] ?? '').trim() || err(fieldId.attr(a.key)));
+    return (
+      <div className="flex flex-col gap-2" data-attrs={key}>
+        {required.length ? <div className="grid gap-x-3 sm:grid-cols-2">{required.map(attrInput)}</div> : null}
+        {optional.length ? (
+          required.length ? (
+            <details open={openByDefault} className="rounded-sm border border-border px-3 py-2">
+              <summary className="cursor-pointer text-sm font-semibold">{t('sc.pf.moreDetails', { count: optional.length })}</summary>
+              <div className="mt-2 grid gap-x-3 sm:grid-cols-2">{optional.map(attrInput)}</div>
+            </details>
+          ) : <div className="grid gap-x-3 sm:grid-cols-2">{optional.map(attrInput)}</div>
+        ) : null}
+      </div>
+    );
+  };
   const idLabel = type?.identifierRule === 'isbn' ? t('sc.pf.field.isbn') : t('sc.pf.field.gtin');
   const noGtin = (
     <Checkbox label={type?.identifierRule === 'isbn' ? t('sc.pf.noIsbn') : t('sc.pf.noGtin')} description={<span className="block text-xs text-muted">{t('sc.pf.noGtinHint')}</span>} checked={s.noGtin}
@@ -296,8 +314,8 @@ export function ProductForm({ productId }: { productId?: string }) {
             <TextField id={fieldId.title} label={t('sc.pf.field.title')} help={t('sc.pf.titleHelp', { count: s.title.trim().length })} value={s.title} error={err(fieldId.title)} maxLength={200}
               onChange={(e) => patch({ title: e.target.value })} />
             <div className="grid gap-x-3 sm:grid-cols-2">
-              <TextField id={fieldId.brand} label={brandDef && !brandDef.required ? t('sc.pf.optional', { label: brandDef.label }) : (brandDef?.label ?? t('sc.pf.field.brandOptional'))} value={s.attrs.brand ?? ''}
-                error={err(fieldId.brand)} onChange={(e) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: e.target.value } }))} />
+              <BrandField id={fieldId.brand} label={brandDef && !brandDef.required ? t('sc.pf.optional', { label: brandDef.label }) : (brandDef?.label ?? t('sc.pf.field.brandOptional'))} value={s.attrs.brand ?? ''}
+                error={err(fieldId.brand)} onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: v } }))} />
               <Select id="pf-condition" label={t('sc.pf.field.condition')} value={s.condition} options={CONDITIONS.map((c) => ({ value: c, label: t(`sc.pf.condition.${c}` as MessageKey) }))}
                 onChange={(e) => patch({ condition: e.target.value as FormState['condition'] })} />
             </div>
@@ -381,7 +399,7 @@ export function ProductForm({ productId }: { productId?: string }) {
                     <input type="radio" name="pf-fulfilment" value={f} checked={s.fulfilment === f} onChange={() => patch({ fulfilment: f })} className="mt-1" />
                     <span className="flex flex-col">
                       <strong className="text-sm">{t(`sc.pf.fulfilment.${f}` as MessageKey)}</strong>
-                      <span className="text-xs text-muted">{t(`sc.pf.fulfilment.${f}.hint` as MessageKey)}</span>
+                      {s.fulfilment === f ? <span className="text-xs text-muted">{t(`sc.pf.fulfilment.${f}.hint` as MessageKey)}</span> : null}
                     </span>
                   </label>
                 ))}
@@ -407,7 +425,8 @@ export function ProductForm({ productId }: { productId?: string }) {
                   options={[{ value: '', label: defaultShipFrom ? t('sc.pf.shipFromDefault', { label: `${defaultShipFrom.label} · ${defaultShipFrom.city}, ${defaultShipFrom.state}` }) : t('sc.pf.shipFromAccount') },
                     ...(shipFrom.data ?? []).filter((a) => !a.isDefault).map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))]}
                   onChange={(e) => patch({ shipFromId: e.target.value })} />
-                <TextField id={fieldId.handling} label={t('sc.pf.field.handling')} help={t('sc.pf.handlingHelp')} inputMode="numeric" value={s.handlingDays} error={err(fieldId.handling)}
+                <Select id={fieldId.handling} label={t('sc.pf.field.handling')} help={t('sc.pf.handlingHelp')} value={s.handlingDays} error={err(fieldId.handling)}
+                  options={[...new Set([...HANDLING_DAYS, Number(s.handlingDays) || 2])].sort((x, y) => x - y).map((n) => ({ value: String(n), label: t('sc.pf.handlingDays', { count: n }) }))}
                   onChange={(e) => patch({ handlingDays: e.target.value })} />
               </div>
             </Section>

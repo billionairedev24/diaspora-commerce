@@ -4,7 +4,7 @@ import { type CategoryNode, CategoryRequestInputSchema, sellerKeys } from '@afro
 import { Button, cx, TextField } from '@afrotransact/ui';
 import { CaretRight, HourglassMedium, LockSimple, MagnifyingGlass } from '@phosphor-icons/react/ssr';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { type KeyboardEvent, useMemo, useState } from 'react';
 
 import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -34,7 +34,12 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
   const [reqOpen, setReqOpen] = useState(false);
   const [req, setReq] = useState({ parentPath: '', name: '', exampleProduct: '', detailsNeeded: '' });
   const [reqErr, setReqErr] = useState<Record<string, string>>({});
-  const hits = searchLeaves(leaves, query);
+  const [focused, setFocused] = useState(false);
+  const [active, setActive] = useState(0);
+  const [recent, setRecent] = useState<CategoryLeaf[]>(() => readRecent());
+  const searched = query.trim() ? searchLeaves(leaves, query) : [];
+  const hits = query.trim() ? searched : [...recent.filter((r) => leaves.some((l) => l.id === r.id)), ...leaves.filter((l) => !recent.some((r) => r.id === l.id))].slice(0, 40);
+  const listOpen = focused && hits.length > 0;
   const chosen = Boolean(s.categoryId || s.request);
   const request = useMutation({
     mutationFn: () => api.requestCategory(req),
@@ -59,6 +64,16 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
     onChoose(l);
     setQuery('');
     setBrowse(false);
+    setFocused(false);
+    const next = [l, ...recent.filter((r) => r.id !== l.id)].slice(0, 5);
+    setRecent(next);
+    writeRecent(next);
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocused(true); setActive((a) => Math.min(a + 1, hits.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    else if (e.key === 'Enter' && listOpen) { e.preventDefault(); const h = hits[active]; if (h) pick(h); }
+    else if (e.key === 'Escape') setFocused(false);
   };
   const toggle = (id: string) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]));
   const branch = (nodes: CategoryNode[], depth: number) => (
@@ -99,25 +114,27 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
         <>
           <div className="relative">
             <TextField id={fieldId.category} label={t('sc.pf.category.search')} placeholder={t('sc.pf.category.searchPlaceholder')} value={query} error={error}
-              autoComplete="off" role="combobox" aria-expanded={hits.length > 0} aria-controls="pf-category-results" onChange={(e) => setQuery(e.target.value)} />
+              autoComplete="off" role="combobox" aria-expanded={listOpen} aria-controls="pf-category-results" aria-autocomplete="list"
+              aria-activedescendant={listOpen ? `pf-cat-${active}` : undefined}
+              onFocus={() => setFocused(true)} onBlur={() => window.setTimeout(() => setFocused(false), 150)} onKeyDown={onKey}
+              onChange={(e) => { setQuery(e.target.value); setActive(0); setFocused(true); }} />
             <MagnifyingGlass size={16} aria-hidden className="pointer-events-none absolute top-[34px] right-3 text-muted" />
-          </div>
-          {query.trim() ? (
-            hits.length ? (
-              <ul id="pf-category-results" role="listbox" aria-label={t('sc.pf.category.results')} className="m-0 flex list-none flex-col gap-1 p-0">
-                {hits.map((l) => (
-                  <li key={l.id} role="option" aria-selected={false}>
-                    <button type="button" onClick={() => pick(l)} className="flex w-full flex-col items-start rounded-sm border border-border bg-surface px-3 py-2 text-left hover:border-gold-500">
-                      <span className="text-sm font-semibold">{l.name}</span>
+            {listOpen ? (
+              <ul id="pf-category-results" role="listbox" aria-label={t('sc.pf.category.results')}
+                className="absolute inset-x-0 top-full z-20 m-0 mt-1 flex max-h-80 list-none flex-col overflow-y-auto rounded-sm border border-border bg-surface p-1 shadow-lg">
+                {hits.map((l, i) => (
+                  <li key={l.id} id={`pf-cat-${i}`} role="option" aria-selected={i === active}>
+                    <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(l)} onMouseEnter={() => setActive(i)}
+                      className={cx('flex w-full flex-col items-start rounded-xs border-0 px-3 py-1.5 text-left', i === active ? 'bg-gold-50' : 'bg-transparent')}>
+                      <span className="text-sm font-semibold">{l.name}{!query.trim() && recent.some((r) => r.id === l.id) ? <span className="ml-2 text-2xs font-normal text-muted">{t('sc.pf.category.recent')}</span> : null}</span>
                       <span className="text-xs text-muted">{l.path}</span>
                     </button>
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="m-0 text-sm text-muted">{t('sc.pf.category.noMatch')}</p>
-            )
-          ) : null}
+            ) : null}
+          </div>
+          {query.trim() && !searched.length ? <p className="m-0 text-sm text-muted">{t('sc.pf.category.noMatch')}</p> : null}
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             <button type="button" className="link-button border-0 bg-transparent p-0 text-sm text-link hover:underline" aria-expanded={browse} onClick={() => setBrowse(!browse)}>
               {t('sc.pf.category.browse')}
@@ -152,4 +169,24 @@ export function CategoryPicker({ tree, s, locked, error, onChoose }: Props) {
       ) : null}
     </div>
   );
+}
+
+const RECENT_KEY = 'sc.pf.recentCategories';
+
+function readRecent(): CategoryLeaf[] {
+  try {
+    const raw = typeof window === 'undefined' ? null : window.localStorage.getItem(RECENT_KEY);
+    const v: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(v) ? (v as CategoryLeaf[]).filter((x) => typeof x?.id === 'string').slice(0, 5) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecent(list: CategoryLeaf[]) {
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch {
+    /* private mode: recent picks are a convenience */
+  }
 }

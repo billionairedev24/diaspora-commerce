@@ -755,5 +755,8 @@
   "sc.bulk.photosTitle": "Photos first",
   "sc.bulk.photosHint": "Upload your photos named after the SKU (ANK-001.MAIN.jpg, ANK-001.PT01.jpg) and leave Image URLs empty: rows pick them up automatically.",
   "sc.bulk.photosLink": "Open product images",
-  "sc.listings.images": "Images"
+  "sc.listings.images": "Images",
+  "sc.pf.category.recent": "Recent",
+  "sc.pf.moreDetails": "More details (optional, {count})",
+  "sc.pf.handlingDays": "{count} business day(s)"
 }

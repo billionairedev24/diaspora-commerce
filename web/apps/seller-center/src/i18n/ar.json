@@ -742,5 +742,8 @@
   "sc.bulk.photosTitle": "الصور أولًا",
   "sc.bulk.photosHint": "ارفع صورك المسماة برمز SKU (ANK-001.MAIN.jpg و ANK-001.PT01.jpg) واترك Image URLs فارغًا: ستستخدمها الصفوف تلقائيًا.",
   "sc.bulk.photosLink": "فتح صور المنتجات",
-  "sc.listings.images": "الصور"
+  "sc.listings.images": "الصور",
+  "sc.pf.category.recent": "حديثة",
+  "sc.pf.moreDetails": "تفاصيل إضافية (اختيارية، {count})",
+  "sc.pf.handlingDays": "{count} يوم عمل"
 }
