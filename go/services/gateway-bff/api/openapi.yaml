@@ -3293,7 +3293,7 @@ components:
       required: [id, type, brand, last4, label, expires, isDefault]
       properties:
         id: {type: string}
-        type: {type: string, enum: [card, us_bank_account, cashapp, link]}
+        type: {type: string, enum: [card, us_bank_account, cashapp, link, amazon_pay]}
         brand: {type: [string, 'null']}
         last4: {type: [string, 'null']}
         label: {type: string}

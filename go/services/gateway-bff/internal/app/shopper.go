@@ -109,6 +109,8 @@ func toPaymentMethod(m port.WalletMethod) domain.PaymentMethod {
 		pm.Label = "Cash App Pay"
 	case "link":
 		pm.Label = "Link"
+	case "amazon_pay":
+		pm.Label = "Amazon Pay"
 	default:
 		pm.Type = "card"
 		pm.Label = brandName(m.Brand) + " ending in " + m.Last4

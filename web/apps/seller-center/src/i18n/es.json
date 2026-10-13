@@ -745,5 +745,7 @@
   "sc.listings.images": "Imágenes",
   "sc.pf.category.recent": "Reciente",
   "sc.pf.moreDetails": "Más detalles (opcional, {count})",
-  "sc.pf.handlingDays": "{count} día(s) hábil(es)"
+  "sc.pf.handlingDays": "{count} día(s) hábil(es)",
+  "sc.billing.expires": "Vence {date}",
+  "sc.billing.expired": "Vencida"
 }

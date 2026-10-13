@@ -16,8 +16,8 @@ import {
   type Subscription
 } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Badge, Button, ChipGroup, cx, Dialog, TextField, useToast } from '@afrotransact/ui';
-import { Bank, CheckCircle, CreditCard, Flask, Gift, Plus } from '@phosphor-icons/react/ssr';
+import { Badge, Button, ChipGroup, cx, Dialog, SavedPaymentCard, TextField, useToast } from '@afrotransact/ui';
+import { CheckCircle, Flask, Gift, Plus } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -39,7 +39,6 @@ import { exportDataset, pollExport } from '@/lib/table-export';
 
 type T = Translator<MessageKey>;
 
-const BRAND: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover' };
 const CADENCE_KEYS: Record<Cadence, MessageKey> = { MONTHLY: 'sc.billing.cadence.MONTHLY', QUARTERLY: 'sc.billing.cadence.QUARTERLY', ANNUAL: 'sc.billing.cadence.ANNUAL' };
 const TRIAL_SOURCE_KEYS: Record<string, MessageKey> = {
   PLAN: 'sc.billing.trialSource.PLAN',
@@ -50,38 +49,34 @@ const TRIAL_SOURCE_KEYS: Record<string, MessageKey> = {
 function MethodCard({ m, canManage, onDefault, onRemove, busy, t }: { m: BillingPaymentMethod; canManage: boolean; onDefault: () => void; onRemove: () => void; busy: boolean; t: T }) {
   const card = m.kind === 'card';
   return (
-    <div className={cx('flex min-w-0 flex-col gap-3 rounded-lg border p-4', m.isDefault ? 'border-gold-500 bg-gold-50' : 'border-border')}>
-      <div className="flex items-center gap-3">
-        <span aria-hidden className="grid size-10 place-items-center rounded-md bg-ink-1000 text-gold-500">
-          {card ? <CreditCard size={22} /> : <Bank size={22} />}
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <strong>{card ? (BRAND[m.brand ?? ''] ?? t('sc.billing.card')) : (m.bankName ?? t('sc.billing.bankAccount'))}</strong>
-          <span className="text-sm text-muted">
-            {card
-              ? t('sc.billing.cardDetail', { last4: m.last4, exp: `${String(m.expMonth ?? '').padStart(2, '0')}/${String(m.expYear ?? '').slice(-2)}` })
-              : `${m.accountType ?? t('sc.billing.account')} •••• ${m.last4}`}
-          </span>
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        {m.isDefault ? <Badge tone="brand">{t('sc.billing.default')}</Badge> : null}
-        {m.verified ? (
-          <span className="flex items-center gap-1 text-success">
-            <CheckCircle size={14} weight="fill" aria-hidden /> {t('sc.billing.verified')}
-          </span>
-        ) : (
-          <span className="text-warning">{t('sc.billing.verificationPending')}</span>
-        )}
-        {m.receivesPayouts ? <span className="text-muted">{t('sc.billing.receivesPayouts')}</span> : null}
-      </div>
-      {canManage && !m.isDefault ? (
-        <div className="flex gap-2">
+    <SavedPaymentCard
+      type={card ? 'card' : 'bank'}
+      brand={m.brand}
+      last4={m.last4}
+      expires={card && m.expMonth && m.expYear ? `${String(m.expMonth).padStart(2, '0')}/${String(m.expYear).slice(-2)}` : null}
+      title={card ? undefined : (m.bankName ?? t('sc.billing.bankAccount'))}
+      detail={card ? undefined : (m.accountType ?? t('sc.billing.account'))}
+      isDefault={m.isDefault}
+      labels={{ defaultTag: t('sc.billing.default'), expires: (date) => t('sc.billing.expires', { date }), expired: t('sc.billing.expired') }}
+      status={
+        <>
+          {m.verified ? (
+            <span className="flex items-center gap-1 text-success">
+              <CheckCircle size={14} weight="fill" aria-hidden /> {t('sc.billing.verified')}
+            </span>
+          ) : (
+            <span className="text-warning">{t('sc.billing.verificationPending')}</span>
+          )}
+          {m.receivesPayouts ? <span className="text-muted">{t('sc.billing.receivesPayouts')}</span> : null}
+        </>
+      }
+      actions={canManage && !m.isDefault ? (
+        <>
           <Button size="sm" variant="neutral" disabled={busy} onClick={onDefault}>{t('sc.billing.makeDefault')}</Button>
           <Button size="sm" variant="link" disabled={busy} onClick={onRemove}>{t('sc.billing.remove')}</Button>
-        </div>
+        </>
       ) : null}
-    </div>
+    />
   );
 }
 
@@ -501,7 +496,7 @@ export function BillingView() {
         <h2 className="m-0 text-lg font-semibold">{t('sc.billing.paymentMethods')}</h2>
         {canManage ? <Button size="sm" variant="neutral" onClick={() => setAdding(true)}><Plus size={16} aria-hidden /> {t('sc.billing.addMethod')}</Button> : null}
       </div>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))] gap-3">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))] gap-4">
         {paymentMethods.map((m) => (
           <MethodCard key={m.id} m={m} t={t} canManage={canManage} busy={pm.isPending} onDefault={() => pm.mutate({ id: m.id, op: 'default' })} onRemove={() => pm.mutate({ id: m.id, op: 'remove' })} />
         ))}

@@ -745,5 +745,7 @@
   "sc.listings.images": "Àwòrán",
   "sc.pf.category.recent": "Àìpẹ́",
   "sc.pf.moreDetails": "Àlàyé síi (àṣàyàn, {count})",
-  "sc.pf.handlingDays": "Ọjọ́ iṣẹ́ {count}"
+  "sc.pf.handlingDays": "Ọjọ́ iṣẹ́ {count}",
+  "sc.billing.expires": "Yóò parí {date}",
+  "sc.billing.expired": "Ti parí"
 }

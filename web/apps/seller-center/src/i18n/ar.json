@@ -745,5 +745,7 @@
   "sc.listings.images": "الصور",
   "sc.pf.category.recent": "حديثة",
   "sc.pf.moreDetails": "تفاصيل إضافية (اختيارية، {count})",
-  "sc.pf.handlingDays": "{count} يوم عمل"
+  "sc.pf.handlingDays": "{count} يوم عمل",
+  "sc.billing.expires": "تنتهي {date}",
+  "sc.billing.expired": "منتهية"
 }

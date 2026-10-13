@@ -1,12 +1,11 @@
 'use client';
 
 import { accountKeys, isApiError, type PaymentMethod } from '@afrotransact/api-client';
-import { Button, Plus, Skeleton, useToast } from '@afrotransact/ui';
+import { Button, Plus, SavedPaymentCard, Skeleton, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { AddPaymentMethodDialog } from '@/components/payments/AddPaymentMethodDialog';
-import { PaymentChip } from '@/components/payments/PaymentChip';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
@@ -40,27 +39,31 @@ export function PaymentsView() {
         {list.isPending && <Skeleton height={48} />}
         {list.isError && <p className={styles.error} role="alert">{t('acct.loadError')}</p>}
         {list.data?.length === 0 && <p className={styles.muted}>{t('pay.none')}</p>}
-        <ul className={styles.list}>
+        <ul className={styles.cards}>
           {list.data?.map((pm) => (
-            <li key={pm.id} className={styles.row} data-testid="payment-method">
-              <PaymentChip method={pm} />
-              <span>
-                <strong>{pm.label}</strong>
-                <br />
-                <span className={styles.muted}>{pm.expires ? t('pay.expires', { date: pm.expires }) : pm.type === 'us_bank_account' ? t('pay.bankAccount') : t('pay.wallet')}</span>
-              </span>
-              <span className={styles.actions}>
-                {pm.isDefault ? (
-                  <span className={styles.status}>{t('pay.default')}</span>
-                ) : (
-                  <button type="button" className="link-button" onClick={() => makeDefault.mutate(pm)} disabled={makeDefault.isPending}>
-                    {t('pay.setDefault')}
-                  </button>
-                )}
-                <button type="button" className="link-button" onClick={() => remove.mutate(pm)} disabled={remove.isPending} aria-label={t('pay.removeAria', { label: pm.label })}>
-                  {t('common.remove')}
-                </button>
-              </span>
+            <li key={pm.id} data-testid="payment-method">
+              <SavedPaymentCard
+                type={pm.type}
+                brand={pm.brand}
+                last4={pm.last4}
+                expires={pm.expires}
+                title={pm.type === 'us_bank_account' ? pm.label.replace(/ ending in \d+.*$/, '') : undefined}
+                detail={pm.type === 'us_bank_account' && /verification pending/i.test(pm.label) ? t('pay.verificationPending') : undefined}
+                isDefault={pm.isDefault}
+                labels={{ defaultTag: t('pay.default'), expires: (date) => t('pay.expires', { date }), expired: t('pay.expired') }}
+                actions={
+                  <span className={styles.actions}>
+                    {pm.isDefault ? null : (
+                      <button type="button" className="link-button" onClick={() => makeDefault.mutate(pm)} disabled={makeDefault.isPending}>
+                        {t('pay.setDefault')}
+                      </button>
+                    )}
+                    <button type="button" className="link-button" onClick={() => remove.mutate(pm)} disabled={remove.isPending} aria-label={t('pay.removeAria', { label: pm.label })}>
+                      {t('common.remove')}
+                    </button>
+                  </span>
+                }
+              />
             </li>
           ))}
         </ul>

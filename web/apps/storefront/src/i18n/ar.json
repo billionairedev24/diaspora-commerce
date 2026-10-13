@@ -1135,5 +1135,7 @@
   "paynow.or": "أو ادفع بطريقة أخرى",
   "co.otherAddresses": "عناوينك الأخرى",
   "co.addInstructions": "أضف تعليمات التوصيل",
-  "co.handoverLabel": "طريقة التسليم"
+  "co.handoverLabel": "طريقة التسليم",
+  "pay.expired": "منتهية",
+  "pay.verificationPending": "التحقق قيد الانتظار"
 }

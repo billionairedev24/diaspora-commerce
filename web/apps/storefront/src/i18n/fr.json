@@ -1135,5 +1135,7 @@
   "paynow.or": "ou payez autrement",
   "co.otherAddresses": "Vos autres adresses",
   "co.addInstructions": "Ajouter des instructions de livraison",
-  "co.handoverLabel": "Comment nous le remettons"
+  "co.handoverLabel": "Comment nous le remettons",
+  "pay.expired": "Expirée",
+  "pay.verificationPending": "Vérification en attente"
 }

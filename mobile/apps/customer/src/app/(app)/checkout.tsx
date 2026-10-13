@@ -2,11 +2,11 @@
    for AfroTransact Delivery), payment and totals. Saved cards place the order directly (3-D Secure handled with
    handleNextAction); Apple Pay / Google Pay and new cards or bank accounts use Stripe's PaymentSheet in deferred-intent
    mode built from the summary total. Orders over $100 and wallet payments are confirmed with Face ID / passcode. */
-import { formatMoney, isApiError, type PaymentMethod } from '@afrotransact/api-client';
+import { formatMoney, isApiError } from '@afrotransact/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import { useRouter } from 'expo-router';
-import { AppleLogoIcon as AppleLogo, BankIcon as Bank, CircleIcon as Circle, CreditCardIcon as CreditCard, CurrencyDollarIcon as CurrencyDollar, GoogleLogoIcon as GoogleLogo, LockSimpleIcon as LockSimple, RadioButtonIcon as RadioButton, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
+import { AppleLogoIcon as AppleLogo, CircleIcon as Circle, CreditCardIcon as CreditCard, GoogleLogoIcon as GoogleLogo, LockSimpleIcon as LockSimple, RadioButtonIcon as RadioButton, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
 
@@ -18,6 +18,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { buildPlaceOrderRequest, defaultChoices, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '@/domain/checkout';
 import { usePayments } from '@/payments/usePayments';
 import { c, sp, t } from '@/theme';
+import { PaymentMark } from '@/ui/PaymentMarks';
 import { AppText, Banner, Button, Card, Chip, Empty, KeyValue, Loading, SectionLabel } from '@/ui/primitives';
 import { Screen, SubHeader } from '@/ui/Screen';
 import { useToast } from '@/ui/Toast';
@@ -34,10 +35,6 @@ const CONTACT = [
   { key: 'call', label: 'Call on arrival' },
   { key: 'none', label: 'Don’t contact me' }
 ] as const;
-
-function pmIcon(p: PaymentMethod) {
-  return p.type === 'us_bank_account' ? Bank : p.type === 'cashapp' ? CurrencyDollar : CreditCard;
-}
 
 function Radio({ on }: { on: boolean }) {
   return on ? <RadioButton size={22} weight="fill" color={c.text} /> : <Circle size={22} color={c.textMuted} />;
@@ -227,12 +224,11 @@ export default function Checkout() {
           </View>
         </Card>
         {s.paymentMethods.map((m) => {
-          const I = pmIcon(m);
           const on = pay?.kind === 'saved' && pay.id === m.id;
           return (
             <Card key={m.id} selected={on} onPress={() => setPay({ kind: 'saved', id: m.id })} accessibilityLabel={m.label}>
               <View style={styles.between}>
-                <I size={22} color={c.text} />
+                <PaymentMark method={m} height={24} />
                 <AppText style={{ flex: 1 }}>{m.label}</AppText>
                 <Radio on={on} />
               </View>

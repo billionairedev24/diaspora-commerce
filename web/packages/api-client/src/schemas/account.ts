@@ -21,7 +21,7 @@ export type Address = z.infer<typeof AddressSchema>;
 
 export const PaymentMethodSchema = z.object({
   id: z.string(),
-  type: z.enum(['card', 'us_bank_account', 'cashapp', 'link']),
+  type: z.enum(['card', 'us_bank_account', 'cashapp', 'link', 'amazon_pay']),
   brand: z.string().nullable(),
   last4: z.string().nullable(),
   label: z.string(),

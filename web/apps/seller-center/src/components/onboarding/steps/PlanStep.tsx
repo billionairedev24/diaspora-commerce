@@ -1,8 +1,8 @@
 'use client';
 
 import { type OnboardingPlanInput, type OnboardingPlanOffer, type PlanFeeCollectionMode, sellerQueries } from '@afrotransact/api-client';
-import { Button, cx, TextField } from '@afrotransact/ui';
-import { Check, CreditCard, Flask, LockSimple } from '@phosphor-icons/react/ssr';
+import { Button, cx, SavedPaymentCard, TextField } from '@afrotransact/ui';
+import { Check, Flask, LockSimple } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
@@ -363,18 +363,19 @@ export function PlanStep({ status, ref }: StepProps) {
         <div className="flex flex-col gap-2">
           <h3 className="m-0 text-md font-bold">How should we bill you?</h3>
           {cardKept ? (
-            <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3">
-              <CreditCard size={24} aria-hidden />
-              <span className="flex-1 text-sm">
-                <strong className="capitalize">{saved.cardBrand}</strong> ••
-                {saved.cardLast4} · expires {String(saved.cardExpMonth).padStart(2, '0')}/{String(saved.cardExpYear).slice(-2)}
-              </span>
-              {!disabled ? (
+            <SavedPaymentCard
+              type="card"
+              brand={saved.cardBrand}
+              last4={saved.cardLast4}
+              expires={saved.cardExpMonth && saved.cardExpYear ? `${String(saved.cardExpMonth).padStart(2, '0')}/${String(saved.cardExpYear).slice(-2)}` : null}
+              selected
+              labels={{ defaultTag: t('sc.billing.default'), expires: (date) => t('sc.billing.expires', { date }), expired: t('sc.billing.expired') }}
+              actions={!disabled ? (
                 <Button size="sm" variant="link" onClick={() => setNewCard(true)}>
                   Use a different card
                 </Button>
               ) : null}
-            </div>
+            />
           ) : hasStripeKey(key) ? (
             <StripeCard ref={card} publishableKey={key} holder={holder} />
           ) : (

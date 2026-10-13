@@ -11,8 +11,8 @@ import { PaymentChip } from '@/components/payments/PaymentChip';
 import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle } from '@/components/payments/PaymentElementField';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 
-import { CheckoutCrossSell } from './CheckoutCrossSell';
 import styles from './Checkout.module.css';
+import { CheckoutCrossSell } from './CheckoutCrossSell';
 
 const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', 'co.placing.split'] as const;
 
@@ -68,7 +68,7 @@ export function CheckoutOrderPanel(props: Props) {
     taxNote,
     payWith,
     pmId,
-    pm,
+    pm: _pm,
     save,
     setSave,
     setPayWith,

@@ -2709,7 +2709,7 @@ export interface components {
         PaymentMethod: {
             id: string;
             /** @enum {string} */
-            type: "card" | "us_bank_account" | "cashapp" | "link";
+            type: "card" | "us_bank_account" | "cashapp" | "link" | "amazon_pay";
             brand: string | null;
             last4: string | null;
             label: string;
