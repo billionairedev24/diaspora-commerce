@@ -262,11 +262,11 @@ func placementStaffActions(key string, act func(string, func(jobj) jobj) func(co
 	}
 	actions = append(actions, staffAction{
 		key: "delete", label: "Delete", tone: "danger", permission: "advert:delete", confirm: "Permanently delete this advert?",
-		when: func(_ staffCtx, o jobj) string {
+		when: func(sc staffCtx, o jobj) string {
 			if !boolean(o, "paid") {
 				return "Only paid adverts can be deleted."
 			}
-			return inState("DRAFT", "ENDED")(_, o)
+			return inState("DRAFT", "ENDED")(sc, o)
 		}, removes: true,
 		run: func(ctx context.Context, sc staffCtx, o jobj, _ jobj) error {
 			return sc.call(ctx, sc.up.Content, port.StaffCall{Method: http.MethodDelete, Path: "/v1/placements/" + url.PathEscape(jstr(o, "id"))}, nil)
