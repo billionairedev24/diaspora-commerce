@@ -97,6 +97,28 @@ export default tseslint.config(
     }
   },
   {
+    // Phone numbers go through the standard PhoneNumberField (country code dropdown, E.164 out): no raw tel inputs in
+    // the apps. The ui package's own PhoneInput is the one place that renders the input.
+    files: ['web/apps/*/src/**/*.tsx', 'web/packages/account/src/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "ImportDeclaration[source.value=/^(\\.|@\\/|@afrotransact\\/)/] > ImportNamespaceSpecifier",
+          message: 'No namespace imports of app code — import the named members you use.'
+        },
+        {
+          selector: "JSXAttribute[name.name='type'][value.value='tel']",
+          message: 'Use PhoneNumberField from @afrotransact/ui for phone numbers (country code dropdown, E.164 value).'
+        },
+        {
+          selector: "JSXAttribute[name.name='autoComplete'][value.value='tel']",
+          message: 'Use PhoneNumberField from @afrotransact/ui for phone numbers (country code dropdown, E.164 value).'
+        }
+      ]
+    }
+  },
+  {
     // Documented exception to "design tokens only": third-party payment brand marks (Stripe, card networks) must keep
     // their owners' colours. Only this file may hold them; everything else uses the marks from @afrotransact/ui.
     files: ['web/packages/ui/src/commerce/PaymentBrandMarks.tsx'],

@@ -670,5 +670,6 @@
   "sc.bulk.historyDescription": "Gbogbo gbígbé ọ̀pọ̀ sókè ẹgbẹ́ rẹ, pẹ̀lú àyẹ̀wò àti àbájáde wọn.",
   "sc.bulk.historySearch": "Wá àwọn tí a gbé sókè",
   "sc.bulk.historyEmpty": "Kò tíì sí ohun tí a gbé sókè.",
-  "sc.bulk.newUpload": "Gbígbé sókè tuntun"
+  "sc.bulk.newUpload": "Gbígbé sókè tuntun",
+  "sc.coupons.loading": "Ń gbé àwọn kúpọ́nù rẹ wá…"
 }

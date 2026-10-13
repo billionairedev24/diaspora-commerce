@@ -1132,5 +1132,6 @@
   "paynow.lastDeclined": "Votre dernière tentative de paiement a échoué : {message}",
   "paynow.viewOrders": "Voir vos commandes",
   "paynow.error": "Impossible de charger ce paiement. Réessayez dans un instant.",
-  "paynow.or": "ou payez autrement"
+  "paynow.or": "ou payez autrement",
+  "co.otherAddresses": "Vos autres adresses"
 }

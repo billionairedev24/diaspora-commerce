@@ -20,6 +20,7 @@ import {
   CarrierSchema,
   CategoryRequestInputSchema,
   type ChartSpec,
+  CreateSellerCouponSchema,
   type Dashboard,
   type EarningsRow,
   FulfilmentKindSchema,
@@ -34,13 +35,12 @@ import {
   ProductDraftSchema,
   PublicPageInputSchema,
   SellerAddressSchema,
+  type SellerCoupon,
   type SellerFeesView,
   type SellerFeeVersion,
   type SellerOrderDetail,
   type SellerOrderRow,
   type SellerProductDetail,
-  CreateSellerCouponSchema,
-  type SellerCoupon,
   type SellerSession,
   SellerStatusActionSchema,
   ServiceInputSchema,
@@ -52,7 +52,7 @@ import {
   UploadRequestSchema,
   validatePickupHours
 } from '../../schemas/seller';
-import { suggestAddresses } from '../addresses';
+import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
@@ -892,10 +892,17 @@ export const sellerHandlers = [
   ),
   http.get(
     '*/v1/geo/address-suggestions',
-    plain((_db, request) => ({
-      suggestions: suggestAddresses(new URL(request.url).searchParams.get('q') ?? ''),
-      attribution: 'Sample addresses (geo service: Google Places / OpenStreetMap Nominatim in production)'
-    }))
+    plain((_db, request) => {
+      const p = new URL(request.url).searchParams;
+      return mockAddressSuggestions(p.get('q') ?? '', p.get('sessionToken'));
+    })
+  ),
+  http.get(
+    '*/v1/geo/address-suggestions/:id',
+    plain((_db, request) => {
+      const id = decodeURIComponent(new URL(request.url).pathname.split('/').pop() ?? '');
+      return mockResolveAddress(id) ?? { line1: '', line2: '', city: '', state: '', zip: '', country: 'US', lat: null, lon: null };
+    })
   ),
   http.put(
     `${W}/session/active-org`,

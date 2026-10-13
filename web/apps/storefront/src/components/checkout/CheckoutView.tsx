@@ -11,7 +11,7 @@ import {
   type OrderConfirmation,
   orderKeys,
 } from '@afrotransact/api-client';
-import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
+import { buttonClassName, LockSimple, SavedAddressPicker, Skeleton, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -26,8 +26,8 @@ import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 import { readAttribution } from '@/lib/preorder/attribution';
 
-import { CheckoutOrderPanel } from './CheckoutOrderPanel';
 import styles from './Checkout.module.css';
+import { CheckoutOrderPanel } from './CheckoutOrderPanel';
 import { type Choice, feeOf, initialChoice, PackageCard } from './PackageCard';
 
 /** How the order is paid: saved card or new details via the Payment Element. */
@@ -349,55 +349,33 @@ export function CheckoutView() {
           n={1}
           id="co-address"
           title={t('co.step.address')}
-          action={
-            !addressList && (
-              <button type="button" className="link-button" onClick={() => setAddressOpen(true)} aria-label={t('co.changeAria', { step: t('co.step.address') })}>
-                {t('co.change')}
-              </button>
-            )
-          }
         >
-          {!addressList && address ? (
-            <p className={styles.addressLine} data-testid="checkout-address">
-              <strong>{address.name}</strong>
-              <span>{addressLine(address)}</span>
-              <span className={styles.muted}>{address.phone}</span>
-            </p>
-          ) : (
-            <div className={styles.choices}>
-              {s.addresses.length === 0 && <p className={styles.muted}>{t('co.noAddresses')}</p>}
-              {s.addresses.map((a) => (
-                <label key={a.id} className={styles.choice} data-testid="checkout-address">
-                  <input type="radio" name="shipaddr" checked={a.id === addressId} onChange={() => setAddressId(a.id)} />
-                  <span className={styles.choiceText}>
-                    <strong>{a.name}</strong> {addressLine(a)}
-                    <br />
-                    <span className={styles.muted}>{a.phone}</span>
-                  </span>
-                  {a.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
-                  <button type="button" className="link-button" onClick={() => setAddrDialog({ open: true, address: a })}>
-                    {t('common.edit')}
-                  </button>
-                </label>
-              ))}
-              <div className={styles.rowActions}>
-                <button type="button" className={styles.addRow} onClick={() => setAddrDialog({ open: true, address: null })}>
-                  <Plus aria-hidden /> {t('co.addAddress')}
-                </button>
-                {address && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setError(null);
-                      setAddressOpen(false);
-                    }}
-                  >
-                    {t('co.useAddress')}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
+          <SavedAddressPicker
+            testId="checkout-address-picker"
+            addresses={s.addresses.map((a) => ({ id: a.id, name: a.name, lines: [addressLine(a)], meta: a.phone, isDefault: a.isDefault }))}
+            selectedId={addressId}
+            onSelect={(id) => {
+              setAddressId(id);
+              setError(null);
+            }}
+            onAddNew={() => setAddrDialog({ open: true, address: null })}
+            expanded={addressOpen}
+            onExpandedChange={setAddressOpen}
+            actions={(o) => (
+              <button type="button" className="link-button" onClick={() => setAddrDialog({ open: true, address: s.addresses.find((a) => a.id === o.id) ?? null })}>
+                {t('common.edit')}
+              </button>
+            )}
+            labels={{
+              change: t('co.change'),
+              keep: t('common.cancel'),
+              defaultTag: t('pay.default'),
+              addNew: t('co.addAddress'),
+              others: t('co.otherAddresses'),
+              empty: t('co.noAddresses'),
+              changeAria: t('co.changeAria', { step: t('co.step.address') })
+            }}
+          />
         </Section>
 
         <Section n={2} id="co-delivery" title={t('co.step.delivery')} action={<span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>}>

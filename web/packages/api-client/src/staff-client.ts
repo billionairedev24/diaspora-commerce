@@ -1,7 +1,9 @@
+import { type AddressSearchOptions } from './address-lookup';
 import { createStaffFeeRatesApi } from './fee-rates';
 import { type ApiClientOptions, createRequester } from './http';
 import { createInventoryHubApi } from './inventory-hub';
 import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
+import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import {
   type Customer360,
   Customer360Schema,
@@ -10,8 +12,6 @@ import {
   type DeliveryQuote,
   type DeliveryQuoteRequest,
   DeliveryQuoteSchema,
-  type TaxRatesImportResult,
-  TaxRatesImportResultSchema,
   type DriverSuggestions,
   DriverSuggestionsSchema,
   type ExportRequest,
@@ -55,8 +55,9 @@ import {
   StaffSessionSchema,
   type SupportActionResult,
   SupportActionResultSchema,
-  type SupportRefundRequest
-} from './schemas/staff';
+  type SupportRefundRequest,
+  type TaxRatesImportResult,
+  TaxRatesImportResultSchema} from './schemas/staff';
 import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
@@ -81,6 +82,11 @@ export function createStaffApiClient(options: ApiClientOptions) {
   const record = (resource: ResourceKey, id: string) => `/v1/staff/resources/${enc(resource)}/${enc(id)}`;
 
   return {
+    /** Address suggestions (geo service: Google Places / OSM), the same search the storefront uses. */
+    searchAddresses: (q: string, signal?: AbortSignal, options: AddressSearchOptions = {}): Promise<AddressSuggestions> =>
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country }, signal }),
+    resolveAddressSuggestion: (id: string, sessionToken?: string, signal?: AbortSignal): Promise<PostalAddress> =>
+      request(`/v1/geo/address-suggestions/${encodeURIComponent(id)}`, PostalAddressSchema, { query: { sessionToken }, signal }),
     /* Shell & dashboard */
     getSession: (signal?: AbortSignal): Promise<StaffSession> => request('/v1/staff/session', StaffSessionSchema, { signal }),
     getDashboard: (rangeDays: number, signal?: AbortSignal): Promise<StaffDashboard> =>

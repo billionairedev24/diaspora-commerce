@@ -2,6 +2,8 @@ export { AddressAutocomplete, type AddressAutocompleteProps } from './address/Ad
 export { createFixtureAddressSearch, type FixtureAddress, SAMPLE_ADDRESSES } from './address/fixture';
 export { createNominatimSearch, fromNominatim, type NominatimOptions } from './address/nominatim';
 export type { AddressParts, AddressSuggestionItem, SearchAddresses } from './address/types';
+export { type AddressFieldKey, type AddressFieldLabels, AddressFields, type AddressFieldsProps, type AddressValue, DEFAULT_ADDRESS_LABELS, EMPTY_ADDRESS } from './address/AddressFields';
+export { DEFAULT_PICKER_LABELS, type SavedAddressOption, SavedAddressPicker, type SavedAddressPickerLabels, type SavedAddressPickerProps, selectedAddress } from './address/SavedAddressPicker';
 export { Barcode, type BarcodeProps } from './barcode/Barcode';
 export { type Bar, BarcodeError, caseLabelData, code128, code128Values, ean13, encode, FNC1, gs1_128, gs1CheckDigit, gs1Date, type Gs1Element, gs1Hri, gs1Values, gtin14, gtinValid, modules, parseGs1, sscc, type Symbology } from './barcode/encode';
 export { AppleLogo, FacebookLogo, GoogleG } from './brand/BrandIcons';
@@ -24,6 +26,7 @@ export { ErrorSummary, type ErrorSummaryItem, type ErrorSummaryProps } from './f
 export { Field, type FieldProps, type FieldRenderProps, fieldStyles } from './form/Field';
 export { PasswordField, type PasswordFieldProps, type PasswordRuleView } from './form/PasswordField';
 export { formatNational, phoneCountries, type PhoneCountry, PhoneInput, type PhoneInputProps } from './form/PhoneInput';
+export { PhoneNumberField, type PhoneNumberFieldProps, splitE164 as splitPhoneE164, toE164Number } from './form/PhoneNumberField';
 export { Select, type SelectOption, type SelectProps, TextField, type TextFieldProps } from './form/TextField';
 export * from './icons';
 export { Dialog, type DialogProps, Sheet, type SheetProps } from './overlay/Dialog';

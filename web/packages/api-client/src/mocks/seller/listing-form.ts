@@ -325,7 +325,12 @@ export function validateSheet(sheet: string[][], mode: ImportMode, existingSkus:
     });
     if (!get('description') && mode === 'CREATE') err('description', 'Add a description so shoppers know what they’re buying', 'WARNING');
     const status = messages.some((m) => m.severity === 'ERROR') ? 'ERROR' : messages.length ? 'WARNING' : 'VALID';
-    return { rowNumber: i + 2, groupKey: get('parent_sku').toUpperCase() || sku || `row-${i + 2}`, sku, status, outcome: 'PENDING', outcomeNote: null, productId: null, messages, cells };
+    const slots = ['MAIN', 'PT01', 'PT02', 'PT03', 'PT04', 'PT05', 'PT06', 'PT07', 'PT08'] as const;
+    const rowImages = images.slice(0, slots.length).map((u, k) => {
+      const link = /^https:\/\//.test(u);
+      return { slot: slots[k] ?? 'PT08', source: link ? ('LINK' as const) : ('FILE' as const), ref: u, state: link ? ('LINK' as const) : ('MISSING' as const), url: null, message: link ? null : 'Not in your image library yet' };
+    });
+    return { rowNumber: i + 2, groupKey: get('parent_sku').toUpperCase() || sku || `row-${i + 2}`, sku, status, outcome: 'PENDING', outcomeNote: null, productId: null, messages, cells, images: rowImages };
   });
   // A variant with errors holds back its siblings (catalog imports a product whole).
   const badGroups = new Set(rows.filter((r) => r.status === 'ERROR').map((r) => r.groupKey));

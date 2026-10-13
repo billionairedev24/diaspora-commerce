@@ -1017,6 +1017,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/tax-rates/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk upsert US state rules and local ZIP rates from CSV (USA pilot)
+         * @description tax-returns `POST /v1/tax/rates/import` (tax:configure and EDIT on fees). Header row
+         *     `kind,country,state,name,zipPrefix,generalRate,groceryRate,preparedFoodRate,shippingTaxable,facilitator,localRate,appliesToGrocery`
+         *     with `kind=STATE|LOCAL`. Country column is stored for future markets; quotes today use US rules only.
+         */
+        post: operations["importStaffTaxRates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/fees/negotiated-rates": {
         parameters: {
             query?: never;
@@ -4239,7 +4261,7 @@ export interface components {
          * @description Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "notifications" | "preorders" | "plans";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "notifications" | "preorders" | "plans";
         StaffUser: {
             id: string;
             firstName: string;
@@ -4321,7 +4343,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
@@ -4460,6 +4482,8 @@ export interface components {
             links: components["schemas"]["RecordLink"][];
             /** @description Optimistic-locking version to send back with edits */
             version: string | null;
+            /** @description Set when an action deleted the record; the console closes the sheet */
+            removed?: boolean;
         };
         RecordValues: {
             values?: {
@@ -5165,6 +5189,15 @@ export interface components {
             scheduleVersion: number | null;
             maxRadiusMiles: number | null;
             currency: string;
+        };
+        TaxRatesImportRequest: {
+            /** @description CSV text including header row */
+            csv: string;
+        };
+        TaxRatesImportResult: {
+            statesUpserted: number;
+            localsUpserted: number;
+            warnings: string[];
         };
         PickupRow: {
             shipmentId: string;
@@ -7671,6 +7704,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeliveryQuote"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    importStaffTaxRates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaxRatesImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Import result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxRatesImportResult"];
                 };
             };
             400: components["responses"]["Problem"];

@@ -15,6 +15,7 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
   inventory: { label: 'Inventory', description: 'AfroTransact-owned and FBA stock by fulfilment centre, lot by lot.' },
   retail: { label: 'AfroTransact Retail (1P)', description: 'Purchase orders for AfroTransact-owned and AfroTransact Brand inventory.' },
   dispatch: { label: 'Delivery dispatch', description: 'AfroTransact Delivery routes, drivers and internal delivery.' },
+  orgs: { label: 'Organisations', description: 'Seller and provider organisations: status, Stripe Connect accounts and enforcement.' },
   apps: {
     label: 'Applications',
     description: 'Seller and service-provider onboarding queue. Every application goes through two people: a reviewer, then a different approver.'
@@ -58,7 +59,7 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   payouts: 'payouts', inventory: 'inventory', 'purchase-orders': 'retail', routes: 'dispatch', 'support-cases': 'support', audit: 'audit', markets: 'markets',
   'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'help-articles': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
   'fee-schedules': 'fees', 'tax-rates': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',
-  coupons: 'marketing'
+  coupons: 'marketing', organisations: 'orgs', 'connect-accounts': 'orgs'
 };
 
 /** Refund ceiling per platform role in minor units (null = no limit). Roles not listed may not refund. */
@@ -143,6 +144,11 @@ export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | 
     // Derived from the seller service's permissions, as the BFF does (identity's matrix has no Plans & billing column).
     const perms = permissionsOf(roles);
     return perms.includes('plans:manage') || perms.includes('billing:adjust') ? 'EDIT' : perms.includes('seller:billing') || perms.includes('billing:usage') ? 'VIEW' : null;
+  }
+  if (module === 'orgs') {
+    // Organisations follow the seller service's permissions (identity's matrix has no Organisations column).
+    const perms = permissionsOf(roles);
+    return perms.includes('sellers:enforce') || perms.includes('compliance:hold') ? 'EDIT' : perms.includes('compliance:remind') || perms.includes('applications:review') ? 'VIEW' : null;
   }
   return matrixLevel(roles, module);
 }

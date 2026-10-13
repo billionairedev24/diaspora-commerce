@@ -1,9 +1,10 @@
 import { z } from 'zod';
 
+import { type AddressSearchOptions } from './address-lookup';
 import { type ApiClientOptions, createDownloader, createRequester, type DownloadedFile } from './http';
 import { createSellerFbaApi } from './inventory-hub';
 import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
-import { type AddressSuggestions, AddressSuggestionsSchema } from './schemas/location';
+import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
@@ -39,6 +40,7 @@ import {
   ChangePlanResultSchema,
   type ComplianceSummary,
   ComplianceSummarySchema,
+  type CreateSellerCoupon,
   type CustomerPickupRequest,
   type Dashboard,
   DashboardSchema,
@@ -108,13 +110,12 @@ import {
   SavedProductDraftSchema,
   type SaveProductDraftRequest,
   type SellerAddress,
-  type SellerFeesView,
-  SellerFeesViewSchema,
-  type SellerOffer,
-  type CreateSellerCoupon,
   type SellerCoupon,
   SellerCouponListSchema,
   SellerCouponSchema,
+  type SellerFeesView,
+  SellerFeesViewSchema,
+  type SellerOffer,
   type SellerOfferList,
   SellerOfferListSchema,
   SellerOfferSchema,
@@ -225,8 +226,12 @@ export function createSellerApiClient(options: ApiClientOptions) {
     completeOnboardingUpload: (assetId: string): Promise<Asset> =>
       request(`/v1/seller/onboarding/uploads/${enc(assetId)}/complete`, AssetSchema, { method: 'POST' }),
     /** Address suggestions (geo service: Google Places / OSM), the same search the storefront uses. */
-    searchAddresses: (q: string, signal?: AbortSignal): Promise<AddressSuggestions> =>
-      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q }, signal }),
+    /** One keystroke of an address field; pass the entry's session token (Google Places bills the entry as one session). */
+    searchAddresses: (q: string, signal?: AbortSignal, options: AddressSearchOptions = {}): Promise<AddressSuggestions> =>
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country }, signal }),
+    /** Structured address of a picked suggestion (Google Place Details, closing the session). */
+    resolveAddressSuggestion: (id: string, sessionToken?: string, signal?: AbortSignal): Promise<PostalAddress> =>
+      request(`/v1/geo/address-suggestions/${encodeURIComponent(id)}`, PostalAddressSchema, { query: { sessionToken }, signal }),
     getCompliance: (signal?: AbortSignal): Promise<ComplianceSummary> => request('/v1/seller/compliance', ComplianceSummarySchema, { signal }),
     /** Account Session for Account health (owner / finance): Stripe's components answer what Stripe needs. */
     createSellerStripeSession: (): Promise<OnboardingStripeSession> =>

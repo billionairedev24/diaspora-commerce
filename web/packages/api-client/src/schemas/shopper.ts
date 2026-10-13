@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preorders';
 import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './account';
 import { CartPackageSchema } from './cart';
-import { RailSchema } from './home';
 import { MinorSchema } from './common';
+import { RailSchema } from './home';
 
 /* Storefront account (address input, order detail & tracking, returns, login & security), checkout, services &
    bookings and Lola — contracts/openapi/gateway-bff.yaml. */

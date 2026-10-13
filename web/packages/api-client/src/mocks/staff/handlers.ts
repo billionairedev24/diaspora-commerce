@@ -38,6 +38,7 @@ import {
   type SupportActionResult
 } from '../../schemas/staff';
 import { validateStaffForm } from '../../validation/staff-form';
+import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf, type MockExportColumn } from '../export-file';
 import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey } from '../table';
@@ -618,6 +619,15 @@ const hubGate: HubGate = (request, area, level) => {
 };
 
 export const staffHandlers = [
+  // Address fields (Google-like: resolved when picked), as the shopper mocks answer.
+  http.get('*/v1/geo/address-suggestions', ({ request }) => {
+    const p = new URL(request.url).searchParams;
+    return HttpResponse.json(mockAddressSuggestions(p.get('q') ?? '', p.get('sessionToken')));
+  }),
+  http.get('*/v1/geo/address-suggestions/:id', ({ params }) => {
+    const a = mockResolveAddress(decodeURIComponent(String(params.id ?? '')));
+    return a ? HttpResponse.json(a) : HttpResponse.json({ status: 404, title: 'Not found' }, { status: 404 });
+  }),
   http.get(
     `${W}/session`,
     route((ctx): StaffSession => {

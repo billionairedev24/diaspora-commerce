@@ -666,6 +666,26 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       build: (v) => ({ id: `local:${str(v.state)}:${str(v.zipPrefix)}`, fields: { kind: 'LOCAL', state: str(v.state), zipPrefix: str(v.zipPrefix), name: str(v.name), generalRate: num(v.rate), groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null }, activity: [] })
     }
   },
+  organisations: {
+    title: 'Organisations',
+    columns: [col('name', 'Organisation', 'strong', 30), col('kind', 'Kind', 'text', 14), col('plan', 'Plan', 'text', 16), col('createdAt', 'Since', 'date', 14), col('status', 'Status', 'status', 14)],
+    statusKey: 'status',
+    facets: facets('APPROVED', 'SUSPENDED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => str(r.fields.kind),
+    actions: []
+  },
+  'connect-accounts': {
+    title: 'Stripe Connect accounts',
+    columns: [col('organisation', 'Organisation', 'strong', 30), col('accountId', 'Account', 'mono', 22), col('payoutsEnabled', 'Payouts', 'text', 12), col('status', 'Status', 'status', 14)],
+    statusKey: 'status',
+    facets: facets('ACTIVE', 'RESTRICTED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.organisation),
+    subtitleOf: (r) => str(r.fields.accountId),
+    actions: []
+  },
   coupons: {
     title: 'Platform coupons',
     columns: [col('code', 'Code', 'mono', 10), col('description', 'Description', 'text', 22), col('type', 'Type', 'status', 10), col('value', 'Value', 'number', 8), col('scope', 'Scope', 'text', 12), col('status', 'Status', 'status', 10), col('redeemedCount', 'Redeemed', 'number', 8)],
@@ -675,8 +695,8 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     titleOf: (r) => str(r.fields.code),
     subtitleOf: (r) => str(r.fields.description),
     actions: [
-      { key: 'pause', label: 'Pause', tone: 'neutral', permission: 'coupons:manage', confirm: 'Pause this coupon?', when: (r) => (r.fields.status === 'ACTIVE' ? '' : 'Only active coupons can be paused'), run: (r) => { r.fields.status = 'PAUSED'; } },
-      { key: 'activate', label: 'Activate', tone: 'primary', permission: 'coupons:manage', confirm: 'Activate this coupon?', when: (r) => (r.fields.status === 'PAUSED' ? '' : 'Only paused coupons can be activated'), run: (r) => { r.fields.status = 'ACTIVE'; } }
+      { key: 'pause', label: 'Pause', tone: 'neutral', permission: 'coupons:manage', confirm: 'Pause this coupon?', when: (r) => (r.fields.status === 'ACTIVE' ? null : 'Only active coupons can be paused'), apply: (r) => { r.fields.status = 'PAUSED'; } },
+      { key: 'activate', label: 'Activate', tone: 'primary', permission: 'coupons:manage', confirm: 'Activate this coupon?', when: (r) => (r.fields.status === 'PAUSED' ? null : 'Only paused coupons can be activated'), apply: (r) => { r.fields.status = 'ACTIVE'; } }
     ],
     create: {
       permission: 'coupons:manage',
@@ -711,10 +731,10 @@ function placementsDef(title: string, announcementsOnly: boolean): MockResource 
           {
             key: 'delete',
             label: 'Delete',
-            tone: 'danger',
+            tone: 'danger' as const,
             permission: 'advert:delete',
             confirm: 'Permanently delete this advert?',
-            when: (r) => (r.fields.paid ? stateReason(r, 'DRAFT', 'ENDED') : 'Only paid adverts can be deleted.'),
+            when: (r: MockRecord) => (r.fields.paid ? stateReason(r, 'DRAFT', 'ENDED') : 'Only paid adverts can be deleted.'),
             removes: true,
             apply: () => {}
           }

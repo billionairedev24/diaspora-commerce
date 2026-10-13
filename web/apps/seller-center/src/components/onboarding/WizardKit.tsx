@@ -1,6 +1,6 @@
 'use client';
 
-import { isApiError, type OnboardingStatus, sellerKeys, US_STATES } from '@afrotransact/api-client';
+import { addressLookup, isApiError, type OnboardingStatus, sellerKeys, US_STATES } from '@afrotransact/api-client';
 import { AddressAutocomplete, type AddressSuggestionItem, cx, ErrorSummary, type SearchAddresses, Select, TextField } from '@afrotransact/ui';
 import { CheckCircle, FileArrowUp, UserCircleCheck } from '@phosphor-icons/react/ssr';
 import { useQueryClient } from '@tanstack/react-query';
@@ -131,7 +131,7 @@ const STATES = US_STATES.map(([value, label]) => ({
 export const STATE_OPTIONS = STATES;
 
 /** The same address search the storefront uses (BFF /v1/geo/address-suggestions → geo service). */
-export const sellerAddressSearch: SearchAddresses = async (q, { signal }) => (await sellerApi().searchAddresses(q, signal)).suggestions;
+export const sellerAddressSearch: SearchAddresses = (q, options) => addressLookup(sellerApi())(q, options);
 
 /**
  * Street with address suggestions; picking one fills street, city, state and ZIP, and every part can still be typed.

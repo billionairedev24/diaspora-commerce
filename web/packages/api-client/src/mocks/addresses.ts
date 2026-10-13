@@ -1,6 +1,6 @@
 /* Address autocomplete over the prototype's sample addresses and streets (port of acSuggest for the
    street field). Production: the geo service proxies Google Places or OSM Nominatim. */
-import { type AddressSuggestion } from '../schemas/location';
+import { type AddressSuggestion, type AddressSuggestions, type PostalAddress } from '../schemas/location';
 import { ADDRESSES, STREETS } from './fixtures/geo';
 import { levenshtein } from './matching';
 
@@ -36,6 +36,28 @@ export function suggestAddresses(input: string, limit = 5): AddressSuggestion[] 
       label: x.line1,
       secondary: `${x.city}, ${x.state} ${x.zip}`,
       address: { line1: x.line1, line2: '', city: x.city, state: x.state, zip: x.zip, country: 'US', lat: null, lon: null },
-      source: 'fixture' as const
+      source: 'fixture' as const,
+      resolved: true
     }));
+}
+
+/** Every suggestion handed out, by id, for the resolve endpoint (the mock plays Google: resolved when picked). */
+const handedOut = new Map<string, PostalAddress>();
+
+/**
+ * GET /v1/geo/address-suggestions as the BFF answers with Google Places: street line only (`resolved: false`) and the
+ * entry's session token (the client's, or a new one on the first keystroke).
+ */
+export function mockAddressSuggestions(q: string, sessionToken: string | null): AddressSuggestions {
+  const suggestions = suggestAddresses(q).map((s) => {
+    handedOut.set(s.id, s.address);
+    return { ...s, address: { ...s.address, city: '', state: '', zip: '' }, resolved: false };
+  });
+  const token = sessionToken || `mock${Math.random().toString(36).slice(2, 12)}`;
+  return { suggestions, attribution: 'Sample addresses (geo service: Google Places / OpenStreetMap Nominatim in production)', sessionToken: token };
+}
+
+/** GET /v1/geo/address-suggestions/{id}: the picked suggestion's structured address (Place Details), or null. */
+export function mockResolveAddress(id: string): PostalAddress | null {
+  return handedOut.get(id) ?? null;
 }

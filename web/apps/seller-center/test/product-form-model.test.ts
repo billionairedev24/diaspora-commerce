@@ -155,7 +155,7 @@ describe('bulk upload rules', () => {
 
   it('puts SKU, title, price and quantity first and maps messages to cells', () => {
     expect(previewColumns(['Parent SKU', 'SKU *', 'Category', 'Title *', 'Price (USD) *', 'Quantity *']).map((c) => c.label)).toEqual(['SKU', 'Title', 'Price (USD)', 'Quantity', 'Category', 'Parent SKU']);
-    const row = { rowNumber: 3, groupKey: 'A', sku: 'A', status: 'ERROR' as const, outcome: 'PENDING' as const, outcomeNote: null, productId: null, cells: [],
+    const row = { rowNumber: 3, groupKey: 'A', sku: 'A', status: 'ERROR' as const, outcome: 'PENDING' as const, outcomeNote: null, productId: null, cells: [], images: [],
       messages: [{ column: 'Price (USD) *', columnIndex: 4, severity: 'ERROR' as const, message: 'not a price' }, { column: null, columnIndex: -1, severity: 'ERROR' as const, message: 'sibling' }] };
     expect(cellProblems(row).get(4)?.[0]?.message).toBe('not a price');
     expect(cellProblems(row).get(-1)).toHaveLength(1);

@@ -86,7 +86,7 @@ export function TaxRatesImportPanel() {
         </Button>
         <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={onFile} />
       </div>
-      {fileError ? <Notice tone="bad">{fileError}</Notice> : null}
+      {fileError ? <Notice tone="danger" title={fileError} /> : null}
       <form className="flex flex-col gap-3" onSubmit={submit}>
         <label className="text-sm font-medium" htmlFor="tax-rates-csv">
           CSV text

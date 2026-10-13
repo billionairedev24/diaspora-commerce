@@ -975,6 +975,18 @@ export const ImportRowMessageSchema = z.object({
   message: z.string()
 });
 export type ImportRowMessage = z.infer<typeof ImportRowMessageSchema>;
+export const ImageSlotSchema = z.enum(['MAIN', 'PT01', 'PT02', 'PT03', 'PT04', 'PT05', 'PT06', 'PT07', 'PT08', 'SWCH']);
+export type ImageSlot = z.infer<typeof ImageSlotSchema>;
+/** One image of a bulk-upload row: found in the image library, a link copied at import, held, missing or a bad link. */
+export const ImportRowImageSchema = z.object({
+  slot: ImageSlotSchema,
+  source: z.enum(['LINK', 'FILE', 'SKU']),
+  ref: z.string(),
+  state: z.enum(['FOUND', 'LINK', 'HELD', 'MISSING', 'BAD_LINK']),
+  url: nullableString,
+  message: nullableString
+});
+export type ImportRowImage = z.infer<typeof ImportRowImageSchema>;
 export const ProductImportRowSchema = z.object({
   rowNumber: z.number().int(),
   groupKey: z.string(),
@@ -984,7 +996,8 @@ export const ProductImportRowSchema = z.object({
   outcomeNote: nullableString,
   productId: nullableString,
   messages: z.array(ImportRowMessageSchema),
-  cells: z.array(z.string())
+  cells: z.array(z.string()),
+  images: z.array(ImportRowImageSchema).default([])
 });
 export type ProductImportRow = z.infer<typeof ProductImportRowSchema>;
 export const ProductImportRowPageSchema = z.object({

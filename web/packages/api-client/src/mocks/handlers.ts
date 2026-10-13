@@ -11,7 +11,7 @@ import { StockAlertRequestSchema } from '../schemas/catalog';
 import { ZipSchema } from '../schemas/location';
 import { NewsletterRequestSchema } from '../schemas/site';
 import { fromApiSearchParams } from '../search-params';
-import { suggestAddresses } from './addresses';
+import { mockAddressSuggestions, mockResolveAddress } from './addresses';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
@@ -107,8 +107,13 @@ export const handlers = [
     return json(loc);
   })),
   http.get('*/v1/geo/address-suggestions', route((ctx) => {
-    const q = new URL(ctx.request.url).searchParams.get('q') ?? '';
-    return json({ suggestions: suggestAddresses(q), attribution: 'Sample addresses (geo service: Google Places / OpenStreetMap Nominatim in production)' });
+    const p = new URL(ctx.request.url).searchParams;
+    return json(mockAddressSuggestions(p.get('q') ?? '', p.get('sessionToken')));
+  })),
+  http.get('*/v1/geo/address-suggestions/:id', route((_ctx, params) => {
+    const a = mockResolveAddress(decodeURIComponent(params.id ?? ''));
+    if (!a) throw new MockProblem(404, 'NOT_FOUND', 'Not found', 'That suggestion is no longer available.');
+    return json(a);
   })),
 
   /* Search */

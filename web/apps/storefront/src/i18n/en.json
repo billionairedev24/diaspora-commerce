@@ -1138,5 +1138,6 @@
   "paynow.lastDeclined": "Your last payment attempt didn’t go through: {message}",
   "paynow.viewOrders": "View your orders",
   "paynow.error": "We couldn’t load this payment. Try again in a moment.",
-  "paynow.or": "or pay another way"
+  "paynow.or": "or pay another way",
+  "co.otherAddresses": "Your other addresses"
 }

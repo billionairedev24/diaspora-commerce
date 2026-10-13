@@ -670,5 +670,6 @@
   "sc.bulk.historyDescription": "Todas las cargas masivas de tu equipo, con sus revisiones y resultados.",
   "sc.bulk.historySearch": "Buscar cargas",
   "sc.bulk.historyEmpty": "Aún no hay cargas.",
-  "sc.bulk.newUpload": "Nueva carga"
+  "sc.bulk.newUpload": "Nueva carga",
+  "sc.coupons.loading": "Cargando tus cupones…"
 }

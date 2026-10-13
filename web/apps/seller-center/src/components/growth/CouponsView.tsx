@@ -1,6 +1,6 @@
 'use client';
 
-import { sellerKeys, sellerQueries, type CreateSellerCoupon, type SellerCoupon } from '@afrotransact/api-client';
+import { type CreateSellerCoupon, type SellerCoupon,sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { Button, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
@@ -48,7 +48,7 @@ export function CouponsView() {
     create.mutate();
   };
 
-  if (q.isError) return <ErrorState message={problemMessage(q.error)} onRetry={() => void q.refetch()} />;
+  if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
   const items = q.data ?? [];
 
   return (
@@ -58,9 +58,7 @@ export function CouponsView() {
         <p className="mt-2 max-w-2xl text-sm text-muted">{t('sc.coupons.lead')}</p>
       </div>
 
-      <Notice tone="info" icon="info">
-        {t('sc.coupons.platformNote')}
-      </Notice>
+      <Notice tone="info" title={t('sc.coupons.platformNote')} />
 
       {editable ? (
         <Card title={t('sc.coupons.createTitle')}>
@@ -93,7 +91,7 @@ export function CouponsView() {
       ) : null}
 
       <Card title={t('sc.coupons.yours')}>
-        {q.isPending ? <p className="text-sm text-muted">{t('common.loading')}</p> : null}
+        {q.isPending ? <p className="text-sm text-muted">{t('sc.coupons.loading')}</p> : null}
         {!q.isPending && items.length === 0 ? <p className="text-sm text-muted">{t('sc.coupons.empty')}</p> : null}
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
           {items.map((c) => (

@@ -683,5 +683,6 @@
   "sc.bulk.historyDescription": "Every bulk upload of your team, with its checks and results.",
   "sc.bulk.historySearch": "Search uploads",
   "sc.bulk.historyEmpty": "No uploads yet.",
-  "sc.bulk.newUpload": "New upload"
+  "sc.bulk.newUpload": "New upload",
+  "sc.coupons.loading": "Loading your coupons…"
 }

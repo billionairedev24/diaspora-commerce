@@ -1132,5 +1132,6 @@
   "paynow.lastDeclined": "Tu último intento de pago no se completó: {message}",
   "paynow.viewOrders": "Ver tus pedidos",
   "paynow.error": "No pudimos cargar este pago. Inténtalo de nuevo en un momento.",
-  "paynow.or": "o paga de otra forma"
+  "paynow.or": "o paga de otra forma",
+  "co.otherAddresses": "Tus otras direcciones"
 }

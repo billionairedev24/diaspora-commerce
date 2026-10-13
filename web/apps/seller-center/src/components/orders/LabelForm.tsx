@@ -12,10 +12,11 @@ import {
   shipFromToForm,
   toSellerAddress
 } from '@afrotransact/api-client';
-import { Button, Select, TextField, useToast } from '@afrotransact/ui';
+import { AddressFields, Button, PhoneNumberField, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
+import { sellerAddressSearch, STATE_OPTIONS } from '@/components/onboarding/WizardKit';
 import { problemMessage } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey, money } from '@/lib/format';
@@ -145,12 +146,20 @@ export function LabelForm({ order, shipmentId }: { order: SellerOrderDetail; shi
           </div>
         ) : null}
         <div className="col-span-2">{field('name', 'Sender name', { autoComplete: 'organization' })}</div>
-        <div className="col-span-2">{field('line1', 'Street address', { autoComplete: 'address-line1' })}</div>
-        <div className="col-span-2">{field('line2', 'Apt, suite (optional)', { autoComplete: 'address-line2' })}</div>
-        {field('city', 'City', { autoComplete: 'address-level2' })}
-        {field('state', 'State', { autoComplete: 'address-level1' })}
-        {field('postalCode', 'ZIP code', { autoComplete: 'postal-code', inputMode: 'numeric' })}
-        {field('phone', 'Phone (optional)', { autoComplete: 'tel' })}
+        <div className="col-span-2">
+          <AddressFields
+            idPrefix="label-from"
+            value={{ line1: from.line1, line2: from.line2, city: from.city, state: from.state, zip: from.postalCode, country: 'US' }}
+            onChange={(a) => setFrom({ ...from, line1: a.line1, line2: a.line2, city: a.city, state: a.state, postalCode: a.zip })}
+            searchAddresses={sellerAddressSearch}
+            regions={STATE_OPTIONS}
+            errors={{ line1: errors.line1, line2: errors.line2, city: errors.city, state: errors.state, zip: errors.postalCode }}
+            labels={{ line2: 'Apt, suite (optional)' }}
+          />
+        </div>
+        <div className="col-span-2">
+          <PhoneNumberField label="Phone (optional)" value={from.phone} error={errors.phone} onChange={(phone) => setFrom({ ...from, phone })} />
+        </div>
       </fieldset>
       <fieldset className="m-0 grid grid-cols-4 gap-x-3 border-0 p-0">
         <legend className="mb-1 text-sm font-semibold">Package</legend>

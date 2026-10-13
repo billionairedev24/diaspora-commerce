@@ -1,5 +1,6 @@
 import { type z } from 'zod';
 
+import { type AddressSearchOptions } from './address-lookup';
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
@@ -32,7 +33,7 @@ import {
   type PrivacyRequestReceipt,
   PrivacyRequestReceiptSchema
 } from './schemas/legal';
-import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema } from './schemas/location';
+import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocation, DeliveryLocationSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
 import { type SearchPage, SearchPageSchema, type SearchQuery, type Suggestions, SuggestionsSchema } from './schemas/search';
 import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './schemas/site';
 import { toApiSearchParams } from './search-params';
@@ -76,8 +77,12 @@ export function createApiClient(options: ApiClientOptions) {
     /** Set the deliver-to location by ZIP or by device coordinates ("Use my current location"). */
     setDeliveryLocation: (input: { zip: string } | { lat: number; lon: number }): Promise<DeliveryLocation> =>
       request('/v1/delivery-location', DeliveryLocationSchema, { method: 'PUT', body: input }),
-    searchAddresses: (q: string, signal?: AbortSignal): Promise<AddressSuggestions> =>
-      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q }, signal }),
+    /** One keystroke of an address field; pass the entry's session token (Google Places bills the entry as one session). */
+    searchAddresses: (q: string, signal?: AbortSignal, options: AddressSearchOptions = {}): Promise<AddressSuggestions> =>
+      request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q, sessionToken: options.sessionToken, country: options.country }, signal }),
+    /** Structured address of a picked suggestion (Google Place Details, closing the session). */
+    resolveAddressSuggestion: (id: string, sessionToken?: string, signal?: AbortSignal): Promise<PostalAddress> =>
+      request(`/v1/geo/address-suggestions/${encodeURIComponent(id)}`, PostalAddressSchema, { query: { sessionToken }, signal }),
 
     /* Search */
     search: (query: SearchQuery, signal?: AbortSignal): Promise<SearchPage> => request('/v1/search', SearchPageSchema, { query: toApiSearchParams(query), signal }),

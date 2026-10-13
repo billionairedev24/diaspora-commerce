@@ -670,5 +670,6 @@
   "sc.bulk.historyDescription": "كل عمليات الرفع الجماعي لفريقك، مع فحوصها ونتائجها.",
   "sc.bulk.historySearch": "ابحث في عمليات الرفع",
   "sc.bulk.historyEmpty": "لا توجد عمليات رفع بعد.",
-  "sc.bulk.newUpload": "رفع جديد"
+  "sc.bulk.newUpload": "رفع جديد",
+  "sc.coupons.loading": "جارٍ تحميل قسائمك…"
 }

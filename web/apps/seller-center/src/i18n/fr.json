@@ -670,5 +670,6 @@
   "sc.bulk.historyDescription": "Tous les imports en masse de votre équipe, avec leurs vérifications et résultats.",
   "sc.bulk.historySearch": "Rechercher des imports",
   "sc.bulk.historyEmpty": "Aucun import pour l’instant.",
-  "sc.bulk.newUpload": "Nouvel import"
+  "sc.bulk.newUpload": "Nouvel import",
+  "sc.coupons.loading": "Chargement de vos coupons…"
 }
