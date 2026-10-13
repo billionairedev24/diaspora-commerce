@@ -46,6 +46,9 @@ func NewSellerCatalogService(d SellerDeps) SellerCatalogService {
 func listingOf(p port.CatalogOwnProduct) domain.ListingRow {
 	row := domain.ListingRow{ProductID: p.ID, ATIN: strPtr(p.ATIN), Title: p.Title, VariantCount: len(p.Variants), Currency: domain.Currency,
 		Fulfilment: domain.ShipsFromSeller, Status: strings.ToUpper(p.Status), ModerationNote: strPtr(p.ModerationNote), UpdatedAt: p.UpdatedAt}
+	if p.Listing != nil && strings.EqualFold(p.Listing.Fulfilment, domain.FulfilledByAfroTransact) {
+		row.Fulfilment = domain.FulfilledByAfroTransact
+	}
 	row.StatusLabel = domain.ListingStatusLabel(row.Status)
 	for i, v := range p.Variants {
 		if i == 0 || (v.PriceMinor > 0 && v.PriceMinor < row.PriceMinor) {
@@ -99,11 +102,16 @@ func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q Se
 		for _, it := range p.Items {
 			out.Items = append(out.Items, listingOf(it))
 		}
+		s.sellableStock(ctx, c.BearerToken, out.Items)
 		return out, nil
 	}
 	// Search over every column and any sort: the BFF reads the organisation's listings and pages them.
 	rows, partial, err := s.cache.load(sc.member.ID+"@"+sc.org.ID, "listings", q.Status, func() ([]domain.ListingRow, bool, error) {
-		return s.scanListings(ctx, c.BearerToken, q.Status, domain.TableScanMaxRows)
+		rows, partial, err := s.scanListings(ctx, c.BearerToken, q.Status, domain.TableScanMaxRows)
+		if err == nil {
+			s.sellableStock(ctx, c.BearerToken, rows)
+		}
+		return rows, partial, err
 	})
 	if err != nil {
 		return domain.ListingPage{}, err
@@ -111,6 +119,40 @@ func (s *sellerCatalogImpl) Listings(ctx context.Context, c *domain.Caller, q Se
 	picked := pickRows(rows, SellerListingColumns, sellerListingRowCells, q.Q, nil, sort)
 	items, _ := pageSlice(picked, q.Page*q.Size, q.Size)
 	return domain.ListingPage{Items: items, Total: int64(len(picked)), Page: q.Page, Size: q.Size, Sort: domain.SortStrings(sort), Partial: partial}, nil
+}
+
+// sellableStock replaces each listing's stock with what shoppers can buy: the offers' available units (the seller's
+// declared quantity for seller-fulfilled offers, warehouse stock for Fulfilled by AfroTransact, 0 while the listing is
+// not live). The catalog quantity alone made a listing look "29 in stock" while the storefront showed it unavailable.
+// Listings offers does not know keep the catalog quantity; offers being down leaves every row as it is.
+func (s *sellerCatalogImpl) sellableStock(ctx context.Context, bearer string, rows []domain.ListingRow) {
+	if s.r.d.Offers == nil || len(rows) == 0 {
+		return
+	}
+	byProduct := map[string]int{}
+	for page := 0; page < 25; page++ {
+		p, err := s.r.d.Offers.List(ctx, bearer, page, 200)
+		if err != nil {
+			return
+		}
+		for _, o := range p.Items {
+			if strings.EqualFold(o.Status, "WITHDRAWN") {
+				continue
+			}
+			byProduct[strings.ToUpper(o.ProductATIN)] += max(0, o.AvailableQty)
+		}
+		if len(p.Items) == 0 || int64((page+1)*200) >= p.Total {
+			break
+		}
+	}
+	for i := range rows {
+		if rows[i].ATIN == nil {
+			continue
+		}
+		if qty, ok := byProduct[strings.ToUpper(*rows[i].ATIN)]; ok {
+			rows[i].Stock = qty
+		}
+	}
 }
 
 // scanListings reads up to limit of the organisation's listings.

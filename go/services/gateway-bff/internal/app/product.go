@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -157,6 +158,9 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	if err != nil {
 		return domain.ProductDetail{}, mapErr("inventory", err)
 	}
+	// Inventory only holds warehouse stock (Fulfilled by AfroTransact, retail); a seller who ships their own orders
+	// declares the quantity on the offer. The offers service's buy box is the sellable quantity of every variant.
+	s.offerAvailability(ctx, skus, avail)
 	sel := p.Variants[0]
 	found := false
 	for _, v := range p.Variants {
@@ -238,6 +242,33 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 		ReturnsPolicy:  returnsPolicy(fulfilment, department),
 		UnitPriceLabel: domain.Money(sel.PriceMinor) + " / " + unit,
 	}, nil
+}
+
+// offerAvailability raises each variant's availability to its buy box quantity (seller-fulfilled stock lives on the
+// offer, not in inventory). Variants offers cannot answer keep the inventory figure.
+func (s *productServiceImpl) offerAvailability(ctx context.Context, atins []string, avail map[string]int) {
+	if s.offers == nil || len(atins) == 0 {
+		return
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 8)
+	for _, atin := range atins {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			bb, err := s.offers.BuyBox(ctx, atin)
+			if err != nil || bb.BuyBox == nil {
+				return
+			}
+			mu.Lock()
+			avail[atin] = max(avail[atin], bb.BuyBox.AvailableQty)
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
 }
 
 // offerBuyBox reads the variant's buy box from offers; ok=false when offers is not wired or cannot answer (the page
