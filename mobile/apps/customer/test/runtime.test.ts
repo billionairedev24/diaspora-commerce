@@ -22,10 +22,10 @@ describe('runtime capabilities', () => {
     native.os = 'android';
   });
 
-  it('treats the store client as Expo Go: no remote push, no wallets, local notifications kept', async () => {
+  it('treats the store client as Expo Go: no remote push, no wallets, no notifications module on Android', async () => {
     const { capabilities, isExpoGo } = await load();
     expect(isExpoGo()).toBe(true);
-    expect(capabilities).toEqual({ runtime: 'expo-go', remotePush: false, localNotifications: true, biometrics: true, walletPay: false });
+    expect(capabilities).toEqual({ runtime: 'expo-go', remotePush: false, localNotifications: false, biometrics: true, walletPay: false });
   });
 
   it('has no Face ID in Expo Go on iOS (the passcode unlocks instead)', async () => {
@@ -33,6 +33,7 @@ describe('runtime capabilities', () => {
     const { capabilities } = await load();
     expect(capabilities.biometrics).toBe(false);
     expect(capabilities.remotePush).toBe(false);
+    expect(capabilities.localNotifications).toBe(true);
   });
 
   it.each(['bare', 'standalone'])('enables everything in our own build (%s)', async (env) => {
@@ -57,7 +58,14 @@ describe('runtime capabilities', () => {
     await expect(loadNotifications()).resolves.toBeNull();
   });
 
-  it('loads expo-notifications lazily in Expo Go (local notifications only)', async () => {
+  it('never loads expo-notifications in Expo Go on Android (SDK 53+ throws while it loads)', async () => {
+    vi.resetModules();
+    const { loadNotifications } = await import('@/push/notificationsModule');
+    await expect(loadNotifications()).resolves.toBeNull();
+  });
+
+  it('loads expo-notifications lazily in Expo Go on iOS (local notifications only)', async () => {
+    native.os = 'ios';
     vi.resetModules();
     const { loadNotifications } = await import('@/push/notificationsModule');
     const m = await loadNotifications();

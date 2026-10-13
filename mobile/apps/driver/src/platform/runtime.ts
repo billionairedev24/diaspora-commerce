@@ -22,11 +22,12 @@ export function runtimeOf(executionEnvironment: string | undefined, os: string):
   return executionEnvironment === ExecutionEnvironment.StoreClient ? 'expo-go' : 'native-build';
 }
 
-export function capabilitiesFor(runtime: Runtime): Capabilities {
-  return { runtime, remotePush: runtime === 'native-build', localNotifications: runtime !== 'web' };
+export function capabilitiesFor(runtime: Runtime, os: string = 'android'): Capabilities {
+  // Expo Go on Android (SDK 53+) throws while expo-notifications loads, so even local notifications need our build.
+  return { runtime, remotePush: runtime === 'native-build', localNotifications: runtime === 'native-build' || (runtime === 'expo-go' && os === 'ios') };
 }
 
-export const capabilities: Capabilities = capabilitiesFor(runtimeOf(Constants.executionEnvironment, Platform.OS));
+export const capabilities: Capabilities = capabilitiesFor(runtimeOf(Constants.executionEnvironment, Platform.OS), Platform.OS);
 
 export function isExpoGo(): boolean {
   return capabilities.runtime === 'expo-go';
