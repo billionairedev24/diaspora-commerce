@@ -310,6 +310,8 @@ function orderRow(o: SellerOrderDetail): SellerOrderRow | null {
 }
 
 const NEXT: Partial<Record<ShipmentStatus, ShipmentStatus>> = { PLACED: 'CONFIRMED', CONFIRMED: 'PACKED', PACKED: 'READY' };
+/** Seller-shipped carrier parcels: "Shipped" once the label exists. */
+const SHIPPED_FROM: ShipmentStatus = 'READY';
 
 function findOrder(db: MockSellerDb, orderNumber: string) {
   const o = db.orders.find((x) => x.orderNumber === orderNumber);
@@ -324,6 +326,8 @@ function refreshShipment(o: SellerOrderDetail, shipmentId: string) {
   const next = NEXT[s.status];
   // Sellers pack AfroTransact Delivery shipments too (a driver collects them), but buy no label for them.
   s.nextActions = s.fulfilment !== 'AFROTRANSACT' && next && SellerStatusActionSchema.safeParse(next).success ? [next as 'CONFIRMED' | 'PACKED' | 'READY'] : [];
+  if (s.fulfilment === 'SELLER' && s.status === SHIPPED_FROM && s.trackingNumber) s.nextActions = ['PICKED_UP'];
+  s.hasLabel = s.fulfilment === 'SELLER' && Boolean(s.trackingNumber);
   s.canBuyLabel = s.fulfilment === 'SELLER' && !s.trackingNumber && ['CONFIRMED', 'PACKED', 'READY'].includes(s.status);
   return s;
 }
@@ -1079,12 +1083,15 @@ export const sellerHandlers = [
       const o = findOrder(ctx.db, p.orderNumber ?? '');
       const s = refreshShipment(o, p.shipmentId ?? '');
       if (s.fulfilment === 'AFROTRANSACT') throw forbidden('AfroTransact handles every step of this shipment.');
-      if (NEXT[s.status] !== status) throw conflict(`This order is ${s.statusLabel.toLowerCase()}; it can’t move to ${SHIPMENT_LABELS[status as ShipmentStatus].toLowerCase()}.`);
+      if (NEXT[s.status] !== status && !(status === 'PICKED_UP' && s.status === SHIPPED_FROM && s.trackingNumber)) throw conflict(`This order is ${s.statusLabel.toLowerCase()}; it can’t move to ${SHIPMENT_LABELS[status as ShipmentStatus].toLowerCase()}.`);
       s.status = status as ShipmentStatus;
       s.timeline.push({ status, at: ctx.now.toISOString(), actor: 'seller' });
       refreshShipment(o, s.shipmentId);
       return o;
     })
+  ),
+  http.get(`${W}/orders/:orderNumber/shipments/:shipmentId/label`, () =>
+    new HttpResponse('%PDF-1.4\n%mock label\n', { status: 200, headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': 'attachment; filename="label-MOCK.pdf"' } })
   ),
   http.post(
     `${W}/orders/:orderNumber/shipments/:shipmentId/rates`,

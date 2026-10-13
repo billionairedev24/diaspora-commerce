@@ -460,6 +460,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download the shipping label bought for a shipment
+         * @description carrier-gateway `GET /v1/labels/by-tracking/{carrier}/{trackingNumber}/document` (PDF or ZPL), for seller-shipped carrier parcels with a label.
+         */
+        get: operations["downloadShippingLabel"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels": {
         parameters: {
             query?: never;
@@ -2631,11 +2651,17 @@ export interface components {
         Fulfilment: "SELLER" | "AFROTRANSACT" | "AFROTRANSACT_DELIVERY";
         /** @enum {string} */
         ShipmentStatus: "PENDING_PAYMENT" | "PLACED" | "CONFIRMED" | "PACKED" | "READY" | "PICKED_UP" | "IN_TRANSIT" | "OUT_FOR_DELIVERY" | "DELIVERY_FAILED" | "DELIVERED" | "RETURNED" | "CANCELLED";
+        SuggestedParcel: {
+            weightLb: number;
+            lengthIn: number;
+            widthIn: number;
+            heightIn: number;
+        };
         /**
-         * @description The only statuses a seller may set.
+         * @description The only statuses a seller may set. PICKED_UP ("Shipped": handed to the carrier) needs a label and applies to carrier parcels.
          * @enum {string}
          */
-        SellerStatusAction: "CONFIRMED" | "PACKED" | "READY";
+        SellerStatusAction: "CONFIRMED" | "PACKED" | "READY" | "PICKED_UP";
         SellerOrderRow: {
             orderNumber: string;
             shipmentId: string;
@@ -2885,6 +2911,10 @@ export interface components {
             trackingNumber: string | null;
             nextActions: components["schemas"]["SellerStatusAction"][];
             canBuyLabel: boolean;
+            /** @description A shipping label was bought for this shipment and can be downloaded again */
+            hasLabel: boolean;
+            /** @description The package of the products as listed (weight of every unit, largest footprint, heights stacked); null when not listed */
+            suggestedParcel: components["schemas"]["SuggestedParcel"] | null;
             /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
             localDelivery: components["schemas"]["LocalDelivery"] | null;
             timeline: {
@@ -5143,6 +5173,34 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    downloadShippingLabel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+                shipmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The label document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

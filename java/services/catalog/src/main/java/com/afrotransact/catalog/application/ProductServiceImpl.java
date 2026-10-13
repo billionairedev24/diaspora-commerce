@@ -76,7 +76,10 @@ class ProductServiceImpl implements ProductService {
     @Override
     @Transactional(readOnly = true)
     public Product getByAtin(String atin) {
-        Product p = products.findByAtin(new Atin(atin.toUpperCase(Locale.ROOT))).orElseThrow(() -> notFound(atin));
+        Atin wanted = new Atin(atin.toUpperCase(Locale.ROOT));
+        // A variant's ATIN names its product too (order lines only carry the variant).
+        Product p = products.findByAtin(wanted).or(() -> products.findByVariantAtin(wanted))
+                .orElseThrow(() -> notFound(atin));
         ensureVisible(p);
         return p;
     }

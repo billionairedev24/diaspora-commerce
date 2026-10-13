@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -20,6 +21,8 @@ type SellerOrdersService interface {
 	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error)
 	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error)
 	BuyLabel(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error)
+	// Label downloads the shipping label bought for the shipment.
+	Label(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.FileDownload, error)
 }
 
 type sellerOrdersImpl struct {
@@ -59,6 +62,7 @@ func shipmentOf(s port.OrderShipmentView) domain.SellerShipment {
 		Fulfilment: ff, Perishable: s.Perishable, Lines: []domain.SellerShipmentLine{}, ItemsMinor: s.ItemsMinor,
 		ShippingMinor: s.ShippingMinor, TotalMinor: s.TotalMinor, Carrier: strPtr(s.Carrier), TrackingNumber: strPtr(s.TrackingNumber),
 		NextActions: domain.SellerNextActions(s.NextActions), CanBuyLabel: domain.CanBuyLabel(ff, s.DeliveryMethod, status, s.TrackingNumber),
+		HasLabel: ff == domain.ShipsFromSeller && s.TrackingNumber != "" && s.Carrier != "" && !strings.EqualFold(s.DeliveryMethod, "PICKUP"),
 		Timeline: []domain.TimelineEntry{}}
 	if ff == domain.FulfilledByAfroTransact {
 		out.NextActions = []string{} // AfroTransact owns every step of FBA and 1P shipments; sellers pack AfroTransact Delivery ones
@@ -208,7 +212,65 @@ func (s *sellerOrdersImpl) Get(ctx context.Context, c *domain.Caller, orderNumbe
 	}
 	out := orderOf(o)
 	out.Earnings = s.earnings(ctx, c, sc.org.ID, out)
+	s.suggestParcels(ctx, c, &out)
 	return out, nil
+}
+
+// suggestParcels fills the package of every shipment that still needs a label from what the products were listed
+// with: the weight of every unit, the footprint of the largest item and the heights stacked. Best effort: products
+// without a listed package leave the form empty.
+func (s *sellerOrdersImpl) suggestParcels(ctx context.Context, c *domain.Caller, o *domain.SellerOrderDetail) {
+	if s.r.d.Listing == nil {
+		return
+	}
+	for i := range o.Shipments {
+		sh := &o.Shipments[i]
+		if !sh.CanBuyLabel {
+			continue
+		}
+		var p domain.SuggestedParcel
+		known := true
+		for _, l := range sh.Lines {
+			prod, err := s.r.d.Listing.ProductByATIN(ctx, c.BearerToken, l.VariantATIN)
+			if err != nil || prod.Listing == nil || prod.Listing.Packaging == nil || prod.Listing.Packaging.WeightLb <= 0 {
+				known = false
+				break
+			}
+			pk := prod.Listing.Packaging
+			q := float64(max(1, l.Quantity))
+			p.WeightLb += pk.WeightLb * q
+			p.LengthIn = max(p.LengthIn, pk.LengthIn)
+			p.WidthIn = max(p.WidthIn, pk.WidthIn)
+			p.HeightIn += pk.HeightIn * q
+		}
+		if known && p.WeightLb > 0 {
+			p.WeightLb = math.Round(p.WeightLb*100) / 100
+			p.HeightIn = math.Min(108, math.Round(p.HeightIn*10)/10)
+			sh.SuggestedParcel = &p
+		}
+	}
+}
+
+func (s *sellerOrdersImpl) Label(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.FileDownload, error) {
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView); err != nil {
+		return domain.FileDownload{}, err
+	}
+	o, err := s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber)
+	if err != nil {
+		return domain.FileDownload{}, mapErr("orders", err)
+	}
+	sh, ok := orderOf(o).Shipment(shipmentID)
+	if !ok {
+		return domain.FileDownload{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "That shipment isn't part of this order.")
+	}
+	if !sh.HasLabel || sh.Carrier == nil || sh.TrackingNumber == nil {
+		return domain.FileDownload{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "No label", "No shipping label was bought for this shipment.")
+	}
+	f, err := s.r.d.Carrier.LabelDocument(ctx, c.BearerToken, strings.ToLower(*sh.Carrier), *sh.TrackingNumber)
+	if err != nil {
+		return domain.FileDownload{}, mapErr("carrier-gateway", err)
+	}
+	return f, nil
 }
 
 // earnings is the organisation's row of the order's payment split (best effort: nil before the payment is split or

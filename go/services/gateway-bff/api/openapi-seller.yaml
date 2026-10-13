@@ -475,6 +475,23 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label:
+    get:
+      tags: [Orders]
+      operationId: downloadShippingLabel
+      security: [{sessionCookie: []}]
+      summary: Download the shipping label bought for a shipment
+      description: carrier-gateway `GET /v1/labels/by-tracking/{carrier}/{trackingNumber}/document` (PDF or ZPL), for seller-shipped carrier parcels with a label.
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+        - {name: shipmentId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: The label document, content: {application/pdf: {schema: {type: string, format: binary}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels:
     post:
       tags: [Orders]
@@ -2793,7 +2810,15 @@ components:
     ShipmentStatus:
       type: string
       enum: [PENDING_PAYMENT, PLACED, CONFIRMED, PACKED, READY, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERY_FAILED, DELIVERED, RETURNED, CANCELLED]
-    SellerStatusAction: {type: string, enum: [CONFIRMED, PACKED, READY], description: The only statuses a seller may set.}
+    SuggestedParcel:
+      type: object
+      required: [weightLb, lengthIn, widthIn, heightIn]
+      properties:
+        weightLb: {type: number}
+        lengthIn: {type: number}
+        widthIn: {type: number}
+        heightIn: {type: number}
+    SellerStatusAction: {type: string, enum: [CONFIRMED, PACKED, READY, PICKED_UP], description: 'The only statuses a seller may set. PICKED_UP ("Shipped": handed to the carrier) needs a label and applies to carrier parcels.'}
     SellerOrderRow:
       type: object
       required: [orderNumber, shipmentId, placedAt, buyerName, shipTo, itemsSummary, itemCount, totalMinor, currency, fulfilment, status, statusLabel, carrier, trackingNumber, nextActions, canBuyLabel]
@@ -3008,7 +3033,7 @@ components:
         country: {type: string}
     SellerShipment:
       type: object
-      required: [shipmentId, label, status, statusLabel, fulfilment, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, timeline, localDelivery]
+      required: [shipmentId, label, status, statusLabel, fulfilment, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, hasLabel, suggestedParcel, timeline, localDelivery]
       properties:
         shipmentId: {type: string}
         label: {type: string}
@@ -3035,6 +3060,10 @@ components:
         trackingNumber: {type: [string, 'null']}
         nextActions: {type: array, items: {$ref: '#/components/schemas/SellerStatusAction'}}
         canBuyLabel: {type: boolean}
+        hasLabel: {type: boolean, description: A shipping label was bought for this shipment and can be downloaded again}
+        suggestedParcel:
+          oneOf: [{$ref: '#/components/schemas/SuggestedParcel'}, {type: 'null'}]
+          description: The package of the products as listed (weight of every unit, largest footprint, heights stacked); null when not listed
         localDelivery:
           oneOf: [{$ref: '#/components/schemas/LocalDelivery'}, {type: 'null'}]
           description: AfroTransact Delivery from the seller's store (S255); null for other shipments

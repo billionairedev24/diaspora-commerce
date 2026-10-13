@@ -331,6 +331,8 @@ export function createSellerApiClient(options: ApiClientOptions) {
         query: { status: q.status, outcome: q.outcome, page: String(q.page), size: String(q.size) },
         signal
       }),
+    downloadShippingLabel: (orderNumber: string, shipmentId: string): Promise<DownloadedFile> =>
+      download(`/v1/seller/orders/${enc(orderNumber)}/shipments/${enc(shipmentId)}/label`, {}, 'shipping-label.pdf'),
     downloadImportReport: (id: string, format: SpreadsheetFormat): Promise<DownloadedFile> =>
       download(`/v1/seller/imports/${enc(id)}/report`, { format }, `upload-report.${format}`),
     startImport: (id: string, validOnly: boolean): Promise<ProductImport> =>

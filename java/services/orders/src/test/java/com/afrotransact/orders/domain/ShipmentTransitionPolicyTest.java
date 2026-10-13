@@ -52,6 +52,8 @@ class ShipmentTransitionPolicyTest {
                     m.put(CONFIRMED, EnumSet.of(PLACED));
                     m.put(PACKED, EnumSet.of(CONFIRMED));
                     m.put(READY, EnumSet.of(PACKED));
+                    // Carrier parcels (the matrix uses the carrier method): shipped once the label exists.
+                    m.put(PICKED_UP, EnumSet.of(READY));
                 }
             }
             case PLATFORM_ADMIN, FULFILMENT_OPS -> {
@@ -111,6 +113,19 @@ class ShipmentTransitionPolicyTest {
     }
 
     // ------------------------------------------------------------------ the rules in words
+
+    @Test
+    void sellerMarksACarrierParcelShippedOnlyWithALabel() {
+        Shipment ready = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, READY);
+        assertThat(POLICY.decide(ready, PICKED_UP, ActorKind.SELLER).kind()).isEqualTo(TransitionDecision.Kind.ALLOW);
+        assertThat(POLICY.nextFor(ready, ActorKind.SELLER)).containsExactly(PICKED_UP);
+        Shipment unlabelled = ready.withTracking(null, null);
+        assertThatThrownBy(() -> POLICY.decide(unlabelled, PICKED_UP, ActorKind.SELLER))
+                .isInstanceOf(TransitionRefused.class).hasMessageContaining("shipping label");
+        Shipment pickup = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.PICKUP, READY);
+        assertThatThrownBy(() -> POLICY.decide(pickup, PICKED_UP, ActorKind.SELLER))
+                .isInstanceOf(TransitionRefused.class);
+    }
 
     @Test
     void onlyTheSellerConfirmsPacksAndMarksReadyASellerFulfilledShipment() {

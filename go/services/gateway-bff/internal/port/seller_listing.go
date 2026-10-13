@@ -100,6 +100,8 @@ type UploadFile struct {
 // SellerListingClient calls catalog's product edit, draft and bulk upload endpoints with the member's token.
 type SellerListingClient interface {
 	Product(ctx context.Context, bearer, productID string) (CatalogOwnProduct, error)
+	// ProductByATIN reads one of the organisation's own products by its ATIN (GET /v1/products/atin/{atin}).
+	ProductByATIN(ctx context.Context, bearer, atin string) (CatalogOwnProduct, error)
 	// Update sends the edited product (catalog PUT /v1/products/{id}); shipFrom is the resolved ship-from snapshot.
 	Update(ctx context.Context, bearer, productID string, d domain.ProductDraft, shipFrom *CatalogShipFrom) (CatalogOwnProduct, error)
 	// CreateFull is POST /v1/products with the listing details and the resolved ship-from.

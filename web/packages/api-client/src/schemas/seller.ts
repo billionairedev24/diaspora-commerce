@@ -406,7 +406,8 @@ export const ShipmentStatusSchema = z.enum([
 ]);
 export type ShipmentStatus = z.infer<typeof ShipmentStatusSchema>;
 /** The only statuses a seller may set. */
-export const SellerStatusActionSchema = z.enum(['CONFIRMED', 'PACKED', 'READY']);
+/** What a seller may set; PICKED_UP is "Shipped" (handed to the carrier, needs a label). */
+export const SellerStatusActionSchema = z.enum(['CONFIRMED', 'PACKED', 'READY', 'PICKED_UP']);
 export type SellerStatusAction = z.infer<typeof SellerStatusActionSchema>;
 
 export const SellerOrderRowSchema = z.object({
@@ -451,6 +452,8 @@ export const SellerAddressSchema = z.object({
 });
 export type SellerAddress = z.infer<typeof SellerAddressSchema>;
 
+export const SuggestedParcelSchema = z.object({ weightLb: z.number(), lengthIn: z.number(), widthIn: z.number(), heightIn: z.number() });
+export type SuggestedParcel = z.infer<typeof SuggestedParcelSchema>;
 export const SellerShipmentSchema = z.object({
   shipmentId: z.string(),
   label: z.string(),
@@ -468,6 +471,10 @@ export const SellerShipmentSchema = z.object({
   trackingNumber: nullableString,
   nextActions: z.array(SellerStatusActionSchema),
   canBuyLabel: z.boolean(),
+  /** A label was bought for this shipment; it can be downloaded again. */
+  hasLabel: z.boolean().default(false),
+  /** The products' listed package (lb / in), to prefill the label form. */
+  suggestedParcel: SuggestedParcelSchema.nullable().default(null),
   timeline: z.array(z.object({ status: z.string(), at: z.string(), actor: z.string() })),
   /** AfroTransact Delivery from the seller's store (S255): the seller delivery fee is deducted from the payout. */
   localDelivery: z

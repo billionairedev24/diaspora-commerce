@@ -21,9 +21,9 @@ outbox:
   batch: 100
 polling:
   enabled: true
-  carriers: [usps]      # carriers without push tracking
-  tick: 1m
-  interval: 2h          # per tracking number while active
+  carriers: [usps, ups, fedex, dhl]   # local: every carrier is polled (the test carrier has no push tracking)
+  tick: 15s
+  interval: 1m          # per tracking number while active (production: 2h)
   maxBackoff: 12h       # after repeated failures
   lease: 10m
   batch: 50

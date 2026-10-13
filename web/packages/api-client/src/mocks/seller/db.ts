@@ -158,6 +158,8 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           trackingNumber: tracking,
           nextActions: next,
           canBuyLabel: !fba && !local && !tracking && ['CONFIRMED', 'PACKED', 'READY'].includes(status),
+          hasLabel: !fba && !local && Boolean(tracking),
+          suggestedParcel: { weightLb: 1.2, lengthIn: 9, widthIn: 6, heightIn: 2 },
           timeline: [{ status: 'PLACED', at: iso(placed), actor: 'customer' }],
           localDelivery: local
             ? { pickupLocationId: 'sfa-store', roadMiles: Math.round(roadMiles * 10) / 10, durationMinutes: Math.round(roadMiles * 2.6), customerChargeMinor: chargeMinor, sellerFeeMinor: deliveryFee }

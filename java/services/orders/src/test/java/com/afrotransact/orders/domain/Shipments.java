@@ -29,7 +29,7 @@ final class Shipments {
         return new Shipment(id, UUID.randomUUID().toString(), 1, "org_seller", "Mama Tee's Pantry", type,
                 type.inventoryTracked() ? "HOU-FC" : null, method, "standard",
                 method == DeliveryMethod.PICKUP ? "PICKUP-1" : null, prefs, perishable, required,
-                required ? HANDOVER.hash(id, code) : null, null, status, 599, null, null, LocalDate.now(),
+                required ? HANDOVER.hash(id, code) : null, null, status, 599, "usps", "9400TEST", LocalDate.now(),
                 LocalDate.now().plusDays(3), null, null, null, null, Instant.now(), List.of(line(1, 1250, 2, 103)), 0,
                 null, type == FulfilmentType.PREORDER ? PreorderPackage.placed("win-1", "LBK-7", "Lubbock Pre-order #7",
                 LocalDate.now().plusDays(3), Instant.now().plusSeconds(86_400), PreorderFulfilment.DOOR) : null);

@@ -86,7 +86,10 @@ func ShipmentStatusLabel(s string) string {
 func IsShipmentStatus(s string) bool { _, ok := shipmentLabels[s]; return ok }
 
 // SellerStatuses are the only statuses a seller may set (orders enforces the same rule).
-var SellerStatuses = []string{"CONFIRMED", "PACKED", "READY"}
+var SellerStatuses = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP"}
+
+// labelStatuses are the shipment statuses a label can still be bought in.
+var labelStatuses = []string{"CONFIRMED", "PACKED", "READY"}
 
 // IsSellerStatus reports whether a seller may set status s.
 func IsSellerStatus(s string) bool { return slices.Contains(SellerStatuses, s) }
@@ -113,7 +116,7 @@ func CanBuyLabel(fulfilment, deliveryMethod, status, tracking string) bool {
 	if dm := strings.ToUpper(deliveryMethod); dm == "PICKUP" || dm == "AFROTRANSACT_DELIVERY" {
 		return false
 	}
-	return IsSellerStatus(status)
+	return slices.Contains(labelStatuses, status)
 }
 
 // SellerOrderRow is one row of the orders table.
@@ -192,8 +195,20 @@ type SellerShipment struct {
 	TrackingNumber *string              `json:"trackingNumber"`
 	NextActions    []string             `json:"nextActions"`
 	CanBuyLabel    bool                 `json:"canBuyLabel"`
-	Timeline       []TimelineEntry      `json:"timeline"`
-	LocalDelivery  *SellerLocalDelivery `json:"localDelivery"`
+	// HasLabel: a label was bought for this shipment and can be downloaded again.
+	HasLabel bool `json:"hasLabel"`
+	// SuggestedParcel is the package size and weight the products were listed with (nil when unknown).
+	SuggestedParcel *SuggestedParcel     `json:"suggestedParcel"`
+	Timeline        []TimelineEntry      `json:"timeline"`
+	LocalDelivery   *SellerLocalDelivery `json:"localDelivery"`
+}
+
+// SuggestedParcel is the package of a shipment worked out from its products' listed package (inches, pounds).
+type SuggestedParcel struct {
+	WeightLb float64 `json:"weightLb"`
+	LengthIn float64 `json:"lengthIn"`
+	WidthIn  float64 `json:"widthIn"`
+	HeightIn float64 `json:"heightIn"`
 }
 
 // SellerOrderDetail is GET /v1/seller/orders/{orderNumber}.

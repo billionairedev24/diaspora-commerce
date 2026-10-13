@@ -34,6 +34,12 @@ func (k *sellerListingImpl) Product(ctx context.Context, bearer, productID strin
 	return p, err
 }
 
+func (k *sellerListingImpl) ProductByATIN(ctx context.Context, bearer, atin string) (port.CatalogOwnProduct, error) {
+	var p port.CatalogOwnProduct
+	_, err := call(ctx, k.c, httpclient.Request{Path: "/v1/products/atin/" + url.PathEscape(atin), Bearer: bearer}, &p)
+	return p, err
+}
+
 // productBody is catalog's CreateProductRequest / UpdateProductRequest for a form submission.
 func productBody(d domain.ProductDraft, shipFrom *port.CatalogShipFrom) map[string]any {
 	variants := make([]map[string]any, 0, len(d.Variants))

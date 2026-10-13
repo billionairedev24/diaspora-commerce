@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
@@ -329,6 +330,23 @@ func (k *carrierImpl) BuyLabel(ctx context.Context, bearer, key, carrier, servic
 	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/labels", Bearer: bearer, Header: idem(key), RetryUnsafe: true,
 		JSON: map[string]any{"carrier": carrier, "service": service, "shipment": s}}, &out)
 	return out, err
+}
+
+func (k *carrierImpl) LabelDocument(ctx context.Context, bearer, carrier, trackingNumber string) (domain.FileDownload, error) {
+	res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/labels/by-tracking/" + url.PathEscape(carrier) + "/" + url.PathEscape(trackingNumber) + "/document",
+		Bearer: bearer, Header: http.Header{"Accept": {"*/*"}}}, nil)
+	if err != nil {
+		return domain.FileDownload{}, err
+	}
+	ct := res.Header.Get("Content-Type")
+	if ct == "" {
+		ct = "application/pdf"
+	}
+	ext := ".pdf"
+	if strings.Contains(ct, "zpl") {
+		ext = ".zpl"
+	}
+	return domain.FileDownload{FileName: "label-" + trackingNumber + ext, ContentType: ct, Content: res.Body}, nil
 }
 
 func (k *carrierImpl) ManagedPickupLocations(ctx context.Context, bearer, ownerOrg string) ([]port.PickupLocation, error) {

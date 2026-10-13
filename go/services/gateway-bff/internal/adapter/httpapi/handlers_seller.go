@@ -43,6 +43,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/status", h.shipmentStatus)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates", h.shippingRates)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels", h.buyLabel)
+	route("GET /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label", h.downloadLabel)
 	route("GET /v1/seller/ship-from-addresses", h.shipFromList)
 	route("POST /v1/seller/ship-from-addresses", h.shipFromCreate)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}", h.shipFromUpdate)
@@ -428,6 +429,15 @@ func (h *handlersImpl) requestCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.SellerCatalog.RequestCategory(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) downloadLabel(w http.ResponseWriter, r *http.Request) {
+	f, err := h.s.SellerOrders.Label(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	sendFile(w, f)
 }
 
 func (h *handlersImpl) requestUpload(w http.ResponseWriter, r *http.Request) {

@@ -2,18 +2,20 @@
 
 import { sellerKeys, sellerQueries, type SellerStatusAction } from '@afrotransact/api-client';
 import { Button, Sheet, useToast } from '@afrotransact/ui';
+import { DownloadSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
+import { download } from '@/lib/export/table';
 import { dateTime, idempotencyKey, money } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
 import { LabelForm } from './LabelForm';
 
-export const ACTION_LABEL: Record<SellerStatusAction, string> = { CONFIRMED: 'Confirm order', PACKED: 'Mark packed', READY: 'Mark ready to ship' };
+export const ACTION_LABEL: Record<SellerStatusAction, string> = { CONFIRMED: 'Confirm order', PACKED: 'Mark packed', READY: 'Mark ready to ship', PICKED_UP: 'Mark shipped' };
 
 /** Order sheet: buyer, address, each of the organisation's shipments with its lines, timeline and actions. */
 export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | null; onClose: () => void }) {
@@ -29,8 +31,13 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
     onSuccess: (o, v) => {
       qc.setQueryData(sellerKeys.order(orgId, o.orderNumber), o);
       void qc.invalidateQueries({ queryKey: sellerKeys.orders(orgId) });
-      toast.show(`${ACTION_LABEL[v.to].replace('Mark ', 'Marked ').replace('Confirm order', 'Order confirmed')}`);
+      toast.show(v.to === 'PICKED_UP' ? 'Marked shipped' : `${ACTION_LABEL[v.to].replace('Mark ', 'Marked ').replace('Confirm order', 'Order confirmed')}`);
     },
+    onError: (e) => toast.show(problemMessage(e), 'error')
+  });
+  const label = useMutation({
+    mutationFn: ({ shipmentId }: { shipmentId: string }) => api.downloadShippingLabel(orderNumber ?? '', shipmentId),
+    onSuccess: (f) => download(f.blob, f.fileName),
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
   const o = q.data;
@@ -81,6 +88,13 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   Tracking: <strong className="font-mono">{s.carrier?.toUpperCase()} {s.trackingNumber}</strong>
                 </p>
               ) : null}
+              {s.hasLabel ? (
+                <div>
+                  <Button size="sm" variant="neutral" loading={label.isPending && label.variables?.shipmentId === s.shipmentId} onClick={() => label.mutate({ shipmentId: s.shipmentId })}>
+                    <DownloadSimple size={16} aria-hidden /> Download label
+                  </Button>
+                </div>
+              ) : null}
               {s.fulfilment === 'AFROTRANSACT' ? <p className="m-0 text-xs text-muted">Fulfilled by AfroTransact — we pick, pack and ship this one.</p> : null}
               {s.localDelivery ? (
                 <div className="flex flex-col gap-1 rounded-md bg-success-bg p-3 text-sm" data-testid="local-delivery">
@@ -109,7 +123,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   ))}
                 </div>
               ) : null}
-              {editable && s.canBuyLabel ? <LabelForm order={o} shipmentId={s.shipmentId} /> : null}
+              {editable && s.canBuyLabel ? <LabelForm order={o} shipmentId={s.shipmentId} suggested={s.suggestedParcel} /> : null}
               <details className="text-xs text-muted">
                 <summary className="cursor-pointer">Timeline</summary>
                 <ol className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">

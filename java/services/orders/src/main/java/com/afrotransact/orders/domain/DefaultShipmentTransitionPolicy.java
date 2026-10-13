@@ -10,8 +10,8 @@ import java.util.Set;
 /**
  * Architecture §17c "Who can do what", enforced here rather than in any UI:
  * <ul>
- *   <li><b>Seller-fulfilled</b>: only the seller confirms, packs and marks ready (and hands a pickup order to the
- *       customer at its own shop). Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
+ *   <li><b>Seller-fulfilled</b>: only the seller confirms, packs and marks ready, marks a carrier parcel shipped
+ *       (handed to the carrier, once a label exists) and hands a pickup order to the customer at its own shop. Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
  *       Platform admins may confirm delivery, record a failure, process returns or cancel — never "packed" (nor
  *       confirmed / ready).</li>
  *   <li><b>Fulfilled by AfroTransact / AfroTransact Retail</b>: admins and fulfilment ops own every step; carriers
@@ -46,6 +46,10 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         Set<ShipmentStatus> from = rules.get(to);
         if (from == null) {
             throw TransitionRefused.forbidden(actor, to, shipment.fulfilmentType());
+        }
+        if (actor == ActorKind.SELLER && to == ShipmentStatus.PICKED_UP && shipment.status() != to
+                && (shipment.trackingNumber() == null || shipment.trackingNumber().isBlank())) {
+            throw TransitionRefused.forbidden("Buy a shipping label before marking the order shipped");
         }
         if (shipment.status() == to) {
             return TransitionDecision.unchanged();
@@ -147,6 +151,10 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         m.put(ShipmentStatus.READY, EnumSet.of(ShipmentStatus.PACKED));
         if (method == DeliveryMethod.PICKUP) {
             m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.READY));
+        }
+        if (method == DeliveryMethod.CARRIER) {
+            // "Shipped": the parcel with its label is handed to the carrier; the carrier's tracking moves it on.
+            m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.READY));
         }
         return m;
     }
