@@ -1,22 +1,17 @@
 'use client';
 
-import { type CheckoutPackage, type CheckoutSummary, type PaymentMethod } from '@afrotransact/api-client';
+import { type CheckoutPackage, type CheckoutSummary } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, CheckCircle, Circle, CircleNotch, ImagePlaceholder, LockSimple, PoweredByStripe, ShieldCheck, Tag } from '@afrotransact/ui';
+import { Button, CheckCircle, Circle, CircleNotch, ImagePlaceholder, LockSimple, PoweredByStripe, Tag } from '@afrotransact/ui';
 import Link from 'next/link';
-import { type FormEvent, type RefObject } from 'react';
+import { type FormEvent } from 'react';
 
-import { AcceptedPaymentsHint } from '@/components/payments/AcceptedPaymentsHint';
-import { PaymentChip } from '@/components/payments/PaymentChip';
-import { type PaymentElementChange, PaymentElementField, type PaymentElementHandle } from '@/components/payments/PaymentElementField';
-import { type MessageKey, type Translator, useT } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 
 import styles from './Checkout.module.css';
 import { CheckoutCrossSell } from './CheckoutCrossSell';
 
 const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', 'co.placing.split'] as const;
-
-const pmSub = (t: Translator<MessageKey>, pm: PaymentMethod) => (pm.expires ? t('pay.expires', { date: pm.expires }) : pm.type === 'us_bank_account' ? t('pay.bankAccount') : t('pay.wallet'));
 
 type Props = {
   s: CheckoutSummary;
@@ -27,17 +22,9 @@ type Props = {
   total: number;
   itemCount: number;
   taxNote: string | null;
-  payWith: 'saved' | 'new' | null;
-  pmId: string | null;
-  pm: PaymentMethod | null;
-  save: boolean;
-  setSave: (v: boolean) => void;
-  setPayWith: (v: 'saved' | 'new') => void;
-  setPmId: (id: string) => void;
-  onNewMethod: (c: PaymentElementChange) => void;
-  payEl: RefObject<PaymentElementHandle | null>;
-  methodTypes: string[] | undefined;
   paymentChosen: boolean;
+  /** The chosen method ("Visa ending in 4242"), shown under Place order. */
+  pmLabel?: string | null;
   addressOk: boolean;
   blocked: boolean;
   preLocked: boolean;
@@ -54,7 +41,7 @@ type Props = {
   onRemoveCoupon: () => void;
 };
 
-/** Sticky checkout rail: total, items, payment and place order — payment is never buried in a scroll trap. */
+/** Sticky checkout rail, Amazon style: total and Place order first, then the items, promo code and the breakdown. */
 export function CheckoutOrderPanel(props: Props) {
   const fmt = useFormatters();
   const t = useT();
@@ -66,17 +53,8 @@ export function CheckoutOrderPanel(props: Props) {
     total,
     itemCount,
     taxNote,
-    payWith,
-    pmId,
-    pm: _pm,
-    save,
-    setSave,
-    setPayWith,
-    setPmId,
-    onNewMethod,
-    payEl,
-    methodTypes,
     paymentChosen,
+    pmLabel,
     addressOk,
     blocked,
     preLocked,
@@ -116,6 +94,38 @@ export function CheckoutOrderPanel(props: Props) {
             </span>
           </div>
           <p className={styles.panelMeta}>{t('co.items', { n: itemCount })} · {t('co.sellers', { n: s.sellerCount })}</p>
+        </div>
+
+        <div className={styles.placeBlock}>
+          <Button size="lg" block onClick={onPlace} loading={busy} disabled={!paymentChosen || !addressOk || addressList || blocked} data-place-order="1">
+            {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
+          </Button>
+          {error && (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          )}
+          {preLocked && preLockedText && (
+            <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
+              {preLockedText}
+            </p>
+          )}
+          {undeliverable && !preLocked && (
+            <p className={styles.fine} data-testid="local-delivery-blocked">
+              {t('ld.blocked')}
+            </p>
+          )}
+          {addressList && addressOk && <p className={styles.fine}>{t('co.confirmAddress')}</p>}
+          {busy && (
+            <ol className={styles.steps} aria-live="polite">
+              {STEPS.map((k, i) => (
+                <li key={k}>
+                  {i < placing ? <CheckCircle weight="fill" aria-hidden /> : i === placing ? <CircleNotch className={styles.spin} aria-hidden /> : <Circle aria-hidden />} {t(k)}
+                </li>
+              ))}
+            </ol>
+          )}
+          {pmLabel ? <p className={styles.payingWith}>{t('co.payingWith', { method: pmLabel })}</p> : null}
         </div>
 
         <details className={styles.itemsDetails}>
@@ -217,94 +227,7 @@ export function CheckoutOrderPanel(props: Props) {
           </div>
         </dl>
 
-        <div className={styles.panelDivider} role="presentation" />
-
-        <section className={styles.paymentBlock} id="co-payment" aria-labelledby="co-payment-title">
-          <div className={styles.paymentHead}>
-            <h2 id="co-payment-title" className={styles.paymentTitle}>
-              {t('co.step.payment')}
-            </h2>
-            <AcceptedPaymentsHint />
-          </div>
-          <div className={styles.payment}>
-            {s.paymentMethods.length > 0 && (
-              <fieldset className={styles.saved}>
-                <legend className={styles.legend}>{t('co.savedMethods')}</legend>
-                {s.paymentMethods.map((p) => (
-                  <label key={p.id} className={styles.choiceCompact} data-testid="checkout-payment">
-                    <input
-                      type="radio"
-                      name="paym"
-                      checked={payWith === 'saved' && p.id === pmId}
-                      onChange={() => {
-                        setPayWith('saved');
-                        setPmId(p.id);
-                      }}
-                    />
-                    <PaymentChip method={p} />
-                    <span className={styles.choiceText}>
-                      <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(t, p)}</span>
-                    </span>
-                    {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
-                  </label>
-                ))}
-              </fieldset>
-            )}
-            <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method">
-              <span className={styles.legend}>{s.paymentMethods.length > 0 ? t('co.orNew') : t('co.payWith')}</span>
-              <PaymentElementField
-                ref={payEl}
-                publishableKey={s.publishableKey ?? ''}
-                amountMinor={total}
-                currency={s.currency}
-                save={save}
-                stripeCustomerId={s.stripeCustomerId}
-                paymentMethodTypes={methodTypes}
-                onChange={onNewMethod}
-              />
-              <label className={styles.save}>
-                <input type="checkbox" checked={save} onChange={(e) => setSave(e.target.checked)} />
-                <span>
-                  {t('co.saveForLater')}
-                  <small>{t('co.saveForLaterHint')}</small>
-                </span>
-              </label>
-            </div>
-            <p className={styles.secureText}>
-              <ShieldCheck aria-hidden /> {t('pay.storedByStripe')}
-            </p>
-          </div>
-        </section>
-
-        <div className={styles.placeBlock}>
-          <Button size="lg" block onClick={onPlace} loading={busy} disabled={!paymentChosen || !addressOk || addressList || blocked} data-place-order="1">
-            {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
-          </Button>
-          {error && (
-            <p className={styles.error} role="alert">
-              {error}
-            </p>
-          )}
-          {preLocked && preLockedText && (
-            <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
-              {preLockedText}
-            </p>
-          )}
-          {undeliverable && !preLocked && (
-            <p className={styles.fine} data-testid="local-delivery-blocked">
-              {t('ld.blocked')}
-            </p>
-          )}
-          {addressList && addressOk && <p className={styles.fine}>{t('co.confirmAddress')}</p>}
-          {busy && (
-            <ol className={styles.steps} aria-live="polite">
-              {STEPS.map((k, i) => (
-                <li key={k}>
-                  {i < placing ? <CheckCircle weight="fill" aria-hidden /> : i === placing ? <CircleNotch className={styles.spin} aria-hidden /> : <Circle aria-hidden />} {t(k)}
-                </li>
-              ))}
-            </ol>
-          )}
+        <div className={styles.legalBlock}>
           <p className={styles.fine}>
             {t('co.agreePrefix')} <Link href="/legal/conditions-of-use">{t('co.conditions')}</Link> {t('co.and')} <Link href="/legal/privacy">{t('co.privacy')}</Link>.
           </p>
@@ -313,6 +236,7 @@ export function CheckoutOrderPanel(props: Props) {
             <span>{t('co.chargeNote')}</span>
           </div>
         </div>
+
 
         {s.crossSell && (
           <div className={styles.promoWrap}>

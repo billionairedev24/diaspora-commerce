@@ -649,7 +649,7 @@
   "co.addAddress": "Add a new delivery address",
   "co.useAddress": "Deliver to this address",
   "co.choosePayment": "Choose a payment method",
-  "co.payingWith": "Paying with",
+  "co.payingWith": "Paying with {method}",
   "co.afterAddress": "Choose a delivery address first.",
   "co.billingSame": "Billing address: same as delivery",
   "co.quickPay": "Express checkout",
@@ -1143,5 +1143,6 @@
   "co.addInstructions": "Add delivery instructions",
   "co.handoverLabel": "How we hand it over",
   "pay.expired": "Expired",
-  "pay.verificationPending": "Verification pending"
+  "pay.verificationPending": "Verification pending",
+  "co.addPaymentMethod": "Add a credit or debit card or bank account"
 }

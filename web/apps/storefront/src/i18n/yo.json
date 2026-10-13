@@ -655,7 +655,7 @@
   "co.addAddress": "Fi àdírẹ́sì ìfiránṣẹ́ tuntun kún",
   "co.useAddress": "Fi ránṣẹ́ sí àdírẹ́sì yìí",
   "co.choosePayment": "Yan ọ̀nà ìsanwó",
-  "co.payingWith": "Ìsanwó pẹ̀lú",
+  "co.payingWith": "Ò ń san pẹ̀lú {method}",
   "co.afterAddress": "Kọ́kọ́ yan àdírẹ́sì ìfiránṣẹ́.",
   "co.billingSame": "Àdírẹ́sì ìsanwó: bákan náà pẹ̀lú ìfiránṣẹ́",
   "co.quickPay": "Ìsanwó kíákíá",
@@ -1137,5 +1137,6 @@
   "co.addInstructions": "Fi ìtọ́sọ́nà ìfijíṣẹ́ kún un",
   "co.handoverLabel": "Bí a ṣe máa fi lé ọ lọ́wọ́",
   "pay.expired": "Ti parí",
-  "pay.verificationPending": "Ìfọwọ́sí ń dúró"
+  "pay.verificationPending": "Ìfọwọ́sí ń dúró",
+  "co.addPaymentMethod": "Ṣàfikún káàdì tàbí àkáǹtì báńkì"
 }

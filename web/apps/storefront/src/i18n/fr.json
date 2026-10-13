@@ -655,7 +655,7 @@
   "co.addAddress": "Ajouter une nouvelle adresse de livraison",
   "co.useAddress": "Livrer à cette adresse",
   "co.choosePayment": "Choisissez un moyen de paiement",
-  "co.payingWith": "Paiement avec",
+  "co.payingWith": "Paiement avec {method}",
   "co.afterAddress": "Choisissez d’abord une adresse de livraison.",
   "co.billingSame": "Adresse de facturation : identique à la livraison",
   "co.quickPay": "Paiement express",
@@ -1137,5 +1137,6 @@
   "co.addInstructions": "Ajouter des instructions de livraison",
   "co.handoverLabel": "Comment nous le remettons",
   "pay.expired": "Expirée",
-  "pay.verificationPending": "Vérification en attente"
+  "pay.verificationPending": "Vérification en attente",
+  "co.addPaymentMethod": "Ajouter une carte ou un compte bancaire"
 }

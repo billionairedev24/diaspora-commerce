@@ -18,6 +18,7 @@ import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AddressDialog } from '@/components/account/AddressDialog';
+import { AddPaymentMethodDialog } from '@/components/payments/AddPaymentMethodDialog';
 import { type PaymentElementChange, type PaymentElementHandle, REDIRECTED } from '@/components/payments/PaymentElementField';
 import { useCartPreorderCopy } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
@@ -29,6 +30,7 @@ import { readAttribution } from '@/lib/preorder/attribution';
 import styles from './Checkout.module.css';
 import { CheckoutOrderPanel } from './CheckoutOrderPanel';
 import { type Choice, feeOf, initialChoice, PackageCard } from './PackageCard';
+import { PaymentStep } from './PaymentStep';
 
 /** How the order is paid: saved card or new details via the Payment Element. */
 type PaySpec = { paymentMethodId: string } | { newPaymentMethod: true; savePaymentMethod: boolean };
@@ -84,6 +86,9 @@ export function CheckoutView() {
   const [save, setSave] = useState(false);
   const [newMethod, setNewMethod] = useState<PaymentElementChange>({ complete: false, empty: true, type: null });
   const payEl = useRef<PaymentElementHandle>(null);
+  const [addingPm, setAddingPm] = useState(false);
+  /** Saved method ids when the add dialog opened: the one that is new afterwards gets selected. */
+  const knownPmIds = useRef<Set<string> | null>(null);
   const [couponDraft, setCouponDraft] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState('');
   /** Sent to the BFF so shipping, tax and coupons match the selected delivery option per package. */
@@ -106,8 +111,13 @@ export function CheckoutView() {
       if (def) setAddressId(def.id);
       else setAddressOpen(true);
     }
-    if (!pmId || !s.paymentMethods.some((p) => p.id === pmId)) setPmId((s.paymentMethods.find((p) => p.isDefault) ?? s.paymentMethods[0])?.id ?? null);
-    setPayWith((w) => w ?? (s.paymentMethods.length ? 'saved' : 'new'));
+    const added = knownPmIds.current ? s.paymentMethods.find((p) => !knownPmIds.current?.has(p.id)) : undefined;
+    if (added) {
+      knownPmIds.current = null;
+      setPmId(added.id);
+    } else if (!pmId || !s.paymentMethods.some((p) => p.id === pmId)) setPmId((s.paymentMethods.find((p) => p.isDefault) ?? s.paymentMethods[0])?.id ?? null);
+    // Saved methods are listed (a new one is added in a dialog); the inline form is only for a first method.
+    setPayWith(s.paymentMethods.length ? 'saved' : 'new');
     setChoices((c) => {
       const next = { ...c };
       for (const p of s.packages) {
@@ -378,7 +388,29 @@ export function CheckoutView() {
           />
         </Section>
 
-        <Section n={2} id="co-delivery" title={t('co.step.delivery')} action={<span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>}>
+        <Section n={2} id="co-payment-title" title={t('co.step.payment')}>
+          <PaymentStep
+            s={s}
+            total={total}
+            pmId={pmId}
+            setPmId={(id) => {
+              setPmId(id);
+              setPayWith('saved');
+              setError(null);
+            }}
+            onAddMethod={() => {
+              knownPmIds.current = new Set(s.paymentMethods.map((p) => p.id));
+              setAddingPm(true);
+            }}
+            save={save}
+            setSave={setSave}
+            onNewMethod={onNewMethod}
+            payEl={payEl}
+            methodTypes={methodTypes}
+          />
+        </Section>
+
+        <Section n={3} id="co-delivery" title={t('co.step.delivery')} action={<span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>}>
           <div className={styles.packages}>
             {s.packages.map((p, i) => (
               <PackageCard
@@ -405,17 +437,8 @@ export function CheckoutView() {
         total={total}
         itemCount={itemCount}
         taxNote={taxNote}
-        payWith={payWith}
-        pmId={pmId}
-        pm={pm}
-        save={save}
-        setSave={setSave}
-        setPayWith={setPayWith}
-        setPmId={setPmId}
-        onNewMethod={onNewMethod}
-        payEl={payEl}
-        methodTypes={methodTypes}
         paymentChosen={paymentChosen}
+        pmLabel={payWith === 'saved' ? pm?.label : null}
         addressOk={!!address}
         blocked={blocked}
         preLocked={preLocked}
@@ -439,6 +462,18 @@ export function CheckoutView() {
         }}
       />
 
+      <AddPaymentMethodDialog
+        open={addingPm}
+        onOpenChange={setAddingPm}
+        onSaved={(added) => {
+          // A card is known at once; a Stripe-confirmed method arrives with the refreshed summary (selected there).
+          if (added) {
+            setPmId(added.id);
+            setPayWith('saved');
+          }
+          toast.show(added ? t('pay.added', { label: added.label }) : t('pay.addedPending'));
+        }}
+      />
       <AddressDialog open={addrDialog.open} onOpenChange={(o) => setAddrDialog((d) => ({ ...d, open: o }))} address={addrDialog.address} onSaved={(a) => setAddressId(a.id)} />
       <span hidden data-testid="checkout-pay-with">
         {payWith === 'new' ? (newMethod.type ?? 'new') : (pm?.id ?? '')}

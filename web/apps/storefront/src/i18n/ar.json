@@ -655,7 +655,7 @@
   "co.addAddress": "إضافة عنوان توصيل جديد",
   "co.useAddress": "التوصيل إلى هذا العنوان",
   "co.choosePayment": "اختر طريقة الدفع",
-  "co.payingWith": "الدفع باستخدام",
+  "co.payingWith": "الدفع باستخدام {method}",
   "co.afterAddress": "اختر عنوان التوصيل أولًا.",
   "co.billingSame": "عنوان الفوترة: نفس عنوان التوصيل",
   "co.quickPay": "دفع سريع",
@@ -1137,5 +1137,6 @@
   "co.addInstructions": "أضف تعليمات التوصيل",
   "co.handoverLabel": "طريقة التسليم",
   "pay.expired": "منتهية",
-  "pay.verificationPending": "التحقق قيد الانتظار"
+  "pay.verificationPending": "التحقق قيد الانتظار",
+  "co.addPaymentMethod": "إضافة بطاقة أو حساب مصرفي"
 }
