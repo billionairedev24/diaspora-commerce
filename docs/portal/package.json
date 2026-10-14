@@ -31,7 +31,7 @@
     "@docusaurus/types": "3.10.2",
     "@redocly/openapi-core": "^2.60.0",
     "@types/react": "19.3.0",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "yaml": "^2.9.1"
   },
   "browserslist": {
