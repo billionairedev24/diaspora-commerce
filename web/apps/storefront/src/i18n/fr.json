@@ -7,6 +7,9 @@
     "note": "Placeholder machine translation (S193). Every string needs review by a native-speaking translator before launch; move reviewed keys to reviewedKeys."
   },
   "a11y.skip": "Aller au contenu principal",
+  "chat.whatsapp": "Discutez avec nous sur WhatsApp",
+  "chat.whatsappMessage": "Bonjour AfroTransact, j'ai besoin d'aide.",
+  "chat.whatsappOrderMessage": "Bonjour AfroTransact, j'ai besoin d'aide pour la commande {order}.",
   "a11y.signingIn": "Redirection vers la connexion…",
   "a11y.cartRegion": "Mises à jour du panier",
   "header.home": "Accueil AfroTransact",

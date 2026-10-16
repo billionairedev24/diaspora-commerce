@@ -134,7 +134,7 @@ func siteSettingsResource() *staffResource {
 		edit: &staffEdit{permission: "content:site.edit",
 			form: func(o jobj) domain.Form {
 				fields := []domain.FormField{
-					withValue(withPattern(ff("supportPhone", "Support phone (E.164)", "text", true), `^\+[1-9][0-9]{7,14}$`, "Use the international format, e.g. +18324300000"), jstr(o, "contacts.supportPhone")),
+					withValue(withPattern(ff("supportPhone", "Support phone (E.164)", "text", true), `^\+[1-9][0-9]{7,14}$`, "Use the international format, e.g. +18324300000. Customers and sellers who tap the WhatsApp chat button reach this number, so it must be a number WhatsApp can message."), jstr(o, "contacts.supportPhone")),
 					withValue(withMax(ff("supportPhoneDisplay", "Phone as shown", "text", true), 30), jstr(o, "contacts.supportPhoneDisplay")),
 					withValue(ff("supportEmail", "Support email", "email", true), jstr(o, "contacts.emails.support")),
 					withValue(withMax(ff("smsProgramName", "SMS program name", "text", true), 60), jstr(o, "smsProgramName")),

@@ -133,7 +133,7 @@ func siteConfigBody(c port.ContentSiteConfig, enabled map[string]bool) map[strin
 	return map[string]any{
 		"revision": c.Revision,
 		"socials":  socials,
-		"contacts": map[string]string{"phone": str("phone"), "privacyEmail": str("privacyEmail"), "accessibilityEmail": str("accessibilityEmail"),
+		"contacts": map[string]string{"phone": str("phone"), "phoneE164": str("phoneE164"), "privacyEmail": str("privacyEmail"), "accessibilityEmail": str("accessibilityEmail"),
 			"legalEmail": str("legalEmail"), "pressEmail": str("pressEmail"), "partnersEmail": str("partnersEmail"), "address": str("address")},
 		"legal":             legal,
 		"identityProviders": providers,

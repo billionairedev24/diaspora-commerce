@@ -2951,9 +2951,10 @@ components:
               label: {type: string}
         contacts:
           type: object
-          required: [phone, privacyEmail, accessibilityEmail, legalEmail, pressEmail, partnersEmail, address]
+          required: [phone, phoneE164, privacyEmail, accessibilityEmail, legalEmail, pressEmail, partnersEmail, address]
           properties:
             phone: {type: string}
+            phoneE164: {type: string, description: 'The support phone in E.164 (+18335550199); also the number of the WhatsApp chat button in the storefront and Seller Center. Empty when not set (the button is then hidden).'}
             privacyEmail: {type: string}
             accessibilityEmail: {type: string}
             legalEmail: {type: string}

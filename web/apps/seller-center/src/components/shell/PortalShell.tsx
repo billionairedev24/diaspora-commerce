@@ -22,6 +22,7 @@ import { ComplianceBanner, PayoutsPausedBanner } from './ComplianceBanner';
 import { Header } from './Header';
 import { AutoSignIn, clearSignInAttempt, ShellFailed, ShellLoading, ShellLooped } from './ShellStates';
 import { Sidebar, SidebarRail } from './Sidebar';
+import { SupportChat } from './SupportChat';
 
 function Centered({ children }: { children: ReactNode }) {
   return <div className="mx-auto flex w-[min(560px,100%)] flex-col items-center gap-4 px-4 py-16 text-center">{children}</div>;
@@ -287,6 +288,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           ) : null}
         </main>
       </BackofficeFrame>
+      <SupportChat orgName={session.activeOrg.name} />
     </SellerSessionProvider>
   );
 }
