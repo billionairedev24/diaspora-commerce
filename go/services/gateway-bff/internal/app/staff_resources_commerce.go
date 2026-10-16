@@ -83,6 +83,9 @@ func ordersResource() *staffResource {
 					if r := jstr(t, "reason"); r != "" {
 						text += " — " + r
 					}
+					if p := proofSummary(t); p != "" {
+						text += " (" + p + ")"
+					}
 					out = append(out, domain.ActivityEntry{At: timeOf(t, "at"), Actor: firstNonEmpty(jstr(t, "source"), jstr(t, "actorType")), Text: text})
 				}
 			}
@@ -92,56 +95,72 @@ func ordersResource() *staffResource {
 			return []domain.RecordLink{{Label: "Open in customer support", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId"))}}
 		},
 		actions: []staffAction{
-			{key: "shipment-status", label: "Update shipment status", tone: "primary", permission: "orders:manage", also: []string{"orders:update-status"},
+			{key: "shipment-status", label: "Update a shipment", tone: "primary", permission: "orders:manage", also: []string{"orders:update-status"},
 				form: func(_ context.Context, _ staffCtx, o jobj) *domain.Form {
-					opts := []domain.FieldOption{}
-					for _, s := range objs(o, "shipments") {
-						label := jstr(s, "label") + " · " + domain.Humanize(jstr(s, "status"))
-						if next := strs(s, "nextActions"); len(next) > 0 {
-							label += " → " + strings.ToLower(domain.Humanize(strings.ToUpper(strings.Join(next, ", "))))
-						}
-						opts = append(opts, domain.FieldOption{Value: firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id")), Label: label})
-					}
-					return &domain.Form{Title: "Move a shipment to another status", SubmitLabel: "Update", Fields: []domain.FormField{
-						withOptions(ff("shipmentId", "Shipment", "select", true), opts),
-						withOptions(ff("to", "New status", "select", true), domain.StaffOptions(shipmentMoves(o)...)),
-						withMax(ff("reason", "Reason", "text", false), 500)}}
+					return &domain.Form{Title: "What happened to the shipment?", SubmitLabel: "Save", Fields: []domain.FormField{
+						withOptions(ff("step", "Next step", "select", true), shipmentSteps(o)),
+						withMax(ff("reason", "Reason or note", "text", false), 500)}}
 				},
 				when: func(_ staffCtx, o jobj) string {
 					if len(objs(o, "shipments")) == 0 {
 						return "This order has no shipments."
 					}
-					if len(shipmentMoves(o)) == 0 {
-						return "No shipment status changes are available for your role on this order."
+					if len(shipmentSteps(o)) == 0 {
+						return "No shipment steps are available for your role on this order."
 					}
 					return ""
 				},
 				run: func(ctx context.Context, sc staffCtx, _ jobj, v jobj) error {
-					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(vs(v, "shipmentId"))+"/transitions", omitEmpty(jobj{"to": vs(v, "to"), "reason": vs(v, "reason")}), nil)
+					shipmentID, to, ok := strings.Cut(vs(v, "step"), "|")
+					if !ok || shipmentID == "" || to == "" {
+						return domain.ValidationProblem(map[string]string{"step": "Choose the next step"})
+					}
+					if reasonRequired(to) && strings.TrimSpace(vs(v, "reason")) == "" {
+						return domain.ValidationProblem(map[string]string{"reason": "Say why (required to " + strings.ToLower(shipmentStepVerbs[to]) + ")"})
+					}
+					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/transitions", omitEmpty(jobj{"to": to, "reason": vs(v, "reason")}), nil)
 				}},
 		},
 	}
 }
 
-// shipmentLifecycle is the order of the shipment statuses staff may move a shipment to (orders-service state machine).
+// shipmentLifecycle is the order of the steps staff may take on a shipment (orders-service state machine).
 var shipmentLifecycle = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP", "IN_TRANSIT", "OUT_FOR_DELIVERY", "DELIVERED",
 	"DELIVERY_FAILED", "RETURNED", "CANCELLED"}
 
-// shipmentMoves lists the statuses the order's shipments can move to next, from each shipment's nextActions (orders-service
-// applies the state machine for the caller: staff move AfroTransact-fulfilled packages through every step, but only
-// confirm delivery, record a failure, return or cancel a seller's). Without nextActions every staff move is offered and
-// orders-service refuses the ones that do not apply.
-func shipmentMoves(o jobj) []string {
-	next := map[string]bool{}
+// shipmentStepVerbs names each step as the action a person takes, not the status it leaves behind.
+var shipmentStepVerbs = map[string]string{
+	"CONFIRMED": "Confirm", "PACKED": "Mark packed", "READY": "Mark ready", "PICKED_UP": "Mark picked up",
+	"IN_TRANSIT": "Mark in transit", "OUT_FOR_DELIVERY": "Mark out for delivery", "DELIVERED": "Mark delivered",
+	"DELIVERY_FAILED": "Record a failed delivery", "RETURNED": "Mark returned", "CANCELLED": "Cancel the shipment",
+}
+
+// reasonRequired: the steps orders-service wants a reason for (a cancellation, a failure, a delivery confirmed by hand).
+func reasonRequired(to string) bool {
+	return to == "CANCELLED" || to == "DELIVERY_FAILED" || to == "DELIVERED"
+}
+
+// shipmentSteps lists, for each shipment, the steps the caller may take on it next (the shipment's own nextActions:
+// orders-service applies the state machine for the caller), one choice per shipment and step, as "<shipment> · <step>".
+// The value is "<shipmentId>|<STATUS>".
+func shipmentSteps(o jobj) []domain.FieldOption {
+	out := []domain.FieldOption{}
+	multi := len(objs(o, "shipments")) > 1
 	for _, s := range objs(o, "shipments") {
+		next := map[string]bool{}
 		for _, a := range strs(s, "nextActions") {
 			next[strings.ToUpper(a)] = true
 		}
-	}
-	out := []string{}
-	for _, v := range shipmentLifecycle {
-		if next[v] {
-			out = append(out, v)
+		id := firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id"))
+		for _, step := range shipmentLifecycle {
+			if !next[step] {
+				continue
+			}
+			label := shipmentStepVerbs[step]
+			if multi {
+				label = jstr(s, "label") + " · " + label
+			}
+			out = append(out, domain.FieldOption{Value: id + "|" + step, Label: label})
 		}
 	}
 	return out
@@ -358,4 +377,35 @@ func routesResource() *staffResource {
 				}},
 		},
 	}
+}
+
+// proofSummary is the driver's proof of delivery on a timeline entry in one line: how it was handed over, to whom or
+// where, and which evidence was captured ("handed to the customer, code checked, photo"). Empty when there is none.
+func proofSummary(t jobj) string {
+	if jstr(t, "proof.handoverMethod") == "" && jstr(t, "proof.failureReason") == "" && jstr(t, "proof.photoAssetId") == "" {
+		return ""
+	}
+	parts := []string{}
+	switch jstr(t, "proof.handoverMethod") {
+	case "CUSTOMER":
+		parts = append(parts, "handed to the customer, code checked")
+	case "SOMEONE_ELSE":
+		who := jstr(t, "proof.recipientName")
+		if rel := jstr(t, "proof.relationship"); rel != "" {
+			who += ", " + strings.ToLower(rel)
+		}
+		parts = append(parts, "handed to "+firstNonEmpty(strings.TrimSpace(who), "someone else"))
+	case "SAFE_PLACE":
+		parts = append(parts, "left at "+firstNonEmpty(strings.ToLower(jstr(t, "proof.safePlace")), "a safe place"))
+	}
+	if r := jstr(t, "proof.failureReason"); r != "" {
+		parts = append(parts, "driver: "+r)
+	}
+	if jstr(t, "proof.photoAssetId") != "" {
+		parts = append(parts, "photo")
+	}
+	if jstr(t, "proof.signatureAssetId") != "" {
+		parts = append(parts, "signature")
+	}
+	return strings.Join(parts, ", ")
 }

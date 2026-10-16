@@ -228,19 +228,25 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     links: (r) => [{ label: 'Open in customer support', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
     actions: [
       {
-        key: 'shipment-status', label: 'Update shipment status', tone: 'primary', permission: 'orders:manage', when: (r) => stateReason(r, 'OPEN'),
-        form: (r) => form('Move a shipment to another status', 'Update', [
-          field('shipmentId', 'Shipment', 'select', true, { options: (r.lines ?? []).map((l) => ({ value: str(l.id), label: `${str(l.label)} · ${humanize(str(l.status))}` })) }),
-          field('to', 'New status', 'select', true, { options: options('OUT_FOR_DELIVERY', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED', 'CANCELLED') }),
-          field('reason', 'Reason', 'text', false, { maxLength: 500 })
-        ]),
+        key: 'shipment-status', label: 'Update a shipment', tone: 'primary', permission: 'orders:manage', when: (r) => stateReason(r, 'OPEN'),
+        form: (r) => {
+          const lines = r.lines ?? [];
+          const verbs: [string, string][] = [['OUT_FOR_DELIVERY', 'Mark out for delivery'], ['DELIVERED', 'Mark delivered'], ['DELIVERY_FAILED', 'Record a failed delivery'], ['RETURNED', 'Mark returned'], ['CANCELLED', 'Cancel the shipment']];
+          return form('What happened to the shipment?', 'Save', [
+            field('step', 'Next step', 'select', true, {
+              options: lines.flatMap((l) => verbs.map(([to, verb]) => ({ value: `${str(l.id)}|${to}`, label: lines.length > 1 ? `${str(l.label)} · ${verb}` : verb })))
+            }),
+            field('reason', 'Reason or note', 'text', false, { maxLength: 500 })
+          ]);
+        },
         apply: (r, v, ctx) => {
-          const line = (r.lines ?? []).find((l) => l.id === v.shipmentId);
-          if (line) line.status = str(v.to);
-          r.fields.shipmentStatus = str(v.to);
-          if (v.to === 'DELIVERED') r.fields.status = 'COMPLETED';
-          if (v.to === 'CANCELLED') r.fields.status = 'CANCELLED';
-          log(r, ctx, `Shipment moved to ${humanize(str(v.to)).toLowerCase()}`);
+          const [shipmentId, to = ''] = str(v.step).split('|');
+          const line = (r.lines ?? []).find((l) => l.id === shipmentId);
+          if (line) line.status = to;
+          r.fields.shipmentStatus = to;
+          if (to === 'DELIVERED') r.fields.status = 'COMPLETED';
+          if (to === 'CANCELLED') r.fields.status = 'CANCELLED';
+          log(r, ctx, `Shipment moved to ${humanize(to).toLowerCase()}`);
         }
       }
     ]

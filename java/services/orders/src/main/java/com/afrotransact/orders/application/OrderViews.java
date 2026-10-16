@@ -10,6 +10,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import com.afrotransact.orders.domain.ActorKind;
+import com.afrotransact.orders.domain.CourierProof;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrderTotals;
@@ -87,7 +88,7 @@ class OrderViews {
                 s.captured(), cancellable, nextActions,
                 s.lines().stream().map(OrderViews::line).toList(),
                 history.stream().map(h -> new OrderView.TimelineEntry(h.from() == null ? null : h.from().wire(),
-                        h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt())).toList(),
+                        h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt(), proofOf(h.proof(), viewer.kind() == Viewer.Kind.STAFF))).toList(),
                 returnable, windowEnds, returnWindows.problemReportOnly(s), links,
                 s.localDelivery() == null ? null : new OrderView.LocalDeliveryView(
                         s.localDelivery().shipFromLocationId(), s.localDelivery().distanceMiles(),
@@ -126,5 +127,15 @@ class OrderViews {
         return new OrderView.LineView(l.id(), l.lineNo(), l.variantAtin(), l.productAtin(), l.title(), l.imageUrl(),
                 l.quantity(), l.unitPriceMinor(), l.itemsMinor(), l.taxMinor(), l.discountMinor(), l.category(),
                 l.perishable(), l.taxJurisdiction(), l.productType());
+    }
+
+    /** Staff see everything the driver recorded; the customer and the seller do not get the driver's GPS position. */
+    private static OrderView.DeliveryProof proofOf(CourierProof p, boolean staff) {
+        if (p == null) {
+            return null;
+        }
+        return new OrderView.DeliveryProof(p.handoverMethod() == null ? null : p.handoverMethod().name(),
+                p.recipientName(), p.relationship(), p.safePlace(), p.failureReason(), p.photoAssetId(),
+                p.signatureAssetId(), staff ? p.latitude() : null, staff ? p.longitude() : null);
     }
 }

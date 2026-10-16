@@ -1312,6 +1312,36 @@ components:
         at:
           type: string
           format: date-time
+        proof:
+          $ref: '#/components/schemas/DeliveryProof'
+    DeliveryProof:
+      type: object
+      description: >-
+        What the driver app recorded for this step: how the parcel was handed over, to whom, where it was left, why a
+        delivery failed, and the media assets of the proof photo and the signature. The driver's GPS position is
+        returned to staff only. Absent for carrier events and for steps staff took by hand.
+      properties:
+        handoverMethod:
+          type: string
+          enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE]
+        recipientName:
+          type: string
+        relationship:
+          type: string
+        safePlace:
+          type: string
+        failureReason:
+          type: string
+        photoAssetId:
+          type: string
+        signatureAssetId:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
     TrackingRequest:
       type: object
       description: Carrier label of a seller-fulfilled carrier shipment

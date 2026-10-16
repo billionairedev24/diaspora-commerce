@@ -228,7 +228,7 @@ class JdbcOrderRepository implements OrderRepository {
     public List<StatusChange> history(String orderId) {
         return jdbc.sql("""
                 select shipment_id, event_id, from_status, to_status, actor_type, actor_id, actor_org, reason, source,
-                    occurred_at
+                    occurred_at, proof::text as proof
                 from shipment_status_change where order_id = :o order by id
                 """)
                 .param("o", Sql.uuid(orderId))
@@ -236,7 +236,8 @@ class JdbcOrderRepository implements OrderRepository {
                         rs.getString("from_status") == null ? null : ShipmentStatus.valueOf(rs.getString("from_status")),
                         ShipmentStatus.valueOf(rs.getString("to_status")), ActorKind.valueOf(rs.getString("actor_type")),
                         rs.getString("actor_id"), rs.getString("actor_org"), rs.getString("reason"),
-                        TransitionSource.valueOf(rs.getString("source")), Sql.instant(rs, "occurred_at")))
+                        TransitionSource.valueOf(rs.getString("source")), Sql.instant(rs, "occurred_at"),
+                        rs.getString("proof") == null ? null : json.read(rs.getString("proof"), CourierProof.class)))
                 .list();
     }
 

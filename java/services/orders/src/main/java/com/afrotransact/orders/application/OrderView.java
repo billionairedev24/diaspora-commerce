@@ -105,6 +105,15 @@ public record OrderView(String id, String orderNumber, String status, String cus
 
     /** One status change. */
     public record TimelineEntry(String from, String to, String actorType, String source, String reason,
-                                Instant at) {
+                                Instant at, DeliveryProof proof) {
+    }
+
+    /**
+     * What the driver app recorded when it handed a parcel over (or failed to): how, to whom, where it was left, and
+     * whether the photo and the signature exist. The assets themselves are fetched from media with their ids.
+     */
+    public record DeliveryProof(String handoverMethod, String recipientName, String relationship, String safePlace,
+                                String failureReason, String photoAssetId, String signatureAssetId, Double latitude,
+                                Double longitude) {
     }
 }

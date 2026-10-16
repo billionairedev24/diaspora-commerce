@@ -15,8 +15,15 @@ import java.time.Instant;
  * @param reason     free-text reason (required for cancellations and failures)
  * @param source     api | carrier | driver | system
  * @param occurredAt when it happened
+ * @param proof      the driver app's proof of delivery (handover code redacted), null when there is none
  */
 public record StatusChange(String shipmentId, String eventId, ShipmentStatus from, ShipmentStatus to,
                            ActorKind actorKind, String actorId, String actorOrg, String reason,
-                           TransitionSource source, Instant occurredAt) {
+                           TransitionSource source, Instant occurredAt, CourierProof proof) {
+
+    public StatusChange(String shipmentId, String eventId, ShipmentStatus from, ShipmentStatus to,
+                        ActorKind actorKind, String actorId, String actorOrg, String reason,
+                        TransitionSource source, Instant occurredAt) {
+        this(shipmentId, eventId, from, to, actorKind, actorId, actorOrg, reason, source, occurredAt, null);
+    }
 }

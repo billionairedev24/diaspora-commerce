@@ -47,7 +47,7 @@ own every step. Carriers and drivers only move a shipment forward.
 | Step | Who | Screen |
 |---|---|---|
 | Checkout, track, cancel before packing, start a return | Customer | Storefront › Your orders |
-| Pick, pack, label, stage at the dock | FC staff | The FC pick/pack queue (fulfilment-service `/v1/fc/tasks`, for the FC's handhelds; there is no console screen for it yet). Ops staff can also move these shipments in Staff › Orders › Update shipment status |
+| Pick, pack, label, stage at the dock | FC staff | The FC pick/pack queue (fulfilment-service `/v1/fc/tasks`, for the FC's handhelds; there is no console screen for it yet). Ops staff can also move these shipments in Staff › Orders › Update a shipment |
 | Confirm, pack, print the label, mark ready (seller-fulfilled) | Seller | Seller Center › Orders |
 | Plan routes, assign driver and vehicle, handle SOS alerts and vehicle defects, route seller pickups | Dispatcher | Staff › Delivery dispatch |
 | Pre-trip inspection, load-out scans, deliver with a photo (and a 4-digit code when required), collect return pickups | Driver | Driver app |

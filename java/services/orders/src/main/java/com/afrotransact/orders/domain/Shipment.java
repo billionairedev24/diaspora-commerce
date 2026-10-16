@@ -182,6 +182,12 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 && (reason == null || reason.isBlank())) {
             throw new OrdersRuleViolation("orders.reason-required", "A reason is required to set " + to.wire());
         }
+        if (to == ShipmentStatus.DELIVERED && source == TransitionSource.API
+                && deliveryMethod == DeliveryMethod.AFROTRANSACT_DELIVERY && (reason == null || reason.isBlank())) {
+            // Our drivers prove a delivery with a photo and a handover; staff confirming it without them say why.
+            throw new OrdersRuleViolation("orders.reason-required",
+                    "Say why you are confirming this delivery without the driver's proof");
+        }
         Instant eventTime = external && externalEventAt != null ? externalEventAt : at;
         Shipment next = new Shipment(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId,
                 deliveryMethod, serviceLevel, pickupLocationId, preferences, perishable, handoverRequired,
