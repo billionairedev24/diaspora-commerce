@@ -428,9 +428,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Confirm, pack or mark ready (the only statuses a seller may set)
-         * @description orders `POST /v1/shipments/{id}/transitions`. Anything but CONFIRMED, PACKED or READY is refused with 422
-         *     before calling orders; orders answers 409 `CONFLICT` for a transition that is not allowed from the current
+         * Confirm, pack, mark ready, mark shipped or hand a pickup order over (the only statuses a seller may set)
+         * @description orders `POST /v1/shipments/{id}/transitions`. Anything but CONFIRMED, PACKED, READY, PICKED_UP or DELIVERED is
+         *     refused with 422 before calling orders. DELIVERED (a pickup order handed to the buyer) needs `handoverCode`, the
+         *     buyer's 4-digit code from their order page; a wrong one is refused with 409 `orders.handover-code-invalid`; orders answers 409 `CONFLICT` for a transition that is not allowed from the current
          *     status and 403 for a step that belongs to AfroTransact (AfroTransact-fulfilled shipments).
          */
         post: operations["updateShipmentStatus"];
@@ -614,6 +615,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lola's tier for the active organisation, today's messages and what she can do
+         * @description The tier comes from the organisation's plan (Essentials, Growth, Pro) and sets the daily messages (UTC), the tools she
+         *     can use and whether she can prepare changes for the seller to confirm. `upgrade` is the next plan up (null on Pro).
+         */
+        get: operations["sellerAssistantStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/assistant/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Lola one question (the browser keeps the conversation and sends the earlier turns)
+         * @description Lola looks things up through the same Seller Center services as the pages, as the signed-in seller, then answers. She
+         *     never sees buyers' names or addresses. A change she prepares comes back as a proposal the seller confirms with a tap;
+         *     the app then calls the normal Seller Center API (stock adjustment, order status). Earlier turns are plain user and
+         *     assistant text only (anything else is dropped). The usage is billed to the organisation as AI credits.
+         *     429 `ASSISTANT_LIMIT` when today's messages on the plan are used (the detail names the plan that gives more);
+         *     429 `RATE_LIMITED` when ai-gateway's budget is spent; 503 when ai-gateway is not reachable.
+         */
+        post: operations["sellerAssistantChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/offers": {
         parameters: {
             query?: never;
@@ -686,6 +733,23 @@ export interface paths {
         /** Pause or activate a seller coupon */
         post: operations["setSellerCouponStatus"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/coupons/{couponId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a seller-funded coupon */
+        delete: operations["deleteSellerCoupon"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1182,7 +1246,11 @@ export interface paths {
         delete: operations["removeLibraryImage"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename an image in the library
+         * @description media `PATCH /v1/library/{id}`. Updates the file name and re-matches SKU/slot.
+         */
+        patch: operations["renameLibraryImage"];
         trace?: never;
     };
     "/v1/seller/image-library/attach": {
@@ -1419,6 +1487,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/billing/invoices/{invoiceId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Collect an unpaid invoice again after fixing the payment method — owner and finance only
+         * @description seller `POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/retry`. Reopens an invoice that failed every attempt
+         *     (or is waiting for the next one) and collects it now: platform credit first, then the seller's sales if they
+         *     chose that, then the default card or bank account. Answers with the invoice as it stands afterwards.
+         */
+        post: operations["retryInvoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/billing/invoices/{invoiceId}/document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A printable invoice (HTML; the browser's Print › Save as PDF makes the PDF)
+         * @description seller `GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/document`. Sent as a download, like shipping labels.
+         */
+        get: operations["getInvoiceDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/billing/plan-fee-collection": {
         parameters: {
             query?: never;
@@ -1428,7 +1538,7 @@ export interface paths {
         };
         get?: never;
         /**
-         * Pay the plan from sales first (EARNINGS_FIRST) or always by card (CARD) — owner and finance only (S298)
+         * Pay the plan from your sales after credit (EARNINGS_FIRST) or always by card (CARD) — owner and finance only (S298)
          * @description seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection`. Applies from the next invoice (`appliesFromInvoiceAt`);
          *     an invoice being collected now keeps the choice it was created with. 403 for other roles, 409
          *     `seller.earnings-collection-off` while the platform's kill switch is off.
@@ -2658,10 +2768,10 @@ export interface components {
             heightIn: number;
         };
         /**
-         * @description The only statuses a seller may set. PICKED_UP ("Shipped": handed to the carrier) needs a label and applies to carrier parcels.
+         * @description The only statuses a seller may set. PICKED_UP ("Shipped": handed to the carrier) needs a label and applies to carrier parcels. DELIVERED is the handover of a pickup order at the seller's own shop and needs the buyer's 4-digit code (handoverCode).
          * @enum {string}
          */
-        SellerStatusAction: "CONFIRMED" | "PACKED" | "READY" | "PICKED_UP";
+        SellerStatusAction: "CONFIRMED" | "PACKED" | "READY" | "PICKED_UP" | "DELIVERED";
         SellerOrderRow: {
             orderNumber: string;
             shipmentId: string;
@@ -2761,6 +2871,71 @@ export interface components {
              * @description Version being edited
              */
             version?: number | null;
+        };
+        AssistantStatus: {
+            /** @enum {string} */
+            tier: "ESSENTIALS" | "GROWTH" | "PRO";
+            limits: {
+                /** @example Lola Growth */
+                label: string;
+                /** @description Messages a day (UTC); Lola starts again at midnight UTC */
+                dailyMessages: number;
+                maxToolRounds: number;
+                /** @description Earlier messages she remembers in a conversation */
+                history: number;
+                /** @description my_orders, order_detail, my_listings, stock_levels, fees_and_plan, payouts, sales_summary, propose_set_stock, propose_next_step */
+                tools: string[];
+                /** @description She can prepare a change for the seller to confirm */
+                canPropose: boolean;
+            };
+            used: number;
+            remaining: number;
+            upgrade: null | {
+                planCode: string;
+                label: string;
+                gains: string;
+            };
+        };
+        AssistantChatRequest: {
+            message: string;
+            /** @description The earlier turns the browser kept (the last few are used, by tier) */
+            history?: {
+                /** @enum {string} */
+                role: "user" | "assistant";
+                content: string;
+            }[];
+            /** @description Reply language (BCP 47) */
+            language?: string;
+        };
+        AssistantReply: {
+            answer: string;
+            /** @description What she looked up, for the seller to see ("Checking your orders") */
+            steps: {
+                tool: string;
+                label: string;
+            }[];
+            /** @description Changes she prepared. Nothing happens until the seller taps one. */
+            proposals: components["schemas"]["AssistantProposal"][];
+            status: components["schemas"]["AssistantStatus"];
+        };
+        AssistantProposal: {
+            /** @enum {string} */
+            kind: "SET_STOCK" | "NEXT_STEP";
+            /** @example Set JOLLOF-1 to 40 */
+            label: string;
+            /** @description SET_STOCK */
+            sku?: string;
+            /** @description SET_STOCK */
+            quantity?: number;
+            /** @description NEXT_STEP */
+            orderNumber?: string;
+            /** @description NEXT_STEP */
+            shipmentId?: string;
+            /**
+             * @description NEXT_STEP
+             * @enum {string}
+             */
+            step?: "CONFIRMED" | "PACKED" | "READY";
         };
         SellerOffer: {
             offerId: string;
@@ -2889,6 +3064,36 @@ export interface components {
             postalCode: string;
             country: string;
         };
+        /**
+         * @description How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
+         *     tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+         *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
+         */
+        DeliveryProof: {
+            /**
+             * @description To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place
+             * @enum {string}
+             */
+            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE";
+            recipientName: string | null;
+            relationship: string | null;
+            safePlace: string | null;
+            /**
+             * Format: uri
+             * @description Proof photo; null when none or it cannot be shown right now
+             */
+            photoUrl: string | null;
+            /**
+             * Format: uri
+             * @description Recipient's signature (someone-else handovers)
+             */
+            signatureUrl: string | null;
+            /**
+             * Format: date-time
+             * @description When it was delivered
+             */
+            at: string;
+        } | null;
         SellerShipment: {
             shipmentId: string;
             label: string;
@@ -2913,6 +3118,7 @@ export interface components {
             canBuyLabel: boolean;
             /** @description A shipping label was bought for this shipment and can be downloaded again */
             hasLabel: boolean;
+            proof?: components["schemas"]["DeliveryProof"];
             /** @description The package of the products as listed (weight of every unit, largest footprint, heights stacked); null when not listed */
             suggestedParcel: components["schemas"]["SuggestedParcel"] | null;
             /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
@@ -2939,6 +3145,8 @@ export interface components {
         };
         StatusUpdateRequest: {
             status: components["schemas"]["SellerStatusAction"];
+            /** @description The buyer's 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise */
+            handoverCode?: string;
         };
         Parcel: {
             weightLb: number;
@@ -2947,6 +3155,8 @@ export interface components {
             heightIn?: number;
         };
         RatesRequest: {
+            /** @description Optional carrier filter */
+            carrier?: components["schemas"]["Carrier"];
             parcel: components["schemas"]["Parcel"];
             shipFrom: components["schemas"]["PostalAddress"];
         };
@@ -3650,6 +3860,24 @@ export interface components {
             features: string[];
             prices: components["schemas"]["PlanPrice"][];
             current: boolean;
+            /** @description What the plan allows; null when the seller service did not say */
+            entitlements?: components["schemas"]["PlanEntitlements"] | null;
+        };
+        /** @description What a plan lets an organisation do; staff set it per plan. There is no limit on shops or users, only on live listings. Null when the seller service did not say. */
+        PlanEntitlements: {
+            /**
+             * Format: int64
+             * @description The most live listings; null = unlimited
+             */
+            listings: number | null;
+            listingsUnlimited: boolean;
+            /** @description The AI listing writer is included */
+            aiListingWriter: boolean;
+            /**
+             * @description What Lola, the seller assistant, can do
+             * @enum {string}
+             */
+            lolaTier: "ESSENTIALS" | "GROWTH" | "PRO";
         };
         BillingPaymentMethod: {
             id: string;
@@ -3666,6 +3894,17 @@ export interface components {
             isDefault: boolean;
             label: string;
         };
+        InvoiceLine: {
+            /**
+             * @description USAGE is a metered add-on; COUPON and WAIVER are negative (a coupon, or the plan fee a charge condition waived)
+             * @enum {string}
+             */
+            kind: "PLAN" | "USAGE" | "COUPON" | "PRORATION" | "WAIVER";
+            description: string;
+            /** Format: int64 */
+            amountMinor: number;
+        };
+        /** @description A plan invoice AfroTransact issued itself for one billing period. It is settled in this order: platform credit (coupons are already off the invoice), the seller's sales — only if they chose to pay from sales — then the saved card or bank account; a failed charge is retried 1, 3, 5 and 7 days later. */
         Invoice: {
             id: string;
             number: string;
@@ -3673,18 +3912,63 @@ export interface components {
             periodStart: string | null;
             /** Format: date-time */
             periodEnd: string | null;
+            /**
+             * Format: int64
+             * @description The plan fee and usage before coupons and waivers
+             */
+            subtotalMinor: number;
+            /**
+             * Format: int64
+             * @description Coupons and what a charge condition waived
+             */
+            discountMinor: number;
+            /**
+             * Format: int64
+             * @description What is owed after discounts
+             */
             amountDueMinor: number;
+            /** Format: int64 */
             amountPaidMinor: number;
             currency: string;
-            status: string;
-            pdfUrl: string | null;
-            hostedUrl: string | null;
+            /**
+             * @description A fully waived or covered invoice is PAID
+             * @enum {string}
+             */
+            status: "OPEN" | "PAID" | "VOID" | "UNCOLLECTIBLE";
             /** Format: date-time */
             createdAt: string;
-            /** @description Paid from the organisation's sales (S298): withheld from its earnings and credited to the invoice */
+            /** Format: date-time */
+            paidAt: string | null;
+            /**
+             * Format: date-time
+             * @description When an unpaid invoice is tried again
+             */
+            nextAttemptAt: string | null;
+            /** @description Why the last attempt failed ("Your card was declined.") */
+            lastError: string | null;
+            lines: components["schemas"]["InvoiceLine"][];
+            /**
+             * Format: int64
+             * @description Paid from platform credit
+             */
+            paidFromCreditMinor: number;
+            /**
+             * Format: int64
+             * @description Paid from the organisation's sales (S298): withheld from its earnings, only if it chose that
+             */
             paidFromSalesMinor: number;
-            /** @description Paid (or, while open, due) by card or bank: the rest */
+            /**
+             * Format: int64
+             * @description Paid (or, while open, due) by card or bank: the rest
+             */
             paidByCardMinor: number;
+            /**
+             * Format: int64
+             * @description Forgiven by staff
+             */
+            waivedMinor: number;
+            /** @description The seller can fix the payment method and retry */
+            canRetry: boolean;
         };
         /**
          * @description EARNINGS_FIRST: "Pay your plan from your sales" — each invoice is taken from pending earnings and the card pays only what they don't cover. CARD: "Charge my card" — plan fees stay a separate card expense.
@@ -3744,11 +4028,41 @@ export interface components {
             planVersion?: number;
             /**
              * Format: int64
-             * @description Stripe credit balance the next invoices use (rewards, staff credits)
+             * @description Platform credit the next invoices use first (rewards, staff credits)
              */
             creditBalanceMinor?: number;
             /** @enum {string|null} */
             trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
+            /** @description A condition staff put on the plan charges, with the seller's progress; null when charges apply as normal */
+            chargeGate?: components["schemas"]["ChargeGate"] | null;
+            /** @description What the plan allows */
+            entitlements?: components["schemas"]["PlanEntitlements"] | null;
+        };
+        /** @description START_AFTER: no plan charge until the seller reaches the threshold (sales, orders, bookings or live listings); WAIVE_WHILE: free while they keep it; WAIVE_UNTIL: free until a date. Staff set it with a reason. */
+        ChargeGate: {
+            /** @enum {string} */
+            mode: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL";
+            /** @enum {string|null} */
+            metric: "GROSS_SALES" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "ACTIVE_LISTINGS" | null;
+            /**
+             * Format: int64
+             * @description Minor units for GROSS_SALES, else a count
+             */
+            threshold: number | null;
+            /**
+             * Format: int64
+             * @description Where the seller is now
+             */
+            progress: number;
+            /** Format: date-time */
+            until: string | null;
+            /**
+             * Format: date-time
+             * @description A START_AFTER condition was reached; charging has started
+             */
+            metAt: string | null;
+            /** @description One sentence for the seller: "Charging starts after $1,000 in sales — you're at $420" */
+            label: string;
         };
         /** @description A reward the organisation can still earn: "$640 of $1,000 in sales → 1 month free" (S296). A LESS_THAN rule (low-sales relief, S299) has no progress to show: it is pending until checkAt, when it is decided once. */
         RewardProgress: {
@@ -5443,6 +5757,59 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    sellerAssistantStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    sellerAssistantChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantReply"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     listSellerOffers: {
         parameters: {
             query: {
@@ -5578,6 +5945,28 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SellerCoupon"];
                 };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+        };
+    };
+    deleteSellerCoupon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                couponId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
@@ -6398,6 +6787,40 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    renameLibraryImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fileName: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Renamed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageLibraryItem"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     attachLibraryImages: {
         parameters: {
             query?: never;
@@ -6759,6 +7182,61 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    retryInvoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invoice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Invoice"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getInvoiceDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invoiceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The invoice */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

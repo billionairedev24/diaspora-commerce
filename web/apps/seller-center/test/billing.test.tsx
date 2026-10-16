@@ -1,4 +1,4 @@
-import { getSellerDb, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
+import { getSellerDb, PROVIDER_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { configure, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -29,10 +29,39 @@ describe('Plan & billing (S292–S297)', () => {
     const earned = screen.getByRole('table', { name: 'Rewards and credits received' });
     expect(await within(earned).findByText('$25 credit')).toBeInTheDocument();
     const invoices = screen.getByRole('table', { name: 'Invoices' });
-    expect(within(invoices).getAllByRole('link', { name: 'Download PDF' })[0]).toHaveAttribute('href', 'https://invoices.afrotransact.dev/in_3.pdf');
+    expect(within(invoices).getAllByRole('button', { name: 'Download invoice' })).toHaveLength(3);
+    expect(screen.getByTestId('entitlements')).toHaveTextContent('Up to 1,000 live listings · AI listing writer included · Lola Growth');
   });
 
-  it('previews a plan change with Stripe’s proration before confirming it', async () => {
+  it('breaks an invoice down by what paid it: credit, then sales, then card', async () => {
+    await renderScreen(<BillingView />);
+    const invoices = await screen.findByRole('table', { name: 'Invoices' });
+    expect(within(invoices).getByText('Your sales $90.00 · Card $21.15')).toBeInTheDocument();
+    expect(screen.getByText(/Each invoice is paid in this order/)).toBeInTheDocument();
+  });
+
+  it('shows a charge condition staff set, with progress', async () => {
+    await renderScreen(<BillingView />, PROVIDER_ORG);
+    const gate = await screen.findByTestId('charge-gate');
+    expect(gate).toHaveTextContent('Charging starts after 10 completed bookings — you’re at 4');
+    expect(within(gate).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '40');
+  });
+
+  it('retries an unpaid invoice after the payment method is fixed', async () => {
+    const user = userEvent.setup();
+    const db = getSellerDb();
+    const inv = db.invoices[0];
+    if (!inv) throw new Error('seeded');
+    Object.assign(inv, { status: 'OPEN', amountPaidMinor: 0, paidByCardMinor: inv.amountDueMinor, paidFromSalesMinor: 0, paidAt: null, lastError: 'Your card was declined.', nextAttemptAt: new Date(Date.now() + 2 * 86_400_000).toISOString(), canRetry: true });
+    await renderScreen(<BillingView />);
+    expect(await screen.findByText('Invoice AT-1003 is unpaid')).toBeInTheDocument();
+    expect(screen.getByText(/Your card was declined\./)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Retry payment' }));
+    await waitFor(() => expect(db.invoices[0]?.status).toBe('PAID'));
+    await waitFor(() => expect(screen.queryByText('Invoice AT-1003 is unpaid')).not.toBeInTheDocument());
+  });
+
+  it('previews a plan change with its proration before confirming it', async () => {
     const user = userEvent.setup();
     await renderScreen(<BillingView />);
     await user.click(await screen.findByRole('button', { name: 'Choose Seller Pro' }));
@@ -128,7 +157,7 @@ describe('how the plan is paid (S298)', () => {
     const user = userEvent.setup();
     await renderScreen(<BillingView />);
     const card = await screen.findByTestId('plan-fee-collection');
-    const fromSales = within(card).getByRole('radio', { name: /Pay your plan from your sales/ });
+    const fromSales = within(card).getByRole('radio', { name: /Pay my plan from my sales/ });
     const byCard = within(card).getByRole('radio', { name: /Charge my card/ });
     expect(fromSales).toHaveAttribute('aria-checked', 'true');
     expect(within(card).getByText(/separate from your payouts/)).toBeInTheDocument();
@@ -142,8 +171,8 @@ describe('how the plan is paid (S298)', () => {
   it('shows on each invoice what sales and the card paid', async () => {
     await renderScreen(<BillingView />);
     const invoices = await screen.findByRole('table', { name: 'Invoices' });
-    expect(await within(invoices).findByText('Paid from your sales: $90.00 · Card: $21.15')).toBeInTheDocument();
-    expect(within(invoices).getAllByText('Card: $111.15').length).toBeGreaterThan(0);
+    expect(await within(invoices).findByText('Your sales $90.00 · Card $21.15')).toBeInTheDocument();
+    expect(within(invoices).getAllByText('Card $111.15').length).toBeGreaterThan(0);
   });
 
   it('lets finance change it but not other roles, and hides it when the platform doesn’t offer it', async () => {
@@ -221,19 +250,19 @@ describe('onboarding Plan step: how the plan is paid (S298)', () => {
     await api.refreshOnboardingStripe();
   });
 
-  it('offers paying from sales (the platform default) or the card, and saves the choice', { timeout: 20_000 }, async () => {
+  it('offers paying from sales (an opt-in) or the card (the default), and saves the choice', { timeout: 20_000 }, async () => {
     const user = userEvent.setup();
     await renderScreen(<OnboardingWizard slug="plan" />);
     await user.click(await screen.findByRole('radio', { name: /Seller Growth/ }));
     const choice = await screen.findByRole('radiogroup', { name: 'How you pay your plan' });
-    expect(within(choice).getByRole('radio', { name: /Pay your plan from your sales.*Default/ })).toHaveAttribute('aria-checked', 'true');
-    await user.click(within(choice).getByRole('radio', { name: /Charge my card/ }));
+    expect(within(choice).getByRole('radio', { name: /Charge my card.*Default/ })).toHaveAttribute('aria-checked', 'true');
+    await user.click(within(choice).getByRole('radio', { name: /Pay my plan from my sales/ }));
     await user.type(screen.getByLabelText('Card number'), '4242 4242 4242 4242');
     await user.type(screen.getByLabelText('Expiry'), '0430');
     await user.type(screen.getByLabelText('Security code'), '123');
     await user.click(screen.getByRole('button', { name: 'Save and continue' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/catalog-compliance'));
     const status = await mockApi().getOnboarding();
-    expect(status.form.plan).toMatchObject({ planFeeCollection: 'CARD', cardLast4: '4242' });
+    expect(status.form.plan).toMatchObject({ planFeeCollection: 'EARNINGS_FIRST', cardLast4: '4242' });
   });
 });

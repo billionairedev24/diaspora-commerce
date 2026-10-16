@@ -5,9 +5,11 @@ import {
   type BillingSetupIntent,
   type BillingView as BillingViewData,
   type Cadence,
+  type ChargeGate,
   type EarnedReward,
   type Invoice,
   type Plan,
+  type PlanEntitlements,
   type PlanFeeCollectionMode,
   type PlanFeeCollectionView,
   type RewardProgress,
@@ -32,6 +34,7 @@ import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
+import { download } from '@/lib/export/table';
 import { dollars, money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 import { appearance, getStripePayments, hasStripeKey, type PaymentElement, type StripePaymentElements, type StripePaymentInstance } from '@/lib/stripe';
@@ -114,8 +117,36 @@ function PlanSummary({ sub, t }: { sub: Subscription; t: T }) {
           {t('sc.billing.pendingChange', { plan: sub.pendingChange.planName, cadence: t(CADENCE_KEYS[sub.pendingChange.cadence]), date: shortDate(sub.pendingChange.effectiveAt) })}
         </p>
       ) : null}
+      {sub.chargeGate ? <ChargeGateNote gate={sub.chargeGate} t={t} /> : null}
+      {sub.entitlements ? <EntitlementsLine e={sub.entitlements} t={t} /> : null}
       {sub.dunning ? <Notice tone="danger" title={t('sc.billing.paymentFailed')}>{sub.dunning}</Notice> : null}
     </Card>
+  );
+}
+
+/** What the plan allows: only live listings are capped (no limit on shops or users). */
+export function EntitlementsLine({ e, t }: { e: PlanEntitlements; t: T }) {
+  const parts = [
+    e.listingsUnlimited || e.listings === null ? t('sc.billing.ent.listingsUnlimited') : t('sc.billing.ent.listings', { count: e.listings.toLocaleString('en-US') }),
+    e.aiListingWriter ? t('sc.billing.ent.aiWriter') : t('sc.billing.ent.noAiWriter'),
+    t(`sc.billing.ent.lola.${e.lolaTier}` as MessageKey)
+  ];
+  return <p className="m-0 text-sm text-muted" data-testid="entitlements">{parts.join(' · ')}</p>;
+}
+
+/** A condition AfroTransact put on the plan charges ("Charging starts after 10 bookings — you're at 4"), with progress. */
+function ChargeGateNote({ gate, t }: { gate: ChargeGate; t: T }) {
+  const pct = gate.threshold && gate.mode !== 'WAIVE_UNTIL' ? Math.min(100, Math.round((gate.progress / gate.threshold) * 100)) : null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md bg-info-bg p-3 text-sm" data-testid="charge-gate">
+      <strong>{gate.label}</strong>
+      {pct !== null && !gate.metAt ? (
+        <div role="progressbar" aria-label={t('sc.billing.gate.progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-2 overflow-hidden rounded-pill bg-surface">
+          <div className="h-full rounded-pill bg-gold-500" style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
+      {gate.metAt ? <span className="text-xs text-muted">{t('sc.billing.gate.met', { date: shortDate(gate.metAt) })}</span> : null}
+    </div>
   );
 }
 
@@ -168,31 +199,47 @@ const earnedColumns = (t: T): ColumnDef<EarnedReward>[] => [
   { id: 'status', accessorFn: (r) => r.status, header: t('sc.billing.col.status'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> }
 ];
 
-const invoiceColumns = (t: T): ColumnDef<Invoice>[] => [
+interface InvoiceActions {
+  canManage: boolean;
+  busy: string | null;
+  onDownload: (i: Invoice) => void;
+  onRetry: (i: Invoice) => void;
+}
+
+const invoiceColumns = (t: T, a: InvoiceActions): ColumnDef<Invoice>[] => [
   { id: 'number', accessorFn: (i) => i.number, header: t('sc.billing.col.invoice'), size: 160, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.number}</span> },
   { id: 'periodStart', accessorFn: (i) => i.periodStart, header: t('sc.billing.col.period'), size: 240, meta: { kind: 'date', exportValue: (i) => `${i.periodStart} – ${i.periodEnd}` }, cell: ({ row }) => `${shortDate(row.original.periodStart)} – ${shortDate(row.original.periodEnd)}` },
   { id: 'amountDueMinor', accessorFn: (i) => i.amountDueMinor, header: t('sc.billing.col.amount'), size: 130, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountDueMinor, row.original.currency) },
   {
-    // S298: what the organisation's sales paid and what the card paid.
-    id: 'paidWith', accessorFn: (i) => paidWith(i, t), header: t('sc.billing.col.paidWith'), size: 280, enableSorting: false,
+    // What settled the invoice, in order: credit, the seller's sales (only if they chose that), the card, a waiver.
+    id: 'paidWith', accessorFn: (i) => paidWith(i, t), header: t('sc.billing.col.paidWith'), size: 300, enableSorting: false,
     cell: ({ row }) => <span className={cx('text-sm', row.original.paidFromSalesMinor > 0 && 'font-semibold')}>{paidWith(row.original, t)}</span>
   },
   { id: 'status', accessorFn: (i) => i.status, header: t('sc.billing.col.status'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> },
   {
-    id: 'pdf', header: () => <span className="at-visually-hidden">{t('sc.billing.col.download')}</span>, size: 150, enableSorting: false, meta: { export: false, label: t('sc.billing.col.download') },
-    cell: ({ row }) => (row.original.pdfUrl ? <a href={row.original.pdfUrl} target="_blank" rel="noreferrer">{t('sc.billing.downloadPdf')}</a> : null)
+    id: 'actions', header: () => <span className="at-visually-hidden">{t('sc.billing.col.download')}</span>, size: 220, enableSorting: false, meta: { export: false, label: t('sc.billing.col.download') },
+    cell: ({ row }) => (
+      <span className="flex items-center gap-2">
+        <Button size="sm" variant="link" disabled={a.busy === row.original.id} onClick={() => a.onDownload(row.original)}>{t('sc.billing.downloadInvoice')}</Button>
+        {row.original.canRetry && a.canManage ? <Button size="sm" variant="neutral" loading={a.busy === `retry:${row.original.id}`} onClick={() => a.onRetry(row.original)}>{t('sc.billing.retryPayment')}</Button> : null}
+      </span>
+    )
   }
 ];
 
-/** "Paid from your sales: $90.00 · Card: $21.15" (S298), or just the card's part. */
+/** "Credit $5.00 · Your sales $90.00 · Card $21.15": what settled the invoice, in the order it is taken (S298). */
 export function paidWith(i: Invoice, t: T): string {
-  const card = money(i.paidByCardMinor, i.currency);
-  return i.paidFromSalesMinor > 0 ? t('sc.billing.paidSplit', { sales: money(i.paidFromSalesMinor, i.currency), card }) : t('sc.billing.paidCard', { card });
+  const parts: string[] = [];
+  if (i.paidFromCreditMinor > 0) parts.push(t('sc.billing.paid.credit', { amount: money(i.paidFromCreditMinor, i.currency) }));
+  if (i.paidFromSalesMinor > 0) parts.push(t('sc.billing.paid.sales', { amount: money(i.paidFromSalesMinor, i.currency) }));
+  if (i.paidByCardMinor > 0) parts.push(t(i.status === 'OPEN' ? 'sc.billing.paid.cardDue' : 'sc.billing.paid.card', { amount: money(i.paidByCardMinor, i.currency) }));
+  if (i.waivedMinor > 0) parts.push(t('sc.billing.paid.waived', { amount: money(i.waivedMinor, i.currency) }));
+  return parts.length ? parts.join(' · ') : i.discountMinor > 0 ? t('sc.billing.paid.free') : t('sc.billing.paid.none');
 }
 
 /**
- * How the plan is paid (S298): from sales first or always by card. Owner and finance change it; it applies from the
- * next invoice. Hidden while the platform doesn't offer it.
+ * How the plan is paid (S298): the seller chooses whether earnings pay the plan (after credit), or the card always does. Owner and
+ * finance change it; it applies from the next invoice. Hidden while the platform doesn't offer it.
  */
 function PlanFeeCollectionCard({ v, t }: { v: PlanFeeCollectionView; t: T }) {
   const api = sellerApi();
@@ -224,7 +271,7 @@ function PlanFeeCollectionCard({ v, t }: { v: PlanFeeCollectionView; t: T }) {
   );
 }
 
-/** Change plan or cadence: the preview (Stripe's proration for an upgrade) before anything changes. */
+/** Change plan or cadence: the preview (the proration for an upgrade) before anything changes. */
 function ChangePlanDialog({ target, onClose, t }: { target: { plan: Plan; cadence: Cadence } | null; onClose: () => void; t: T }) {
   const api = sellerApi();
   const qc = useQueryClient();
@@ -406,8 +453,8 @@ function AddPaymentMethodDialog({ open, onClose, t }: { open: boolean; onClose: 
 
 /**
  * Plan & billing (S292–S297): plan and cadence, trial end, credit balance, rewards the organisation can earn with their
- * progress and the ones it earned, plan changes with Stripe's proration preview, payment methods through the Payment
- * Element (SetupIntent), and invoices with their PDFs. AfroTransact owns the plans and rewards; Stripe charges.
+ * progress and the ones it earned, plan changes with a proration preview, payment methods through the Payment Element
+ * (SetupIntent), and AfroTransact's own invoices (printable, retryable). Stripe only moves card money.
  */
 export function BillingView() {
   const t = useT();
@@ -427,6 +474,24 @@ export function BillingView() {
     () => (['MONTHLY', 'QUARTERLY', 'ANNUAL'] as const).map((c) => ({ value: c, label: t(`sc.billing.cadenceChip.${c}`) })),
     [t]
   );
+  const [invoiceBusy, setInvoiceBusy] = useState<string | null>(null);
+  const retry = useMutation({
+    mutationFn: (i: Invoice) => api.retryInvoice(i.id),
+    onMutate: (i) => setInvoiceBusy(`retry:${i.id}`),
+    onSettled: () => setInvoiceBusy(null),
+    onSuccess: (inv) => {
+      void qc.invalidateQueries({ queryKey: sellerKeys.billing(orgId) });
+      toast.show(inv.status === 'PAID' ? t('sc.billing.retry.paid') : inv.lastError ?? t('sc.billing.retry.failed'), inv.status === 'PAID' ? 'info' : 'error');
+    },
+    onError: (e) => toast.show(problemMessage(e), 'error')
+  });
+  const downloadInvoice = useMutation({
+    mutationFn: (i: Invoice) => api.downloadInvoice(i.id),
+    onMutate: (i) => setInvoiceBusy(i.id),
+    onSettled: () => setInvoiceBusy(null),
+    onSuccess: (f, i) => download(f.blob, f.fileName === 'download' ? `invoice-${i.number}.html` : f.fileName),
+    onError: (e) => toast.show(problemMessage(e), 'error')
+  });
   const pm = useMutation({
     mutationFn: (v: { id: string; op: 'default' | 'remove' }) => (v.op === 'default' ? api.makeDefaultPaymentMethod(v.id) : api.removePaymentMethod(v.id)),
     onSuccess: () => void qc.invalidateQueries({ queryKey: sellerKeys.billing(orgId) }),
@@ -439,6 +504,7 @@ export function BillingView() {
   const available = rewards.data?.available ?? [];
   const earned = rewards.data?.earned ?? [];
   // S299: applied low-sales relief moved the next charge.
+  const unpaid = invoices.find((i) => i.canRetry);
   const relief = earned.find((e) => e.comparison === 'LESS_THAN' && e.status === 'APPLIED' && e.nextChargeAt);
   return (
     <ModulePage module="billing" readOnlyNote={false}>
@@ -508,7 +574,14 @@ export function BillingView() {
         state={earnedState} mode="client" loading={rewards.isPending} fetching={rewards.isFetching} empty={t('sc.billing.noEarned')} />
 
       <h2 className="m-0 text-lg font-semibold">{t('sc.billing.invoices')}</h2>
-      <DataTable<Invoice> id="seller.invoices" label={t('sc.billing.invoices')} columns={invoiceColumns(t)} data={invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number}
+      {unpaid ? (
+        <Notice tone="danger" title={t('sc.billing.unpaidTitle', { number: unpaid.number })}>
+          {unpaid.lastError ?? t('sc.billing.unpaidDetail')}{' '}
+          {unpaid.nextAttemptAt ? t('sc.billing.unpaidNext', { date: shortDate(unpaid.nextAttemptAt) }) : ''}
+        </Notice>
+      ) : null}
+      <p className="m-0 text-xs text-muted">{t('sc.billing.invoiceOrder')}</p>
+      <DataTable<Invoice> id="seller.invoices" label={t('sc.billing.invoices')} columns={invoiceColumns(t, { canManage, busy: invoiceBusy, onDownload: (i) => downloadInvoice.mutate(i), onRetry: (i) => retry.mutate(i) })} data={invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number}
         state={invoiceState} mode="client" fetching={q.isFetching} empty={t('sc.billing.noInvoices')} onExport={exportDataset} pollExport={pollExport} />
 
       <ChangePlanDialog target={target} onClose={() => setTarget(null)} t={t} />

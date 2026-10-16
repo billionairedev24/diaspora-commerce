@@ -381,7 +381,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Every plan with its versions, Stripe prices and subscribers
+         * Every plan with its versions, entitlements, prices and subscribers
          * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
          */
         get: operations["listStaffPlans"];
@@ -451,7 +451,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Publish the draft version and sync Stripe (new Prices, old ones archived; never edited)
+         * Publish the draft version (subscribers stay on theirs until migrated)
          * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
          */
         post: operations["publishStaffPlan"];
@@ -519,30 +519,6 @@ export interface paths {
          * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
          */
         post: operations["migrateStaffPlan"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/staff/billing/stripe-sync": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Drift between our plan versions and Stripe (nothing changes)
-         * @description Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
-         */
-        get: operations["getStaffStripeSync"];
-        put?: never;
-        /**
-         * Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones
-         * @description Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
-         */
-        post: operations["syncStaffStripe"];
         delete?: never;
         options?: never;
         head?: never;
@@ -787,7 +763,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Credit the organisation's Stripe balance (billing:adjust, reason code)
+         * Give platform credit the next invoices use first (billing:adjust, reason code)
          * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
          */
         post: operations["creditStaffBillingOrg"];
@@ -807,10 +783,70 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Give free days: the subscription's trial_end moves out (billing:adjust)
+         * Give free days: the first charge moves out (billing:adjust)
          * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
          */
         post: operations["giveStaffBillingFreeDays"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/free-months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Give free calendar months: the first charge moves out (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+         */
+        post: operations["giveStaffBillingFreeMonths"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/charge-gate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put a condition on the plan charges: start after X sales or listings, waive while X listings, or waive until a date (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. A reason code is required; the grant is in the grants log. The seller sees the condition and their progress on the Billing page.
+         */
+        put: operations["setStaffBillingChargeGate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/billing/orgs/{orgId}/charge-gate/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Remove the condition on the plan charges: they apply as normal again (billing:adjust)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`.
+         */
+        post: operations["clearStaffBillingChargeGate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -847,7 +883,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Waive (void) an open invoice (billing:adjust)
+         * Waive the rest of an open invoice (billing:adjust)
          * @description Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
          */
         post: operations["waiveStaffBillingInvoice"];
@@ -1126,7 +1162,7 @@ export interface paths {
          * Negotiate a plan price for one organisation (private, invite-only plan)
          * @description Over the seller service's plan catalogue (plans:manage and EDIT on plans): copies the base plan's kind, features,
          *     limits and trial into a new INVITE_ONLY plan `<base>_<org>` at the negotiated prices (quarterly and annual default
-         *     to the catalogue's rule), invites the organisation and publishes it (Stripe Prices are synced on publish). The
+         *     to the catalogue's rule), invites the organisation and publishes it. The
          *     seller then chooses it in Plan & billing; it stays on its current plan until it does. 409 when that private plan
          *     already exists.
          */
@@ -3562,16 +3598,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description What the plan lets an organisation do (read from `limits`). */
+        StaffPlanEntitlements: {
+            /**
+             * Format: int64
+             * @description The most live listings; null = unlimited
+             */
+            listings: number | null;
+            listingsUnlimited: boolean;
+            aiListingWriter: boolean;
+            /** @enum {string} */
+            lolaTier: "ESSENTIALS" | "GROWTH" | "PRO";
+        };
         StaffPlanVersionPrice: {
             /** @enum {string} */
             cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
             /** Format: int64 */
             amountCents: number;
-            lookupKey: string;
-            stripePriceId?: string | null;
-            /** Format: date-time */
-            syncedAt?: string | null;
-            syncError?: string | null;
         };
         StaffPlanVersion: {
             version: number;
@@ -3596,9 +3639,11 @@ export interface components {
             name: string;
             tagline?: string | null;
             features: string[];
+            /** @description The plan's settings. `listings` (a number or `unlimited`), `aiListingWriter` (`true`/`false`) and `lolaTier` (`ESSENTIALS`, `GROWTH`, `PRO`) are entitlements the platform enforces; any other key is shown as plan information. There is no limit on shops or users. */
             limits?: {
                 [key: string]: string;
             };
+            entitlements?: components["schemas"]["StaffPlanEntitlements"];
             /** @enum {string} */
             visibility: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
             /** @enum {string} */
@@ -3617,7 +3662,6 @@ export interface components {
              * @description Send back as expectedVersion to edit the metadata
              */
             rowVersion: number;
-            stripeProductId?: string | null;
             /** Format: int64 */
             subscribers: number;
             invites: string[];
@@ -3699,33 +3743,6 @@ export interface components {
                 orgId: string;
                 error?: string | null;
             }[];
-        };
-        StaffPlanSyncLine: {
-            planCode: string;
-            planName?: string | null;
-            version: number;
-            /** @enum {string} */
-            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
-            /** Format: int64 */
-            amountCents: number;
-            lookupKey?: string | null;
-            /** @enum {string} */
-            state: "IN_SYNC" | "FREE" | "ADOPTABLE" | "MISSING" | "DRIFT" | "SUPERSEDED";
-            /** @enum {string} */
-            action: "NONE" | "ADOPTED" | "CREATED" | "REPLACED" | "FAILED";
-            stripePriceId?: string | null;
-            /** Format: int64 */
-            stripeAmountCents?: number | null;
-            error?: string | null;
-        };
-        StaffPlanSyncReport: {
-            /** Format: date-time */
-            checkedAt: string;
-            /** @description false for the drift report, true after a sync */
-            applied: boolean;
-            /** Format: int64 */
-            drifted: number;
-            lines: components["schemas"]["StaffPlanSyncLine"][];
         };
         StaffTrialCampaign: {
             /** Format: uuid */
@@ -3908,7 +3925,7 @@ export interface components {
             pending: number;
             rows: components["schemas"]["StaffRewardPreviewRow"][];
         };
-        /** @description A reward or staff adjustment and the Stripe objects it produced. */
+        /** @description A reward or staff adjustment and what it changed. */
         StaffBillingGrant: {
             /** Format: uuid */
             id: string;
@@ -3917,12 +3934,17 @@ export interface components {
             source: "RULE" | "MANUAL";
             ruleId?: string | null;
             /** @enum {string} */
-            type: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END";
+            type: "FREE_DAYS" | "FREE_MONTHS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END" | "CHARGE_GATE";
             /** Format: int64 */
             creditCents?: number | null;
             freeDays?: number | null;
+            freeMonths?: number | null;
             percentOff?: number | null;
             durationInvoices?: number | null;
+            /** @description Coupons: invoices still to discount */
+            remainingInvoices?: number | null;
+            /** @enum {string|null} */
+            gateMode?: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL" | null;
             invoiceId?: string | null;
             /** @enum {string} */
             status: "PENDING" | "APPLIED" | "FAILED";
@@ -3933,10 +3955,7 @@ export interface components {
             metric?: string | null;
             /** Format: int64 */
             metricValue?: number | null;
-            stripeCustomerId?: string | null;
-            stripeSubscriptionId?: string | null;
-            stripeBalanceTransactionId?: string | null;
-            stripeCouponId?: string | null;
+            reference?: string | null;
             /** Format: date-time */
             previousTrialEnd?: string | null;
             /** Format: date-time */
@@ -3988,13 +4007,62 @@ export interface components {
             dunning?: string | null;
             failedPaymentAttempts?: number;
             planVersion: number;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Platform credit the next invoices use first
+             */
             creditBalanceCents: number;
             /** @enum {string|null} */
             trialSource?: "PLAN" | "CAMPAIGN" | "OVERRIDE" | "NONE" | null;
             trialDaysOverride?: number | null;
             planFeeCollection?: components["schemas"]["StaffPlanFeeCollectionMode"];
+            /** @description The condition on the plan charges, with the seller's progress; null when charges apply as normal */
+            chargeGate?: components["schemas"]["StaffChargeGate"] | null;
+            entitlements?: components["schemas"]["StaffPlanEntitlements"] | null;
         };
+        StaffChargeGate: {
+            /** @enum {string} */
+            mode: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL";
+            /** @enum {string|null} */
+            metric?: "GROSS_SALES" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "ACTIVE_LISTINGS" | null;
+            /** Format: int64 */
+            threshold?: number | null;
+            /** Format: int64 */
+            progress: number;
+            /** Format: date-time */
+            since?: string | null;
+            /** Format: date-time */
+            until?: string | null;
+            reasonCode?: string | null;
+            note?: string | null;
+            /** Format: date-time */
+            setAt?: string | null;
+            /** Format: date-time */
+            metAt?: string | null;
+            label: string;
+        };
+        StaffBillingInvoiceLine: {
+            /** @enum {string} */
+            kind: "PLAN" | "USAGE" | "COUPON" | "PRORATION" | "WAIVER";
+            description: string;
+            /** Format: int64 */
+            amountCents: number;
+            /** Format: int64 */
+            quantity?: number | null;
+            meter?: string | null;
+        };
+        StaffBillingInvoicePayment: {
+            /** @enum {string} */
+            source: "CREDIT" | "EARNINGS" | "CARD" | "WAIVER";
+            /** Format: int64 */
+            amountCents: number;
+            /** @enum {string} */
+            status: "APPLIED" | "PENDING" | "FAILED" | "REVERSED";
+            note?: string | null;
+            /** Format: date-time */
+            createdAt?: string | null;
+        };
+        /** @description A plan invoice AfroTransact issued. Settled in this order: platform credit (coupons are already off the invoice), the seller's sales if they chose that, then the saved card or bank account. */
         StaffBillingInvoice: {
             id: string;
             number?: string | null;
@@ -4003,26 +4071,39 @@ export interface components {
             /** Format: date-time */
             periodEnd?: string | null;
             /** Format: int64 */
+            subtotalCents: number;
+            /** Format: int64 */
+            discountCents: number;
+            /** Format: int64 */
             amountDueCents: number;
             /** Format: int64 */
             amountPaidCents: number;
             currency: string;
-            status?: string | null;
+            /** @enum {string|null} */
+            status?: "open" | "paid" | "void" | "uncollectible" | null;
             billingReason?: string | null;
-            hostedInvoiceUrl?: string | null;
-            invoicePdf?: string | null;
+            planCode?: string | null;
+            attempts?: number;
+            /** Format: date-time */
+            nextAttemptAt?: string | null;
+            lastError?: string | null;
+            /** Format: date-time */
+            paidAt?: string | null;
             /** Format: date-time */
             createdAt: string;
+            lines?: components["schemas"]["StaffBillingInvoiceLine"][];
+            payments?: components["schemas"]["StaffBillingInvoicePayment"][];
+            /** Format: int64 */
+            paidFromCreditCents: number;
             /**
              * Format: int64
-             * @description Paid from the organisation's sales (S298): withheld from its earnings and credited to the invoice
+             * @description Withheld from the organisation's sales (S298), only if it chose that
              */
             paidFromSalesCents: number;
-            /**
-             * Format: int64
-             * @description Paid (or, while open, due) by card or bank: the rest
-             */
+            /** Format: int64 */
             paidByCardCents: number;
+            /** Format: int64 */
+            waivedCents: number;
         };
         /** @description One plan invoice paid (or asked to be paid) from earnings (S298). */
         StaffEarningsCollection: {
@@ -4030,7 +4111,7 @@ export interface components {
             invoiceNumber?: string | null;
             /**
              * Format: int64
-             * @description Invoice amount when Stripe created it
+             * @description The invoice amount when it was issued
              */
             invoiceAmountCents?: number | null;
             /**
@@ -4049,7 +4130,6 @@ export interface components {
             /** @enum {string} */
             status: "REQUESTED" | "WITHHELD" | "CREDITED" | "DECLINED" | "MISSED" | "FAILED" | "RELEASED";
             paymentsReference?: string | null;
-            stripeBalanceTransactionId?: string | null;
             reason?: string | null;
             attempts: number;
             lastError?: string | null;
@@ -4139,6 +4219,24 @@ export interface components {
         };
         StaffDaysRequest: {
             days: number;
+            reasonCode: string;
+            note?: string | null;
+        };
+        StaffMonthsRequest: {
+            months: number;
+            reasonCode: string;
+            note?: string | null;
+        };
+        /** @description A condition on the plan charges. START_AFTER: no charge until the seller reaches `threshold` of `metric`; WAIVE_WHILE: free while they keep it; WAIVE_UNTIL: free until `until`. `threshold` is in cents for GROSS_SALES, else a count. Replaces any earlier condition. */
+        StaffChargeGateRequest: {
+            /** @enum {string} */
+            mode: "START_AFTER" | "WAIVE_WHILE" | "WAIVE_UNTIL";
+            /** @enum {string|null} */
+            metric?: "GROSS_SALES" | "COMPLETED_ORDERS" | "COMPLETED_BOOKINGS" | "ACTIVE_LISTINGS" | null;
+            /** Format: int64 */
+            threshold?: number | null;
+            /** Format: date-time */
+            until?: string | null;
             reasonCode: string;
             note?: string | null;
         };
@@ -5115,10 +5213,10 @@ export interface components {
             /** Format: int64 */
             feeMinor: number;
         };
-        /** @description FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee of the band covering the distance, else baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor (null = no cap) */
+        /** @description FLAT: flatPerPackageMinor × packages. PER_WEIGHT: baseMinor + perLbMinor × weightLb. DISTANCE (per trip): the fee of the band covering the distance, else baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor (null = no cap) */
         DeliveryTariff: {
             /** @enum {string} */
-            mode: "FLAT" | "DISTANCE";
+            mode: "FLAT" | "DISTANCE" | "PER_WEIGHT";
             /** Format: int64 */
             flatPerPackageMinor: number | null;
             /** Format: int64 */
@@ -5128,6 +5226,11 @@ export interface components {
              * @description 85 = $0.85 per mile
              */
             perMileMinor: number | null;
+            /**
+             * Format: int64
+             * @description 50 = $0.50 per pound
+             */
+            perLbMinor?: number | null;
             bands: components["schemas"]["DeliveryBand"][];
             /** Format: int64 */
             minMinor: number | null;
@@ -6908,54 +7011,6 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
-    getStaffStripeSync: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StaffPlanSyncReport"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    syncStaffStripe: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StaffPlanSyncReport"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
     listStaffTrialCampaigns: {
         parameters: {
             query?: never;
@@ -7385,6 +7440,114 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["StaffDaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    giveStaffBillingFreeMonths: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffMonthsRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setStaffBillingChargeGate: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffChargeGateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffBillingGrant"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    clearStaffBillingChargeGate: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffWaiveRequest"];
             };
         };
         responses: {

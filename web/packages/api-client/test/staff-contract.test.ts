@@ -41,7 +41,6 @@ import {
   type StaffPlanMigrationPreview,
   type StaffPlanMigrationResult,
   type StaffPlanPrices,
-  type StaffPlanSyncReport,
   type StaffRewardPreview,
   type StaffRewardRule,
   type StaffRewardRuleInput,
@@ -94,7 +93,6 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<StaffPlan>().toExtend<S['StaffPlan']>();
     expectTypeOf<StaffPlanPrices>().toExtend<S['StaffPlanPrices']>();
     expectTypeOf<StaffCreatePlanInput>().toExtend<S['StaffCreatePlanRequest']>();
-    expectTypeOf<StaffPlanSyncReport>().toExtend<S['StaffPlanSyncReport']>();
     expectTypeOf<StaffPlanMigrationPreview>().toExtend<S['StaffPlanMigrationPreview']>();
     expectTypeOf<StaffPlanMigrationResult>().toExtend<S['StaffPlanMigrationResult']>();
     expectTypeOf<StaffTrialCampaign>().toExtend<S['StaffTrialCampaign']>();
@@ -418,7 +416,7 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(published).toMatchObject({ currentVersion: 2, monthlyCents: 4500 });
     expect(published.versions.find((v) => v.version === 1)?.status).toBe('SUPERSEDED');
     expect((await finance.migrationPreview('seller_growth')).rows[0]).toMatchObject({ fromCents: 3900, toCents: 4500 });
-    expect((await finance.stripeSync()).lines.find((l) => l.planCode === 'seller_essentials')?.state).toBe('FREE');
+    expect(plans.find((x) => x.code === 'seller_growth')?.entitlements).toMatchObject({ listings: 1000, aiListingWriter: true, lolaTier: 'GROWTH' });
 
     await expect(finance.createCampaign({ name: 'No code', trialDays: 30, eligiblePlans: [] })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.signupFrom);
     expect(await finance.createCampaign({ name: 'Pro 45', promoCode: 'pro45', trialDays: 45, eligiblePlans: ['seller_pro'] })).toMatchObject({ promoCode: 'PRO45', status: 'ACTIVE' });
@@ -459,13 +457,13 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     const overridden = await finance.overridePlanFeeCollection(org, 'CARD', { reasonCode: 'SELLER_REQUEST', note: 'Books plan fees on the card' });
     expect(overridden).toMatchObject({ mode: 'CARD', source: 'STAFF' });
     expect(overridden.history[0]).toMatchObject({ previous: 'EARNINGS_FIRST', reasonCode: 'SELLER_REQUEST', note: 'Books plan fees on the card' });
-    expect(await finance.billingSettings()).toMatchObject({ earningsCollectionEnabled: true, planFeeCollectionDefault: 'EARNINGS_FIRST' });
-    expect(await finance.updateBillingSettings('CARD')).toMatchObject({ planFeeCollectionDefault: 'CARD' });
+    expect(await finance.billingSettings()).toMatchObject({ earningsCollectionEnabled: true, planFeeCollectionDefault: 'CARD' });
+    expect(await finance.updateBillingSettings('EARNINGS_FIRST')).toMatchObject({ planFeeCollectionDefault: 'EARNINGS_FIRST' });
 
     const auditor = client('platform.auditor').plans;
     await expect(auditor.panel(org)).resolves.toMatchObject({ orgId: org });
-    await expect(auditor.billingSettings()).resolves.toMatchObject({ planFeeCollectionDefault: 'CARD' });
-    await expect(auditor.updateBillingSettings('EARNINGS_FIRST')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    await expect(auditor.billingSettings()).resolves.toMatchObject({ planFeeCollectionDefault: 'EARNINGS_FIRST' });
+    await expect(auditor.updateBillingSettings('CARD')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
     await expect(auditor.overridePlanFeeCollection(org, 'EARNINGS_FIRST', { reasonCode: 'GOODWILL' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
     await expect(auditor.freeDays(org, 5, { reasonCode: 'GOODWILL' }, 'k-4')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
     await expect(auditor.publish('seller_pro')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);

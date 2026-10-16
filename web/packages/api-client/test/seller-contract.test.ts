@@ -456,7 +456,7 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const saved = await api.saveOnboardingPlan({ planCode: 'seller_growth', cadence: 'MONTHLY', promoCode: 'grow60' });
     expect(saved.form.plan?.firstCharge?.sentence).toMatch(/^Free for 60 days/);
     // S298: the Plan step offers paying the plan from sales; the choice is kept with the plan.
-    expect(saved.form.plan).toMatchObject({ planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'EARNINGS_FIRST' });
+    expect(saved.form.plan).toMatchObject({ planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'CARD' });
     const card = await api.saveOnboardingPlan({ planCode: 'seller_growth', cadence: 'MONTHLY', planFeeCollection: 'CARD' });
     expect(card.form.plan?.planFeeCollection).toBe('CARD');
   });

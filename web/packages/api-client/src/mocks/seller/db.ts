@@ -16,6 +16,7 @@ import {
   type OrgStatus,
   type Payout,
   type Plan,
+  type PlanEntitlements,
   type PlanFeeCollectionMode,
   type PlanFeeDeduction,
   type ProductTypeSchema,
@@ -273,6 +274,16 @@ const PLAN_CATALOG: Record<OrgKind, { code: string; name: string; tagline: strin
 
 const usd = (minor: number) => `$${(minor / 100).toLocaleString('en-US', { minimumFractionDigits: minor % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
+const ENTITLEMENTS: Record<string, PlanEntitlements> = {
+  seller_essentials: { listings: 50, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS' },
+  seller_growth: { listings: 1000, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH' },
+  seller_pro: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO' },
+  provider_solo: { listings: 20, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS' },
+  provider_studio: { listings: 100, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH' },
+  provider_business: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO' }
+};
+export const entitlementsOf = (code: string): PlanEntitlements | null => ENTITLEMENTS[code] ?? null;
+
 /** Plans with monthly, quarterly (5% off) and annual (2 months free) prices, as the seller service computes them. */
 export function plansFor(kind: OrgKind, currentCode: string): Plan[] {
   return PLAN_CATALOG[kind].map((p) => {
@@ -292,7 +303,7 @@ export function plansFor(kind: OrgKind, currentCode: string): Plan[] {
         savingLabel: saving > 0 ? `Save ${usd(saving)} vs monthly` : ''
       };
     });
-    return { code: p.code, name: p.name, tagline: p.tagline, monthlyMinor: m, trialDays: p.trial, features: p.features, prices, current: p.code === currentCode };
+    return { code: p.code, name: p.name, tagline: p.tagline, monthlyMinor: m, trialDays: p.trial, features: p.features, prices, current: p.code === currentCode, entitlements: entitlementsOf(p.code) };
   });
 }
 
@@ -425,11 +436,13 @@ function freshDb(now: Date): MockSellerDb {
       SELLER: { planCode: 'seller_growth', planName: 'Seller Growth', cadence: 'QUARTERLY', status: 'ACTIVE', priceLabel: '$37.05/mo', billedLabel: 'Billed $111.15 every 3 months',
         trialEndsAt: null, currentPeriodEnd: iso(new Date(now.getTime() + 92 * DAY)), nextChargeAt: iso(new Date(now.getTime() + 92 * DAY)), nextChargeMinor: 11115,
         nextChargeLabel: `$111.15 on ${new Date(now.getTime() + 92 * DAY).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`, cancelAtPeriodEnd: false, pendingChange: null, dunning: null,
-        planVersion: 1, creditBalanceMinor: 2500, trialSource: 'PLAN' },
+        planVersion: 1, creditBalanceMinor: 2500, trialSource: 'PLAN', chargeGate: null, entitlements: entitlementsOf('seller_growth') },
       PROVIDER: { planCode: 'provider_studio', planName: 'Provider Studio', cadence: 'MONTHLY', status: 'TRIALING', priceLabel: '$49/mo', billedLabel: 'Billed $49 every month',
         trialEndsAt: iso(new Date(now.getTime() + 10 * DAY)), currentPeriodEnd: iso(new Date(now.getTime() + 10 * DAY)), nextChargeAt: iso(new Date(now.getTime() + 10 * DAY)), nextChargeMinor: 4900,
         nextChargeLabel: 'Free for 30 days. First charge of $49 when the trial ends', cancelAtPeriodEnd: false, pendingChange: null, dunning: null,
-        planVersion: 1, creditBalanceMinor: 0, trialSource: 'CAMPAIGN' }
+        planVersion: 1, creditBalanceMinor: 0, trialSource: 'CAMPAIGN',
+        chargeGate: { mode: 'START_AFTER', metric: 'COMPLETED_BOOKINGS', threshold: 10, progress: 4, until: null, metAt: null, label: 'Charging starts after 10 completed bookings — you’re at 4' },
+        entitlements: entitlementsOf('provider_studio') }
     },
     rewards: {
       SELLER: {
@@ -477,12 +490,21 @@ function freshDb(now: Date): MockSellerDb {
       ]
     },
     // The latest invoice was paid mostly from sales (S298): $90.00 from sales, the card the remaining $21.15.
-    invoices: [0, 1, 2].map((i) => ({
-      id: `in_${3 - i}`, number: `AT-${String(1003 - i)}`, periodStart: iso(new Date(now.getTime() - (i + 1) * 92 * DAY)), periodEnd: iso(new Date(now.getTime() - i * 92 * DAY)),
-      amountDueMinor: i === 0 ? 2115 : i === 2 ? 0 : 11115, amountPaidMinor: i === 0 ? 2115 : i === 2 ? 0 : 11115, currency: 'USD', status: 'PAID',
-      pdfUrl: `https://invoices.afrotransact.dev/in_${3 - i}.pdf`, hostedUrl: `https://invoices.afrotransact.dev/in_${3 - i}`, createdAt: iso(new Date(now.getTime() - i * 92 * DAY)),
-      paidFromSalesMinor: i === 0 ? 9000 : 0, paidByCardMinor: i === 0 ? 2115 : i === 2 ? 0 : 11115
-    })),
+    invoices: [0, 1, 2].map((i) => {
+      const due = i === 0 ? 11115 : i === 2 ? 0 : 11115;
+      const sales = i === 0 ? 9000 : 0;
+      const credit = i === 0 ? 0 : 0;
+      return {
+        id: `inv_${3 - i}`, number: `AT-${String(1003 - i)}`, periodStart: iso(new Date(now.getTime() - (i + 1) * 92 * DAY)), periodEnd: iso(new Date(now.getTime() - i * 92 * DAY)),
+        subtotalMinor: 11115, discountMinor: i === 2 ? 11115 : 0, amountDueMinor: i === 2 ? 0 : due, amountPaidMinor: i === 2 ? 0 : due, currency: 'USD', status: 'PAID' as const,
+        createdAt: iso(new Date(now.getTime() - i * 92 * DAY)), paidAt: iso(new Date(now.getTime() - i * 92 * DAY)), nextAttemptAt: null, lastError: null,
+        lines: [
+          { kind: 'PLAN' as const, description: 'Seller Growth, billed every 3 months', amountMinor: 11115 },
+          ...(i === 2 ? [{ kind: 'WAIVER' as const, description: 'Free quarter (welcome offer)', amountMinor: -11115 }] : [])
+        ],
+        paidFromCreditMinor: credit, paidFromSalesMinor: sales, paidByCardMinor: i === 2 ? 0 : due - sales - credit, waivedMinor: 0, canRetry: false
+      };
+    }),
     planFeeCollection: { SELLER: 'EARNINGS_FIRST', PROVIDER: 'CARD' },
     planFeeCollectionAvailable: true,
     planFeeDeductions: [

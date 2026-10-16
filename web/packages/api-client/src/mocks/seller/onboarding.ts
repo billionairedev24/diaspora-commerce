@@ -66,7 +66,7 @@ export function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
     owners: [],
     payouts: { ...NO_BANK },
     plan: { planCode: null, planName: null, cadence: null, paymentMethodKind: null, cardBrand: null, cardLast4: null, cardExpMonth: null, cardExpYear: null, firstCharge: null,
-      planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'EARNINGS_FIRST' },
+      planFeeCollection: null, planFeeCollectionAvailable: true, planFeeCollectionDefault: 'CARD' },
     compliance: { categories: [], foodPermit: null, beautyLabellingConfirmed: null, services: [], insuranceDocumentAssetId: null, agreementsAccepted: null, w9Certified: null, w9SignerName: null },
     documents: [],
     prefilled: ['business.contactEmail', 'business.phone', 'details.address', 'details.legalFirstName', 'details.legalLastName'],

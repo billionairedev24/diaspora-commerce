@@ -1,6 +1,7 @@
 /* Plans & billing (contracts/openapi/gateway-bff-staff.yaml, tag Plans & billing; S292–S297): AfroTransact's plan
-   catalogue (versions, publish with Stripe sync, migrations, invites), trial campaigns, reward rules with a preview, the
-   grants log and the per-seller billing panel with audited adjustments. Stripe Billing only executes the charges.
+   catalogue (versions, publish, migrations, invites, entitlements), trial campaigns, reward rules with a preview, the
+   grants log and the per-seller billing panel with audited adjustments. AfroTransact issues and collects its own
+   invoices; Stripe only moves card money.
    Amounts are cents (USD), as the seller service sends them. */
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -26,18 +27,23 @@ export type RewardComparison = z.infer<typeof RewardComparisonSchema>;
 /** Where "the first N days" start: approval or the subscription's start (its trial's first day). */
 export const RewardWindowAnchorSchema = z.enum(['APPROVAL', 'SUBSCRIPTION_START']);
 export type RewardWindowAnchor = z.infer<typeof RewardWindowAnchorSchema>;
-export const GrantTypeSchema = z.enum(['FREE_DAYS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END']);
+export const GrantTypeSchema = z.enum(['FREE_DAYS', 'FREE_MONTHS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END', 'CHARGE_GATE']);
 export type GrantType = z.infer<typeof GrantTypeSchema>;
 
 export const StaffPlanVersionPriceSchema = z.object({
   cadence: PlanCadenceSchema,
-  amountCents: z.number().int(),
-  lookupKey: z.string(),
-  stripePriceId: nullableString.default(null),
-  syncedAt: nullableString.default(null),
-  syncError: nullableString.default(null)
+  amountCents: z.number().int()
 });
 export type StaffPlanVersionPrice = z.infer<typeof StaffPlanVersionPriceSchema>;
+
+/** What a plan lets an organisation do (read from `limits`); there is no limit on shops or users. */
+export const StaffPlanEntitlementsSchema = z.object({
+  listings: nullableInt,
+  listingsUnlimited: z.boolean(),
+  aiListingWriter: z.boolean(),
+  lolaTier: z.enum(['ESSENTIALS', 'GROWTH', 'PRO'])
+});
+export type StaffPlanEntitlements = z.infer<typeof StaffPlanEntitlementsSchema>;
 
 export const StaffPlanVersionSchema = z.object({
   version: z.number().int(),
@@ -59,6 +65,7 @@ export const StaffPlanSchema = z.object({
   tagline: nullableString.default(null),
   features: z.array(z.string()),
   limits: z.record(z.string(), z.string()).default({}),
+  entitlements: StaffPlanEntitlementsSchema.optional(),
   visibility: PlanVisibilitySchema,
   status: PlanStatusSchema,
   sortOrder: z.number().int().default(0),
@@ -68,7 +75,6 @@ export const StaffPlanSchema = z.object({
   annualCents: z.number().int(),
   trialDays: z.number().int(),
   rowVersion: z.number().int(),
-  stripeProductId: nullableString.default(null),
   subscribers: z.number().int(),
   invites: z.array(z.string()),
   versions: z.array(StaffPlanVersionSchema)
@@ -97,28 +103,6 @@ export interface StaffCreatePlanInput extends StaffPlanInput {
   kind: 'SELLER' | 'PROVIDER';
   prices: StaffPlanPrices;
 }
-
-export const StaffPlanSyncLineSchema = z.object({
-  planCode: z.string(),
-  planName: nullableString.default(null),
-  version: z.number().int(),
-  cadence: PlanCadenceSchema,
-  amountCents: z.number().int(),
-  lookupKey: nullableString.default(null),
-  state: z.enum(['IN_SYNC', 'FREE', 'ADOPTABLE', 'MISSING', 'DRIFT', 'SUPERSEDED']),
-  action: z.enum(['NONE', 'ADOPTED', 'CREATED', 'REPLACED', 'FAILED']),
-  stripePriceId: nullableString.default(null),
-  stripeAmountCents: nullableInt.default(null),
-  error: nullableString.default(null)
-});
-export type StaffPlanSyncLine = z.infer<typeof StaffPlanSyncLineSchema>;
-export const StaffPlanSyncReportSchema = z.object({
-  checkedAt: z.string(),
-  applied: z.boolean(),
-  drifted: z.number().int(),
-  lines: z.array(StaffPlanSyncLineSchema)
-});
-export type StaffPlanSyncReport = z.infer<typeof StaffPlanSyncReportSchema>;
 
 export const StaffPlanMigrationRowSchema = z.object({
   orgId: z.string(),
@@ -266,8 +250,11 @@ export const StaffBillingGrantSchema = z.object({
   type: GrantTypeSchema,
   creditCents: nullableInt.default(null),
   freeDays: nullableInt.default(null),
+  freeMonths: nullableInt.default(null),
   percentOff: z.number().nullable().default(null),
   durationInvoices: nullableInt.default(null),
+  remainingInvoices: nullableInt.default(null),
+  gateMode: z.enum(['START_AFTER', 'WAIVE_WHILE', 'WAIVE_UNTIL']).nullable().default(null),
   invoiceId: nullableString.default(null),
   status: z.enum(['PENDING', 'APPLIED', 'FAILED']),
   reasonCode: nullableString.default(null),
@@ -276,10 +263,7 @@ export const StaffBillingGrantSchema = z.object({
   actorId: z.string(),
   metric: nullableString.default(null),
   metricValue: nullableInt.default(null),
-  stripeCustomerId: nullableString.default(null),
-  stripeSubscriptionId: nullableString.default(null),
-  stripeBalanceTransactionId: nullableString.default(null),
-  stripeCouponId: nullableString.default(null),
+  reference: nullableString.default(null),
   previousTrialEnd: nullableString.default(null),
   newTrialEnd: nullableString.default(null),
   attempts: z.number().int(),
@@ -313,6 +297,27 @@ export const StaffBillingOrgSearchSchema = z.object({
 });
 export type StaffBillingOrgSearch = z.infer<typeof StaffBillingOrgSearchSchema>;
 
+export const StaffChargeGateSchema = z.object({
+  mode: z.enum(['START_AFTER', 'WAIVE_WHILE', 'WAIVE_UNTIL']),
+  metric: z.enum(['GROSS_SALES', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'ACTIVE_LISTINGS']).nullable().default(null),
+  threshold: nullableInt.default(null),
+  progress: z.number().int(),
+  since: nullableString.default(null),
+  until: nullableString.default(null),
+  reasonCode: nullableString.default(null),
+  note: nullableString.default(null),
+  setAt: nullableString.default(null),
+  metAt: nullableString.default(null),
+  label: z.string()
+});
+export type StaffChargeGate = z.infer<typeof StaffChargeGateSchema>;
+export interface StaffChargeGateInput {
+  mode: 'START_AFTER' | 'WAIVE_WHILE' | 'WAIVE_UNTIL';
+  metric?: 'GROSS_SALES' | 'COMPLETED_ORDERS' | 'COMPLETED_BOOKINGS' | 'ACTIVE_LISTINGS' | null;
+  threshold?: number | null;
+  until?: string | null;
+}
+
 export const StaffBillingSubscriptionSchema = z.object({
   orgId: z.string(),
   planCode: z.string(),
@@ -332,26 +337,51 @@ export const StaffBillingSubscriptionSchema = z.object({
   trialSource: z.enum(['PLAN', 'CAMPAIGN', 'OVERRIDE', 'NONE']).nullable().default(null),
   trialDaysOverride: nullableInt.default(null),
   /** How the plan is paid (S298). */
-  planFeeCollection: z.enum(['EARNINGS_FIRST', 'CARD']).default('CARD')
+  planFeeCollection: z.enum(['EARNINGS_FIRST', 'CARD']).default('CARD'),
+  chargeGate: StaffChargeGateSchema.nullable().default(null),
+  entitlements: StaffPlanEntitlementsSchema.nullable().default(null)
 });
 export type StaffBillingSubscription = z.infer<typeof StaffBillingSubscriptionSchema>;
 
+export const StaffBillingInvoiceLineSchema = z.object({
+  kind: z.enum(['PLAN', 'USAGE', 'COUPON', 'PRORATION', 'WAIVER']),
+  description: z.string(),
+  amountCents: z.number().int(),
+  quantity: nullableInt.default(null),
+  meter: nullableString.default(null)
+});
+export const StaffBillingInvoicePaymentSchema = z.object({
+  source: z.enum(['CREDIT', 'EARNINGS', 'CARD', 'WAIVER']),
+  amountCents: z.number().int(),
+  status: z.enum(['APPLIED', 'PENDING', 'FAILED', 'REVERSED']),
+  note: nullableString.default(null),
+  createdAt: nullableString.default(null)
+});
+/** An invoice AfroTransact issued: credit, then sales (only if the seller chose that), then the saved card or bank. */
 export const StaffBillingInvoiceSchema = z.object({
   id: z.string(),
   number: nullableString.default(null),
   periodStart: nullableString.default(null),
   periodEnd: nullableString.default(null),
+  subtotalCents: z.number().int(),
+  discountCents: z.number().int(),
   amountDueCents: z.number().int(),
   amountPaidCents: z.number().int(),
   currency: z.string(),
-  status: nullableString.default(null),
+  status: z.enum(['open', 'paid', 'void', 'uncollectible']).nullable().default(null),
   billingReason: nullableString.default(null),
-  hostedInvoiceUrl: nullableString.default(null),
-  invoicePdf: nullableString.default(null),
+  planCode: nullableString.default(null),
+  attempts: z.number().int().default(0),
+  nextAttemptAt: nullableString.default(null),
+  lastError: nullableString.default(null),
+  paidAt: nullableString.default(null),
   createdAt: z.string(),
-  /** S298: paid from the organisation's sales, and by card. */
-  paidFromSalesCents: z.number().int().default(0),
-  paidByCardCents: z.number().int().default(0)
+  lines: z.array(StaffBillingInvoiceLineSchema).default([]),
+  payments: z.array(StaffBillingInvoicePaymentSchema).default([]),
+  paidFromCreditCents: z.number().int(),
+  paidFromSalesCents: z.number().int(),
+  paidByCardCents: z.number().int(),
+  waivedCents: z.number().int()
 });
 export type StaffBillingInvoice = z.infer<typeof StaffBillingInvoiceSchema>;
 
@@ -367,7 +397,6 @@ export const StaffEarningsCollectionSchema = z.object({
   paidFromSalesCents: z.number().int().default(0),
   status: z.enum(['REQUESTED', 'WITHHELD', 'CREDITED', 'DECLINED', 'MISSED', 'FAILED', 'RELEASED']),
   paymentsReference: nullableString.default(null),
-  stripeBalanceTransactionId: nullableString.default(null),
   reason: nullableString.default(null),
   attempts: z.number().int().default(0),
   lastError: nullableString.default(null),
@@ -457,8 +486,6 @@ export function createStaffPlansApi(request: Requester) {
       request(`${plan(code)}/migration`, StaffPlanMigrationPreviewSchema, { signal }),
     migrate: (code: string, orgIds?: string[]): Promise<StaffPlanMigrationResult> =>
       request(`${plan(code)}/migration`, StaffPlanMigrationResultSchema, { method: 'POST', body: { orgIds: orgIds ?? [] } }),
-    stripeSync: (signal?: AbortSignal): Promise<StaffPlanSyncReport> => request(`${B}/stripe-sync`, StaffPlanSyncReportSchema, { signal }),
-    syncStripe: (): Promise<StaffPlanSyncReport> => request(`${B}/stripe-sync`, StaffPlanSyncReportSchema, { method: 'POST' }),
 
     campaigns: (signal?: AbortSignal): Promise<StaffTrialCampaign[]> => request(`${B}/trial-campaigns`, z.array(StaffTrialCampaignSchema), { signal }),
     createCampaign: (body: StaffTrialCampaignInput): Promise<StaffTrialCampaign> =>
@@ -491,6 +518,12 @@ export function createStaffPlansApi(request: Requester) {
       request(`${org(orgId)}/free-days`, StaffBillingGrantSchema, { method: 'POST', body: { days, ...adj }, headers: idem(key) }),
     overrideTrial: (orgId: string, days: number, adj: StaffAdjustment, key: string): Promise<StaffBillingGrant> =>
       request(`${org(orgId)}/trial`, StaffBillingGrantSchema, { method: 'POST', body: { days, ...adj }, headers: idem(key) }),
+    freeMonths: (orgId: string, months: number, adj: StaffAdjustment, key: string): Promise<StaffBillingGrant> =>
+      request(`${org(orgId)}/free-months`, StaffBillingGrantSchema, { method: 'POST', body: { months, ...adj }, headers: idem(key) }),
+    setChargeGate: (orgId: string, gate: StaffChargeGateInput, adj: StaffAdjustment, key: string): Promise<StaffBillingGrant> =>
+      request(`${org(orgId)}/charge-gate`, StaffBillingGrantSchema, { method: 'PUT', body: { ...gate, ...adj }, headers: idem(key) }),
+    clearChargeGate: (orgId: string, adj: StaffAdjustment, key: string): Promise<StaffBillingGrant> =>
+      request(`${org(orgId)}/charge-gate/clear`, StaffBillingGrantSchema, { method: 'POST', body: adj, headers: idem(key) }),
     waiveInvoice: (orgId: string, invoiceId: string, adj: StaffAdjustment, key: string): Promise<StaffBillingGrant> =>
       request(`${org(orgId)}/invoices/${enc(invoiceId)}/waive`, StaffBillingGrantSchema, { method: 'POST', body: adj, headers: idem(key) }),
     /** S298: per-seller override of how the plan is paid, audited with a reason (billing:adjust). */
@@ -509,7 +542,6 @@ export const staffPlanKeys = {
   plans: () => [...staffPlanKeys.all, 'catalogue'] as const,
   plan: (code: string) => [...staffPlanKeys.plans(), code] as const,
   migration: (code: string) => [...staffPlanKeys.plan(code), 'migration'] as const,
-  sync: () => [...staffPlanKeys.all, 'stripe-sync'] as const,
   campaigns: () => [...staffPlanKeys.all, 'trial-campaigns'] as const,
   rules: () => [...staffPlanKeys.all, 'reward-rules'] as const,
   rulePreview: (input: StaffRewardRuleInput | null) => [...staffPlanKeys.rules(), 'preview', input] as const,
@@ -525,7 +557,6 @@ export const staffPlanQueries = {
   plans: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.plans(), queryFn: ({ signal }) => api.plans(signal), staleTime: 15_000 }),
   migration: (api: StaffPlansApi, code: string) =>
     queryOptions({ queryKey: staffPlanKeys.migration(code), queryFn: ({ signal }) => api.migrationPreview(code, signal) }),
-  sync: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.sync(), queryFn: ({ signal }) => api.stripeSync(signal), staleTime: 30_000 }),
   campaigns: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.campaigns(), queryFn: ({ signal }) => api.campaigns(signal), staleTime: 15_000 }),
   rules: (api: StaffPlansApi) => queryOptions({ queryKey: staffPlanKeys.rules(), queryFn: ({ signal }) => api.rules(signal), staleTime: 15_000 }),
   /** Who qualifies now for an unsaved rule (nothing is granted). */

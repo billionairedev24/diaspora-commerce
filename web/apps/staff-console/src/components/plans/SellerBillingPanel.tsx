@@ -2,6 +2,8 @@
 
 import {
   type StaffBillingGrant,
+  type StaffChargeGate,
+  type StaffChargeGateInput,
   type StaffBillingInvoice,
   type StaffEarningsCollection,
   type StaffPlanFeeCollection,
@@ -26,9 +28,13 @@ import { useT } from '@/i18n/t';
 import { dateTime, humanize, idempotencyKey, money, shortDate } from '@/lib/format';
 
 import { grantColumns } from './GrantsPanel';
+import { allowsOf } from './CataloguePanel';
 import { centsOf, errorsOf, intOf, plansApi, ReasonFields, STATUS_TONE, type T, usePlanRights } from './kit';
 
-type Action = { kind: 'credit' } | { kind: 'freeDays' } | { kind: 'trial' } | { kind: 'waive'; invoice: StaffBillingInvoice };
+type Action = { kind: 'credit' } | { kind: 'freeDays' } | { kind: 'freeMonths' } | { kind: 'trial' } | { kind: 'chargeGate' } | { kind: 'clearGate' } | { kind: 'waive'; invoice: StaffBillingInvoice };
+
+const GATE_MODES = ['START_AFTER', 'WAIVE_WHILE', 'WAIVE_UNTIL'] as const;
+const GATE_METRICS = ['GROSS_SALES', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'ACTIVE_LISTINGS'] as const;
 
 /** One adjustment, audited with a reason code; the Idempotency-Key is kept for retries of the same click. */
 function AdjustDialog({ orgId, action, onClose, t }: { orgId: string; action: Action | null; onClose: () => void; t: T }) {
@@ -38,6 +44,8 @@ function AdjustDialog({ orgId, action, onClose, t }: { orgId: string; action: Ac
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
+  const [gate, setGate] = useState<{ mode: StaffChargeGateInput['mode']; metric: NonNullable<StaffChargeGateInput['metric']>; threshold: string; until: string }>(
+    { mode: 'START_AFTER', metric: 'GROSS_SALES', threshold: '', until: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const apply = useMutation({
     mutationFn: (): Promise<StaffBillingGrant> => {
@@ -45,9 +53,20 @@ function AdjustDialog({ orgId, action, onClose, t }: { orgId: string; action: Ac
       const api = plansApi();
       if (!action) throw new Error('no action');
       if (action.kind === 'waive') return api.waiveInvoice(orgId, action.invoice.id, adj, key);
+      if (action.kind === 'clearGate') return api.clearChargeGate(orgId, adj, key);
+      if (action.kind === 'chargeGate') {
+        if (gate.mode === 'WAIVE_UNTIL') {
+          if (!gate.until) throw new Error(t('st.plans.gate.badUntil'));
+          return api.setChargeGate(orgId, { mode: gate.mode, until: new Date(`${gate.until}T23:59:59Z`).toISOString() }, adj, key);
+        }
+        const n = gate.metric === 'GROSS_SALES' ? centsOf(gate.threshold) : intOf(gate.threshold);
+        if (n === null || Number.isNaN(n) || n < 1) throw new Error(t('st.plans.gate.badThreshold'));
+        return api.setChargeGate(orgId, { mode: gate.mode, metric: gate.metric, threshold: n }, adj, key);
+      }
       const n = action.kind === 'credit' ? centsOf(amount) : intOf(amount);
-      if (n === null || Number.isNaN(n)) throw new Error(action.kind === 'credit' ? t('st.plans.badAmount') : t('st.plans.badDays'));
+      if (n === null || Number.isNaN(n)) throw new Error(action.kind === 'credit' ? t('st.plans.badAmount') : action.kind === 'freeMonths' ? t('st.plans.badMonths') : t('st.plans.badDays'));
       if (action.kind === 'credit') return api.credit(orgId, n, adj, key);
+      if (action.kind === 'freeMonths') return api.freeMonths(orgId, n, adj, key);
       return action.kind === 'freeDays' ? api.freeDays(orgId, n, adj, key) : api.overrideTrial(orgId, n, adj, key);
     },
     onSuccess: (g) => {
@@ -58,7 +77,8 @@ function AdjustDialog({ orgId, action, onClose, t }: { orgId: string; action: Ac
     },
     onError: (e) => setErrors(e instanceof Error && !('status' in e) ? { _: e.message } : errorsOf(e))
   });
-  const title = !action ? '' : action.kind === 'credit' ? t('st.plans.addCredit') : action.kind === 'freeDays' ? t('st.plans.giveFreeDays') : action.kind === 'trial' ? t('st.plans.changeTrial')
+  const title = !action ? '' : action.kind === 'credit' ? t('st.plans.addCredit') : action.kind === 'freeDays' ? t('st.plans.giveFreeDays') : action.kind === 'freeMonths' ? t('st.plans.giveFreeMonths')
+    : action.kind === 'trial' ? t('st.plans.changeTrial') : action.kind === 'chargeGate' ? t('st.plans.gate.set') : action.kind === 'clearGate' ? t('st.plans.gate.clear')
     : t('st.plans.waiveTitle', { number: action.invoice.number ?? action.invoice.id });
   const help = !action ? '' : t(`st.plans.adjustHelp.${action.kind}`);
   const submit = (e: FormEvent) => {
@@ -69,9 +89,25 @@ function AdjustDialog({ orgId, action, onClose, t }: { orgId: string; action: Ac
   return (
     <Dialog open={!!action} onOpenChange={(o) => !o && onClose()} title={title} description={help} width={480} closeLabel={t('st.plans.close')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-2">
-        {action && action.kind !== 'waive' ? (
-          <TextField id="adj-amount" label={action.kind === 'credit' ? t('st.plans.creditDollars') : action.kind === 'trial' ? t('st.plans.trialLength') : t('st.plans.freeDays')} inputMode="decimal"
-            value={amount} error={errors.amountCents ?? errors.days} onChange={(e) => setAmount(e.currentTarget.value)} />
+        {action?.kind === 'chargeGate' ? (
+          <>
+            <Select id="gate-mode" label={t('st.plans.gate.mode')} value={gate.mode} onChange={(e) => { const v = e.currentTarget.value as typeof gate.mode; setGate((g) => ({ ...g, mode: v })); }}
+              options={GATE_MODES.map((m) => ({ value: m, label: t(`st.plans.gate.mode.${m}`) }))} />
+            {gate.mode === 'WAIVE_UNTIL' ? (
+              <TextField id="gate-until" type="date" label={t('st.plans.gate.until')} value={gate.until} error={errors.until} onChange={(e) => { const v = e.currentTarget.value; setGate((g) => ({ ...g, until: v })); }} />
+            ) : (
+              <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
+                <Select id="gate-metric" label={t('st.plans.gate.metric')} value={gate.metric} error={errors.metric} onChange={(e) => { const v = e.currentTarget.value as typeof gate.metric; setGate((g) => ({ ...g, metric: v })); }}
+                  options={GATE_METRICS.map((m) => ({ value: m, label: t(`st.plans.gate.metric.${m}`) }))} />
+                <TextField id="gate-threshold" label={gate.metric === 'GROSS_SALES' ? t('st.plans.gate.thresholdDollars') : t('st.plans.gate.thresholdCount')} inputMode="decimal" value={gate.threshold}
+                  error={errors.threshold} onChange={(e) => { const v = e.currentTarget.value; setGate((g) => ({ ...g, threshold: v })); }} />
+              </div>
+            )}
+          </>
+        ) : null}
+        {action && action.kind !== 'waive' && action.kind !== 'chargeGate' && action.kind !== 'clearGate' ? (
+          <TextField id="adj-amount" label={action.kind === 'credit' ? t('st.plans.creditDollars') : action.kind === 'trial' ? t('st.plans.trialLength') : action.kind === 'freeMonths' ? t('st.plans.freeMonths') : t('st.plans.freeDays')} inputMode="decimal"
+            value={amount} error={errors.amountCents ?? errors.days ?? errors.months} onChange={(e) => setAmount(e.currentTarget.value)} />
         ) : null}
         <ReasonFields idPrefix="adj" reason={reason} note={note} onReason={setReason} onNote={setNote} errors={errors} />
         {errors._ ? <p role="alert" className="m-0 text-sm text-danger">{errors._}</p> : null}
@@ -153,6 +189,22 @@ function PlanFeeSummary({ v, adjust, onChange, t }: { v: StaffPlanFeeCollection;
   );
 }
 
+/** The condition on this seller's plan charges, why it was set, and how far they are. */
+function GateSummary({ g, adjust, onClear, t }: { g: StaffChargeGate; adjust: boolean; onClear: () => void; t: T }) {
+  return (
+    <div className="flex flex-col gap-1 rounded-md bg-info-bg p-3 text-sm" data-testid="panel-charge-gate">
+      <div className="flex flex-wrap items-center gap-2">
+        <strong>{g.label}</strong>
+        {adjust ? <Button size="sm" variant="link" onClick={onClear}>{t('st.plans.gate.clear')}</Button> : null}
+      </div>
+      <span className="text-xs text-muted">
+        {t('st.plans.gate.setBy', { date: g.setAt ? shortDate(g.setAt) : '—' })}{g.reasonCode ? ` · ${humanize(g.reasonCode)}` : ''}{g.note ? ` — ${g.note}` : ''}
+        {g.metAt ? ` · ${t('st.plans.gate.met', { date: shortDate(g.metAt) })}` : ''}
+      </span>
+    </div>
+  );
+}
+
 function OrgFinder({ onPick, t }: { onPick: (orgId: string) => void; t: T }) {
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
@@ -209,15 +261,18 @@ export function SellerBillingPanel() {
     { id: 'number', accessorFn: (i) => i.number ?? i.id, header: t('st.plans.col.invoice'), size: 150, meta: { kind: 'mono' } },
     { id: 'createdAt', accessorFn: (i) => i.createdAt, header: t('st.plans.col.date'), size: 130, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.createdAt) },
     { id: 'amountDueCents', accessorFn: (i) => i.amountDueCents, header: t('st.plans.col.amount'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountDueCents) },
+    { id: 'paidFromCreditCents', accessorFn: (i) => i.paidFromCreditCents, header: t('st.plans.col.credit'), size: 110, meta: { kind: 'money', align: 'end' },
+      cell: ({ row }) => (row.original.paidFromCreditCents ? money(row.original.paidFromCreditCents) : '—') },
     { id: 'paidFromSalesCents', accessorFn: (i) => i.paidFromSalesCents, header: t('st.plans.col.fromSales'), size: 120, meta: { kind: 'money', align: 'end' },
       cell: ({ row }) => (row.original.paidFromSalesCents ? money(row.original.paidFromSalesCents) : '—') },
     { id: 'paidByCardCents', accessorFn: (i) => i.paidByCardCents, header: t('st.plans.col.card'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.paidByCardCents) },
     { id: 'status', accessorFn: (i) => i.status ?? '', header: t('st.plans.col.status'), size: 100, meta: { kind: 'status' },
-      cell: ({ row }) => <StatusPill tone={row.original.status === 'paid' ? 'good' : row.original.status === 'open' ? 'warn' : 'brand'}>{row.original.status ?? '—'}</StatusPill> },
+      cell: ({ row }) => <StatusPill tone={row.original.status === 'paid' ? 'good' : row.original.status === 'open' ? 'warn' : 'brand'}>{row.original.waivedCents ? t('st.plans.waived') : (row.original.status ?? '—')}</StatusPill> },
+    { id: 'lastError', accessorFn: (i) => i.lastError ?? '', header: t('st.plans.col.detail'), size: 220,
+      cell: ({ row }) => <span className="text-xs text-muted">{row.original.lastError ? `${row.original.lastError} (${t('st.plans.attempts', { count: row.original.attempts })})` : ''}</span> },
     { id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 200, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
       cell: ({ row }) => (
         <div className="flex flex-wrap gap-2">
-          {row.original.invoicePdf ? <a href={row.original.invoicePdf} target="_blank" rel="noreferrer">PDF</a> : null}
           {adjust && row.original.status === 'open' ? <Button size="sm" variant="link" onClick={() => open({ kind: 'waive', invoice: row.original })}>{t('st.plans.waive')}</Button> : null}
         </div>
       ) }
@@ -246,6 +301,8 @@ export function SellerBillingPanel() {
               {manage ? <Button size="sm" variant="neutral" onClick={() => setPlanDealOpen(true)}>{t('st.rates.negotiatePlan')}</Button> : null}
               {adjust && b ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'credit' })}>{t('st.plans.addCredit')}</Button> : null}
               {adjust && b ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'freeDays' })}>{t('st.plans.giveFreeDays')}</Button> : null}
+              {adjust && b ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'freeMonths' })}>{t('st.plans.giveFreeMonths')}</Button> : null}
+              {adjust && b ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'chargeGate' })}>{b.chargeGate ? t('st.plans.gate.change') : t('st.plans.gate.set')}</Button> : null}
               {adjust && b?.status === 'trialing' ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'trial' })}>{t('st.plans.changeTrial')}</Button> : null}
             </div>
           ) : null}>
@@ -258,6 +315,8 @@ export function SellerBillingPanel() {
                 <div><dt className="text-xs text-muted">{t('st.plans.creditBalance')}</dt><dd className="m-0 font-semibold" data-testid="panel-credit">{money(b.creditBalanceCents)}</dd></div>
               </dl>
             ) : <p className="m-0 text-sm text-muted">{t('st.plans.noSubscription')}</p>}
+            {b?.chargeGate ? <GateSummary g={b.chargeGate} adjust={adjust} onClear={() => open({ kind: 'clearGate' })} t={t} /> : null}
+            {b?.entitlements ? <p className="m-0 text-xs text-muted" data-testid="panel-entitlements">{allowsOf(b.entitlements, t)}</p> : null}
           </Card>
           {p.planFeeCollection ? (
             <Card title={t('st.plans.planFee')}>

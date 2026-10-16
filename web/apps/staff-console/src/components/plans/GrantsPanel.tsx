@@ -15,7 +15,7 @@ import { dateTime, humanize } from '@/lib/format';
 
 import { plansApi, STATUS_TONE, type T } from './kit';
 
-const TYPES: GrantType[] = ['FREE_DAYS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END'];
+const TYPES: GrantType[] = ['FREE_DAYS', 'FREE_MONTHS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END', 'CHARGE_GATE'];
 
 export const grantColumns = (t: T, withOrg = true): ColumnDef<StaffBillingGrant>[] => [
   { id: 'createdAt', accessorFn: (g) => g.createdAt, header: t('st.plans.col.date'), size: 160, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.createdAt) },
@@ -27,8 +27,8 @@ export const grantColumns = (t: T, withOrg = true): ColumnDef<StaffBillingGrant>
   { id: 'actorId', accessorFn: (g) => g.actorId, header: t('st.plans.col.by'), size: 140 },
   { id: 'status', accessorFn: (g) => g.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' },
     cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
-  { id: 'stripe', accessorFn: (g) => g.stripeBalanceTransactionId ?? g.stripeCouponId ?? g.invoiceId ?? g.newTrialEnd ?? '', header: t('st.plans.col.stripe'), size: 200, meta: { kind: 'mono' },
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.lastError ?? row.original.stripeBalanceTransactionId ?? row.original.stripeCouponId ?? row.original.invoiceId ?? (row.original.newTrialEnd ? `trial_end ${dateTime(row.original.newTrialEnd)}` : '')}</span> }
+  { id: 'effect', accessorFn: (g) => g.reference ?? g.invoiceId ?? g.newTrialEnd ?? '', header: t('st.plans.col.effect'), size: 200, meta: { kind: 'mono' },
+    cell: ({ row }) => <span className="font-mono text-xs">{row.original.lastError ?? row.original.reference ?? row.original.invoiceId ?? (row.original.newTrialEnd ? t('st.plans.chargesFrom', { date: dateTime(row.original.newTrialEnd) }) : '')}</span> }
 ];
 
 /** Grants log: every reward and adjustment, filtered and paged by the seller service. */

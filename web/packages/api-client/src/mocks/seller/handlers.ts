@@ -585,7 +585,7 @@ function planFeeView(ctx: { db: MockSellerDb; org: MockOrg; role: string; now: D
   const at = sub.trialEndsAt ?? sub.currentPeriodEnd;
   const day = at ? new Date(at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : null;
   const available = ctx.db.planFeeCollectionAvailable;
-  return { available, mode, effective: available ? mode : 'CARD', source: 'SELLER', platformDefault: 'EARNINGS_FIRST', appliesFromInvoiceAt: at,
+  return { available, mode, effective: available ? mode : 'CARD', source: 'SELLER', platformDefault: 'CARD', appliesFromInvoiceAt: at,
     appliesFromLabel: day ? `Applies from your next invoice, on ${day}` : 'Applies from your first paid invoice', inProgressInvoiceId: null,
     changedAt: null, canChange: available && (ctx.role.endsWith('.owner') || ctx.role.endsWith('.finance')) };
 }
@@ -1631,6 +1631,20 @@ export const sellerHandlers = [
       return { subscription: sub, plans: plansFor(ctx.org.kind, sub.planCode), paymentMethods: ctx.db.paymentMethods[ctx.org.kind], invoices: ctx.db.invoices,
         canManage: ctx.role.endsWith('.owner'), planFeeCollection: planFeeView(ctx) };
     })
+  ),
+  http.post(
+    `${W}/billing/invoices/:invoiceId/retry`,
+    route((ctx, p) => {
+      if (!ctx.role.endsWith('.owner') && !ctx.role.endsWith('.finance')) throw forbidden('Only the owner or a finance member can retry an invoice.');
+      const inv = ctx.db.invoices.find((i) => i.id === p.invoiceId);
+      if (!inv) throw notFound('We couldn’t find that invoice.');
+      if (!inv.canRetry) throw conflict('That invoice is not waiting for payment.');
+      Object.assign(inv, { status: 'PAID', amountPaidMinor: inv.amountDueMinor, paidByCardMinor: inv.amountDueMinor, paidAt: ctx.now.toISOString(), lastError: null, nextAttemptAt: null, canRetry: false });
+      return inv;
+    })
+  ),
+  http.get(`${W}/billing/invoices/:invoiceId/document`, ({ params }) =>
+    new HttpResponse(`<!doctype html><title>Invoice ${String(params.invoiceId)}</title><h1>Invoice</h1>`, { status: 200, headers: { 'Content-Type': 'text/html', 'Content-Disposition': 'attachment; filename="invoice.html"' } })
   ),
   http.put(
     `${W}/billing/plan-fee-collection`,

@@ -20,13 +20,13 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     asRoles('platform.finance');
   });
 
-  it('lists the catalogue with Stripe sync status, and versions a plan: new prices are a draft until published', async () => {
+  it('lists the catalogue with what each plan allows, and versions a plan: new prices are a draft until published', async () => {
     const user = userEvent.setup();
     await renderScreen(<CataloguePanel />);
     const table = await screen.findByRole('table', { name: 'Plans' });
     const growth = await within(table).findByRole('row', { name: /Seller Growth/ });
     expect(within(growth).getByText('$39.00')).toBeInTheDocument();
-    expect(await screen.findByText(/Every price matches Stripe/)).toBeInTheDocument();
+    expect(within(growth).getByText('1,000 listings · AI writer · Lola Growth')).toBeInTheDocument();
     await user.click(within(growth).getByRole('button', { name: 'New prices or trial' }));
     const dialog = await screen.findByRole('dialog', { name: 'New prices or trial for Seller Growth' });
     const monthly = within(dialog).getByLabelText('Monthly ($)');
@@ -38,6 +38,25 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(plan).toMatchObject({ currentVersion: 2, monthlyCents: 4500 });
     expect(await within(table).findByText('$45.00')).toBeInTheDocument();
     expect(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'Migrate subscribers' })).toBeInTheDocument();
+  });
+
+  it('edits what a plan allows: the listing cap, the AI writer and the Lola tier', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<CataloguePanel />);
+    const table = await screen.findByRole('table', { name: 'Plans' });
+    const essentials = await within(table).findByRole('row', { name: /Seller Essentials/ });
+    expect(within(essentials).getByText('50 listings · Lola Essentials')).toBeInTheDocument();
+    await user.click(within(essentials).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog', { name: /Edit Seller Essentials/ });
+    const cap = within(dialog).getByLabelText('Live listings');
+    await user.clear(cap);
+    await user.type(cap, '120');
+    await user.click(within(dialog).getByLabelText('AI listing writer included'));
+    await user.selectOptions(within(dialog).getByLabelText('Lola (seller assistant)'), 'GROWTH');
+    await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(getStaffDb().plans.plans.find((p) => p.code === 'seller_essentials')?.limits).toMatchObject({ listings: '120', aiListingWriter: 'true', lolaTier: 'GROWTH' });
+    expect(await within(table).findByText('120 listings · AI writer · Lola Growth')).toBeInTheDocument();
   });
 
   it('creates a promo-code trial campaign', async () => {
@@ -143,6 +162,39 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(within(screen.getByRole('table', { name: 'Rewards and adjustments' })).getAllByRole('row').length).toBeGreaterThan(2);
   });
 
+  it('gives free months and sets a charge condition with a reason, then removes it', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<SellerBillingPanel />);
+    await user.type(screen.getByRole('searchbox'), 'ade');
+    await user.click(await screen.findByRole('button', { name: /Ade’s Kitchen/ }));
+    expect(await screen.findByTestId('panel-entitlements')).toHaveTextContent('1,000 listings · AI writer · Lola Growth');
+    await user.click(screen.getByRole('button', { name: 'Give free months' }));
+    const months = await screen.findByRole('dialog', { name: 'Give free months' });
+    await user.type(within(months).getByLabelText('Free months'), '2');
+    await waitFor(() => expect(within(months).getAllByRole('option').length).toBeGreaterThan(2));
+    await user.selectOptions(within(months).getByLabelText('Reason'), 'PROMOTION');
+    await user.click(within(months).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(getStaffDb().plans.grants[0]).toMatchObject({ type: 'FREE_MONTHS', freeMonths: 2, reasonCode: 'PROMOTION' });
+
+    await user.click(screen.getByRole('button', { name: 'Set a charge condition' }));
+    const gate = await screen.findByRole('dialog', { name: 'Set a charge condition' });
+    await user.type(within(gate).getByLabelText('Amount ($)'), '1000');
+    await waitFor(() => expect(within(gate).getAllByRole('option').length).toBeGreaterThan(6));
+    await user.selectOptions(within(gate).getByLabelText('Reason'), 'PROMOTION');
+    await user.click(within(gate).getByRole('button', { name: 'Apply' }));
+    const summary = await screen.findByTestId('panel-charge-gate');
+    expect(summary).toHaveTextContent('Charging starts after $1,000 in sales');
+    expect(getStaffDb().plans.orgs[0]?.chargeGate).toMatchObject({ mode: 'START_AFTER', metric: 'GROSS_SALES', threshold: 100000 });
+
+    await user.click(within(summary).getByRole('button', { name: 'Remove charge condition' }));
+    const clear = await screen.findByRole('dialog', { name: 'Remove charge condition' });
+    await waitFor(() => expect(within(clear).getAllByRole('option').length).toBeGreaterThan(2));
+    await user.selectOptions(within(clear).getByLabelText('Reason'), 'GOODWILL');
+    await user.click(within(clear).getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(screen.queryByTestId('panel-charge-gate')).not.toBeInTheDocument());
+  });
+
   it('overrides how a seller pays its plan with a reason, and shows the invoices paid from earnings (S298)', async () => {
     const user = userEvent.setup();
     await renderScreen(<SellerBillingPanel />);
@@ -177,10 +229,10 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     await renderScreen(<SettingsPanel />);
     expect(await screen.findByTestId('kill-switch')).toHaveTextContent('On: sellers may pay their plan from their sales');
     const select = screen.getByLabelText('Default for new sellers');
-    expect(select).toHaveValue('EARNINGS_FIRST');
-    await user.selectOptions(select, 'CARD');
+    expect(select).toHaveValue('CARD');
+    await user.selectOptions(select, 'EARNINGS_FIRST');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(getStaffDb().plans.settings.planFeeCollectionDefault).toBe('CARD'));
+    await waitFor(() => expect(getStaffDb().plans.settings.planFeeCollectionDefault).toBe('EARNINGS_FIRST'));
     expect(await screen.findByText('Default saved')).toBeInTheDocument();
   });
 
@@ -189,7 +241,6 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     await renderScreen(<CataloguePanel />);
     await within(await screen.findByRole('table', { name: 'Plans' })).findByRole('row', { name: /Seller Growth/ });
     expect(screen.queryByRole('button', { name: 'New plan' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Sync with Stripe' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retire' })).not.toBeInTheDocument();
   });
 

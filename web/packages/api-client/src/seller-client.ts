@@ -9,14 +9,14 @@ import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
   type AddBillingPaymentMethodInput,
+  type AfrotransactPickupRequest,
+  type Asset,
+  AssetSchema,
   type AssistantChatRequest,
   type AssistantReply,
   AssistantReplySchema,
   type AssistantStatus,
   AssistantStatusSchema,
-  type AfrotransactPickupRequest,
-  type Asset,
-  AssetSchema,
   type AttachLibraryImagesResult,
   AttachLibraryImagesResultSchema,
   type Availability,
@@ -69,6 +69,8 @@ import {
   InventoryViewSchema,
   type InvitationPreview,
   InvitationPreviewSchema,
+  type Invoice,
+  InvoiceSchema,
   type LabelPurchase,
   LabelPurchaseSchema,
   type ListingContext,
@@ -408,7 +410,13 @@ export function createSellerApiClient(options: ApiClientOptions) {
     /** Owner only: register the payment method the SetupIntent confirmed. */
     addBillingPaymentMethod: (body: AddBillingPaymentMethodInput): Promise<BillingPaymentMethod> =>
       request('/v1/seller/billing/payment-methods', BillingPaymentMethodSchema, { method: 'POST', body }),
-    /** S298: pay the plan from sales first or always by card (owner / finance; applies from the next invoice). */
+    /** Collect an unpaid invoice again after fixing the payment method (owner / finance). */
+    retryInvoice: (invoiceId: string): Promise<Invoice> =>
+      request(`/v1/seller/billing/invoices/${enc(invoiceId)}/retry`, InvoiceSchema, { method: 'POST' }),
+    /** A printable invoice (HTML; Print › Save as PDF makes the PDF). */
+    downloadInvoice: (invoiceId: string): Promise<DownloadedFile> =>
+      download(`/v1/seller/billing/invoices/${enc(invoiceId)}/document`, {}, 'invoice.html'),
+    /** S298: pay the plan from sales (after credit) when the seller chose that, else always by card or always by card (owner / finance; applies from the next invoice). */
     setPlanFeeCollection: (mode: PlanFeeCollectionMode): Promise<PlanFeeCollectionView> =>
       request('/v1/seller/billing/plan-fee-collection', PlanFeeCollectionViewSchema, { method: 'PUT', body: { mode } }),
 

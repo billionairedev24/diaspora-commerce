@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { CORRELATION_HEADER, forwardBffProxyRequestHeaders, withCorrelationHeaders } from '../src/correlation';
 import { createRequester } from '../src/http';
-import { z } from 'zod';
 
 describe('correlation', () => {
   it('adds X-Correlation-Id when missing', () => {

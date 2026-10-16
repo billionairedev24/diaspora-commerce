@@ -1235,6 +1235,14 @@ export const PlanPriceSchema = z.object({
   savingLabel: z.string()
 });
 export type PlanPrice = z.infer<typeof PlanPriceSchema>;
+/** What a plan allows: only live listings are capped (no limit on shops or users). */
+export const PlanEntitlementsSchema = z.object({
+  listings: z.number().int().nullable(),
+  listingsUnlimited: z.boolean(),
+  aiListingWriter: z.boolean(),
+  lolaTier: z.enum(['ESSENTIALS', 'GROWTH', 'PRO'])
+});
+export type PlanEntitlements = z.infer<typeof PlanEntitlementsSchema>;
 export const PlanSchema = z.object({
   code: z.string(),
   name: z.string(),
@@ -1243,7 +1251,8 @@ export const PlanSchema = z.object({
   trialDays: z.number().int(),
   features: z.array(z.string()),
   prices: z.array(PlanPriceSchema),
-  current: z.boolean()
+  current: z.boolean(),
+  entitlements: PlanEntitlementsSchema.nullable().default(null)
 });
 export type Plan = z.infer<typeof PlanSchema>;
 export const BillingPaymentMethodSchema = z.object({
@@ -1261,28 +1270,52 @@ export const BillingPaymentMethodSchema = z.object({
   label: z.string()
 });
 export type BillingPaymentMethod = z.infer<typeof BillingPaymentMethodSchema>;
+export const InvoiceLineSchema = z.object({
+  kind: z.enum(['PLAN', 'USAGE', 'COUPON', 'PRORATION', 'WAIVER']),
+  description: z.string(),
+  amountMinor: z.number().int()
+});
+export type InvoiceLine = z.infer<typeof InvoiceLineSchema>;
+/** A plan invoice AfroTransact issued: settled by credit, then sales (if chosen), then the saved card or bank. */
 export const InvoiceSchema = z.object({
   id: z.string(),
   number: z.string(),
   periodStart: nullableString,
   periodEnd: nullableString,
+  subtotalMinor: z.number().int(),
+  discountMinor: z.number().int(),
   amountDueMinor: z.number().int(),
   amountPaidMinor: z.number().int(),
   currency: z.string(),
-  status: z.string(),
-  pdfUrl: nullableString,
-  hostedUrl: nullableString,
+  status: z.enum(['OPEN', 'PAID', 'VOID', 'UNCOLLECTIBLE']),
   createdAt: z.string(),
-  /** Paid from the organisation's sales (S298); the card paid (or pays) `paidByCardMinor`. */
-  paidFromSalesMinor: z.number().int().default(0),
-  paidByCardMinor: z.number().int().default(0)
+  paidAt: nullableString,
+  nextAttemptAt: nullableString,
+  lastError: nullableString,
+  lines: z.array(InvoiceLineSchema),
+  paidFromCreditMinor: z.number().int(),
+  paidFromSalesMinor: z.number().int(),
+  paidByCardMinor: z.number().int(),
+  waivedMinor: z.number().int(),
+  canRetry: z.boolean()
 });
 export type Invoice = z.infer<typeof InvoiceSchema>;
-/** How the plan is paid (S298): from sales first, or always by card. */
+/** A condition staff put on plan charges, with the seller's progress. */
+export const ChargeGateSchema = z.object({
+  mode: z.enum(['START_AFTER', 'WAIVE_WHILE', 'WAIVE_UNTIL']),
+  metric: z.enum(['GROSS_SALES', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'ACTIVE_LISTINGS']).nullable(),
+  threshold: z.number().int().nullable(),
+  progress: z.number().int(),
+  until: nullableString,
+  metAt: nullableString,
+  label: z.string()
+});
+export type ChargeGate = z.infer<typeof ChargeGateSchema>;
+/** How the plan is paid (S298): platform credit first, then from sales if the seller chose that, then the card. */
 export const PlanFeeCollectionModeSchema = z.enum(['EARNINGS_FIRST', 'CARD']);
 export type PlanFeeCollectionMode = z.infer<typeof PlanFeeCollectionModeSchema>;
 export const PlanFeeCollectionViewSchema = z.object({
-  /** The platform offers the choice; false hides it (every invoice is charged to the card). */
+  /** The platform offers the choice; false hides it (every invoice is charged to the card). The seller opts in. */
   available: z.boolean(),
   mode: PlanFeeCollectionModeSchema,
   effective: PlanFeeCollectionModeSchema,
@@ -1314,9 +1347,11 @@ export const SubscriptionSchema = z.object({
   dunning: nullableString,
   /** Plan version (prices) the organisation pays (S292). */
   planVersion: z.number().int().default(1),
-  /** Stripe credit balance the next invoices use (rewards, staff credits). */
+  /** Platform credit the next invoices use first (rewards, staff credits). */
   creditBalanceMinor: z.number().int().default(0),
-  trialSource: z.enum(['PLAN', 'CAMPAIGN', 'OVERRIDE', 'NONE']).nullable().default(null)
+  trialSource: z.enum(['PLAN', 'CAMPAIGN', 'OVERRIDE', 'NONE']).nullable().default(null),
+  chargeGate: ChargeGateSchema.nullable().default(null),
+  entitlements: PlanEntitlementsSchema.nullable().default(null)
 });
 export type Subscription = z.infer<typeof SubscriptionSchema>;
 export const BillingViewSchema = z.object({
@@ -1360,7 +1395,7 @@ export type RewardProgress = z.infer<typeof RewardProgressSchema>;
 export const EarnedRewardSchema = z.object({
   id: z.string(),
   source: z.enum(['RULE', 'MANUAL']),
-  type: z.enum(['FREE_DAYS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END']),
+  type: z.enum(['FREE_DAYS', 'FREE_MONTHS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END', 'CHARGE_GATE']),
   summary: z.string(),
   reason: nullableString.default(null),
   status: z.enum(['PENDING', 'APPLIED', 'FAILED']),
@@ -1384,7 +1419,7 @@ export const BillingPlanChangePreviewSchema = z.object({
   planName: z.string(),
   cadence: CadenceSchema,
   effectiveAt: nullableString.default(null),
-  /** Invoiced now: Stripe's proration of an upgrade (0 in a trial or for a change at renewal). */
+  /** Invoiced now: the proration of an upgrade (0 in a trial or for a change at renewal). */
   amountDueNowMinor: z.number().int(),
   nextChargeMinor: z.number().int(),
   nextChargeAt: nullableString.default(null),

@@ -13,12 +13,13 @@ import {
   type StaffBillingInvoice,
   type StaffBillingPanel,
   type StaffBillingSettings,
+  type StaffChargeGate,
   type StaffEarningsCollection,
   type StaffPlan,
+  type StaffPlanEntitlements,
   type StaffPlanFeeCollection,
   type StaffPlanFeeCollectionChange,
   type StaffPlanFeeMode,
-  type StaffPlanSyncLine,
   type StaffRewardPreviewRow,
   type StaffRewardRule,
   type StaffTrialCampaign
@@ -38,6 +39,7 @@ interface MockBillingOrg {
   periodEnd: string;
   creditBalanceCents: number;
   trialDaysOverride: number | null;
+  chargeGate: StaffChargeGate | null;
   /** How it pays its plan (S298), who chose it and the change log; invoices paid from earnings. */
   planFeeCollection: StaffPlanFeeMode;
   planFeeSource: StaffPlanFeeCollection['source'];
@@ -85,20 +87,40 @@ const SEED_PLANS: [string, 'SELLER' | 'PROVIDER', string, string, number, number
   ['provider_business', 'PROVIDER', 'Provider Business', 'Multi-location', 9900, 14, ['Unlimited staff', '6% booking fee', 'Multiple locations and API']]
 ];
 
+const LIMITS: Record<string, Record<string, string>> = {
+  seller_essentials: { listings: '50', aiListingWriter: 'false', lolaTier: 'ESSENTIALS' },
+  seller_growth: { listings: '1000', aiListingWriter: 'true', lolaTier: 'GROWTH' },
+  seller_pro: { listings: 'unlimited', aiListingWriter: 'true', lolaTier: 'PRO' },
+  provider_solo: { listings: '20', aiListingWriter: 'false', lolaTier: 'ESSENTIALS' },
+  provider_studio: { listings: '100', aiListingWriter: 'true', lolaTier: 'GROWTH' },
+  provider_business: { listings: 'unlimited', aiListingWriter: 'true', lolaTier: 'PRO' }
+};
+
+/** Reads a plan's entitlements from its `limits`, as the seller service does. */
+export function entitlementsFrom(limits: Record<string, string>): StaffPlanEntitlements {
+  const raw = (limits.listings ?? 'unlimited').toLowerCase();
+  const n = Number(raw);
+  const unlimited = raw === 'unlimited' || !Number.isFinite(n);
+  const tier = (limits.lolaTier ?? 'ESSENTIALS').toUpperCase();
+  return {
+    listings: unlimited ? null : n, listingsUnlimited: unlimited, aiListingWriter: limits.aiListingWriter === 'true',
+    lolaTier: tier === 'PRO' || tier === 'GROWTH' ? tier : 'ESSENTIALS'
+  };
+}
+
 function seedPlan([code, kind, name, tagline, monthly, trial, features]: (typeof SEED_PLANS)[number], i: number, now: Date): StaffPlan {
   const quarterly = Math.round(monthly * 3 * 0.95);
   const annual = monthly * 10;
   const amounts: Record<PlanCadence, number> = { MONTHLY: monthly, QUARTERLY: quarterly, ANNUAL: annual };
   return {
-    code, kind, name, tagline, features, limits: {}, visibility: 'PUBLIC', status: 'ACTIVE', sortOrder: (i + 1) * 10, currentVersion: 1,
+    code, kind, name, tagline, features, limits: LIMITS[code] ?? {}, entitlements: entitlementsFrom(LIMITS[code] ?? {}), visibility: 'PUBLIC', status: 'ACTIVE', sortOrder: (i + 1) * 10, currentVersion: 1,
     monthlyCents: monthly, quarterlyCents: quarterly, annualCents: annual, trialDays: trial, rowVersion: 0,
-    stripeProductId: monthly ? `prod_${code}` : null, subscribers: monthly ? 3 - (i % 3) : 0, invites: [],
+    subscribers: monthly ? 3 - (i % 3) : 0, invites: [],
     versions: [{
       version: 1, status: 'PUBLISHED', trialDays: trial, note: 'Seeded catalogue', createdBy: 'system', createdAt: new Date(now.getTime() - 200 * DAY).toISOString(),
       publishedAt: new Date(now.getTime() - 200 * DAY).toISOString(), subscribers: monthly ? 3 - (i % 3) : 0,
       prices: CADENCES.map((c) => ({
-        cadence: c, amountCents: amounts[c], lookupKey: `${code}_${c.toLowerCase()}`, stripePriceId: monthly ? `price_${code}_${c.toLowerCase()}` : null,
-        syncedAt: monthly ? now.toISOString() : null, syncError: null
+        cadence: c, amountCents: amounts[c]
       }))
     }]
   };
@@ -110,18 +132,24 @@ const facts = (gross: number, listings: number, orders: number, bookings: number
 
 export function seedPlans(now: Date): MockPlansState {
   const iso = (d: number) => new Date(now.getTime() + d * DAY).toISOString();
-  const invoice = (id: string, cents: number, status: string, daysAgo: number, fromSales = 0): StaffBillingInvoice => ({
-    id, number: `AT-${id.slice(3).toUpperCase()}`, periodStart: iso(-daysAgo - 30), periodEnd: iso(-daysAgo), amountDueCents: cents - fromSales,
-    amountPaidCents: status === 'paid' ? cents - fromSales : 0, currency: 'usd', status, billingReason: 'subscription_cycle', hostedInvoiceUrl: `https://invoices.afrotransact.dev/${id}`,
-    invoicePdf: `https://invoices.afrotransact.dev/${id}.pdf`, createdAt: iso(-daysAgo), paidFromSalesCents: fromSales, paidByCardCents: cents - fromSales
+  const invoice = (id: string, cents: number, status: 'open' | 'paid' | 'void', daysAgo: number, fromSales = 0): StaffBillingInvoice => ({
+    id, number: `AT-${id.slice(4).toUpperCase()}`, periodStart: iso(-daysAgo - 30), periodEnd: iso(-daysAgo), subtotalCents: cents, discountCents: 0, amountDueCents: cents,
+    amountPaidCents: status === 'paid' ? cents : 0, currency: 'usd', status, billingReason: 'subscription_cycle', planCode: null, attempts: status === 'open' ? 1 : 0,
+    nextAttemptAt: status === 'open' ? iso(2) : null, lastError: status === 'open' ? 'Your card was declined.' : null, paidAt: status === 'paid' ? iso(-daysAgo) : null, createdAt: iso(-daysAgo),
+    lines: [{ kind: 'PLAN', description: 'Plan fee', amountCents: cents, quantity: null, meter: null }],
+    payments: status === 'paid' ? [
+      ...(fromSales ? [{ source: 'EARNINGS' as const, amountCents: fromSales, status: 'APPLIED' as const, note: null, createdAt: iso(-daysAgo) }] : []),
+      ...(cents - fromSales ? [{ source: 'CARD' as const, amountCents: cents - fromSales, status: 'APPLIED' as const, note: null, createdAt: iso(-daysAgo) }] : [])
+    ] : [],
+    paidFromCreditCents: 0, paidFromSalesCents: status === 'paid' ? fromSales : 0, paidByCardCents: status === 'paid' ? cents - fromSales : 0, waivedCents: 0
   });
   const org = (orgId: string, name: string, kind: 'SELLER' | 'PROVIDER', planCode: string, subStatus: string, f: Record<RewardMetric, number>, invoices: StaffBillingInvoice[]): MockBillingOrg => ({
     orgId, name, kind, status: 'APPROVED', planCode, cadence: 'MONTHLY', subStatus, trialEndsAt: subStatus === 'trialing' ? iso(12) : null, periodEnd: iso(subStatus === 'trialing' ? 12 : 20),
-    creditBalanceCents: 0, trialDaysOverride: null, planFeeCollection: kind === 'SELLER' ? 'EARNINGS_FIRST' : 'CARD', planFeeSource: 'DEFAULT', planFeeHistory: [],
+    creditBalanceCents: 0, trialDaysOverride: null, chargeGate: null, planFeeCollection: kind === 'SELLER' ? 'EARNINGS_FIRST' : 'CARD', planFeeSource: 'DEFAULT', planFeeHistory: [],
     collections: invoices.filter((i) => i.paidFromSalesCents > 0).map((i) => ({
-      invoiceId: i.id, invoiceNumber: i.number, invoiceAmountCents: i.paidFromSalesCents + i.paidByCardCents, amountCents: i.paidFromSalesCents + i.paidByCardCents,
+      invoiceId: i.id, invoiceNumber: i.number, invoiceAmountCents: i.amountDueCents, amountCents: i.amountDueCents,
       withheldCents: i.paidFromSalesCents, creditedCents: i.paidFromSalesCents, releasedCents: 0, paidFromSalesCents: i.paidFromSalesCents, status: 'CREDITED' as const,
-      paymentsReference: `wh_${i.id}`, stripeBalanceTransactionId: `cbtxn_${i.id}`, reason: 'Only part was available; the card paid the rest', attempts: 1, lastError: null,
+      paymentsReference: `wh_${i.id}`, reason: 'Only part was available; the card paid the rest', attempts: 1, lastError: null,
       createdAt: i.createdAt, updatedAt: i.createdAt
     })),
     facts: f, invoices
@@ -147,24 +175,32 @@ export function seedPlans(now: Date): MockPlansState {
       conditionLabel: 'less than $1,000 in sales in the first 30 days of the subscription', createdBy: 'Amaka Eze', createdAt: iso(-20), updatedBy: null, updatedAt: null, version: 0
     }],
     grants: [{
-      id: 'gr_seed1', orgId: 'org-ades-kitchen', source: 'RULE', ruleId: 'rr_sales', type: 'FREE_DAYS', creditCents: null, freeDays: 30, percentOff: null, durationInvoices: null,
+      id: 'gr_seed1', orgId: 'org-ades-kitchen', source: 'RULE', ruleId: 'rr_sales', type: 'FREE_DAYS', creditCents: null, freeDays: 30, freeMonths: null, percentOff: null, durationInvoices: null, remainingInvoices: null, gateMode: null,
       invoiceId: null, status: 'APPLIED', reasonCode: null, note: null, summary: '30 days free', actorId: 'system', metric: 'GROSS_SALES', metricValue: 104500,
-      stripeCustomerId: 'cus_ades', stripeSubscriptionId: 'sub_ades', stripeBalanceTransactionId: null, stripeCouponId: null, previousTrialEnd: null, newTrialEnd: iso(50),
+      reference: null, previousTrialEnd: null, newTrialEnd: iso(50),
       attempts: 1, lastError: null, createdAt: iso(-3), appliedAt: iso(-3)
     }],
     orgs: [
-      org('org-ades-kitchen', 'Ade’s Kitchen', 'SELLER', 'seller_growth', 'active', facts(104500, 42, 61, 0, 40), [invoice('in_ades1', 3900, 'paid', 10, 2500), invoice('in_ades2', 3900, 'open', 1)]),
-      org('org-lagos-textile', 'Lagos Textile Hub', 'SELLER', 'seller_pro', 'active', facts(64000, 18, 22, 0, 75), [invoice('in_lth1', 12900, 'paid', 5)]),
+      org('org-ades-kitchen', 'Ade’s Kitchen', 'SELLER', 'seller_growth', 'active', facts(104500, 42, 61, 0, 40), [invoice('inv_ades1', 3900, 'paid', 10, 2500), invoice('inv_ades2', 3900, 'open', 1)]),
+      org('org-lagos-textile', 'Lagos Textile Hub', 'SELLER', 'seller_pro', 'active', facts(64000, 18, 22, 0, 75), [invoice('inv_lth1', 12900, 'paid', 5)]),
       org('org-braids-by-bisi', 'Braids by Bisi', 'PROVIDER', 'provider_studio', 'trialing', facts(0, 0, 0, 3, 18), []),
       // A seller still in its 30-day trial (S299: in the window of a low-sales relief rule).
       org('org-mama-put', 'Mama Put', 'SELLER', 'seller_growth', 'trialing', facts(32000, 6, 5, 0, 18), [])
     ],
     keys: {},
-    settings: { earningsCollectionEnabled: true, planFeeCollectionDefault: 'EARNINGS_FIRST', updatedBy: 'system', updatedAt: iso(-60) },
+    settings: { earningsCollectionEnabled: true, planFeeCollectionDefault: 'CARD', updatedBy: 'system', updatedAt: iso(-60) },
     seq: 1
   };
 }
 
+const GateBody = z.object({
+  mode: z.enum(['START_AFTER', 'WAIVE_WHILE', 'WAIVE_UNTIL']),
+  metric: z.enum(['GROSS_SALES', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'ACTIVE_LISTINGS']).nullish(),
+  threshold: z.number().int().min(1).nullish(),
+  until: z.string().nullish(),
+  reasonCode: z.string(),
+  note: z.string().max(500).nullish()
+});
 const PlanBody = z.object({
   name: z.string().trim().min(1, 'Enter a name').max(80), tagline: z.string().max(120).nullish(), features: z.array(z.string().max(200)).max(20),
   limits: z.record(z.string(), z.string()).optional(), visibility: z.enum(['PUBLIC', 'HIDDEN', 'INVITE_ONLY']), sortOrder: z.number().int().optional()
@@ -245,7 +281,8 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
         orgId: o.orgId, planCode: o.planCode, planName: plan?.name ?? o.planCode, cadence: o.cadence, status: o.subStatus, trialEndsAt: o.trialEndsAt, currentPeriodEnd: o.periodEnd,
         nextChargeAt: o.periodEnd, nextChargeCents: cents, nextChargeLabel: `${usd(cents)} on ${new Date(o.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`,
         cancelAtPeriodEnd: false, dunning: null, failedPaymentAttempts: 0, planVersion: plan?.currentVersion ?? 1, creditBalanceCents: o.creditBalanceCents,
-        trialSource: o.trialDaysOverride ? 'OVERRIDE' : 'PLAN', trialDaysOverride: o.trialDaysOverride, planFeeCollection: o.planFeeCollection
+        trialSource: o.trialDaysOverride ? 'OVERRIDE' : 'PLAN', trialDaysOverride: o.trialDaysOverride, planFeeCollection: o.planFeeCollection,
+        chargeGate: o.chargeGate, entitlements: plan?.entitlements ?? null
       },
       invoices: o.invoices,
       grants: st(ctx).grants.filter((g) => g.orgId === o.orgId),
@@ -277,9 +314,9 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
     if (b.reasonCode === 'OTHER' && !b.note?.trim()) throw invalid({ note: 'Say why when the reason is Other' });
     apply();
     const g: StaffBillingGrant = {
-      id: id(ctx, 'gr'), orgId: o.orgId, source: 'MANUAL', ruleId: null, type, creditCents: null, freeDays: null, percentOff: null, durationInvoices: null, invoiceId: null,
-      status: 'APPLIED', reasonCode: b.reasonCode, note: b.note ?? null, summary, actorId: ctx.action.actorId, metric: null, metricValue: null, stripeCustomerId: `cus_${o.orgId}`,
-      stripeSubscriptionId: `sub_${o.orgId}`, stripeBalanceTransactionId: null, stripeCouponId: null, previousTrialEnd: null, newTrialEnd: null, attempts: 1, lastError: null,
+      id: id(ctx, 'gr'), orgId: o.orgId, source: 'MANUAL', ruleId: null, type, creditCents: null, freeDays: null, freeMonths: null, percentOff: null, durationInvoices: null, remainingInvoices: null, gateMode: null, invoiceId: null,
+      status: 'APPLIED', reasonCode: b.reasonCode, note: b.note ?? null, summary, actorId: ctx.action.actorId, metric: null, metricValue: null,
+      reference: null, previousTrialEnd: null, newTrialEnd: null, attempts: 1, lastError: null,
       createdAt: ctx.now.toISOString(), appliedAt: ctx.now.toISOString(), ...extra
     };
     st(ctx).grants.unshift(g);
@@ -287,16 +324,6 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
     audit(ctx, `billing.${type.toLowerCase()}`, o.orgId, `${summary} for ${o.name} (${b.reasonCode})`);
     return g;
   };
-
-  const syncLines = (ctx: PreorderCtx): StaffPlanSyncLine[] =>
-    st(ctx).plans.flatMap((p) => {
-      const v = p.versions.find((x) => x.version === p.currentVersion);
-      return (v?.prices ?? []).map((pr) => ({
-        planCode: p.code, planName: p.name, version: p.currentVersion, cadence: pr.cadence, amountCents: pr.amountCents, lookupKey: pr.lookupKey,
-        state: pr.amountCents === 0 ? ('FREE' as const) : pr.stripePriceId ? ('IN_SYNC' as const) : ('MISSING' as const),
-        action: 'NONE' as const, stripePriceId: pr.stripePriceId, stripeAmountCents: pr.stripePriceId ? pr.amountCents : null, error: null
-      }));
-    });
 
   const ruleFrom = (ctx: PreorderCtx, b: z.infer<typeof RuleBody>, prior?: StaffRewardRule): StaffRewardRule => {
     const errors: Record<string, string> = {};
@@ -328,8 +355,8 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const plan = seedPlan([b.code, b.kind, b.name, b.tagline ?? '', b.prices.monthlyCents, b.prices.trialDays, b.features], st(ctx).plans.length, ctx.now);
       const amounts: Record<PlanCadence, number> = { MONTHLY: b.prices.monthlyCents, QUARTERLY: b.prices.quarterlyCents, ANNUAL: b.prices.annualCents };
       const v = plan.versions[0];
-      if (v) Object.assign(v, { status: 'DRAFT', publishedAt: null, subscribers: 0, note: b.prices.note ?? null, createdBy: ctx.action.actor, prices: v.prices.map((p) => ({ ...p, amountCents: amounts[p.cadence], stripePriceId: null, syncedAt: null })) });
-      Object.assign(plan, { status: 'DRAFT', visibility: b.visibility, quarterlyCents: b.prices.quarterlyCents, annualCents: b.prices.annualCents, subscribers: 0, stripeProductId: null, limits: b.limits ?? {} });
+      if (v) Object.assign(v, { status: 'DRAFT', publishedAt: null, subscribers: 0, note: b.prices.note ?? null, createdBy: ctx.action.actor, prices: v.prices.map((p) => ({ ...p, amountCents: amounts[p.cadence] })) });
+      Object.assign(plan, { status: 'DRAFT', visibility: b.visibility, quarterlyCents: b.prices.quarterlyCents, annualCents: b.prices.annualCents, subscribers: 0, limits: b.limits ?? {}, entitlements: entitlementsFrom(b.limits ?? {}) });
       st(ctx).plans.push(plan);
       audit(ctx, 'billing.plan.created', plan.code, `Created plan ${plan.name}`);
       return plan;
@@ -340,7 +367,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const plan = planOf(ctx, p.code);
       const b = await json(ctx.request, PlanBody.extend({ expectedVersion: z.number().int() }));
       if (b.expectedVersion !== plan.rowVersion) throw problem(409, 'CONFLICT', 'Changed by someone else', 'This plan was changed by someone else. Refresh to see the latest.');
-      Object.assign(plan, { name: b.name, tagline: b.tagline ?? null, features: b.features, limits: b.limits ?? plan.limits, visibility: b.visibility, sortOrder: b.sortOrder ?? plan.sortOrder, rowVersion: plan.rowVersion + 1 });
+      Object.assign(plan, { name: b.name, tagline: b.tagline ?? null, features: b.features, limits: b.limits ?? plan.limits, entitlements: entitlementsFrom(b.limits ?? plan.limits), visibility: b.visibility, sortOrder: b.sortOrder ?? plan.sortOrder, rowVersion: plan.rowVersion + 1 });
       return plan;
     })),
     http.put(`${B}/plans/:code/draft`, route(async (ctx, p) => {
@@ -349,7 +376,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const b = await json(ctx.request, PricesBody);
       const amounts: Record<PlanCadence, number> = { MONTHLY: b.monthlyCents, QUARTERLY: b.quarterlyCents, ANNUAL: b.annualCents };
       const draft = plan.versions.find((v) => v.status === 'DRAFT');
-      const prices = CADENCES.map((c) => ({ cadence: c, amountCents: amounts[c], lookupKey: `${plan.code}_${c.toLowerCase()}`, stripePriceId: null, syncedAt: null, syncError: null }));
+      const prices = CADENCES.map((c) => ({ cadence: c, amountCents: amounts[c] }));
       if (draft) Object.assign(draft, { trialDays: b.trialDays, note: b.note ?? null, prices });
       else plan.versions.unshift({ version: Math.max(...plan.versions.map((v) => v.version)) + 1, status: 'DRAFT', trialDays: b.trialDays, note: b.note ?? null, createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), publishedAt: null, subscribers: 0, prices });
       return plan;
@@ -360,7 +387,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const draft = plan.versions.find((v) => v.status === 'DRAFT');
       if (!draft) throw problem(409, 'CONFLICT', 'Nothing to publish', 'Save a draft version first.');
       plan.versions.forEach((v) => { if (v.status === 'PUBLISHED') v.status = 'SUPERSEDED'; });
-      Object.assign(draft, { status: 'PUBLISHED', publishedAt: ctx.now.toISOString(), prices: draft.prices.map((pr) => ({ ...pr, stripePriceId: pr.amountCents ? `price_${plan.code}_v${draft.version}_${pr.cadence.toLowerCase()}` : null, syncedAt: ctx.now.toISOString() })) });
+      Object.assign(draft, { status: 'PUBLISHED', publishedAt: ctx.now.toISOString() });
       const by = (c: PlanCadence) => draft.prices.find((x) => x.cadence === c)?.amountCents ?? 0;
       Object.assign(plan, { status: 'ACTIVE', currentVersion: draft.version, trialDays: draft.trialDays, monthlyCents: by('MONTHLY'), quarterlyCents: by('QUARTERLY'), annualCents: by('ANNUAL') });
       audit(ctx, 'billing.plan.published', plan.code, `Published ${plan.name} v${draft.version}`);
@@ -397,17 +424,6 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const migrated = st(ctx).orgs.filter((o) => o.planCode === plan.code && (b.orgIds.length === 0 || b.orgIds.includes(o.orgId))).map((o) => o.orgId);
       return { planCode: plan.code, toVersion: plan.currentVersion, migrated, failed: [] };
     })),
-    http.get(`${B}/stripe-sync`, route((ctx) => {
-      view(ctx);
-      const lines = syncLines(ctx);
-      return { checkedAt: ctx.now.toISOString(), applied: false, drifted: lines.filter((l) => l.state !== 'IN_SYNC' && l.state !== 'FREE').length, lines };
-    })),
-    http.post(`${B}/stripe-sync`, route((ctx) => {
-      need(ctx, 'plans:manage');
-      const lines = syncLines(ctx).map((l) => (l.state === 'MISSING' ? { ...l, state: 'IN_SYNC' as const, action: 'CREATED' as const, stripePriceId: `price_${l.planCode}_v${l.version}_${l.cadence.toLowerCase()}`, stripeAmountCents: l.amountCents } : l));
-      return { checkedAt: ctx.now.toISOString(), applied: true, drifted: 0, lines };
-    })),
-
     http.get(`${B}/trial-campaigns`, route((ctx) => { view(ctx); return st(ctx).campaigns; })),
     http.post(`${B}/trial-campaigns`, route(async (ctx) => {
       need(ctx, 'plans:manage');
@@ -517,7 +533,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       need(ctx, 'billing:adjust');
       const o = orgOf(ctx, p.orgId);
       const { amountCents } = await json(ctx.request.clone(), z.object({ amountCents: z.number().int().min(100, 'At least $1').max(100_000, 'At most $1,000') }));
-      return adjust(ctx, o, 'CREDIT', { creditCents: amountCents, stripeBalanceTransactionId: `cbtxn_${st(ctx).seq + 1}` }, `${usd(amountCents)} credit`, () => { o.creditBalanceCents += amountCents; });
+      return adjust(ctx, o, 'CREDIT', { creditCents: amountCents, reference: `credit_${st(ctx).seq + 1}` }, `${usd(amountCents)} credit`, () => { o.creditBalanceCents += amountCents; });
     }, 201)),
     http.post(`${B}/orgs/:orgId/free-days`, route(async (ctx, p) => {
       need(ctx, 'billing:adjust');
@@ -528,6 +544,37 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       return adjust(ctx, o, 'FREE_DAYS', { freeDays: days, previousTrialEnd: from, newTrialEnd: to }, `${days} days free`, () => {
         Object.assign(o, { trialEndsAt: to, periodEnd: to, subStatus: 'trialing' });
       });
+    }, 201)),
+    http.post(`${B}/orgs/:orgId/free-months`, route(async (ctx, p) => {
+      need(ctx, 'billing:adjust');
+      const o = orgOf(ctx, p.orgId);
+      const { months } = await json(ctx.request.clone(), z.object({ months: z.number().int().min(1, 'At least 1 month').max(36, 'At most 36 months') }));
+      const from = new Date(o.trialEndsAt ?? o.periodEnd);
+      const to = new Date(from);
+      to.setUTCMonth(to.getUTCMonth() + months);
+      return adjust(ctx, o, 'FREE_MONTHS', { freeMonths: months, previousTrialEnd: from.toISOString(), newTrialEnd: to.toISOString() }, `${months} ${months === 1 ? 'month' : 'months'} free`, () => {
+        Object.assign(o, { trialEndsAt: to.toISOString(), periodEnd: to.toISOString(), subStatus: 'trialing' });
+      });
+    }, 201)),
+    http.put(`${B}/orgs/:orgId/charge-gate`, route(async (ctx, p) => {
+      need(ctx, 'billing:adjust');
+      const o = orgOf(ctx, p.orgId);
+      const g = await json(ctx.request.clone(), GateBody);
+      if (g.mode === 'WAIVE_UNTIL' && !g.until) throw invalid({ until: 'Choose the date the free stretch ends' });
+      if (g.mode !== 'WAIVE_UNTIL' && (!g.metric || !g.threshold)) throw invalid({ threshold: 'Say what the seller has to reach' });
+      const progress = g.metric ? (o.facts[g.metric === 'GROSS_SALES' ? 'GROSS_SALES' : g.metric === 'ACTIVE_LISTINGS' ? 'ACTIVE_LISTINGS' : g.metric === 'COMPLETED_BOOKINGS' ? 'COMPLETED_BOOKINGS' : 'COMPLETED_ORDERS']) : 0;
+      const what = g.metric === 'GROSS_SALES' ? usd(g.threshold ?? 0) + ' in sales' : `${g.threshold} ${g.metric === 'ACTIVE_LISTINGS' ? 'live listings' : g.metric === 'COMPLETED_BOOKINGS' ? 'completed bookings' : 'completed orders'}`;
+      const label = g.mode === 'START_AFTER' ? `Charging starts after ${what}` : g.mode === 'WAIVE_WHILE' ? `Free while you have ${what}` : `Free until ${new Date(g.until ?? ctx.now).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}`;
+      return adjust(ctx, o, 'CHARGE_GATE', { gateMode: g.mode }, label, () => {
+        o.chargeGate = { mode: g.mode, metric: g.metric ?? null, threshold: g.threshold ?? null, progress, since: ctx.now.toISOString(), until: g.until ?? null, reasonCode: g.reasonCode,
+          note: g.note ?? null, setAt: ctx.now.toISOString(), metAt: null, label };
+      });
+    }, 201)),
+    http.post(`${B}/orgs/:orgId/charge-gate/clear`, route(async (ctx, p) => {
+      need(ctx, 'billing:adjust');
+      const o = orgOf(ctx, p.orgId);
+      if (!o.chargeGate) throw problem(409, 'seller.no-charge-gate', 'No condition set', 'This organisation has no condition on its plan charges.');
+      return adjust(ctx, o, 'CHARGE_GATE', { gateMode: null }, 'Charge condition removed', () => { o.chargeGate = null; });
     }, 201)),
     http.post(`${B}/orgs/:orgId/trial`, route(async (ctx, p) => {
       need(ctx, 'billing:adjust');
@@ -542,7 +589,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const inv = o.invoices.find((i) => i.id === p.invoiceId);
       if (!inv) throw problem(404, 'NOT_FOUND', 'Not found', 'No such invoice.');
       if (inv.status !== 'open') throw problem(409, 'seller.invoice-not-open', 'Invoice not open', 'Only an open invoice can be waived.');
-      return adjust(ctx, o, 'WAIVE_INVOICE', { invoiceId: inv.id }, `Invoice ${inv.number ?? inv.id} waived`, () => { inv.status = 'void'; });
+      return adjust(ctx, o, 'WAIVE_INVOICE', { invoiceId: inv.id }, `Invoice ${inv.number ?? inv.id} waived`, () => { Object.assign(inv, { status: 'paid', waivedCents: inv.amountDueCents, amountPaidCents: inv.amountDueCents, paidAt: ctx.now.toISOString(), lastError: null, nextAttemptAt: null, payments: [{ source: 'WAIVER' as const, amountCents: inv.amountDueCents, status: 'APPLIED' as const, note: null, createdAt: ctx.now.toISOString() }] }); });
     }, 201)),
     http.put(`${B}/orgs/:orgId/plan-fee-collection`, route(async (ctx, p) => {
       need(ctx, 'billing:adjust');

@@ -1,6 +1,6 @@
 'use client';
 
-import { type PlanVisibility, type StaffPlan, staffPlanKeys, staffPlanQueries,type StaffPlanSyncLine } from '@afrotransact/api-client';
+import { type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -8,8 +8,6 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
 import { type FormEvent, useMemo, useState } from 'react';
 
-import { Card } from '@/components/ui/Card';
-import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
@@ -29,13 +27,19 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
   const open = editing?.mode === 'create' || editing?.mode === 'edit';
   const [f, setF] = useState(() => ({
     code: '', kind: 'SELLER', name: plan?.name ?? '', tagline: plan?.tagline ?? '', features: plan?.features.join('\n') ?? '', visibility: plan?.visibility ?? 'PUBLIC',
-    sortOrder: String(plan?.sortOrder ?? 100), monthly: '', quarterly: '', annual: '', trialDays: '30'
+    sortOrder: String(plan?.sortOrder ?? 100), monthly: '', quarterly: '', annual: '', trialDays: '30',
+    unlimited: plan?.entitlements?.listingsUnlimited ?? false, listings: String(plan?.entitlements?.listings ?? 50), aiWriter: plan?.entitlements?.aiListingWriter ?? false,
+    lola: plan?.entitlements?.lolaTier ?? 'ESSENTIALS'
   }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useMutation({
     mutationFn: () => {
+      const cap = intOf(f.listings);
+      if (!f.unlimited && (cap == null || Number.isNaN(cap) || cap < 0)) throw new Error(t('st.plans.badListings'));
+      // Entitlements live in `limits` (the seller service enforces them); other keys stay as plan information.
+      const limits = { ...(plan?.limits ?? {}), listings: f.unlimited ? 'unlimited' : String(cap), aiListingWriter: String(f.aiWriter), lolaTier: f.lola };
       const meta = { name: f.name.trim(), tagline: f.tagline.trim() || null, features: f.features.split('\n').map((x) => x.trim()).filter(Boolean),
-        visibility: f.visibility as PlanVisibility, sortOrder: intOf(f.sortOrder) ?? 100 };
+        visibility: f.visibility as PlanVisibility, sortOrder: intOf(f.sortOrder) ?? 100, limits };
       if (plan) return plansApi().updatePlan(plan.code, meta, plan.rowVersion);
       const prices = { monthlyCents: centsOf(f.monthly) ?? 0, quarterlyCents: centsOf(f.quarterly) ?? 0, annualCents: centsOf(f.annual) ?? 0, trialDays: intOf(f.trialDays) ?? 0 };
       if ([prices.monthlyCents, prices.quarterlyCents, prices.annualCents, prices.trialDays].some(Number.isNaN)) throw new Error(t('st.plans.badAmount'));
@@ -78,6 +82,26 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
             options={VISIBILITY.map((v) => ({ value: v, label: t(`st.plans.visibility.${v}`) }))} />
           <TextField id="plan-sort" label={t('st.plans.sortOrder')} inputMode="numeric" value={f.sortOrder} onChange={set('sortOrder')} />
         </div>
+        <fieldset className="m-0 flex flex-col gap-2 rounded-md border border-border p-3">
+          <legend className="px-1 text-sm font-semibold">{t('st.plans.allows')}</legend>
+          <p className="m-0 text-xs text-muted">{t('st.plans.allowsHelp')}</p>
+          <div className="grid grid-cols-1 items-end gap-x-3 md:grid-cols-2">
+            <TextField id="plan-listings" label={t('st.plans.listings')} inputMode="numeric" value={f.unlimited ? '' : f.listings} disabled={f.unlimited} error={errors['limits.listings']}
+              onChange={set('listings')} />
+            <label className="mb-2 inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={f.unlimited} onChange={(e) => setF((x) => ({ ...x, unlimited: e.target.checked }))} />
+              {t('st.plans.listingsUnlimited')}
+            </label>
+          </div>
+          <div className="grid grid-cols-1 items-end gap-x-3 md:grid-cols-2">
+            <Select id="plan-lola" label={t('st.plans.lolaTier')} value={f.lola} onChange={set('lola')}
+              options={(['ESSENTIALS', 'GROWTH', 'PRO'] as const).map((v) => ({ value: v, label: t(`st.plans.lola.${v}`) }))} />
+            <label className="mb-2 inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={f.aiWriter} onChange={(e) => setF((x) => ({ ...x, aiWriter: e.target.checked }))} />
+              {t('st.plans.aiWriter')}
+            </label>
+          </div>
+        </fieldset>
         {!plan ? (
           <div className="grid grid-cols-2 gap-x-3 md:grid-cols-4">
             <TextField id="plan-monthly" label={t('st.plans.monthly')} inputMode="decimal" value={f.monthly} error={errors['prices.monthlyCents']} onChange={set('monthly')} />
@@ -143,7 +167,7 @@ function PricesDialog({ plan, onClose, t }: { plan: StaffPlan | null; onClose: (
   );
 }
 
-/** Moves subscribers of older versions to the current one at their next renewal (Stripe item swap, no proration). */
+/** Moves subscribers of older versions to the current one at their next renewal (no proration). */
 function MigrationDialog({ plan, onClose, t }: { plan: StaffPlan | null; onClose: () => void; t: T }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -182,44 +206,17 @@ function MigrationDialog({ plan, onClose, t }: { plan: StaffPlan | null; onClose
   );
 }
 
-/** Stripe sync: every published price against Stripe; drift creates a new Price and archives the old one (never edits). */
-function SyncCard({ t }: { t: T }) {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const { manage } = usePlanRights();
-  const sync = useQuery(staffPlanQueries.sync(plansApi()));
-  const run = useMutation({
-    mutationFn: () => plansApi().syncStripe(),
-    onSuccess: (r) => {
-      qc.setQueryData(staffPlanKeys.sync(), r);
-      void qc.invalidateQueries({ queryKey: staffPlanKeys.plans() });
-      toast.show(t('st.plans.syncDone'));
-    },
-    onError: (e) => toast.show(problemMessage(e), 'error')
-  });
-  const state = useTableState({ searchParams: useSearchParams(), prefix: 'sync', syncUrl: false });
-  const columns = useMemo<ColumnDef<StaffPlanSyncLine>[]>(() => [
-    { id: 'plan', accessorFn: (l) => `${l.planName ?? l.planCode} v${l.version}`, header: t('st.plans.col.plan'), size: 200 },
-    { id: 'cadence', accessorFn: (l) => l.cadence, header: t('st.plans.col.cadence'), size: 110, cell: ({ row }) => humanize(row.original.cadence) },
-    { id: 'amount', accessorFn: (l) => l.amountCents, header: t('st.plans.col.ours'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountCents) },
-    { id: 'stripe', accessorFn: (l) => l.stripeAmountCents ?? -1, header: t('st.plans.col.stripe'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.stripeAmountCents == null ? '—' : money(row.original.stripeAmountCents)) },
-    { id: 'state', accessorFn: (l) => l.state, header: t('st.plans.col.state'), size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.state] ?? 'info'}>{humanize(row.original.state)}</StatusPill> },
-    { id: 'price', accessorFn: (l) => l.stripePriceId ?? '', header: t('st.plans.col.priceId'), size: 220, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.stripePriceId ?? row.original.error ?? ''}</span> }
-  ], [t]);
-  const drift = sync.data?.drifted ?? 0;
-  return (
-    <Card title={t('st.plans.syncTitle')} actions={manage ? <Button size="sm" variant="neutral" loading={run.isPending} onClick={() => run.mutate()}>{t('st.plans.syncNow')}</Button> : null}>
-      {sync.data ? (
-        drift ? <Notice tone="warning" title={t('st.plans.drift', { count: drift })}>{t('st.plans.driftHelp')}</Notice>
-          : <p className="m-0 text-sm text-success">{t('st.plans.inSync', { at: dateTime(sync.data.checkedAt) })}</p>
-      ) : null}
-      <DataTable<StaffPlanSyncLine> id="staff.plans.sync" label={t('st.plans.syncTitle')} columns={columns} data={sync.data?.lines ?? []} getRowId={(l) => `${l.planCode}-${l.version}-${l.cadence}`}
-        state={state} mode="client" loading={sync.isPending} fetching={sync.isFetching} error={sync.isError ? <ErrorState error={sync.error} onRetry={() => void sync.refetch()} /> : undefined} />
-    </Card>
-  );
+/** "1,000 listings · AI writer · Lola Growth": what the plan allows, from its entitlements. */
+export function allowsOf(e: StaffPlanEntitlements | undefined, t: T): string {
+  if (!e) return '—';
+  return [
+    e.listingsUnlimited || e.listings === null ? t('st.plans.listingsUnlimitedShort') : t('st.plans.listingsShort', { count: e.listings.toLocaleString('en-US') }),
+    e.aiListingWriter ? t('st.plans.aiWriterShort') : null,
+    t(`st.plans.lola.${e.lolaTier}`)
+  ].filter(Boolean).join(' · ');
 }
 
-/** Plans: the catalogue with versions, publish, retire, migrations and the Stripe sync status. */
+/** Plans: the catalogue with versions, publish, retire, migrations and what each plan allows. */
 export function CataloguePanel() {
   const t = useT();
   const qc = useQueryClient();
@@ -244,6 +241,7 @@ export function CataloguePanel() {
     { id: 'quarterlyCents', accessorFn: (p) => p.quarterlyCents, header: t('st.plans.quarterly'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.quarterlyCents) },
     { id: 'annualCents', accessorFn: (p) => p.annualCents, header: t('st.plans.annual'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.annualCents) },
     { id: 'trialDays', accessorFn: (p) => p.trialDays, header: t('st.plans.trialDays'), size: 90, meta: { kind: 'number', align: 'end' } },
+    { id: 'allows', accessorFn: (p) => allowsOf(p.entitlements, t), header: t('st.plans.allows'), size: 240, enableSorting: false },
     { id: 'version', accessorFn: (p) => p.currentVersion, header: t('st.plans.col.version'), size: 110,
       cell: ({ row }) => `v${row.original.currentVersion}${row.original.versions.some((v) => v.status === 'DRAFT') ? ` · ${t('st.plans.draftPending')}` : ''}` },
     { id: 'visibility', accessorFn: (p) => p.visibility, header: t('st.plans.visibility'), size: 120, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.visibility] ?? 'info'}>{t(`st.plans.visibility.${row.original.visibility}`)}</StatusPill> },
@@ -273,7 +271,6 @@ export function CataloguePanel() {
       <DataTable<StaffPlan> id="staff.plans.catalogue" label={t('st.plans.tab.plans')} columns={columns} data={plans.data ?? []} getRowId={(p) => p.code} rowLabel={(p) => p.name}
         state={state} mode="client" loading={plans.isPending} fetching={plans.isFetching} error={plans.isError ? <ErrorState error={plans.error} onRetry={() => void plans.refetch()} /> : undefined}
         toolbar={manage ? <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>{t('st.plans.newPlan')}</Button> : null} empty={t('st.plans.noPlans')} />
-      <SyncCard t={t} />
       <PlanDialog key={editing?.mode === 'edit' ? editing.plan.code : editing?.mode ?? 'none'} editing={editing} onClose={() => setEditing(null)} t={t} />
       <PricesDialog key={editing?.mode === 'prices' ? `p-${editing.plan.code}` : 'p'} plan={editing?.mode === 'prices' ? editing.plan : null} onClose={() => setEditing(null)} t={t} />
       <MigrationDialog plan={editing?.mode === 'migrate' ? editing.plan : null} onClose={() => setEditing(null)} t={t} />
