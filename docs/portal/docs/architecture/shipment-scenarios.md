@@ -59,6 +59,39 @@ Money for the shipment is captured at `picked_up`.
 | `ready` | The seller, or the pickup point's "ready" notice | Ops, or the pickup point's notice |
 | `delivered` | The seller hands it over at its own shop | Ops at the counter |
 
+## Cancelling
+
+| Who | When | Where |
+|---|---|---|
+| The customer | Only before the parcel is packed (`placed` or `confirmed`) **and** inside the cancellation window: 30 minutes after placing by default (`ORDERS_CANCELLATION_WINDOW`), or until a pre-order's window closes | Orders → Cancel |
+| A platform admin | Any shipment that has not been picked up (`placed` to `ready`), with a reason | Staff › Orders › Update a shipment |
+| The seller | Never. A seller who cannot ship asks support | — |
+
+The Cancel button is shown only while the cancel would be accepted. After the window, or once the seller packs, it is gone and
+the customer is pointed at returns instead.
+
+## Carrier webhooks: what has to be true when we really ship
+
+| Step | What happens | If it is missing |
+|---|---|---|
+| The seller buys a label | carrier-gateway stores the label, subscribes the tracking number (UPS Track Alert) and orders-service is given the carrier and number | Events cannot be matched to the shipment |
+| The carrier pushes an event | `POST /v1/webhooks/{carrier}` is verified (UPS credential header, FedEx and DHL HMAC), parsed and stored once | A bad signature is refused with 401 |
+| carrier-gateway publishes it | orders-service moves the shipment forward only (an older event is ignored) | — |
+| A push never arrives | A slow poll (every 2 hours in dev, UAT and prod) asks UPS, FedEx, DHL and USPS for each active tracking number | The shipment would otherwise stay stuck |
+
+A carrier event can move a shipment from `confirmed`, `packed` or `ready` straight to `in_transit`, so the seller forgetting
+"Mark shipped" does not hold the money capture or the customer's tracking back.
+
+To switch it on for an environment:
+
+1. Set `PUBLIC_BASE_URL` (or the shared `API_BASE_URL`) to an address the carriers can reach; UPS subscribes to
+   `<base>/v1/webhooks/ups`.
+2. Set the secrets: `UPS_WEBHOOK_CREDENTIAL`, `FEDEX_WEBHOOK_SECRET`, `DHL_WEBHOOK_SECRET`. In the FedEx and DHL consoles, point
+   the webhook project at `<base>/v1/webhooks/fedex` and `<base>/v1/webhooks/dhl`.
+3. Check one real label: it should show `in_transit` in Staff › Orders within minutes of the carrier's first scan.
+
+Locally, the test carrier has no push; the 1-minute poll moves its labels to delivered within 15 minutes.
+
 ## What proof each path leaves
 
 | Path | Proof recorded today | Shown to anyone today |

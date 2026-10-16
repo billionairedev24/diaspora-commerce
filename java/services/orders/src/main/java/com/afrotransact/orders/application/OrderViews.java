@@ -32,14 +32,16 @@ class OrderViews {
     private final HandoverCodeVault vault;
     private final ReturnWindowPolicy returnWindows;
     private final OrdersAccess access;
+    private final OrdersSettings settings;
     private final Clock clock;
 
     OrderViews(ShipmentTransitionPolicy policy, HandoverCodeVault vault, ReturnWindowPolicy returnWindows,
-               OrdersAccess access, Clock clock) {
+               OrdersAccess access, OrdersSettings settings, Clock clock) {
         this.policy = policy;
         this.vault = vault;
         this.returnWindows = returnWindows;
         this.access = access;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -69,8 +71,7 @@ class OrderViews {
                 && !s.status().terminal() ? vault.reveal(s.id(), s.handoverCodeSealed()) : null;
         int units = s.lines().stream().mapToInt(OrderLine::quantity).sum();
         String label = "Shipment " + s.seq() + " of " + count + (s.sellerName() == null ? "" : " · " + s.sellerName());
-        boolean cancellable = (s.status() == ShipmentStatus.PLACED || s.status() == ShipmentStatus.CONFIRMED)
-                && (!s.preorderShipment() || s.preorder().cancellableAt(Instant.now(clock)));
+        boolean cancellable = customerMayCancel(order, s);
         if (s.preorderShipment()) {
             label = "Pre-order · delivered " + s.preorder().deliversOn()
                     + (s.sellerName() == null ? "" : " · " + s.sellerName());
@@ -99,6 +100,22 @@ class OrderViews {
                         s.preorder().windowCode(), s.preorder().windowName(), s.preorder().deliversOn(),
                         s.preorder().fulfilment().name(), s.preorder().closesAt(), s.preorder().deliveryMissed(),
                         s.preorder().missedChoice() == null ? null : s.preorder().missedChoice().name()));
+    }
+
+    /**
+     * The customer's Cancel button: only before the parcel is packed (placed, or confirmed by the seller) and inside the
+     * cancellation window (a pre-order: until its window closes). The same two rules the cancel itself enforces, so
+     * the button is never shown for a cancel that would be refused.
+     */
+    private boolean customerMayCancel(Order order, Shipment s) {
+        if (s.status() != ShipmentStatus.PLACED && s.status() != ShipmentStatus.CONFIRMED) {
+            return false;
+        }
+        Instant now = Instant.now(clock);
+        if (s.preorderShipment()) {
+            return s.preorder().cancellableAt(now);
+        }
+        return order != null && order.placedAt() != null && !now.isAfter(order.placedAt().plus(settings.cancellationWindow()));
     }
 
     private List<String> nextActions(Order order, Shipment s, Viewer viewer) {
