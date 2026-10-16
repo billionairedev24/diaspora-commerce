@@ -24,6 +24,11 @@ type SellerBillingClient interface {
 	PlanFeeCollection(ctx context.Context, bearer, orgID string) (SellerPlanFeeCollection, error)
 	// SetPlanFeeCollection is seller PUT /v1/orgs/{orgId}/billing/plan-fee-collection (owner / finance).
 	SetPlanFeeCollection(ctx context.Context, bearer, orgID, mode string) (SellerPlanFeeCollection, error)
+	// RetryInvoice is seller POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/retry (owner / finance): collects an
+	// unpaid invoice again after the payment method was fixed.
+	RetryInvoice(ctx context.Context, bearer, orgID, invoiceID string) (SellerInvoice, error)
+	// InvoiceDocument is seller GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/document: a printable HTML invoice.
+	InvoiceDocument(ctx context.Context, bearer, orgID, invoiceID string) ([]byte, error)
 }
 
 // SellerPlanFeeCollection is seller's PlanFeeCollection: how the organisation pays its plan (S298).

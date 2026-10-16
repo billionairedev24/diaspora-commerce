@@ -83,6 +83,10 @@ func TestSellerContractConformance(t *testing.T) {
 			t.Errorf("%s %s answered %d, which the contract does not document: %s", req.Method, req.URL.Path, rec.Code, rec.Body.Bytes())
 			return
 		}
+		if strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
+			validated[route.Operation.OperationID]++ // a printable document: the status is documented, there is no schema
+			return
+		}
 		in := &openapi3filter.ResponseValidationInput{
 			RequestValidationInput: &openapi3filter.RequestValidationInput{Request: req, PathParams: params, Route: route,
 				Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc}},
@@ -282,12 +286,29 @@ func TestSellerContractConformance(t *testing.T) {
 	}
 	billing := b.do("GET", "/v1/seller/billing", nil)
 	mustStatus(t, billing, 200)
-	// S298: how the plan is paid, and on each invoice what sales and the card paid.
-	if bv := billing.json(t); bv["planFeeCollection"].(map[string]any)["mode"] != "EARNINGS_FIRST" ||
+	// S298: how the plan is paid, and on each invoice what credit, sales and the card paid.
+	bv := billing.json(t)
+	inv0 := bv["invoices"].([]any)[0].(map[string]any)
+	if bv["planFeeCollection"].(map[string]any)["mode"] != "EARNINGS_FIRST" ||
 		bv["planFeeCollection"].(map[string]any)["canChange"] != true ||
-		num(bv["invoices"].([]any)[0].(map[string]any), "paidFromSalesMinor") != 9000 ||
-		num(bv["invoices"].([]any)[0].(map[string]any), "paidByCardMinor") != 2115 {
+		num(inv0, "paidFromCreditMinor") != 2000 || num(inv0, "paidFromSalesMinor") != 7000 || num(inv0, "paidByCardMinor") != 2115 ||
+		inv0["canRetry"] != false || len(inv0["lines"].([]any)) != 1 {
 		t.Fatalf("billing plan fees = %v / %v", bv["planFeeCollection"], bv["invoices"])
+	}
+	// Staff conditions on the charges and what the plan allows come through for the seller to read.
+	sub := bv["subscription"].(map[string]any)
+	if gate := sub["chargeGate"].(map[string]any); gate["mode"] != "START_AFTER" || num(gate, "progress") != 42000 ||
+		!strings.Contains(gate["label"].(string), "Charging starts after $1,000") {
+		t.Fatalf("charge gate = %v", sub["chargeGate"])
+	}
+	if ent := sub["entitlements"].(map[string]any); num(ent, "listings") != 1000 || ent["aiListingWriter"] != true || ent["lolaTier"] != "GROWTH" {
+		t.Fatalf("entitlements = %v", sub["entitlements"])
+	}
+	if retry := b.do("POST", "/v1/seller/billing/invoices/inv_s3/retry", nil); retry.status != 200 || retry.json(t)["status"] != "PAID" {
+		t.Fatalf("retry invoice = %d %s", retry.status, retry.body)
+	}
+	if doc := b.do("GET", "/v1/seller/billing/invoices/inv_s3/document", nil); doc.status != 200 || !strings.Contains(string(doc.body), "AT-INV-2026-1003") {
+		t.Fatalf("invoice document = %d %s", doc.status, doc.body)
 	}
 	if pf := b.do("PUT", "/v1/seller/billing/plan-fee-collection", map[string]any{"mode": "CARD"}); pf.status != 200 || pf.json(t)["mode"] != "CARD" {
 		t.Fatalf("plan fee collection = %d %s", pf.status, pf.body)

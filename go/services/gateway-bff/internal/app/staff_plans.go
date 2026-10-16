@@ -12,8 +12,8 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// StaffPlansService is Plans & billing (S292–S297): the seller service's plan catalogue (versions, publish with
-// Stripe sync, migrations, invites), trial campaigns, reward rules with their preview, the grants log and the
+// StaffPlansService is Plans & billing (S292–S297): the seller service's plan catalogue (versions, entitlements, publish,
+// migrations, invites), trial campaigns, reward rules with their preview, the grants log and the
 // per-seller billing panel with audited adjustments. The seller service validates and authorises again; the BFF checks
 // the module level and the permission each operation needs, so the console can hide what a role can't do, and relays
 // the staff member's Idempotency-Key on adjustments.
@@ -57,9 +57,6 @@ var StaffPlanOps = []StaffPlanOp{
 		Path: "/v1/billing/plans/{code}/migration"},
 	{Name: "migratePlan", Route: "POST /v1/staff/billing/plans/{code}/migration", Method: http.MethodPost,
 		Path: "/v1/billing/plans/{code}/migration", Permission: domain.PermPlansManage, Body: true},
-	{Name: "stripeSync", Route: "GET /v1/staff/billing/stripe-sync", Method: http.MethodGet, Path: "/v1/billing/stripe-sync"},
-	{Name: "syncStripe", Route: "POST /v1/staff/billing/stripe-sync", Method: http.MethodPost, Path: "/v1/billing/stripe-sync",
-		Permission: domain.PermPlansManage},
 	{Name: "trialCampaigns", Route: "GET /v1/staff/billing/trial-campaigns", Method: http.MethodGet,
 		Path: "/v1/billing/trial-campaigns"},
 	{Name: "createTrialCampaign", Route: "POST /v1/staff/billing/trial-campaigns", Method: http.MethodPost,
@@ -86,6 +83,12 @@ var StaffPlanOps = []StaffPlanOp{
 		Path: "/v1/orgs/{orgId}/billing/credits", Permission: domain.PermBillingAdjust, Status: http.StatusCreated, Body: true},
 	{Name: "giveFreeDays", Route: "POST /v1/staff/billing/orgs/{orgId}/free-days", Method: http.MethodPost,
 		Path: "/v1/orgs/{orgId}/billing/free-days", Permission: domain.PermBillingAdjust, Status: http.StatusCreated, Body: true},
+	{Name: "giveFreeMonths", Route: "POST /v1/staff/billing/orgs/{orgId}/free-months", Method: http.MethodPost,
+		Path: "/v1/orgs/{orgId}/billing/free-months", Permission: domain.PermBillingAdjust, Status: http.StatusCreated, Body: true},
+	{Name: "setChargeGate", Route: "PUT /v1/staff/billing/orgs/{orgId}/charge-gate", Method: http.MethodPut,
+		Path: "/v1/orgs/{orgId}/billing/charge-gate", Permission: domain.PermBillingAdjust, Status: http.StatusCreated, Body: true},
+	{Name: "clearChargeGate", Route: "POST /v1/staff/billing/orgs/{orgId}/charge-gate/clear", Method: http.MethodPost,
+		Path: "/v1/orgs/{orgId}/billing/charge-gate/clear", Permission: domain.PermBillingAdjust, Status: http.StatusCreated, Body: true},
 	{Name: "overrideTrial", Route: "POST /v1/staff/billing/orgs/{orgId}/trial", Method: http.MethodPost,
 		Path: "/v1/orgs/{orgId}/billing/trial", Permission: domain.PermBillingAdjust, Status: http.StatusCreated, Body: true},
 	{Name: "waiveInvoice", Route: "POST /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/waive", Method: http.MethodPost,

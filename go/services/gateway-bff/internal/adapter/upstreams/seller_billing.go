@@ -59,3 +59,19 @@ func (s *sellerServiceImpl) AddPaymentMethod(ctx context.Context, bearer, orgID 
 		Bearer: bearer, JSON: in}, &out)
 	return out, err
 }
+
+func (s *sellerServiceImpl) RetryInvoice(ctx context.Context, bearer, orgID, invoiceID string) (port.SellerInvoice, error) {
+	var out port.SellerInvoice
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/retry"),
+		Bearer: bearer, RetryUnsafe: true}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) InvoiceDocument(ctx context.Context, bearer, orgID, invoiceID string) ([]byte, error) {
+	res, err := call(ctx, s.c, httpclient.Request{Path: orgPath(orgID, "/billing/invoices/"+url.PathEscape(invoiceID)+"/document"), Bearer: bearer,
+		Header: http.Header{"Accept": {"text/html"}}}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return res.Body, nil
+}

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 )
 
@@ -129,8 +130,18 @@ type ListingContext struct {
 	ImportLimits    ImportLimits    `json:"importLimits"`
 }
 
-// AIListingWriterPlans are the plans whose features include the AI listing writer.
+// AIListingWriterPlans are the plans assumed to include the AI listing writer when the seller service does not say
+// (it normally does: staff set aiListingWriter per plan).
 var AIListingWriterPlans = []string{"seller_growth", "seller_pro"}
+
+// PlanHasAIListingWriter is whether a plan includes the AI listing writer: the plan's entitlement when the seller
+// service sent one, else the built-in list.
+func PlanHasAIListingWriter(planCode string, entitled, known bool) bool {
+	if known {
+		return entitled
+	}
+	return slices.Contains(AIListingWriterPlans, planCode)
+}
 
 // Reasons the AI listing writer is not offered.
 const (

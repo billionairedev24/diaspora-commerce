@@ -399,6 +399,10 @@ type SellerPlan struct {
 	TrialDays    int               `json:"trialDays"`
 	Features     []string          `json:"features"`
 	Prices       []SellerPlanPrice `json:"prices"`
+	// Visibility is PUBLIC, HIDDEN or INVITE_ONLY (invited organisations see the last).
+	Visibility string `json:"visibility"`
+	// Entitlements is what the plan allows (listing cap, AI listing writer, Lola tier).
+	Entitlements *SellerEntitlements `json:"entitlements"`
 }
 
 // SellerPaymentMethod is seller's PaymentMethod.
@@ -439,28 +443,86 @@ type SellerBilling struct {
 	} `json:"pendingChange"`
 	Dunning        string                `json:"dunning"`
 	PaymentMethods []SellerPaymentMethod `json:"paymentMethods"`
-	// S292–S297: the plan version paid, the Stripe credit balance and where the trial came from.
+	// S292–S297: the plan version paid, the platform credit balance and where the trial came from.
 	PlanVersion        int    `json:"planVersion"`
 	CreditBalanceCents int64  `json:"creditBalanceCents"`
 	TrialSource        string `json:"trialSource"`
+	// ChargeGate is a condition staff put on the plan charges (start after X sales, waive while X listings, waive
+	// until a date); nil when charges apply as normal.
+	ChargeGate *SellerChargeGate `json:"chargeGate"`
+	// Entitlements is what the plan allows (listing cap, AI listing writer, Lola tier).
+	Entitlements *SellerEntitlements `json:"entitlements"`
 }
 
-// SellerInvoice is seller's Invoice.
+// SellerChargeGate is seller's ChargeGate with the seller's progress.
+type SellerChargeGate struct {
+	Mode       string     `json:"mode"`
+	Metric     string     `json:"metric"`
+	Threshold  *int64     `json:"threshold"`
+	Progress   int64      `json:"progress"`
+	Since      *time.Time `json:"since"`
+	Until      *time.Time `json:"until"`
+	ReasonCode string     `json:"reasonCode"`
+	Note       string     `json:"note"`
+	SetAt      *time.Time `json:"setAt"`
+	MetAt      *time.Time `json:"metAt"`
+	Label      string     `json:"label"`
+}
+
+// SellerEntitlements is seller's PlanEntitlements: what a plan lets an organisation do. There is no limit on shops or
+// users.
+type SellerEntitlements struct {
+	Listings          *int64 `json:"listings"`
+	ListingsUnlimited bool   `json:"listingsUnlimited"`
+	AIListingWriter   bool   `json:"aiListingWriter"`
+	LolaTier          string `json:"lolaTier"`
+}
+
+// SellerInvoice is seller's Invoice: a plan invoice AfroTransact issued itself.
 type SellerInvoice struct {
-	ID               string     `json:"id"`
-	Number           string     `json:"number"`
-	PeriodStart      *time.Time `json:"periodStart"`
-	PeriodEnd        *time.Time `json:"periodEnd"`
-	AmountDueCents   int64      `json:"amountDueCents"`
-	AmountPaidCents  int64      `json:"amountPaidCents"`
-	Currency         string     `json:"currency"`
-	Status           string     `json:"status"`
-	HostedInvoiceURL string     `json:"hostedInvoiceUrl"`
-	InvoicePDF       string     `json:"invoicePdf"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	// S298: what the organisation's sales paid, and the card the rest.
-	PaidFromSalesCents int64 `json:"paidFromSalesCents"`
-	PaidByCardCents    int64 `json:"paidByCardCents"`
+	ID              string                 `json:"id"`
+	Number          string                 `json:"number"`
+	PeriodStart     *time.Time             `json:"periodStart"`
+	PeriodEnd       *time.Time             `json:"periodEnd"`
+	SubtotalCents   int64                  `json:"subtotalCents"`
+	DiscountCents   int64                  `json:"discountCents"`
+	AmountDueCents  int64                  `json:"amountDueCents"`
+	AmountPaidCents int64                  `json:"amountPaidCents"`
+	Currency        string                 `json:"currency"`
+	Status          string                 `json:"status"`
+	BillingReason   string                 `json:"billingReason"`
+	PlanCode        string                 `json:"planCode"`
+	Cadence         string                 `json:"cadence"`
+	DueAt           *time.Time             `json:"dueAt"`
+	PaidAt          *time.Time             `json:"paidAt"`
+	Attempts        int                    `json:"attempts"`
+	NextAttemptAt   *time.Time             `json:"nextAttemptAt"`
+	LastError       string                 `json:"lastError"`
+	CreatedAt       time.Time              `json:"createdAt"`
+	Lines           []SellerInvoiceLine    `json:"lines"`
+	Payments        []SellerInvoicePayment `json:"payments"`
+	// What settled it, in the order tried: platform credit, the seller's sales (only if chosen), the card, a waiver.
+	PaidFromCreditCents int64 `json:"paidFromCreditCents"`
+	PaidFromSalesCents  int64 `json:"paidFromSalesCents"`
+	PaidByCardCents     int64 `json:"paidByCardCents"`
+	WaivedCents         int64 `json:"waivedCents"`
+}
+
+// SellerInvoiceLine is seller's InvoiceLine.
+type SellerInvoiceLine struct {
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	AmountCents int64  `json:"amountCents"`
+	Meter       string `json:"meter"`
+}
+
+// SellerInvoicePayment is seller's InvoicePayment.
+type SellerInvoicePayment struct {
+	Source      string    `json:"source"`
+	AmountCents int64     `json:"amountCents"`
+	Status      string    `json:"status"`
+	Note        string    `json:"note"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 // ShipFromAddress is seller's ShipFromAddress.

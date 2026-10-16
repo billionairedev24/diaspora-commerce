@@ -371,7 +371,7 @@ func (s *sellerListingImpl) aiWriter(ctx context.Context, c *domain.Caller, sc s
 		return reason(domain.AIUnavailableRole)
 	}
 	b, err := s.r.d.Sellers.Billing(ctx, c.BearerToken, sc.org.ID)
-	if err != nil || !slices.Contains(domain.AIListingWriterPlans, b.PlanCode) {
+	if err != nil || !domain.PlanHasAIListingWriter(b.PlanCode, b.Entitlements != nil && b.Entitlements.AIListingWriter, b.Entitlements != nil) {
 		return reason(domain.AIUnavailablePlan)
 	}
 	return domain.AIListingWriter{Available: true}

@@ -30,6 +30,10 @@ type SellerMoneyService interface {
 	AddPaymentMethod(ctx context.Context, c *domain.Caller, in domain.AddBillingPaymentMethod) (domain.BillingPaymentMethod, error)
 	// SetPlanFeeCollection chooses how the plan is paid (S298): from sales first or always by card (owner / finance).
 	SetPlanFeeCollection(ctx context.Context, c *domain.Caller, mode string) (domain.PlanFeeCollectionView, error)
+	// RetryInvoice collects an unpaid invoice again after the payment method was fixed (owner / finance).
+	RetryInvoice(ctx context.Context, c *domain.Caller, invoiceID string) (domain.Invoice, error)
+	// InvoiceDocument is the printable invoice (HTML; the browser's Print makes the PDF).
+	InvoiceDocument(ctx context.Context, c *domain.Caller, invoiceID string) (domain.FileDownload, error)
 }
 
 type sellerMoneyImpl struct{ r *orgResolver }
@@ -197,11 +201,43 @@ func priceOf(p port.SellerPlanPrice) domain.PlanPrice {
 		SavingMinor: p.SavingCents, PerMonthLabel: p.PerMonthLabel, BilledLabel: p.BilledLabel, SavingLabel: p.SavingLabel}
 }
 
+func entitlementsOf(e *port.SellerEntitlements) *domain.PlanEntitlementsView {
+	if e == nil {
+		return nil
+	}
+	return &domain.PlanEntitlementsView{Listings: e.Listings, ListingsUnlimited: e.ListingsUnlimited || e.Listings == nil,
+		AIListingWriter: e.AIListingWriter, LolaTier: strings.ToUpper(firstNonEmpty(e.LolaTier, "ESSENTIALS"))}
+}
+
+func chargeGateOf(g *port.SellerChargeGate) *domain.ChargeGateView {
+	if g == nil {
+		return nil
+	}
+	return &domain.ChargeGateView{Mode: g.Mode, Metric: strPtr(g.Metric), Threshold: g.Threshold, Progress: g.Progress,
+		Until: g.Until, MetAt: g.MetAt, Label: g.Label}
+}
+
+func invoiceOf(in port.SellerInvoice) domain.Invoice {
+	lines := make([]domain.InvoiceLine, 0, len(in.Lines))
+	for _, l := range in.Lines {
+		lines = append(lines, domain.InvoiceLine{Kind: l.Kind, Description: l.Description, AmountMinor: l.AmountCents})
+	}
+	status := strings.ToUpper(in.Status)
+	return domain.Invoice{ID: in.ID, Number: firstNonEmpty(in.Number, in.ID), PeriodStart: in.PeriodStart, PeriodEnd: in.PeriodEnd,
+		SubtotalMinor: in.SubtotalCents, DiscountMinor: in.DiscountCents, AmountDueMinor: in.AmountDueCents,
+		AmountPaidMinor: in.AmountPaidCents, Currency: strings.ToUpper(firstNonEmpty(in.Currency, domain.Currency)), Status: status,
+		CreatedAt: in.CreatedAt, PaidAt: in.PaidAt, NextAttemptAt: in.NextAttemptAt, LastError: strPtr(in.LastError), Lines: lines,
+		PaidFromCreditMinor: max(0, in.PaidFromCreditCents), PaidFromSalesMinor: max(0, in.PaidFromSalesCents),
+		PaidByCardMinor: max(0, in.PaidByCardCents), WaivedMinor: max(0, in.WaivedCents),
+		CanRetry: status == "UNCOLLECTIBLE" || (status == "OPEN" && in.Attempts > 0)}
+}
+
 func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerPlan, invoices []port.SellerInvoice, fees *port.SellerPlanFeeCollection, role string) domain.BillingView {
 	sub := domain.Subscription{PlanCode: b.PlanCode, PlanName: b.PlanName, Cadence: cadenceOf(b.Cadence), Status: strings.ToUpper(b.Status),
 		TrialEndsAt: b.TrialEndsAt, CurrentPeriodEnd: b.CurrentPeriodEnd, NextChargeAt: b.NextChargeAt, NextChargeMinor: b.NextChargeCents,
 		NextChargeLabel: b.NextChargeLabel, CancelAtPeriodEnd: b.CancelAtPeriodEnd, Dunning: strPtr(b.Dunning),
-		PlanVersion: max(1, b.PlanVersion), CreditBalanceMinor: max(0, b.CreditBalanceCents), TrialSource: strPtr(b.TrialSource)}
+		PlanVersion: max(1, b.PlanVersion), CreditBalanceMinor: max(0, b.CreditBalanceCents), TrialSource: strPtr(b.TrialSource),
+		ChargeGate: chargeGateOf(b.ChargeGate), Entitlements: entitlementsOf(b.Entitlements)}
 	if b.Price != nil {
 		sub.PriceLabel, sub.BilledLabel = b.Price.PerMonthLabel, b.Price.BilledLabel
 	}
@@ -216,17 +252,15 @@ func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerP
 	}
 	for _, p := range plans {
 		plan := domain.Plan{Code: p.Code, Name: p.Name, Tagline: p.Tagline, MonthlyMinor: p.MonthlyCents, TrialDays: p.TrialDays,
-			Features: append([]string{}, p.Features...), Prices: []domain.PlanPrice{}, Current: p.Code == b.PlanCode}
+			Features: append([]string{}, p.Features...), Prices: []domain.PlanPrice{}, Current: p.Code == b.PlanCode,
+			Entitlements: entitlementsOf(p.Entitlements)}
 		for _, pr := range p.Prices {
 			plan.Prices = append(plan.Prices, priceOf(pr))
 		}
 		out.Plans = append(out.Plans, plan)
 	}
 	for _, in := range invoices {
-		out.Invoices = append(out.Invoices, domain.Invoice{ID: in.ID, Number: firstNonEmpty(in.Number, in.ID), PeriodStart: in.PeriodStart, PeriodEnd: in.PeriodEnd,
-			AmountDueMinor: in.AmountDueCents, AmountPaidMinor: in.AmountPaidCents, Currency: strings.ToUpper(firstNonEmpty(in.Currency, domain.Currency)),
-			Status: strings.ToUpper(in.Status), PDFURL: strPtr(in.InvoicePDF), HostedURL: strPtr(in.HostedInvoiceURL), CreatedAt: in.CreatedAt,
-			PaidFromSalesMinor: max(0, in.PaidFromSalesCents), PaidByCardMinor: max(0, in.PaidByCardCents)})
+		out.Invoices = append(out.Invoices, invoiceOf(in))
 	}
 	return out
 }
@@ -283,6 +317,34 @@ func (s *sellerMoneyImpl) SetPlanFeeCollection(ctx context.Context, c *domain.Ca
 		return domain.PlanFeeCollectionView{}, mapErr("seller", err)
 	}
 	return *planFeeCollectionOf(p, sc.org.Role), nil
+}
+
+func (s *sellerMoneyImpl) RetryInvoice(ctx context.Context, c *domain.Caller, invoiceID string) (domain.Invoice, error) {
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.Invoice{}, err
+	}
+	if !isOwnerOrFinance(sc.org.Role) {
+		return domain.Invoice{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Owner or finance only",
+			"Only the owner or a finance member can retry a payment.")
+	}
+	in, err := s.r.d.Sellers.RetryInvoice(ctx, c.BearerToken, sc.org.ID, invoiceID)
+	if err != nil {
+		return domain.Invoice{}, mapErr("seller", err)
+	}
+	return invoiceOf(in), nil
+}
+
+func (s *sellerMoneyImpl) InvoiceDocument(ctx context.Context, c *domain.Caller, invoiceID string) (domain.FileDownload, error) {
+	sc, err := s.r.require(ctx, c, "", "billing", domain.LevelView)
+	if err != nil {
+		return domain.FileDownload{}, err
+	}
+	body, err := s.r.d.Sellers.InvoiceDocument(ctx, c.BearerToken, sc.org.ID, invoiceID)
+	if err != nil {
+		return domain.FileDownload{}, mapErr("seller", err)
+	}
+	return domain.FileDownload{FileName: "invoice-" + invoiceID + ".html", ContentType: "text/html; charset=utf-8", Content: body}, nil
 }
 
 func ownerOnly() error {

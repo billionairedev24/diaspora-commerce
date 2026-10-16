@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // AssistantTier is the Lola level of a seller's plan: what she can look at, whether she can prepare changes for the seller to
 // confirm, and how many messages a day.
@@ -73,6 +76,64 @@ func AssistantTierOf(planCode string) AssistantTier {
 		return AssistantGrowth
 	default:
 		return AssistantEssentials
+	}
+}
+
+// AssistantTierFor is the Lola tier a plan's entitlements give (staff set it per plan). A plan that carries no
+// entitlement (an older seller service) falls back to the plan code's name.
+func AssistantTierFor(lolaTier, planCode string) AssistantTier {
+	switch strings.ToUpper(strings.TrimSpace(lolaTier)) {
+	case "PRO":
+		return AssistantPro
+	case "GROWTH":
+		return AssistantGrowth
+	case "ESSENTIALS":
+		return AssistantEssentials
+	default:
+		return AssistantTierOf(planCode)
+	}
+}
+
+// AssistantUpgradeFrom is the plan to offer when a limit is reached or a tool is not on the plan: among the plans
+// whose Lola tier is the next one up, the cheapest. Nil when no plan has a higher tier.
+func AssistantUpgradeFrom(tier AssistantTier, plans []Plan) *AssistantUpgradeOffer {
+	var best *Plan
+	rank := 0
+	for i := range plans {
+		p := plans[i]
+		if p.Entitlements == nil || p.Current {
+			continue
+		}
+		r := assistantRank(AssistantTierFor(p.Entitlements.LolaTier, p.Code))
+		if r <= assistantRank(tier) {
+			continue
+		}
+		if best == nil || r < rank || (r == rank && p.MonthlyMinor < best.MonthlyMinor) {
+			best, rank = &p, r
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	next := AssistantTierFor(best.Entitlements.LolaTier, best.Code)
+	l := AssistantLimitsOf(next)
+	gains := fmt.Sprintf("%d messages a day", l.DailyMessages)
+	if tier == AssistantEssentials && l.CanPropose {
+		gains += ", fees and payouts, and changes she prepares for you to confirm"
+	} else if next == AssistantPro {
+		gains += " and sales summaries"
+	}
+	return &AssistantUpgradeOffer{PlanCode: best.Code, Label: best.Name, Gains: gains}
+}
+
+func assistantRank(t AssistantTier) int {
+	switch t {
+	case AssistantPro:
+		return 2
+	case AssistantGrowth:
+		return 1
+	default:
+		return 0
 	}
 }
 

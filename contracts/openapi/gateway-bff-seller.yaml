@@ -1547,12 +1547,51 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/invoices/{invoiceId}/retry:
+    post:
+      tags: [Money]
+      operationId: retryInvoice
+      security: [{sessionCookie: []}]
+      summary: Collect an unpaid invoice again after fixing the payment method — owner and finance only
+      description: |
+        seller `POST /v1/orgs/{orgId}/billing/invoices/{invoiceId}/retry`. Reopens an invoice that failed every attempt
+        (or is waiting for the next one) and collects it now: platform credit first, then the seller's sales if they
+        chose that, then the default card or bank account. Answers with the invoice as it stands afterwards.
+      parameters:
+        - {name: invoiceId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: The invoice, content: {application/json: {schema: {$ref: '#/components/schemas/Invoice'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/invoices/{invoiceId}/document:
+    get:
+      tags: [Money]
+      operationId: getInvoiceDocument
+      security: [{sessionCookie: []}]
+      summary: A printable invoice (HTML; the browser's Print › Save as PDF makes the PDF)
+      description: seller `GET /v1/orgs/{orgId}/billing/invoices/{invoiceId}/document`. Sent as a download, like shipping labels.
+      parameters:
+        - {name: invoiceId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: The invoice
+          content:
+            text/html: {schema: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/billing/plan-fee-collection:
     put:
       tags: [Money]
       operationId: setPlanFeeCollection
       security: [{sessionCookie: []}]
-      summary: Pay the plan from sales first (EARNINGS_FIRST) or always by card (CARD) — owner and finance only (S298)
+      summary: Pay the plan from your sales after credit (EARNINGS_FIRST) or always by card (CARD) — owner and finance only (S298)
       description: |
         seller `PUT /v1/orgs/{orgId}/billing/plan-fee-collection`. Applies from the next invoice (`appliesFromInvoiceAt`);
         an invoice being collected now keeps the choice it was created with. 403 for other roles, 409
@@ -4002,6 +4041,18 @@ components:
         features: {type: array, items: {type: string}}
         prices: {type: array, items: {$ref: '#/components/schemas/PlanPrice'}}
         current: {type: boolean}
+        entitlements: {$ref: '#/components/schemas/PlanEntitlements'}
+    PlanEntitlements:
+      type: object
+      description: >-
+        What a plan lets an organisation do; staff set it per plan. There is no limit on shops or users, only on live
+        listings. Null when the seller service did not say.
+      required: [listings, listingsUnlimited, aiListingWriter, lolaTier]
+      properties:
+        listings: {type: [integer, 'null'], format: int64, description: The most live listings; null = unlimited}
+        listingsUnlimited: {type: boolean}
+        aiListingWriter: {type: boolean, description: The AI listing writer is included}
+        lolaTier: {type: string, enum: [ESSENTIALS, GROWTH, PRO], description: 'What Lola, the seller assistant, can do'}
     BillingPaymentMethod:
       type: object
       required: [id, kind, brand, last4, expMonth, expYear, bankName, accountType, verified, receivesPayouts, isDefault, label]
@@ -4018,23 +4069,41 @@ components:
         receivesPayouts: {type: boolean}
         isDefault: {type: boolean}
         label: {type: string}
+    InvoiceLine:
+      type: object
+      required: [kind, description, amountMinor]
+      properties:
+        kind: {type: string, enum: [PLAN, USAGE, COUPON, PRORATION, WAIVER], description: 'USAGE is a metered add-on; COUPON and WAIVER are negative (a coupon, or the plan fee a charge condition waived)'}
+        description: {type: string}
+        amountMinor: {type: integer, format: int64}
     Invoice:
       type: object
-      required: [id, number, periodStart, periodEnd, amountDueMinor, amountPaidMinor, currency, status, pdfUrl, hostedUrl, createdAt, paidFromSalesMinor, paidByCardMinor]
+      description: >-
+        A plan invoice AfroTransact issued itself for one billing period. It is settled in this order: platform credit
+        (coupons are already off the invoice), the seller's sales — only if they chose to pay from sales — then the
+        saved card or bank account; a failed charge is retried 1, 3, 5 and 7 days later.
+      required: [id, number, periodStart, periodEnd, subtotalMinor, discountMinor, amountDueMinor, amountPaidMinor, currency, status, createdAt, paidAt, nextAttemptAt, lastError, lines, paidFromCreditMinor, paidFromSalesMinor, paidByCardMinor, waivedMinor, canRetry]
       properties:
         id: {type: string}
         number: {type: string}
         periodStart: {type: [string, 'null'], format: date-time}
         periodEnd: {type: [string, 'null'], format: date-time}
-        amountDueMinor: {type: integer}
-        amountPaidMinor: {type: integer}
+        subtotalMinor: {type: integer, format: int64, description: The plan fee and usage before coupons and waivers}
+        discountMinor: {type: integer, format: int64, description: Coupons and what a charge condition waived}
+        amountDueMinor: {type: integer, format: int64, description: What is owed after discounts}
+        amountPaidMinor: {type: integer, format: int64}
         currency: {type: string}
-        status: {type: string}
-        pdfUrl: {type: [string, 'null']}
-        hostedUrl: {type: [string, 'null']}
+        status: {type: string, enum: [OPEN, PAID, VOID, UNCOLLECTIBLE], description: 'A fully waived or covered invoice is PAID'}
         createdAt: {type: string, format: date-time}
-        paidFromSalesMinor: {type: integer, description: 'Paid from the organisation''s sales (S298): withheld from its earnings and credited to the invoice'}
-        paidByCardMinor: {type: integer, description: 'Paid (or, while open, due) by card or bank: the rest'}
+        paidAt: {type: [string, 'null'], format: date-time}
+        nextAttemptAt: {type: [string, 'null'], format: date-time, description: When an unpaid invoice is tried again}
+        lastError: {type: [string, 'null'], description: Why the last attempt failed ("Your card was declined.")}
+        lines: {type: array, items: {$ref: '#/components/schemas/InvoiceLine'}}
+        paidFromCreditMinor: {type: integer, format: int64, description: Paid from platform credit}
+        paidFromSalesMinor: {type: integer, format: int64, description: 'Paid from the organisation''s sales (S298): withheld from its earnings, only if it chose that'}
+        paidByCardMinor: {type: integer, format: int64, description: 'Paid (or, while open, due) by card or bank: the rest'}
+        waivedMinor: {type: integer, format: int64, description: Forgiven by staff}
+        canRetry: {type: boolean, description: The seller can fix the payment method and retry}
     PlanFeeCollectionMode:
       type: string
       enum: [EARNINGS_FIRST, CARD]
@@ -4085,8 +4154,32 @@ components:
             effectiveAt: {type: string, format: date-time}
         dunning: {type: [string, 'null']}
         planVersion: {type: integer, description: 'Plan version (prices) the organisation pays; changes only by a plan change or a staff migration (S292)'}
-        creditBalanceMinor: {type: integer, format: int64, minimum: 0, description: 'Stripe credit balance the next invoices use (rewards, staff credits)'}
+        creditBalanceMinor: {type: integer, format: int64, minimum: 0, description: 'Platform credit the next invoices use first (rewards, staff credits)'}
         trialSource: {type: [string, 'null'], enum: [PLAN, CAMPAIGN, OVERRIDE, NONE, null]}
+        chargeGate:
+          description: A condition staff put on the plan charges, with the seller's progress; null when charges apply as normal
+          oneOf:
+            - {$ref: '#/components/schemas/ChargeGate'}
+            - {type: 'null'}
+        entitlements:
+          description: What the plan allows
+          oneOf:
+            - {$ref: '#/components/schemas/PlanEntitlements'}
+            - {type: 'null'}
+    ChargeGate:
+      type: object
+      description: >-
+        START_AFTER: no plan charge until the seller reaches the threshold (sales, orders, bookings or live listings);
+        WAIVE_WHILE: free while they keep it; WAIVE_UNTIL: free until a date. Staff set it with a reason.
+      required: [mode, metric, threshold, progress, until, metAt, label]
+      properties:
+        mode: {type: string, enum: [START_AFTER, WAIVE_WHILE, WAIVE_UNTIL]}
+        metric: {type: [string, 'null'], enum: [GROSS_SALES, COMPLETED_ORDERS, COMPLETED_BOOKINGS, ACTIVE_LISTINGS, null]}
+        threshold: {type: [integer, 'null'], format: int64, description: 'Minor units for GROSS_SALES, else a count'}
+        progress: {type: integer, format: int64, description: Where the seller is now}
+        until: {type: [string, 'null'], format: date-time}
+        metAt: {type: [string, 'null'], format: date-time, description: A START_AFTER condition was reached; charging has started}
+        label: {type: string, description: 'One sentence for the seller: "Charging starts after $1,000 in sales — you''re at $420"'}
     RewardProgress:
       type: object
       description: >-

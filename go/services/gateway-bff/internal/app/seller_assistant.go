@@ -56,18 +56,36 @@ const maxToolCallsPerRound = 4
 
 func (s *sellerAssistantImpl) counterKey(orgID string) string { return "assistant:" + orgID }
 
-// tier reads the organisation's plan; anything unreadable is Essentials, so Lola still answers.
-func (s *sellerAssistantImpl) tier(ctx context.Context, c *domain.Caller, orgID string) domain.AssistantTier {
+// plan reads the organisation's plan: Lola's tier comes from the plan's entitlements (staff set it per plan) and the
+// upgrade offer is the cheapest plan above it. Anything unreadable is Essentials, so Lola still answers.
+func (s *sellerAssistantImpl) plan(ctx context.Context, c *domain.Caller, orgID string) (domain.AssistantTier, *domain.AssistantUpgradeOffer) {
 	b, err := s.r.d.Sellers.Billing(ctx, c.BearerToken, orgID)
 	if err != nil {
-		return domain.AssistantEssentials
+		return domain.AssistantEssentials, domain.AssistantUpgrade(domain.AssistantEssentials)
 	}
-	return domain.AssistantTierOf(b.PlanCode)
+	lola := ""
+	if b.Entitlements != nil {
+		lola = b.Entitlements.LolaTier
+	}
+	tier := domain.AssistantTierFor(lola, b.PlanCode)
+	plans, perr := s.r.d.Sellers.OrgPlans(ctx, c.BearerToken, orgID)
+	if perr != nil {
+		return tier, domain.AssistantUpgrade(tier)
+	}
+	offered := make([]domain.Plan, 0, len(plans))
+	for _, p := range plans {
+		if p.Code != b.PlanCode && p.Visibility != "" && !strings.EqualFold(p.Visibility, "PUBLIC") {
+			continue // never upsell a hidden or invite-only plan
+		}
+		offered = append(offered, domain.Plan{Code: p.Code, Name: p.Name, MonthlyMinor: p.MonthlyCents, Current: p.Code == b.PlanCode,
+			Entitlements: entitlementsOf(p.Entitlements)})
+	}
+	return tier, domain.AssistantUpgradeFrom(tier, offered)
 }
 
-func (s *sellerAssistantImpl) status(tier domain.AssistantTier, used int) domain.AssistantStatus {
+func (s *sellerAssistantImpl) status(tier domain.AssistantTier, used int, up *domain.AssistantUpgradeOffer) domain.AssistantStatus {
 	l := domain.AssistantLimitsOf(tier)
-	return domain.AssistantStatus{Tier: tier, Limits: l, Used: min(used, l.DailyMessages), Remaining: max(0, l.DailyMessages-used), Upgrade: domain.AssistantUpgrade(tier)}
+	return domain.AssistantStatus{Tier: tier, Limits: l, Used: min(used, l.DailyMessages), Remaining: max(0, l.DailyMessages-used), Upgrade: up}
 }
 
 func (s *sellerAssistantImpl) Status(ctx context.Context, c *domain.Caller) (domain.AssistantStatus, error) {
@@ -81,7 +99,8 @@ func (s *sellerAssistantImpl) Status(ctx context.Context, c *domain.Caller) (dom
 			return domain.AssistantStatus{}, mapErr("valkey", err)
 		}
 	}
-	return s.status(s.tier(ctx, c, sc.org.ID), used), nil
+	tier, up := s.plan(ctx, c, sc.org.ID)
+	return s.status(tier, used, up), nil
 }
 
 func (s *sellerAssistantImpl) Chat(ctx context.Context, c *domain.Caller, in domain.AssistantChatRequest) (domain.AssistantReply, error) {
@@ -99,7 +118,7 @@ func (s *sellerAssistantImpl) Chat(ctx context.Context, c *domain.Caller, in dom
 	if s.a.Model == nil || s.a.Counter == nil {
 		return domain.AssistantReply{}, domain.UpstreamUnavailable("ai-gateway")
 	}
-	tier := s.tier(ctx, c, sc.org.ID)
+	tier, upgrade := s.plan(ctx, c, sc.org.ID)
 	limits := domain.AssistantLimitsOf(tier)
 	key := s.counterKey(sc.org.ID)
 	used, err := s.a.Counter.Add(ctx, key, 1)
@@ -110,14 +129,14 @@ func (s *sellerAssistantImpl) Chat(ctx context.Context, c *domain.Caller, in dom
 		_, _ = s.a.Counter.Add(ctx, key, -1)
 		p := domain.NewProblem(http.StatusTooManyRequests, "ASSISTANT_LIMIT", "Lola is done for today",
 			fmt.Sprintf("You've used today's %d messages on %s. Lola starts again at midnight UTC.", limits.DailyMessages, limits.Label))
-		if up := domain.AssistantUpgrade(tier); up != nil {
+		if up := upgrade; up != nil {
 			p.Detail += " " + up.Label + " gives you " + up.Gains + "."
 			p.Extra = map[string]any{"upgradePlan": up.PlanCode}
 		}
 		return domain.AssistantReply{}, p
 	}
 	run := &assistantRun{s: s, c: c, sc: sc, tier: tier, limits: limits}
-	messages := []port.AssistantMessage{{Role: "system", Content: assistantPrompt(s.a.Now(), sc.org.Name, tier, limits, in.Language)}}
+	messages := []port.AssistantMessage{{Role: "system", Content: assistantPrompt(s.a.Now(), sc.org.Name, tier, limits, upgrade, in.Language)}}
 	for _, t := range trimHistory(in.History, limits.History) {
 		messages = append(messages, port.AssistantMessage{Role: t.Role, Content: t.Content})
 	}
@@ -157,7 +176,7 @@ func (s *sellerAssistantImpl) Chat(ctx context.Context, c *domain.Caller, in dom
 	if run.proposals == nil {
 		run.proposals = []domain.AssistantProposal{}
 	}
-	return domain.AssistantReply{Answer: answer, Steps: run.steps, Proposals: run.proposals, Status: s.status(tier, used)}, nil
+	return domain.AssistantReply{Answer: answer, Steps: run.steps, Proposals: run.proposals, Status: s.status(tier, used, upgrade)}, nil
 }
 
 // trimHistory keeps the last n earlier messages the browser sent, as plain user and assistant text only: a browser cannot
@@ -183,7 +202,7 @@ func trimHistory(in []domain.AssistantTurn, n int) []domain.AssistantTurn {
 
 // assistantPrompt is Lola's instructions for sellers. The tier says what she may look at and what she cannot, so she
 // answers "that comes with Seller Growth" instead of guessing.
-func assistantPrompt(now time.Time, org string, tier domain.AssistantTier, l domain.AssistantLimits, language string) string {
+func assistantPrompt(now time.Time, org string, tier domain.AssistantTier, l domain.AssistantLimits, upgrade *domain.AssistantUpgradeOffer, language string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `You are Lola, the AfroTransact assistant for sellers in Seller Center. You help the team of %q run their shop: orders to pack and ship, listings, stock, fees and payouts.
 
@@ -212,7 +231,7 @@ Rules you always follow:
 		missing = append(missing, "preparing changes for the seller to confirm")
 	}
 	if len(missing) > 0 {
-		up := domain.AssistantUpgrade(tier)
+		up := upgrade
 		b.WriteString(" On this level you cannot do: " + strings.Join(missing, ", ") + ".")
 		if up != nil {
 			b.WriteString(" If asked for one of those, say it comes with " + up.Label + " (Plan & billing), once, without pushing.")

@@ -749,6 +749,8 @@ type Plan struct {
 	Features     []string    `json:"features"`
 	Prices       []PlanPrice `json:"prices"`
 	Current      bool        `json:"current"`
+	// Entitlements is what the plan allows: the live-listing cap, the AI listing writer and Lola's tier.
+	Entitlements *PlanEntitlementsView `json:"entitlements"`
 }
 
 // BillingPaymentMethod is a card or bank account the plan is charged to.
@@ -773,16 +775,33 @@ type Invoice struct {
 	Number          string     `json:"number"`
 	PeriodStart     *time.Time `json:"periodStart"`
 	PeriodEnd       *time.Time `json:"periodEnd"`
+	SubtotalMinor   int64      `json:"subtotalMinor"`
+	DiscountMinor   int64      `json:"discountMinor"`
 	AmountDueMinor  int64      `json:"amountDueMinor"`
 	AmountPaidMinor int64      `json:"amountPaidMinor"`
 	Currency        string     `json:"currency"`
 	Status          string     `json:"status"`
-	PDFURL          *string    `json:"pdfUrl"`
-	HostedURL       *string    `json:"hostedUrl"`
 	CreatedAt       time.Time  `json:"createdAt"`
-	// PaidFromSalesMinor is what the organisation's sales paid (S298); PaidByCardMinor the rest.
-	PaidFromSalesMinor int64 `json:"paidFromSalesMinor"`
-	PaidByCardMinor    int64 `json:"paidByCardMinor"`
+	// PaidAt is when it was settled; NextAttemptAt and LastError describe an unpaid one (a declined card is retried).
+	PaidAt        *time.Time    `json:"paidAt"`
+	NextAttemptAt *time.Time    `json:"nextAttemptAt"`
+	LastError     *string       `json:"lastError"`
+	Lines         []InvoiceLine `json:"lines"`
+	// What settled it, in the order tried: platform credit and coupons first, then the seller's sales (only when they
+	// chose that), then the card or bank account; a waiver is staff forgiving the rest.
+	PaidFromCreditMinor int64 `json:"paidFromCreditMinor"`
+	PaidFromSalesMinor  int64 `json:"paidFromSalesMinor"`
+	PaidByCardMinor     int64 `json:"paidByCardMinor"`
+	WaivedMinor         int64 `json:"waivedMinor"`
+	// CanRetry is true for an invoice that failed every attempt: the seller can fix the payment method and retry.
+	CanRetry bool `json:"canRetry"`
+}
+
+// InvoiceLine is one line of an invoice: the plan, usage, a coupon or what a charge condition waived.
+type InvoiceLine struct {
+	Kind        string `json:"kind"`
+	Description string `json:"description"`
+	AmountMinor int64  `json:"amountMinor"`
 }
 
 // PendingPlanChange is a downgrade or cadence change applied at renewal.
@@ -812,10 +831,34 @@ type Subscription struct {
 	// PlanVersion is the plan version (prices) the organisation pays; it changes only by a plan change or a staff
 	// migration (S292).
 	PlanVersion int `json:"planVersion"`
-	// CreditBalanceMinor is the Stripe credit balance the next invoices use (rewards, staff credits).
+	// CreditBalanceMinor is the platform credit the next invoices use first (rewards, staff credits).
 	CreditBalanceMinor int64 `json:"creditBalanceMinor"`
 	// TrialSource is PLAN, CAMPAIGN, OVERRIDE or NONE once the subscription started.
 	TrialSource *string `json:"trialSource"`
+	// ChargeGate is a condition staff put on the plan charges, with the seller's progress; nil when charges apply.
+	ChargeGate *ChargeGateView `json:"chargeGate"`
+	// Entitlements is what the plan allows.
+	Entitlements *PlanEntitlementsView `json:"entitlements"`
+}
+
+// ChargeGateView explains a condition on the plan charges to the seller: "Charging starts after $1,000 in sales — you're
+// at $420".
+type ChargeGateView struct {
+	Mode      string     `json:"mode"`
+	Metric    *string    `json:"metric"`
+	Threshold *int64     `json:"threshold"`
+	Progress  int64      `json:"progress"`
+	Until     *time.Time `json:"until"`
+	MetAt     *time.Time `json:"metAt"`
+	Label     string     `json:"label"`
+}
+
+// PlanEntitlementsView is what a plan lets an organisation do (there is no limit on shops or users).
+type PlanEntitlementsView struct {
+	Listings          *int64 `json:"listings"`
+	ListingsUnlimited bool   `json:"listingsUnlimited"`
+	AIListingWriter   bool   `json:"aiListingWriter"`
+	LolaTier          string `json:"lolaTier"`
 }
 
 // BillingView is GET /v1/seller/billing.

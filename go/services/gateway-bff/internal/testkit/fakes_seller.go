@@ -405,18 +405,39 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 				"perMonthLabel": "$37.05/mo", "billedLabel": "Billed $111.15 every 3 months", "savingLabel": "Save $5.85 vs monthly"},
 			"currentPeriodEnd": "2027-01-10T00:00:00Z", "nextChargeAt": "2027-01-10T00:00:00Z", "nextChargeCents": 11115, "nextChargeLabel": "$111.15 on Jan 10, 2027",
 			"cancelAtPeriodEnd": false, "paymentMethods": u.paymentMethodsJSON(), "planVersion": 2, "creditBalanceCents": 2500,
-			"trialSource": "CAMPAIGN"}
+			"trialSource": "CAMPAIGN",
+			"chargeGate": map[string]any{"mode": "START_AFTER", "metric": "GROSS_SALES", "threshold": 100000, "progress": 42000, "since": "2026-10-01T00:00:00Z",
+				"until": nil, "reasonCode": "PROMOTION", "note": "Launch partner", "setAt": "2026-10-01T00:00:00Z", "metAt": nil,
+				"label": "Charging starts after $1,000 in sales — you're at $420"},
+			"entitlements": entitlementsOfPlan(u.seller.plan)}
 	}
 	mux.HandleFunc("GET /v1/orgs/{id}/billing", func(w http.ResponseWriter, _ *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()
 		writeJSON(w, 200, billing())
 	})
+	invoice := func(status string) map[string]any {
+		return map[string]any{"id": "inv_s3", "number": "AT-INV-2026-1003", "periodStart": "2026-07-10T00:00:00Z", "periodEnd": "2026-10-10T00:00:00Z",
+			"subtotalCents": 11115, "discountCents": 0, "amountDueCents": 11115, "amountPaidCents": 11115, "currency": "USD", "status": status,
+			"billingReason": "subscription_cycle", "planCode": "seller_growth", "cadence": "QUARTERLY", "dueAt": "2026-10-10T00:00:00Z",
+			"paidAt": "2026-10-10T00:00:05Z", "attempts": 0, "nextAttemptAt": nil, "lastError": nil, "createdAt": "2026-10-10T00:00:00Z",
+			"lines": []any{map[string]any{"kind": "PLAN", "description": "Seller Growth plan — quarterly (Jul 10, 2026 – Oct 9, 2026)",
+				"amountCents": 11115, "quantity": nil, "metered": false, "meter": nil, "periodStart": nil, "periodEnd": nil}},
+			"payments": []any{
+				map[string]any{"id": "pay_1", "source": "CREDIT", "amountCents": 2000, "status": "APPLIED", "note": "Platform credit", "createdAt": "2026-10-10T00:00:01Z"},
+				map[string]any{"id": "pay_2", "source": "EARNINGS", "amountCents": 7000, "status": "APPLIED", "note": nil, "createdAt": "2026-10-10T00:00:02Z"},
+				map[string]any{"id": "pay_3", "source": "CARD", "amountCents": 2115, "status": "APPLIED", "note": "Visa ••4242", "createdAt": "2026-10-10T00:00:05Z"}},
+			"meteredAmountCents": 0, "paidFromCreditCents": 2000, "paidFromSalesCents": 7000, "paidByCardCents": 2115, "waivedCents": 0}
+	}
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/invoices", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, []map[string]any{{"id": "in_s3", "number": "AT-0003", "periodStart": "2026-07-10T00:00:00Z", "periodEnd": "2026-10-10T00:00:00Z",
-			"amountDueCents": 11115, "amountPaidCents": 11115, "currency": "usd", "status": "paid", "invoicePdf": "https://files.example/in_s3.pdf",
-			"hostedInvoiceUrl": "https://invoice.example/in_s3", "createdAt": "2026-10-10T00:00:00Z", "paidFromSalesCents": 9000,
-			"paidByCardCents": 2115}})
+		writeJSON(w, 200, []map[string]any{invoice("paid")})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/billing/invoices/{invoice}/retry", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, invoice("paid"))
+	})
+	mux.HandleFunc("GET /v1/orgs/{id}/billing/invoices/{invoice}/document", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html;charset=UTF-8")
+		_, _ = w.Write([]byte("<!doctype html><html><body><h1>AfroTransact invoice AT-INV-2026-1003</h1></body></html>"))
 	})
 	// S298: how the organisation pays its plan.
 	planFees := func() map[string]any {
@@ -459,12 +480,18 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 	// S292–S297: the plans this organisation may choose, rewards, previews and adding a payment method.
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/plans", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{
+			{"code": "seller_essentials", "kind": "SELLER", "name": "Seller Essentials", "tagline": "Start selling", "monthlyCents": 0, "trialDays": 0,
+				"features": []string{"Up to 50 listings"}, "version": 1, "visibility": "PUBLIC", "entitlements": entitlementsOfPlan("seller_essentials"), "prices": []any{}},
+			{"code": "seller_pro", "kind": "SELLER", "name": "Seller Pro", "tagline": "For established brands", "monthlyCents": 12900, "trialDays": 14,
+				"features": []string{"Unlimited listings"}, "version": 1, "visibility": "PUBLIC", "entitlements": entitlementsOfPlan("seller_pro"), "prices": []any{}},
 			{"code": "seller_growth", "kind": "SELLER", "name": "Seller Growth", "tagline": "Most popular", "monthlyCents": 3900, "trialDays": 60,
-				"features": []string{"Up to 1,000 listings"}, "version": 2, "visibility": "PUBLIC", "prices": []any{
+				"features": []string{"Up to 1,000 listings"}, "version": 2, "visibility": "PUBLIC",
+				"entitlements": map[string]any{"listings": 1000, "listingsUnlimited": false, "aiListingWriter": true, "lolaTier": "GROWTH"}, "prices": []any{
 					map[string]any{"cadence": "QUARTERLY", "months": 3, "totalCents": 11115, "perMonthCents": 3705, "savingCents": 585,
 						"perMonthLabel": "$37.05/mo", "billedLabel": "Billed $111.15 every 3 months", "savingLabel": "Save $5.85 vs monthly"}}},
 			{"code": "seller_partner", "kind": "SELLER", "name": "Growth Partner", "tagline": "Invited", "monthlyCents": 2900, "trialDays": 30,
-				"features": []string{"Priority support"}, "version": 1, "visibility": "INVITE_ONLY", "prices": []any{}},
+				"features": []string{"Priority support"}, "version": 1, "visibility": "INVITE_ONLY",
+				"entitlements": map[string]any{"listings": nil, "listingsUnlimited": true, "aiListingWriter": true, "lolaTier": "GROWTH"}, "prices": []any{}},
 		})
 	})
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/rewards", func(w http.ResponseWriter, _ *http.Request) {
@@ -1316,4 +1343,16 @@ func (u *Upstreams) bookingsRoutes(mux *http.ServeMux) {
 			{"bookingId": "23970", "reference": "BK-23970", "customer": "Ama K.", "serviceName": "Cornrows", "startAt": "2026-10-05T15:00:00Z", "status": "CANCELLED_PROVIDER",
 				"collectedMinor": 0, "commissionBps": 1000, "commissionMinor": 0, "cardFeesMinor": 0, "providerFeeMinor": 1500, "netMinor": -1500}}})
 	})
+}
+
+// entitlementsOfPlan are the seeded plans' entitlements (staff can change them per plan).
+func entitlementsOfPlan(plan string) map[string]any {
+	switch {
+	case strings.HasSuffix(plan, "_pro"):
+		return map[string]any{"listings": nil, "listingsUnlimited": true, "aiListingWriter": true, "lolaTier": "PRO"}
+	case strings.HasSuffix(plan, "_growth"):
+		return map[string]any{"listings": 1000, "listingsUnlimited": false, "aiListingWriter": true, "lolaTier": "GROWTH"}
+	default:
+		return map[string]any{"listings": 50, "listingsUnlimited": false, "aiListingWriter": false, "lolaTier": "ESSENTIALS"}
+	}
 }

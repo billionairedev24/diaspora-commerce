@@ -8,14 +8,30 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
 
-// registerSellerBilling adds Plan & billing beyond the overview (S292–S297): rewards, plan change previews and adding
-// a payment method through a Stripe SetupIntent.
+// registerSellerBilling adds Plan & billing beyond the overview (S292–S297): rewards, plan change previews, adding
+// a payment method through a Stripe SetupIntent, and retrying or printing an invoice.
 func (h *handlersImpl) registerSellerBilling(route func(pattern string, fn http.HandlerFunc)) {
 	route("GET /v1/seller/billing/rewards", h.billingRewards)
 	route("GET /v1/seller/billing/plan/preview", h.previewPlanChange)
 	route("POST /v1/seller/billing/setup-intents", h.billingSetupIntent)
 	route("POST /v1/seller/billing/payment-methods", h.addBillingMethod)
 	route("PUT /v1/seller/billing/plan-fee-collection", h.setPlanFeeCollection)
+	route("POST /v1/seller/billing/invoices/{invoiceId}/retry", h.retryInvoice)
+	route("GET /v1/seller/billing/invoices/{invoiceId}/document", h.invoiceDocument)
+}
+
+func (h *handlersImpl) retryInvoice(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerMoney.RetryInvoice(r.Context(), callerFrom(r.Context()), r.PathValue("invoiceId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) invoiceDocument(w http.ResponseWriter, r *http.Request) {
+	f, err := h.s.SellerMoney.InvoiceDocument(r.Context(), callerFrom(r.Context()), r.PathValue("invoiceId"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	sendFile(w, f)
 }
 
 func (h *handlersImpl) setPlanFeeCollection(w http.ResponseWriter, r *http.Request) {

@@ -13,7 +13,9 @@ type assistantModelImpl struct{ c httpclient.Client }
 var _ port.AssistantModelClient = (*assistantModelImpl)(nil)
 
 // NewAssistantModel returns the AssistantModelClient (ai-gateway POST /v1/ai/seller-assistant/complete).
-func NewAssistantModel(c httpclient.Client) port.AssistantModelClient { return &assistantModelImpl{c: c} }
+func NewAssistantModel(c httpclient.Client) port.AssistantModelClient {
+	return &assistantModelImpl{c: c}
+}
 
 func (a *assistantModelImpl) Complete(ctx context.Context, bearer string, messages []port.AssistantMessage, tools []port.AssistantTool, maxTokens int) (port.AssistantCompletion, error) {
 	body := map[string]any{"messages": messages, "tools": tools}

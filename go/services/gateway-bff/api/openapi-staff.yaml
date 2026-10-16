@@ -60,9 +60,9 @@ tags:
     description: Customer support console (Lola hand-offs, customer lookup, refunds, notifications, shipments)
   - name: Plans & billing
     description: >-
-      AfroTransact's plan catalogue (versions, publish with Stripe sync, migrations, invites), trial campaigns, reward
+      AfroTransact's plan catalogue (versions, publish, migrations, invites, entitlements), trial campaigns, reward
       rules with a preview, the grants log and the per-seller billing panel with audited adjustments (S292–S297), over
-      the seller service. Stripe Billing only executes the charges.
+      the seller service. AfroTransact issues and collects its own invoices; Stripe only moves card money.
   - name: Fees
     description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees, AfroTransact Delivery pricing) over payments' immutable versions
   - name: Dispatch
@@ -513,7 +513,7 @@ paths:
       tags: [Plans & billing]
       operationId: listStaffPlans
       security: [{sessionCookie: []}]
-      summary: "Every plan with its versions, Stripe prices and subscribers"
+      summary: "Every plan with its versions, entitlements, prices and subscribers"
       description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
       responses:
         '200': {description: OK, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/StaffPlan'}}}}}
@@ -600,7 +600,7 @@ paths:
       tags: [Plans & billing]
       operationId: publishStaffPlan
       security: [{sessionCookie: []}]
-      summary: "Publish the draft version and sync Stripe (new Prices, old ones archived; never edited)"
+      summary: "Publish the draft version (subscribers stay on theirs until migrated)"
       description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
       parameters:
         - {$ref: '#/components/parameters/PlanCode'}
@@ -682,31 +682,6 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
-        '502': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-  /v1/staff/billing/stripe-sync:
-    get:
-      tags: [Plans & billing]
-      operationId: getStaffStripeSync
-      security: [{sessionCookie: []}]
-      summary: "Drift between our plan versions and Stripe (nothing changes)"
-      description: Needs VIEW on Plans & billing (plans:manage, billing:adjust, seller:billing or billing:usage). The seller service validates and authorises again.
-      responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanSyncReport'}}}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '502': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-    post:
-      tags: [Plans & billing]
-      operationId: syncStaffStripe
-      security: [{sessionCookie: []}]
-      summary: "Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones"
-      description: Needs EDIT on Plans & billing and `plans:manage`. The seller service validates and authorises again.
-      responses:
-        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanSyncReport'}}}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/billing/trial-campaigns:
@@ -940,7 +915,7 @@ paths:
       tags: [Plans & billing]
       operationId: creditStaffBillingOrg
       security: [{sessionCookie: []}]
-      summary: "Credit the organisation's Stripe balance (billing:adjust, reason code)"
+      summary: "Give platform credit the next invoices use first (billing:adjust, reason code)"
       description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
       parameters:
         - {$ref: '#/components/parameters/BillingOrgId'}
@@ -962,7 +937,7 @@ paths:
       tags: [Plans & billing]
       operationId: giveStaffBillingFreeDays
       security: [{sessionCookie: []}]
-      summary: "Give free days: the subscription's trial_end moves out (billing:adjust)"
+      summary: "Give free days: the first charge moves out (billing:adjust)"
       description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
       parameters:
         - {$ref: '#/components/parameters/BillingOrgId'}
@@ -970,6 +945,72 @@ paths:
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/StaffDaysRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/free-months:
+    post:
+      tags: [Plans & billing]
+      operationId: giveStaffBillingFreeMonths
+      security: [{sessionCookie: []}]
+      summary: "Give free calendar months: the first charge moves out (billing:adjust)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffMonthsRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/charge-gate:
+    put:
+      tags: [Plans & billing]
+      operationId: setStaffBillingChargeGate
+      security: [{sessionCookie: []}]
+      summary: "Put a condition on the plan charges: start after X sales or listings, waive while X listings, or waive until a date (billing:adjust)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`. A reason code is required; the grant is in the grants log. The seller sees the condition and their progress on the Billing page.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffChargeGateRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/charge-gate/clear:
+    post:
+      tags: [Plans & billing]
+      operationId: clearStaffBillingChargeGate
+      security: [{sessionCookie: []}]
+      summary: "Remove the condition on the plan charges: they apply as normal again (billing:adjust)"
+      description: Needs EDIT on Plans & billing and `billing:adjust`.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffWaiveRequest'}}}
       responses:
         '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffBillingGrant'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -1006,7 +1047,7 @@ paths:
       tags: [Plans & billing]
       operationId: waiveStaffBillingInvoice
       security: [{sessionCookie: []}]
-      summary: "Waive (void) an open invoice (billing:adjust)"
+      summary: "Waive the rest of an open invoice (billing:adjust)"
       description: Needs EDIT on Plans & billing and `billing:adjust`. The seller service validates and authorises again.
       parameters:
         - {$ref: '#/components/parameters/BillingOrgId'}
@@ -1308,7 +1349,7 @@ paths:
       description: |
         Over the seller service's plan catalogue (plans:manage and EDIT on plans): copies the base plan's kind, features,
         limits and trial into a new INVITE_ONLY plan `<base>_<org>` at the negotiated prices (quarterly and annual default
-        to the catalogue's rule), invites the organisation and publishes it (Stripe Prices are synced on publish). The
+        to the catalogue's rule), invites the organisation and publishes it. The
         seller then chooses it in Plan & billing; it stays on its current plan until it does. 409 when that private plan
         already exists.
       parameters:
@@ -4275,16 +4316,21 @@ components:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
     # ── Plans & billing (S292–S297) ─────────────────────────────────────────
+    StaffPlanEntitlements:
+      type: object
+      description: What the plan lets an organisation do (read from `limits`).
+      required: [listings, listingsUnlimited, aiListingWriter, lolaTier]
+      properties:
+        listings: {type: [integer, 'null'], format: int64, description: The most live listings; null = unlimited}
+        listingsUnlimited: {type: boolean}
+        aiListingWriter: {type: boolean}
+        lolaTier: {type: string, enum: [ESSENTIALS, GROWTH, PRO]}
     StaffPlanVersionPrice:
       type: object
-      required: [cadence, amountCents, lookupKey]
+      required: [cadence, amountCents]
       properties:
         cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
         amountCents: {type: integer, format: int64}
-        lookupKey: {type: string}
-        stripePriceId: {type: [string, 'null']}
-        syncedAt: {type: [string, 'null'], format: date-time}
-        syncError: {type: [string, 'null']}
     StaffPlanVersion:
       type: object
       required: [version, status, trialDays, subscribers, prices]
@@ -4308,7 +4354,14 @@ components:
         name: {type: string}
         tagline: {type: [string, 'null']}
         features: {type: array, items: {type: string}}
-        limits: {type: object, additionalProperties: {type: string}}
+        limits:
+          type: object
+          additionalProperties: {type: string}
+          description: >-
+            The plan's settings. `listings` (a number or `unlimited`), `aiListingWriter` (`true`/`false`) and `lolaTier`
+            (`ESSENTIALS`, `GROWTH`, `PRO`) are entitlements the platform enforces; any other key is shown as plan
+            information. There is no limit on shops or users.
+        entitlements: {$ref: '#/components/schemas/StaffPlanEntitlements'}
         visibility: {type: string, enum: [PUBLIC, HIDDEN, INVITE_ONLY]}
         status: {type: string, enum: [DRAFT, ACTIVE, RETIRED]}
         sortOrder: {type: integer}
@@ -4318,7 +4371,6 @@ components:
         annualCents: {type: integer, format: int64}
         trialDays: {type: integer}
         rowVersion: {type: integer, format: int64, description: 'Send back as expectedVersion to edit the metadata'}
-        stripeProductId: {type: [string, 'null']}
         subscribers: {type: integer, format: int64}
         invites: {type: array, items: {type: string}}
         versions: {type: array, items: {$ref: '#/components/schemas/StaffPlanVersion'}}
@@ -4398,29 +4450,6 @@ components:
             properties:
               orgId: {type: string}
               error: {type: [string, 'null']}
-    StaffPlanSyncLine:
-      type: object
-      required: [planCode, version, cadence, amountCents, state, action]
-      properties:
-        planCode: {type: string}
-        planName: {type: [string, 'null']}
-        version: {type: integer}
-        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
-        amountCents: {type: integer, format: int64}
-        lookupKey: {type: [string, 'null']}
-        state: {type: string, enum: [IN_SYNC, FREE, ADOPTABLE, MISSING, DRIFT, SUPERSEDED]}
-        action: {type: string, enum: [NONE, ADOPTED, CREATED, REPLACED, FAILED]}
-        stripePriceId: {type: [string, 'null']}
-        stripeAmountCents: {type: [integer, 'null'], format: int64}
-        error: {type: [string, 'null']}
-    StaffPlanSyncReport:
-      type: object
-      required: [checkedAt, applied, drifted, lines]
-      properties:
-        checkedAt: {type: string, format: date-time}
-        applied: {type: boolean, description: 'false for the drift report, true after a sync'}
-        drifted: {type: integer, format: int64}
-        lines: {type: array, items: {$ref: '#/components/schemas/StaffPlanSyncLine'}}
     StaffTrialCampaign:
       type: object
       required: [id, name, trialDays, eligiblePlans, redemptions, status, version]
@@ -4554,18 +4583,21 @@ components:
         rows: {type: array, items: {$ref: '#/components/schemas/StaffRewardPreviewRow'}}
     StaffBillingGrant:
       type: object
-      description: A reward or staff adjustment and the Stripe objects it produced.
+      description: A reward or staff adjustment and what it changed.
       required: [id, orgId, source, type, status, summary, actorId, attempts, createdAt]
       properties:
         id: {type: string, format: uuid}
         orgId: {type: string}
         source: {type: string, enum: [RULE, MANUAL]}
         ruleId: {type: [string, 'null']}
-        type: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF, WAIVE_INVOICE, TRIAL_END]}
+        type: {type: string, enum: [FREE_DAYS, FREE_MONTHS, CREDIT, PERCENT_OFF, WAIVE_INVOICE, TRIAL_END, CHARGE_GATE]}
         creditCents: {type: [integer, 'null'], format: int64}
         freeDays: {type: [integer, 'null']}
+        freeMonths: {type: [integer, 'null']}
         percentOff: {type: [number, 'null']}
         durationInvoices: {type: [integer, 'null']}
+        remainingInvoices: {type: [integer, 'null'], description: 'Coupons: invoices still to discount'}
+        gateMode: {type: [string, 'null'], enum: [START_AFTER, WAIVE_WHILE, WAIVE_UNTIL, null]}
         invoiceId: {type: [string, 'null']}
         status: {type: string, enum: [PENDING, APPLIED, FAILED]}
         reasonCode: {type: [string, 'null']}
@@ -4574,10 +4606,7 @@ components:
         actorId: {type: string}
         metric: {type: [string, 'null']}
         metricValue: {type: [integer, 'null'], format: int64}
-        stripeCustomerId: {type: [string, 'null']}
-        stripeSubscriptionId: {type: [string, 'null']}
-        stripeBalanceTransactionId: {type: [string, 'null']}
-        stripeCouponId: {type: [string, 'null']}
+        reference: {type: [string, 'null']}
         previousTrialEnd: {type: [string, 'null'], format: date-time}
         newTrialEnd: {type: [string, 'null'], format: date-time}
         attempts: {type: integer}
@@ -4631,28 +4660,82 @@ components:
         dunning: {type: [string, 'null']}
         failedPaymentAttempts: {type: integer}
         planVersion: {type: integer}
-        creditBalanceCents: {type: integer, format: int64}
+        creditBalanceCents: {type: integer, format: int64, description: 'Platform credit the next invoices use first'}
         trialSource: {type: [string, 'null'], enum: [PLAN, CAMPAIGN, OVERRIDE, NONE, null]}
         trialDaysOverride: {type: [integer, 'null']}
         planFeeCollection: {$ref: '#/components/schemas/StaffPlanFeeCollectionMode'}
+        chargeGate:
+          description: The condition on the plan charges, with the seller's progress; null when charges apply as normal
+          oneOf:
+            - {$ref: '#/components/schemas/StaffChargeGate'}
+            - {type: 'null'}
+        entitlements:
+          oneOf:
+            - {$ref: '#/components/schemas/StaffPlanEntitlements'}
+            - {type: 'null'}
+    StaffChargeGate:
+      type: object
+      required: [mode, progress, label]
+      properties:
+        mode: {type: string, enum: [START_AFTER, WAIVE_WHILE, WAIVE_UNTIL]}
+        metric: {type: [string, 'null'], enum: [GROSS_SALES, COMPLETED_ORDERS, COMPLETED_BOOKINGS, ACTIVE_LISTINGS, null]}
+        threshold: {type: [integer, 'null'], format: int64}
+        progress: {type: integer, format: int64}
+        since: {type: [string, 'null'], format: date-time}
+        until: {type: [string, 'null'], format: date-time}
+        reasonCode: {type: [string, 'null']}
+        note: {type: [string, 'null']}
+        setAt: {type: [string, 'null'], format: date-time}
+        metAt: {type: [string, 'null'], format: date-time}
+        label: {type: string}
+    StaffBillingInvoiceLine:
+      type: object
+      required: [kind, description, amountCents]
+      properties:
+        kind: {type: string, enum: [PLAN, USAGE, COUPON, PRORATION, WAIVER]}
+        description: {type: string}
+        amountCents: {type: integer, format: int64}
+        quantity: {type: [integer, 'null'], format: int64}
+        meter: {type: [string, 'null']}
+    StaffBillingInvoicePayment:
+      type: object
+      required: [source, amountCents, status]
+      properties:
+        source: {type: string, enum: [CREDIT, EARNINGS, CARD, WAIVER]}
+        amountCents: {type: integer, format: int64}
+        status: {type: string, enum: [APPLIED, PENDING, FAILED, REVERSED]}
+        note: {type: [string, 'null']}
+        createdAt: {type: [string, 'null'], format: date-time}
     StaffBillingInvoice:
       type: object
-      required: [id, amountDueCents, amountPaidCents, currency, createdAt, paidFromSalesCents, paidByCardCents]
+      description: >-
+        A plan invoice AfroTransact issued. Settled in this order: platform credit (coupons are already off the
+        invoice), the seller's sales if they chose that, then the saved card or bank account.
+      required: [id, subtotalCents, discountCents, amountDueCents, amountPaidCents, currency, createdAt, paidFromCreditCents, paidFromSalesCents, paidByCardCents, waivedCents]
       properties:
         id: {type: string}
         number: {type: [string, 'null']}
         periodStart: {type: [string, 'null'], format: date-time}
         periodEnd: {type: [string, 'null'], format: date-time}
+        subtotalCents: {type: integer, format: int64}
+        discountCents: {type: integer, format: int64}
         amountDueCents: {type: integer, format: int64}
         amountPaidCents: {type: integer, format: int64}
         currency: {type: string}
-        status: {type: [string, 'null']}
+        status: {type: [string, 'null'], enum: [open, paid, void, uncollectible, null]}
         billingReason: {type: [string, 'null']}
-        hostedInvoiceUrl: {type: [string, 'null']}
-        invoicePdf: {type: [string, 'null']}
+        planCode: {type: [string, 'null']}
+        attempts: {type: integer}
+        nextAttemptAt: {type: [string, 'null'], format: date-time}
+        lastError: {type: [string, 'null']}
+        paidAt: {type: [string, 'null'], format: date-time}
         createdAt: {type: string, format: date-time}
-        paidFromSalesCents: {type: integer, format: int64, description: 'Paid from the organisation''s sales (S298): withheld from its earnings and credited to the invoice'}
-        paidByCardCents: {type: integer, format: int64, description: 'Paid (or, while open, due) by card or bank: the rest'}
+        lines: {type: array, items: {$ref: '#/components/schemas/StaffBillingInvoiceLine'}}
+        payments: {type: array, items: {$ref: '#/components/schemas/StaffBillingInvoicePayment'}}
+        paidFromCreditCents: {type: integer, format: int64}
+        paidFromSalesCents: {type: integer, format: int64, description: 'Withheld from the organisation''s sales (S298), only if it chose that'}
+        paidByCardCents: {type: integer, format: int64}
+        waivedCents: {type: integer, format: int64}
     StaffEarningsCollection:
       type: object
       description: One plan invoice paid (or asked to be paid) from earnings (S298).
@@ -4660,7 +4743,7 @@ components:
       properties:
         invoiceId: {type: string}
         invoiceNumber: {type: [string, 'null']}
-        invoiceAmountCents: {type: [integer, 'null'], format: int64, description: Invoice amount when Stripe created it}
+        invoiceAmountCents: {type: [integer, 'null'], format: int64, description: The invoice amount when it was issued}
         amountCents: {type: integer, format: int64, description: Asked from earnings (the invoice less the credit balance)}
         withheldCents: {type: integer, format: int64}
         creditedCents: {type: integer, format: int64}
@@ -4668,7 +4751,6 @@ components:
         paidFromSalesCents: {type: integer, format: int64}
         status: {type: string, enum: [REQUESTED, WITHHELD, CREDITED, DECLINED, MISSED, FAILED, RELEASED]}
         paymentsReference: {type: [string, 'null']}
-        stripeBalanceTransactionId: {type: [string, 'null']}
         reason: {type: [string, 'null']}
         attempts: {type: integer}
         lastError: {type: [string, 'null']}
@@ -4765,6 +4847,27 @@ components:
       required: [days, reasonCode]
       properties:
         days: {type: integer, minimum: 0, maximum: 365}
+        reasonCode: {type: string}
+        note: {type: [string, 'null'], maxLength: 500}
+    StaffMonthsRequest:
+      type: object
+      required: [months, reasonCode]
+      properties:
+        months: {type: integer, minimum: 1, maximum: 36}
+        reasonCode: {type: string}
+        note: {type: [string, 'null'], maxLength: 500}
+    StaffChargeGateRequest:
+      type: object
+      description: >-
+        A condition on the plan charges. START_AFTER: no charge until the seller reaches `threshold` of `metric`;
+        WAIVE_WHILE: free while they keep it; WAIVE_UNTIL: free until `until`. `threshold` is in cents for GROSS_SALES,
+        else a count. Replaces any earlier condition.
+      required: [mode, reasonCode]
+      properties:
+        mode: {type: string, enum: [START_AFTER, WAIVE_WHILE, WAIVE_UNTIL]}
+        metric: {type: [string, 'null'], enum: [GROSS_SALES, COMPLETED_ORDERS, COMPLETED_BOOKINGS, ACTIVE_LISTINGS, null]}
+        threshold: {type: [integer, 'null'], format: int64, minimum: 1}
+        until: {type: [string, 'null'], format: date-time}
         reasonCode: {type: string}
         note: {type: [string, 'null'], maxLength: 500}
     StaffWaiveRequest:

@@ -94,7 +94,7 @@ func samplePanel() map[string]any {
 			"nextChargeCents": 3900, "nextChargeLabel": "Free trial ends Nov 9, 2026", "cancelAtPeriodEnd": false, "dunning": "NONE",
 			"failedPaymentAttempts": 0, "planVersion": 2, "creditBalanceCents": 2500, "trialSource": "CAMPAIGN", "trialDaysOverride": nil,
 			"planFeeCollection": "EARNINGS_FIRST", "price": map[string]any{"cadence": "MONTHLY"}, "paymentMethods": []any{}},
-		"invoices": []any{map[string]any{"id": "in_1", "number": "AT-0001", "periodStart": nil, "periodEnd": nil, "amountDueCents": 3900,
+		"invoices": []any{map[string]any{"id": "in_1", "number": "AT-0001", "periodStart": nil, "periodEnd": nil, "subtotalCents": 3900, "discountCents": 0, "amountDueCents": 3900, "paidFromCreditCents": 0, "waivedCents": 0,
 			"amountPaidCents": 0, "currency": "usd", "status": "open", "billingReason": "subscription_cycle", "hostedInvoiceUrl": nil,
 			"invoicePdf": nil, "createdAt": "2026-10-09T10:00:00Z", "lines": []any{}, "meteredAmountCents": 0, "paidFromSalesCents": 2500,
 			"paidByCardCents": 1400}},
@@ -165,10 +165,6 @@ func (f *fakeSellerBilling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJ(w, 200, samplePlan("seller_growth", "ACTIVE"))
-	case p == "/v1/billing/stripe-sync":
-		writeJ(w, 200, map[string]any{"checkedAt": "2026-10-11T12:00:00Z", "applied": r.Method == http.MethodPost, "drifted": 1, "lines": []any{
-			map[string]any{"planCode": "seller_growth", "planName": "Seller Growth", "version": 2, "cadence": "ANNUAL", "amountCents": 39000,
-				"lookupKey": "seller_growth_annual", "state": "MISSING", "action": "NONE", "stripePriceId": nil, "stripeAmountCents": nil, "error": nil}}})
 	case key == "GET /v1/billing/trial-campaigns":
 		writeJ(w, 200, []any{sampleCampaign()})
 	case key == "POST /v1/billing/trial-campaigns":
@@ -229,7 +225,8 @@ func (f *fakeSellerBilling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"fieldErrors": map[string]string{"reasonCode": "Choose a reason"}})
 			return
 		}
-		typ := map[string]string{"credits": "CREDIT", "free-days": "FREE_DAYS", "trial": "TRIAL_END"}[p[strings.LastIndex(p, "/")+1:]]
+		typ := map[string]string{"credits": "CREDIT", "free-days": "FREE_DAYS", "free-months": "FREE_MONTHS", "trial": "TRIAL_END", "charge-gate": "CHARGE_GATE",
+			"clear": "CHARGE_GATE"}[p[strings.LastIndex(p, "/")+1:]]
 		if strings.HasSuffix(p, "/waive") {
 			typ = "WAIVE_INVOICE"
 		}
@@ -365,11 +362,6 @@ func TestStaffPlansAndBilling(t *testing.T) {
 	do("auditor", "GET", "/v1/staff/billing/plans/seller_growth/migration", nil, 200)
 	do("auditor", "POST", "/v1/staff/billing/plans/seller_growth/migration", map[string]any{}, 403)
 	do("finance", "POST", "/v1/staff/billing/plans/seller_growth/migration", map[string]any{"orgIds": []string{"org_1"}}, 200)
-	do("auditor", "GET", "/v1/staff/billing/stripe-sync", nil, 200)
-	do("auditor", "POST", "/v1/staff/billing/stripe-sync", nil, 403)
-	if synced := do("finance", "POST", "/v1/staff/billing/stripe-sync", nil, 200); synced["applied"] != true {
-		t.Errorf("sync = %v", synced)
-	}
 
 	// Trials and rewards.
 	do("auditor", "GET", "/v1/staff/billing/trial-campaigns", nil, 200)
@@ -417,6 +409,13 @@ func TestStaffPlansAndBilling(t *testing.T) {
 	}
 	do("finance", "POST", "/v1/staff/billing/orgs/org_1/credits", map[string]any{"amountCents": 2500}, 422)
 	do("finance", "POST", "/v1/staff/billing/orgs/org_1/free-days", map[string]any{"days": 30, "reasonCode": "RETENTION"}, 201)
+	// Free months and conditions on the charges (start after X sales, waive while X listings, waive until a date).
+	do("auditor", "POST", "/v1/staff/billing/orgs/org_1/free-months", map[string]any{"months": 3, "reasonCode": "PROMOTION"}, 403)
+	do("finance", "POST", "/v1/staff/billing/orgs/org_1/free-months", map[string]any{"months": 3, "reasonCode": "PROMOTION"}, 201)
+	do("auditor", "PUT", "/v1/staff/billing/orgs/org_1/charge-gate", map[string]any{"mode": "START_AFTER", "metric": "GROSS_SALES", "threshold": 100000, "reasonCode": "PROMOTION"}, 403)
+	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/charge-gate", map[string]any{"mode": "START_AFTER", "metric": "GROSS_SALES", "threshold": 100000, "reasonCode": "PROMOTION"}, 201)
+	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/charge-gate", map[string]any{"mode": "WAIVE_WHILE", "metric": "ACTIVE_LISTINGS", "threshold": 20, "reasonCode": "PROMOTION"}, 201)
+	do("finance", "POST", "/v1/staff/billing/orgs/org_1/charge-gate/clear", map[string]any{"reasonCode": "RETENTION"}, 201)
 	do("finance", "POST", "/v1/staff/billing/orgs/org_1/trial", map[string]any{"days": 45, "reasonCode": "ONBOARDING_DELAY"}, 201)
 	do("finance", "POST", "/v1/staff/billing/orgs/org_1/invoices/in_1/waive", map[string]any{"reasonCode": "BILLING_ERROR"}, 201)
 
