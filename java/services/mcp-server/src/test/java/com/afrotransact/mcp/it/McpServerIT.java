@@ -222,6 +222,7 @@ class McpServerIT {
         assertThat(update.path("requiredPermission").asString()).isEqualTo("orders:update-status");
         assertThat(update.path("readOnly").asBoolean()).isFalse();
         assertThat(update.path("inputSchema").path("properties").has("trackingNumber")).isTrue();
+        assertThat(update.path("inputSchema").path("properties").has("handoverCode")).isTrue();
     }
 
     private McpSyncClient client(String clientId) {

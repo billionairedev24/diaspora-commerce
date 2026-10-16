@@ -59,17 +59,21 @@ layer.
 | | `check_delivery` | — | geo `GET /v1/zip/{zip}` + promise `GET /v1/promises` |
 | | `get_cart` | — | cart `GET /v1/cart` |
 | | `propose_add_to_cart` | — | catalog lookup; returns a **PROPOSED** cart call, never executes it |
-| | `track_order` | — | orders `GET /v1/orders/{id}` |
+| | `track_order` | — | orders `GET /v1/orders/{id}`: status, shipments, tracking, whether Cancel is still offered (`cancellable`, `cancellableUntil`: before packing and inside the cancellation window), and a delivered shipment's proof (how it was handed over; the photo and signature are media asset ids, not links) |
 | | `start_return_proposal` | — | returns a **PROPOSED** return request |
 | | `find_service` | — | bookings `GET /v1/services/search` |
 | seller (`mcp:seller` + org) | `list_my_products`, `product_status` | `catalog:write` | catalog `GET /v1/products?orgId=…` |
-| | `list_my_orders` | `orders:read` | orders `GET /v1/orders?sellerOrgId=…` |
-| | `update_shipment_status` | `orders:update-status` | seller-fulfilled, forward only (PACKED → SHIPPED with carrier + tracking → DELIVERED) |
+| | `list_my_orders` | `orders:read` | orders `GET /v1/seller/shipments` — the organisation's shipments, newest first; page with `cursor` (the previous `nextCursor`) |
+| | `update_shipment_status` | `orders:update-status` | seller-fulfilled, one step forward: CONFIRMED → PACKED → READY → SHIPPED (carrier shipments; needs a carrier and tracking number, recorded with `POST /v1/shipments/{id}/tracking`, unless a label is already bought) or DELIVERED (pickup orders only; needs the buyer's 4-digit `handoverCode`); the step is `POST /v1/shipments/{id}/transitions` |
 | | `check_inventory` | `inventory:read` | inventory `GET /v1/positions?ownerOrg=…` |
 | | `request_category` | `catalog:write` | catalog `POST /v1/category-requests` |
 | staff (`mcp:staff` + staff) | `applications_queue`, `application_detail` | `applications:review` | seller `GET /v1/applications…` — PII masked |
 | | `moderation_queue` | `catalog:moderate` | catalog `GET /v1/products?status=IN_REVIEW` |
 | | `order_payment_split` | `ledger:read` | payments `GET /v1/orders/{id}/payment-split` |
+
+> **Changed:** `update_shipment_status` and `list_my_orders` now call orders-service's real routes (they called ones
+> that do not exist). `list_my_orders` takes `cursor` instead of `page`; `update_shipment_status` takes `handoverCode`
+> and follows orders' steps (CONFIRMED → PACKED → READY → SHIPPED, or DELIVERED for a pickup order).
 
 Every tool returns `{status, data, message}` where status is `OK`, `PROPOSED` (show to the user; only their
 confirmation performs it), `NOT_FOUND`, `FORBIDDEN`, `REJECTED` or `UNAVAILABLE` (the owning service is not deployed

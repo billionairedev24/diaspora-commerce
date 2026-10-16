@@ -38,29 +38,37 @@ class SellerMcpTools {
     }
 
     @McpTool(name = ToolCatalog.LIST_MY_ORDERS, title = "List my orders",
-            description = "Orders containing the organisation's items (orders:read).",
+            description = "The organisation's shipments, newest first (orders:read). Each has its status, delivery "
+                    + "method, tracking and the steps the seller may take next. Page with the returned nextCursor.",
             annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
     ToolResult listMyOrders(McpTransportContext context,
-                            @McpToolParam(description = "Order status filter", required = false) String status,
-                            @McpToolParam(description = "Page number from 0", required = false) Integer page) {
-        return seller.listMyOrders(McpCallerExtractor.caller(context), status, page);
+                            @McpToolParam(description = "Shipment status filter, e.g. placed, confirmed, packed, ready",
+                                    required = false) String status,
+                            @McpToolParam(description = "nextCursor of the previous page", required = false)
+                            String cursor) {
+        return seller.listMyOrders(McpCallerExtractor.caller(context), status, cursor);
     }
 
     @McpTool(name = ToolCatalog.UPDATE_SHIPMENT_STATUS, title = "Update shipment status",
-            description = "Move a seller-fulfilled shipment forward: PACKED, SHIPPED (carrier and tracking number "
-                    + "required) or DELIVERED. Cancellations, refunds and AfroTransact-fulfilled shipments are not "
+            description = "Move a seller-fulfilled shipment one step forward: CONFIRMED, PACKED, READY, then SHIPPED "
+                    + "(carrier shipments: needs a carrier and tracking number unless a label is already bought) or "
+                    + "DELIVERED (pickup orders only: needs the buyer's 4-digit code from their order page). "
+                    + "Cancellations, refunds, AfroTransact Delivery and AfroTransact-fulfilled shipments are not "
                     + "allowed here (orders:update-status).",
             annotations = @McpTool.McpAnnotations(readOnlyHint = false, destructiveHint = false, idempotentHint = true))
     ToolResult updateShipmentStatus(McpTransportContext context,
-                                    @McpToolParam(description = "Order id") String orderId,
+                                    @McpToolParam(description = "Order number or id") String orderId,
                                     @McpToolParam(description = "Shipment id") String shipmentId,
-                                    @McpToolParam(description = "PACKED, SHIPPED or DELIVERED") String status,
-                                    @McpToolParam(description = "Carrier code, e.g. USPS", required = false)
+                                    @McpToolParam(description = "CONFIRMED, PACKED, READY, SHIPPED or DELIVERED")
+                                    String status,
+                                    @McpToolParam(description = "Carrier code, e.g. USPS (SHIPPED)", required = false)
                                     String carrier,
-                                    @McpToolParam(description = "Tracking number", required = false)
-                                    String trackingNumber) {
+                                    @McpToolParam(description = "Tracking number (SHIPPED)", required = false)
+                                    String trackingNumber,
+                                    @McpToolParam(description = "The buyer's 4-digit code (DELIVERED, pickup orders)",
+                                            required = false) String handoverCode) {
         return seller.updateShipmentStatus(McpCallerExtractor.caller(context), orderId, shipmentId, status, carrier,
-                trackingNumber);
+                trackingNumber, handoverCode);
     }
 
     @McpTool(name = ToolCatalog.CHECK_INVENTORY, title = "Check inventory",

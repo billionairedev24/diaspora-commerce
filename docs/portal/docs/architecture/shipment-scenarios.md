@@ -57,7 +57,9 @@ Money for the shipment is captured at `picked_up`.
 | Step | Seller-fulfilled | AfroTransact-fulfilled |
 |---|---|---|
 | `ready` | The seller, or the pickup point's "ready" notice | Ops, or the pickup point's notice |
-| `delivered` | The seller hands it over at its own shop | Ops at the counter |
+| `delivered` | The seller hands it over at its own shop, with the customer's 4-digit pickup code | Ops at the counter, with the code |
+
+Staff can confirm a pickup handover without the code by giving a reason.
 
 ## Cancelling
 
@@ -94,31 +96,60 @@ Locally, the test carrier has no push; the 1-minute poll moves its labels to del
 
 ## What proof each path leaves
 
-| Path | Proof recorded today | Shown to anyone today |
+| Path | Proof recorded | Shown to |
 |---|---|---|
-| Carrier delivery | The carrier's tracking event | Tracking number and status |
-| AfroTransact Delivery by the driver app | Photo, handover method, code check, recipient and signature, safe place, GPS | **No one.** It is stored on the status history and never returned |
-| Manual "delivered" by staff | The reason, the actor and the time | The activity line |
-| Pickup handover | Actor and time | The activity line |
+| Carrier delivery | The carrier's tracking event | Everyone, as tracking and status |
+| AfroTransact Delivery by the driver app | Photo, handover method, code check, recipient and signature, safe place, GPS | The customer, the seller and staff: how it was handed over, to whom, the door photo and the signature. Staff also see the driver's position |
+| Manual "delivered" by staff on a driver shipment | The reason, the actor and the time | The activity line; there is no photo |
+| Pickup handover | The customer's code was checked (seller) or a reason was given (staff) | The activity line |
 
-This is the gap behind "FBA has no delivery proof". The driver app collects proof for FBA and seller parcels alike,
-and orders-service stores it, but no API returns it. Fixing that comes first.
+The photo and the signature are private media. Orders-service returns their asset ids; the gateway turns them into
+links that last about five minutes, using its own service token with `media:read` (media only lets it read
+`proof-photo` assets). A page opened for longer shows the pictures broken until it is read again.
 
 ## Decisions
 
-1. **Show the proof.** Orders-service returns a delivery proof (handover method, who received it, where it was left,
-   whether a photo and a signature exist, and when) on the shipment's timeline entry. Staff see it on the order
-   record. Showing the photo itself needs a signed media link and comes next.
+1. **Show the proof.** Done: the customer's order page, the seller's order sheet and the staff order sheet show it.
 2. **A manual "delivered" on a driver shipment needs a reason.** A platform admin can still confirm a delivery the
-   driver could not record (a dead phone, a lost signal), but must say why, and the entry is marked as having no
-   proof.
-3. **Staff pick a step for the shipment in front of them.** The status form lists the next steps of the one
-   shipment chosen, named as actions ("Mark packed", "Hand to the carrier"), not as raw statuses.
+   driver could not record (a dead phone, a lost signal), but must say why.
+3. **Staff pick a step for the shipment in front of them.** The status form lists the next steps of each shipment,
+   named as actions ("Mark packed", "Mark delivered"), not as raw statuses.
 4. **Out-of-order events are ignored, not applied.** A late `in_transit` after `delivered` changes nothing.
+5. **A pickup order is handed over with the customer's code.** Every new pickup shipment has a 4-digit handover code. The
+   customer sees it as the pickup code; the seller enters it to hand the order over; staff may confirm without it by giving
+   a reason. A seller-fulfilled pickup order could not be completed in Seller Center before this.
+6. **The seller sees one next step.** The order sheet shows Accepted, Packed, Ready, Shipped and Delivered, and a single
+   button with a line on what it does. "Mark as shipped" waits for a label.
+7. **Cancel is offered only before packing and inside the window**, with its deadline ("You can cancel until 3:42 PM") and a
+   confirmation before it refunds.
+
+## The driver app's scans
+
+The driver app already sends scans in batches, not one parcel at a time: finishing the load-out at the dock marks every loaded
+parcel `picked_up` in one go, starting the route marks them `out_for_delivery`, and confirming a seller pickup marks that
+stop's parcels `picked_up` and `out_for_delivery`. A delivery sends the proof for every parcel at the stop. If orders-service
+is unreachable the fulfilment service queues the events and retries them, so a valid proof is never thrown away.
+
+## API and tool changes
+
+| Where | Change |
+|---|---|
+| orders `POST /v1/shipments/{id}/transitions` | New optional `handoverCode` (4 digits). Pickup `delivered` needs it, or a staff `reason`. 422 `orders.handover-code-required`, 409 `orders.handover-code-invalid` |
+| orders `OrderView` shipment | New `cancellableUntil`; `cancellable` now also needs the cancellation window. Timeline entries carry `proof` (`DeliveryProof`: handover method, recipient, safe place, failure reason, photo and signature asset ids; GPS for staff only) |
+| gateway-bff customer API | Order summary and detail shipments: `cancellableUntil`. Detail: `proof` (`DeliveryProof` with `photoUrl` and `signatureUrl`) |
+| gateway-bff Seller Center API | `POST /v1/seller/orders/{n}/shipments/{id}/status` accepts `DELIVERED` with `handoverCode`; the shipment has `proof` |
+| gateway-bff staff API | "Update a shipment" is one `step` choice plus `reason` and `handoverCode`; the order sheet has a Proof of delivery section |
+| media `GET /v1/assets/{id}` | `gateway-bff` may read `proof-photo` assets with `media:read` |
+| identity | The `gateway-bff` client gets the `media:read` scope |
+| carrier-gateway | Dev, UAT and prod poll every carrier slowly as the net under webhooks |
+| MCP `update_shipment_status` | Now calls the real orders routes. Steps: CONFIRMED, PACKED, READY, SHIPPED (carrier and tracking), DELIVERED (pickup orders, with `handoverCode`). New input `handoverCode`. Before this it called a route that does not exist and read fields orders does not return |
+| MCP `list_my_orders` | Now `GET /v1/seller/shipments`. **Breaking:** the `page` input is replaced by `cursor` (the previous `nextCursor`) |
+| MCP `track_order` | Returns `cancellable`, `cancellableUntil` and the delivered shipment's proof |
 
 ## Still open
 
-- Pickup handovers do not yet check the customer's code the way a driver delivery does.
-- The driver app's batch scan at the dock sets `picked_up` one shipment at a time. A batch call would be faster.
+- The photo link lasts five minutes; a long-open page needs a refresh to see it again.
 - Carrier proof of delivery (signature, photo) is not fetched from the carrier.
-- A return's inbound scan and refund steps are in [Disputes and returns](./orders-and-shipments.md).
+- A refund when a bank-paid order is cancelled is logged, not made automatically.
+- The customer mobile app does not show the cancel deadline or the proof of delivery yet.
+- A return's inbound scan and refund steps are in [Orders and shipments](./orders-and-shipments.md).

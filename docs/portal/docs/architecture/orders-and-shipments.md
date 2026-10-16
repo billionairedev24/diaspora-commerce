@@ -30,7 +30,7 @@ The order's status is worked out from its shipments.
 | `in_transit` / `out_for_delivery` | On its way | Carrier webhook; the driver app | Staff › Orders; Staff › Delivery dispatch |
 | `delivered` | Handed over (photo and handover method for AfroTransact Delivery). The seller's 7-day settlement hold starts | Carrier; driver; staff can confirm | Same |
 | `delivery_failed` | Attempt failed (customer unavailable, unsafe…); re-attempted or returned | Driver; carrier | Delivery dispatch |
-| `cancelled` | The customer cancelled before packing, or staff cancelled. Uncaptured money is released; captured money is refunded | Customer; staff | Storefront › Your orders; Staff › Orders |
+| `cancelled` | The customer cancelled before packing and inside the cancellation window (30 minutes by default), or staff cancelled. Uncaptured money is released; captured money is refunded | Customer; staff | Storefront › Your orders; Staff › Orders |
 | `returned` | Came back to the seller or the FC | Staff | Staff › Orders |
 
 **Order status**, derived from its shipments: `placed` (nothing has moved yet) → `in_progress` (at least one
@@ -67,6 +67,13 @@ own every step. Carriers and drivers only move a shipment forward.
     collects it from the seller's pickup location on the way, and it shows under Delivery dispatch › Seller pickups.
 - **Pre-order windows** (e.g. Lubbock): the package is held until the window closes and is delivered on the window's
   delivery day, to the door or at the pickup point. Staff › Pre-orders.
+
+## Codes and proof of delivery
+
+Every pickup order and every hand-to-customer or perishable driver delivery has a 4-digit code that the customer sees on
+their order page. Whoever hands the order over asks for it: the seller or the counter for a pickup, the driver at the door.
+Our drivers also take a photo, and a signature or a safe-place note, and the customer, the seller and staff can see them on
+the order afterwards. [Shipment scenarios](./shipment-scenarios.md) lists every path and what it records.
 
 ## Money
 
