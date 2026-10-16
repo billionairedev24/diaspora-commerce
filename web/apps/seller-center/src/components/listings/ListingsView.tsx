@@ -20,6 +20,7 @@ import { useSeller } from '@/lib/session';
 import { exportTable, pollExport, runForEach } from '@/lib/table-export';
 
 import { FulfilmentSheet } from './FulfilmentSheet';
+import { QuickStockSheet } from './QuickStockSheet';
 
 /** Listings: server-driven table (one search over every column, sort, pages, selection, exports) with pause/resume
     (one row or many), edit, autosaved drafts of the one-step form, "Add a product" and "Bulk upload". */
@@ -28,6 +29,7 @@ export function ListingsView() {
   const t = useT();
   const qc = useQueryClient();
   const [fulfilment, setFulfilment] = useState<ListingRow | null>(null);
+  const [stockOf, setStockOf] = useState<ListingRow | null>(null);
   const toast = useToast();
   const { orgId, can } = useSeller();
   const editable = can('listings');
@@ -69,7 +71,16 @@ export function ListingsView() {
       { id: 'sku', accessorFn: (r) => r.sku, header: 'SKU', size: 150, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}{row.original.variantCount > 1 ? ` +${row.original.variantCount - 1}` : ''}</span> },
       { id: 'variantCount', accessorFn: (r) => r.variantCount, header: 'Variants', size: 90, meta: { kind: 'number', align: 'end' } },
       { id: 'priceMinor', accessorFn: (r) => r.priceMinor, header: 'Price', size: 100, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.priceMinor, row.original.currency) },
-      { id: 'stock', accessorFn: (r) => r.stock, header: 'Stock', size: 80, meta: { kind: 'number', align: 'end' }, cell: ({ row }) => <span className={row.original.stock <= 5 ? 'font-semibold text-danger' : undefined}>{row.original.stock}</span> },
+      { id: 'stock', accessorFn: (r) => r.stock, header: 'Stock', size: 80, meta: { kind: 'number', align: 'end' }, cell: ({ row }) => {
+          const low = row.original.stock <= 5;
+          return editable && row.original.atin ? (
+            <button type="button" className={`link-button inline-flex items-center gap-1 border-0 bg-transparent p-0 hover:underline ${low ? 'font-semibold text-danger' : 'text-text'}`} onClick={() => setStockOf(row.original)} aria-label={t('sc.stock.buttonAria', { title: row.original.title })}>
+              {row.original.stock} <PencilSimple size={12} aria-hidden />
+            </button>
+          ) : (
+            <span className={low ? 'font-semibold text-danger' : undefined}>{row.original.stock}</span>
+          );
+        } },
       {
         id: 'fulfilment', accessorFn: (r) => t(`sc.ff.${r.fulfilment}`), header: 'Fulfilment', size: 140,
         cell: ({ row }) => (
@@ -184,6 +195,7 @@ export function ListingsView() {
         }
       />
       <FulfilmentSheet listing={fulfilment} onClose={() => setFulfilment(null)} />
+      <QuickStockSheet listing={stockOf} onClose={() => setStockOf(null)} />
     </ModulePage>
   );
 }

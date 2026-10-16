@@ -45,22 +45,53 @@ func (s *sellerListingImpl) listing() (port.SellerListingClient, error) {
 	return s.r.d.Listing, nil
 }
 
-// shipFrom resolves a ship-from address id to the snapshot catalog stores (nil id: the seller's default).
-func (s *sellerListingImpl) shipFrom(ctx context.Context, c *domain.Caller, orgID string, id *string) (*port.CatalogShipFrom, error) {
-	if id == nil || strings.TrimSpace(*id) == "" {
+// shipFrom resolves a ship-from address id to the snapshot catalog stores. With no id, a seller-shipped listing
+// (shipped = true) gets the seller's default address, so a listing saved without choosing one still has somewhere to ship
+// from (offers refuse a seller-fulfilled offer without it); nil when the seller has no address yet.
+func (s *sellerListingImpl) shipFrom(ctx context.Context, c *domain.Caller, orgID string, id *string, shipped bool) (*port.CatalogShipFrom, error) {
+	chosen := id != nil && strings.TrimSpace(*id) != ""
+	if !chosen && !shipped {
 		return nil, nil
 	}
 	list, err := s.r.d.Sellers.ShipFrom(ctx, c.BearerToken, orgID)
 	if err != nil {
 		return nil, mapErr("seller", err)
 	}
+	if !chosen {
+		if a, ok := defaultShipFrom(list); ok {
+			return catalogShipFrom(a), nil
+		}
+		return nil, nil
+	}
 	for _, a := range list {
 		if a.ID == *id {
-			return &port.CatalogShipFrom{LocationID: a.ID, Label: a.Label, City: a.City, Region: a.State,
-				Country: firstNonEmpty(a.Country, "US"), PostalCode: a.PostalCode}, nil
+			return catalogShipFrom(a), nil
 		}
 	}
 	return nil, domain.ValidationProblem(map[string]string{"listing.shipFromId": "Choose one of your ship-from addresses"})
+}
+
+// defaultShipFrom is the seller's default ship-from address, else the first one.
+func defaultShipFrom(list []port.ShipFromAddress) (port.ShipFromAddress, bool) {
+	for _, a := range list {
+		if a.IsDefault {
+			return a, true
+		}
+	}
+	if len(list) > 0 {
+		return list[0], true
+	}
+	return port.ShipFromAddress{}, false
+}
+
+func catalogShipFrom(a port.ShipFromAddress) *port.CatalogShipFrom {
+	return &port.CatalogShipFrom{LocationID: a.ID, Label: a.Label, City: a.City, Region: a.State,
+		Country: firstNonEmpty(a.Country, "US"), PostalCode: a.PostalCode}
+}
+
+// shipsBySeller: the listing is not "Fulfilled by AfroTransact", so the seller ships it (or no choice was made yet).
+func shipsBySeller(d domain.ProductDraft) bool {
+	return d.Listing == nil || !strings.EqualFold(d.Listing.Fulfilment, domain.FulfilledByAfroTransact)
 }
 
 func (s *sellerListingImpl) Submit(ctx context.Context, c *domain.Caller, d domain.ProductDraft) (domain.ListingRow, error) {
@@ -82,7 +113,7 @@ func (s *sellerListingImpl) Submit(ctx context.Context, c *domain.Caller, d doma
 	if d.Listing != nil {
 		shipFromID = d.Listing.ShipFromID
 	}
-	ship, err := s.shipFrom(ctx, c, sc.org.ID, shipFromID)
+	ship, err := s.shipFrom(ctx, c, sc.org.ID, shipFromID, shipsBySeller(d))
 	if err != nil {
 		return domain.ListingRow{}, err
 	}
@@ -120,7 +151,7 @@ func (s *sellerListingImpl) Update(ctx context.Context, c *domain.Caller, produc
 	if d.Listing != nil {
 		shipFromID = d.Listing.ShipFromID
 	}
-	ship, err := s.shipFrom(ctx, c, sc.org.ID, shipFromID)
+	ship, err := s.shipFrom(ctx, c, sc.org.ID, shipFromID, shipsBySeller(d))
 	if err != nil {
 		return domain.ListingRow{}, err
 	}
