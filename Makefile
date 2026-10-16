@@ -29,8 +29,8 @@ help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — PROD=1 runs the web apps as production builds, MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
-	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — the web apps run as production builds (DEV=1 for Next dev servers, REBUILD=1 to force a rebuild), MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
+	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
 up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)
 	$(COMPOSE) up -d
@@ -166,7 +166,7 @@ perf-wrk: ## wrk on gateway healthz + search (WRK_THREADS, WRK_CONNECTIONS, WRK_
 
 # ------------------------------------------------------------------------------------------------ web / misc
 dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
-	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+	PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
 stripe-setup: ## Check your Stripe TEST account: keys, Connect and the seller account settings (plans are synced by the seller service)
 	python3 tools/dev/stripe_setup.py
@@ -193,7 +193,7 @@ mobile: ## Only the Expo apps against the running stack: customer :8081, driver 
 	tools/dev/local.sh mobile
 
 mobile-lan: ## LAN mode: everything (sign-in included) on this Mac's Wi-Fi address for a phone on the same network; prints exp:// links + QR codes (MOBILE_HOST=<ip> to pick the address)
-	MOBILE_HOST=$${MOBILE_HOST:-lan} PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
+	MOBILE_HOST=$${MOBILE_HOST:-lan} PROD=$(PROD) DEV=$(DEV) REBUILD=$(REBUILD) tools/dev/local.sh up $(SERVICES)
 
 lan-env: ## Print the addresses the stack would advertise for MOBILE_HOST (dry run): make lan-env MOBILE_HOST=lan
 	tools/dev/local.sh lan-env

@@ -20,6 +20,7 @@ export { QuantityStepper, type QuantityStepperProps } from './commerce/QuantityS
 export { cardExpired, SavedPaymentCard, type SavedPaymentCardLabels, type SavedPaymentCardProps } from './commerce/SavedPaymentCard';
 export { Stars, type StarsProps } from './commerce/Stars';
 export { cx } from './cx';
+export { PendingNavigation, type PendingNavigationProps } from './feedback/PendingNavigation';
 export { Spinner, type SpinnerProps, type SpinnerSize, type SpinnerVariant } from './feedback/Spinner';
 export { Checkbox, type CheckboxProps } from './form/Checkbox';
 export { ChipGroup, type ChipGroupProps } from './form/ChipGroup';

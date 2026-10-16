@@ -7,6 +7,7 @@
     "note": "Placeholder machine translation (S193). Every string needs review by a native-speaking translator before launch; move reviewed keys to reviewedKeys."
   },
   "a11y.skip": "تخطَّ إلى المحتوى الرئيسي",
+  "a11y.signingIn": "جارٍ تحويلك إلى تسجيل الدخول…",
   "a11y.cartRegion": "تحديثات السلة",
   "header.home": "الصفحة الرئيسية لـ AfroTransact",
   "header.deliverTo": "التوصيل إلى",

@@ -1,0 +1,10 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--at-color-surface, #fff);
+  opacity: 0.94;
+}

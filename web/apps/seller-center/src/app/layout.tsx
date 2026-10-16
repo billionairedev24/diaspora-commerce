@@ -10,6 +10,7 @@ import { resolvedVariables } from '@afrotransact/tokens';
 import { type Metadata, type Viewport } from 'next';
 import { type ReactNode } from 'react';
 
+import { SignInPending } from '@/components/shell/SignInPending';
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
 import { storefrontUrl } from '@/lib/config';
@@ -43,6 +44,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           {t('sc.layout.skip')}
         </a>
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
+          <SignInPending />
           <WebVitalsReporter />
           <RuntimeConfigProvider value={{ storefrontUrl: storefrontUrl() }}>
             <Providers>{children}</Providers>

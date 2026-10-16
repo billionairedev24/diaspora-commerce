@@ -11,6 +11,7 @@ import { type Metadata, type Viewport } from 'next';
 import { cookies, headers } from 'next/headers';
 import { type ReactNode } from 'react';
 
+import { SignInPending } from '@/components/shell/SignInPending';
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
 import { CONSENT_COOKIE, headerGpc, parseConsent } from '@/lib/consent/consent';
@@ -46,6 +47,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           {t('a11y.skip')}
         </a>
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
+          <SignInPending />
           <Providers consent={consent} gpc={headerGpc(h.get('sec-gpc'))}>
             {/* Page-performance measurement is an analytics cookie category: only with consent (S192). */}
             <ConsentGate category="analytics">

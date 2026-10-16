@@ -3,7 +3,7 @@
 # profile, fixed ports from infra/local/PORTS.md), the three web apps against them; logs and PIDs under .local/.
 #
 #   tools/dev/local.sh up                      # infra + the default services + web apps, then prints every link
-#   PROD=1 tools/dev/local.sh up               # same, with the web apps as production builds (next build + start)
+#   DEV=1 tools/dev/local.sh up                # same, with Next dev servers (default: production builds, next build + start)
 #   tools/dev/local.sh up identity catalog     # only these services (plus infra and the web apps; WEB=0 skips them)
 #   tools/dev/local.sh status                  # what is running and healthy
 #   tools/dev/local.sh links                   # print every link again (apps, docs portal, MCP, API docs)
@@ -556,10 +556,31 @@ stop() {
   rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode" "$PIDS/$svc.env" "$PIDS/$svc.otel"
 }
 
-# PROD=1 (make up PROD=1): the web apps run as production builds (next build + next start, output in .next-prod so
-# the dev cache stays) instead of dev servers: real bundles, no dev overlay, production React. Rebuild after a change
-# with make up PROD=1 again: each run rebuilds the three apps, one at a time (a few minutes each).
-web_mode() { if [[ "${PROD:-0}" == 1 || "${WEB_MODE:-dev}" == prod ]]; then echo prod; else echo dev; fi; }
+# The web apps run as production builds by default (next build + next start, output in .next-prod so the dev cache
+# stays): real bundles, no dev overlay, production React. A build is skipped when nothing under the app, web/packages
+# or its config changed since it was made (REBUILD=1 forces one). DEV=1 (make up DEV=1; or PROD=0) runs Next dev
+# servers instead: hot reload, slow first page loads.
+web_mode() {
+  if [[ "${DEV:-0}" == 1 || "${PROD:-}" == 0 || "${WEB_MODE:-}" == dev ]]; then echo dev; else echo prod; fi
+}
+
+# node must actually start: after a brew upgrade a dylib it links (simdjson, icu, …) can be missing.
+node_ok() {
+  command -v node >/dev/null && node -e 0 >/dev/null 2>&1 && return 0
+  echo "  ✗ node does not start (a library it needs is missing after a Homebrew upgrade). Fix it, then make up again:" >&2
+  echo "      brew reinstall node@22   # or: brew reinstall simdjson" >&2
+  node -v 2>&1 | head -2 | sed 's/^/      /' >&2
+  return 1
+}
+
+# Is the production build of this app current: built from this source, for these addresses?
+web_build_fresh() {
+  local dir="$ROOT/web/apps/$1" id
+  id="$dir/.next-prod/BUILD_ID"
+  [[ "${REBUILD:-0}" != 1 && -f "$id" && "$(cat "$dir/.next-prod/.local-sig" 2>/dev/null)" == "$(env_sig)" ]] || return 1
+  [[ -z "$(find "$dir/src" "$dir/public" "$ROOT/web/packages" "$dir/package.json" "$dir"/next.config.* "$ROOT/web/pnpm-lock.yaml" \
+    \( -name node_modules -o -name .next -o -name .next-prod \) -prune -o -type f -newer "$id" -print -quit 2>/dev/null)" ]]
+}
 
 web_up() {
   local app name url port i mode
@@ -569,6 +590,7 @@ web_up() {
     echo "==> installing web dependencies (pnpm install)"
     (cd "$ROOT" && pnpm install --frozen-lockfile)
   fi
+  node_ok || return 0
   mode=$(web_mode)
   mkdir -p "$LOGS" "$PIDS"
   platform_env
@@ -587,10 +609,15 @@ web_up() {
       name="web-$app"
       if running "$name"; then stop "$name"; fi
       : >"$LOGS/$name.log"
-      echo "  … building $app"
-      if ! (cd "$ROOT/web/apps/$app" && NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 \
-        NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 ./node_modules/.bin/next build >>"$LOGS/$name.log" 2>&1); then
-        echo "  ✗ $app build failed; last log lines:" >&2; tail -n 25 "$LOGS/$name.log" >&2; continue
+      if web_build_fresh "$app"; then
+        echo "  · $app: build is current (REBUILD=1 to force)"
+      else
+        echo "  … building $app"
+        if ! (cd "$ROOT/web/apps/$app" && NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 \
+          NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 ./node_modules/.bin/next build >>"$LOGS/$name.log" 2>&1); then
+          echo "  ✗ $app build failed; last log lines:" >&2; tail -n 25 "$LOGS/$name.log" >&2; continue
+        fi
+        env_sig >"$ROOT/web/apps/$app/.next-prod/.local-sig"
       fi
       port=$(web_port_of "$app")
       (cd "$ROOT/web/apps/$app" || exit 1
@@ -763,6 +790,7 @@ docs_up() {
   local port i
   if [[ "${DOCS:-1}" == 0 || "${WEB:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || return 0
+  node_ok || return 0
   if running docs-portal; then echo "  · docs portal already running"; return 0; fi
   port=$(docs_port)
   if [[ -z "${DOCS_PORT:-}" ]] && port_open "$port"; then
