@@ -52,13 +52,20 @@ func ordersResource() *staffResource {
 			}
 			return jpage(raw), nil
 		},
-		get:     getByPath("/v1/orders/", upOrders),
+		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
+			o, err := getByPath("/v1/orders/", upOrders)(ctx, sc, id)
+			if err != nil {
+				return nil, err
+			}
+			enrichStaffProof(ctx, sc.up.Proof, o)
+			return o, nil
+		},
 		titleOf: func(o jobj) string { return "Order " + jstr(o, "orderNumber") },
 		subtitleOf: func(o jobj) string {
 			return strings.Trim(firstNonEmpty(jstr(o, "shippingAddress.fullName"), jstr(o, "customerId"))+" · "+jstr(o, "shipTo"), " ·")
 		},
 		sections: func(o jobj) []domain.DetailSection {
-			return autoSections(o, "status", "shipments")
+			return append(autoSections(o, "status", "shipments"), proofSections(o)...)
 		},
 		tables: func(o jobj) []domain.DetailTable {
 			lines := []jobj{}

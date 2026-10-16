@@ -27,15 +27,17 @@ type ShopperDeps struct {
 	Pages    port.PublishedPagesClient
 	Lola     port.LolaClient
 	Delivery port.DeliveryFactsClient
+	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).
+	ProofLinks port.ProofLinks
 	// LocalDelivery and Offers price AfroTransact Delivery from the seller's store on the checkout page (S255; optional).
 	LocalDelivery port.LocalDeliveryClient
 	Offers        port.StorefrontOffersClient
 	// Coupons validates checkout coupon codes (offers-service; optional).
 	Coupons  port.CheckoutCouponsClient
 	Identity port.IdentityClient
-	Checkout      CheckoutService
-	Carts         CartService
-	Location      LocationService
+	Checkout CheckoutService
+	Carts    CartService
+	Location LocationService
 	// PublishableKey is the Stripe publishable key handed to Stripe.js / PaymentSheet.
 	PublishableKey string
 	// IdentityPublicURL is where the browser reaches identity (hosted passkey registration page).
@@ -320,7 +322,7 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 	for _, sh := range o.Shipments {
 		d := domain.ShipmentDetail{ShipmentID: firstNonEmpty(sh.ShipmentID, sh.ID), Label: sh.Label, Status: strings.ToLower(sh.Status),
 			StatusLabel: statusLabel(sh.Status), Items: sh.Items, SellerName: sh.SellerName, DeliveryMethod: methodKey(sh.DeliveryMethod, sh.ServiceLevel),
-			Cancellable: sh.Cancellable, Carrier: optStr(sh.Carrier), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
+			Cancellable: sh.Cancellable, CancellableUntil: optStr(sh.CancellableUntil), Carrier: optStr(sh.Carrier), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
 			PromisedBy: optStr(sh.PromisedBy), DeliveredAt: optStr(sh.DeliveredAt), DeliveryCode: optStr(sh.HandoverCode),
 			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline), Returnable: sh.Returnable,
 			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly}
@@ -328,12 +330,22 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 			d.LocalDelivery = &domain.OrderLocalDelivery{RoadMiles: ld.RoadMiles, DurationMinutes: ld.DurationMinutes, ChargeMinor: ld.CustomerChargeMinor}
 		}
 		d.Pickup = s.pickupOf(ctx, sh)
+		entries := make([]proofEntry, 0, len(sh.Timeline))
+		for _, t := range sh.Timeline {
+			entries = append(entries, proofEntry{to: t.To, at: t.At, proof: t.Proof})
+		}
+		d.Proof = deliveredProof(entries)
 		for _, l := range sh.Lines {
 			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, Title: l.Title,
 				ImageURL: optStr(l.ImageURL), Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, ItemsMinor: l.ItemsMinor})
 		}
 		out.Shipments = append(out.Shipments, d)
 	}
+	proofs := make([]*domain.DeliveryProof, 0, len(out.Shipments))
+	for _, sh := range out.Shipments {
+		proofs = append(proofs, sh.Proof)
+	}
+	attachProofLinks(ctx, s.d.ProofLinks, proofs)
 	s.withPayment(ctx, c, o.ID, &out)
 	return out, nil
 }

@@ -121,6 +121,13 @@ paths:
       tags: [Assets]
       operationId: getAsset
       summary: Asset metadata (private assets include a signed URL, 5 minutes unless asked otherwise)
+      description: >-
+        Readable by the uploader, the owning organisation and staff with the purpose's permission. Two service clients
+        read with their own client-credentials token and scope `media:read`: `delivery-runs-service` (public assets,
+        including ones not published yet) and `gateway-bff`, which also reads driver proof-of-delivery photos and
+        signatures (purpose `proof-photo`, nothing else private) to hand the customer's, the seller's and staff's
+        order pages a short-lived link. The BFF asks only for ids that orders-service returned for an order the viewer
+        may already read.
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
         - name: urlTtlSeconds

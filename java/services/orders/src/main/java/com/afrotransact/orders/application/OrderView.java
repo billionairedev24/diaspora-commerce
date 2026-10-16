@@ -51,6 +51,8 @@ public record OrderView(String id, String orderNumber, String status, String cus
      *                         "Return or replace items"; tax-returns decides per line)
      * @param returnWindowEndsAt end of the return window (null when not delivered or nothing is returnable)
      * @param problemReportOnly delivered with only perishable / non-returnable lines ("Report a problem")
+     * @param cancellableUntil  when the customer's Cancel stops being offered (the cancellation window's end, or a
+     *                          pre-order window's close); null when the shipment can no longer be cancelled by the customer
      * @param returns          where the apps read eligibility and returns (tax-returns, through gateway-bff)
      */
     public record ShipmentView(String id, String shipmentId, int seq, String label, String sellerOrgId,
@@ -59,7 +61,8 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                boolean perishable, boolean handoverRequired, String handoverCode, String status,
                                String items, long itemsMinor, long shippingMinor, long taxMinor, long totalMinor,
                                String carrier, String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy,
-                               Instant deliveredAt, boolean captured, boolean cancellable, List<String> nextActions,
+                               Instant deliveredAt, boolean captured, boolean cancellable, Instant cancellableUntil,
+                               List<String> nextActions,
                                List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
                                Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns,
                                LocalDeliveryView localDelivery, PreorderView preorder) {

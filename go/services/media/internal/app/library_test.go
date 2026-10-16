@@ -19,6 +19,22 @@ import (
 // memLibrary filters memRepo's assets like the SQL of pgrepo (completed library images, newest first).
 type memLibrary struct{ repo *memRepo }
 
+func (l memLibrary) RenameLibraryImage(_ context.Context, id, newFileName string, sku, slot *string) error {
+	a, ok := l.repo.assets[id]
+	if !ok {
+		return errors.New("asset not found")
+	}
+	a.FileName, a.SKU, a.Slot = newFileName, "", ""
+	if sku != nil {
+		a.SKU = *sku
+	}
+	if slot != nil {
+		a.Slot = domain.LibrarySlot(*slot)
+	}
+	l.repo.assets[id] = a
+	return nil
+}
+
 func (l memLibrary) sorted(org string) []domain.Asset {
 	var out []domain.Asset
 	for _, a := range l.repo.assets {

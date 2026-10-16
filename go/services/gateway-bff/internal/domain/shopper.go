@@ -39,22 +39,25 @@ type TimelineEvent struct {
 
 // ShipmentDetail is one shipment of an order with tracking.
 type ShipmentDetail struct {
-	ShipmentID     string          `json:"shipmentId"`
-	Label          string          `json:"label"`
-	Status         string          `json:"status"`
-	StatusLabel    string          `json:"statusLabel"`
-	Items          string          `json:"items"`
-	SellerName     string          `json:"sellerName"`
-	DeliveryMethod string          `json:"deliveryMethod"`
-	Cancellable    bool            `json:"cancellable"`
-	Carrier        *string         `json:"carrier"`
-	TrackingNumber *string         `json:"trackingNumber"`
-	PromisedFrom   *string         `json:"promisedFrom"`
-	PromisedBy     *string         `json:"promisedBy"`
-	DeliveredAt    *string         `json:"deliveredAt"`
-	DeliveryCode   *string         `json:"deliveryCode"`
-	Lines          []OrderLineView `json:"lines"`
-	Timeline       []TimelineEvent `json:"timeline"`
+	ShipmentID     string `json:"shipmentId"`
+	Label          string `json:"label"`
+	Status         string `json:"status"`
+	StatusLabel    string `json:"statusLabel"`
+	Items          string `json:"items"`
+	SellerName     string `json:"sellerName"`
+	DeliveryMethod string `json:"deliveryMethod"`
+	Cancellable    bool   `json:"cancellable"`
+	// CancellableUntil is when Cancel stops being offered (before packing and inside the cancellation window); null when
+	// it is not offered now.
+	CancellableUntil *string         `json:"cancellableUntil"`
+	Carrier          *string         `json:"carrier"`
+	TrackingNumber   *string         `json:"trackingNumber"`
+	PromisedFrom     *string         `json:"promisedFrom"`
+	PromisedBy       *string         `json:"promisedBy"`
+	DeliveredAt      *string         `json:"deliveredAt"`
+	DeliveryCode     *string         `json:"deliveryCode"`
+	Lines            []OrderLineView `json:"lines"`
+	Timeline         []TimelineEvent `json:"timeline"`
 	// Returns (S148/S166): show "Return items" when returnable, "Report a problem" when only that is possible.
 	Returnable         bool    `json:"returnable"`
 	ReturnWindowEndsAt *string `json:"returnWindowEndsAt"`
@@ -63,6 +66,8 @@ type ShipmentDetail struct {
 	LocalDelivery *OrderLocalDelivery `json:"localDelivery"`
 	// Pickup is where a pickup shipment is collected; nil for other shipments (or when the point can't be read).
 	Pickup *OrderPickup `json:"pickup"`
+	// Proof is how our driver handed it over (photo, who received it); null for carrier, pickup and manual deliveries.
+	Proof *DeliveryProof `json:"proof"`
 }
 
 // OrderPickup is the pickup point of a pickup shipment as the order page shows it.

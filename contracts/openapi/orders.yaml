@@ -1271,6 +1271,13 @@ components:
           type: boolean
         cancellable:
           type: boolean
+          description: >-
+            The customer may cancel now: the shipment is not packed yet (placed or confirmed) and the cancellation window
+            (30 minutes after placing by default; a pre-order's window until it closes) has not ended.
+        cancellableUntil:
+          type: string
+          format: date-time
+          description: When the customer's Cancel stops being offered. Absent when it is not offered now.
         nextActions:
           type: array
           items:

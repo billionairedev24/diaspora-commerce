@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -79,9 +80,12 @@ func shipmentOf(s port.OrderShipmentView) domain.SellerShipment {
 		out.Lines = append(out.Lines, domain.SellerShipmentLine{Title: l.Title, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor,
 			ItemsMinor: l.ItemsMinor, VariantATIN: l.VariantATIN, ImageURL: strPtr(l.ImageURL)})
 	}
+	entries := make([]proofEntry, 0, len(s.Timeline))
 	for _, t := range s.Timeline {
 		out.Timeline = append(out.Timeline, domain.TimelineEntry{Status: strings.ToUpper(t.To), At: t.At, Actor: strings.ToLower(t.ActorType)})
+		entries = append(entries, proofEntry{to: t.To, at: t.At.UTC().Format(time.RFC3339), proof: t.Proof})
 	}
+	out.Proof = deliveredProof(entries)
 	return out
 }
 
@@ -211,6 +215,7 @@ func (s *sellerOrdersImpl) Get(ctx context.Context, c *domain.Caller, orderNumbe
 		return domain.SellerOrderDetail{}, mapErr("orders", err)
 	}
 	out := orderOf(o)
+	s.withProofLinks(ctx, &out)
 	out.Earnings = s.earnings(ctx, c, sc.org.ID, out)
 	s.suggestParcels(ctx, c, &out)
 	return out, nil
@@ -318,7 +323,18 @@ func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, k
 			return domain.SellerOrderDetail{}, mapErr("orders", err)
 		}
 	}
-	return orderOf(o), nil
+	out := orderOf(o)
+	s.withProofLinks(ctx, &out)
+	return out, nil
+}
+
+// withProofLinks gives the shipments' delivery proofs their short-lived photo and signature links.
+func (s *sellerOrdersImpl) withProofLinks(ctx context.Context, o *domain.SellerOrderDetail) {
+	proofs := make([]*domain.DeliveryProof, 0, len(o.Shipments))
+	for _, sh := range o.Shipments {
+		proofs = append(proofs, sh.Proof)
+	}
+	attachProofLinks(ctx, s.r.d.ProofLinks, proofs)
 }
 
 func validateParcel(p domain.Parcel, from domain.SellerAddress) map[string]string {

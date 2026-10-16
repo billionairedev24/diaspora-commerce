@@ -76,6 +76,8 @@ type UpTimelineEntry struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	At   string `json:"at"`
+	// Proof is the driver's proof of delivery on a delivered (or failed) step; nil for every other entry.
+	Proof *UpDeliveryProof `json:"proof"`
 }
 
 // UpPreferences is orders' DeliveryPreferences (upper-case enums).
@@ -88,25 +90,27 @@ type UpPreferences struct {
 
 // UpShipment is orders' ShipmentView.
 type UpShipment struct {
-	ID               string            `json:"id"`
-	ShipmentID       string            `json:"shipmentId"`
-	Label            string            `json:"label"`
-	SellerName       string            `json:"sellerName"`
-	FulfilmentType   string            `json:"fulfilmentType"`
-	DeliveryMethod   string            `json:"deliveryMethod"`
-	ServiceLevel     string            `json:"serviceLevel"`
-	Preferences      *UpPreferences    `json:"preferences"`
-	Perishable       bool              `json:"perishable"`
-	HandoverRequired bool              `json:"handoverRequired"`
-	HandoverCode     string            `json:"handoverCode"`
-	Status           string            `json:"status"`
-	Items            string            `json:"items"`
-	Carrier          string            `json:"carrier"`
-	TrackingNumber   string            `json:"trackingNumber"`
-	PromisedFrom     string            `json:"promisedFrom"`
-	PromisedBy       string            `json:"promisedBy"`
-	DeliveredAt      string            `json:"deliveredAt"`
-	Cancellable      bool              `json:"cancellable"`
+	ID               string         `json:"id"`
+	ShipmentID       string         `json:"shipmentId"`
+	Label            string         `json:"label"`
+	SellerName       string         `json:"sellerName"`
+	FulfilmentType   string         `json:"fulfilmentType"`
+	DeliveryMethod   string         `json:"deliveryMethod"`
+	ServiceLevel     string         `json:"serviceLevel"`
+	Preferences      *UpPreferences `json:"preferences"`
+	Perishable       bool           `json:"perishable"`
+	HandoverRequired bool           `json:"handoverRequired"`
+	HandoverCode     string         `json:"handoverCode"`
+	Status           string         `json:"status"`
+	Items            string         `json:"items"`
+	Carrier          string         `json:"carrier"`
+	TrackingNumber   string         `json:"trackingNumber"`
+	PromisedFrom     string         `json:"promisedFrom"`
+	PromisedBy       string         `json:"promisedBy"`
+	DeliveredAt      string         `json:"deliveredAt"`
+	Cancellable      bool           `json:"cancellable"`
+	// CancellableUntil is when the customer's Cancel stops being offered (RFC 3339; empty when it is not offered).
+	CancellableUntil string            `json:"cancellableUntil"`
 	Lines            []UpOrderLine     `json:"lines"`
 	Timeline         []UpTimelineEntry `json:"timeline"`
 	// Returns (S148/S166): whether a return can start, until when, and whether only a problem report is possible.

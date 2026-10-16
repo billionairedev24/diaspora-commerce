@@ -18,6 +18,7 @@ type shopperClients struct {
 	identityAPI                port.IdentityClient
 	offers                     port.StorefrontOffersClient
 	serviceTokens              port.ServiceTokens
+	proofLinks                 port.ProofLinks
 }
 
 // shopperServices wires the storefront's account, checkout payment, services & bookings and Lola use cases.
@@ -35,6 +36,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 			sc.serviceTokens),
 		LocalDelivery: upstreams.NewLocalDelivery(client("seller", up.Seller), client("geo", up.Geo), sc.payments, sc.serviceTokens),
 		Offers:        sc.offers,
+		ProofLinks:    sc.proofLinks,
 		Coupons:       upstreams.NewCheckoutCoupons(client("offers", up.Offers)),
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,

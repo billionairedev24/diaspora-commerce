@@ -58,11 +58,17 @@ func ImportablePurposes() []Purpose { return []Purpose{PurposeProductImage} }
 // assets (GET /v1/assets/{id}: delivery-runs verifies pre-order creatives and stores their size). They never upload.
 func ReaderClients() []string { return []string{ClientDeliveryRunsService} }
 
+// ProofReaderClients are service clients whose own tokens, with scope media:read, may also read driver proof-of-delivery
+// photos and signatures (private, purpose proof-photo) and get a short-lived signed link to them. gateway-bff does, for
+// the order pages of the customer, the seller and staff: it asks only for asset ids that orders-service returned to a
+// viewer it had already authorised.
+func ProofReaderClients() []string { return []string{ClientGatewayBFF} }
+
 // AcceptedServiceClients are the service clients whose own client-credentials tokens media accepts: the clients the
 // purpose rules name, the reader clients and the importer clients.
 func AcceptedServiceClients() []string {
 	out := ServiceClients()
-	for _, c := range append(ReaderClients(), ImporterClients()...) {
+	for _, c := range append(append(ReaderClients(), ProofReaderClients()...), ImporterClients()...) {
 		if !slices.Contains(out, c) {
 			out = append(out, c)
 		}

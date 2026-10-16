@@ -72,6 +72,7 @@ class OrderViews {
         int units = s.lines().stream().mapToInt(OrderLine::quantity).sum();
         String label = "Shipment " + s.seq() + " of " + count + (s.sellerName() == null ? "" : " · " + s.sellerName());
         boolean cancellable = customerMayCancel(order, s);
+        Instant cancellableUntil = cancellable ? cancelWindowEnd(order, s) : null;
         if (s.preorderShipment()) {
             label = "Pre-order · delivered " + s.preorder().deliversOn()
                     + (s.sellerName() == null ? "" : " · " + s.sellerName());
@@ -86,7 +87,7 @@ class OrderViews {
                 s.pickupLocationId(), s.preferences(), s.perishable(), s.handoverRequired(), code, s.status().wire(),
                 units + (units == 1 ? " item" : " items"), s.itemsMinor(), s.shippingMinor(), s.taxMinor(),
                 s.totalMinor(), s.carrier(), s.trackingNumber(), s.promisedFrom(), s.promisedBy(), s.deliveredAt(),
-                s.captured(), cancellable, nextActions,
+                s.captured(), cancellable, cancellableUntil, nextActions,
                 s.lines().stream().map(OrderViews::line).toList(),
                 history.stream().map(h -> new OrderView.TimelineEntry(h.from() == null ? null : h.from().wire(),
                         h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt(), proofOf(h.proof(), viewer.kind() == Viewer.Kind.STAFF))).toList(),
@@ -103,7 +104,7 @@ class OrderViews {
     }
 
     /**
-     * The customer's Cancel button: only before the parcel is packed (placed, or confirmed by the seller) and inside the
+     * The customer's Cancel: only before the parcel is packed (placed, or confirmed by the seller) and inside the
      * cancellation window (a pre-order: until its window closes). The same two rules the cancel itself enforces, so
      * the button is never shown for a cancel that would be refused.
      */
@@ -115,7 +116,17 @@ class OrderViews {
         if (s.preorderShipment()) {
             return s.preorder().cancellableAt(now);
         }
-        return order != null && order.placedAt() != null && !now.isAfter(order.placedAt().plus(settings.cancellationWindow()));
+        Instant until = cancelWindowEnd(order, s);
+        return until != null && !now.isAfter(until);
+    }
+
+    /** When that window ends: placing plus the cancellation window, or the pre-order's close (null: not known). */
+    private Instant cancelWindowEnd(Order order, Shipment s) {
+        if (s.preorderShipment()) {
+            return s.preorder().closesAt();
+        }
+        return order == null || order.placedAt() == null ? null
+                : order.placedAt().plus(settings.cancellationWindow());
     }
 
     private List<String> nextActions(Order order, Shipment s, Viewer viewer) {

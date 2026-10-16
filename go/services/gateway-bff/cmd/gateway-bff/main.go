@@ -102,7 +102,9 @@ func run() error {
 	content := upstreams.NewContent(client("content", up.Content), cache, cfg.Cache.DefaultTTL)
 	clientCreds := upstreams.IdentityOptions{ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret}
 	serviceTokens := upstreams.NewServiceTokens(identityClient, clientCreds)
-	media := upstreams.NewMedia(client("media", up.Media))
+	mediaClient := client("media", up.Media)
+	media := upstreams.NewMedia(mediaClient)
+	proofLinks := upstreams.NewProofLinks(mediaClient, serviceTokens)
 	payments := upstreams.NewPayments(paymentsClient)
 	promise := upstreams.NewPromise(client("promise", up.Promise))
 	orders := upstreams.NewOrders(ordersClient)
@@ -112,7 +114,7 @@ func run() error {
 		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
 		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient),
-		Media:        media, Orders: upstreams.NewSellerOrders(ordersClient),
+		Media:        media, ProofLinks: proofLinks, Orders: upstreams.NewSellerOrders(ordersClient),
 		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
 		Fees:       upstreams.NewFees(paymentsClient, serviceTokens),
 		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
@@ -180,11 +182,12 @@ func run() error {
 	}
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
-		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers}, services, log)
+		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,
-		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient}, rdb, cache, log); err != nil {
+		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient,
+		proofLinks: proofLinks}, rdb, cache, log); err != nil {
 		return err
 	}
 	// Seller Center exports share the staff console's job store, renderer and file directory.

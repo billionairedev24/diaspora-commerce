@@ -121,6 +121,13 @@ paths:
       tags: [Assets]
       operationId: getAsset
       summary: Asset metadata (private assets include a signed URL, 5 minutes unless asked otherwise)
+      description: >-
+        Readable by the uploader, the owning organisation and staff with the purpose's permission. Two service clients
+        read with their own client-credentials token and scope `media:read`: `delivery-runs-service` (public assets,
+        including ones not published yet) and `gateway-bff`, which also reads driver proof-of-delivery photos and
+        signatures (purpose `proof-photo`, nothing else private) to hand the customer's, the seller's and staff's
+        order pages a short-lived link. The BFF asks only for ids that orders-service returned for an order the viewer
+        may already read.
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
         - name: urlTtlSeconds
@@ -232,6 +239,30 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
   /v1/library/{id}:
+    patch:
+      tags: [Image library]
+      operationId: renameLibraryImage
+      summary: Rename a library image and re-match SKU / slot
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName]
+              properties:
+                fileName: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Renamed image
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LibraryImage'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
     delete:
       tags: [Image library]
       operationId: removeFromLibrary

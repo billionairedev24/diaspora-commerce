@@ -22,6 +22,7 @@ import (
 // the remaining ones are created here.
 type staffClients struct {
 	identity, catalog, inventory, payments, orders, deliveryRuns, offers httpclient.Client
+	proofLinks                                                           port.ProofLinks
 }
 
 // staffServices wires the staff console (contracts/openapi/gateway-bff-staff.yaml): shell, tables and sheets,
@@ -45,6 +46,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Media: upstreams.NewStaffUpstream(media), Geo: upstreams.NewStaffUpstream(client("geo", up.Geo)),
 			Offers: upstreams.NewStaffUpstream(sc.offers), Search: upstreams.NewStaffUpstream(client("search", up.Search)),
 			Carrier: upstreams.NewStaffUpstream(client("carrier-gateway", up.Carrier)),
+			Proof:   sc.proofLinks,
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
 		Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,

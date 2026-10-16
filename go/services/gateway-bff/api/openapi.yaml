@@ -3706,6 +3706,21 @@ components:
         customerId: {type: string}
         ephemeralKey: {type: string}
         publishableKey: {type: string}
+    DeliveryProof:
+      type: [object, 'null']
+      description: |
+        How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
+        tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+        short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
+      required: [method, recipientName, relationship, safePlace, photoUrl, signatureUrl, at]
+      properties:
+        method: {type: string, enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE], description: 'To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place'}
+        recipientName: {type: [string, 'null']}
+        relationship: {type: [string, 'null']}
+        safePlace: {type: [string, 'null']}
+        photoUrl: {type: [string, 'null'], format: uri, description: Proof photo; null when none or it cannot be shown right now}
+        signatureUrl: {type: [string, 'null'], format: uri, description: Recipient's signature (someone-else handovers)}
+        at: {type: string, format: date-time, description: When it was delivered}
     TimelineEvent:
       type: object
       required: [status, label, at]
@@ -3772,12 +3787,14 @@ components:
               items: {type: string}
               sellerName: {type: string}
               deliveryMethod: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
-              cancellable: {type: boolean}
+              cancellable: {type: boolean, description: 'Cancel is offered: before the parcel is packed and inside the cancellation window'}
+              cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered (the window''s end); null when it is not offered now'}
               carrier: {type: [string, 'null']}
               trackingNumber: {type: [string, 'null']}
               promisedFrom: {type: [string, 'null']}
               promisedBy: {type: [string, 'null']}
               deliveredAt: {type: [string, 'null']}
+              proof: {$ref: '#/components/schemas/DeliveryProof'}
               deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
               lines: {type: array, items: {$ref: '#/components/schemas/OrderLineView'}}
               timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}

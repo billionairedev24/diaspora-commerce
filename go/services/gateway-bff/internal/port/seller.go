@@ -869,9 +869,10 @@ type OrderShipmentView struct {
 		ItemsMinor     int64  `json:"itemsMinor"`
 	} `json:"lines"`
 	Timeline []struct {
-		To        string    `json:"to"`
-		ActorType string    `json:"actorType"`
-		At        time.Time `json:"at"`
+		To        string           `json:"to"`
+		ActorType string           `json:"actorType"`
+		At        time.Time        `json:"at"`
+		Proof     *UpDeliveryProof `json:"proof"`
 	} `json:"timeline"`
 }
 

@@ -88,7 +88,7 @@ at:
         grant-types: [authorization_code, refresh_token, client_credentials]
         redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/oidc/callback", "${SELLER_CENTER_URL:http://localhost:3001}/api/bff/v1/auth/oidc/callback", "http://localhost:3010/api/bff/v1/auth/oidc/callback", "${STAFF_CONSOLE_URL:http://localhost:3002}/api/bff/v1/auth/oidc/callback"]
         post-logout-redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/signed-out/storefront", "${SELLER_CENTER_URL:http://localhost:3001}/api/bff/v1/auth/signed-out/seller-center", "http://localhost:3010/api/bff/v1/auth/signed-out/seller-center", "${STAFF_CONSOLE_URL:http://localhost:3002}/api/bff/v1/auth/signed-out/staff-console"]
-        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read", "orders:pay-link"]
+        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read", "orders:pay-link", "media:read"]
       - client-id: seller-service
         name: Seller service
         type: confidential

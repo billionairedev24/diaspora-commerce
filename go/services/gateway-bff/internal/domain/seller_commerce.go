@@ -201,6 +201,8 @@ type SellerShipment struct {
 	SuggestedParcel *SuggestedParcel     `json:"suggestedParcel"`
 	Timeline        []TimelineEntry      `json:"timeline"`
 	LocalDelivery   *SellerLocalDelivery `json:"localDelivery"`
+	// Proof is how our driver handed it over (photo, who received it); nil for carrier, pickup and manual deliveries.
+	Proof *DeliveryProof `json:"proof"`
 }
 
 // SuggestedParcel is the package of a shipment worked out from its products' listed package (inches, pounds).

@@ -63,6 +63,8 @@ type StaffUpstreams struct {
 	Search StaffUpstream
 	// Carrier is carrier-gateway: customer pickup points (Delivery dispatch › Pickup points).
 	Carrier StaffUpstream
+	// Proof signs the links to a delivery's proof photo and signature on an order's sheet (optional: none without it).
+	Proof ProofLinks
 }
 
 // ExportJobStore keeps export jobs (shared by every BFF replica; jobs live 24 hours after they finish).

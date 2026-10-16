@@ -3067,6 +3067,21 @@ components:
         state: {type: string}
         postalCode: {type: string}
         country: {type: string}
+    DeliveryProof:
+      type: [object, 'null']
+      description: |
+        How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
+        tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+        short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
+      required: [method, recipientName, relationship, safePlace, photoUrl, signatureUrl, at]
+      properties:
+        method: {type: string, enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE], description: 'To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place'}
+        recipientName: {type: [string, 'null']}
+        relationship: {type: [string, 'null']}
+        safePlace: {type: [string, 'null']}
+        photoUrl: {type: [string, 'null'], format: uri, description: Proof photo; null when none or it cannot be shown right now}
+        signatureUrl: {type: [string, 'null'], format: uri, description: Recipient's signature (someone-else handovers)}
+        at: {type: string, format: date-time, description: When it was delivered}
     SellerShipment:
       type: object
       required: [shipmentId, label, status, statusLabel, fulfilment, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, hasLabel, suggestedParcel, timeline, localDelivery]
@@ -3097,6 +3112,7 @@ components:
         nextActions: {type: array, items: {$ref: '#/components/schemas/SellerStatusAction'}}
         canBuyLabel: {type: boolean}
         hasLabel: {type: boolean, description: A shipping label was bought for this shipment and can be downloaded again}
+        proof: {$ref: '#/components/schemas/DeliveryProof'}
         suggestedParcel:
           oneOf: [{$ref: '#/components/schemas/SuggestedParcel'}, {type: 'null'}]
           description: The package of the products as listed (weight of every unit, largest footprint, heights stacked); null when not listed

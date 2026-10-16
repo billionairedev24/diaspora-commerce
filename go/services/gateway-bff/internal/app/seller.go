@@ -26,7 +26,9 @@ type SellerDeps struct {
 	Media     port.MediaClient
 	Orders    port.SellerOrdersClient
 	Carrier   port.CarrierClient
-	Payouts   port.PayoutsClient
+	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).
+	ProofLinks port.ProofLinks
+	Payouts    port.PayoutsClient
 
 	// Listing edits products, keeps form drafts and runs bulk uploads at catalog (S307/S308); nil answers 503.
 	Listing port.SellerListingClient
