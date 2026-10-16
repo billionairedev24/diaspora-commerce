@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 
+import { LolaLauncher } from '@/components/assistant/LolaLauncher';
 import { NoAccess } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
@@ -289,6 +290,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         </main>
       </BackofficeFrame>
       <SupportChat orgName={session.activeOrg.name} />
+      {session.portal === 'SELLER_CENTER' && session.approved ? <LolaLauncher /> : null}
     </SellerSessionProvider>
   );
 }

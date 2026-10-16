@@ -9,6 +9,11 @@ import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
   type AddBillingPaymentMethodInput,
+  type AssistantChatRequest,
+  type AssistantReply,
+  AssistantReplySchema,
+  type AssistantStatus,
+  AssistantStatusSchema,
   type AfrotransactPickupRequest,
   type Asset,
   AssetSchema,
@@ -376,6 +381,10 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/inventory', InventoryViewSchema, { query: { lowStock: lowStock ? 'true' : undefined }, signal }),
     adjustStock: (input: StockAdjustmentRequest, key?: string): Promise<StockAdjustment> =>
       request('/v1/seller/inventory/adjustments', StockAdjustmentSchema, { method: 'POST', body: input, headers: idem(key) }),
+
+    /* Lola for sellers */
+    getAssistantStatus: (signal?: AbortSignal): Promise<AssistantStatus> => request('/v1/seller/assistant', AssistantStatusSchema, { signal }),
+    askAssistant: (body: AssistantChatRequest): Promise<AssistantReply> => request('/v1/seller/assistant/chat', AssistantReplySchema, { method: 'POST', body }),
 
     /* Money */
     getPayouts: (signal?: AbortSignal): Promise<PayoutsView> => request('/v1/seller/payouts', PayoutsViewSchema, { signal }),

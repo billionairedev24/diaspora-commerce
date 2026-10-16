@@ -1704,3 +1704,46 @@ export const PublicPageInputSchema = z.object({
   social: z.array(z.object({ network: SocialLinkNetworkSchema, url: z.string() })).optional()
 });
 export type PublicPageInput = z.infer<typeof PublicPageInputSchema>;
+
+/* ── Lola for sellers (plan tiers) ─────────────────────── */
+
+export const AssistantTierSchema = z.enum(['ESSENTIALS', 'GROWTH', 'PRO']);
+export type AssistantTier = z.infer<typeof AssistantTierSchema>;
+export const AssistantStatusSchema = z.object({
+  tier: AssistantTierSchema,
+  limits: z.object({
+    label: z.string(),
+    dailyMessages: z.number().int(),
+    maxToolRounds: z.number().int(),
+    history: z.number().int(),
+    tools: z.array(z.string()),
+    canPropose: z.boolean()
+  }),
+  used: z.number().int(),
+  remaining: z.number().int(),
+  upgrade: z.object({ planCode: z.string(), label: z.string(), gains: z.string() }).nullable()
+});
+export type AssistantStatus = z.infer<typeof AssistantStatusSchema>;
+/** A change Lola prepared; nothing happens until the seller taps it. */
+export const AssistantProposalSchema = z.object({
+  kind: z.enum(['SET_STOCK', 'NEXT_STEP']),
+  label: z.string(),
+  sku: z.string().optional(),
+  quantity: z.number().int().optional(),
+  orderNumber: z.string().optional(),
+  shipmentId: z.string().optional(),
+  step: z.enum(['CONFIRMED', 'PACKED', 'READY']).optional()
+});
+export type AssistantProposal = z.infer<typeof AssistantProposalSchema>;
+export const AssistantReplySchema = z.object({
+  answer: z.string(),
+  steps: z.array(z.object({ tool: z.string(), label: z.string() })),
+  proposals: z.array(AssistantProposalSchema),
+  status: AssistantStatusSchema
+});
+export type AssistantReply = z.infer<typeof AssistantReplySchema>;
+export interface AssistantChatRequest {
+  message: string;
+  history?: { role: 'user' | 'assistant'; content: string }[];
+  language?: string;
+}

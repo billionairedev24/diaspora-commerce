@@ -14,6 +14,7 @@ export const sellerKeys = {
   onboardingPlans: (orgId: string) => [...sellerKeys.onboarding(orgId), 'plans'] as const,
   compliance: (orgId: string) => [...sellerKeys.org(orgId), 'compliance'] as const,
   dashboard: (orgId: string, rangeDays: number) => [...sellerKeys.org(orgId), 'dashboard', rangeDays] as const,
+  assistant: (orgId: string) => [...sellerKeys.org(orgId), 'assistant'] as const,
   orders: (orgId: string) => [...sellerKeys.org(orgId), 'orders'] as const,
   exports: (orgId: string) => [...sellerKeys.org(orgId), 'exports'] as const,
   exportJob: (orgId: string, id: string) => [...sellerKeys.exports(orgId), id] as const,
