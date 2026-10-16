@@ -151,6 +151,12 @@ func (s *sellerAssistantImpl) Chat(ctx context.Context, c *domain.Caller, in dom
 	if answer == "" {
 		answer = "I couldn't put an answer together for that. Could you ask it another way?"
 	}
+	if run.steps == nil {
+		run.steps = []domain.AssistantStep{}
+	}
+	if run.proposals == nil {
+		run.proposals = []domain.AssistantProposal{}
+	}
 	return domain.AssistantReply{Answer: answer, Steps: run.steps, Proposals: run.proposals, Status: s.status(tier, used)}, nil
 }
 
