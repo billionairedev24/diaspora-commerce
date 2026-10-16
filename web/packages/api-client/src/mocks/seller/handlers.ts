@@ -2127,8 +2127,10 @@ export const sellerHandlers = [
       if (listing && activeOffers.length > 0 && activeOffers.every((x) => x.fulfilment === o.fulfilment)) {
         listing.fulfilment = o.fulfilment;
       }
-      if (ctx.db.productDetails[o.productId]?.listing) {
-        ctx.db.productDetails[o.productId].listing.fulfilment = o.fulfilment;
+      const detail = ctx.db.productDetails[o.productId];
+      if (detail?.listing) {
+        // The product form knows two kinds; AfroTransact Delivery collects from the seller's store, so it is "SELLER" there.
+        detail.listing.fulfilment = o.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER';
       }
       return o;
     })

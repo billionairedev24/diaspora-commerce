@@ -319,7 +319,7 @@ export const FeeOverrideSchema = z.object({
 export type FeeOverride = z.infer<typeof FeeOverrideSchema>;
 
 /* AfroTransact Delivery from the seller's store (S255): amounts in minor units, distances in road miles. */
-export const DeliveryTariffModeSchema = z.enum(['FLAT', 'DISTANCE']);
+export const DeliveryTariffModeSchema = z.enum(['FLAT', 'DISTANCE', 'PER_WEIGHT']);
 export type DeliveryTariffMode = z.infer<typeof DeliveryTariffModeSchema>;
 export const DeliveryBandSchema = z.object({ fromMiles: z.number(), toMiles: z.number(), feeMinor: z.number().int() });
 export type DeliveryBand = z.infer<typeof DeliveryBandSchema>;
@@ -329,6 +329,7 @@ export const DeliveryTariffSchema = z.object({
   flatPerPackageMinor: nullableInt,
   baseMinor: nullableInt,
   perMileMinor: nullableInt,
+  perLbMinor: nullableInt.optional(),
   bands: z.array(DeliveryBandSchema),
   minMinor: nullableInt,
   maxMinor: nullableInt

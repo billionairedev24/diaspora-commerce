@@ -89,7 +89,7 @@ function validateTariff(errs: Record<string, string>, key: string, t: DeliveryTa
   }
   if (t.mode === 'PER_WEIGHT') {
     amount('baseMinor', t.baseMinor, true);
-    amount('perLbMinor', (t as any).perLbMinor ?? null, true);
+    amount('perLbMinor', t.perLbMinor ?? null, true);
     amount('minMinor', t.minMinor, false);
     amount('maxMinor', t.maxMinor, false);
     if (t.minMinor !== null && t.maxMinor !== null && t.minMinor > t.maxMinor && !errs[`${key}.maxMinor`]) errs[`${key}.maxMinor`] = 'The maximum must not be below the minimum';
