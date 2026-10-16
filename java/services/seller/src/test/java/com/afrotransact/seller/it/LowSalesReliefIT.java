@@ -15,7 +15,6 @@ import com.afrotransact.seller.application.RewardService;
 import com.afrotransact.seller.application.SellerMetricsService;
 import com.afrotransact.seller.application.SellerPermissions;
 import com.afrotransact.seller.domain.Cadence;
-import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,8 +23,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * S299: "1st month free (the trial) and 2nd month free if the seller sold less than $1,000". A LESS_THAN rule anchored
  * at the subscription's start is never decided by sales events: the window-end job checks it once, 24 h before the
- * 30-day trial ends, and the free days move trial_end at Stripe (proration_behavior=none, the grant's own
- * idempotency key) before Stripe creates the first invoice. Exactly $1,000 does not qualify; a second run decides
+ * 30-day trial ends, and the free days move the first charge out locally before the first invoice is
+ * issued. Exactly $1,000 does not qualify; a second run decides
  * nothing again.
  */
 class LowSalesReliefIT extends SellerIntegrationTest {
@@ -113,12 +112,11 @@ class LowSalesReliefIT extends SellerIntegrationTest {
         assertThat(g.get("status")).isEqualTo("APPLIED");
         assertThat(g.get("summary")).isEqualTo("1 month free");
         assertThat(g.get("metric_value")).isEqualTo(99_999L);
-        String key = "grant-" + g.get("id") + "-trial";
-        String sub = column(quiet, "stripe_subscription_id");
-        List<LoggedRequest> calls = trialCalls(sub, key);
-        assertThat(calls).hasSize(1);
-        assertThat(StripeStub.decoded(calls.getFirst())).contains("trial_end="
-                + trialEnd.plus(Duration.ofDays(30)).getEpochSecond(), "proration_behavior=none");
+        assertThat(jdbc.sql("select trial_ends_at from subscription where org_id = :o").param("o", quiet)
+                .query(Timestamp.class).single().toInstant()).isEqualTo(trialEnd.plus(Duration.ofDays(30)));
+        assertThat(jdbc.sql("select trial_ends_at from subscription where org_id = :o").param("o", busy)
+                .query(Timestamp.class).single().toInstant()).as("the busy seller's trial is untouched")
+                .isEqualTo(trialEnd);
 
         assertThat(check(rule, quiet)).containsEntry("outcome", "QUALIFIED").containsEntry("value", 99_999L)
                 .containsEntry("grant_id", g.get("id"));
@@ -129,7 +127,9 @@ class LowSalesReliefIT extends SellerIntegrationTest {
 
         rewards.evaluateWindowEnds();
         assertThat(grants(rule)).as("decided once per (rule, seller, window)").hasSize(1);
-        assertThat(trialCalls(sub, key)).hasSize(1);
+        assertThat(jdbc.sql("select trial_ends_at from subscription where org_id = :o").param("o", quiet)
+                .query(Timestamp.class).single().toInstant()).as("not extended twice")
+                .isEqualTo(trialEnd.plus(Duration.ofDays(30)));
         assertThat(jdbc.sql("select count(*) from reward_window_check where rule_id = cast(:r as uuid)")
                 .param("r", rule).query(Long.class).single()).isEqualTo(2);
 
@@ -166,11 +166,6 @@ class LowSalesReliefIT extends SellerIntegrationTest {
         TestActors.reset();
     }
 
-    private List<LoggedRequest> trialCalls(String sub, String key) {
-        return StripeStub.requests(STRIPE, "POST", "/v1/subscriptions/" + sub).stream()
-                .filter(r -> key.equals(r.getHeader("Idempotency-Key"))).toList();
-    }
-
     private Map<String, Object> check(String rule, String org) {
         return jdbc.sql("select * from reward_window_check where rule_id = cast(:r as uuid) and org_id = :o")
                 .param("r", rule).param("o", org).query().singleRow();
@@ -189,10 +184,5 @@ class LowSalesReliefIT extends SellerIntegrationTest {
     private static JsonNode row(Response preview, String org) {
         return preview.body().path("rows").valueStream().filter(r -> r.path("orgId").asString().equals(org))
                 .findFirst().orElseThrow();
-    }
-
-    private String column(String org, String column) {
-        return jdbc.sql("select " + column + "::text from subscription where org_id = :o").param("o", org)
-                .query(String.class).optional().orElse(null);
     }
 }

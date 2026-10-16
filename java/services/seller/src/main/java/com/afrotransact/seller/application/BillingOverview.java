@@ -13,11 +13,14 @@ import com.afrotransact.seller.port.SubscriptionTerms;
  * The Billing page: current plan and price, next charge (or trial end), pending change and payment methods.
  *
  * @param nextChargeLabel e.g. "Free trial ends Nov 9 · first charge $139.65" or "Next charge $39 on Nov 9"
- * @param terms           credit balance, trial source and overrides
+ * @param terms           credit balance, trial source and overrides, charge gate
+ * @param gateProgress    where the seller is on the charge gate's metric (0 without a gate)
+ * @param gateLabel       the gate in one sentence for the seller (null without a gate)
  */
 public record BillingOverview(Subscription subscription, Plan plan, PlanQuote quote, Plan pendingPlan,
                               Instant nextChargeAt, long nextChargeCents, String nextChargeLabel,
-                              List<PaymentMethod> paymentMethods, SubscriptionTerms terms) {
+                              List<PaymentMethod> paymentMethods, SubscriptionTerms terms, long gateProgress,
+                              String gateLabel) {
 
     public BillingOverview {
         paymentMethods = List.copyOf(paymentMethods);

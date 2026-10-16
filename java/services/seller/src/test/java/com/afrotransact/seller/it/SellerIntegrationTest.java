@@ -73,6 +73,8 @@ abstract class SellerIntegrationTest {
 
     static final String CONNECT_SECRET = "whsec_connect_test_secret";
     static final String BILLING_SECRET = "whsec_billing_test_secret";
+    /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…, with PostGIS) to run without Docker. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
     static final WireMockServer STRIPE = new WireMockServer(WireMockConfiguration.options().dynamicPort()
             .globalTemplating(true));
@@ -81,16 +83,20 @@ abstract class SellerIntegrationTest {
     static final Address ADDRESS = new Address("9800 Westheimer Rd", null, "Houston", "TX", "77042", "US");
 
     static {
-        POSTGRES.start();
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
         STRIPE.start();
         StripeStub.install(STRIPE);
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
         registry.add("at.seller.stripe.api-base", STRIPE::baseUrl);
         registry.add("at.seller.stripe.files-base", STRIPE::baseUrl);
         registry.add("at.seller.media.base-url", STRIPE::baseUrl);

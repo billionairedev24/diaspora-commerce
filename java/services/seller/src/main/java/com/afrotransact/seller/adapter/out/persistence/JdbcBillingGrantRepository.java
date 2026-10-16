@@ -43,6 +43,9 @@ class JdbcBillingGrantRepository implements BillingGrantRepository {
         p.put("type", g.type().name());
         p.put("credit", g.creditCents());
         p.put("days", g.freeDays());
+        p.put("months", g.freeMonths());
+        p.put("remaining", g.remainingInvoices());
+        p.put("gate", g.gateMode());
         p.put("percent", g.percentOff());
         p.put("duration", g.durationInvoices());
         p.put("invoice", g.invoiceId());
@@ -57,10 +60,11 @@ class JdbcBillingGrantRepository implements BillingGrantRepository {
         p.put("at", Sql.ts(g.createdAt()));
         int rows = jdbc.sql("""
                 insert into billing_grant (id, org_id, source, rule_id, request_key, type, credit_cents, free_days,
-                    percent_off, duration_invoices, invoice_id, trial_end, status, reason_code, note, summary, actor_id,
-                    metric, metric_value, created_at)
-                values (:id, :org, :source, :rule, :key, :type, :credit, :days, :percent, :duration, :invoice,
-                    :trialEnd, :status, :reason, :note, :summary, :actor, :metric, :metricValue, :at)
+                    free_months, percent_off, duration_invoices, remaining_invoices, gate_mode, invoice_id, trial_end,
+                    status, reason_code, note, summary, actor_id, metric, metric_value, created_at)
+                values (:id, :org, :source, :rule, :key, :type, :credit, :days, :months, :percent, :duration,
+                    :remaining, :gate, :invoice, :trialEnd, :status, :reason, :note, :summary, :actor, :metric,
+                    :metricValue, :at)
                 on conflict do nothing
                 """).params(p).update();
         if (rows == 1) {
@@ -80,22 +84,35 @@ class JdbcBillingGrantRepository implements BillingGrantRepository {
 
     @Override
     public BillingGrant update(BillingGrant g) {
-        BillingGrant.StripeRefs s = g.stripe();
+        BillingGrant.Effect e = g.effect();
         int rows = jdbc.sql("""
-                update billing_grant set status = :status, stripe_customer_id = :customer,
-                    stripe_subscription_id = :sub, stripe_balance_transaction_id = :txn, stripe_coupon_id = :coupon,
-                    previous_trial_end = :prev, new_trial_end = :next, attempts = :attempts, last_error = :error,
-                    applied_at = :applied, version = version + 1
+                update billing_grant set status = :status, reference = :ref, previous_trial_end = :prev,
+                    new_trial_end = :next, attempts = :attempts, last_error = :error, applied_at = :applied,
+                    remaining_invoices = :remaining, version = version + 1
                 where id = :id and version = :version
-                """).param("status", g.status().name()).param("customer", s.customerId())
-                .param("sub", s.subscriptionId()).param("txn", s.balanceTransactionId()).param("coupon", s.couponId())
-                .param("prev", Sql.ts(s.previousTrialEnd())).param("next", Sql.ts(s.newTrialEnd()))
+                """).param("status", g.status().name()).param("ref", e.reference())
+                .param("prev", Sql.ts(e.previousTrialEnd())).param("next", Sql.ts(e.newTrialEnd()))
                 .param("attempts", g.attempts()).param("error", g.lastError()).param("applied", Sql.ts(g.appliedAt()))
+                .param("remaining", g.remainingInvoices())
                 .param("id", g.id()).param("version", g.version()).update();
         if (rows == 0) {
             throw new ConflictException("seller.concurrent-update", "The grant changed; reload and retry");
         }
         return find(g.id()).orElseThrow();
+    }
+
+    @Override
+    public List<BillingGrant> activeCoupons(String orgId) {
+        return jdbc.sql("""
+                select * from billing_grant where org_id = :o and type = 'PERCENT_OFF' and status = 'APPLIED'
+                  and remaining_invoices > 0 order by created_at
+                """).param("o", orgId).query(this::map).list();
+    }
+
+    @Override
+    public void useCouponOnce(UUID id) {
+        jdbc.sql("update billing_grant set remaining_invoices = remaining_invoices - 1, version = version + 1 "
+                + "where id = :id and remaining_invoices > 0").param("id", id).update();
     }
 
     @Override
@@ -173,13 +190,13 @@ class JdbcBillingGrantRepository implements BillingGrantRepository {
         return new BillingGrant(rs.getObject("id", UUID.class), rs.getString("org_id"),
                 GrantSource.valueOf(rs.getString("source")), rs.getObject("rule_id", UUID.class),
                 rs.getString("request_key"), GrantType.valueOf(rs.getString("type")), creditCents,
-                Sql.integer(rs, "free_days"), rs.getBigDecimal("percent_off"), Sql.integer(rs, "duration_invoices"),
+                Sql.integer(rs, "free_days"), Sql.integer(rs, "free_months"), rs.getBigDecimal("percent_off"),
+                Sql.integer(rs, "duration_invoices"), Sql.integer(rs, "remaining_invoices"), rs.getString("gate_mode"),
                 rs.getString("invoice_id"), Sql.instant(rs, "trial_end"), GrantStatus.valueOf(rs.getString("status")),
                 rs.getString("reason_code"), rs.getString("note"), rs.getString("summary"), rs.getString("actor_id"),
                 metric == null ? null : RewardMetric.valueOf(metric), metricValue,
-                new BillingGrant.StripeRefs(rs.getString("stripe_customer_id"), rs.getString("stripe_subscription_id"),
-                        rs.getString("stripe_balance_transaction_id"), rs.getString("stripe_coupon_id"),
-                        Sql.instant(rs, "previous_trial_end"), Sql.instant(rs, "new_trial_end")),
+                new BillingGrant.Effect(rs.getString("reference"), Sql.instant(rs, "previous_trial_end"),
+                        Sql.instant(rs, "new_trial_end")),
                 rs.getInt("attempts"), rs.getString("last_error"), Sql.instant(rs, "created_at"),
                 Sql.instant(rs, "applied_at"), rs.getLong("version"));
     }

@@ -3,34 +3,24 @@ package com.afrotransact.seller.domain;
 import java.time.Instant;
 
 /**
- * One line of a Stripe invoice: the plan, a proration, or a metered usage line (S206).
+ * One line of a plan invoice.
  *
- * @param priceLookupKey     lookup key of the line's price when Stripe sent it (metered: {@code metered_*})
- * @param subscriptionItemId the subscription item the line bills, when Stripe sent it
- * @param meter              the usage meter of a metered line, null otherwise
+ * @param kind     PLAN (the subscription for the period), USAGE (a metered add-on), COUPON (a discount, negative) or
+ *                 PRORATION (an upgrade mid-period) or WAIVER (the plan fee a charge gate waived, negative)
+ * @param quantity meter units for USAGE lines, else null
+ * @param meter    the usage meter of a USAGE line, null otherwise
  */
-public record InvoiceLine(String description, long amountCents, Long quantity, String priceLookupKey,
-                          String subscriptionItemId, UsageMeter meter, Instant periodStart, Instant periodEnd) {
+public record InvoiceLine(String kind, String description, long amountCents, Long quantity, UsageMeter meter,
+                          Instant periodStart, Instant periodEnd) {
 
-    public InvoiceLine withMeter(UsageMeter m) {
-        return new InvoiceLine(description, amountCents, quantity, priceLookupKey, subscriptionItemId, m,
-                periodStart, periodEnd);
-    }
+    public static final String PLAN = "PLAN";
+    public static final String USAGE = "USAGE";
+    public static final String COUPON = "COUPON";
+    public static final String PRORATION = "PRORATION";
+    /** What a charge gate waived of the plan fee (negative), with the gate's reason. */
+    public static final String WAIVER = "WAIVER";
 
     public boolean metered() {
         return meter != null;
-    }
-
-    /** The meter whose metered price has {@code lookupKey}, or null. */
-    public static UsageMeter meterOf(String lookupKey) {
-        if (lookupKey == null) {
-            return null;
-        }
-        for (UsageMeter m : UsageMeter.values()) {
-            if (m.priceLookupKey().equals(lookupKey)) {
-                return m;
-            }
-        }
-        return null;
     }
 }

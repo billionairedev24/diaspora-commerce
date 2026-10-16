@@ -1,52 +1,43 @@
 package com.afrotransact.seller.application;
 
-import com.afrotransact.seller.port.InvoiceSnapshot;
-import com.afrotransact.seller.port.StripeEvent;
+import com.afrotransact.seller.domain.Invoice;
 
 /**
- * Plan fees paid from earnings (S298) for organisations that chose {@code EARNINGS_FIRST}, while the kill switch
- * {@code COLLECT_PLAN_FEES_FROM_EARNINGS} is on.
+ * Plan fees paid from earnings (S298), for organisations that chose {@code EARNINGS_FIRST} while the kill switch
+ * {@code COLLECT_PLAN_FEES_FROM_EARNINGS} is on. It is the third step of {@link InvoiceCollectionService}: platform
+ * credit has been used first, and the card pays whatever earnings did not cover.
  *
- * <p>Timing: Stripe creates a renewal (or trial-end) invoice as a draft and finalises it one hour after our endpoint
- * acknowledged {@code invoice.created} (up to 72 hours while the endpoint keeps failing). The webhook claims the
- * invoice; right after the webhook transaction commits the seller service asks payments to withhold up to the
- * invoice amount (less the customer's credit balance) from the organisation's earnings and credits the Stripe customer
- * balance by what was withheld, so the invoice is finalised with the card charged only for the rest. While a step
- * fails for a transient reason the webhook answers 503, so Stripe redelivers and keeps the invoice a draft; a job
- * retries with back-off as well. Before the credit the invoice is read again: once Stripe finalised it the withholding
- * is released instead (the card paid). Every remote step is idempotent ({@code plan-fee-<invoice>} at payments,
- * {@code earnings-<invoice>} at Stripe), so a retry never withholds or credits twice.
- *
- * <p>A voided or deleted invoice (and a credit note refunded out of band) releases the withholding back to the
- * seller's next transfer; when the credit had reached the invoice it is taken back from the customer balance first.
+ * <p>The invoice is claimed once with the amount still owed after credit. payments is asked to withhold up to that
+ * from the organisation's earnings (it may withhold less: only delivered, undisputed earnings count) and the amount it
+ * withheld is recorded as an {@code EARNINGS} payment of the invoice. Every remote step is idempotent
+ * ({@code plan-fee-<invoice>} at payments), so a retry never withholds twice; while a step fails for a transient reason
+ * the collection retries with back-off and the card is not charged yet. A voided invoice releases what was withheld
+ * back to the seller's next transfer.
  */
 public interface EarningsCollectionService {
 
     /** What happened to one collection step. */
     enum Outcome {
-        /** Nothing (more) to do now. */
+        /** Nothing (more) to do now: the invoice is covered, declined or given up; the card pays the rest. */
         DONE,
-        /** A transient failure: retry (the webhook answers 503 so Stripe keeps the invoice a draft). */
+        /** A transient failure: retry later, do not charge the card yet. */
         RETRY
     }
 
-    /** invoice.created (inside the webhook transaction): claims a renewal invoice of an EARNINGS_FIRST organisation. */
-    String onInvoiceCreated(String orgId, InvoiceSnapshot invoice);
+    /** Claims an open invoice for collection from earnings for {@code amountCents}; false when already claimed. */
+    boolean request(Invoice invoice, long amountCents);
 
-    /** invoice.voided / invoice.deleted (inside the webhook transaction): queues the release of what was withheld. */
-    String onInvoiceVoided(String orgId, InvoiceSnapshot invoice);
-
-    /** credit_note.created (inside the webhook transaction): releases the part refunded out of band. */
-    String onCreditNote(String orgId, StripeEvent.CreditNote creditNote);
-
-    /** Withholds and credits one claimed invoice now (after the webhook committed). */
+    /** Withholds and records one claimed invoice now. */
     Outcome collect(String invoiceId);
 
-    /** Sends the queued releases of one invoice now (after the webhook committed); failures are left to the job. */
+    /** A voided invoice: queues the release of what was withheld. */
+    String onInvoiceVoided(String orgId, String invoiceId);
+
+    /** Sends the queued releases of one invoice now; failures are left to the job. */
     void release(String invoiceId);
 
-    /** Job: due collections and releases. Returns how many invoices were credited. */
-    int processOpen();
+    /** Job: queued releases that are due. Returns how many were sent. */
+    int processReleases();
 
     /** The kill switch. */
     boolean enabled();

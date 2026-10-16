@@ -280,25 +280,20 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(orgApproved.path("applicantUserId").asString()).isEqualTo(user);
         assertThat(orgApproved.path("legalName").asString()).isEqualTo("Adaeze Nwosu");
 
-        // Subscription created at Stripe with the plan's trial; card attached as default.
+        // The subscription starts with the plan's trial (30 days) on our own RRULE schedule: no Stripe Billing
+        // subscription, customer or price exists; the first invoice is issued when the trial ends.
         assertThat(jdbc.sql("select status from subscription where org_id = :o").param("o", orgId)
                 .query(String.class).single()).isEqualTo("TRIALING");
-        String customer = jdbc.sql("select stripe_customer_id from subscription where org_id = :o").param("o", orgId)
-                .query(String.class).single();
-        assertThat(customer).startsWith("cus_");
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/customers")).anySatisfy(b -> assertThat(b)
-                .contains("metadata[org_id]=" + orgId));
-        // The Price comes from our catalogue (seller_growth v1, created or adopted on first use), the trial from the
-        // plan version: trial_end = activation + 30 days.
-        String price = jdbc.sql("select stripe_price_id from plan_version_price where plan_code = 'seller_growth' "
-                + "and version = 1 and cadence = 'QUARTERLY'").query(String.class).single();
-        assertThat(price).startsWith("price_");
-        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/subscriptions")).anySatisfy(b -> assertThat(b)
-                .contains("customer=" + customer, "items[0][price]=" + price, "trial_end=",
-                        "metadata[plan_code]=seller_growth", "metadata[plan_version]=1",
-                        "metadata[cadence]=QUARTERLY")
-                .doesNotContain("trial_period_days"));
-        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/payment_methods/pm_card_visa/attach")).isNotEmpty();
+        assertThat(jdbc.sql("select anchor_date = trial_ends_at from subscription where org_id = :o")
+                .param("o", orgId).query(Boolean.class).single()).isTrue();
+        assertThat(jdbc.sql("select (trial_ends_at between now() + interval '29 days' and now() + interval '31 "
+                + "days') from subscription where org_id = :o").param("o", orgId).query(Boolean.class).single())
+                .isTrue();
+        assertThat(jdbc.sql("select count(*) from invoice where org_id = :o").param("o", orgId).query(Long.class)
+                .single()).isZero();
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/subscriptions")).isEmpty();
+        assertThat(jdbc.sql("select count(*) from payment_method where org_id = :o and is_default").param("o", orgId)
+                .query(Long.class).single()).isEqualTo(1);
         assertThat(events(SellerEvents.SUBSCRIPTION_CHANGED, orgId)).isEqualTo(1);
         assertThat(lastEvent(SellerEvents.SUBSCRIPTION_CHANGED, orgId).path("change").asString())
                 .isEqualTo("ACTIVATED");

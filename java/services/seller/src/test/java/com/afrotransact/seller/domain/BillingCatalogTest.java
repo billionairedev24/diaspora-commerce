@@ -25,7 +25,6 @@ class BillingCatalogTest {
         assertThat(v1.differsFrom(PlanVersion.prices(3900, 11115, 39000), 30)).isFalse();
         assertThat(v1.differsFrom(PlanVersion.prices(4900, 11115, 39000), 30)).as("price").isTrue();
         assertThat(v1.differsFrom(PlanVersion.prices(3900, 11115, 39000), 14)).as("trial").isTrue();
-        assertThat(PlanVersion.lookupKey("seller_growth", Cadence.QUARTERLY)).isEqualTo("seller_growth_quarterly");
         assertThat(Plan.standardPrice(4900, Cadence.QUARTERLY)).isEqualTo(13965);
         assertThat(Plan.standardPrice(4900, Cadence.ANNUAL)).isEqualTo(49000);
     }
@@ -46,29 +45,6 @@ class BillingCatalogTest {
                 .isInstanceOfSatisfying(SellerRuleViolation.class, e -> assertThat(e.fieldErrors())
                         .containsKey("trialDays"));
         PlanCatalogRules.validate(new PlanPricesInput(2500L, 7125L, 25000L, 30, "launch"));
-    }
-
-    @Test
-    void driftStatesDecideWhatTheSyncDoes() {
-        StripePriceFacts monthly = new StripePriceFacts("price_1", "prod_1", 3900, "usd", 1, true,
-                "seller_growth_monthly");
-        assertThat(PriceSyncState.of(0, Cadence.MONTHLY, null, null, null)).isEqualTo(PriceSyncState.FREE);
-        assertThat(PriceSyncState.of(3900, Cadence.MONTHLY, null, null, null)).isEqualTo(PriceSyncState.MISSING);
-        assertThat(PriceSyncState.of(3900, Cadence.MONTHLY, null, null, monthly))
-                .as("made by make stripe-setup with the same amount and interval").isEqualTo(PriceSyncState.ADOPTABLE);
-        assertThat(PriceSyncState.of(4900, Cadence.MONTHLY, null, null, monthly))
-                .as("the key holds the previous version's amount").isEqualTo(PriceSyncState.DRIFT);
-        assertThat(PriceSyncState.of(3900, Cadence.QUARTERLY, null, null, monthly)).as("interval")
-                .isEqualTo(PriceSyncState.DRIFT);
-        assertThat(PriceSyncState.of(3900, Cadence.MONTHLY, "price_1", monthly, null))
-                .isEqualTo(PriceSyncState.IN_SYNC);
-        StripePriceFacts archived = new StripePriceFacts("price_1", "prod_1", 3900, "usd", 1, false, null);
-        assertThat(PriceSyncState.of(3900, Cadence.MONTHLY, "price_1", archived, null)).as("archived by hand")
-                .isEqualTo(PriceSyncState.DRIFT);
-        assertThat(PriceSyncState.of(3900, Cadence.MONTHLY, "price_gone", null, null)).as("deleted")
-                .isEqualTo(PriceSyncState.DRIFT);
-        assertThat(new StripePriceFacts("p", "x", 3900, "eur", 1, true, null).matches(3900, Cadence.MONTHLY))
-                .isFalse();
     }
 
     @Test

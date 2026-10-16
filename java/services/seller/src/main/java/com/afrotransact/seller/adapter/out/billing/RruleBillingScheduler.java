@@ -5,9 +5,11 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Iterator;
+import java.util.stream.IntStream;
 
 import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.port.BillingScheduler;
+import net.fortuna.ical4j.model.Month;
 import net.fortuna.ical4j.model.Recur;
 import net.fortuna.ical4j.transform.recurrence.Frequency;
 
@@ -31,8 +33,8 @@ public class RruleBillingScheduler implements BillingScheduler {
         if (!candidate.isBefore(now)) {
             return candidate; // now is within the very first period
         }
-        Recur<ZonedDateTime> recur = recur(cadence);
         ZonedDateTime anchorZdt = candidate.atZone(ZoneOffset.UTC);
+        Recur<ZonedDateTime> recur = recur(cadence, anchorZdt);
         ZonedDateTime nowZdt = now.atZone(ZoneOffset.UTC);
 
         // getDates returns occurrences in the half-open interval (start, end]; we iterate to find the last one ≤ now.
@@ -55,8 +57,8 @@ public class RruleBillingScheduler implements BillingScheduler {
 
     @Override
     public Instant nextPeriodEnd(Instant anchorDate, Cadence cadence, Instant after) {
-        Recur<ZonedDateTime> recur = recur(cadence);
         ZonedDateTime anchorZdt = anchorDate.truncatedTo(ChronoUnit.SECONDS).atZone(ZoneOffset.UTC);
+        Recur<ZonedDateTime> recur = recur(cadence, anchorZdt);
         ZonedDateTime afterZdt = after.truncatedTo(ChronoUnit.SECONDS).atZone(ZoneOffset.UTC);
         // One occurrence strictly after `after` is the start of the next period = end of current one.
         Iterator<ZonedDateTime> it = recur.getDates(anchorZdt, afterZdt, afterZdt.plusYears(3)).iterator();
@@ -72,15 +74,24 @@ public class RruleBillingScheduler implements BillingScheduler {
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-    private static Recur<ZonedDateTime> recur(Cadence cadence) {
-        return switch (cadence) {
-            case MONTHLY -> new Recur.Builder<ZonedDateTime>()
-                    .frequency(Frequency.MONTHLY).interval(1).build();
-            case QUARTERLY -> new Recur.Builder<ZonedDateTime>()
-                    .frequency(Frequency.MONTHLY).interval(3).build();
-            case ANNUAL -> new Recur.Builder<ZonedDateTime>()
-                    .frequency(Frequency.YEARLY).interval(1).build();
-        };
+    /**
+     * The cadence's recurrence. RFC 5545 skips months that lack the anchor's day (Jan 31 + 1 month would be Mar 31), which
+     * would bill two months at once; for anchors on the 29th–31st the rule picks the last valid day of
+     * {@code BYMONTHDAY=28..day} instead (Jan 31, Feb 28, Mar 31, Apr 30), so every period is one cadence long and the
+     * cycle returns to the anchor day.
+     */
+    private static Recur<ZonedDateTime> recur(Cadence cadence, ZonedDateTime anchor) {
+        Recur.Builder<ZonedDateTime> b = new Recur.Builder<ZonedDateTime>().interval(cadence == Cadence.QUARTERLY ? 3 : 1);
+        b.frequency(cadence == Cadence.ANNUAL ? Frequency.YEARLY : Frequency.MONTHLY);
+        int day = anchor.getDayOfMonth();
+        if (day > 28) {
+            if (cadence == Cadence.ANNUAL) {
+                b.monthList(new Month(anchor.getMonthValue()));
+            }
+            b.monthDayList(IntStream.rangeClosed(28, day).boxed().toList());
+            b.setPosList(-1);
+        }
+        return b.build();
     }
 
     /** Simple arithmetic fallback — adds months/years directly without rrule. */

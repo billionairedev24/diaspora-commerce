@@ -9,11 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.SellerEvents;
 import com.afrotransact.seller.application.SellerMetricsService;
 import com.afrotransact.seller.application.SellerPermissions;
 import com.afrotransact.seller.domain.Cadence;
-import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,26 +21,27 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * S296: reward rules in our DB. Metrics arrive as events (de-duplicated on the event id), a qualifying organisation
- * gets one grant per rule (max grants respected), applied at Stripe with the grant's own idempotency keys: free days
- * move trial_end, a credit is a customer balance transaction, a percentage is a repeating coupon added to the
- * subscription's discounts. Sellers see their progress; staff preview who qualifies.
+ * gets one grant per rule (max grants respected), applied locally: free days move the first charge out, a credit adds
+ * to the platform credit balance the next invoices use first, a percentage is a coupon for the next N invoices (coupons
+ * stack). Sellers see their progress; staff preview who qualifies.
  */
 class RewardsIT extends SellerIntegrationTest {
 
     private static final String RULES = "/v1/billing/reward-rules";
 
     private SellerMetricsService metrics;
+    private BillingService billing;
 
     @BeforeEach
-    void wire(@Autowired SellerMetricsService sellerMetrics) {
+    void wire(@Autowired SellerMetricsService sellerMetrics, @Autowired BillingService billingService) {
         this.metrics = sellerMetrics;
+        this.billing = billingService;
     }
 
     @Test
     void salesWithinSixtyDaysOfApprovalEarnAMonthFreeOnce() {
         String owner = unique("rw");
         String org = approvedSeller(owner, "seller_growth", Cadence.MONTHLY);
-        String sub = column(org, "stripe_subscription_id");
         String rule = createRule(Map.of("name", "1 month free at $1,000 " + owner, "kind", "SELLER",
                 "metric", "GROSS_SALES", "threshold", 100_000, "withinDaysOfApproval", 60, "rewardType", "FREE_DAYS",
                 "freeDays", 30, "eligiblePlans", List.of("seller_growth"), "status", "ACTIVE"));
@@ -69,12 +70,11 @@ class RewardsIT extends SellerIntegrationTest {
         assertThat(g.get("status")).isEqualTo("APPLIED");
         assertThat(g.get("summary")).isEqualTo("1 month free");
         assertThat(g.get("metric_value")).isEqualTo(104_000L);
-        String key = "grant-" + g.get("id") + "-trial";
-        List<LoggedRequest> calls = StripeStub.requests(STRIPE, "POST", "/v1/subscriptions/" + sub).stream()
-                .filter(r -> key.equals(r.getHeader("Idempotency-Key"))).toList();
-        assertThat(calls).hasSize(1);
-        assertThat(StripeStub.decoded(calls.getFirst())).contains("trial_end="
-                + trialBefore.plusSeconds(30L * 86400).getEpochSecond(), "proration_behavior=none");
+        Instant trialAfter = jdbc.sql("select trial_ends_at from subscription where org_id = :o").param("o", org)
+                .query(Timestamp.class).single().toInstant();
+        assertThat(trialAfter).as("the first charge moved out by 30 days").isEqualTo(trialBefore.plusSeconds(30L * 86400));
+        assertThat(column(org, "anchor_date")).as("and the billing cycle restarts there")
+                .isEqualTo(column(org, "trial_ends_at"));
         assertThat(lastEvent(SellerEvents.BILLING_GRANT_APPLIED, org).path("summary").asString())
                 .isEqualTo("1 month free");
 
@@ -103,12 +103,6 @@ class RewardsIT extends SellerIntegrationTest {
         List<Map<String, Object>> credits = grants(credit);
         assertThat(credits).as("max grants 1").hasSize(1);
         assertThat(credits.getFirst().get("org_id")).isEqualTo(orgA);
-        String customer = column(orgA, "stripe_customer_id");
-        String key = "grant-" + credits.getFirst().get("id") + "-balance";
-        List<LoggedRequest> balance = StripeStub.requests(STRIPE, "POST", "/v1/customers/" + customer
-                + "/balance_transactions").stream().filter(r -> key.equals(r.getHeader("Idempotency-Key"))).toList();
-        assertThat(balance).hasSize(1);
-        assertThat(StripeStub.decoded(balance.getFirst())).contains("amount=-2500", "currency=usd");
         assertThat(column(orgA, "credit_balance_cents")).isEqualTo("2500");
 
         TestActors.as(TestActors.staff(unique("plans"), SellerPermissions.PLANS_MANAGE));
@@ -135,20 +129,23 @@ class RewardsIT extends SellerIntegrationTest {
         metrics.offerChanged(UUID.randomUUID(), "offer-" + ownerA + "-2", orgA, true, Instant.now());
         List<Map<String, Object>> discounts = grants(pct);
         assertThat(discounts).hasSize(1);
-        String grantId = discounts.getFirst().get("id").toString();
-        String coupon = discounts.getFirst().get("stripe_coupon_id").toString();
-        assertThat(coupon).startsWith("at_");
-        LoggedRequest createdCoupon = StripeStub.requests(STRIPE, "POST", "/v1/coupons").stream()
-                .filter(r -> ("grant-" + grantId + "-coupon").equals(r.getHeader("Idempotency-Key"))).findFirst()
-                .orElseThrow();
-        assertThat(StripeStub.decoded(createdCoupon)).contains("id=" + coupon, "percent_off=20",
-                "duration=repeating", "duration_in_months=9", "max_redemptions=1");
-        String sub = column(orgA, "stripe_subscription_id");
-        LoggedRequest added = StripeStub.requests(STRIPE, "POST", "/v1/subscriptions/" + sub).stream()
-                .filter(r -> ("grant-" + grantId + "-discount").equals(r.getHeader("Idempotency-Key"))).findFirst()
-                .orElseThrow();
-        assertThat(StripeStub.decoded(added)).as("existing discounts are kept").contains(
-                "discounts[0][discount]=di_existing", "discounts[1][coupon]=" + coupon);
+        assertThat(discounts.getFirst().get("status")).isEqualTo("APPLIED");
+        assertThat(discounts.getFirst().get("remaining_invoices")).isEqualTo(3);
+
+        // The coupon comes off the next invoice's plan fee, after the platform credit has been used first.
+        jdbc.sql("update subscription set trial_ends_at = null, status = 'ACTIVE', current_period_end = now() - "
+                + "interval '1 hour', anchor_date = now() - interval '1 hour' where org_id = :o").param("o", orgA)
+                .update();
+        billing.renewDueSubscriptions();
+        Map<String, Object> invoice = jdbc.sql("select * from invoice where org_id = :o").param("o", orgA).query()
+                .singleRow();
+        assertThat(invoice.get("subtotal_cents")).isEqualTo(11115L);
+        assertThat(invoice.get("discount_cents")).as("20% of $111.15").isEqualTo(2223L);
+        assertThat(invoice.get("amount_due_cents")).isEqualTo(8892L);
+        assertThat(jdbc.sql("select source || ':' || amount_cents from invoice_payment where org_id = :o order by "
+                + "created_at").param("o", orgA).query(String.class).list()).containsExactly("CREDIT:2500",
+                "CARD:6392");
+        assertThat(grants(pct).getFirst().get("remaining_invoices")).as("one invoice used").isEqualTo(2);
 
         TestActors.as(TestActors.staff(unique("billing"), SellerPermissions.BILLING));
         Response log = get("/v1/billing/grants?ruleId=" + pct);

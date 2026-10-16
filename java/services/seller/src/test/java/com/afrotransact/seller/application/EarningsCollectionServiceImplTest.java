@@ -18,174 +18,135 @@ import java.util.Optional;
 
 import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.Invoice;
-import com.afrotransact.seller.domain.PlanFeeCollection;
-import com.afrotransact.seller.domain.Subscription;
+import com.afrotransact.seller.domain.InvoicePayment;
+import com.afrotransact.seller.domain.PaymentSource;
 import com.afrotransact.seller.port.EarningsCollectionRepository;
 import com.afrotransact.seller.port.EarningsCollectionRepository.Change;
 import com.afrotransact.seller.port.EarningsCollectionRepository.Row;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.InvoiceRepository;
-import com.afrotransact.seller.port.InvoiceSnapshot;
-import com.afrotransact.seller.port.StripeEvent;
-import com.afrotransact.seller.port.SubscriptionRepository;
-import com.afrotransact.seller.port.SubscriptionTerms;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionOperations;
 
-/** S298 (seller side): plan invoices paid from earnings first, the card for the rest; releases on void / refund. */
+/** S298 (seller side): the earnings step of plan collection; the card pays what earnings do not cover. */
 class EarningsCollectionServiceImplTest {
 
     private static final Instant NOW = Instant.parse("2026-10-11T12:00:00Z");
 
     private final EarningsWithholdingGateway payments = mock(EarningsWithholdingGateway.class);
     private final EarningsCollectionRepository collections = mock(EarningsCollectionRepository.class);
-    private final SubscriptionRepository subs = mock(SubscriptionRepository.class);
     private final InvoiceRepository invoices = mock(InvoiceRepository.class);
     private final EarningsCollectionServiceImpl service = new EarningsCollectionServiceImpl(payments, collections,
-            subs, invoices, TransactionOperations.withoutTransaction(), Clock.fixed(NOW, ZoneOffset.UTC));
+            invoices, TransactionOperations.withoutTransaction(), Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void theKillSwitchOffClaimsNothing() {
         when(payments.enabled()).thenReturn(false);
-        assertThat(service.onInvoiceCreated("org_1", invoice("draft", "subscription_cycle", 3900)))
-                .isEqualTo("ignored");
-        assertThat(service.processOpen()).isZero();
-        assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
+        assertThat(service.request(invoice("open", 3900), 3900)).isFalse();
+        assertThat(service.processReleases()).isZero();
+        assertThat(service.collect("inv_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
         verify(collections, never()).claim(anyString(), anyString(), any(), anyLong(), anyLong(), eq(NOW));
     }
 
     @Test
-    void onlyEarningsFirstRenewalDraftsAreClaimedOnceForWhatCreditsDoNotCover() {
+    void anInvoiceIsClaimedOnceForWhatCreditDidNotCover() {
         when(payments.enabled()).thenReturn(true);
-        when(subs.terms("org_1")).thenReturn(terms("org_1", PlanFeeCollection.EARNINGS_FIRST, 0));
-        when(subs.terms("org_2")).thenReturn(terms("org_2", PlanFeeCollection.CARD, 0));
-        when(subs.terms("org_3")).thenReturn(terms("org_3", PlanFeeCollection.EARNINGS_FIRST, 1000));
-        when(subs.terms("org_4")).thenReturn(terms("org_4", PlanFeeCollection.EARNINGS_FIRST, 5000));
-        when(collections.claim("in_1", "org_1", "INV-1", 3900, 3900, NOW)).thenReturn(true, false);
-        when(collections.claim("in_1", "org_3", "INV-1", 3900, 2900, NOW)).thenReturn(true);
-        assertThat(service.onInvoiceCreated("org_1", invoice("draft", "subscription_create", 3900)))
-                .as("the first invoice is charged at once").isEqualTo("ignored");
-        assertThat(service.onInvoiceCreated("org_2", invoice("draft", "subscription_cycle", 3900)))
-                .as("Charge my card").isEqualTo("ignored-card");
-        assertThat(service.onInvoiceCreated("org_1", invoice("draft", "subscription_cycle", 3900)))
-                .isEqualTo("earnings-requested");
-        assertThat(service.onInvoiceCreated("org_1", invoice("draft", "subscription_cycle", 3900)))
-                .isEqualTo("earnings-duplicate");
-        assertThat(service.onInvoiceCreated("org_1", invoice("open", "subscription_cycle", 3900)))
-                .as("already finalised").isEqualTo("ignored");
-        assertThat(service.onInvoiceCreated("org_3", invoice("draft", "subscription_cycle", 3900)))
-                .as("a $10 credit pays first").isEqualTo("earnings-requested");
-        assertThat(service.onInvoiceCreated("org_4", invoice("draft", "subscription_cycle", 3900)))
-                .isEqualTo("ignored-covered-by-credit");
+        when(collections.claim("inv_1", "org_1", "AT-INV-1", 3900, 2900, NOW)).thenReturn(true, false);
+        assertThat(service.request(invoice("open", 3900), 2900)).isTrue();
+        assertThat(service.request(invoice("open", 3900), 2900)).as("claimed once").isFalse();
+        assertThat(service.request(invoice("open", 3900), 0)).as("credit covered it").isFalse();
     }
 
     @Test
-    void withheldEarningsBecomeABalanceCreditWithPerInvoiceKeys() {
+    void withheldEarningsBecomeAnInvoicePayment() {
         when(payments.enabled()).thenReturn(true);
-        when(collections.lock("in_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
-        when(invoices.findById("in_1")).thenReturn(Optional.of(domainInvoice("draft", "subscription_cycle", 3900)));
-        when(payments.withhold("org_1", "in_1", "INV-1", 3900, "usd")).thenReturn(
+        when(collections.lock("inv_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
+        when(invoices.findById("inv_1")).thenReturn(Optional.of(invoice("open", 3900)));
+        when(payments.withhold("org_1", "inv_1", "AT-INV-1", 3900, "usd")).thenReturn(
                 new EarningsWithholdingGateway.Withholding(true, 2500, "wh_1", "Only $25.00 was available"));
-        when(subs.find("org_1")).thenReturn(Optional.of(sub("org_1")));
-        when(subs.adjustCreditBalance("org_1", 2500)).thenReturn(2500L);
-        when(collections.dueReleases(NOW, "in_1", 50)).thenReturn(List.of());
+        when(collections.dueReleases(NOW, "inv_1", 50)).thenReturn(List.of());
 
-        assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
-        verify(collections).transition("in_1", "REQUESTED", "WITHHELD",
+        assertThat(service.collect("inv_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
+        verify(collections).transition("inv_1", "REQUESTED", "WITHHELD",
                 new Change(2500L, null, "wh_1", null, "Only $25.00 was available"), NOW);
-        verify(collections).transition("in_1", "WITHHELD", "CREDITED", new Change(null, 2500L, null, "local-balance-in_1",
-                null), NOW);
-        verify(subs).setCreditBalance("org_1", 2500);
+        verify(collections).transition("inv_1", "WITHHELD", "CREDITED", new Change(null, 2500L, null, null, null), NOW);
+        ArgumentCaptor<InvoicePayment> paid = ArgumentCaptor.forClass(InvoicePayment.class);
+        verify(invoices).addPayment(paid.capture());
+        assertThat(paid.getValue().source()).isEqualTo(PaymentSource.EARNINGS);
+        assertThat(paid.getValue().amountCents()).isEqualTo(2500);
+        assertThat(paid.getValue().status()).isEqualTo(InvoicePayment.APPLIED);
+        verify(invoices).refreshPaid("inv_1", NOW);
     }
 
     @Test
-    void declinedOrFinalisedInvoicesAreLeftToTheCard() {
+    void declinedOrAlreadySettledInvoicesAreLeftToTheCard() {
         when(payments.enabled()).thenReturn(true);
-        when(collections.lock("in_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
-        when(invoices.findById("in_1")).thenReturn(Optional.of(domainInvoice("draft", "subscription_cycle", 3900)));
-        when(payments.withhold("org_1", "in_1", "INV-1", 3900, "usd")).thenReturn(
+        when(collections.lock("inv_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
+        when(invoices.findById("inv_1")).thenReturn(Optional.of(invoice("open", 3900)));
+        when(payments.withhold("org_1", "inv_1", "AT-INV-1", 3900, "usd")).thenReturn(
                 new EarningsWithholdingGateway.Withholding(false, 0, "wh_1", "No delivered earnings"));
-        assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
-        verify(collections).transition("in_1", "REQUESTED", "DECLINED", new Change(0L, null, "wh_1", null,
+        assertThat(service.collect("inv_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
+        verify(collections).transition("inv_1", "REQUESTED", "DECLINED", new Change(0L, null, "wh_1", null,
                 "No delivered earnings"), NOW);
+        verify(invoices, never()).addPayment(any());
 
-        when(collections.lock("in_2")).thenReturn(Optional.of(new Row("in_2", "org_1", "INV-2", 3900L, 3900, "WITHHELD",
-                3900, 0, 0, "wh_2", null, null, 0, null, null, NOW, NOW)));
-        when(invoices.findById("in_2")).thenReturn(Optional.of(domainInvoice("open", "subscription_cycle", 3900)));
-        assertThat(service.collect("in_2")).isEqualTo(EarningsCollectionService.Outcome.DONE);
-        verify(collections).transition(eq("in_2"), eq("WITHHELD"), eq("MISSED"), any(), eq(NOW));
-        verify(collections).requestRelease("plan-fee-release-in_2", "in_2", 3900, "invoice finalised before the "
-                + "credit", false, NOW);
+        when(collections.lock("inv_2")).thenReturn(Optional.of(new Row("inv_2", "org_1", "AT-INV-2", 3900L, 3900,
+                "WITHHELD", 3900, 0, 0, "wh_2", null, null, 0, null, null, NOW, NOW)));
+        when(invoices.findById("inv_2")).thenReturn(Optional.of(invoice("paid", 3900)));
+        assertThat(service.collect("inv_2")).isEqualTo(EarningsCollectionService.Outcome.DONE);
+        verify(collections).transition(eq("inv_2"), eq("WITHHELD"), eq("MISSED"), any(), eq(NOW));
+        verify(collections).requestRelease("plan-fee-release-inv_2", "inv_2", 3900, "invoice no longer open", false,
+                NOW);
     }
 
     @Test
     void aTransientFailureAsksForARetryAndGivesUpAfterMaxAttempts() {
         when(payments.enabled()).thenReturn(true);
-        when(collections.lock("in_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
-        when(invoices.findById("in_1")).thenReturn(Optional.of(domainInvoice("draft", "subscription_cycle", 3900)));
+        when(collections.lock("inv_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
+        when(invoices.findById("inv_1")).thenReturn(Optional.of(invoice("open", 3900)));
         when(payments.withhold(anyString(), anyString(), any(), anyLong(), anyString()))
                 .thenThrow(new GatewayException("seller.payments-unavailable", "down", false, null));
-        assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.RETRY);
-        verify(collections).failedAttempt("in_1", "down", NOW.plusSeconds(60), NOW);
+        assertThat(service.collect("inv_1")).isEqualTo(EarningsCollectionService.Outcome.RETRY);
+        verify(collections).failedAttempt("inv_1", "down", NOW.plusSeconds(60), NOW);
 
-        Row tired = new Row("in_1", "org_1", "INV-1", 3900L, 3900, "REQUESTED", 0, 0, 0, null, null, null,
+        Row tired = new Row("inv_1", "org_1", "AT-INV-1", 3900L, 3900, "REQUESTED", 0, 0, 0, null, null, null,
                 EarningsCollectionServiceImpl.MAX_ATTEMPTS - 1, "down", NOW, NOW, NOW);
-        when(collections.lock("in_1")).thenReturn(Optional.of(tired));
-        assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
-        verify(collections).transition(eq("in_1"), eq("REQUESTED"), eq("FAILED"), any(), eq(NOW));
-        verify(collections).requestRelease("plan-fee-release-in_1", "in_1", 3900, "collection gave up", false, NOW);
+        when(collections.lock("inv_1")).thenReturn(Optional.of(tired));
+        assertThat(service.collect("inv_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
+        verify(collections).transition(eq("inv_1"), eq("REQUESTED"), eq("FAILED"), any(), eq(NOW));
+        verify(collections).requestRelease("plan-fee-release-inv_1", "inv_1", 3900, "collection gave up", false, NOW);
     }
 
     @Test
-    void aVoidTakesTheCreditBackAndAnOutOfBandRefundReleasesThatPart() {
-        when(collections.lock("in_1")).thenReturn(Optional.of(row("CREDITED", 3900, 3900)));
-        assertThat(service.onInvoiceVoided("org_1", invoice("void", "subscription_cycle", 0)))
-                .isEqualTo("earnings-release-requested");
-        verify(collections).requestRelease("plan-fee-release-in_1", "in_1", 3900, "invoice voided", true, NOW);
-
-        assertThat(service.onCreditNote("org_1", new StripeEvent.CreditNote("cn_1", "in_1", "cus_org_1", 3900,
-                1000))).isEqualTo("earnings-release-requested");
-        verify(collections).requestRelease("plan-fee-release-cn_1", "in_1", 1000,
-                "refunded out of band (credit note cn_1)", false, NOW);
-        assertThat(service.onCreditNote("org_1", new StripeEvent.CreditNote("cn_2", "in_1", "cus_org_1", 3900, 0)))
-                .as("refunded to the card or the balance: Stripe handles it").isEqualTo("ignored");
+    void aVoidedInvoiceReleasesWhatWasWithheld() {
+        when(collections.lock("inv_1")).thenReturn(Optional.of(row("CREDITED", 3900, 3900)));
+        assertThat(service.onInvoiceVoided("org_1", "inv_1")).isEqualTo("earnings-release-requested");
+        verify(collections).requestRelease("plan-fee-release-inv_1", "inv_1", 3900, "invoice voided", false, NOW);
     }
 
     @Test
-    void aReleaseDebitsTheBalanceOnceThenReleasesAtPayments() {
-        when(collections.dueReleases(NOW, "in_1", 50)).thenReturn(List.of("plan-fee-release-in_1"));
-        when(collections.lockRelease("plan-fee-release-in_1")).thenReturn(Optional.of(new EarningsCollectionRepository
-                .Release("plan-fee-release-in_1", "in_1", "org_1", 3900, "invoice voided", true, null, 0)));
-        when(collections.find("in_1")).thenReturn(Optional.of(row("CREDITED", 3900, 3900)));
-        when(subs.find("org_1")).thenReturn(Optional.of(sub("org_1")));
-        when(subs.adjustCreditBalance("org_1", -3900L)).thenReturn(0L);
-        service.release("in_1");
-        verify(collections).releaseDebited("plan-fee-release-in_1", "local-debit-plan-fee-release-in_1", NOW);
-        verify(payments).release("org_1", "in_1", 3900, "invoice voided", "plan-fee-release-in_1");
-        verify(collections).addReleased("in_1", 3900, "RELEASED", NOW);
-        verify(collections).releaseDone("plan-fee-release-in_1", "local-debit-plan-fee-release-in_1", NOW);
+    void aReleaseGoesToPaymentsOnceWithItsOwnKey() {
+        when(payments.enabled()).thenReturn(true);
+        when(collections.dueReleases(NOW, "inv_1", 50)).thenReturn(List.of("plan-fee-release-inv_1"));
+        when(collections.lockRelease("plan-fee-release-inv_1")).thenReturn(Optional.of(new EarningsCollectionRepository
+                .Release("plan-fee-release-inv_1", "inv_1", "org_1", 3900, "invoice voided", false, null, 0)));
+        when(collections.find("inv_1")).thenReturn(Optional.of(row("CREDITED", 3900, 3900)));
+        service.release("inv_1");
+        verify(payments).release("org_1", "inv_1", 3900, "invoice voided", "plan-fee-release-inv_1");
+        verify(collections).addReleased("inv_1", 3900, "RELEASED", NOW);
+        verify(collections).releaseDone("plan-fee-release-inv_1", null, NOW);
     }
 
     private static Row row(String status, long withheld, long credited) {
-        return new Row("in_1", "org_1", "INV-1", 3900L, 3900, status, withheld, credited, 0, "wh_1", null, null, 0,
-                null, NOW, NOW, NOW);
+        return new Row("inv_1", "org_1", "AT-INV-1", 3900L, 3900, status, withheld, credited, 0, "wh_1", null, null,
+                0, null, NOW, NOW, NOW);
     }
 
-    private static SubscriptionTerms terms(String org, PlanFeeCollection mode, long credit) {
-        return new SubscriptionTerms(org, null, null, null, null, null, null, credit, mode, "SELLER", NOW, "u1");
-    }
-
-    private static Subscription sub(String org) {
-        return Subscription.selected(org, "seller_growth", 1, Cadence.MONTHLY, null, NOW);
-    }
-
-    private static InvoiceSnapshot invoice(String status, String reason, long amount) {
-        return new InvoiceSnapshot("in_1", "cus_1", "sub_1", "INV-1", status, reason, amount, 0, "usd", NOW, NOW, null,
-                null, 0, null, NOW, List.of(), null);
-    }
-
-    private static Invoice domainInvoice(String status, String reason, long amount) {
-        return new Invoice("in_1", "org_1", "INV-1", NOW, NOW, amount, 0, "usd", status, reason, null, null, NOW, List.of());
+    private static Invoice invoice(String status, long due) {
+        return new Invoice("inv_1", "org_1", "AT-INV-1", NOW, NOW.plusSeconds(86_400), due, 0, due, 0, "USD", status,
+                Invoice.REASON_CYCLE, "seller_growth", 1, Cadence.MONTHLY, NOW, null, 0, null, null, NOW, List.of(),
+                List.of());
     }
 }

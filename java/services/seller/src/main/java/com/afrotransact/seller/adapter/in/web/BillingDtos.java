@@ -9,10 +9,13 @@ import java.util.UUID;
 import com.afrotransact.seller.application.BillingOverview;
 import com.afrotransact.seller.application.PlanChangePreview;
 import com.afrotransact.seller.application.PlanOffer;
+import com.afrotransact.seller.domain.ChargeGate;
 import com.afrotransact.seller.domain.FirstCharge;
 import com.afrotransact.seller.domain.Invoice;
 import com.afrotransact.seller.domain.InvoiceLine;
+import com.afrotransact.seller.domain.InvoicePayment;
 import com.afrotransact.seller.domain.PaymentMethod;
+import com.afrotransact.seller.domain.PaymentSource;
 import com.afrotransact.seller.domain.PlanPricing;
 import com.afrotransact.seller.domain.PlanQuote;
 import com.afrotransact.seller.domain.Subscription;
@@ -80,13 +83,15 @@ final class BillingDtos {
                            PendingChange pendingChange, String dunning, int failedPaymentAttempts,
                            List<PaymentMethodResponse> paymentMethods,
                            @Schema(description = "Plan version (prices) the organisation is on") int planVersion,
-                           @Schema(description = "Stripe customer credit balance the next invoices use")
+                           @Schema(description = "Platform credit the next invoices use first")
                            long creditBalanceCents,
                            @Schema(allowableValues = {"PLAN", "CAMPAIGN", "OVERRIDE", "NONE"}) String trialSource,
                            Integer trialDaysOverride,
                            @Schema(allowableValues = {"EARNINGS_FIRST", "CARD"}, description = "How the plan is paid "
                                    + "(S298); details: GET /v1/orgs/{orgId}/billing/plan-fee-collection")
-                           String planFeeCollection) {
+                           String planFeeCollection,
+                           @Schema(description = "A condition staff put on the plan charges, with progress; null "
+                                   + "when charges apply as normal") ChargeGateView chargeGate) {
 
         static BillingResponse of(BillingOverview b) {
             Subscription s = b.subscription();
@@ -100,7 +105,28 @@ final class BillingDtos {
                     b.paymentMethods().stream().map(PaymentMethodResponse::of).toList(), s.planVersion(),
                     b.terms().creditBalanceCents(), b.terms().trialSource() == null ? null
                             : b.terms().trialSource().name(), b.terms().trialDaysOverride(),
-                    b.terms().planFeeCollection().name());
+                    b.terms().planFeeCollection().name(), ChargeGateView.of(b));
+        }
+    }
+
+    @Schema(name = "ChargeGate", description = "A condition on the plan charges: START_AFTER (no charge until the "
+            + "seller reaches the threshold), WAIVE_WHILE (free while they keep it) or WAIVE_UNTIL (free until a date)")
+    record ChargeGateView(@Schema(allowableValues = {"START_AFTER", "WAIVE_WHILE", "WAIVE_UNTIL"}) String mode,
+                          @Schema(allowableValues = {"GROSS_SALES", "COMPLETED_ORDERS", "COMPLETED_BOOKINGS",
+                                  "ACTIVE_LISTINGS"}) String metric,
+                          Long threshold, @Schema(description = "Where the seller is now (cents for sales)")
+                          long progress, Instant since, Instant until, String reasonCode, String note,
+                          Instant setAt, Instant metAt, @Schema(description = "One sentence for the seller")
+                          String label) {
+
+        static ChargeGateView of(BillingOverview b) {
+            ChargeGate g = b.terms().chargeGate();
+            if (g == null) {
+                return null;
+            }
+            return new ChargeGateView(g.mode().name(), g.metric() == null ? null : g.metric().name(), g.threshold(),
+                    b.gateProgress(), g.since(), g.until(), g.reasonCode(), g.note(), g.setAt(), g.metAt(),
+                    b.gateLabel());
         }
     }
 
@@ -122,46 +148,60 @@ final class BillingDtos {
                                    String accountType, Boolean makeDefault) {
     }
 
-    @Schema(name = "InvoiceLine", description = "Plan, proration or metered usage line (S206)")
-    record InvoiceLineResponse(String description, long amountCents, Long quantity, boolean metered,
+    @Schema(name = "InvoiceLine", description = "Plan, proration, usage, coupon or waiver line (S206)")
+    record InvoiceLineResponse(@Schema(allowableValues = {"PLAN", "USAGE", "COUPON", "PRORATION", "WAIVER"})
+                               String kind, String description, long amountCents, Long quantity, boolean metered,
                                @Schema(allowableValues = {"FBA_STORAGE", "ADS_SPEND", "AI_CREDITS"},
                                        description = "Usage meter of a metered line") String meter,
                                Instant periodStart, Instant periodEnd) {
 
         static InvoiceLineResponse of(InvoiceLine l) {
-            return new InvoiceLineResponse(l.description(), l.amountCents(), l.quantity(), l.metered(),
+            return new InvoiceLineResponse(l.kind(), l.description(), l.amountCents(), l.quantity(), l.metered(),
                     l.meter() == null ? null : l.meter().name(), l.periodStart(), l.periodEnd());
         }
     }
 
-    @Schema(name = "Invoice")
-    record InvoiceResponse(String id, String number, Instant periodStart, Instant periodEnd, long amountDueCents,
-                           long amountPaidCents, String currency, String status, String billingReason,
-                           String hostedInvoiceUrl, String invoicePdf, Instant createdAt,
-                           List<InvoiceLineResponse> lines,
+    @Schema(name = "InvoicePayment", description = "What settled part of an invoice, in the order tried: platform "
+            + "credit, the seller's earnings (only if they chose that), the saved card or bank, or a waiver")
+    record InvoicePaymentResponse(UUID id, @Schema(allowableValues = {"CREDIT", "EARNINGS", "CARD", "WAIVER"})
+                                  String source, long amountCents,
+                                  @Schema(allowableValues = {"APPLIED", "PENDING", "FAILED", "REVERSED"}) String status,
+                                  String note, Instant createdAt) {
+
+        static InvoicePaymentResponse of(InvoicePayment p) {
+            return new InvoicePaymentResponse(p.id(), p.source().name(), p.amountCents(), p.status(), p.note(),
+                    p.createdAt());
+        }
+    }
+
+    @Schema(name = "Invoice", description = "A plan invoice AfroTransact issued: the plan for one billing period "
+            + "(and metered usage), less coupons and anything a charge condition waived")
+    record InvoiceResponse(String id, String number, Instant periodStart, Instant periodEnd, long subtotalCents,
+                           long discountCents, long amountDueCents, long amountPaidCents, String currency,
+                           @Schema(allowableValues = {"open", "paid", "void", "uncollectible"}) String status,
+                           @Schema(allowableValues = {"subscription_create", "subscription_cycle",
+                                   "subscription_update"}) String billingReason,
+                           String planCode, String cadence, Instant dueAt, Instant paidAt, int attempts,
+                           Instant nextAttemptAt, String lastError, Instant createdAt,
+                           List<InvoiceLineResponse> lines, List<InvoicePaymentResponse> payments,
                            @Schema(description = "Sum of the metered usage lines") long meteredAmountCents,
+                           @Schema(description = "Paid from platform credit") long paidFromCreditCents,
                            @Schema(description = "Paid from the organisation's sales (S298): withheld from its "
-                                   + "earnings and credited to the invoice") long paidFromSalesCents,
-                           @Schema(description = "Paid (or, while open, due) by card or bank: the rest")
-                           long paidByCardCents) {
+                                   + "earnings, only if it chose that") long paidFromSalesCents,
+                           @Schema(description = "Paid (or, while open, due) by card or bank") long paidByCardCents,
+                           @Schema(description = "Waived by staff") long waivedCents) {
 
         static InvoiceResponse of(Invoice i) {
-            return new InvoiceResponse(i.stripeInvoiceId(), i.number(), i.periodStart(), i.periodEnd(),
-                    i.amountDueCents(), i.amountPaidCents(), i.currency(), i.status(), i.billingReason(),
-                    i.hostedInvoiceUrl(), i.invoicePdf(), i.createdAt(),
+            long card = i.isOpen() ? i.remainingCents() + i.paidBy(PaymentSource.CARD) : i.paidBy(PaymentSource.CARD);
+            return new InvoiceResponse(i.id(), i.number(), i.periodStart(), i.periodEnd(), i.subtotalCents(),
+                    i.discountCents(), i.amountDueCents(), i.amountPaidCents(), i.currency(), i.status(),
+                    i.billingReason(), i.planCode(), i.cadence() == null ? null : i.cadence().name(), i.dueAt(),
+                    i.paidAt(), i.attempts(), i.nextAttemptAt(), i.lastError(), i.createdAt(),
                     i.lines().stream().map(InvoiceLineResponse::of).toList(),
-                    i.meteredLines().stream().mapToLong(InvoiceLine::amountCents).sum(), i.paidFromSalesCents(),
-                    byCard(i));
-        }
-
-        /** Paid (or due) by card: what was paid; for a draft, what the credit from sales doesn't cover. */
-        private static long byCard(Invoice i) {
-            return switch (i.status() == null ? "" : i.status()) {
-                case "paid" -> i.amountPaidCents();
-                case "void", "uncollectible" -> 0;
-                case "draft" -> Math.max(0, i.amountDueCents() - i.paidFromSalesCents());
-                default -> i.amountDueCents();
-            };
+                    i.payments().stream().map(InvoicePaymentResponse::of).toList(),
+                    i.meteredLines().stream().mapToLong(InvoiceLine::amountCents).sum(),
+                    i.paidBy(PaymentSource.CREDIT), i.paidBy(PaymentSource.EARNINGS), card,
+                    i.paidBy(PaymentSource.WAIVER));
         }
     }
 

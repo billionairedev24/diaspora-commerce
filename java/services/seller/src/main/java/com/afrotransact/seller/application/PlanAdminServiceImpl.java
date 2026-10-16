@@ -34,19 +34,16 @@ class PlanAdminServiceImpl implements PlanAdminService {
     private final PlanRepository plans;
     private final SubscriptionRepository subs;
     private final OrganisationRepository orgs;
-    private final PlanSyncService sync;
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
     private final Clock clock;
 
     PlanAdminServiceImpl(PlanRepository plans, SubscriptionRepository subs, OrganisationRepository orgs,
-                         PlanSyncService sync, AccessGuard access,
-                         DomainEventPublisher events, TransactionOperations tx, Clock clock) {
+                         AccessGuard access, DomainEventPublisher events, TransactionOperations tx, Clock clock) {
         this.plans = plans;
         this.subs = subs;
         this.orgs = orgs;
-        this.sync = sync;
         this.access = access;
         this.events = events;
         this.tx = tx;
@@ -152,8 +149,6 @@ class PlanAdminServiceImpl implements PlanAdminService {
             }
             plans.setStatus(code, PlanStatus.ACTIVE, actor.subject(), now);
         });
-        // Stripe after the commit: a failure is recorded per price (and retried lazily on first use / next sync).
-        sync.syncPlan(code);
         return plan(code);
     }
 
@@ -249,7 +244,7 @@ class PlanAdminServiceImpl implements PlanAdminService {
         List<PlanAdminView.VersionView> versions = plans.versions(p.code()).stream()
                 .map(v -> new PlanAdminView.VersionView(v, plans.prices(p.code(), v.version()),
                         byVersion.getOrDefault(v.version(), 0L))).toList();
-        return new PlanAdminView(p, plans.rowVersion(p.code()), plans.stripeProduct(p.code()), versions,
+        return new PlanAdminView(p, plans.rowVersion(p.code()), versions,
                 plans.invites(p.code()), byVersion.values().stream().mapToLong(Long::longValue).sum());
     }
 

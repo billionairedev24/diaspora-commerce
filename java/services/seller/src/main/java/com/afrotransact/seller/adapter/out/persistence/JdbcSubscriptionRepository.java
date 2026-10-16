@@ -8,9 +8,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.seller.domain.Cadence;
+import com.afrotransact.seller.domain.ChargeGate;
 import com.afrotransact.seller.domain.DunningState;
 import com.afrotransact.seller.domain.PaymentMethodKind;
 import com.afrotransact.seller.domain.PlanFeeCollection;
+import com.afrotransact.seller.domain.RewardMetric;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.domain.SubscriptionStatus;
 import com.afrotransact.seller.domain.TrialSource;
@@ -52,7 +54,7 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                        current_period_end = :end, cancel_at_period_end = :cancel, pending_plan_code = :pendingPlan,
                        pending_cadence = :pendingCadence, pending_effective_at = :pendingAt, dunning = :dunning,
                        failed_payment_attempts = :attempts, next_payment_attempt_at = :nextAttempt,
-                       started_at = coalesce(started_at, coalesce(cast(:anchor as timestamptz), cast(:start as timestamptz))),
+                       started_at = coalesce(started_at, cast(:start as timestamptz), cast(:anchor as timestamptz)),
                        updated_at = :at, version = version + 1
                 where org_id = :org and version = :version
                 """)
@@ -83,16 +85,6 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
     public Optional<Subscription> lock(String orgId) {
         return jdbc.sql("select * from subscription where org_id = :o for update").param("o", orgId)
                 .query(this::map).optional();
-    }
-
-    @Override
-    public Optional<Subscription> lockByStripeSubscription(String subscriptionId) {
-        return Optional.empty();
-    }
-
-    @Override
-    public Optional<Subscription> findByCustomer(String customerId) {
-        return Optional.empty();
     }
 
     @Override
@@ -131,7 +123,7 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                     source == null ? null : TrialSource.valueOf(source), rs.getLong("credit_balance_cents"),
                     PlanFeeCollection.valueOf(rs.getString("plan_fee_collection")),
                     rs.getString("plan_fee_collection_source"), Sql.instant(rs, "plan_fee_collection_changed_at"),
-                    rs.getString("plan_fee_collection_changed_by"));
+                    rs.getString("plan_fee_collection_changed_by"), gate(rs));
         }).optional().orElse(SubscriptionTerms.none(orgId));
     }
 
@@ -173,6 +165,60 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
                 where org_id = :o
                 """).param("m", mode.name()).param("s", source).param("at", Sql.ts(at)).param("a", actor)
                 .param("o", orgId).update();
+    }
+
+    @Override
+    public void setChargeGate(String orgId, ChargeGate g) {
+        jdbc.sql("""
+                update subscription set charge_gate_mode = :mode, charge_gate_metric = :metric,
+                    charge_gate_threshold = :threshold, charge_gate_since = :since, charge_gate_until = :until,
+                    charge_gate_reason_code = :reason, charge_gate_note = :note, charge_gate_by = :by,
+                    charge_gate_set_at = :at, charge_gate_met_at = null
+                where org_id = :o
+                """).param("mode", g.mode().name()).param("metric", g.metric() == null ? null : g.metric().name())
+                .param("threshold", g.threshold()).param("since", Sql.ts(g.since())).param("until", Sql.ts(g.until()))
+                .param("reason", g.reasonCode()).param("note", g.note()).param("by", g.setBy())
+                .param("at", Sql.ts(g.setAt())).param("o", orgId).update();
+    }
+
+    @Override
+    public void clearChargeGate(String orgId) {
+        jdbc.sql("""
+                update subscription set charge_gate_mode = null, charge_gate_metric = null,
+                    charge_gate_threshold = null, charge_gate_since = null, charge_gate_until = null,
+                    charge_gate_reason_code = null, charge_gate_note = null, charge_gate_by = null,
+                    charge_gate_set_at = null, charge_gate_met_at = null
+                where org_id = :o
+                """).param("o", orgId).update();
+    }
+
+    @Override
+    public void markChargeGateMet(String orgId, Instant at) {
+        jdbc.sql("update subscription set charge_gate_met_at = :at where org_id = :o and charge_gate_mode = "
+                + "'START_AFTER' and charge_gate_met_at is null").param("at", Sql.ts(at)).param("o", orgId).update();
+    }
+
+    @Override
+    public List<Subscription> withOpenStartGate(String afterOrgId, int limit) {
+        return jdbc.sql("""
+                select * from subscription where charge_gate_mode = 'START_AFTER' and charge_gate_met_at is null
+                  and status <> 'CANCELED' and org_id > :after order by org_id limit :limit
+                """).param("after", afterOrgId == null ? "" : afterOrgId).param("limit", limit)
+                .query(this::map).list();
+    }
+
+    private static ChargeGate gate(ResultSet rs) throws SQLException {
+        String mode = rs.getString("charge_gate_mode");
+        if (mode == null) {
+            return null;
+        }
+        String metric = rs.getString("charge_gate_metric");
+        long threshold = rs.getLong("charge_gate_threshold");
+        return new ChargeGate(ChargeGate.Mode.valueOf(mode), metric == null ? null : RewardMetric.valueOf(metric),
+                rs.wasNull() ? null : threshold, Sql.instant(rs, "charge_gate_since"),
+                Sql.instant(rs, "charge_gate_until"), rs.getString("charge_gate_reason_code"),
+                rs.getString("charge_gate_note"), rs.getString("charge_gate_by"),
+                Sql.instant(rs, "charge_gate_set_at"), Sql.instant(rs, "charge_gate_met_at"));
     }
 
     @Override

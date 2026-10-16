@@ -182,10 +182,10 @@ class JdbcPlanRepository implements PlanRepository {
     private void writePrices(PlanVersion v) {
         for (Cadence c : Cadence.values()) {
             jdbc.sql("""
-                    insert into plan_version_price (plan_code, version, cadence, amount_cents, lookup_key)
-                    values (:p, :v, :c, :amount, :key)
+                    insert into plan_version_price (plan_code, version, cadence, amount_cents)
+                    values (:p, :v, :c, :amount)
                     """).param("p", v.planCode()).param("v", v.version()).param("c", c.name())
-                    .param("amount", v.price(c)).param("key", PlanVersion.lookupKey(v.planCode(), c)).update();
+                    .param("amount", v.price(c)).update();
         }
     }
 
@@ -201,65 +201,6 @@ class JdbcPlanRepository implements PlanRepository {
     public List<PriceRow> prices(String code, int version) {
         return jdbc.sql("select * from plan_version_price where plan_code = :c and version = :v order by cadence")
                 .param("c", code).param("v", version).query((rs, n) -> price(rs)).list();
-    }
-
-    @Override
-    public List<PriceRow> allPrices() {
-        return jdbc.sql("select * from plan_version_price order by plan_code, version desc, cadence")
-                .query((rs, n) -> price(rs)).list();
-    }
-
-    @Override
-    public void recordStripePrice(String code, int version, Cadence cadence, String stripePriceId, Instant at) {
-        jdbc.sql("""
-                update plan_version_price set stripe_price_id = :id, synced_at = :at, sync_error = null
-                where plan_code = :c and version = :v and cadence = :cad
-                """).param("id", stripePriceId).param("at", Sql.ts(at)).param("c", code).param("v", version)
-                .param("cad", cadence.name()).update();
-    }
-
-    @Override
-    public void recordSyncError(String code, int version, Cadence cadence, String error) {
-        jdbc.sql("update plan_version_price set sync_error = :e where plan_code = :c and version = :v "
-                + "and cadence = :cad").param("e", error).param("c", code).param("v", version)
-                .param("cad", cadence.name()).update();
-    }
-
-    @Override
-    public void setStripeProduct(String code, String productId) {
-        jdbc.sql("update plan set stripe_product_id = :p where code = :c").param("p", productId).param("c", code)
-                .update();
-    }
-
-    @Override
-    public String stripeProduct(String code) {
-        List<String> ids = jdbc.sql("select stripe_product_id from plan where code = :c").param("c", code)
-                .query(String.class).list();
-        return ids.isEmpty() ? null : ids.getFirst();
-    }
-
-    @Override
-    public Optional<PriceRef> byStripePrice(String stripePriceId) {
-        if (stripePriceId == null) {
-            return Optional.empty();
-        }
-        return jdbc.sql("select plan_code, version, cadence from plan_version_price where stripe_price_id = :id "
-                + "order by version desc limit 1")
-                .param("id", stripePriceId).query((rs, n) -> new PriceRef(rs.getString("plan_code"),
-                        rs.getInt("version"), Cadence.valueOf(rs.getString("cadence")))).optional();
-    }
-
-    @Override
-    public Optional<PriceRef> byLookupKey(String lookupKey) {
-        if (lookupKey == null) {
-            return Optional.empty();
-        }
-        return jdbc.sql("""
-                select pr.plan_code, pr.version, pr.cadence from plan_version_price pr
-                join plan p on p.code = pr.plan_code and p.current_version = pr.version
-                where pr.lookup_key = :k
-                """).param("k", lookupKey).query((rs, n) -> new PriceRef(rs.getString("plan_code"),
-                rs.getInt("version"), Cadence.valueOf(rs.getString("cadence")))).optional();
     }
 
     @Override
@@ -338,8 +279,7 @@ class JdbcPlanRepository implements PlanRepository {
 
     private static PriceRow price(ResultSet rs) throws SQLException {
         return new PriceRow(rs.getString("plan_code"), rs.getInt("version"), Cadence.valueOf(rs.getString("cadence")),
-                rs.getLong("amount_cents"), rs.getString("lookup_key"), rs.getString("stripe_price_id"),
-                Sql.instant(rs, "synced_at"), rs.getString("sync_error"));
+                rs.getLong("amount_cents"));
     }
 
     private static String blankToNull(String s) {

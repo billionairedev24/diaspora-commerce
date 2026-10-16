@@ -3,7 +3,6 @@ package com.afrotransact.seller.domain;
 import java.time.Instant;
 import java.util.EnumMap;
 import java.util.Map;
-import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -47,10 +46,5 @@ public record PlanVersion(String planCode, int version, PlanVersionStatus status
         m.put(Cadence.QUARTERLY, quarterly);
         m.put(Cadence.ANNUAL, annual);
         return m;
-    }
-
-    /** Stripe lookup key of the current version's price for a cadence, e.g. {@code seller_growth_quarterly}. */
-    public static String lookupKey(String planCode, Cadence cadence) {
-        return planCode + "_" + cadence.name().toLowerCase(Locale.ROOT);
     }
 }

@@ -131,15 +131,17 @@ final class RewardDtos {
         }
     }
 
-    @Schema(name = "BillingGrant", description = "A reward or staff adjustment and the Stripe objects it produced")
+    @Schema(name = "BillingGrant", description = "A reward or staff adjustment and what it changed")
     record GrantView(String id, String orgId,
                      @Schema(allowableValues = {"RULE", "MANUAL"}) String source, String ruleId,
-                     @Schema(allowableValues = {"FREE_DAYS", "CREDIT", "PERCENT_OFF", "WAIVE_INVOICE", "TRIAL_END"})
-                     String type, Long creditCents, Integer freeDays, BigDecimal percentOff, Integer durationInvoices,
+                     @Schema(allowableValues = {"FREE_DAYS", "FREE_MONTHS", "CREDIT", "PERCENT_OFF", "WAIVE_INVOICE",
+                             "TRIAL_END", "CHARGE_GATE"})
+                     String type, Long creditCents, Integer freeDays, Integer freeMonths, BigDecimal percentOff,
+                     Integer durationInvoices, Integer remainingInvoices,
+                     @Schema(allowableValues = {"START_AFTER", "WAIVE_WHILE", "WAIVE_UNTIL"}) String gateMode,
                      String invoiceId, @Schema(allowableValues = {"PENDING", "APPLIED", "FAILED"}) String status,
                      String reasonCode, String note, String summary, String actorId, String metric, Long metricValue,
-                     String stripeCustomerId, String stripeSubscriptionId, String stripeBalanceTransactionId,
-                     String stripeCouponId, Instant previousTrialEnd, Instant newTrialEnd, int attempts,
+                     String reference, Instant previousTrialEnd, Instant newTrialEnd, int attempts,
                      String lastError, Instant createdAt, Instant appliedAt,
                      @Schema(allowableValues = {"AT_LEAST", "LESS_THAN"}, description = "Seller rewards: the rule's "
                              + "comparison (LESS_THAN = low-sales relief); null for staff adjustments and in the "
@@ -154,13 +156,13 @@ final class RewardDtos {
         }
 
         static GrantView of(BillingGrant g, RewardComparison comparison) {
-            BillingGrant.StripeRefs s = g.stripe();
+            BillingGrant.Effect s = g.effect();
             return new GrantView(g.id().toString(), g.orgId(), g.source().name(),
                     g.ruleId() == null ? null : g.ruleId().toString(), g.type().name(), g.creditCents(), g.freeDays(),
-                    g.percentOff(), g.durationInvoices(), g.invoiceId(), g.status().name(), g.reasonCode(), g.note(),
+                    g.freeMonths(), g.percentOff(), g.durationInvoices(), g.remainingInvoices(), g.gateMode(),
+                    g.invoiceId(), g.status().name(), g.reasonCode(), g.note(),
                     g.summary(), g.actorId(), g.metric() == null ? null : g.metric().name(), g.metricValue(),
-                    s.customerId(), s.subscriptionId(), s.balanceTransactionId(), s.couponId(), s.previousTrialEnd(),
-                    s.newTrialEnd(), g.attempts(), g.lastError(), g.createdAt(), g.appliedAt(),
+                    s.reference(), s.previousTrialEnd(), s.newTrialEnd(), g.attempts(), g.lastError(), g.createdAt(), g.appliedAt(),
                     comparison == null ? null : comparison.name());
         }
     }
@@ -193,7 +195,20 @@ final class RewardDtos {
     record DaysBody(Integer days, String reasonCode, String note) {
     }
 
+    @Schema(name = "FreeMonthsRequest")
+    record MonthsBody(Integer months, String reasonCode, String note) {
+    }
+
     @Schema(name = "WaiveInvoiceRequest")
     record WaiveBody(String reasonCode, String note) {
+    }
+
+    @Schema(name = "ChargeGateRequest", description = "A condition on the plan charges, with a reason. START_AFTER: "
+            + "no charge until the seller reaches threshold of metric; WAIVE_WHILE: free while they keep it; "
+            + "WAIVE_UNTIL: free until a date. threshold is in cents for GROSS_SALES, else a count.")
+    record ChargeGateBody(@Schema(allowableValues = {"START_AFTER", "WAIVE_WHILE", "WAIVE_UNTIL"}) String mode,
+                          @Schema(allowableValues = {"GROSS_SALES", "COMPLETED_ORDERS", "COMPLETED_BOOKINGS",
+                                  "ACTIVE_LISTINGS"}) String metric,
+                          Long threshold, Instant until, String reasonCode, String note) {
     }
 }

@@ -12,7 +12,7 @@ import java.util.UUID;
 import com.afrotransact.seller.domain.UsageDay;
 import com.afrotransact.seller.domain.UsageMeter;
 
-/** Metered usage per organisation, meter and day, the meter events sent to Stripe and the metering runs (S206). */
+/** Metered usage per organisation, meter and day, the quantities invoiced and the metering runs (S206). */
 public interface UsageRepository {
 
     /**
@@ -28,29 +28,23 @@ public interface UsageRepository {
     /** One organisation's rows in [from, to], ordered by meter and day. */
     List<UsageDay> byOrg(String orgId, LocalDate from, LocalDate to);
 
-    /** Rows in [from, to] whose quantity differs from what Stripe received. */
+    /** Rows in [from, to] whose quantity differs from what was invoiced. */
     List<UsageDay> unreported(LocalDate from, LocalDate to);
+
+    /** One organisation's rows up to and including {@code through} whose quantity differs from what was invoiced. */
+    List<UsageDay> unbilled(String orgId, LocalDate through);
 
     /** Locks one row for the rest of the transaction. */
     Optional<UsageDay> lock(String orgId, UsageMeter meter, LocalDate day);
 
-    /** Records a sent meter event and moves the row to {@code reportedQuantity} / {@code revision}. */
-    void markReported(UsageDay day, long reportedQuantity, int revision, String identifier, long value,
-                      String customerId, Instant at);
+    /** Records the invoiced quantity and moves the row to {@code reportedQuantity} / {@code revision}. */
+    void markReported(UsageDay day, long reportedQuantity, int revision, String identifier, long value, Instant at);
 
     /** Records why the row could not be reported (null clears it). */
     void markError(UsageDay day, String error, Instant at);
 
     /** Which of {@code orgIds} are known organisations. */
     Set<String> knownOrgs(Collection<String> orgIds);
-
-    /** Meters whose metered price is already on {@code subscriptionId}. */
-    Set<UsageMeter> meteredItems(String orgId, String subscriptionId);
-
-    /** The meter whose metered price is the subscription item {@code stripeItemId}. */
-    Optional<UsageMeter> meterOfItem(String stripeItemId);
-
-    void saveMeteredItem(String orgId, UsageMeter meter, String subscriptionId, String itemId, Instant at);
 
     /** Takes the metering lease for {@code ttl} unless another holder has it. */
     boolean tryLease(UUID holder, Instant now, Duration ttl);

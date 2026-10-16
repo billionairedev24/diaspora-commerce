@@ -3,7 +3,9 @@ package com.afrotransact.seller.adapter.in.scheduling;
 import com.afrotransact.seller.application.BillingAdjustmentService;
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.ComplianceService;
+import com.afrotransact.seller.application.ChargeGateEvaluator;
 import com.afrotransact.seller.application.EarningsCollectionService;
+import com.afrotransact.seller.application.InvoiceCollectionService;
 import com.afrotransact.seller.application.RewardService;
 import com.afrotransact.seller.application.UsageMeteringService;
 import org.slf4j.Logger;
@@ -28,15 +30,20 @@ class SellerJobs {
     private final RewardService rewards;
     private final BillingAdjustmentService adjustments;
     private final EarningsCollectionService earnings;
+    private final InvoiceCollectionService collection;
+    private final ChargeGateEvaluator gates;
 
     SellerJobs(ComplianceService compliance, BillingService billing, UsageMeteringService metering,
-               RewardService rewards, BillingAdjustmentService adjustments, EarningsCollectionService earnings) {
+               RewardService rewards, BillingAdjustmentService adjustments, EarningsCollectionService earnings,
+               InvoiceCollectionService collection, ChargeGateEvaluator gates) {
         this.compliance = compliance;
         this.billing = billing;
         this.metering = metering;
         this.rewards = rewards;
         this.adjustments = adjustments;
         this.earnings = earnings;
+        this.collection = collection;
+        this.gates = gates;
     }
 
     /**
@@ -51,7 +58,7 @@ class SellerJobs {
     /**
      * S299: rules checked at window end ("less than $1,000 in the first 30 days"), decided once per (rule,
      * organisation, window) when the check is due: the rule's lead (default 24 h) before the window or the trial ends,
-     * so a free period moves trial_end before Stripe creates the invoice. Unique checks make replicas decide once.
+     * so a free period moves the first charge out before the invoice is issued. Unique checks make replicas decide once.
      */
     @Scheduled(fixedDelayString = "${at.seller.jobs.reward-window-interval:15m}",
             initialDelayString = "${at.seller.jobs.reward-window-interval:15m}")
@@ -64,18 +71,38 @@ class SellerJobs {
         });
     }
 
-    /** Grants recorded but not applied at Stripe yet (Stripe was unavailable): retried with their own keys. */
+    /** Grants recorded but not applied yet: retried. */
     @Scheduled(fixedDelayString = "${at.seller.jobs.grant-retry-interval:15m}",
             initialDelayString = "${at.seller.jobs.grant-retry-interval:15m}")
     void retryGrants() {
         run("grant-retry", adjustments::retryPending);
     }
 
-    /** Collection from earnings (no-op while the flag is off): renewal invoices claimed from invoice.created. */
+    /** Open plan invoices whose next attempt is due: platform credit, earnings if chosen, then the saved card. */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.collection-interval:10m}",
+            initialDelayString = "${at.seller.jobs.collection-interval:10m}")
+    void invoiceCollection() {
+        run("invoice-collection", () -> LOG.info("Collected {} due plan invoice(s)", collection.collectDue()));
+    }
+
+    /** Releases of earnings withheld for plan fees whose invoice was voided (no-op while the flag is off). */
     @Scheduled(fixedDelayString = "${at.seller.jobs.earnings-interval:5m}",
             initialDelayString = "${at.seller.jobs.earnings-interval:5m}")
-    void earningsCollection() {
-        run("earnings-collection", earnings::processOpen);
+    void earningsReleases() {
+        run("earnings-releases", earnings::processReleases);
+    }
+
+    /** Rolls subscriptions whose period ended into the next one, issuing and collecting its invoice. */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.renewal-interval:5m}",
+            initialDelayString = "${at.seller.jobs.renewal-interval:5m}")
+    void renewals() {
+        run("renewals", () -> LOG.info("Renewed {} subscription(s)", billing.renewDueSubscriptions()));
+    }
+
+    /** Marks charge gates ("start charging after X sales or X listings") the seller has reached. */
+    @Scheduled(cron = "${at.seller.jobs.gates-cron:0 50 2 * * *}", zone = "UTC")
+    void chargeGates() {
+        run("charge-gates", () -> LOG.info("{} charge gate(s) reached", gates.markMetGates()));
     }
 
     /** S206: meters the two previous UTC days; a replica that finds the lease taken skips (seller.usage-run-…). */

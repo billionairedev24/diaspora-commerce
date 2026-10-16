@@ -20,6 +20,12 @@ public interface BillingGrantRepository {
 
     BillingGrant update(BillingGrant g);
 
+    /** Applied coupons of the organisation with invoices left, oldest first (they stack). */
+    List<BillingGrant> activeCoupons(String orgId);
+
+    /** A coupon was used on one invoice: one invoice fewer left. */
+    void useCouponOnce(UUID id);
+
     List<BillingGrant> forOrg(String orgId, int limit);
 
     /** Grants log for staff, newest first, filtered and paged. */

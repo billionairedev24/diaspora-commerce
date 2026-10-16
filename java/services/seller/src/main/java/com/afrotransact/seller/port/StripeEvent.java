@@ -11,21 +11,14 @@ import com.afrotransact.seller.domain.RequirementsSnapshot;
  */
 public record StripeEvent(String id, String type, long created, String accountId, RequirementsSnapshot account,
                           Capability capability, Person person, ExternalAccount externalAccount, Payout payout,
-                          InvoiceSnapshot invoice, SubscriptionSnapshot subscription, CreditNote creditNote) {
-
-    /** Without a credit note (every event but credit_note.*). */
-    public StripeEvent(String id, String type, long created, String accountId, RequirementsSnapshot account,
-                       Capability capability, Person person, ExternalAccount externalAccount, Payout payout,
-                       InvoiceSnapshot invoice, SubscriptionSnapshot subscription) {
-        this(id, type, created, accountId, account, capability, person, externalAccount, payout, invoice, subscription,
-                null);
-    }
+                          PaymentIntentResult paymentIntent) {
 
     /**
-     * credit_note.created (S298): a refund of a plan invoice. {@code outOfBandAmount} is the part refunded outside
-     * Stripe, which is how a fee paid from earnings is refunded (released back to the seller's next transfer).
+     * payment_intent.succeeded / payment_intent.payment_failed of a plan fee ({@code metadata.purpose = plan_fee}):
+     * how a bank debit that was still processing ended.
      */
-    public record CreditNote(String id, String invoiceId, String customerId, long total, long outOfBandAmount) {
+    public record PaymentIntentResult(String id, String invoiceId, boolean succeeded, String failureCode,
+                                      String failureMessage) {
     }
 
     /** capability.updated */

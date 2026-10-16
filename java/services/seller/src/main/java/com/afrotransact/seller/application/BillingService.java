@@ -24,6 +24,12 @@ public interface BillingService {
 
     List<PaymentMethod> paymentMethods(String orgId);
 
+    /**
+     * Starts adding a card or US bank account: a Stripe SetupIntent on the organisation's customer (created on first
+     * use). The client confirms it with Stripe.js / PaymentSheet, then registers the resulting {@code pm_…}.
+     */
+    SetupIntentView setupIntent(String orgId);
+
     PaymentMethod addPaymentMethod(String orgId, AddPaymentMethodCommand command);
 
     List<PaymentMethod> makeDefault(String orgId, UUID paymentMethodId);
@@ -33,7 +39,7 @@ public interface BillingService {
 
     List<Invoice> invoices(String orgId);
 
-    /** One invoice (same readers as {@link #invoices}), e.g. to download its PDF. */
+    /** One invoice (same readers as {@link #invoices}), e.g. to show or print it. */
     Invoice invoice(String orgId, String invoiceId);
 
     /** The effect of a plan / cadence change without making it (owner or finance; staff with seller:billing). */
@@ -44,6 +50,12 @@ public interface BillingService {
 
     /** Job: activations that failed earlier. Returns how many were activated. */
     int retryPendingActivations();
+
+    /** Who invoices are addressed to (the organisation's name). */
+    String billedTo(String orgId);
+
+    /** Retries an uncollectible invoice (after the seller fixed their payment method); owner or finance. */
+    Invoice retryInvoice(String orgId, String invoiceId);
 
     /** Job: pending downgrades / cadence changes whose renewal has come. Returns how many were applied. */
     int applyDueChanges();

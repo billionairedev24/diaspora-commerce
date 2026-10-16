@@ -7,7 +7,6 @@ import java.util.Map;
 import com.afrotransact.seller.application.MigrationPreview;
 import com.afrotransact.seller.application.MigrationResult;
 import com.afrotransact.seller.application.PlanAdminView;
-import com.afrotransact.seller.application.PlanSyncReport;
 import com.afrotransact.seller.domain.CampaignInput;
 import com.afrotransact.seller.domain.CampaignStatus;
 import com.afrotransact.seller.domain.OrgKind;
@@ -20,7 +19,7 @@ import com.afrotransact.seller.domain.TrialCampaign;
 import com.afrotransact.seller.port.PlanRepository;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-/** Staff plan catalogue, Stripe sync, migrations and trial campaigns. */
+/** Staff plan catalogue, migrations and trial campaigns. */
 final class PlanAdminDtos {
 
     private PlanAdminDtos() {
@@ -61,13 +60,11 @@ final class PlanAdminDtos {
     record InvitesBody(List<String> orgIds) {
     }
 
-    @Schema(name = "PlanVersionPrice", description = "One cadence of a version and its Stripe Price")
-    record VersionPriceView(String cadence, long amountCents, String lookupKey, String stripePriceId,
-                            Instant syncedAt, String syncError) {
+    @Schema(name = "PlanVersionPrice", description = "One cadence of a version")
+    record VersionPriceView(String cadence, long amountCents) {
 
         static VersionPriceView of(PlanRepository.PriceRow p) {
-            return new VersionPriceView(p.cadence().name(), p.amountCents(), p.lookupKey(), p.stripePriceId(),
-                    p.syncedAt(), p.syncError());
+            return new VersionPriceView(p.cadence().name(), p.amountCents());
         }
     }
 
@@ -84,39 +81,19 @@ final class PlanAdminDtos {
         }
     }
 
-    @Schema(name = "PlanAdmin", description = "A plan for staff: metadata, versions with Stripe prices, invites")
+    @Schema(name = "PlanAdmin", description = "A plan for staff: metadata, versions with prices, invites")
     record PlanAdminResponse(String code, String kind, String name, String tagline, List<String> features,
                              Map<String, String> limits, String visibility, String status, int sortOrder,
                              int currentVersion, long monthlyCents, long quarterlyCents, long annualCents,
-                             int trialDays, long rowVersion, String stripeProductId, long subscribers,
+                             int trialDays, long rowVersion, long subscribers,
                              List<String> invites, List<VersionView> versions) {
 
         static PlanAdminResponse of(PlanAdminView v) {
             Plan p = v.plan();
             return new PlanAdminResponse(p.code(), p.kind().name(), p.name(), p.tagline(), p.features(), p.limits(),
                     p.visibility().name(), p.status().name(), p.sortOrder(), p.version(), p.monthlyCents(),
-                    p.quarterlyCents(), p.annualCents(), p.trialDays(), v.rowVersion(), v.stripeProductId(),
+                    p.quarterlyCents(), p.annualCents(), p.trialDays(), v.rowVersion(),
                     v.subscribers(), v.invites(), v.versions().stream().map(VersionView::of).toList());
-        }
-    }
-
-    @Schema(name = "PlanSyncLine")
-    record SyncLineView(String planCode, String planName, int version, String cadence, long amountCents,
-                        String lookupKey,
-                        @Schema(allowableValues = {"IN_SYNC", "FREE", "ADOPTABLE", "MISSING", "DRIFT", "SUPERSEDED"})
-                        String state,
-                        @Schema(allowableValues = {"NONE", "ADOPTED", "CREATED", "REPLACED", "FAILED"}) String action,
-                        String stripePriceId, Long stripeAmountCents, String error) {
-    }
-
-    @Schema(name = "PlanSyncReport", description = "Drift between our plan versions and Stripe; applied = the sync ran")
-    record SyncReportResponse(Instant checkedAt, boolean applied, long drifted, List<SyncLineView> lines) {
-
-        static SyncReportResponse of(PlanSyncReport r) {
-            return new SyncReportResponse(r.checkedAt(), r.applied(), r.drifted(), r.lines().stream()
-                    .map(l -> new SyncLineView(l.planCode(), l.planName(), l.version(), l.cadence().name(),
-                            l.amountCents(), l.lookupKey(), l.state().name(), l.action(), l.stripePriceId(),
-                            l.stripeAmountCents(), l.error())).toList());
         }
     }
 

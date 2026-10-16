@@ -183,7 +183,7 @@ class RewardServiceImpl implements RewardService {
             Map<UUID, RewardComparison> comparisons = new HashMap<>();
             List<Earned> out = new ArrayList<>();
             for (BillingGrant g : grants.forOrg(orgId, 100)) {
-                if (g.type() == GrantType.TRIAL_END || g.type() == GrantType.WAIVE_INVOICE) {
+                if (g.type() == GrantType.TRIAL_END || g.type() == GrantType.WAIVE_INVOICE || g.type() == GrantType.CHARGE_GATE) {
                     continue;
                 }
                 RewardComparison c = g.ruleId() == null ? null : comparisons.computeIfAbsent(g.ruleId(),
@@ -301,9 +301,9 @@ class RewardServiceImpl implements RewardService {
             return Optional.empty();
         }
         BillingGrant g = new BillingGrant(UUID.randomUUID(), orgId, GrantSource.RULE, r.id(), null,
-                GrantType.of(r.rewardType()), r.creditCents(), r.freeDays(), r.percentOff(), r.durationInvoices(),
-                null, null, GrantStatus.PENDING, null, r.name(), r.rewardLabel(), "system:rewards", r.metric(), value,
-                BillingGrant.StripeRefs.NONE, 0, null, now, null, 0);
+                GrantType.of(r.rewardType()), r.creditCents(), r.freeDays(), null, r.percentOff(), r.durationInvoices(),
+                r.durationInvoices(), null, null, null, GrantStatus.PENDING, null, r.name(), r.rewardLabel(),
+                "system:rewards", r.metric(), value, BillingGrant.Effect.NONE, 0, null, now, null, 0);
         BillingGrant stored = grants.insertOnce(g);
         if (!stored.id().equals(g.id())) {
             return Optional.empty();

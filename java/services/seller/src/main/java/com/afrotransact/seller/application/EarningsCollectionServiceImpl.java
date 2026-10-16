@@ -3,12 +3,14 @@ package com.afrotransact.seller.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import com.afrotransact.seller.domain.Invoice;
-import com.afrotransact.seller.domain.PlanFeeCollection;
-import com.afrotransact.seller.domain.Subscription;
+import com.afrotransact.seller.domain.InvoicePayment;
+import com.afrotransact.seller.domain.PaymentSource;
 import com.afrotransact.seller.port.EarningsCollectionRepository;
 import com.afrotransact.seller.port.EarningsCollectionRepository.Change;
 import com.afrotransact.seller.port.EarningsCollectionRepository.Release;
@@ -16,10 +18,6 @@ import com.afrotransact.seller.port.EarningsCollectionRepository.Row;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.InvoiceRepository;
-import com.afrotransact.seller.port.InvoiceSnapshot;
-import com.afrotransact.seller.port.StripeEvent;
-import com.afrotransact.seller.port.SubscriptionRepository;
-import com.afrotransact.seller.port.SubscriptionTerms;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -27,8 +25,8 @@ import org.springframework.transaction.support.TransactionOperations;
 
 /**
  * Each step runs in one transaction holding the collection's row lock, around idempotent remote calls: a failure
- * rolls the step back and the retry replays the same keys (payments answers its first decision, Stripe its first
- * balance transaction), so nothing is withheld or credited twice and a void can never interleave with a step.
+ * rolls the step back and the retry replays the same keys (payments answers its first decision), so nothing is
+ * withheld or recorded twice and a void can never interleave with a step.
  */
 @Service
 class EarningsCollectionServiceImpl implements EarningsCollectionService {
@@ -40,8 +38,6 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
     static final String MISSED = "MISSED";
     static final String FAILED = "FAILED";
     static final String RELEASED = "RELEASED";
-    /** Renewal and trial-end invoices; first invoices and upgrades are charged at once (no draft hour). */
-    static final String SUBSCRIPTION_CYCLE = "subscription_cycle";
     static final int MAX_ATTEMPTS = 12;
 
     private static final Logger LOG = LoggerFactory.getLogger(EarningsCollectionServiceImpl.class);
@@ -51,17 +47,14 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
 
     private final EarningsWithholdingGateway payments;
     private final EarningsCollectionRepository collections;
-    private final SubscriptionRepository subs;
     private final InvoiceRepository invoices;
     private final TransactionOperations tx;
     private final Clock clock;
 
     EarningsCollectionServiceImpl(EarningsWithholdingGateway payments, EarningsCollectionRepository collections,
-                                  SubscriptionRepository subs, InvoiceRepository invoices, TransactionOperations tx,
-                                  Clock clock) {
+                                  InvoiceRepository invoices, TransactionOperations tx, Clock clock) {
         this.payments = payments;
         this.collections = collections;
-        this.subs = subs;
         this.invoices = invoices;
         this.tx = tx;
         this.clock = clock;
@@ -73,27 +66,17 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
     }
 
     @Override
-    public String onInvoiceCreated(String orgId, InvoiceSnapshot inv) {
-        if (!payments.enabled() || !"draft".equals(inv.status()) || inv.amountDue() <= 0
-                || !SUBSCRIPTION_CYCLE.equals(inv.billingReason())) {
-            return "ignored";
+    public boolean request(Invoice inv, long amountCents) {
+        if (!payments.enabled() || amountCents <= 0) {
+            return false;
         }
-        SubscriptionTerms terms = subs.terms(orgId);
-        if (terms.planFeeCollection() != PlanFeeCollection.EARNINGS_FIRST) {
-            return "ignored-card";
-        }
-        // Stripe applies the customer's credit balance first: only the rest is asked from earnings.
-        long amount = inv.amountDue() - Math.max(0, terms.creditBalanceCents());
-        if (amount <= 0) {
-            return "ignored-covered-by-credit";
-        }
-        return collections.claim(inv.id(), orgId, inv.number(), inv.amountDue(), amount, Instant.now(clock))
-                ? "earnings-requested" : "earnings-duplicate";
+        return collections.claim(inv.id(), inv.orgId(), inv.number(), inv.amountDueCents(), amountCents,
+                Instant.now(clock));
     }
 
     @Override
-    public String onInvoiceVoided(String orgId, InvoiceSnapshot inv) {
-        Optional<Row> found = collections.lock(inv.id());
+    public String onInvoiceVoided(String orgId, String invoiceId) {
+        Optional<Row> found = collections.lock(invoiceId);
         if (found.isEmpty()) {
             return "applied";
         }
@@ -112,33 +95,13 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
                 if (amount <= 0) {
                     return "applied";
                 }
-                // Stripe returns the applied balance on a void (and a deleted draft never used it): take our credit
-                // back before the earnings go back to the seller.
-                collections.requestRelease(key, r.invoiceId(), amount, "invoice voided", true, now);
+                collections.requestRelease(key, r.invoiceId(), amount, "invoice voided", false, now);
                 return "earnings-release-requested";
             }
             default -> {
                 return "applied";
             }
         }
-    }
-
-    @Override
-    public String onCreditNote(String orgId, StripeEvent.CreditNote cn) {
-        if (cn.invoiceId() == null || cn.outOfBandAmount() <= 0) {
-            return "ignored";
-        }
-        Optional<Row> found = collections.lock(cn.invoiceId());
-        if (found.isEmpty() || !CREDITED.equals(found.get().status())) {
-            return "ignored";
-        }
-        long amount = Math.min(cn.outOfBandAmount(), found.get().fromSalesCents());
-        if (amount <= 0) {
-            return "ignored";
-        }
-        collections.requestRelease("plan-fee-release-" + cn.id(), cn.invoiceId(), amount,
-                "refunded out of band (credit note " + cn.id() + ")", false, Instant.now(clock));
-        return "earnings-release-requested";
     }
 
     @Override
@@ -160,14 +123,13 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
     /** One step of a locked, open collection: withhold (REQUESTED), then credit the customer balance (WITHHELD). */
     private Outcome step(Row r) {
         Instant now = Instant.now(clock);
-        // Retrieve invoice status from the local invoice repository.
         Invoice inv = invoices.findById(r.invoiceId()).orElse(null);
-        if (inv == null || !"draft".equals(inv.status())) {
-            // Invoice finalised before earnings could pay: release anything withheld.
-            collections.transition(r.invoiceId(), r.status(), MISSED, Change.reason("Invoice finalised "
-                    + "before it could be paid from sales; the card paid it"), now);
+        if (inv == null || !inv.isOpen()) {
+            // The invoice was settled or voided before earnings could pay: release anything withheld.
+            collections.transition(r.invoiceId(), r.status(), MISSED, Change.reason("Invoice no longer open; "
+                    + "nothing was taken from sales"), now);
             collections.requestRelease("plan-fee-release-" + r.invoiceId(), r.invoiceId(), r.amountCents(),
-                    "invoice finalised before the credit", false, now);
+                    "invoice no longer open", false, now);
             return Outcome.DONE;
         }
         long withheld = r.withheldCents();
@@ -183,12 +145,10 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
             collections.transition(r.invoiceId(), REQUESTED, WITHHELD, new Change(withheld, null, w.reference(), null,
                     w.reason()), now);
         }
-        Subscription sub = subs.find(r.orgId()).orElseThrow();
-        // Credit the local balance (replaces Stripe customer.balanceTransactions.create).
-        long newBalance = subs.adjustCreditBalance(r.orgId(), withheld);
-        collections.transition(r.invoiceId(), WITHHELD, CREDITED,
-                new Change(null, withheld, null, "local-balance-" + r.invoiceId(), null), now);
-        subs.setCreditBalance(r.orgId(), Math.max(0, newBalance));
+        collections.transition(r.invoiceId(), WITHHELD, CREDITED, new Change(null, withheld, null, null, null), now);
+        invoices.addPayment(new InvoicePayment(UUID.randomUUID(), r.invoiceId(), r.orgId(), PaymentSource.EARNINGS,
+                withheld, InvoicePayment.APPLIED, "earnings-" + r.invoiceId(), null, now));
+        invoices.refreshPaid(r.invoiceId(), now);
         LOG.info("Invoice {} of {}: {} cents paid from sales (of {} asked)", r.invoiceId(), r.orgId(), withheld,
                 r.amountCents());
         return Outcome.DONE;
@@ -235,39 +195,26 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
         }
     }
 
-    /** Takes the credit back from the customer balance when needed, then releases the earnings at payments. */
+    /** Releases the earnings at payments (idempotent per release key). */
     private void sendRelease(Release rel) {
         Instant now = Instant.now(clock);
         Row r = collections.find(rel.invoiceId()).orElseThrow();
-        String txn = rel.balanceTransactionId();
-        if (rel.debitBalance() && txn == null) {
-            Subscription sub = subs.find(rel.orgId()).orElseThrow();
-            // Debit the local balance (replaces Stripe customer.balanceTransactions.create).
-            long newBalance = subs.adjustCreditBalance(rel.orgId(), -rel.amountCents());
-            txn = "local-debit-" + rel.idempotencyKey();
-            collections.releaseDebited(rel.idempotencyKey(), txn, now);
-            subs.setCreditBalance(rel.orgId(), Math.max(0, newBalance));
-        }
         payments.release(rel.orgId(), rel.invoiceId(), rel.amountCents(), rel.reason(), rel.idempotencyKey());
         boolean fully = CREDITED.equals(r.status()) && r.releasedCents() + rel.amountCents() >= r.creditedCents();
         collections.addReleased(rel.invoiceId(), rel.amountCents(), fully ? RELEASED : null, now);
-        collections.releaseDone(rel.idempotencyKey(), txn, now);
+        collections.releaseDone(rel.idempotencyKey(), null, now);
         LOG.info("Invoice {} of {}: {} cents released back to the seller's next transfer ({})", rel.invoiceId(),
                 rel.orgId(), rel.amountCents(), rel.reason());
     }
 
     @Override
-    public int processOpen() {
+    public int processReleases() {
         if (!payments.enabled()) {
             return 0;
         }
-        int credited = 0;
-        for (String invoiceId : tx.execute(s -> collections.dueInvoices(Instant.now(clock), BATCH))) {
-            collect(invoiceId);
-            credited += collections.find(invoiceId).filter(r -> CREDITED.equals(r.status())).isPresent() ? 1 : 0;
-        }
-        release(null);
-        return credited;
+        List<String> keys = tx.execute(s -> collections.dueReleases(Instant.now(clock), null, BATCH));
+        keys.forEach(this::releaseOne);
+        return keys.size();
     }
 
     private static Duration backoff(int attempts) {
@@ -275,7 +222,4 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
         return d.compareTo(MAX_BACKOFF) > 0 ? MAX_BACKOFF : d;
     }
 
-    private static String label(Row r) {
-        return r.invoiceNumber() == null ? r.invoiceId() : r.invoiceNumber();
-    }
 }

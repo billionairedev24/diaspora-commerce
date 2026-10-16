@@ -14,10 +14,8 @@ import com.afrotransact.seller.adapter.in.web.PlanAdminDtos.MigrationResultRespo
 import com.afrotransact.seller.adapter.in.web.PlanAdminDtos.PlanAdminResponse;
 import com.afrotransact.seller.adapter.in.web.PlanAdminDtos.PricesBody;
 import com.afrotransact.seller.adapter.in.web.PlanAdminDtos.StatusBody;
-import com.afrotransact.seller.adapter.in.web.PlanAdminDtos.SyncReportResponse;
 import com.afrotransact.seller.adapter.in.web.PlanAdminDtos.UpdatePlanBody;
 import com.afrotransact.seller.application.PlanAdminService;
-import com.afrotransact.seller.application.PlanSyncService;
 import com.afrotransact.seller.application.TrialService;
 import com.afrotransact.seller.domain.CampaignStatus;
 import com.afrotransact.seller.domain.PlanPricesInput;
@@ -34,22 +32,20 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Plan catalogue", description = "AfroTransact owns plans, versions (prices per cadence and the default "
-        + "trial) and trial campaigns; Stripe only executes the charges. Staff with plans:manage change them; "
+        + "trial) and trial campaigns; AfroTransact bills and collects itself. Staff with plans:manage change them; "
         + "plans:manage, seller:billing or billing:adjust read them.")
 @RestController
 class PlanAdminController {
 
     private final PlanAdminService plans;
-    private final PlanSyncService sync;
     private final TrialService trials;
 
-    PlanAdminController(PlanAdminService plans, PlanSyncService sync, TrialService trials) {
+    PlanAdminController(PlanAdminService plans, TrialService trials) {
         this.plans = plans;
-        this.sync = sync;
         this.trials = trials;
     }
 
-    @Operation(summary = "Every plan with its versions, Stripe prices and subscribers (staff)")
+    @Operation(summary = "Every plan with its versions, prices and subscribers (staff)")
     @GetMapping("/v1/billing/plans")
     List<PlanAdminResponse> listAdminPlans() {
         return plans.plans().stream().map(PlanAdminResponse::of).toList();
@@ -85,8 +81,7 @@ class PlanAdminController {
         return PlanAdminResponse.of(plans.saveDraft(code, in));
     }
 
-    @Operation(summary = "Publish the draft version and sync it to Stripe (a new Price per cadence; the old one is "
-            + "archived)")
+    @Operation(summary = "Publish the draft version (subscribers stay on theirs until migrated)")
     @PostMapping("/v1/billing/plans/{code}/publish")
     PlanAdminResponse publishPlan(@PathVariable String code) {
         return PlanAdminResponse.of(plans.publish(code));
@@ -114,18 +109,6 @@ class PlanAdminController {
     @PostMapping("/v1/billing/plans/{code}/migration")
     MigrationResultResponse migratePlan(@PathVariable String code, @RequestBody(required = false) MigrationBody body) {
         return MigrationResultResponse.of(plans.migrate(code, body == null ? null : body.orgIds()));
-    }
-
-    @Operation(summary = "Drift between our plan versions and Stripe (nothing changes)")
-    @GetMapping("/v1/billing/stripe-sync")
-    SyncReportResponse planSyncReport() {
-        return SyncReportResponse.of(sync.report());
-    }
-
-    @Operation(summary = "Sync with Stripe: adopt matching Prices, create missing ones, replace drifted ones")
-    @PostMapping("/v1/billing/stripe-sync")
-    SyncReportResponse syncPlans() {
-        return SyncReportResponse.of(sync.sync());
     }
 
     @Operation(summary = "Trial campaigns (promo codes and sign-up windows)")

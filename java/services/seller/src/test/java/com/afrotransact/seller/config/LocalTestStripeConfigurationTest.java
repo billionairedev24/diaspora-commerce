@@ -7,10 +7,10 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Set;
 
-import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeBilling;
+import com.afrotransact.seller.adapter.out.localtest.LocalTestPlanPayments;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeConnect;
-import com.afrotransact.seller.adapter.out.stripe.StripeBillingAdapter;
 import com.afrotransact.seller.adapter.out.stripe.StripeConnectAdapter;
+import com.afrotransact.seller.adapter.out.stripe.StripePlanPaymentsAdapter;
 import com.afrotransact.seller.domain.DefaultLocalTestStripePolicy;
 import com.afrotransact.seller.domain.LocalTestStripePolicy;
 import com.stripe.StripeClient;
@@ -50,8 +50,8 @@ class LocalTestStripeConfigurationTest {
                 .isTrue();
         assertThat(config.stripeConnectGateway(client, mapper, props("auto", ""), policy, env("local"),
                 Clock.systemUTC())).isInstanceOf(LocalTestStripeConnect.class);
-        assertThat(config.stripeBillingGateway(client, mapper, props("auto", ""), policy, env("local"),
-                Clock.systemUTC())).isInstanceOf(LocalTestStripeBilling.class);
+        assertThat(config.planPaymentsGateway(client, props("auto", ""), policy, env("local")))
+                .isInstanceOf(LocalTestPlanPayments.class);
     }
 
     @Test
@@ -60,8 +60,8 @@ class LocalTestStripeConfigurationTest {
                 .isFalse();
         assertThat(config.stripeConnectGateway(client, mapper, props("auto", "sk_test_51abc"), policy, env("local"),
                 Clock.systemUTC())).isInstanceOf(StripeConnectAdapter.class);
-        assertThat(config.stripeBillingGateway(client, mapper, props("auto", "sk_test_51abc"), policy, env("local"),
-                Clock.systemUTC())).isInstanceOf(StripeBillingAdapter.class);
+        assertThat(config.planPaymentsGateway(client, props("auto", "sk_test_51abc"), policy, env("local")))
+                .isInstanceOf(StripePlanPaymentsAdapter.class);
     }
 
     @Test

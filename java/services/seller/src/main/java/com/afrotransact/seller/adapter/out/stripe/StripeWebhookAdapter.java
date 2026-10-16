@@ -2,10 +2,8 @@ package com.afrotransact.seller.adapter.out.stripe;
 
 import com.afrotransact.seller.domain.RequirementsSnapshot;
 import com.afrotransact.seller.domain.SellerRuleViolation;
-import com.afrotransact.seller.port.InvoiceSnapshot;
 import com.afrotransact.seller.port.StripeEvent;
 import com.afrotransact.seller.port.StripeWebhookParser;
-import com.afrotransact.seller.port.SubscriptionSnapshot;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.net.Webhook;
 import tools.jackson.databind.JsonNode;
@@ -47,9 +45,7 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
         StripeEvent.ExternalAccount bank = null;
         StripeEvent.Payout payout = null;
         RequirementsSnapshot accountSnapshot = null;
-        InvoiceSnapshot invoice = null;
-        SubscriptionSnapshot subscription = null;
-        StripeEvent.CreditNote creditNote = null;
+        StripeEvent.PaymentIntentResult paymentIntent = null;
         if (type != null) {
             switch (type) {
                 case "account.updated" -> {
@@ -81,20 +77,22 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
                         o.path("amount").asLong(0), StripeJson.text(o, "currency"),
                         StripeJson.text(o, "failure_code"), StripeJson.text(o, "failure_message"),
                         StripeJson.epoch(o.path("arrival_date")));
-                case "credit_note.created" -> creditNote = new StripeEvent.CreditNote(StripeJson.text(o, "id"),
-                        StripeJson.idOf(o.path("invoice")), StripeJson.idOf(o.path("customer")),
-                        o.path("total").asLong(0), o.path("out_of_band_amount").asLong(0));
-                default -> {
-                    if (type.startsWith("invoice.")) {
-                        invoice = json.invoice(o);
-                    } else if (type.startsWith("customer.subscription.")) {
-                        subscription = json.subscription(o);
+                case "payment_intent.succeeded", "payment_intent.payment_failed" -> {
+                    if ("plan_fee".equals(o.path("metadata").path("purpose").asString(null))) {
+                        JsonNode err = o.path("last_payment_error");
+                        paymentIntent = new StripeEvent.PaymentIntentResult(StripeJson.text(o, "id"),
+                                o.path("metadata").path("invoice_id").asString(null),
+                                "payment_intent.succeeded".equals(type), StripeJson.text(err, "code"),
+                                StripeJson.text(err, "message"));
                     }
+                }
+                default -> {
+                    // not a billing event we act on
                 }
             }
         }
         return new StripeEvent(StripeJson.text(e, "id"), type, e.path("created").asLong(0), account,
-                accountSnapshot, capability, person, bank, payout, invoice, subscription, creditNote);
+                accountSnapshot, capability, person, bank, payout, paymentIntent);
     }
 
     private static SellerRuleViolation invalid() {

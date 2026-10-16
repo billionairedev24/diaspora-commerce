@@ -12,8 +12,7 @@ import com.afrotransact.seller.domain.PlanStatus;
 import com.afrotransact.seller.domain.PlanVersion;
 
 /**
- * Plan catalogue owned by AfroTransact: plan metadata, immutable versions (prices per cadence and default trial) and
- * the Stripe Product / Price ids the sync stored.
+ * Plan catalogue owned by AfroTransact: plan metadata and immutable versions (prices per cadence and default trial).
  */
 public interface PlanRepository {
 
@@ -51,7 +50,7 @@ public interface PlanRepository {
 
     int nextVersionNumber(String code);
 
-    /** Inserts a draft version with its prices and lookup keys. */
+    /** Inserts a draft version with its prices. */
     void insertVersion(PlanVersion v);
 
     /** Replaces a draft version's prices and trial. */
@@ -61,24 +60,6 @@ public interface PlanRepository {
     void publishVersion(String code, int version, Instant at);
 
     List<PriceRow> prices(String code, int version);
-
-    /** Every price of every version, for the drift report. */
-    List<PriceRow> allPrices();
-
-    void recordStripePrice(String code, int version, Cadence cadence, String stripePriceId, Instant at);
-
-    void recordSyncError(String code, int version, Cadence cadence, String error);
-
-    void setStripeProduct(String code, String productId);
-
-    /** The plan's Stripe Product id, or null. */
-    String stripeProduct(String code);
-
-    /** Which plan version and cadence a Stripe Price id belongs to. */
-    Optional<PriceRef> byStripePrice(String stripePriceId);
-
-    /** Fallback for prices not yet adopted: the current version holding {@code lookupKey}. */
-    Optional<PriceRef> byLookupKey(String lookupKey);
 
     List<String> invites(String code);
 
@@ -94,13 +75,8 @@ public interface PlanRepository {
     /** Subscriptions per (plan, version), for the catalogue and the migration preview. */
     List<VersionCount> subscriberCounts();
 
-    /** A plan version and cadence. */
-    record PriceRef(String planCode, int version, Cadence cadence) {
-    }
-
-    /** One version's price for a cadence and its Stripe state. */
-    record PriceRow(String planCode, int version, Cadence cadence, long amountCents, String lookupKey,
-                    String stripePriceId, Instant syncedAt, String syncError) {
+    /** One version's price for a cadence. */
+    record PriceRow(String planCode, int version, Cadence cadence, long amountCents) {
     }
 
     /** Subscribers on a plan version. */

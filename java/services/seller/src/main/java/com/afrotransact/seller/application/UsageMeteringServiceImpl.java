@@ -160,8 +160,7 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
             changed += collect(UsageMeter.ADS_SPEND, from, to, "ADS", failedSources, () -> adSamples(from, to));
             changed += collect(UsageMeter.AI_CREDITS, from, to, "AI", failedSources, () -> aiSamples(from, to));
             Report report = report(from, to);
-            String status = failedSources.size() == 3 ? "FAILED"
-                    : failedSources.isEmpty() && report.pending() == 0 ? "COMPLETED" : "PARTIAL";
+            String status = failedSources.size() == 3 ? "FAILED" : failedSources.isEmpty() ? "COMPLETED" : "PARTIAL";
             UsageRun done = new UsageRun(runId, from, to, trigger, actorId, status, changed, report.reported(),
                     report.pending(), report.corrections(), failedSources, started, Instant.now(clock));
             tx.executeWithoutResult(s -> usage.saveRun(done));
@@ -261,30 +260,24 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
     private record Report(int reported, int pending, int corrections) {
     }
 
-    /** Sends a meter event for every positive difference between stored usage and what Stripe has. */
+    /**
+     * What is still to be invoiced: usage days whose quantity differs from what plan invoices have billed. Nothing is
+     * sent anywhere; the next plan invoice bills these days (see {@code InvoiceIssuingService}).
+     */
     private Report report(LocalDate from, LocalDate to) {
-        int reported = 0;
         int pending = 0;
         int corrections = 0;
-        Map<String, List<UsageDay>> byOrg = new LinkedHashMap<>();
-        tx.execute(s -> usage.unreported(from, to)).stream().filter(d -> !settings.isRetail(d.orgId())).forEach(d ->
-                byOrg.computeIfAbsent(d.orgId(), k -> new ArrayList<>()).add(d));
-        for (Map.Entry<String, List<UsageDay>> e : byOrg.entrySet()) {
-            for (UsageDay d : e.getValue()) {
-                Instant now = Instant.now(clock);
-                if (d.needsCorrection()) {
-                    corrections++;
-                    tx.executeWithoutResult(s -> usage.markError(d, "Usage dropped by " + d.meter().display(-d.delta())
-                            + " " + d.meter().displayUnit() + " after it was recorded; adjustment needed", now));
-                    continue;
-                }
-                String identifier = d.nextIdentifier();
-                tx.executeWithoutResult(s -> usage.lock(d.orgId(), d.meter(), d.day()).ifPresent(locked -> usage.markReported(
-                        locked, d.quantity(), d.revision() + 1, identifier, d.delta(), null, now)));
-                reported++;
+        for (UsageDay d : tx.execute(s -> usage.unreported(from, to))) {
+            if (settings.isRetail(d.orgId())) {
+                continue;
+            }
+            if (d.needsCorrection()) {
+                corrections++;
+            } else {
+                pending++;
             }
         }
-        return new Report(reported, pending, corrections);
+        return new Report(0, pending, corrections);
     }
 
     private LocalDate[] currentPeriod(String orgId) {

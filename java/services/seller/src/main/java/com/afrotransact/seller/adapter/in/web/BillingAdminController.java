@@ -7,9 +7,11 @@ import com.afrotransact.seller.adapter.in.web.BillingDtos.BillingResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.InvoiceResponse;
 import com.afrotransact.seller.adapter.in.web.PlanFeeDtos.CollectionResponse;
 import com.afrotransact.seller.adapter.in.web.PlanFeeDtos.CollectionView;
+import com.afrotransact.seller.adapter.in.web.RewardDtos.ChargeGateBody;
 import com.afrotransact.seller.adapter.in.web.RewardDtos.CreditBody;
 import com.afrotransact.seller.adapter.in.web.RewardDtos.DaysBody;
 import com.afrotransact.seller.adapter.in.web.RewardDtos.GrantView;
+import com.afrotransact.seller.adapter.in.web.RewardDtos.MonthsBody;
 import com.afrotransact.seller.adapter.in.web.RewardDtos.WaiveBody;
 import com.afrotransact.seller.application.BillingAdjustmentService;
 import com.afrotransact.seller.application.BillingPanel;
@@ -22,13 +24,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Billing adjustments", description = "Staff per-seller billing panel and audited adjustments (credits, "
-        + "free days, waived invoices, trial overrides) with reason codes; billing:adjust to change. The "
+        + "free days and months, charge conditions, waived invoices, trial overrides) with reason codes; billing:adjust to change. The "
         + "Idempotency-Key header makes a retried request return the first grant.")
 @RestController
 class BillingAdminController {
@@ -65,7 +68,7 @@ class BillingAdminController {
         return PanelResponse.of(billing.panel(orgId));
     }
 
-    @Operation(summary = "Credit the organisation's Stripe balance (billing:adjust)")
+    @Operation(summary = "Give platform credit the next invoices use first (billing:adjust)")
     @PostMapping("/v1/orgs/{orgId}/billing/credits")
     @ResponseStatus(HttpStatus.CREATED)
     GrantView creditBalance(@PathVariable String orgId, @RequestBody CreditBody body,
@@ -74,7 +77,7 @@ class BillingAdminController {
                 body.reasonCode(), body.note(), key));
     }
 
-    @Operation(summary = "Give free days: the subscription's trial_end moves out (billing:adjust)")
+    @Operation(summary = "Give free days: the first charge moves out (billing:adjust)")
     @PostMapping("/v1/orgs/{orgId}/billing/free-days")
     @ResponseStatus(HttpStatus.CREATED)
     GrantView giveFreeDays(@PathVariable String orgId, @RequestBody DaysBody body,
@@ -83,7 +86,36 @@ class BillingAdminController {
                 key));
     }
 
-    @Operation(summary = "Waive (void) an open invoice (billing:adjust)")
+    @Operation(summary = "Give free calendar months: the first charge moves out (billing:adjust)")
+    @PostMapping("/v1/orgs/{orgId}/billing/free-months")
+    @ResponseStatus(HttpStatus.CREATED)
+    GrantView giveFreeMonths(@PathVariable String orgId, @RequestBody MonthsBody body,
+                             @RequestHeader(value = "Idempotency-Key", required = false) String key) {
+        return GrantView.of(adjustments.freeMonths(orgId, required(body.months(), "months"), body.reasonCode(),
+                body.note(), key));
+    }
+
+    @Operation(summary = "Put a condition on the plan charges (billing:adjust)",
+            description = "START_AFTER: no charge until the seller reaches the threshold (sales in cents, orders, "
+                    + "bookings or live listings); WAIVE_WHILE: free while they keep it; WAIVE_UNTIL: free until a "
+                    + "date. Replaces any earlier condition; a reason is required and shown in the grants log.")
+    @PutMapping("/v1/orgs/{orgId}/billing/charge-gate")
+    @ResponseStatus(HttpStatus.CREATED)
+    GrantView setChargeGate(@PathVariable String orgId, @RequestBody ChargeGateBody body,
+                            @RequestHeader(value = "Idempotency-Key", required = false) String key) {
+        return GrantView.of(adjustments.setChargeGate(orgId, new BillingAdjustmentService.GateInput(body.mode(),
+                body.metric(), body.threshold(), body.until()), body.reasonCode(), body.note(), key));
+    }
+
+    @Operation(summary = "Remove the condition on the plan charges: they apply as normal again (billing:adjust)")
+    @PostMapping("/v1/orgs/{orgId}/billing/charge-gate/clear")
+    @ResponseStatus(HttpStatus.CREATED)
+    GrantView clearChargeGate(@PathVariable String orgId, @RequestBody WaiveBody body,
+                              @RequestHeader(value = "Idempotency-Key", required = false) String key) {
+        return GrantView.of(adjustments.clearChargeGate(orgId, body.reasonCode(), body.note(), key));
+    }
+
+    @Operation(summary = "Waive the rest of an open invoice (billing:adjust)")
     @PostMapping("/v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive")
     @ResponseStatus(HttpStatus.CREATED)
     GrantView waiveInvoice(@PathVariable String orgId, @PathVariable String invoiceId, @RequestBody WaiveBody body,

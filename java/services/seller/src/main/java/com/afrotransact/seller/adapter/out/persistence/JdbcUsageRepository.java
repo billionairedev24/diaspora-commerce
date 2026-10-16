@@ -7,7 +7,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -74,6 +73,16 @@ class JdbcUsageRepository implements UsageRepository {
     }
 
     @Override
+    public List<UsageDay> unbilled(String orgId, LocalDate through) {
+        return jdbc.sql("""
+                select * from usage_daily where org_id = :org and quantity <> reported_quantity and day <= :through
+                order by meter, day
+                """)
+                .param("org", orgId).param("through", Date.valueOf(through))
+                .query(JdbcUsageRepository::day).list();
+    }
+
+    @Override
     public Optional<UsageDay> lock(String orgId, UsageMeter meter, LocalDate day) {
         return jdbc.sql("select * from usage_daily where org_id = :org and meter = :meter and day = :day for update")
                 .param("org", orgId).param("meter", meter.name()).param("day", Date.valueOf(day))
@@ -82,7 +91,7 @@ class JdbcUsageRepository implements UsageRepository {
 
     @Override
     public void markReported(UsageDay d, long reportedQuantity, int revision, String identifier, long value,
-                             String customerId, Instant at) {
+                             Instant at) {
         jdbc.sql("""
                 insert into usage_report (identifier, org_id, meter, day, value, created_at)
                 values (:id, :org, :meter, :day, :value, :at)
@@ -121,37 +130,6 @@ class JdbcUsageRepository implements UsageRepository {
         }
         return new HashSet<>(jdbc.sql("select id from organisation where id in (:ids)")
                 .param("ids", List.copyOf(orgIds)).query(String.class).list());
-    }
-
-    @Override
-    public Set<UsageMeter> meteredItems(String orgId, String subscriptionId) {
-        Set<UsageMeter> out = EnumSet.noneOf(UsageMeter.class);
-        jdbc.sql("select meter from metered_subscription_item where org_id = :org and stripe_subscription_id = :sub")
-                .param("org", orgId).param("sub", subscriptionId).query(String.class).list()
-                .forEach(m -> out.add(UsageMeter.valueOf(m)));
-        return out;
-    }
-
-    @Override
-    public Optional<UsageMeter> meterOfItem(String stripeItemId) {
-        if (stripeItemId == null) {
-            return Optional.empty();
-        }
-        return jdbc.sql("select meter from metered_subscription_item where stripe_item_id = :item limit 1")
-                .param("item", stripeItemId).query(String.class).optional().map(UsageMeter::valueOf);
-    }
-
-    @Override
-    public void saveMeteredItem(String orgId, UsageMeter meter, String subscriptionId, String itemId, Instant at) {
-        jdbc.sql("""
-                insert into metered_subscription_item (org_id, meter, stripe_subscription_id, stripe_item_id,
-                                                       created_at)
-                values (:org, :meter, :sub, :item, :at)
-                on conflict (org_id, meter, stripe_subscription_id) do nothing
-                """)
-                .param("org", orgId).param("meter", meter.name()).param("sub", subscriptionId).param("item", itemId)
-                .param("at", Sql.ts(at))
-                .update();
     }
 
     @Override

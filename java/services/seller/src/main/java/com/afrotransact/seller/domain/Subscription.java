@@ -87,6 +87,18 @@ public record Subscription(String orgId, String planCode, int planVersion, Caden
                 version);
     }
 
+    /**
+     * Pushes the first charge out to {@code chargeStart}: the subscription is free (TRIALING) until then and its
+     * billing cycle restarts on that day. Used by free days, free months and trial changes.
+     */
+    public Subscription withFreeUntil(Instant chargeStart, Instant now) {
+        Instant start = status == SubscriptionStatus.TRIALING && currentPeriodStart != null ? currentPeriodStart
+                : now;
+        return new Subscription(orgId, planCode, planVersion, cadence, SubscriptionStatus.TRIALING, paymentMethodKind,
+                chargeStart, chargeStart, start, chargeStart, cancelAtPeriodEnd, pendingPlanCode, pendingCadence,
+                pendingEffectiveAt, dunning, failedPaymentAttempts, nextPaymentAttemptAt, now, version);
+    }
+
     /** Rolls the period forward by one cadence occurrence (renewal). */
     public Subscription withNextPeriod(Instant nextStart, Instant nextEnd, Instant now) {
         return new Subscription(orgId, planCode, planVersion, cadence, SubscriptionStatus.ACTIVE, paymentMethodKind,

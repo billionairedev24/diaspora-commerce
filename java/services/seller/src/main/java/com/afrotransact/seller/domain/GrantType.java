@@ -1,12 +1,14 @@
 package com.afrotransact.seller.domain;
 
-/** What a billing grant did: reward types plus the staff-only waived invoice and trial end change. */
+/** What a billing grant did: reward types plus the staff-only free months, waived invoice, trial end and charge gate. */
 public enum GrantType {
     FREE_DAYS,
+    FREE_MONTHS,
     CREDIT,
     PERCENT_OFF,
     WAIVE_INVOICE,
-    TRIAL_END;
+    TRIAL_END,
+    CHARGE_GATE;
 
     public static GrantType of(RewardType t) {
         return switch (t) {
