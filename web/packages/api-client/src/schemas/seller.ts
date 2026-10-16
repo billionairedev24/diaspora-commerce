@@ -408,7 +408,7 @@ export const ShipmentStatusSchema = z.enum([
 export type ShipmentStatus = z.infer<typeof ShipmentStatusSchema>;
 /** The only statuses a seller may set. */
 /** What a seller may set; PICKED_UP is "Shipped" (handed to the carrier, needs a label). */
-export const SellerStatusActionSchema = z.enum(['CONFIRMED', 'PACKED', 'READY', 'PICKED_UP']);
+export const SellerStatusActionSchema = z.enum(['CONFIRMED', 'PACKED', 'READY', 'PICKED_UP', 'DELIVERED']);
 export type SellerStatusAction = z.infer<typeof SellerStatusActionSchema>;
 
 export const SellerOrderRowSchema = z.object({

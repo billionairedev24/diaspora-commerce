@@ -3,7 +3,10 @@ package com.afrotransact.orders.domain;
 /** When a 4-digit handover code is needed, and how it is generated and checked. */
 public interface HandoverPolicy {
 
-    /** Code needed for AfroTransact Delivery / pickup of perishables or when the customer asked for hand delivery. */
+    /**
+     * Code needed for every pickup order (the person handing it over checks it), and for AfroTransact Delivery of
+     * perishables or when the customer asked for hand delivery. Never for carrier shipments.
+     */
     boolean required(boolean perishable, DeliveryMethod method, DeliveryPreferences preferences);
 
     /** A fresh random 4-digit code. */

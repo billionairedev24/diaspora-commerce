@@ -589,6 +589,8 @@
   "ord.arriving": "Arrivée d’ici le {date}",
   "ord.trackingNo": "Suivi {carrier} {number}",
   "ord.codeHint": "à donner au chauffeur à la porte",
+  "ord.pickupCode": "Code de retrait",
+  "ord.codeHintPickup": "montrez-le lors du retrait de votre commande",
   "ord.timeline": "Suivi",
   "ord.summary": "Récapitulatif de commande",
   "ord.items": "Articles",

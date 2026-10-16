@@ -589,6 +589,8 @@
   "ord.arriving": "Yóò dé ní {date}",
   "ord.trackingNo": "Ìtọpinpin {carrier} {number}",
   "ord.codeHint": "fún awakọ̀ ní ẹnu ọ̀nà",
+  "ord.pickupCode": "Kóòdù gbígbà",
+  "ord.codeHintPickup": "fi hàn nígbà tí o bá ń gba àṣẹ rẹ",
   "ord.timeline": "Ìtọpinpin",
   "ord.summary": "Àkópọ̀ ìbéèrè",
   "ord.items": "Àwọn ohun",

@@ -82,7 +82,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                   )}
                   {s.status.toLowerCase() !== 'cancelled' && s.deliveryCode && (
                     <span className={styles.code}>
-                      <Key aria-hidden /> {t('ord.deliveryCode')} <strong className={pageStyles.code}>{s.deliveryCode}</strong> · {t('ord.codeHint')}
+                      <Key aria-hidden /> {t(s.deliveryMethod === 'pickup' ? 'ord.pickupCode' : 'ord.deliveryCode')} <strong className={pageStyles.code}>{s.deliveryCode}</strong> · {t(s.deliveryMethod === 'pickup' ? 'ord.codeHintPickup' : 'ord.codeHint')}
                     </span>
                   )}
                   <ol className={styles.timeline} aria-label={t('ord.timeline')}>

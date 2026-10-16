@@ -15,8 +15,9 @@ import { useSeller } from '@/lib/session';
 
 import { LabelForm } from './LabelForm';
 import { ProofOfDelivery } from './ProofOfDelivery';
+import { ShipmentProgress } from './ShipmentProgress';
 
-export const ACTION_LABEL: Record<SellerStatusAction, string> = { CONFIRMED: 'Confirm order', PACKED: 'Mark packed', READY: 'Mark ready to ship', PICKED_UP: 'Mark shipped' };
+export const ACTION_LABEL: Record<SellerStatusAction, string> = { CONFIRMED: 'Confirm order', PACKED: 'Mark packed', READY: 'Mark ready to ship', PICKED_UP: 'Mark shipped', DELIVERED: 'Hand over' };
 
 /** Order sheet: buyer, address, each of the organisation's shipments with its lines, timeline and actions. */
 export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | null; onClose: () => void }) {
@@ -28,11 +29,11 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
   const editable = can('orders');
   const q = useQuery({ ...sellerQueries.order(api, orgId, orderNumber ?? ''), enabled: orderNumber !== null });
   const status = useMutation({
-    mutationFn: ({ shipmentId, to }: { shipmentId: string; to: SellerStatusAction }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey()),
+    mutationFn: ({ shipmentId, to, code }: { shipmentId: string; to: SellerStatusAction; code?: string }) => api.updateShipmentStatus(orderNumber ?? '', shipmentId, to, idempotencyKey(), code),
     onSuccess: (o, v) => {
       qc.setQueryData(sellerKeys.order(orgId, o.orderNumber), o);
       void qc.invalidateQueries({ queryKey: sellerKeys.orders(orgId) });
-      toast.show(v.to === 'PICKED_UP' ? 'Marked shipped' : `${ACTION_LABEL[v.to].replace('Mark ', 'Marked ').replace('Confirm order', 'Order confirmed')}`);
+      toast.show(v.to === 'PICKED_UP' ? 'Marked shipped' : v.to === 'DELIVERED' ? 'Handed over' : `${ACTION_LABEL[v.to].replace('Mark ', 'Marked ').replace('Confirm order', 'Order confirmed')}`);
     },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
@@ -115,15 +116,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   </span>
                 </div>
               ) : null}
-              {editable && s.nextActions.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {s.nextActions.map((a) => (
-                    <Button key={a} size="sm" loading={status.isPending} onClick={() => status.mutate({ shipmentId: s.shipmentId, to: a })}>
-                      {ACTION_LABEL[a]}
-                    </Button>
-                  ))}
-                </div>
-              ) : null}
+              <ShipmentProgress shipment={s} editable={editable} loading={status.isPending} onMove={(to, code) => status.mutate({ shipmentId: s.shipmentId, to, code })} />
               {s.proof ? <ProofOfDelivery proof={s.proof} /> : null}
               {editable && s.canBuyLabel ? <LabelForm order={o} shipmentId={s.shipmentId} suggested={s.suggestedParcel} /> : null}
               <details className="text-xs text-muted">

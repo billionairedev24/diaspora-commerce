@@ -85,11 +85,25 @@ func ShipmentStatusLabel(s string) string {
 // IsShipmentStatus reports whether s is a known shipment status.
 func IsShipmentStatus(s string) bool { _, ok := shipmentLabels[s]; return ok }
 
-// SellerStatuses are the only statuses a seller may set (orders enforces the same rule).
-var SellerStatuses = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP"}
+// SellerStatuses are the only statuses a seller may set (orders enforces the same rule). DELIVERED is the handover of
+// a pickup order at the seller's own shop, with the customer's code; orders offers it only for those.
+var SellerStatuses = []string{"CONFIRMED", "PACKED", "READY", "PICKED_UP", "DELIVERED"}
 
 // labelStatuses are the shipment statuses a label can still be bought in.
 var labelStatuses = []string{"CONFIRMED", "PACKED", "READY"}
+
+// IsHandoverCode reports whether v is a 4-digit handover code.
+func IsHandoverCode(v string) bool {
+	if len(v) != 4 {
+		return false
+	}
+	for _, r := range v {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // IsSellerStatus reports whether a seller may set status s.
 func IsSellerStatus(s string) bool { return slices.Contains(SellerStatuses, s) }

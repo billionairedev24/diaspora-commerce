@@ -106,7 +106,8 @@ func ordersResource() *staffResource {
 				form: func(_ context.Context, _ staffCtx, o jobj) *domain.Form {
 					return &domain.Form{Title: "What happened to the shipment?", SubmitLabel: "Save", Fields: []domain.FormField{
 						withOptions(ff("step", "Next step", "select", true), shipmentSteps(o)),
-						withMax(ff("reason", "Reason or note", "text", false), 500)}}
+						withMax(ff("reason", "Reason or note", "text", false), 500),
+						withPattern(ff("handoverCode", "Customer's code (handing over a pickup order)", "text", false), `^\d{4}$`, "The 4-digit code the customer shows. Without it, say why in the reason.")}}
 				},
 				when: func(_ staffCtx, o jobj) string {
 					if len(objs(o, "shipments")) == 0 {
@@ -122,10 +123,14 @@ func ordersResource() *staffResource {
 					if !ok || shipmentID == "" || to == "" {
 						return domain.ValidationProblem(map[string]string{"step": "Choose the next step"})
 					}
-					if reasonRequired(to) && strings.TrimSpace(vs(v, "reason")) == "" {
+					code := strings.TrimSpace(vs(v, "handoverCode"))
+					if code != "" && !domain.IsHandoverCode(code) {
+						return domain.ValidationProblem(map[string]string{"handoverCode": "Enter the 4 digits"})
+					}
+					if reasonRequired(to) && strings.TrimSpace(vs(v, "reason")) == "" && !(to == "DELIVERED" && code != "") {
 						return domain.ValidationProblem(map[string]string{"reason": "Say why (required to " + strings.ToLower(shipmentStepVerbs[to]) + ")"})
 					}
-					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/transitions", omitEmpty(jobj{"to": to, "reason": vs(v, "reason")}), nil)
+					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/transitions", omitEmpty(jobj{"to": to, "reason": vs(v, "reason"), "handoverCode": code}), nil)
 				}},
 		},
 	}

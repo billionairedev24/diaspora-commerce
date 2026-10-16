@@ -257,8 +257,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     listOrders: (q: SellerOrdersQuery, signal?: AbortSignal): Promise<SellerOrderPage> =>
       request('/v1/seller/orders', SellerOrderPageSchema, { query: tableSearchParams({ status: q.status, q: q.q, cursor: q.cursor, limit: num(q.limit) }, q.sort), signal }),
     getOrder: (orderNumber: string, signal?: AbortSignal): Promise<SellerOrderDetail> => request(`/v1/seller/orders/${enc(orderNumber)}`, SellerOrderDetailSchema, { signal }),
-    updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string): Promise<SellerOrderDetail> =>
-      request(`${shipment(orderNumber, shipmentId)}/status`, SellerOrderDetailSchema, { method: 'POST', body: { status }, headers: idem(key) }),
+    /** One step forward; `handoverCode` is the buyer's 4-digit code, needed to hand a pickup order over (DELIVERED). */
+    updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string, handoverCode?: string): Promise<SellerOrderDetail> =>
+      request(`${shipment(orderNumber, shipmentId)}/status`, SellerOrderDetailSchema, { method: 'POST', body: { status, ...(handoverCode ? { handoverCode } : {}) }, headers: idem(key) }),
     quoteRates: (orderNumber: string, shipmentId: string, parcel: Parcel, shipFrom: SellerAddress, carrier?: string): Promise<RateQuotes> =>
       request(`${shipment(orderNumber, shipmentId)}/rates`, RateQuotesSchema, { method: 'POST', body: { parcel, shipFrom, ...(carrier ? { carrier } : {}) } }),
     buyLabel: (orderNumber: string, shipmentId: string, body: { carrier: string; service: string; parcel: Parcel; shipFrom: SellerAddress }, key: string): Promise<LabelPurchase> =>

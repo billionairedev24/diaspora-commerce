@@ -589,6 +589,8 @@
   "ord.arriving": "Llega antes del {date}",
   "ord.trackingNo": "Seguimiento de {carrier} {number}",
   "ord.codeHint": "dáselo al conductor en la puerta",
+  "ord.pickupCode": "Código de recogida",
+  "ord.codeHintPickup": "muéstralo al recoger tu pedido",
   "ord.timeline": "Seguimiento",
   "ord.summary": "Resumen del pedido",
   "ord.items": "Artículos",

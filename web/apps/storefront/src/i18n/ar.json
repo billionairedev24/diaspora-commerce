@@ -589,6 +589,8 @@
   "ord.arriving": "يصل بحلول {date}",
   "ord.trackingNo": "تتبع {carrier} {number}",
   "ord.codeHint": "أعطه للسائق عند الباب",
+  "ord.pickupCode": "رمز الاستلام",
+  "ord.codeHintPickup": "أظهره عند استلام طلبك",
   "ord.timeline": "التتبع",
   "ord.summary": "ملخص الطلب",
   "ord.items": "العناصر",

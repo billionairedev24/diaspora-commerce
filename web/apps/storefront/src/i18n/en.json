@@ -583,6 +583,8 @@
   "ord.arriving": "Arriving by {date}",
   "ord.trackingNo": "{carrier} tracking {number}",
   "ord.codeHint": "give it to the driver at the door",
+  "ord.pickupCode": "Pickup code",
+  "ord.codeHintPickup": "show it when you collect your order",
   "ord.timeline": "Tracking",
   "ord.summary": "Order summary",
   "ord.items": "Items",

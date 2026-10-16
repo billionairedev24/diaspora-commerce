@@ -17,6 +17,7 @@ import com.afrotransact.orders.domain.OrdersRuleViolation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /** Request bodies of the orders API. */
@@ -101,7 +102,11 @@ final class OrdersDtos {
     record TransitionRequest(
             @Schema(description = "confirmed | packed | ready | picked_up | in_transit | out_for_delivery | "
                     + "delivered | delivery_failed | returned | cancelled") @NotBlank String to,
-            @Schema(description = "Required for cancelled and delivery_failed") @Size(max = 500) String reason) {
+            @Schema(description = "Required for cancelled and delivery_failed; for delivered by staff on a pickup or "
+                    + "AfroTransact Delivery order, say why it is confirmed without the code or the driver's proof")
+            @Size(max = 500) String reason,
+            @Schema(description = "The customer's 4-digit code: required to hand a pickup order over (delivered); "
+                    + "staff may give a reason instead") @Pattern(regexp = "\\d{4}") String handoverCode) {
     }
 
     @Schema(name = "CancelShipmentRequest")

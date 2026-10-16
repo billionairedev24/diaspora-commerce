@@ -288,12 +288,16 @@ func (o *sellerOrdersImpl) Order(ctx context.Context, bearer, number string) (po
 	return out, err
 }
 
-func (o *sellerOrdersImpl) Transition(ctx context.Context, bearer, key, shipmentID, to string) (port.OrderView, error) {
+func (o *sellerOrdersImpl) Transition(ctx context.Context, bearer, key, shipmentID, to, handoverCode string) (port.OrderView, error) {
 	var out struct {
 		Order port.OrderView `json:"order"`
 	}
+	body := map[string]string{"to": to}
+	if handoverCode != "" {
+		body["handoverCode"] = handoverCode
+	}
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/shipments/" + url.PathEscape(shipmentID) + "/transitions",
-		Bearer: bearer, Header: idem(key), RetryUnsafe: key != "", JSON: map[string]string{"to": to}}, &out)
+		Bearer: bearer, Header: idem(key), RetryUnsafe: key != "", JSON: body}, &out)
 	return out.Order, err
 }
 

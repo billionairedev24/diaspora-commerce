@@ -935,7 +935,8 @@ type SalesAnalytics struct {
 type SellerOrdersClient interface {
 	Queue(ctx context.Context, bearer, status, cursor string, limit int) (ShipmentQueue, error)
 	Order(ctx context.Context, bearer, orderNumber string) (OrderView, error)
-	Transition(ctx context.Context, bearer, idempotencyKey, shipmentID, to string) (OrderView, error)
+	// Transition moves a shipment; handoverCode is the customer's 4-digit code for handing a pickup order over.
+	Transition(ctx context.Context, bearer, idempotencyKey, shipmentID, to, handoverCode string) (OrderView, error)
 	AttachTracking(ctx context.Context, bearer, shipmentID, carrier, trackingNumber string) (OrderView, error)
 	Analytics(ctx context.Context, bearer string, from, to time.Time) (SalesAnalytics, error)
 	// Split is GET /v1/orders/{number}/payment-split (a seller sees its own row).

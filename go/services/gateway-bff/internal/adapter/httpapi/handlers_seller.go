@@ -313,14 +313,15 @@ func (h *handlersImpl) sellerOrder(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) shipmentStatus(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Status string `json:"status"`
+		Status       string `json:"status"`
+		HandoverCode string `json:"handoverCode"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
 	v, err := h.s.SellerOrders.UpdateStatus(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"),
-		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status)
+		r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Status, b.HandoverCode)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

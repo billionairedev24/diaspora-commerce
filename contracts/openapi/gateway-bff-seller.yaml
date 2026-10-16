@@ -437,10 +437,11 @@ paths:
       tags: [Orders]
       operationId: updateShipmentStatus
       security: [{sessionCookie: []}]
-      summary: Confirm, pack or mark ready (the only statuses a seller may set)
+      summary: Confirm, pack, mark ready, mark shipped or hand a pickup order over (the only statuses a seller may set)
       description: |
-        orders `POST /v1/shipments/{id}/transitions`. Anything but CONFIRMED, PACKED or READY is refused with 422
-        before calling orders; orders answers 409 `CONFLICT` for a transition that is not allowed from the current
+        orders `POST /v1/shipments/{id}/transitions`. Anything but CONFIRMED, PACKED, READY, PICKED_UP or DELIVERED is
+        refused with 422 before calling orders. DELIVERED (a pickup order handed to the buyer) needs `handoverCode`, the
+        buyer's 4-digit code from their order page; a wrong one is refused with 409 `orders.handover-code-invalid`; orders answers 409 `CONFLICT` for a transition that is not allowed from the current
         status and 403 for a step that belongs to AfroTransact (AfroTransact-fulfilled shipments).
       parameters: [{$ref: '#/components/parameters/OrderNumber'}, {$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
       requestBody:
@@ -2854,7 +2855,7 @@ components:
         lengthIn: {type: number}
         widthIn: {type: number}
         heightIn: {type: number}
-    SellerStatusAction: {type: string, enum: [CONFIRMED, PACKED, READY, PICKED_UP], description: 'The only statuses a seller may set. PICKED_UP ("Shipped": handed to the carrier) needs a label and applies to carrier parcels.'}
+    SellerStatusAction: {type: string, enum: [CONFIRMED, PACKED, READY, PICKED_UP, DELIVERED], description: 'The only statuses a seller may set. PICKED_UP ("Shipped": handed to the carrier) needs a label and applies to carrier parcels. DELIVERED is the handover of a pickup order at the seller''s own shop and needs the buyer''s 4-digit code (handoverCode).'}
     SellerOrderRow:
       type: object
       required: [orderNumber, shipmentId, placedAt, buyerName, shipTo, itemsSummary, itemCount, totalMinor, currency, fulfilment, status, statusLabel, carrier, trackingNumber, nextActions, canBuyLabel]
@@ -3151,6 +3152,7 @@ components:
       required: [status]
       properties:
         status: {$ref: '#/components/schemas/SellerStatusAction'}
+        handoverCode: {type: string, pattern: '^\d{4}$', description: 'The buyer''s 4-digit code; required when status is DELIVERED (handing a pickup order over), ignored otherwise'}
     Parcel:
       type: object
       required: [weightLb]

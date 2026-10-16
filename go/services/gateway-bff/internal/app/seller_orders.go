@@ -19,7 +19,8 @@ type SellerOrdersService interface {
 	// List is the shipment queue: one search over every column, any sort, status (links), cursor and size (limit).
 	List(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.SellerOrderPage, error)
 	Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error)
-	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error)
+	// UpdateStatus moves a seller's shipment one step; handoverCode is the buyer's 4-digit code for handing a pickup order over.
+	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status, handoverCode string) (domain.SellerOrderDetail, error)
 	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress, carrier string) (domain.RateQuotes, error)
 	BuyLabel(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error)
 	// Label downloads the shipping label bought for the shipment.
@@ -307,14 +308,21 @@ func (s *sellerOrdersImpl) earnings(ctx context.Context, c *domain.Caller, orgID
 	return nil
 }
 
-func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error) {
+func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status, handoverCode string) (domain.SellerOrderDetail, error) {
 	if !domain.IsSellerStatus(status) {
-		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack and mark ready only"})
+		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack, mark ready, mark shipped and hand a pickup order over"})
+	}
+	handoverCode = strings.TrimSpace(handoverCode)
+	if status == "DELIVERED" && !domain.IsHandoverCode(handoverCode) {
+		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"handoverCode": "Ask the buyer for their 4-digit code"})
+	}
+	if status != "DELIVERED" {
+		handoverCode = ""
 	}
 	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelEdit); err != nil {
 		return domain.SellerOrderDetail{}, err
 	}
-	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status))
+	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status), handoverCode)
 	if err != nil {
 		return domain.SellerOrderDetail{}, mapErr("orders", err)
 	}
