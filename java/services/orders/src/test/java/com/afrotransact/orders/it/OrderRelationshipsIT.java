@@ -98,7 +98,7 @@ class OrderRelationshipsIT extends OrdersIntegrationTest {
         // ful-lagos fulfils for LAGOS only; the token claims MAMATEE and carries the seller permissions.
         TestSupport.as(member("ful-lagos", MAMATEE));
         assertDenied(() -> queries.get(order.number()));
-        assertDenied(() -> shipments.transition(mamateeShipment.id(), "confirmed", null, id("k")));
+        assertDenied(() -> shipments.transition(mamateeShipment.id(), "confirmed", null, null, id("k")));
         assertDenied(() -> queries.sellerQueue(null, null, null, 20));
 
         HttpResponse<String> http = send("POST", "/v1/shipments/" + mamateeShipment.id() + "/transitions",
@@ -109,7 +109,7 @@ class OrderRelationshipsIT extends OrdersIntegrationTest {
         // With its real claim it sees and confirms its own shipment only.
         TestSupport.as(member("ful-lagos", LAGOS));
         assertThat(queries.get(order.number()).shipments()).hasSize(1);
-        assertThat(shipments.transition(lagosShipment.id(), "confirmed", null, id("k")).outcome())
+        assertThat(shipments.transition(lagosShipment.id(), "confirmed", null, null, id("k")).outcome())
                 .isEqualTo("applied");
         assertThat(queries.sellerQueue(null, null, null, 100).items()).isNotEmpty();
     }
@@ -131,9 +131,9 @@ class OrderRelationshipsIT extends OrdersIntegrationTest {
 
         // US operations moves AfroTransact-fulfilled shipments of US orders, not of GB orders.
         TestSupport.as(staff("us-ops", "orders:read", "orders:manage"));
-        assertThat(shipments.transition(shipmentOf(usOrder, LAGOS).id(), "confirmed", null, id("k")).outcome())
+        assertThat(shipments.transition(shipmentOf(usOrder, LAGOS).id(), "confirmed", null, null, id("k")).outcome())
                 .isEqualTo("applied");
-        assertDenied(() -> shipments.transition(shipmentOf(gbOrder, MAMATEE).id(), "confirmed", null, id("k")));
+        assertDenied(() -> shipments.transition(shipmentOf(gbOrder, MAMATEE).id(), "confirmed", null, null, id("k")));
         assertThat(status(shipmentOf(gbOrder, MAMATEE).id())).isEqualTo("PLACED");
 
         // A platform-wide grant spans markets and may search.
@@ -155,7 +155,7 @@ class OrderRelationshipsIT extends OrdersIntegrationTest {
         tuples.revoke(membership);
         try {
             assertDenied(() -> queries.get(order.number()));
-            assertDenied(() -> shipments.transition(shipmentOf(order, MAMATEE).id(), "confirmed", null, id("k")));
+            assertDenied(() -> shipments.transition(shipmentOf(order, MAMATEE).id(), "confirmed", null, null, id("k")));
         } finally {
             tuples.grant(membership);
         }
