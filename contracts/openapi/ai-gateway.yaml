@@ -110,6 +110,31 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Translation'
+  /v1/ai/seller-assistant/complete:
+    post:
+      tags:
+      - AI utilities
+      summary: One model turn for Lola in Seller Center (ai:use, seller and provider members)
+      description: |-
+        Called by the gateway-bff, which runs the conversation, the tools (it holds the seller's session and the platform
+        APIs) and the plan tier limits. Send the conversation and the tools offered for this turn; the answer is text, or
+        tool calls for the caller to run before calling again. Nothing is executed here. The usage is billed to the member's
+        organisation as AI credits and counted against the `seller-assistant` budget (429 `ai.budget-exceeded` when it is
+        spent). 403 `ai.seller-only` for anyone who is not a seller or provider member.
+      operationId: sellerAssistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AssistantReply'
   /v1/ai/triage:
     post:
       tags:
@@ -411,6 +436,92 @@ components:
           type: integer
           format: int32
           example: 1536
+    AssistantRequest:
+      type: object
+      description: One model turn for Lola in Seller Center
+      properties:
+        messages:
+          type: array
+          maxItems: 48
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/AssistantMessage'
+        tools:
+          type: array
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/AssistantTool'
+        maxTokens:
+          type: integer
+          format: int32
+          description: Completion limit (default 900, capped at 1500)
+      required:
+      - messages
+    AssistantMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+          maxLength: 24000
+        toolCalls:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantToolCall'
+        toolCallId:
+          type: string
+        toolName:
+          type: string
+      required:
+      - role
+    AssistantToolCall:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        arguments:
+          type: string
+          description: JSON object as text
+      required:
+      - id
+      - name
+    AssistantTool:
+      type: object
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{1,40}$
+        description:
+          type: string
+          maxLength: 1000
+        inputSchema:
+          type: string
+          description: JSON schema as text
+      required:
+      - inputSchema
+      - name
+    AssistantReply:
+      type: object
+      description: Either text or tool calls for the caller to run
+      properties:
+        text:
+          type: string
+        toolCalls:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantToolCall'
+        promptTokens:
+          type: integer
+          format: int64
+        completionTokens:
+          type: integer
+          format: int64
+        model:
+          type: string
     TriageRequest:
       type: object
       description: Trust-team triage input; field values as the reviewer sees them (masked where required)

@@ -43,6 +43,8 @@ type Services struct {
 	SellerImports app.SellerImportService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.
 	SellerOffers app.SellerOffersService
+	// SellerAssistant is Lola in Seller Center, with the plan's tier; its routes are registered when set.
+	SellerAssistant app.SellerAssistantService
 	// SellerCoupons manages seller-funded promotional codes (offers-service).
 	SellerCoupons app.SellerCouponsService
 	// SellerFba is Seller Center's Send to AfroTransact (S281); its routes are registered when set.

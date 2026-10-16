@@ -216,6 +216,37 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 		writeJSON(w, 202, upload(r.PathValue("id"), "QUEUED", 2))
 	})
 
+	// ---- ai-gateway seller assistant: a scripted model. A question about stock makes it prepare a stock change, "orders"
+	// makes it look at the orders, and after tool results it answers with what they said.
+	mux.HandleFunc("POST /v1/ai/seller-assistant/complete", func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Messages []map[string]any `json:"messages"`
+			Tools    []map[string]any `json:"tools"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		names := []string{}
+		for _, t := range b.Tools {
+			names = append(names, fmt.Sprint(t["name"]))
+		}
+		u.mu.Lock()
+		u.AssistantCalls = append(u.AssistantCalls, AssistantCall{Messages: b.Messages, Tools: names})
+		u.mu.Unlock()
+		last := b.Messages[len(b.Messages)-1]
+		text := strings.ToLower(fmt.Sprint(last["content"]))
+		switch {
+		case last["role"] == "tool":
+			writeJSON(w, 200, map[string]any{"text": "Here is what I found: " + fmt.Sprint(last["content"]), "toolCalls": []any{}, "model": "fake/lola"})
+		case strings.Contains(text, "set stock"):
+			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "propose_set_stock", "arguments": `{"sku":"jollof-1","quantity":40}`}}, "model": "fake/lola"})
+		case strings.Contains(text, "payouts"):
+			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "payouts", "arguments": `{}`}}, "model": "fake/lola"})
+		case strings.Contains(text, "orders"):
+			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "my_orders", "arguments": `{"limit":3}`}}, "model": "fake/lola"})
+		default:
+			writeJSON(w, 200, map[string]any{"text": "Hello! Ask me about your orders, listings or stock.", "toolCalls": []any{}, "model": "fake/lola"})
+		}
+	})
+
 	// ---- ai-gateway listing writer
 	mux.HandleFunc("POST /v1/ai/listing-writer", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
@@ -230,4 +261,10 @@ func (u *Upstreams) SetSellerPlan(code string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.seller.plan = code
+}
+
+// AssistantCall is one model call the seller assistant made: what it sent and the tools it offered.
+type AssistantCall struct {
+	Messages []map[string]any
+	Tools    []string
 }

@@ -28,6 +28,7 @@ type Store interface {
 	port.EphemeralStore
 	port.SelectionStore
 	port.RateLimiter
+	port.DailyCounter
 	Ping(ctx context.Context) error
 }
 
@@ -239,6 +240,30 @@ func (s *storeImpl) SetSelected(ctx context.Context, owner string, atins []strin
 		return fmt.Errorf("set selection: %w", err)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------- daily counters
+
+// Add adds n to key's count for today (UTC) and returns the new count; n = 0 reads it.
+func (s *storeImpl) Add(ctx context.Context, key string, n int) (int, error) {
+	k := fmt.Sprintf("%sdc:%s:%s", prefix, key, time.Now().UTC().Format("20060102"))
+	if n == 0 {
+		v, err := s.rdb.Get(ctx, k).Int()
+		if errors.Is(err, redis.Nil) {
+			return 0, nil
+		}
+		if err != nil {
+			return 0, fmt.Errorf("daily counter: %w", err)
+		}
+		return v, nil
+	}
+	pipe := s.rdb.TxPipeline()
+	incr := pipe.IncrBy(ctx, k, int64(n))
+	pipe.Expire(ctx, k, port.DailyCounterTTL)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, fmt.Errorf("daily counter: %w", err)
+	}
+	return int(incr.Val()), nil
 }
 
 // ---------------------------------------------------------------- rate limits

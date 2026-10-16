@@ -1,7 +1,11 @@
 package com.afrotransact.ai.adapter.in.web;
 
 import java.util.Base64;
+import java.util.List;
 
+import com.afrotransact.ai.adapter.in.web.AiDtos.AssistantReply;
+import com.afrotransact.ai.adapter.in.web.AiDtos.AssistantRequest;
+import com.afrotransact.ai.adapter.in.web.AiDtos.AssistantToolCall;
 import com.afrotransact.ai.adapter.in.web.AiDtos.EmbeddingRequest;
 import com.afrotransact.ai.adapter.in.web.AiDtos.EmbeddingResponse;
 import com.afrotransact.ai.adapter.in.web.AiDtos.ListingWriterRequest;
@@ -14,6 +18,7 @@ import com.afrotransact.ai.adapter.in.web.AiDtos.TriageRequest;
 import com.afrotransact.ai.application.ContentAssistService;
 import com.afrotransact.ai.application.EmbeddingService;
 import com.afrotransact.ai.application.ImageModerationService;
+import com.afrotransact.ai.application.SellerAssistantService;
 import com.afrotransact.ai.application.TriageService;
 import com.afrotransact.ai.domain.AiRuleViolation;
 import io.swagger.v3.oas.annotations.Operation;
@@ -33,14 +38,16 @@ class AiController {
     private final ContentAssistService content;
     private final TriageService triage;
     private final ImageModerationService images;
+    private final SellerAssistantService assistant;
     private final CallerResolver callers;
 
     AiController(EmbeddingService embeddings, ContentAssistService content, TriageService triage,
-                 ImageModerationService images, CallerResolver callers) {
+                 ImageModerationService images, SellerAssistantService assistant, CallerResolver callers) {
         this.embeddings = embeddings;
         this.content = content;
         this.triage = triage;
         this.images = images;
+        this.assistant = assistant;
         this.callers = callers;
     }
 
@@ -93,6 +100,27 @@ class AiController {
                 new ImageModerationService.Request(image, body.contentType(), body.purpose()));
         return new ModerateImageResponse(r.decision().name(),
                 r.labels().stream().map(l -> new ModerationLabelView(l.code(), l.description())).toList(), r.model());
+    }
+
+    @Operation(summary = "One model turn for Lola in Seller Center (ai:use, seller and provider members)", description = """
+            Called by the gateway-bff, which runs the conversation, the tools (it holds the seller's session and the \
+            platform APIs) and the plan tier limits. Send the conversation and the tools offered for this turn; the \
+            answer is text, or tool calls for the caller to run before calling again. Nothing is executed here. The \
+            usage is billed to the member's organisation as AI credits and counted against the `seller-assistant` \
+            budget (429 `ai.budget-exceeded` when it is spent).""")
+    @PostMapping("/v1/ai/seller-assistant/complete")
+    AssistantReply sellerAssistant(@Valid @RequestBody AssistantRequest body, HttpServletRequest request) {
+        SellerAssistantService.Reply r = assistant.complete(callers.current(request), new SellerAssistantService.Request(
+                body.messages().stream().map(m -> new SellerAssistantService.Message(m.role(), m.content(),
+                        m.toolCalls() == null ? List.of() : m.toolCalls().stream()
+                                .map(c -> new SellerAssistantService.ToolCall(c.id(), c.name(), c.arguments())).toList(),
+                        m.toolCallId(), m.toolName())).toList(),
+                body.tools() == null ? List.of() : body.tools().stream().map(t -> new SellerAssistantService.Tool(
+                        t.name(), t.description(), t.inputSchema())).toList(),
+                body.maxTokens()));
+        return new AssistantReply(r.text(), r.toolCalls().stream()
+                .map(c -> new AssistantToolCall(c.id(), c.name(), c.arguments())).toList(), r.promptTokens(),
+                r.completionTokens(), r.model());
     }
 
     @Operation(summary = "Trust-team triage summary with cited fields (ai:triage)",

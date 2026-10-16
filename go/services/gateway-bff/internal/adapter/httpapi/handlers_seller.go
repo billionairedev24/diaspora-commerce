@@ -51,6 +51,10 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("DELETE /v1/seller/ship-from-addresses/{addressId}", h.shipFromDelete)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}/afrotransact-pickup", h.shipFromPickup)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}/customer-pickup", h.shipFromCustomerPickup)
+	if h.s.SellerAssistant != nil {
+		route("GET /v1/seller/assistant", h.sellerAssistantStatus)
+		route("POST /v1/seller/assistant/chat", h.sellerAssistantChat)
+	}
 	if h.s.SellerOffers != nil {
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
@@ -857,4 +861,19 @@ func (h *handlersImpl) sellerDownload(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) sellerExportFile(w http.ResponseWriter, r *http.Request) {
 	h.serveExportFile(w, r, h.s.SellerExportFiles)
+}
+
+func (h *handlersImpl) sellerAssistantStatus(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerAssistant.Status(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerAssistantChat(w http.ResponseWriter, r *http.Request) {
+	var b domain.AssistantChatRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerAssistant.Chat(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
 }

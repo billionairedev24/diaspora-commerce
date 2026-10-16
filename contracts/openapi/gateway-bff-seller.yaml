@@ -40,6 +40,8 @@ servers:
   - url: https://api.afrotransact.com/bff
     description: prod
 tags:
+  - name: Assistant
+    description: Lola for sellers, with the level (and the daily messages) of the organisation's plan
   - name: Shell
     description: Session, organisation switcher, role-aware navigation, onboarding status and compliance banner
   - name: Dashboard
@@ -657,6 +659,45 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── Lola for sellers (plan tiers)
+  /v1/seller/assistant:
+    get:
+      tags: [Assistant]
+      operationId: sellerAssistantStatus
+      security: [{sessionCookie: []}]
+      summary: Lola's tier for the active organisation, today's messages and what she can do
+      description: |
+        The tier comes from the organisation's plan (Essentials, Growth, Pro) and sets the daily messages (UTC), the tools she
+        can use and whether she can prepare changes for the seller to confirm. `upgrade` is the next plan up (null on Pro).
+      responses:
+        '200': {description: Status, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/assistant/chat:
+    post:
+      tags: [Assistant]
+      operationId: sellerAssistantChat
+      security: [{sessionCookie: []}]
+      summary: Ask Lola one question (the browser keeps the conversation and sends the earlier turns)
+      description: |
+        Lola looks things up through the same Seller Center services as the pages, as the signed-in seller, then answers. She
+        never sees buyers' names or addresses. A change she prepares comes back as a proposal the seller confirms with a tap;
+        the app then calls the normal Seller Center API (stock adjustment, order status). Earlier turns are plain user and
+        assistant text only (anything else is dropped). The usage is billed to the organisation as AI credits.
+        429 `ASSISTANT_LIMIT` when today's messages on the plan are used (the detail names the plan that gives more);
+        429 `RATE_LIMITED` when ai-gateway's budget is spent; 503 when ai-gateway is not reachable.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AssistantChatRequest'}}}
+      responses:
+        '200': {description: Answer, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantReply'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── offers (fulfilment choice, S255)
   /v1/seller/offers:
@@ -2953,6 +2994,77 @@ components:
         enabled: {type: boolean}
         hours: {type: array, maxItems: 14, items: {$ref: '#/components/schemas/PickupWindow'}, description: At least one window to enable}
         version: {type: [integer, 'null'], format: int64, description: Version being edited}
+    AssistantStatus:
+      type: object
+      required: [tier, limits, used, remaining, upgrade]
+      properties:
+        tier: {type: string, enum: [ESSENTIALS, GROWTH, PRO]}
+        limits:
+          type: object
+          required: [label, dailyMessages, maxToolRounds, history, tools, canPropose]
+          properties:
+            label: {type: string, example: Lola Growth}
+            dailyMessages: {type: integer, description: Messages a day (UTC); Lola starts again at midnight UTC}
+            maxToolRounds: {type: integer}
+            history: {type: integer, description: Earlier messages she remembers in a conversation}
+            tools: {type: array, items: {type: string}, description: 'my_orders, order_detail, my_listings, stock_levels, fees_and_plan, payouts, sales_summary, propose_set_stock, propose_next_step'}
+            canPropose: {type: boolean, description: She can prepare a change for the seller to confirm}
+        used: {type: integer}
+        remaining: {type: integer}
+        upgrade:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required: [planCode, label, gains]
+              properties:
+                planCode: {type: string}
+                label: {type: string}
+                gains: {type: string}
+    AssistantChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message: {type: string, minLength: 1, maxLength: 1500}
+        history:
+          type: array
+          description: The earlier turns the browser kept (the last few are used, by tier)
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: {type: string, enum: [user, assistant]}
+              content: {type: string}
+        language: {type: string, description: Reply language (BCP 47)}
+    AssistantReply:
+      type: object
+      required: [answer, steps, proposals, status]
+      properties:
+        answer: {type: string}
+        steps:
+          type: array
+          description: What she looked up, for the seller to see ("Checking your orders")
+          items:
+            type: object
+            required: [tool, label]
+            properties:
+              tool: {type: string}
+              label: {type: string}
+        proposals:
+          type: array
+          description: Changes she prepared. Nothing happens until the seller taps one.
+          items: {$ref: '#/components/schemas/AssistantProposal'}
+        status: {$ref: '#/components/schemas/AssistantStatus'}
+    AssistantProposal:
+      type: object
+      required: [kind, label]
+      properties:
+        kind: {type: string, enum: [SET_STOCK, NEXT_STEP]}
+        label: {type: string, example: Set JOLLOF-1 to 40}
+        sku: {type: string, description: SET_STOCK}
+        quantity: {type: integer, description: SET_STOCK}
+        orderNumber: {type: string, description: NEXT_STEP}
+        shipmentId: {type: string, description: NEXT_STEP}
+        step: {type: string, enum: [CONFIRMED, PACKED, READY], description: NEXT_STEP}
     SellerOffer:
       type: object
       required: [offerId, atin, productId, sellerSku, condition, priceMinor, currency, fulfilment, quantity, availableQty, shipFromLocationId, shipsFrom, status, version]

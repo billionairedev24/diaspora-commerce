@@ -180,6 +180,10 @@ func run() error {
 		SellerCoupons:   app.NewSellerCouponsService(sellerDeps),
 		SellerFba:       app.NewSellerFbaService(sellerDeps),
 	}
+	// Lola in Seller Center: looks things up through the seller services above, as the signed-in seller.
+	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", up.AIGateway)),
+		Counter: store, Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney,
+		Dashboard: services.SellerDashboard})
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
 		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers, proofLinks: proofLinks}, services, log)

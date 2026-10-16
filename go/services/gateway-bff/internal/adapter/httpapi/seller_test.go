@@ -412,6 +412,11 @@ func TestSellerContractConformance(t *testing.T) {
 		t.Fatalf("not geocoded = %v", p)
 	}
 	pickup("nope", map[string]any{"enabled": false, "hours": []any{}}, 404)
+	// Lola for sellers: status and one question (answered from the scripted model).
+	mustStatus(t, b.do("GET", "/v1/seller/assistant", nil), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "hello"}), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": ""}), 422)
+
 	// Offers: the fulfilment choice per listing, with the pickup location for AfroTransact Delivery.
 	mustStatus(t, b.do("GET", "/v1/seller/offers", nil), 422)
 	if items := b.do("GET", "/v1/seller/offers?productId=p-1", nil).json(t)["items"].([]any); len(items) != 1 ||

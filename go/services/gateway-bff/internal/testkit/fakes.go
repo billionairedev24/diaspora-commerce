@@ -117,6 +117,8 @@ type Upstreams struct {
 	Calls map[string]int
 	// actingAs is the X-Acting-As header of the last request with a bearer token per "METHOD path".
 	actingAs map[string]string
+	// AssistantCalls records the seller assistant's model calls.
+	AssistantCalls []AssistantCall
 	// FailInventory makes inventory answer 503.
 	FailInventory bool
 	opts          Options

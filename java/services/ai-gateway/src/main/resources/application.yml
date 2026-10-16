@@ -186,6 +186,8 @@ at:
       tagline: {user-daily-tokens: 50000, user-daily-cost-usd: 0.10, feature-daily-cost-usd: 20}
       triage: {user-daily-cost-usd: 5.00, feature-daily-cost-usd: 100}
       handoff-summary: {user-daily-tokens: 50000, feature-daily-cost-usd: 20}
+      # Lola in Seller Center: the plan tier's daily message limit is enforced by the gateway-bff; this is the cost backstop.
+      seller-assistant: {user-daily-tokens: 400000, user-daily-cost-usd: 1.00, feature-daily-cost-usd: 300, degrade-on-exceed: true, hard-limit-factor: 1.5}
       # Per caller = media-service; degrade to the cheapest vision model rather than holding every upload.
       image-moderation: {feature-daily-cost-usd: 50, degrade-on-exceed: true, hard-limit-factor: 2}
     # Platform APIs Lola calls with the shopper's relayed token (see infra/local/PORTS.md).
