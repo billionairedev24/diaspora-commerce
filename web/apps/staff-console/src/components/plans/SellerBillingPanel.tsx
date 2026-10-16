@@ -2,9 +2,9 @@
 
 import {
   type StaffBillingGrant,
+  type StaffBillingInvoice,
   type StaffChargeGate,
   type StaffChargeGateInput,
-  type StaffBillingInvoice,
   type StaffEarningsCollection,
   type StaffPlanFeeCollection,
   type StaffPlanFeeMode,
@@ -27,8 +27,8 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { dateTime, humanize, idempotencyKey, money, shortDate } from '@/lib/format';
 
-import { grantColumns } from './GrantsPanel';
 import { allowsOf } from './CataloguePanel';
+import { grantColumns } from './GrantsPanel';
 import { centsOf, errorsOf, intOf, plansApi, ReasonFields, STATUS_TONE, type T, usePlanRights } from './kit';
 
 type Action = { kind: 'credit' } | { kind: 'freeDays' } | { kind: 'freeMonths' } | { kind: 'trial' } | { kind: 'chargeGate' } | { kind: 'clearGate' } | { kind: 'waive'; invoice: StaffBillingInvoice };
