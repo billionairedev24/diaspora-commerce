@@ -105,5 +105,6 @@
   "cu.crash.title": "Something went wrong",
   "cu.crash.body": "The app hit an unexpected problem. Your cart and orders are safe.",
   "cu.crash.retry": "Try again",
-  "cu.lola.send": "Send"
+  "cu.lola.send": "Send",
+  "cu.index.popularNow": "Popular right now"
 }

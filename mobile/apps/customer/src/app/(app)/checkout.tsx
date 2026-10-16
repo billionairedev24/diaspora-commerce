@@ -20,6 +20,7 @@ import { usePayments } from '@/payments/usePayments';
 import { c, sp, t } from '@/theme';
 import { PaymentMark } from '@/ui/PaymentMarks';
 import { AppText, Banner, Button, Card, Chip, Empty, KeyValue, Loading, SectionLabel } from '@/ui/primitives';
+import { ErrorView } from '@/ui/QueryStates';
 import { Screen, SubHeader } from '@/ui/Screen';
 import { useToast } from '@/ui/Toast';
 
@@ -68,11 +69,15 @@ export default function Checkout() {
   const total = useMemo(() => (s ? totalFor(s, choices) : 0), [s, choices]);
   const address = s?.addresses.find((a) => a.id === addressId);
 
-  if (summary.isLoading) return <Screen header={<SubHeader title="Checkout" />}><Loading /></Screen>;
+  if (summary.isPending) return <Screen header={<SubHeader title="Checkout" />}><Loading /></Screen>;
   if (!s) {
     return (
       <Screen header={<SubHeader title="Checkout" />}>
-        <Empty icon={WarningCircle} title={isApiError(summary.error) && summary.error.status === 409 ? 'Your cart is empty' : 'Checkout isn’t available right now'} body={isApiError(summary.error) ? summary.error.message : undefined} action={{ label: 'Keep shopping', onPress: () => router.navigate('/') }} />
+        {isApiError(summary.error) && summary.error.status < 500 ? (
+          <Empty icon={WarningCircle} title={summary.error.status === 409 ? 'Your cart is empty' : 'Checkout isn’t available right now'} body={summary.error.message} action={{ label: 'Keep shopping', onPress: () => router.navigate('/') }} />
+        ) : (
+          <ErrorView error={summary.error} onRetry={() => void summary.refetch()} retrying={summary.isFetching} />
+        )}
       </Screen>
     );
   }

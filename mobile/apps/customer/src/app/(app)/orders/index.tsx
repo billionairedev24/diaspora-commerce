@@ -8,12 +8,14 @@ import { useOrders, useReturns } from '@/api/queries';
 import { stepIndex } from '@/domain/tracking';
 import { c, sp } from '@/theme';
 import { AppText, Button, Card, Empty, Loading } from '@/ui/primitives';
+import { ErrorView, refreshControl, useRefresh } from '@/ui/QueryStates';
 import { Screen, SubHeader } from '@/ui/Screen';
 
 export default function Orders() {
   const router = useRouter();
   const orders = useOrders();
   const returns = useReturns();
+  const refresh = useRefresh(orders, returns);
   return (
     <Screen header={<SubHeader title="Your orders" />} body="fixed">
       <FlatList
@@ -21,7 +23,8 @@ export default function Orders() {
         keyExtractor={(o) => o.orderNumber}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={orders.isLoading ? <Loading /> : <Empty icon={Receipt} title="No orders yet" action={{ label: 'Start shopping', onPress: () => router.navigate('/') }} />}
+        refreshControl={refreshControl(refresh)}
+        ListEmptyComponent={orders.isPending ? <Loading /> : orders.isError ? <ErrorView error={orders.error} onRetry={() => void orders.refetch()} retrying={orders.isFetching} /> : <Empty icon={Receipt} title="No orders yet" action={{ label: 'Start shopping', onPress: () => router.navigate('/') }} />}
         renderItem={({ item: o }) => {
           const delivered = o.shipments.every((s) => stepIndex(s.status) >= 4);
           const refunded = o.status === 'refunded';

@@ -112,5 +112,6 @@
   "cu.crash.title": "Algo salió mal",
   "cu.crash.body": "La app tuvo un problema inesperado. Tu carrito y tus pedidos están a salvo.",
   "cu.crash.retry": "Reintentar",
-  "cu.lola.send": "Enviar"
+  "cu.lola.send": "Enviar",
+  "cu.index.popularNow": "Popular right now"
 }

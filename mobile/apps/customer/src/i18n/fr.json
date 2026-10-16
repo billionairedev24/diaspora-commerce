@@ -112,5 +112,6 @@
   "cu.crash.title": "Un problème est survenu",
   "cu.crash.body": "L’application a rencontré un problème inattendu. Votre panier et vos commandes sont en sécurité.",
   "cu.crash.retry": "Réessayer",
-  "cu.lola.send": "Envoyer"
+  "cu.lola.send": "Envoyer",
+  "cu.index.popularNow": "Popular right now"
 }

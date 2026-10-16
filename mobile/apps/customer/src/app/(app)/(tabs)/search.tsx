@@ -9,6 +9,7 @@ import { ProductRow } from '@/features/shop/components';
 import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Chip, Loading } from '@/ui/primitives';
+import { ErrorView, refreshControl, useRefresh } from '@/ui/QueryStates';
 import { Screen } from '@/ui/Screen';
 
 const RECENT = ['shito', 'gari', 'jollof', 'black soap'];
@@ -30,6 +31,7 @@ export default function Search() {
   useEffect(() => { if (params.q !== undefined) setQ(params.q); }, [params.q]);
   const dq = useDebounced(q.trim());
   const results = useSearch(dq);
+  const refresh = useRefresh(results);
   const hits = results.data?.hits ?? [];
 
   const header = (
@@ -51,6 +53,7 @@ export default function Search() {
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
+        refreshControl={refreshControl(refresh)}
         ListHeaderComponent={
           dq ? (
             <AppText variant="small" color={c.textMuted}>{results.isFetching ? tr('cu.search.searching') : tr('cu.search.resultsFor', { count: results.data?.total ?? 0, q: dq })}</AppText>
@@ -69,7 +72,7 @@ export default function Search() {
             </View>
           )
         }
-        ListEmptyComponent={results.isLoading ? <Loading /> : dq ? <View style={{ paddingTop: sp['6'], gap: sp['2'] }}><AppText>{tr('cu.search.noMatchesYet')}</AppText><Chip label={tr('cu.search.askLolaInstead')} onPress={() => router.push('/lola')} /></View> : null}
+        ListEmptyComponent={results.isPending ? <Loading /> : results.isError ? <ErrorView error={results.error} onRetry={() => void results.refetch()} retrying={results.isFetching} /> : dq ? <View style={{ paddingTop: sp['6'], gap: sp['2'] }}><AppText>{tr('cu.search.noMatchesYet')}</AppText><Chip label={tr('cu.search.askLolaInstead')} onPress={() => router.push('/lola')} /></View> : null}
         renderItem={({ item }) => <ProductRow p={item} onPress={() => router.push(`/product/${item.atin}`)} />}
       />
     </Screen>

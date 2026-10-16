@@ -9,6 +9,7 @@ import { env } from '@/config/env';
 
 import { createAuthFetch, createJsonRequester, type TokenSource } from './http';
 import { mockFetch } from './mock/router';
+import { withDeadline } from './network';
 import {
   type AvailableDay,
   type AvailableSlot,
@@ -33,7 +34,7 @@ import {
   type StartReturnRequest
 } from './types';
 
-export function createCustomerApi(tokens: TokenSource, network: FetchLike = (r) => fetch(r)) {
+export function createCustomerApi(tokens: TokenSource, network: FetchLike = withDeadline((r) => fetch(r))) {
   const transport: FetchLike = env.mocks ? mockFetch : network;
   const authed = createAuthFetch(tokens, transport);
   const bff = createApiClient({ baseUrl: env.bffUrl, fetch: authed, headers: { 'Accept-Language': 'en-US' } });

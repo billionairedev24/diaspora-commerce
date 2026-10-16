@@ -112,5 +112,6 @@
   "cu.crash.title": "حدث خطأ ما",
   "cu.crash.body": "واجه التطبيق مشكلة غير متوقعة. سلتك وطلباتك في أمان.",
   "cu.crash.retry": "حاول مرة أخرى",
-  "cu.lola.send": "إرسال"
+  "cu.lola.send": "إرسال",
+  "cu.index.popularNow": "Popular right now"
 }

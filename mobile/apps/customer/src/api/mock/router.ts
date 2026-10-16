@@ -280,6 +280,41 @@ const ROUTES: Array<[string, string, Handler]> = [
   }],
   ['DELETE', '/v1/cart/items/:lineId', ({ params }) => { const db = mockDb(); db.lines = db.lines.filter((l) => l.lineId !== params.lineId); return json(buildCart()); }],
   ['GET', '/v1/account/addresses', () => json({ items: mockDb().addresses, nextCursor: null })],
+  ['POST', '/v1/account/addresses', ({ body }) => {
+    const db = mockDb();
+    const b = (body ?? {}) as Partial<(typeof db.addresses)[number]> & { acceptUnverified?: boolean };
+    // A street number of 0 stands in for an address the geo service can't verify (try it, then "Keep mine").
+    if (!b.acceptUnverified && /^0\b/.test(b.line1 ?? '')) {
+      return new Response(JSON.stringify({ type: bffProblemType('VALIDATION'), title: 'Check the address', status: 422, code: 'VALIDATION', errors: { line1: 'We couldn’t find that street number.' } }), { status: 422, headers: { 'Content-Type': 'application/problem+json' } });
+    }
+    const first = db.addresses.length === 0;
+    if (b.isDefault || first) db.addresses.forEach((a) => { a.isDefault = false; });
+    const a = { id: nextId('a'), name: b.name ?? '', phone: b.phone ?? '', line1: b.line1 ?? '', line2: b.line2 ?? '', city: b.city ?? '', state: b.state ?? '', zip: b.zip ?? '', isDefault: !!b.isDefault || first, verified: !b.acceptUnverified };
+    db.addresses.push(a);
+    return json(a, 201);
+  }],
+  ['PATCH', '/v1/account/addresses/:id', ({ params, body }) => {
+    const db = mockDb();
+    const a = db.addresses.find((x) => x.id === params.id);
+    if (!a) return problem(404, 'Address not found', 'NOT_FOUND');
+    const b = (body ?? {}) as Partial<typeof a>;
+    if (b.isDefault) db.addresses.forEach((x) => { x.isDefault = false; });
+    Object.assign(a, { name: b.name ?? a.name, phone: b.phone ?? a.phone, line1: b.line1 ?? a.line1, line2: b.line2 ?? '', city: b.city ?? a.city, state: b.state ?? a.state, zip: b.zip ?? a.zip, isDefault: b.isDefault ?? a.isDefault });
+    return json(a);
+  }],
+  ['POST', '/v1/account/addresses/:id/default', ({ params }) => {
+    const db = mockDb();
+    const a = db.addresses.find((x) => x.id === params.id);
+    if (!a) return problem(404, 'Address not found', 'NOT_FOUND');
+    db.addresses.forEach((x) => { x.isDefault = x.id === a.id; });
+    return json(a);
+  }],
+  ['DELETE', '/v1/account/addresses/:id', ({ params }) => {
+    const db = mockDb();
+    db.addresses = db.addresses.filter((x) => x.id !== params.id);
+    if (db.addresses.length && !db.addresses.some((x) => x.isDefault)) db.addresses[0]!.isDefault = true;
+    return noContent();
+  }],
   ['GET', '/v1/account/payment-methods', () => json({ items: mockDb().paymentMethods, nextCursor: null })],
   ['POST', '/v1/account/payment-methods/setup-intents', () => json({ clientSecret: `seti_mock_${nextId('')}_secret_mock`, publishableKey: 'pk_test_mock' }, 201)],
   ['DELETE', '/v1/account/payment-methods/:id', ({ params }) => { const db = mockDb(); db.paymentMethods = db.paymentMethods.filter((m) => m.id !== params.id); return noContent(); }],

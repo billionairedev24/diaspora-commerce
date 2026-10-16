@@ -12,6 +12,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { c, sp } from '@/theme';
 import { SavedCardTile } from '@/ui/PaymentMarks';
 import { AppText, Button, IconButton, Loading } from '@/ui/primitives';
+import { ErrorView, useRefresh } from '@/ui/QueryStates';
 import { Screen, SubHeader } from '@/ui/Screen';
 import { useToast } from '@/ui/Toast';
 
@@ -22,6 +23,7 @@ export default function Payments() {
   const toast = useToast();
   const { confirmWithDevice } = useAuth();
   const pms = usePaymentMethods();
+  const refresh = useRefresh(pms);
   const remove = async (id: string, label: string) => {
     if ((pms.data?.length ?? 0) <= 1) return toast('Keep at least one payment method');
     if (!(await confirmWithDevice(`Remove ${label}`))) return;
@@ -34,8 +36,9 @@ export default function Payments() {
     }
   };
   return (
-    <Screen header={<SubHeader title="Payment methods" />} footer={<Button icon={Plus} label="Add payment method" onPress={() => router.push('/payments/add')} />}>
-      {pms.isLoading ? <Loading /> : null}
+    <Screen header={<SubHeader title="Payment methods" />} footer={<Button icon={Plus} label="Add payment method" onPress={() => router.push('/payments/add')} />} refresh={refresh}>
+      {pms.isPending ? <Loading /> : null}
+      {pms.isError && !pms.data ? <ErrorView error={pms.error} onRetry={() => void pms.refetch()} retrying={pms.isFetching} /> : null}
       {(pms.data ?? []).map((p) => (
         <View key={p.id} style={styles.item}>
           <SavedCardTile method={p} />
