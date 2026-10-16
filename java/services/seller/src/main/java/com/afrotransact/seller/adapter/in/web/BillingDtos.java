@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.seller.application.BillingOverview;
+import com.afrotransact.seller.application.EntitlementsService;
 import com.afrotransact.seller.application.PlanChangePreview;
 import com.afrotransact.seller.application.PlanOffer;
 import com.afrotransact.seller.domain.ChargeGate;
@@ -16,6 +17,7 @@ import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.InvoicePayment;
 import com.afrotransact.seller.domain.PaymentMethod;
 import com.afrotransact.seller.domain.PaymentSource;
+import com.afrotransact.seller.domain.PlanEntitlements;
 import com.afrotransact.seller.domain.PlanPricing;
 import com.afrotransact.seller.domain.PlanQuote;
 import com.afrotransact.seller.domain.Subscription;
@@ -41,13 +43,33 @@ final class BillingDtos {
         }
     }
 
+    @Schema(name = "PlanEntitlements", description = "What a plan lets an organisation do; staff set them per plan. "
+            + "There is no limit on shops or users")
+    record EntitlementsView(@Schema(description = "The most live listings; null = unlimited") Long listings,
+                            boolean listingsUnlimited, boolean aiListingWriter,
+                            @Schema(allowableValues = {"ESSENTIALS", "GROWTH", "PRO"},
+                                    description = "What Lola, the seller assistant, can do") String lolaTier) {
+
+        static EntitlementsView of(PlanEntitlements e) {
+            return new EntitlementsView(e.listings(), e.listings() == null, e.aiListingWriter(), e.lolaTier().name());
+        }
+    }
+
+    @Schema(name = "OrganisationEntitlements", description = "The entitlements of an organisation's plan")
+    record OrgEntitlementsResponse(String orgId, String planCode, String planName, EntitlementsView entitlements) {
+
+        static OrgEntitlementsResponse of(EntitlementsService.Entitlements e) {
+            return new OrgEntitlementsResponse(e.orgId(), e.planCode(), e.planName(), EntitlementsView.of(e.plan()));
+        }
+    }
+
     @Schema(name = "Plan")
     record PlanResponse(String code, String kind, String name, String tagline, long monthlyCents,
                         @Schema(description = "The trial a sign-up gets today (plan default or a running campaign)")
                         int trialDays, List<String> features, List<PriceView> prices,
                         @Schema(description = "Current version (prices)") int version,
                         @Schema(allowableValues = {"PUBLIC", "HIDDEN", "INVITE_ONLY"}) String visibility,
-                        Map<String, String> limits) {
+                        Map<String, String> limits, EntitlementsView entitlements) {
 
         static PlanResponse of(PlanOffer o) {
             var p = o.plan();
@@ -56,7 +78,8 @@ final class BillingDtos {
                 prices.add(PriceView.of(o.quotes().get(i), o.firstCharges().get(i), p.isFree()));
             }
             return new PlanResponse(p.code(), p.kind().name(), p.name(), p.tagline(), p.monthlyCents(), o.trialDays(),
-                    p.features(), prices, p.version(), p.visibility().name(), p.limits());
+                    p.features(), prices, p.version(), p.visibility().name(), p.limits(),
+                    EntitlementsView.of(PlanEntitlements.of(p.limits())));
         }
     }
 
@@ -91,7 +114,9 @@ final class BillingDtos {
                                    + "(S298); details: GET /v1/orgs/{orgId}/billing/plan-fee-collection")
                            String planFeeCollection,
                            @Schema(description = "A condition staff put on the plan charges, with progress; null "
-                                   + "when charges apply as normal") ChargeGateView chargeGate) {
+                                   + "when charges apply as normal") ChargeGateView chargeGate,
+                           @Schema(description = "What the plan allows (listing cap, AI writer, Lola tier)")
+                           EntitlementsView entitlements) {
 
         static BillingResponse of(BillingOverview b) {
             Subscription s = b.subscription();
@@ -105,7 +130,8 @@ final class BillingDtos {
                     b.paymentMethods().stream().map(PaymentMethodResponse::of).toList(), s.planVersion(),
                     b.terms().creditBalanceCents(), b.terms().trialSource() == null ? null
                             : b.terms().trialSource().name(), b.terms().trialDaysOverride(),
-                    b.terms().planFeeCollection().name(), ChargeGateView.of(b));
+                    b.terms().planFeeCollection().name(), ChargeGateView.of(b),
+                    EntitlementsView.of(PlanEntitlements.of(b.plan().limits())));
         }
     }
 

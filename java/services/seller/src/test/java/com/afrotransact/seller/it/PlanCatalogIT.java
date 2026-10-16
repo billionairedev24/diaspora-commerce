@@ -2,10 +2,12 @@ package com.afrotransact.seller.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.afrotransact.seller.application.EntitlementsService;
 import com.afrotransact.seller.application.SellerEvents;
 import com.afrotransact.seller.application.SellerPermissions;
 import com.afrotransact.seller.domain.Cadence;
@@ -129,6 +131,58 @@ class PlanCatalogIT extends SellerIntegrationTest {
         assertThat(renamed.body().path("currentVersion").asInt()).isEqualTo(1);
         assertThat(put(PLANS + "/" + code, Map.of("name", "Stale", "expectedVersion", rowVersion)).status())
                 .isEqualTo(409);
+    }
+
+    @Test
+    void entitlementsAreConfiguredPerPlanAndReadByMembersAndServices() {
+        String code = "seller_e" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        TestActors.as(TestActors.staff(unique("plans"), SellerPermissions.PLANS_MANAGE));
+        Map<String, Object> body = new HashMap<>(plan(code, "PUBLIC"));
+        body.put("limits", Map.of("listings", "lots"));
+        Response bad = post(PLANS, body);
+        assertThat(bad.status()).isEqualTo(422);
+        assertThat(bad.body().path("fieldErrors").has("limits.listings")).isTrue();
+        body.put("limits", Map.of("listings", "2", "aiListingWriter", "true", "lolaTier", "GROWTH",
+                "support", "Priority email"));
+        Response created = post(PLANS, body);
+        assertThat(created.status()).isEqualTo(201);
+        assertThat(created.body().at("/entitlements/listings").asLong()).isEqualTo(2);
+        assertThat(created.body().at("/entitlements/aiListingWriter").asBoolean()).isTrue();
+        assertThat(created.text("/entitlements/lolaTier")).isEqualTo("GROWTH");
+        post(PLANS + "/" + code + "/publish", Map.of());
+        assertThat(get("/v1/plans?kind=SELLER").body().valueStream().filter(p -> code.equals(p.path("code")
+                .asString())).findFirst().orElseThrow().at("/entitlements/listings").asLong()).as("public").isEqualTo(2);
+
+        // Renaming the plan without sending limits keeps the entitlements; sending them replaces them.
+        long rowVersion = get(PLANS + "/" + code).body().path("rowVersion").asLong();
+        Response renamed = put(PLANS + "/" + code, Map.of("name", "Renamed", "expectedVersion", rowVersion));
+        assertThat(renamed.body().at("/entitlements/listings").asLong()).isEqualTo(2);
+        Response unlimited = put(PLANS + "/" + code, Map.of("name", "Renamed", "limits", Map.of("listings",
+                "unlimited", "lolaTier", "PRO"), "expectedVersion", renamed.body().path("rowVersion").asLong()));
+        assertThat(unlimited.body().at("/entitlements/listingsUnlimited").asBoolean()).isTrue();
+        assertThat(unlimited.text("/entitlements/lolaTier")).isEqualTo("PRO");
+        put(PLANS + "/" + code, Map.of("name", "Renamed", "limits", Map.of("listings", "2", "aiListingWriter",
+                "true", "lolaTier", "GROWTH"), "expectedVersion", unlimited.body().path("rowVersion").asLong()));
+
+        String owner = unique("ent");
+        String org = approvedSeller(owner, code, Cadence.MONTHLY);
+        TestActors.as(TestActors.applicant(owner));
+        Response mine = get("/v1/orgs/" + org + "/entitlements");
+        assertThat(mine.status()).isEqualTo(200);
+        assertThat(mine.text("/planCode")).isEqualTo(code);
+        assertThat(mine.body().at("/entitlements/listings").asLong()).isEqualTo(2);
+        assertThat(get("/v1/orgs/" + org + "/billing").body().at("/entitlements/lolaTier").asString())
+                .isEqualTo("GROWTH");
+        TestActors.as(TestActors.member(unique("mkt"), org, "seller.marketing"));
+        assertThat(get("/v1/orgs/" + org + "/entitlements").status()).as("every member sees the plan").isEqualTo(200);
+        TestActors.as(TestActors.applicant(unique("stranger")));
+        assertThat(get("/v1/orgs/" + org + "/entitlements").status()).isEqualTo(403);
+        TestActors.as(TestActors.service("offers-service", EntitlementsService.SERVICE_READ));
+        assertThat(get("/v1/orgs/" + org + "/entitlements").body().at("/entitlements/listings").asLong())
+                .isEqualTo(2);
+        TestActors.as(TestActors.service("orders-service", "orders:manage"));
+        assertThat(get("/v1/orgs/" + org + "/entitlements").status()).as("another service without the scope")
+                .isEqualTo(403);
     }
 
     private static List<String> codes(Response plans) {

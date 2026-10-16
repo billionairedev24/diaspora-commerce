@@ -8,7 +8,9 @@ import java.util.regex.Pattern;
 public final class PlanCatalogRules {
 
     private static final Pattern CODE = Pattern.compile("[a-z][a-z0-9_]{2,39}");
+    private static final Pattern LIMIT_KEY = Pattern.compile("[A-Za-z][A-Za-z0-9_]{0,39}");
     private static final int MAX_FEATURES = 12;
+    private static final int MAX_LIMITS = 20;
 
     private PlanCatalogRules() {
     }
@@ -35,6 +37,14 @@ public final class PlanCatalogRules {
         }
         if (in.sortOrder() != null && (in.sortOrder() < 0 || in.sortOrder() > 10_000)) {
             e.put("sortOrder", "0 to 10000");
+        }
+        if (in.limits().size() > MAX_LIMITS || in.limits().entrySet().stream().anyMatch(l ->
+                l.getKey() == null || !LIMIT_KEY.matcher(l.getKey()).matches() || l.getValue() == null
+                || l.getValue().length() > 120)) {
+            e.put("limits", "Up to " + MAX_LIMITS + " settings with letter-and-digit names and values of up to 120 "
+                    + "characters");
+        } else {
+            e.putAll(PlanEntitlements.validate(in.limits()));
         }
         throwIfAny(e);
     }

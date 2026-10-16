@@ -8,12 +8,14 @@ import com.afrotransact.seller.adapter.in.web.BillingDtos.BillingResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.ChangePlanRequest;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.ChangePlanResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.InvoiceResponse;
+import com.afrotransact.seller.adapter.in.web.BillingDtos.OrgEntitlementsResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PaymentMethodResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanChangePreviewResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.SetupIntentResponse;
 import com.afrotransact.seller.application.AddPaymentMethodCommand;
 import com.afrotransact.seller.application.BillingService;
+import com.afrotransact.seller.application.EntitlementsService;
 import com.afrotransact.seller.application.PlanChangeResult;
 import com.afrotransact.seller.application.PlanService;
 import com.afrotransact.seller.application.SetupIntentView;
@@ -40,10 +42,21 @@ class BillingController {
 
     private final PlanService plans;
     private final BillingService billing;
+    private final EntitlementsService entitlements;
 
-    BillingController(PlanService plans, BillingService billing) {
+    BillingController(PlanService plans, BillingService billing, EntitlementsService entitlements) {
         this.plans = plans;
         this.billing = billing;
+        this.entitlements = entitlements;
+    }
+
+    @Operation(summary = "What the organisation's plan allows: live-listing cap, AI listing writer, Lola tier",
+            description = "Readable by every member of the organisation, by staff with a billing permission and by "
+                    + "services with sellers:entitlements.read (offers-service checks the listing cap with it). An "
+                    + "organisation without a plan (AfroTransact Retail) is not capped.")
+    @GetMapping("/v1/orgs/{orgId}/entitlements")
+    OrgEntitlementsResponse orgEntitlements(@PathVariable String orgId) {
+        return OrgEntitlementsResponse.of(entitlements.forOrg(orgId));
     }
 
     @Operation(summary = "Plans with monthly, quarterly (5% off) and annual (2 months free) prices (public)")

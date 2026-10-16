@@ -90,7 +90,10 @@ class PlanAdminServiceImpl implements PlanAdminService {
         PlanCatalogRules.validate(named, false);
         tx.executeWithoutResult(s -> {
             Plan p = plans.lock(code).orElseThrow(() -> notFound(code));
-            plans.update(named, p.status(), expectedVersion, actor.subject(), Instant.now(clock));
+            // Leaving the limits out keeps the plan's entitlements (an edit of the name must not wipe them).
+            PlanInput effective = named.limits().isEmpty() ? new PlanInput(code, null, named.name(),
+                    named.tagline(), named.features(), p.limits(), named.visibility(), named.sortOrder()) : named;
+            plans.update(effective, p.status(), expectedVersion, actor.subject(), Instant.now(clock));
         });
         return plan(code);
     }

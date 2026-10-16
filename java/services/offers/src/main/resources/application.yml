@@ -109,13 +109,13 @@ at:
       base-url: ${SELLER_URL:http://localhost:8106}
       timeout: ${SELLER_TIMEOUT:3s}
     # offers-service's own client-credentials token (GTIN lookups at catalog need catalog:read; pickup locations at
-    # seller need sellers:ship-from.read).
+    # seller need sellers:ship-from.read; the listing cap of a plan needs sellers:entitlements.read).
     oauth:
       issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
       token-path: /oauth2/token
       client-id: ${OFFERS_CLIENT_ID:offers-service}
       client-secret: ${OFFERS_CLIENT_SECRET:local-offers-service-secret}
-      scopes: catalog:read sellers:ship-from.read
+      scopes: catalog:read sellers:ship-from.read sellers:entitlements.read
     consumers:
       catalog-topic: at.product.events
       inventory-topic: at.inventory.events
