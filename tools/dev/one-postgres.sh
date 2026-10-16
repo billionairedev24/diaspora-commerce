@@ -63,8 +63,20 @@ for d in $DBS; do
   [[ "$d" == postgres || "$d" == template0 || "$d" == template1 ]] && continue
   if [[ "$(psql_b -d postgres -c "select 1 from pg_database where datname = '$d'")" == 1 ]]; then CLASH="$CLASH $d"; fi
 done
-[[ -z "$CLASH" ]] || die "these databases already exist on the Homebrew server, restoring would mix data:$CLASH. Drop or rename them (or tell Claude), then re-run."
-echo "no clashes"
+if [[ -n "$CLASH" ]]; then
+  echo "already on the Homebrew server:$CLASH"
+  for d in $CLASH; do
+    printf '  %-24s %s\n' "$d" "$(psql_b -d postgres -c "select pg_size_pretty(pg_database_size('$d'))")"
+  done
+  [[ "${RENAME_CLASHES:-0}" == 1 ]] || die "restoring would mix data. To keep both copies, re-run with RENAME_CLASHES=1: the Homebrew copies are renamed to <name>_brew_$(date +%Y%m%d) (nothing is dropped) and the backup's copies take the original names."
+  for d in $CLASH; do
+    n="${d}_brew_$(date +%Y%m%d)"
+    psql_b -d postgres -c "alter database \"$d\" rename to \"$n\"" >/dev/null || die "could not rename $d (is something connected to it? stop that app and re-run)."
+    echo "renamed $d -> $n"
+  done
+else
+  echo "no clashes"
+fi
 
 say "6/7 Restoring (log: $LOG)"
 psql -X -w -p 5432 -U "$(whoami)" -d postgres -q -f "$BACKUP" >"$LOG" 2>&1
