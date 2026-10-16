@@ -6,6 +6,7 @@ import { CircleNotch, Flask, WarningCircle } from '@phosphor-icons/react/ssr';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { type ConnectComponent, hasStripeKey, initConnect } from '@/lib/stripe';
+import { Spinner } from '../ui/States';
 
 /* Stripe's embedded Connect components, mounted straight in the page (no Stripe-hosted page, no Stripe login, no
    wrapping card). Seller accounts are Stripe-collected: these components collect identity, tax ID and the payout bank
@@ -23,12 +24,7 @@ export const isLocalSession = (s: OnboardingStripeSession): boolean => s.localTe
 
 /** Loading the secure form: a soft placeholder where the form will appear (no layout jump). */
 export function StripeLoading({ label = 'Loading the secure Stripe form…' }: { label?: string }) {
-  return (
-    <div role="status" className="flex min-h-48 items-center justify-center gap-2 rounded-lg bg-surface-sunken text-sm text-muted">
-      <CircleNotch size={18} className="animate-spin" aria-hidden />
-      {label}
-    </div>
-  );
+  return <Spinner label={label} center className="min-h-48" />;
 }
 
 /** Stripe couldn't load: why, and a way to try again, in the same spot as the form. */

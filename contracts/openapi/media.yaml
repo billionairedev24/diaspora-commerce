@@ -232,6 +232,30 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
   /v1/library/{id}:
+    patch:
+      tags: [Image library]
+      operationId: renameLibraryImage
+      summary: Rename a library image and re-match SKU / slot
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName]
+              properties:
+                fileName: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Renamed image
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LibraryImage'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
     delete:
       tags: [Image library]
       operationId: removeFromLibrary

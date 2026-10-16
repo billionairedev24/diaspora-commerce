@@ -59,6 +59,7 @@ describe('account pages (mock BFF)', () => {
     expect(await screen.findAllByTestId('address-card')).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: /Add address/ }));
     const dialog = await screen.findByRole('dialog');
+    await user.clear(within(dialog).getByLabelText(/Full name/));
     await user.click(within(dialog).getByRole('button', { name: 'Add address' }));
     // Under the field and in the error summary, which links to the field (S194).
     expect(within(dialog).getByRole('link', { name: 'Enter the full name' })).toHaveAttribute('href', '#addr-name');

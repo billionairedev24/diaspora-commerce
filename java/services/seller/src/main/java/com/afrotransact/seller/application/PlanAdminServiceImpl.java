@@ -24,9 +24,7 @@ import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.OrganisationRepository;
 import com.afrotransact.seller.port.PlanRepository;
-import com.afrotransact.seller.port.StripeBillingGateway;
 import com.afrotransact.seller.port.SubscriptionRepository;
-import com.afrotransact.seller.port.SubscriptionSnapshot;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionOperations;
 
@@ -37,20 +35,18 @@ class PlanAdminServiceImpl implements PlanAdminService {
     private final SubscriptionRepository subs;
     private final OrganisationRepository orgs;
     private final PlanSyncService sync;
-    private final StripeBillingGateway stripe;
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
     private final Clock clock;
 
     PlanAdminServiceImpl(PlanRepository plans, SubscriptionRepository subs, OrganisationRepository orgs,
-                         PlanSyncService sync, StripeBillingGateway stripe, AccessGuard access,
+                         PlanSyncService sync, AccessGuard access,
                          DomainEventPublisher events, TransactionOperations tx, Clock clock) {
         this.plans = plans;
         this.subs = subs;
         this.orgs = orgs;
         this.sync = sync;
-        this.stripe = stripe;
         this.access = access;
         this.events = events;
         this.tx = tx;
@@ -218,27 +214,14 @@ class PlanAdminServiceImpl implements PlanAdminService {
     }
 
     /**
-     * The subscription item moves to the current version's Price without proration, so the new price applies from
+     * The subscription moves to the current version without proration, so the new price applies from
      * the next renewal; the stored version changes now.
      */
     private void migrateOne(Subscription sub, Plan target, Actor actor) {
-        SubscriptionSnapshot snap = null;
-        if (sub.stripeSubscriptionId() != null && !target.isFree()) {
-            String price = sync.ensurePrice(target.code(), target.version(), sub.cadence());
-            snap = stripe.changePrice(sub.stripeSubscriptionId(), sub.stripeItemId(),
-                    new StripeBillingGateway.PlanPrice(price, target.code(), target.version(), sub.cadence()), false,
-                    "migrate-" + sub.orgId() + "-" + target.code() + "-v" + target.version());
-        }
-        SubscriptionSnapshot applied = snap;
         tx.executeWithoutResult(s -> {
             Subscription locked = subs.lock(sub.orgId()).orElseThrow();
             Instant now = Instant.now(clock);
             Subscription next = locked.withPlan(target.code(), target.version(), locked.cadence(), now);
-            if (applied != null && applied.itemId() != null) {
-                next = next.withStripe(next.stripeCustomerId(), next.stripeSubscriptionId(), applied.itemId(),
-                        next.status(), next.trialEndsAt(), next.currentPeriodStart(), next.currentPeriodEnd(),
-                        next.cancelAtPeriodEnd(), now);
-            }
             Subscription saved = subs.update(next.withPending(locked.pendingPlanCode(), locked.pendingCadence(),
                     locked.pendingEffectiveAt(), now));
             plans.recordMigration(sub.orgId(), target.code(), sub.planVersion(), target.version(), actor.subject(),

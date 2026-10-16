@@ -96,7 +96,7 @@ const matrix = (rows: Record<string, string>, roles: string[]): Record<string, R
 export const SELLER_MATRIX = matrix(
   {
     sHome: 'FULL,FULL,VIEW,VIEW,VIEW,VIEW,VIEW', sOrders: 'FULL,FULL,VIEW,FULL,VIEW,NONE,EDIT', sListings: 'FULL,FULL,FULL,VIEW,NONE,VIEW,VIEW',
-    sInventory: 'FULL,FULL,EDIT,FULL,NONE,NONE,NONE', sStorefront: 'FULL,FULL,EDIT,NONE,NONE,FULL,NONE', sPayouts: 'FULL,VIEW,NONE,NONE,FULL,NONE,NONE',
+    sInventory: 'FULL,FULL,EDIT,FULL,NONE,NONE,NONE', sAds: 'FULL,FULL,NONE,NONE,VIEW,FULL,NONE', sStorefront: 'FULL,FULL,EDIT,NONE,NONE,FULL,NONE', sPayouts: 'FULL,VIEW,NONE,NONE,FULL,NONE,NONE',
     sBilling: 'FULL,VIEW,NONE,NONE,FULL,NONE,NONE', sTeam: 'FULL,FULL,NONE,NONE,NONE,NONE,NONE', sCompliance: 'FULL,FULL,NONE,NONE,EDIT,NONE,NONE'
   },
   SELLER_ROLES.map((r) => r.key)

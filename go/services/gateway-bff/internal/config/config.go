@@ -193,11 +193,22 @@ const OIDCCallbackPath = "/v1/auth/oidc/callback"
 // <origin><BFFPath>/v1/auth/oidc/callback, the storefront's being OIDC.RedirectURI (OIDC_REDIRECT_URI overrides it).
 // Identity registers the same URIs for the gateway-bff client (application-<env>.yml).
 func (c *Config) RedirectURIs() map[string]string {
-	out := make(map[string]string, len(c.Web.Origins)+1)
+	out := make(map[string]string, len(c.Web.Origins)+2)
 	for _, o := range c.Web.Origins {
 		o = strings.TrimRight(strings.TrimSpace(o), "/")
 		if o != "" {
 			out[o] = pkgconfig.JoinURL(o, strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
+		}
+	}
+	// In local dev, Seller Center may move to port 3010 when 3001 is busy (tools/dev/local.sh).
+	// Ensure both local origins have registered callbacks so appOrigin accepts either port.
+	if _, has3001 := out["http://localhost:3001"]; has3001 {
+		if _, has3010 := out["http://localhost:3010"]; !has3010 {
+			out["http://localhost:3010"] = pkgconfig.JoinURL("http://localhost:3010", strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
+		}
+	} else if _, has3010 := out["http://localhost:3010"]; has3010 {
+		if _, has3001 := out["http://localhost:3001"]; !has3001 {
+			out["http://localhost:3001"] = pkgconfig.JoinURL("http://localhost:3001", strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
 		}
 	}
 	if c.Web.PublicOrigin != "" && c.OIDC.RedirectURI != "" {

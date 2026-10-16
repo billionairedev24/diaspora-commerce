@@ -19,7 +19,7 @@ type SellerOrdersService interface {
 	List(ctx context.Context, c *domain.Caller, q SellerTableQuery) (domain.SellerOrderPage, error)
 	Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error)
 	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error)
-	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error)
+	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress, carrier string) (domain.RateQuotes, error)
 	BuyLabel(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error)
 	// Label downloads the shipping label bought for the shipment.
 	Label(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.FileDownload, error)
@@ -372,7 +372,7 @@ func (s *sellerOrdersImpl) labelShipment(ctx context.Context, c *domain.Caller, 
 		Parcels: []domain.Parcel{parcel}}, nil
 }
 
-func (s *sellerOrdersImpl) Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error) {
+func (s *sellerOrdersImpl) Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress, carrier string) (domain.RateQuotes, error) {
 	if errs := validateParcel(parcel, from); len(errs) > 0 {
 		return domain.RateQuotes{}, domain.ValidationProblem(errs)
 	}
@@ -384,7 +384,7 @@ func (s *sellerOrdersImpl) Rates(ctx context.Context, c *domain.Caller, orderNum
 	if err != nil {
 		return domain.RateQuotes{}, err
 	}
-	res, err := s.r.d.Carrier.Rates(ctx, c.BearerToken, shipment)
+	res, err := s.r.d.Carrier.Rates(ctx, c.BearerToken, shipment, carrier)
 	if err != nil {
 		return domain.RateQuotes{}, mapErr("carrier-gateway", err)
 	}

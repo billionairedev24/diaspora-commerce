@@ -13,11 +13,11 @@ const first = (sp: SearchParams, key: string): string => {
  * staff console URL, which the BFF validates against its allowed origins). `error` is set when the BFF callback
  * reported a failed sign-in.
  */
-export function hostedLoginTarget(sp: SearchParams, mode: 'signin' | 'signup'): { href: string; error: string | null } {
+export function hostedLoginTarget(sp: SearchParams, mode: 'signin' | 'signup'): { href: string; error: string | null; returnTo?: string } {
   const returnTo = first(sp, 'returnTo') || undefined;
   const loginHint = (first(sp, 'email') || first(sp, 'login_hint')).slice(0, 254) || undefined;
   const invitation = first(sp, 'invitation').slice(0, 200) || undefined;
   const hints = { loginHint, invitation };
   const href = mode === 'signup' || invitation ? signUpHref(returnTo, hints) : signInHref(returnTo, hints);
-  return { href, error: first(sp, 'error').slice(0, 64) || null };
+  return { href, error: first(sp, 'error').slice(0, 64) || null, returnTo };
 }

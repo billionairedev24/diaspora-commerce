@@ -238,12 +238,20 @@ func emailLike(v string) bool {
 	return at > 0 && at < len(v)-1 && !strings.ContainsAny(v, " \r\n")
 }
 
-// signinError is the storefront's sign-in error page; it offers to start again towards the original destination.
+// signinError sends the browser back to start sign-in again towards the original destination.
+// When the request belongs to another app (e.g. Seller Center), it goes directly to that app's login start
+// instead of showing an intermediate Storefront error page.
 func (a *authServiceImpl) signinError(reason string, req *port.AuthRequest) string {
-	q := url.Values{"error": {reason}}
 	if req != nil && req.Origin != "" && !strings.EqualFold(req.Origin, a.o.WebOrigin) {
-		q.Set("returnTo", req.Origin+req.ReturnTo)
-	} else if req != nil && req.ReturnTo != "" && req.ReturnTo != "/" {
+		dest := domain.SafeReturnTo(req.ReturnTo)
+		q := url.Values{
+			"prompt":   {"login"},
+			"returnTo": {req.Origin + dest},
+		}
+		return req.Origin + a.o.BFFPath + "/v1/auth/login?" + q.Encode()
+	}
+	q := url.Values{"error": {reason}}
+	if req != nil && req.ReturnTo != "" && req.ReturnTo != "/" {
 		q.Set("returnTo", req.ReturnTo)
 	}
 	return a.o.WebOrigin + "/signin?" + q.Encode()
@@ -258,7 +266,9 @@ func (a *authServiceImpl) Callback(ctx context.Context, c *domain.Caller, code, 
 		return a.signinError(oauthError, req)
 	}
 	// Bind the flow to the browser that started it: a different signed session means a login-CSRF attempt.
-	if req.SessionID != "" && c.Session != nil && !c.App && c.Session.ID != req.SessionID {
+	// Only enforced when the flow originated on the storefront itself; cross-app flows (e.g. storefront -> seller center)
+	// do not share session IDs across origins.
+	if strings.EqualFold(req.Origin, a.o.WebOrigin) && req.SessionID != "" && c.Session != nil && !c.App && c.Session.ID != req.SessionID {
 		return a.signinError("state_mismatch", req)
 	}
 	if code == "" {

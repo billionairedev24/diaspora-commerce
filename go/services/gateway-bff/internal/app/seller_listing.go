@@ -35,7 +35,7 @@ var _ SellerListingService = (*sellerListingImpl)(nil)
 // NewSellerListingService returns the SellerListingService (SellerDeps.Listing must be set).
 func NewSellerListingService(d SellerDeps) SellerListingService {
 	r := newResolver(d)
-	return &sellerListingImpl{r: r, cache: newScanCache[domain.ListingRow](r.d.clock())}
+	return &sellerListingImpl{r: r, cache: d.listingCache()}
 }
 
 func (s *sellerListingImpl) listing() (port.SellerListingClient, error) {
@@ -64,6 +64,9 @@ func (s *sellerListingImpl) shipFrom(ctx context.Context, c *domain.Caller, orgI
 }
 
 func (s *sellerListingImpl) Submit(ctx context.Context, c *domain.Caller, d domain.ProductDraft) (domain.ListingRow, error) {
+	if s.cache != nil {
+		defer s.cache.drop("listings")
+	}
 	if errs := d.Validate(); len(errs) > 0 {
 		return domain.ListingRow{}, domain.ValidationProblem(errs)
 	}
@@ -99,6 +102,9 @@ func (s *sellerListingImpl) Submit(ctx context.Context, c *domain.Caller, d doma
 }
 
 func (s *sellerListingImpl) Update(ctx context.Context, c *domain.Caller, productID string, d domain.ProductDraft) (domain.ListingRow, error) {
+	if s.cache != nil {
+		defer s.cache.drop("listings")
+	}
 	if errs := d.ValidateEdit(); len(errs) > 0 {
 		return domain.ListingRow{}, domain.ValidationProblem(errs)
 	}
@@ -137,7 +143,34 @@ func (s *sellerListingImpl) Product(ctx context.Context, c *domain.Caller, produ
 	if err != nil {
 		return domain.SellerProductDetail{}, mapErr("catalog", err)
 	}
-	return s.detailOf(ctx, c, p), nil
+	detail := s.detailOf(ctx, c, p)
+	if s.r.d.Offers != nil {
+		if page, err := s.r.d.Offers.List(ctx, c.BearerToken, 0, 100); err == nil {
+			var ffs []string
+			for _, o := range page.Items {
+				if strings.EqualFold(o.Status, "WITHDRAWN") {
+					continue
+				}
+				if (o.ProductID == productID || (p.ATIN != "" && strings.EqualFold(o.ProductATIN, p.ATIN))) && o.Fulfilment != "" {
+					ffs = append(ffs, strings.ToUpper(o.Fulfilment))
+				}
+			}
+			if len(ffs) > 0 {
+				firstFF := ffs[0]
+				allSame := true
+				for _, ff := range ffs[1:] {
+					if ff != firstFF {
+						allSame = false
+						break
+					}
+				}
+				if allSame {
+					detail.Listing.Fulfilment = firstFF
+				}
+			}
+		}
+	}
+	return detail, nil
 }
 
 func (s *sellerListingImpl) detailOf(ctx context.Context, c *domain.Caller, p port.CatalogOwnProduct) domain.SellerProductDetail {

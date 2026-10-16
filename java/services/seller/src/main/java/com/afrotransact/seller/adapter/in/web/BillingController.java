@@ -13,12 +13,10 @@ import com.afrotransact.seller.adapter.in.web.BillingDtos.InvoiceResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PaymentMethodResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanChangePreviewResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanResponse;
-import com.afrotransact.seller.adapter.in.web.BillingDtos.SetupIntentResponse;
 import com.afrotransact.seller.application.AddPaymentMethodCommand;
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.PlanChangeResult;
 import com.afrotransact.seller.application.PlanService;
-import com.afrotransact.seller.application.SetupIntentView;
 import com.afrotransact.seller.domain.Invoice;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -140,15 +138,5 @@ class BillingController {
                                                 @RequestParam(required = false) String cadence) {
         return PlanChangePreviewResponse.of(billing.previewPlanChange(orgId, planCode,
                 cadence == null ? null : Inputs.cadence(cadence)));
-    }
-
-    @Operation(summary = "Start adding a card or bank account (owner): Stripe SetupIntent",
-            description = "Confirm the clientSecret with Stripe.js (Payment Element) or the mobile PaymentSheet, then "
-                    + "register the resulting pm_… with POST /billing/payment-methods.")
-    @PostMapping("/v1/orgs/{orgId}/billing/setup-intents")
-    @ResponseStatus(HttpStatus.CREATED)
-    SetupIntentResponse createSetupIntent(@PathVariable String orgId) {
-        SetupIntentView v = billing.setupIntent(orgId);
-        return new SetupIntentResponse(v.customerId(), v.setupIntentId(), v.clientSecret());
     }
 }

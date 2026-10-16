@@ -42,6 +42,7 @@ export function PaymentsView() {
         <ul className={styles.cards}>
           {list.data?.map((pm) => (
             <li key={pm.id} data-testid="payment-method">
+              <strong className="at-visually-hidden">{pm.label}</strong>
               <SavedPaymentCard
                 type={pm.type}
                 brand={pm.brand}

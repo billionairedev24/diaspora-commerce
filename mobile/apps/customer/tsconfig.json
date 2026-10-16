@@ -1,15 +1,37 @@
 {
-  "extends": ["expo/tsconfig.base", "../../../tsconfig.base.json"],
+  "extends": [
+    "expo/tsconfig.base",
+    "../../../tsconfig.base.json"
+  ],
   "compilerOptions": {
     "module": "preserve",
     "moduleResolution": "bundler",
-    "customConditions": ["react-native"],
-    "lib": ["DOM", "ESNext"],
+    "customConditions": [
+      "react-native"
+    ],
+    "lib": [
+      "DOM",
+      "ESNext"
+    ],
     "target": "ESNext",
     "allowJs": false,
     "types": [],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    }
   },
-  "include": ["src", "test", "expo-env.d.ts", ".expo/types/**/*.ts", "*.config.mts", "app.config.ts"],
-  "exclude": ["node_modules", "dist", "android", "ios"]
+  "include": [
+    "src",
+    "test",
+    "*.config.mts",
+    "app.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "android",
+    "ios"
+  ]
 }

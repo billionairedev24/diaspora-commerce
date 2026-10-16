@@ -36,7 +36,12 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: '/search', destination: '/s', permanent: false },
-      { source: '/brands/afrotransact', destination: '/s?soldBy=platform', permanent: false }
+      { source: '/brands/afrotransact', destination: '/s?soldBy=platform', permanent: false },
+      { source: '/terms', destination: '/legal/conditions-of-use', permanent: true },
+      { source: '/terms-of-use', destination: '/legal/conditions-of-use', permanent: true },
+      { source: '/privacy', destination: '/legal/privacy', permanent: true },
+      { source: '/cookies', destination: '/legal/cookies', permanent: true },
+      { source: '/cookie-policy', destination: '/legal/cookies', permanent: true }
     ];
   }
 };

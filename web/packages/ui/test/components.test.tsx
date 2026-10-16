@@ -4,7 +4,7 @@ import { type CountryCode } from 'libphonenumber-js/mobile';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, ImagePlaceholder, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, Sheet, SocialButton, Stars } from '../src';
+import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, ImagePlaceholder, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, Sheet, SocialButton, Spinner, Stars } from '../src';
 
 function Phone() {
   const [country, setCountry] = useState<CountryCode>('US');
@@ -226,5 +226,23 @@ describe('Sheet', () => {
     render(<PageWithSheet side="left" />);
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
     expect(document.querySelector('[class*="overlay"]')).not.toBeNull();
+  });
+});
+
+describe('Spinner', () => {
+  it('renders with role="status" and accessible label', () => {
+    render(<Spinner label="Loading items…" />);
+    const status = screen.getByRole('status');
+    expect(status).toBeInTheDocument();
+    expect(status).toHaveTextContent('Loading items…');
+  });
+
+  it('supports sr-only label when requested', () => {
+    render(<Spinner label="Processing…" srOnlyLabel />);
+    const status = screen.getByRole('status');
+    expect(status).toBeInTheDocument();
+    const span = status.querySelector('.sr-only');
+    expect(span).not.toBeNull();
+    expect(span).toHaveTextContent('Processing…');
   });
 });

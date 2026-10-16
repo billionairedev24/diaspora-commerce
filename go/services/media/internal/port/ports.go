@@ -66,6 +66,8 @@ type LibraryRepository interface {
 	LookupLibrary(ctx context.Context, org string, skus, fileNames []string) ([]domain.Asset, error)
 	// RemoveFromLibrary clears an asset's library flag (the file stays: listings may use it).
 	RemoveFromLibrary(ctx context.Context, id string) error
+	// RenameLibraryImage renames an asset's fileName and recalculates library_sku and library_slot.
+	RenameLibraryImage(ctx context.Context, id, newFileName string, sku, slot *string) error
 }
 
 // ProcessedImage is an image after metadata stripping, with what moderation needs.

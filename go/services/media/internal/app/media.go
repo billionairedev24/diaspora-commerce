@@ -50,6 +50,8 @@ type MediaService interface {
 	LookupLibrary(ctx context.Context, actor auth.Actor, ownerOrg string, skus, fileNames []string) ([]domain.LibraryImage, error)
 	// RemoveFromLibrary takes an image out of the library; the file stays because listings may use it.
 	RemoveFromLibrary(ctx context.Context, actor auth.Actor, id string) error
+	// RenameLibraryImage renames an image in the library and updates its parsed SKU/slot.
+	RenameLibraryImage(ctx context.Context, actor auth.Actor, id, newFileName string) (domain.LibraryImage, error)
 }
 
 // MaxLibraryLookup bounds the SKUs and the file names of one library lookup (a bulk upload has at most 5,000 rows).
@@ -354,6 +356,41 @@ func (s *mediaServiceImpl) RemoveFromLibrary(ctx context.Context, actor auth.Act
 		return fmt.Errorf("remove from library: %w", err)
 	}
 	return nil
+}
+
+func (s *mediaServiceImpl) RenameLibraryImage(ctx context.Context, actor auth.Actor, id, newFileName string) (domain.LibraryImage, error) {
+	if s.library == nil {
+		return domain.LibraryImage{}, fmt.Errorf("%w: the image library is not enabled", domain.ErrRejected)
+	}
+	newFileName = domain.LibraryFileName(newFileName)
+	if newFileName == "" {
+		return domain.LibraryImage{}, fmt.Errorf("%w: file name cannot be empty", domain.ErrRejected)
+	}
+	a, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return domain.LibraryImage{}, fmt.Errorf("get asset: %w", err)
+	}
+	if !a.Library {
+		return domain.LibraryImage{}, fmt.Errorf("asset %s is not in the library: %w", id, ErrNotInLibrary)
+	}
+	if actor.Type == principalService || (actor.OrgID != a.OwnerOrg && actor.Subject != a.UploadedBy) {
+		return domain.LibraryImage{}, ErrForbidden
+	}
+	var sku, slot *string
+	if n, ok := domain.ParseLibraryName(newFileName); ok {
+		sStr := string(n.Slot)
+		sku, slot = &n.SKU, &sStr
+		a.SKU = n.SKU
+		a.Slot = n.Slot
+	} else {
+		a.SKU = ""
+		a.Slot = ""
+	}
+	if err := s.library.RenameLibraryImage(ctx, id, newFileName, sku, slot); err != nil {
+		return domain.LibraryImage{}, fmt.Errorf("rename library image: %w", err)
+	}
+	a.FileName = newFileName
+	return domain.ToLibraryImage(a), nil
 }
 
 func (s *mediaServiceImpl) Complete(ctx context.Context, actor auth.Actor, id string) (domain.Asset, error) {

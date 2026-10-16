@@ -532,7 +532,7 @@ export function gtinValid(code: string): boolean {
 /* Small request bodies validated like the BFF does. */
 const ActiveOrgBody = z.object({ orgId: z.string().min(1, 'Choose an organisation') });
 const StatusBody = z.object({ status: z.string() });
-const RatesBody = z.object({ parcel: ParcelSchema, shipFrom: SellerAddressSchema });
+const RatesBody = z.object({ carrier: CarrierSchema.optional(), parcel: ParcelSchema, shipFrom: SellerAddressSchema });
 const LabelBody = RatesBody.extend({ carrier: CarrierSchema, service: z.string().min(1, 'Choose a rate') });
 const ActiveBody = z.object({ active: z.boolean() });
 const DraftBody = z.object({
@@ -1096,20 +1096,28 @@ export const sellerHandlers = [
   http.post(
     `${W}/orders/:orderNumber/shipments/:shipmentId/rates`,
     route(async (ctx, p) => {
-      const { parcel } = await body(ctx.request, RatesBody);
+      const { carrier, parcel } = await body(ctx.request, RatesBody);
       require(ctx, 'orders', 'EDIT', 'SELLER');
       const s = refreshShipment(findOrder(ctx.db, p.orderNumber ?? ''), p.shipmentId ?? '');
       if (!s.canBuyLabel) throw conflict('Labels can be bought for confirmed seller-shipped orders without tracking.');
       const w = Math.ceil(parcel.weightLb);
       const day = (n: number) => new Date(ctx.now.getTime() + n * 86_400_000).toISOString();
+      const allQuotes = [
+        { carrier: 'usps' as const, service: 'USPS_GROUND_ADVANTAGE', serviceName: 'USPS Ground Advantage', amountMinor: 545 + w * 85, currency: 'USD', transitDays: 4, estimatedDelivery: day(4) },
+        { carrier: 'usps' as const, service: 'PRIORITY_MAIL', serviceName: 'USPS Priority Mail', amountMinor: 895 + w * 120, currency: 'USD', transitDays: 2, estimatedDelivery: day(2) },
+        { carrier: 'usps' as const, service: 'PRIORITY_MAIL_EXPRESS', serviceName: 'USPS Priority Mail Express', amountMinor: 2895 + w * 210, currency: 'USD', transitDays: 1, estimatedDelivery: day(1) },
+        { carrier: 'ups' as const, service: '03', serviceName: 'UPS Ground', amountMinor: 1095 + w * 110, currency: 'USD', transitDays: 4, estimatedDelivery: day(4) },
+        { carrier: 'ups' as const, service: '02', serviceName: 'UPS 2nd Day Air', amountMinor: 2195 + w * 180, currency: 'USD', transitDays: 2, estimatedDelivery: day(2) },
+        { carrier: 'ups' as const, service: '01', serviceName: 'UPS Next Day Air', amountMinor: 3895 + w * 260, currency: 'USD', transitDays: 1, estimatedDelivery: day(1) },
+        { carrier: 'fedex' as const, service: 'FEDEX_GROUND', serviceName: 'FedEx Ground', amountMinor: 1045 + w * 105, currency: 'USD', transitDays: 4, estimatedDelivery: day(4) },
+        { carrier: 'fedex' as const, service: 'FEDEX_2_DAY', serviceName: 'FedEx 2Day', amountMinor: 2095 + w * 175, currency: 'USD', transitDays: 2, estimatedDelivery: day(2) },
+        { carrier: 'fedex' as const, service: 'PRIORITY_OVERNIGHT', serviceName: 'FedEx Priority Overnight', amountMinor: 4095 + w * 270, currency: 'USD', transitDays: 1, estimatedDelivery: day(1) },
+        { carrier: 'dhl' as const, service: 'P', serviceName: 'DHL Express Worldwide', amountMinor: 3495 + w * 300, currency: 'USD', transitDays: 3, estimatedDelivery: day(3) }
+      ];
+      const quotes = carrier ? allQuotes.filter((q) => q.carrier === carrier) : allQuotes;
       return {
         partial: false,
-        quotes: [
-          { carrier: 'usps', service: 'USPS_GROUND_ADVANTAGE', serviceName: 'USPS Ground Advantage', amountMinor: 545 + w * 60, currency: 'USD', transitDays: 4, estimatedDelivery: day(4) },
-          { carrier: 'ups', service: '03', serviceName: 'UPS Ground', amountMinor: 889 + w * 75, currency: 'USD', transitDays: 3, estimatedDelivery: day(3) },
-          { carrier: 'usps', service: 'USPS_PRIORITY', serviceName: 'USPS Priority Mail', amountMinor: 995 + w * 90, currency: 'USD', transitDays: 2, estimatedDelivery: day(2) },
-          { carrier: 'fedex', service: 'FEDEX_2_DAY', serviceName: 'FedEx 2Day', amountMinor: 1890 + w * 120, currency: 'USD', transitDays: 2, estimatedDelivery: day(2) }
-        ]
+        quotes: quotes.sort((a, b) => a.amountMinor - b.amountMinor)
       };
     })
   ),
@@ -1220,7 +1228,7 @@ export const sellerHandlers = [
       Object.assign(l, {
         title: d.title, sku: skus[0] ?? l.sku, variantCount: d.variants.length, priceMinor: Math.min(...d.variants.map((v) => v.priceMinor)),
         stock: d.variants.reduce((a, v) => a + v.quantity, 0), imageUrl: d.images[0]?.url ?? l.imageUrl, updatedAt: ctx.now.toISOString(),
-        fulfilment: d.listing?.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : l.fulfilment === 'AFROTRANSACT' ? 'SELLER' : l.fulfilment,
+        fulfilment: d.listing?.fulfilment ?? l.fulfilment,
         variants: d.variants.map((v) => ({ sku: v.sellerSku.toUpperCase(), quantity: v.quantity }))
       });
       const { variants: _v, ...row } = l;
@@ -2115,7 +2123,13 @@ export const sellerHandlers = [
       o.quantity = b.fulfilment === 'AFROTRANSACT' ? 0 : o.availableQty;
       o.version += 1;
       const listing = ctx.db.listings.find((l) => l.productId === o.productId);
-      if (listing && ctx.db.offers.filter((x) => x.productId === o.productId).every((x) => x.fulfilment === o.fulfilment)) listing.fulfilment = o.fulfilment;
+      const activeOffers = ctx.db.offers.filter((x) => x.productId === o.productId && x.status !== 'WITHDRAWN');
+      if (listing && activeOffers.length > 0 && activeOffers.every((x) => x.fulfilment === o.fulfilment)) {
+        listing.fulfilment = o.fulfilment;
+      }
+      if (ctx.db.productDetails[o.productId]?.listing) {
+        ctx.db.productDetails[o.productId].listing.fulfilment = o.fulfilment;
+      }
       return o;
     })
   ),
@@ -2152,6 +2166,13 @@ export const sellerHandlers = [
     row.status = status;
     row.version += 1;
     return row;
+  })),
+  http.delete(`${W}/coupons/:couponId`, route((ctx, p) => {
+    require(ctx, 'coupons', 'EDIT', 'SELLER');
+    const idx = ctx.db.coupons.findIndex((c) => c.id === p.couponId);
+    if (idx === -1) throw notFound('No such coupon.');
+    ctx.db.coupons.splice(idx, 1);
+    return new HttpResponse(null, { status: 204 });
   })),
   /* Send to AfroTransact (S281) */
   ...sellerFbaHandlers(W, fbaGate),

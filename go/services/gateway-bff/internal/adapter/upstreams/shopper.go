@@ -2,6 +2,7 @@ package upstreams
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -25,9 +26,20 @@ var _ port.WalletClient = (*walletImpl)(nil)
 func NewWallet(c httpclient.Client) port.WalletClient { return &walletImpl{c: c} }
 
 func (w *walletImpl) List(ctx context.Context, bearer string) (port.Wallet, error) {
+	var raw json.RawMessage
+	_, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, &raw)
+	if err != nil {
+		return port.Wallet{}, err
+	}
 	var out port.Wallet
-	_, err := call(ctx, w.c, httpclient.Request{Path: "/v1/customers/me/payment-methods", Bearer: bearer}, &out)
-	return out, err
+	if err := json.Unmarshal(raw, &out); err == nil && len(out.Items) > 0 {
+		return out, nil
+	}
+	var items []port.WalletMethod
+	if err := json.Unmarshal(raw, &items); err == nil {
+		return port.Wallet{Items: items}, nil
+	}
+	return out, nil
 }
 
 func (w *walletImpl) SetupIntent(ctx context.Context, bearer string, types []string) (port.WalletSetupIntent, error) {

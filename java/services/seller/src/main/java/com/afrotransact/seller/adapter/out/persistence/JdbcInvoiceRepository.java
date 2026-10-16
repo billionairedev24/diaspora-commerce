@@ -70,6 +70,14 @@ class JdbcInvoiceRepository implements InvoiceRepository {
                 .optional();
     }
 
+    @Override
+    public Optional<Invoice> findById(String invoiceId) {
+        return jdbc.sql("select * from invoice where stripe_invoice_id = :id")
+                .param("id", invoiceId)
+                .query(this::row)
+                .optional();
+    }
+
     private Invoice row(ResultSet rs, int n) throws SQLException {
         return new Invoice(rs.getString("stripe_invoice_id"), rs.getString("org_id"),
                 rs.getString("number"), Sql.instant(rs, "period_start"), Sql.instant(rs, "period_end"),

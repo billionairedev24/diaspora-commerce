@@ -2,8 +2,8 @@
 
 import { type ImageLibraryItem, type ImageLibraryQuery, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, buttonClassName, cx, Select, useToast } from '@afrotransact/ui';
-import { FileArrowUp, FolderOpen, ImagesSquare, LinkSimple, Trash } from '@phosphor-icons/react/ssr';
+import { Button, buttonClassName, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { FileArrowUp, FolderOpen, ImagesSquare, LinkSimple, PencilSimple, Trash } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
@@ -37,6 +37,8 @@ export function ImageLibraryView() {
   const state = useTableState({ searchParams: useSearchParams() });
   const [status, setStatus] = useState<'' | ImageLibraryItem['status']>('');
   const [matched, setMatched] = useState<'' | 'true' | 'false'>('');
+  const [renaming, setRenaming] = useState<{ assetId: string; fileName: string } | null>(null);
+  const [newName, setNewName] = useState('');
   const query: ImageLibraryQuery = {
     q: state.q || undefined,
     status: status || undefined,
@@ -56,6 +58,16 @@ export function ImageLibraryView() {
   }, []);
 
   const refresh = () => void qc.invalidateQueries({ queryKey: sellerKeys.imageLibrary(orgId) });
+
+  const rename = useMutation({
+    mutationFn: ({ assetId, fileName }: { assetId: string; fileName: string }) => api.renameLibraryImage(assetId, fileName),
+    onSuccess: () => {
+      toast.show(t('sc.img.renamed'));
+      setRenaming(null);
+      refresh();
+    },
+    onError: (e) => toast.show(problemMessage(e), 'error')
+  });
 
   const remove = useMutation({
     mutationFn: (assetId: string) => api.removeLibraryImage(assetId),
@@ -168,12 +180,31 @@ export function ImageLibraryView() {
     { id: 'size', accessorFn: (r) => `${r.width}×${r.height}`, header: t('sc.img.col.size'), size: 110, enableSorting: false, meta: { kind: 'mono' } },
     { id: 'createdAt', accessorFn: (r) => r.createdAt, header: t('sc.img.col.added'), size: 160, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.createdAt) },
     {
-      id: 'actions', header: '', size: 110, enableSorting: false, meta: { label: t('sc.img.remove') },
+      id: 'actions', header: '', size: 160, enableSorting: false, meta: { label: t('sc.img.remove') },
       cell: ({ row }) => (
-        <Button variant="link" size="sm" loading={remove.isPending && remove.variables === row.original.assetId}
-          onClick={(e) => { e.stopPropagation(); remove.mutate(row.original.assetId); }} aria-label={t('sc.img.removeAria', { name: row.original.fileName })}>
-          <Trash size={16} aria-hidden /> {t('sc.img.remove')}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="link"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setRenaming({ assetId: row.original.assetId, fileName: row.original.fileName });
+              setNewName(row.original.fileName);
+            }}
+            aria-label={t('sc.img.renameAria', { name: row.original.fileName })}
+          >
+            <PencilSimple size={16} aria-hidden /> {t('sc.img.rename')}
+          </Button>
+          <Button
+            variant="link"
+            size="sm"
+            loading={remove.isPending && remove.variables === row.original.assetId}
+            onClick={(e) => { e.stopPropagation(); remove.mutate(row.original.assetId); }}
+            aria-label={t('sc.img.removeAria', { name: row.original.fileName })}
+          >
+            <Trash size={16} aria-hidden /> {t('sc.img.remove')}
+          </Button>
+        </div>
       )
     }
   ], [t, remove]);
@@ -270,6 +301,40 @@ export function ImageLibraryView() {
         empty={t('sc.img.empty')}
         noMatches={t('sc.img.noMatches')}
       />
+
+      <Dialog
+        open={renaming !== null}
+        onOpenChange={(open) => !open && setRenaming(null)}
+        title={t('sc.img.renameTitle')}
+        description={t('sc.img.renameDesc')}
+      >
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (renaming && newName.trim()) {
+              rename.mutate({ assetId: renaming.assetId, fileName: newName.trim() });
+            }
+          }}
+        >
+          <TextField
+            label={t('sc.img.col.file')}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="e.g. SKU-123.MAIN.jpg"
+            required
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="neutral" onClick={() => setRenaming(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={rename.isPending} disabled={!newName.trim()}>
+              Save name
+            </Button>
+          </div>
+        </form>
+      </Dialog>
     </>
   );
 }

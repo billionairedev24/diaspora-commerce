@@ -134,7 +134,7 @@ export function createNavGuard(options: NavGuardOptions): NavGuard {
   return {
     allow(destination) {
       const dest = destinationKey(destination);
-      if (last && last.dest === dest && now() - last.at < dedupeMs) return current?.destination !== dest;
+      if (last && last.dest === dest && now() - last.at < dedupeMs) return false;
       last = { dest, at: now() };
       const t = trail();
       const times = [...(t[dest] ?? []), now()];
@@ -179,6 +179,7 @@ export function createNavGuard(options: NavGuardOptions): NavGuard {
       return since;
     },
     loaded() {
+      last = null;
       memLoading = null;
       write(loadingKey, null);
     }

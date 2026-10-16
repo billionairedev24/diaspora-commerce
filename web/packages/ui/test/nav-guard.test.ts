@@ -58,7 +58,8 @@ describe('createNavGuard', () => {
   it('counts a redirect repeated at once in the same page (React re-running an effect) once', () => {
     const c = clock();
     const guard = createNavGuard({ key: 'test.nav', now: c.now });
-    for (let i = 0; i < 10; i++) expect(guard.allow('/onboarding')).toBe(true);
+    expect(guard.allow('/onboarding')).toBe(true);
+    for (let i = 1; i < 10; i++) expect(guard.allow('/onboarding')).toBe(false);
     expect(guard.loop()).toBeNull();
   });
 

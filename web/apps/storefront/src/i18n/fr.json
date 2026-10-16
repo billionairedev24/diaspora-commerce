@@ -1140,5 +1140,18 @@
   "pay.verificationPending": "Vérification en attente",
   "co.useAnotherMethod": "Utiliser un autre moyen de paiement",
   "co.useThisMethod": "Utiliser ce moyen de paiement",
-  "co.newMethodEntered": "saisi pour cette commande"
+  "co.newMethodEntered": "saisi pour cette commande",
+  "pay.acceptedWallets": "Apple Pay · Google Pay · Link · Compte bancaire US (ACH)",
+  "co.pickupNoneNear": "Aucun point de retrait n'est disponible près de cette adresse. Choisissez la livraison ou utilisez une autre adresse.",
+  "co.shippingWas": "au lieu de {amount}",
+  "co.discount": "Promotion",
+  "co.coupon": "Code promo",
+  "co.couponPlaceholder": "Saisir le code",
+  "co.couponApply": "Appliquer",
+  "co.couponApplied": "Code {code} appliqué",
+  "co.couponRemove": "Supprimer",
+  "co.couponFundedPlatform": "Réduction financée par AfroTransact (marketing plateforme).",
+  "co.couponFundedPlatformShort": "plateforme",
+  "co.couponFundedSeller": "Réduction financée par {seller} (déduite de son versement).",
+  "co.couponFundedSellerShort": "vendeur"
 }

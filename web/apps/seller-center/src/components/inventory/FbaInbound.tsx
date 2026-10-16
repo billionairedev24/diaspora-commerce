@@ -155,8 +155,8 @@ function PlanForm({ onDone }: { onDone: (s: InboundShipment) => void }) {
           <legend className="px-1 text-xs font-bold text-muted">Line {i + 1}</legend>
           <Select
             label="Your listing"
-            value=""
-            onChange={(e) => e.target.value && set(i, { atin: e.target.value })}
+            value={l.atin}
+            onChange={(e) => set(i, { atin: e.target.value })}
             options={[{ value: '', label: 'Pick a listing…' }, ...(listings.data?.items ?? []).filter((x) => x.atin).map((x) => ({ value: x.atin ?? '', label: `${x.title} (${x.atin ?? ''})` }))]}
             className="col-span-full sm:col-span-2"
           />
@@ -190,11 +190,13 @@ function PlanSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
   const { can } = useSeller();
   const q = useQuery({ ...inventoryHubQueries.shipment(api.fba, id ?? ''), enabled: id !== null });
   const s = q.data;
+  const [deliveryMethod, setDeliveryMethod] = useState<'carrier' | 'self'>('carrier');
   const [carrier, setCarrier] = useState('');
   const [tracking, setTracking] = useState('');
   const ship = useFbaMutation(() => api.fba.ship(s?.id ?? '', s?.version), (x) => `${x.number} shipped: AfroTransact expects it at ${x.nodeId}.`);
   const cancel = useFbaMutation(() => api.fba.cancel(s?.id ?? ''), (x) => `${x.number} cancelled.`);
   const track = useFbaMutation(() => api.fba.setTracking(s?.id ?? '', carrier.trim(), tracking.trim()), (x) => `Tracking saved on ${x.number}.`);
+  const setSelfDelivery = useFbaMutation(() => api.fba.setTracking(s?.id ?? '', 'self_delivery', `DROP-OFF-${s?.number ?? 'FC'}`), (x) => `Self-delivery drop-off confirmed for ${x.number}.`);
   const edit = can('inventory');
   return (
     <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={s ? `Shipment ${s.number}` : 'Shipment'} width={720}>
@@ -234,17 +236,60 @@ function PlanSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
             </SheetTableScroll>
           </div>
           {edit && s.status === 'WORKING' ? (
-            <form
-              className="flex flex-wrap items-end gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (carrier.trim() && tracking.trim()) track.mutate(undefined);
-              }}
-            >
-              <TextField label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder={s.carrier ?? 'ups'} />
-              <TextField label="Tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder={s.trackingNumber ?? ''} />
-              <Button type="submit" size="sm" variant="neutral" loading={track.isPending}>Save tracking</Button>
-            </form>
+            <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+              <label className="text-xs font-semibold text-muted">Delivery arrangement to AfroTransact FC</label>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deliveryMethod"
+                    value="carrier"
+                    checked={deliveryMethod === 'carrier'}
+                    onChange={() => setDeliveryMethod('carrier')}
+                  />
+                  <span>Ship via carrier (UPS, FedEx, DHL, etc.)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="deliveryMethod"
+                    value="self"
+                    checked={deliveryMethod === 'self'}
+                    onChange={() => setDeliveryMethod('self')}
+                  />
+                  <span>Deliver ourselves (direct drop-off to FC)</span>
+                </label>
+              </div>
+
+              {deliveryMethod === 'carrier' ? (
+                <form
+                  className="flex flex-wrap items-end gap-2 pt-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (carrier.trim() && tracking.trim()) track.mutate(undefined);
+                  }}
+                >
+                  <TextField label="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder={s.carrier ?? 'ups'} />
+                  <TextField label="Tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)} placeholder={s.trackingNumber ?? ''} />
+                  <Button type="submit" size="sm" variant="neutral" loading={track.isPending}>Save tracking</Button>
+                </form>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-sm bg-surface-muted p-2 rounded">
+                  <span className="text-xs text-muted">
+                    Seller will deliver stock directly to {s.nodeId}. No third-party carrier tracking is required.
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="neutral"
+                    loading={setSelfDelivery.isPending}
+                    onClick={() => setSelfDelivery.mutate(undefined)}
+                  >
+                    Confirm self-delivery arrangement
+                  </Button>
+                </div>
+              )}
+            </div>
           ) : null}
           {edit ? (
             <div className="flex flex-wrap gap-2">

@@ -40,6 +40,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux, authenticated func(http.Hand
 	mux.Handle("GET /v1/assets", authenticated(http.HandlerFunc(h.list)))
 	mux.Handle("GET /v1/library", authenticated(http.HandlerFunc(h.listLibrary)))
 	mux.Handle("POST /v1/library/lookup", authenticated(http.HandlerFunc(h.lookupLibrary)))
+	mux.Handle("PATCH /v1/library/{id}", authenticated(http.HandlerFunc(h.renameLibraryImage)))
 	mux.Handle("DELETE /v1/library/{id}", authenticated(http.HandlerFunc(h.removeFromLibrary)))
 	// Media-hosted long-lived links: the signed token is the credential (e-mailed to suppliers).
 	mux.HandleFunc("GET /v1/l/{token}", h.link)
@@ -245,6 +246,28 @@ func (h *handlersImpl) lookupLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"images": images})
+}
+
+func (h *handlersImpl) renameLibraryImage(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	var req struct {
+		FileName string `json:"fileName"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-json", "Body must include fileName"))
+		return
+	}
+	req.FileName = strings.TrimSpace(req.FileName)
+	if req.FileName == "" {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-request", "fileName cannot be empty"))
+		return
+	}
+	item, err := h.media.RenameLibraryImage(r.Context(), actor, r.PathValue("id"), req.FileName)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
 }
 
 func (h *handlersImpl) removeFromLibrary(w http.ResponseWriter, r *http.Request) {

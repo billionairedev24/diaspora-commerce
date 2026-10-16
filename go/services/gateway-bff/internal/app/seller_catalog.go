@@ -40,14 +40,21 @@ var _ SellerCatalogService = (*sellerCatalogImpl)(nil)
 // NewSellerCatalogService returns the SellerCatalogService.
 func NewSellerCatalogService(d SellerDeps) SellerCatalogService {
 	r := newResolver(d)
-	return &sellerCatalogImpl{r: r, cache: newScanCache[domain.ListingRow](r.d.clock())}
+	return &sellerCatalogImpl{r: r, cache: d.listingCache()}
 }
 
 func listingOf(p port.CatalogOwnProduct) domain.ListingRow {
 	row := domain.ListingRow{ProductID: p.ID, ATIN: strPtr(p.ATIN), Title: p.Title, VariantCount: len(p.Variants), Currency: domain.Currency,
 		Fulfilment: domain.ShipsFromSeller, Status: strings.ToUpper(p.Status), ModerationNote: strPtr(p.ModerationNote), UpdatedAt: p.UpdatedAt}
-	if p.Listing != nil && strings.EqualFold(p.Listing.Fulfilment, domain.FulfilledByAfroTransact) {
-		row.Fulfilment = domain.FulfilledByAfroTransact
+	if p.Listing != nil {
+		switch {
+		case strings.EqualFold(p.Listing.Fulfilment, domain.FulfilledByAfroTransact):
+			row.Fulfilment = domain.FulfilledByAfroTransact
+		case strings.EqualFold(p.Listing.Fulfilment, domain.AfroTransactDelivery):
+			row.Fulfilment = domain.AfroTransactDelivery
+		case strings.EqualFold(p.Listing.Fulfilment, domain.ShipsFromSeller):
+			row.Fulfilment = domain.ShipsFromSeller
+		}
 	}
 	row.StatusLabel = domain.ListingStatusLabel(row.Status)
 	for i, v := range p.Variants {
@@ -130,6 +137,9 @@ func (s *sellerCatalogImpl) sellableStock(ctx context.Context, bearer string, ro
 		return
 	}
 	byProduct := map[string]int{}
+	byProductID := map[string]int{}
+	ffByProduct := map[string][]string{}
+	ffByProductID := map[string][]string{}
 	for page := 0; page < 25; page++ {
 		p, err := s.r.d.Offers.List(ctx, bearer, page, 200)
 		if err != nil {
@@ -139,18 +149,75 @@ func (s *sellerCatalogImpl) sellableStock(ctx context.Context, bearer string, ro
 			if strings.EqualFold(o.Status, "WITHDRAWN") {
 				continue
 			}
-			byProduct[strings.ToUpper(o.ProductATIN)] += max(0, o.AvailableQty)
+			atin := strings.ToUpper(o.ProductATIN)
+			if atin != "" {
+				byProduct[atin] += max(0, o.AvailableQty)
+				if o.Fulfilment != "" {
+					ffByProduct[atin] = append(ffByProduct[atin], strings.ToUpper(o.Fulfilment))
+				}
+			}
+			if o.ProductID != "" {
+				byProductID[o.ProductID] += max(0, o.AvailableQty)
+				if o.Fulfilment != "" {
+					ffByProductID[o.ProductID] = append(ffByProductID[o.ProductID], strings.ToUpper(o.Fulfilment))
+				}
+			}
 		}
 		if len(p.Items) == 0 || int64((page+1)*200) >= p.Total {
 			break
 		}
 	}
 	for i := range rows {
-		if rows[i].ATIN == nil {
-			continue
+		var ffs []string
+		qty := 0
+		hasQty := false
+		if rows[i].ATIN != nil {
+			atin := strings.ToUpper(*rows[i].ATIN)
+			if q, ok := byProduct[atin]; ok {
+				qty = q
+				hasQty = true
+			}
+			if f, ok := ffByProduct[atin]; ok {
+				ffs = f
+			}
 		}
-		if qty, ok := byProduct[strings.ToUpper(*rows[i].ATIN)]; ok {
-			rows[i].Stock = qty
+		if len(ffs) == 0 && rows[i].ProductID != "" {
+			if q, ok := byProductID[rows[i].ProductID]; ok {
+				qty = q
+				hasQty = true
+			}
+			if f, ok := ffByProductID[rows[i].ProductID]; ok {
+				ffs = f
+			}
+		}
+		if len(ffs) > 0 {
+			firstFF := ffs[0]
+			allSame := true
+			for _, ff := range ffs[1:] {
+				if ff != firstFF {
+					allSame = false
+					break
+				}
+			}
+			if allSame {
+				switch firstFF {
+				case domain.FulfilledByAfroTransact:
+					rows[i].Fulfilment = domain.FulfilledByAfroTransact
+				case domain.AfroTransactDelivery:
+					rows[i].Fulfilment = domain.AfroTransactDelivery
+				case domain.ShipsFromSeller:
+					rows[i].Fulfilment = domain.ShipsFromSeller
+				}
+			}
+		}
+		if hasQty {
+			if rows[i].Fulfilment == domain.FulfilledByAfroTransact {
+				rows[i].Stock = qty
+			} else if rows[i].Status != "LIVE" && qty == 0 {
+				rows[i].Stock = 0
+			} else if qty > rows[i].Stock || rows[i].Stock == 0 {
+				rows[i].Stock = qty
+			}
 		}
 	}
 }
@@ -438,6 +505,9 @@ func (s *sellerCatalogImpl) Inventory(ctx context.Context, c *domain.Caller, low
 }
 
 func (s *sellerCatalogImpl) AdjustStock(ctx context.Context, c *domain.Caller, key, sku string, quantity int, reason string) (domain.StockAdjustment, error) {
+	if s.cache != nil {
+		defer s.cache.drop("listings")
+	}
 	errs := map[string]string{}
 	if strings.TrimSpace(sku) == "" {
 		errs["sku"] = "Required"

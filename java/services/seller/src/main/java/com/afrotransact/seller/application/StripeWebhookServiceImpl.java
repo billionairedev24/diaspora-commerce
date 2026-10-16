@@ -23,16 +23,14 @@ class StripeWebhookServiceImpl implements StripeWebhookService {
     private final StripeWebhookParser parser;
     private final WebhookInbox inbox;
     private final ComplianceService compliance;
-    private final BillingService billing;
     private final EarningsCollectionService earnings;
     private final TransactionOperations tx;
 
     StripeWebhookServiceImpl(StripeWebhookParser parser, WebhookInbox inbox, ComplianceService compliance,
-                             BillingService billing, EarningsCollectionService earnings, TransactionOperations tx) {
+                             EarningsCollectionService earnings, TransactionOperations tx) {
         this.parser = parser;
         this.inbox = inbox;
         this.compliance = compliance;
-        this.billing = billing;
         this.earnings = earnings;
         this.tx = tx;
     }
@@ -45,8 +43,7 @@ class StripeWebhookServiceImpl implements StripeWebhookService {
                 LOG.debug("Duplicate Stripe event {} ({}) ignored", event.id(), event.type());
                 return new WebhookResult(event.id(), event.type(), true, "duplicate");
             }
-            String outcome = endpoint == StripeWebhookParser.Endpoint.CONNECT ? compliance.handle(event)
-                    : billing.handle(event);
+            String outcome = endpoint == StripeWebhookParser.Endpoint.CONNECT ? compliance.handle(event) : "ignored";
             inbox.outcome(event.id(), outcome);
             return new WebhookResult(event.id(), event.type(), false, outcome);
         });

@@ -269,3 +269,277 @@
 .modalClose { display: inline-flex; padding: var(--at-space-1); border: 0; border-radius: var(--at-radius-sm); background: none; color: var(--at-color-text-muted); font-size: var(--at-text-xl); cursor: pointer; }
 .modalBody { display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-2) var(--at-space-5) var(--at-space-4); overflow-y: auto; }
 .modalFoot { display: flex; justify-content: flex-end; gap: var(--at-space-2); padding: var(--at-space-3) var(--at-space-5) var(--at-space-4); border-top: 1px solid var(--at-color-border); }
+
+/* Redesigned Package Card, Delivery Options & Items */
+.sellerTitle { font-size: var(--at-text-base); font-weight: var(--at-weight-bold); color: var(--at-color-text); }
+.arrivingTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--at-space-1);
+  padding: 4px 10px;
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-success-bg);
+  color: var(--at-color-success);
+  font-size: var(--at-text-xs);
+  font-weight: var(--at-weight-semibold);
+}
+.arrivingIcon { font-size: 14px; }
+
+.packageItems {
+  padding: var(--at-space-3) var(--at-space-4);
+  border-bottom: 1px solid var(--at-color-border-subtle, var(--at-color-border));
+  background: var(--at-color-surface);
+}
+.itemsList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--at-space-3);
+}
+.itemRow {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: var(--at-space-3);
+  align-items: center;
+}
+.itemThumbWrap { position: relative; width: 48px; height: 48px; flex: none; }
+.itemThumb { width: 48px; height: 48px; border-radius: var(--at-radius-sm); object-fit: cover; border: 1px solid var(--at-color-border); }
+.itemQtyBadge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-text);
+  color: var(--at-color-surface);
+  font-size: 10px;
+  font-weight: var(--at-weight-bold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.itemInfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.itemTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-medium); color: var(--at-color-text); line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.itemMeta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-1); font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.itemDot { color: var(--at-color-border-strong); }
+.perishableTag { color: #b45309; background: #fef3c7; padding: 1px 6px; border-radius: 4px; font-weight: var(--at-weight-semibold); }
+.itemPrice { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
+
+.deliveryOptionsSection {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--at-space-2);
+}
+.optionsSectionTitle {
+  font-size: var(--at-text-xs);
+  font-weight: var(--at-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--at-color-text-muted);
+  margin-bottom: var(--at-space-1);
+}
+.deliveryGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--at-space-2);
+}
+.deliveryOptionCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--at-space-3);
+  padding: var(--at-space-3) var(--at-space-4);
+  border: 1.5px solid var(--at-color-border);
+  border-radius: var(--at-radius-md);
+  background: var(--at-color-surface);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+.deliveryOptionCard:hover {
+  border-color: var(--at-color-border-strong);
+  background: var(--at-color-surface-hover, var(--at-color-surface-muted));
+}
+.deliveryOptionCardActive {
+  border-color: var(--at-color-action-secondary) !important;
+  background: color-mix(in srgb, var(--at-color-action-secondary) 5%, var(--at-color-surface)) !important;
+  box-shadow: 0 0 0 1px var(--at-color-action-secondary);
+}
+.deliveryOptionCard input[type="radio"] {
+  margin-top: 3px;
+  accent-color: var(--at-color-action-secondary);
+  flex: none;
+}
+.optionCardIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface-muted);
+  flex: none;
+}
+.atdIcon { font-size: 18px; color: #f59e0b; }
+.expressIcon { font-size: 18px; color: #3b82f6; }
+.carrierIcon { font-size: 18px; color: var(--at-color-text-muted); }
+.optionCardContent { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.optionCardHeader { display: flex; align-items: baseline; justify-content: space-between; gap: var(--at-space-2); }
+.optionTitleRow { display: flex; align-items: center; gap: var(--at-space-2); flex-wrap: wrap; }
+.optionCardTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); color: var(--at-color-text); }
+.atdBadge {
+  font-size: 11px;
+  font-weight: var(--at-weight-semibold);
+  padding: 1px 7px;
+  border-radius: var(--at-radius-pill);
+  background: #fef3c7;
+  color: #92400e;
+}
+.expressBadge {
+  font-size: 11px;
+  font-weight: var(--at-weight-semibold);
+  padding: 1px 7px;
+  border-radius: var(--at-radius-pill);
+  background: #dbeafe;
+  color: #1e40af;
+}
+.optionFee { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
+.optionFeeFree {
+  font-size: var(--at-text-xs);
+  font-weight: var(--at-weight-bold);
+  padding: 2px 8px;
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-success-bg);
+  color: var(--at-color-success);
+}
+.optionCardDesc {
+  margin: 0;
+  font-size: var(--at-text-xs);
+  color: var(--at-color-text-muted);
+  line-height: 1.4;
+}
+
+/* Local Quote Header */
+.localQuoteHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--at-space-2);
+}
+.localQuoteBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--at-space-1);
+  font-size: var(--at-text-xs);
+  font-weight: var(--at-weight-bold);
+  color: #b45309;
+}
+.localQuoteCharge {
+  font-size: var(--at-text-sm);
+  font-weight: var(--at-weight-bold);
+  color: var(--at-color-success);
+}
+.localQuoteDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--at-text-xs);
+}
+
+/* Delivery Preferences Form */
+.prefsBox {
+  margin: var(--at-space-2) 0 0;
+  padding: var(--at-space-4);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-md);
+  background: var(--at-color-surface-muted);
+  display: flex;
+  flex-direction: column;
+  gap: var(--at-space-3);
+}
+.prefsLegend { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--at-space-1); }
+.prefsTitle { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
+.prefsSubtitle { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.prefGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--at-space-3);
+}
+.prefField { display: flex; flex-direction: column; gap: 4px; }
+.prefFieldFull { display: flex; flex-direction: column; gap: 4px; }
+.prefFieldLabel { font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); color: var(--at-color-text-muted); }
+.prefSelect, .prefTextarea {
+  padding: var(--at-space-2) var(--at-space-3);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  font: inherit;
+  font-size: var(--at-text-sm);
+}
+.prefSelect:focus-visible, .prefTextarea:focus-visible {
+  outline: 2px solid var(--at-color-focus);
+  outline-offset: 1px;
+}
+
+/* Pickup Section */
+.pickupSection { display: flex; flex-direction: column; gap: var(--at-space-2); }
+.pickupGrid {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--at-space-2);
+}
+.pickupOptionCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--at-space-3);
+  padding: var(--at-space-3) var(--at-space-4);
+  border: 1.5px solid var(--at-color-border);
+  border-radius: var(--at-radius-md);
+  background: var(--at-color-surface);
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+.pickupOptionCard:hover {
+  border-color: var(--at-color-border-strong);
+  background: var(--at-color-surface-hover, var(--at-color-surface-muted));
+}
+.pickupOptionCardActive {
+  border-color: var(--at-color-action-secondary) !important;
+  background: color-mix(in srgb, var(--at-color-action-secondary) 5%, var(--at-color-surface)) !important;
+  box-shadow: 0 0 0 1px var(--at-color-action-secondary);
+}
+.pickupOptionCard input[type="radio"] {
+  margin-top: 3px;
+  accent-color: var(--at-color-action-secondary);
+  flex: none;
+}
+.pickupCardIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--at-radius-sm);
+  background: color-mix(in srgb, var(--at-color-action-secondary) 15%, transparent);
+  color: var(--at-color-action-secondary);
+  flex: none;
+  font-size: 18px;
+}
+.pickupCardContent { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pickupCardHeader { display: flex; align-items: baseline; justify-content: space-between; gap: var(--at-space-2); }
+.pickupPointName { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); color: var(--at-color-text); }
+.pickupPointAddress { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.pickupPointMeta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--at-space-1); font-size: var(--at-text-xs); color: var(--at-color-text-muted); margin-top: 2px; }
+.pickupDistance { font-weight: var(--at-weight-semibold); color: var(--at-color-text); }
+.pickupHours { color: var(--at-color-text-muted); }
+.pickupTag { font-size: 10px; padding: 1px 6px; border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); color: var(--at-color-text-muted); }
+

@@ -824,6 +824,7 @@ type MediaClient interface {
 	Complete(ctx context.Context, bearer, assetID string) (MediaAsset, error)
 	Library(ctx context.Context, bearer, q, status, matched string, page, size int) (MediaLibraryPage, error)
 	RemoveFromLibrary(ctx context.Context, bearer, assetID string) error
+	RenameLibraryImage(ctx context.Context, bearer, assetID, fileName string) (MediaLibraryImage, error)
 }
 
 // ---------------------------------------------------------------- orders (seller side)
@@ -1020,7 +1021,7 @@ type CarrierLabel struct {
 
 // CarrierClient rate-shops and buys labels.
 type CarrierClient interface {
-	Rates(ctx context.Context, bearer string, s CarrierShipment) (CarrierRates, error)
+	Rates(ctx context.Context, bearer string, s CarrierShipment, carrier string) (CarrierRates, error)
 	BuyLabel(ctx context.Context, bearer, idempotencyKey, carrier, service string, s CarrierShipment) (CarrierLabel, error)
 	// LabelDocument is the printable document of the purchased label with this tracking number
 	// (GET /v1/labels/by-tracking/{carrier}/{trackingNumber}/document).

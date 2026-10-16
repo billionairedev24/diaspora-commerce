@@ -59,7 +59,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                   <p className={pageStyles.muted}>
                     {s.label} · {t('ord.soldBy', { seller: s.sellerName })}
                   </p>
-                  {s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(fmt.tag, s.promisedBy) ?? '' })}</p>}
+                  {s.status.toLowerCase() !== 'cancelled' && s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(fmt.tag, s.promisedBy) ?? '' })}</p>}
                   {s.localDelivery && (
                     <p className={pageStyles.muted} data-testid="order-local-delivery">
                       <Truck aria-hidden />{' '}
@@ -73,12 +73,12 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                     </p>
                   )}
                   {s.pickup && <PickupDetails pickup={s.pickup} />}
-                  {s.carrier && s.trackingNumber && (
+                  {s.status.toLowerCase() !== 'cancelled' && s.carrier && s.trackingNumber && (
                     <p className={pageStyles.muted}>
                       <Truck aria-hidden /> {t('ord.trackingNo', { carrier: s.carrier.toUpperCase(), number: s.trackingNumber })}
                     </p>
                   )}
-                  {s.deliveryCode && (
+                  {s.status.toLowerCase() !== 'cancelled' && s.deliveryCode && (
                     <span className={styles.code}>
                       <Key aria-hidden /> {t('ord.deliveryCode')} <strong className={pageStyles.code}>{s.deliveryCode}</strong> · {t('ord.codeHint')}
                     </span>

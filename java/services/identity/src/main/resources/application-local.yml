@@ -40,6 +40,7 @@ at:
     cors-allowed-origins:
       - ${PUBLIC_WEB_URL:http://localhost:3000}
       - ${SELLER_CENTER_URL:http://localhost:3001}
+      - http://localhost:3010
       - ${STAFF_CONSOLE_URL:http://localhost:3002}
       # Expo web previews of the customer and driver apps (make up / make mobile): OIDC discovery and token calls.
       - http://localhost:8081
@@ -85,8 +86,8 @@ at:
         # the first-party sign-in API (/v1/auth/*).
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:local-bff-secret}}
         grant-types: [authorization_code, refresh_token, client_credentials]
-        redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/oidc/callback", "${SELLER_CENTER_URL:http://localhost:3001}/api/bff/v1/auth/oidc/callback", "${STAFF_CONSOLE_URL:http://localhost:3002}/api/bff/v1/auth/oidc/callback"]
-        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/signed-out/storefront", "${SELLER_CENTER_URL:http://localhost:3001}/api/bff/v1/auth/signed-out/seller-center", "${STAFF_CONSOLE_URL:http://localhost:3002}/api/bff/v1/auth/signed-out/staff-console"]
+        redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/oidc/callback", "${SELLER_CENTER_URL:http://localhost:3001}/api/bff/v1/auth/oidc/callback", "http://localhost:3010/api/bff/v1/auth/oidc/callback", "${STAFF_CONSOLE_URL:http://localhost:3002}/api/bff/v1/auth/oidc/callback"]
+        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/signed-out/storefront", "${SELLER_CENTER_URL:http://localhost:3001}/api/bff/v1/auth/signed-out/seller-center", "http://localhost:3010/api/bff/v1/auth/signed-out/seller-center", "${STAFF_CONSOLE_URL:http://localhost:3002}/api/bff/v1/auth/signed-out/staff-console"]
         scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read", "orders:pay-link"]
       - client-id: seller-service
         name: Seller service

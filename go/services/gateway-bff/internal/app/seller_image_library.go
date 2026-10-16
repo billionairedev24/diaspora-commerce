@@ -105,6 +105,39 @@ func (s *sellerImportImpl) RemoveLibraryImage(ctx context.Context, c *domain.Cal
 	return nil
 }
 
+func (s *sellerImportImpl) RenameLibraryImage(ctx context.Context, c *domain.Caller, assetID, fileName string) (domain.ImageLibraryItem, error) {
+	assetID = strings.TrimSpace(assetID)
+	fileName = strings.TrimSpace(fileName)
+	errs := map[string]string{}
+	if assetID == "" {
+		errs["assetId"] = "Required"
+	}
+	if fileName == "" {
+		errs["fileName"] = "Required"
+	}
+	if len(errs) > 0 {
+		return domain.ImageLibraryItem{}, domain.ValidationProblem(errs)
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+		return domain.ImageLibraryItem{}, err
+	}
+	if s.r.d.Media == nil {
+		return domain.ImageLibraryItem{}, domain.UpstreamUnavailable("media")
+	}
+	i, err := s.r.d.Media.RenameLibraryImage(ctx, c.BearerToken, assetID, fileName)
+	if err != nil {
+		return domain.ImageLibraryItem{}, mapErr("media", err)
+	}
+	flags := i.Flags
+	if flags == nil {
+		flags = []string{}
+	}
+	return domain.ImageLibraryItem{
+		AssetID: i.AssetID, FileName: i.FileName, SKU: i.SKU, Slot: i.Slot, Status: strings.ToUpper(i.Status),
+		URL: i.URL, Width: i.Width, Height: i.Height, Bytes: i.Bytes, Flags: flags, CreatedAt: i.CreatedAt, UsedBy: []string{},
+	}, nil
+}
+
 func (s *sellerImportImpl) AttachLibraryImages(ctx context.Context, c *domain.Caller, skus []string) (domain.AttachLibraryImagesResult, error) {
 	if len(skus) > 5000 {
 		return domain.AttachLibraryImagesResult{}, domain.ValidationProblem(map[string]string{"skus": "At most 5,000 SKUs"})

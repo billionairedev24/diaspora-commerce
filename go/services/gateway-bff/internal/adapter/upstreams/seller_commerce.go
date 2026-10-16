@@ -246,6 +246,13 @@ func (m *mediaImpl) RemoveFromLibrary(ctx context.Context, bearer, assetID strin
 	return err
 }
 
+func (m *mediaImpl) RenameLibraryImage(ctx context.Context, bearer, assetID, fileName string) (port.MediaLibraryImage, error) {
+	var out port.MediaLibraryImage
+	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/library/" + url.PathEscape(assetID), Bearer: bearer,
+		JSON: map[string]any{"fileName": fileName}}, &out)
+	return out, err
+}
+
 func (m *mediaImpl) Complete(ctx context.Context, bearer, assetID string) (port.MediaAsset, error) {
 	var a port.MediaAsset
 	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(assetID) + "/complete", Bearer: bearer}, &a)
@@ -319,9 +326,13 @@ var _ port.CarrierClient = (*carrierImpl)(nil)
 // NewCarrier returns the carrier-gateway client (rates and labels).
 func NewCarrier(c httpclient.Client) port.CarrierClient { return &carrierImpl{c: c} }
 
-func (k *carrierImpl) Rates(ctx context.Context, bearer string, s port.CarrierShipment) (port.CarrierRates, error) {
+func (k *carrierImpl) Rates(ctx context.Context, bearer string, s port.CarrierShipment, carrier string) (port.CarrierRates, error) {
 	var out port.CarrierRates
-	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/rates", Bearer: bearer, JSON: map[string]any{"shipment": s}}, &out)
+	payload := map[string]any{"shipment": s}
+	if carrier != "" {
+		payload["carriers"] = []string{carrier}
+	}
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/rates", Bearer: bearer, JSON: payload}, &out)
 	return out, err
 }
 

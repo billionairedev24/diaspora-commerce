@@ -26,6 +26,7 @@ type SellerImportService interface {
 	// ImageLibrary is the organisation's image library (media) with the SKUs that use each image (catalog), S310.
 	ImageLibrary(ctx context.Context, c *domain.Caller, q, status, matched string, page, size int) (domain.ImageLibraryPage, error)
 	RemoveLibraryImage(ctx context.Context, c *domain.Caller, assetID string) error
+	RenameLibraryImage(ctx context.Context, c *domain.Caller, assetID, fileName string) (domain.ImageLibraryItem, error)
 	AttachLibraryImages(ctx context.Context, c *domain.Caller, skus []string) (domain.AttachLibraryImagesResult, error)
 	Brands(ctx context.Context, c *domain.Caller, q string) (domain.BrandList, error)
 }

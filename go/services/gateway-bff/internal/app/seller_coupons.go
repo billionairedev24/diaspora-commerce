@@ -13,6 +13,7 @@ type SellerCouponsService interface {
 	List(ctx context.Context, c *domain.Caller) ([]domain.SellerCoupon, error)
 	Create(ctx context.Context, c *domain.Caller, in domain.CreateSellerCoupon) (domain.SellerCoupon, error)
 	SetStatus(ctx context.Context, c *domain.Caller, id, status string) (domain.SellerCoupon, error)
+	Delete(ctx context.Context, c *domain.Caller, id string) error
 }
 
 type sellerCouponsImpl struct{ r *orgResolver }
@@ -42,30 +43,39 @@ func (s *sellerCouponsImpl) List(ctx context.Context, c *domain.Caller) ([]domai
 	}
 	raw, err := s.r.d.Offers.ListCoupons(ctx, c.BearerToken)
 	if err != nil {
-		return nil, err
+		return nil, mapErr("offers", err)
 	}
 	out := make([]domain.SellerCoupon, 0, len(raw))
 	for _, row := range raw {
+		// When expired, it can be deleted or hidden
+		if strings.EqualFold(row.Status, "EXPIRED") {
+			continue
+		}
 		out = append(out, sellerCouponOf(row, strings.EqualFold(row.Funding, "SELLER")))
 	}
 	return out, nil
 }
 
 func (s *sellerCouponsImpl) Create(ctx context.Context, c *domain.Caller, in domain.CreateSellerCoupon) (domain.SellerCoupon, error) {
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit); err != nil {
+	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit)
+	if err != nil {
 		return domain.SellerCoupon{}, err
 	}
 	if s.r.d.Offers == nil {
 		return domain.SellerCoupon{}, domain.UpstreamUnavailable("offers")
 	}
+	scopeRef := in.ScopeRef
+	if (strings.EqualFold(in.Scope, "SELLER") || in.Scope == "") && scopeRef == "" {
+		scopeRef = sc.org.ID
+	}
 	body := map[string]any{
 		"code": in.Code, "description": in.Description, "type": in.Type, "value": in.Value, "currency": firstNonEmpty(in.Currency, domain.Currency),
-		"scope": in.Scope, "scopeRef": in.ScopeRef, "minSpendMinor": in.MinSpendMinor, "totalLimit": in.TotalLimit,
+		"scope": in.Scope, "scopeRef": scopeRef, "minSpendMinor": in.MinSpendMinor, "totalLimit": in.TotalLimit,
 		"perCustomerLimit": in.PerCustomerLimit, "clipRequired": false, "funding": "SELLER",
 	}
 	row, err := s.r.d.Offers.CreateCoupon(ctx, c.BearerToken, body)
 	if err != nil {
-		return domain.SellerCoupon{}, err
+		return domain.SellerCoupon{}, mapErr("offers", err)
 	}
 	return sellerCouponOf(row, true), nil
 }
@@ -79,7 +89,22 @@ func (s *sellerCouponsImpl) SetStatus(ctx context.Context, c *domain.Caller, id,
 	}
 	row, err := s.r.d.Offers.SetCouponStatus(ctx, c.BearerToken, id, strings.ToUpper(status))
 	if err != nil {
-		return domain.SellerCoupon{}, err
+		return domain.SellerCoupon{}, mapErr("offers", err)
 	}
 	return sellerCouponOf(row, true), nil
+}
+
+func (s *sellerCouponsImpl) Delete(ctx context.Context, c *domain.Caller, id string) error {
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit); err != nil {
+		return err
+	}
+	if s.r.d.Offers == nil {
+		return domain.UpstreamUnavailable("offers")
+	}
+	// Expire the coupon in offers upstream so it can never be used again.
+	_, err := s.r.d.Offers.SetCouponStatus(ctx, c.BearerToken, id, "EXPIRED")
+	if err != nil {
+		return mapErr("offers", err)
+	}
+	return nil
 }

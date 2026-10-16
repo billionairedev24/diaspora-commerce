@@ -3,6 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { CouponsView } from '@/components/growth/CouponsView';
 import { PayoutsView } from '@/components/money/PayoutsView';
 import { OrdersView } from '@/components/orders/OrdersView';
 import { EarningsView, ProviderFeesCard } from '@/components/provider/EarningsView';
@@ -67,5 +68,24 @@ describe('Seller Center screens (against the seller mocks)', () => {
     await user.type(partial, '48');
     await user.click(screen.getByRole('button', { name: 'Save policy' }));
     expect(await screen.findByText('Must be less than the free-cancellation window')).toBeInTheDocument();
+  });
+
+  it('renders coupons in TanStack DataTable with create and delete buttons', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<CouponsView />);
+    expect(await screen.findByRole('table', { name: 'Coupons' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New seller coupon' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Delete coupon ADE10/i })).toBeInTheDocument();
+
+    // Clicking delete opens confirmation dialog
+    await user.click(screen.getByRole('button', { name: /Delete coupon ADE10/i }));
+    const dialog = await screen.findByRole('dialog', { name: /Delete ADE10/ });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText(/Customers will no longer be able to use it/)).toBeInTheDocument();
+
+    // Confirm deletion
+    const deleteBtn = within(dialog).getByRole('button', { name: 'Delete' });
+    await user.click(deleteBtn);
+    await waitFor(() => expect(screen.queryByText('ADE10')).not.toBeInTheDocument());
   });
 });

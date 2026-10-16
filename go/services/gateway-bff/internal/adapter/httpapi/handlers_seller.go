@@ -59,6 +59,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/coupons", h.sellerCoupons)
 		route("POST /v1/seller/coupons", h.sellerCreateCoupon)
 		route("POST /v1/seller/coupons/{couponId}/status", h.sellerCouponStatus)
+		route("DELETE /v1/seller/coupons/{couponId}", h.sellerDeleteCoupon)
 	}
 	if h.s.SellerFba != nil {
 		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut} {
@@ -89,6 +90,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/imports/{importId}/report", h.importReport)
 		route("POST /v1/seller/imports/{importId}/start", h.startImport)
 		route("GET /v1/seller/image-library", h.imageLibrary)
+		route("PATCH /v1/seller/image-library/{assetId}", h.renameLibraryImage)
 		route("DELETE /v1/seller/image-library/{assetId}", h.removeLibraryImage)
 		route("POST /v1/seller/image-library/attach", h.attachLibraryImages)
 		route("GET /v1/seller/catalog/brands", h.brands)
@@ -335,7 +337,7 @@ func (h *handlersImpl) shippingRates(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	v, err := h.s.SellerOrders.Rates(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Parcel, b.ShipFrom)
+	v, err := h.s.SellerOrders.Rates(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Parcel, b.ShipFrom, b.Carrier)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -806,6 +808,11 @@ func (h *handlersImpl) sellerCouponStatus(w http.ResponseWriter, r *http.Request
 	}
 	v, err := h.s.SellerCoupons.SetStatus(r.Context(), callerFrom(r.Context()), r.PathValue("couponId"), b.Status)
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerDeleteCoupon(w http.ResponseWriter, r *http.Request) {
+	err := h.s.SellerCoupons.Delete(r.Context(), callerFrom(r.Context()), r.PathValue("couponId"))
+	h.reply(w, r, http.StatusNoContent, nil, err)
 }
 
 // ---------------------------------------------------------------- exports

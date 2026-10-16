@@ -48,21 +48,18 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
     public Subscription update(Subscription s) {
         int rows = jdbc.sql("""
                 update subscription set plan_code = :plan, plan_version = :planVersion, cadence = :cadence, status = :status,
-                       payment_method_kind = :pm, stripe_customer_id = :customer, stripe_subscription_id = :sub,
-                       stripe_item_id = :item, trial_ends_at = :trial, current_period_start = :start,
+                       payment_method_kind = :pm, anchor_date = :anchor, trial_ends_at = :trial, current_period_start = :start,
                        current_period_end = :end, cancel_at_period_end = :cancel, pending_plan_code = :pendingPlan,
                        pending_cadence = :pendingCadence, pending_effective_at = :pendingAt, dunning = :dunning,
                        failed_payment_attempts = :attempts, next_payment_attempt_at = :nextAttempt,
-                       started_at = coalesce(started_at, case when cast(:sub as varchar) is not null
-                           then coalesce(cast(:start as timestamptz), cast(:at as timestamptz)) end),
+                       started_at = coalesce(started_at, coalesce(cast(:anchor as timestamptz), cast(:start as timestamptz))),
                        updated_at = :at, version = version + 1
                 where org_id = :org and version = :version
                 """)
                 .param("plan", s.planCode()).param("planVersion", s.planVersion()).param("cadence", s.cadence().name())
                 .param("status", s.status().name())
                 .param("pm", s.paymentMethodKind() == null ? null : s.paymentMethodKind().name())
-                .param("customer", s.stripeCustomerId()).param("sub", s.stripeSubscriptionId())
-                .param("item", s.stripeItemId()).param("trial", Sql.ts(s.trialEndsAt()))
+                .param("anchor", Sql.ts(s.anchorDate())).param("trial", Sql.ts(s.trialEndsAt()))
                 .param("start", Sql.ts(s.currentPeriodStart())).param("end", Sql.ts(s.currentPeriodEnd()))
                 .param("cancel", s.cancelAtPeriodEnd()).param("pendingPlan", s.pendingPlanCode())
                 .param("pendingCadence", s.pendingCadence() == null ? null : s.pendingCadence().name())
@@ -90,14 +87,12 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
 
     @Override
     public Optional<Subscription> lockByStripeSubscription(String subscriptionId) {
-        return jdbc.sql("select * from subscription where stripe_subscription_id = :s for update")
-                .param("s", subscriptionId).query(this::map).optional();
+        return Optional.empty();
     }
 
     @Override
     public Optional<Subscription> findByCustomer(String customerId) {
-        return jdbc.sql("select * from subscription where stripe_customer_id = :c").param("c", customerId)
-                .query(this::map).optional();
+        return Optional.empty();
     }
 
     @Override
@@ -111,6 +106,17 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
         return jdbc.sql("""
                 select * from subscription where pending_plan_code is not null and pending_effective_at <= :now
                 order by pending_effective_at limit :limit
+                """).param("now", Sql.ts(now)).param("limit", limit).query(this::map).list();
+    }
+
+    @Override
+    public List<Subscription> dueRenewals(Instant now, int limit) {
+        return jdbc.sql("""
+                select * from subscription
+                where status in ('ACTIVE', 'TRIALING', 'PAST_DUE')
+                  and current_period_end is not null
+                  and current_period_end <= :now
+                order by current_period_end limit :limit
                 """).param("now", Sql.ts(now)).param("limit", limit).query(this::map).list();
     }
 
@@ -150,6 +156,15 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
     }
 
     @Override
+    public long adjustCreditBalance(String orgId, long deltaCents) {
+        return jdbc.sql("""
+                update subscription set credit_balance_cents = greatest(0, credit_balance_cents + :delta)
+                where org_id = :o
+                returning credit_balance_cents
+                """).param("delta", deltaCents).param("o", orgId).query(Long.class).single();
+    }
+
+    @Override
     public void setPlanFeeCollection(String orgId, PlanFeeCollection mode, String source, String actor,
                                      Instant at) {
         jdbc.sql("""
@@ -178,8 +193,8 @@ class JdbcSubscriptionRepository implements SubscriptionRepository {
         String pendingCadence = rs.getString("pending_cadence");
         return new Subscription(rs.getString("org_id"), rs.getString("plan_code"), rs.getInt("plan_version"),
                 Cadence.valueOf(rs.getString("cadence")), SubscriptionStatus.valueOf(rs.getString("status")),
-                pm == null ? null : PaymentMethodKind.valueOf(pm), rs.getString("stripe_customer_id"),
-                rs.getString("stripe_subscription_id"), rs.getString("stripe_item_id"),
+                pm == null ? null : PaymentMethodKind.valueOf(pm),
+                Sql.instant(rs, "anchor_date"),
                 Sql.instant(rs, "trial_ends_at"), Sql.instant(rs, "current_period_start"),
                 Sql.instant(rs, "current_period_end"), rs.getBoolean("cancel_at_period_end"),
                 rs.getString("pending_plan_code"), pendingCadence == null ? null : Cadence.valueOf(pendingCadence),

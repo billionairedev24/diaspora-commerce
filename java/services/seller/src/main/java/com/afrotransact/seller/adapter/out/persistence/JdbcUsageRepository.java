@@ -84,12 +84,12 @@ class JdbcUsageRepository implements UsageRepository {
     public void markReported(UsageDay d, long reportedQuantity, int revision, String identifier, long value,
                              String customerId, Instant at) {
         jdbc.sql("""
-                insert into usage_report (identifier, org_id, meter, day, value, stripe_customer_id, created_at)
-                values (:id, :org, :meter, :day, :value, :customer, :at)
+                insert into usage_report (identifier, org_id, meter, day, value, created_at)
+                values (:id, :org, :meter, :day, :value, :at)
                 on conflict (identifier) do nothing
                 """)
                 .param("id", identifier).param("org", d.orgId()).param("meter", d.meter().name())
-                .param("day", Date.valueOf(d.day())).param("value", value).param("customer", customerId)
+                .param("day", Date.valueOf(d.day())).param("value", value)
                 .param("at", Sql.ts(at))
                 .update();
         jdbc.sql("""

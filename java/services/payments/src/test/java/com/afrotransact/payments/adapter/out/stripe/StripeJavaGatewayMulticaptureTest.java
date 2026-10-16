@@ -81,7 +81,8 @@ class StripeJavaGatewayMulticaptureTest {
         assertThat(pi.id()).isEqualTo("pi_single");
         assertThat(pi.multicapture()).isFalse();
         assertThat(creates()).singleElement().satisfies(r -> assertThat(r.getBodyAsString())
-                .doesNotContain("request_multicapture").contains("capture_method=manual"));
+                .doesNotContain("request_multicapture")
+                .contains("payment_method_options[card][capture_method]=manual"));
     }
 
     @Test

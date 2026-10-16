@@ -215,6 +215,18 @@ func (h *handlersImpl) removeLibraryImage(w http.ResponseWriter, r *http.Request
 	h.reply(w, r, http.StatusNoContent, nil, err)
 }
 
+func (h *handlersImpl) renameLibraryImage(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		FileName string `json:"fileName"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerImports.RenameLibraryImage(r.Context(), callerFrom(r.Context()), r.PathValue("assetId"), b.FileName)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
 func (h *handlersImpl) attachLibraryImages(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		SKUs []string `json:"skus"`

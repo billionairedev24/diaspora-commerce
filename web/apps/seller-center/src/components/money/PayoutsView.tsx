@@ -10,6 +10,7 @@ import { useRef, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
 import { ModulePage } from '@/components/ui/ModulePage';
+import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
@@ -101,28 +102,64 @@ export function PayoutsView() {
         ) : null
       }
     >
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
-        {[
-          ['Available to request', money(b.availableMinor, b.currency), b.payoutsPaused ? 'Paused — see above' : `Minimum ${money(b.minimumPayoutMinor, b.currency)} · one request a day`],
-          ['Still settling', money(b.onHoldMinor, b.currency), 'Released after delivery or completion'],
-          ['On the way', money(b.requestedOrInTransitMinor, b.currency), 'Requested or in transit to your bank'],
-          ['Paid out', money(b.paidMinor, b.currency), 'All time'],
-          ...(b.providerFeesMinor ? [['Provider fees', money(b.providerFeesMinor, b.currency), 'Late cancellations debited from your balance']] : [])
-        ].map(([label, value, detail]) => (
-          <div key={label} className="flex flex-col gap-1 rounded-md border border-border p-4">
-            <span className="text-xs font-semibold text-muted">{label}</span>
-            <strong className="text-2xl">{value}</strong>
-            <span className="text-xs text-muted">{detail}</span>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
+        <div className={`flex flex-col gap-1 rounded-md border p-4 ${b.availableMinor < 0 ? 'border-amber-500/40 bg-amber-500/5' : 'border-border'}`}>
+          <span className="text-xs font-semibold text-muted">Available to request</span>
+          <strong className={`text-2xl ${b.availableMinor < 0 ? 'text-amber-600 dark:text-amber-400' : ''}`}>
+            {money(b.availableMinor, b.currency)}
+          </strong>
+          <span className="text-xs text-muted">
+            {b.payoutsPaused
+              ? 'Paused — see above'
+              : b.availableMinor < 0
+              ? 'Negative balance: shipping label charges will be covered once orders on hold settle.'
+              : `Minimum ${money(b.minimumPayoutMinor, b.currency)} · one request a day`}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+          <span className="text-xs font-semibold text-muted">Still settling (on hold)</span>
+          <strong className="text-2xl">{money(b.onHoldMinor, b.currency)}</strong>
+          <span className="text-xs text-muted">Released after delivery or completion buffer</span>
+        </div>
+
+        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+          <span className="text-xs font-semibold text-muted">On the way</span>
+          <strong className="text-2xl">{money(b.requestedOrInTransitMinor, b.currency)}</strong>
+          <span className="text-xs text-muted">Requested or in transit to your bank</span>
+        </div>
+
+        <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+          <span className="text-xs font-semibold text-muted">Paid out</span>
+          <strong className="text-2xl">{money(b.paidMinor, b.currency)}</strong>
+          <span className="text-xs text-muted">Total earnings transferred to date</span>
+        </div>
+
+        {b.providerFeesMinor ? (
+          <div className="flex flex-col gap-1 rounded-md border border-border p-4">
+            <span className="text-xs font-semibold text-muted">Provider fees</span>
+            <strong className="text-2xl">{money(b.providerFeesMinor, b.currency)}</strong>
+            <span className="text-xs text-muted">Late cancellations debited from your balance</span>
           </div>
-        ))}
+        ) : null}
       </div>
+
+      {b.availableMinor < 0 ? (
+        <Notice tone="warning" title="Account balance is negative.">
+          You have {money(Math.abs(b.availableMinor), b.currency)} in shipping label or service charges awaiting settlement. Once your held funds of {money(b.onHoldMinor, b.currency)} release upon delivery, this amount will automatically be offset and the remainder will be available to request.
+        </Notice>
+      ) : null}
+
       {b.holds.length ? (
-        <Card title="On hold per order">
+        <Card title="Funds on hold per order">
+          <p className="m-0 mb-3 text-xs text-muted">
+            Customer payments are held securely until the shipment is confirmed delivered to protect against disputes and returns.
+          </p>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {b.holds.map((h) => (
-              <li key={h.orderId} className="flex gap-2">
-                <span className="flex-1 font-mono text-xs">{h.orderId}</span>
-                <span className="text-muted">{h.releaseAt ? `Releases ${shortDate(h.releaseAt)}` : 'Releases after delivery'}</span>
+              <li key={h.orderId} className="flex items-center gap-2 border-b border-border/50 py-1.5 last:border-0">
+                <span className="flex-1 font-mono text-xs text-text">{h.orderId}</span>
+                <span className="text-xs text-muted">{h.releaseAt ? `Releases ${shortDate(h.releaseAt)}` : 'Releases after delivery'}</span>
                 <strong>{money(h.amountMinor, b.currency)}</strong>
               </li>
             ))}

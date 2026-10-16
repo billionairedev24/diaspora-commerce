@@ -46,9 +46,23 @@ type SellerDeps struct {
 	// Cache holds identity's module matrix per portal (not personal data).
 	Cache     port.Cache
 	MatrixTTL time.Duration
-	Location  *time.Location
-	Clock     Clock
-	Log       *slog.Logger
+	// ListingCache caches table scans for seller listings across catalog, listing and offers.
+	ListingCache *scanCache[domain.ListingRow]
+	Location     *time.Location
+	Clock        Clock
+	Log          *slog.Logger
+}
+
+// NewListingCache returns a new scanCache for ListingRow.
+func NewListingCache(c Clock) *scanCache[domain.ListingRow] {
+	return newScanCache[domain.ListingRow](c)
+}
+
+func (d SellerDeps) listingCache() *scanCache[domain.ListingRow] {
+	if d.ListingCache != nil {
+		return d.ListingCache
+	}
+	return newScanCache[domain.ListingRow](d.clock())
 }
 
 // clock is the configured clock (time.Now by default).

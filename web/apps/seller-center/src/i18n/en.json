@@ -714,6 +714,11 @@
   "sc.img.status.REJECTED": "Rejected",
   "sc.img.remove": "Remove",
   "sc.img.removeAria": "Remove {name} from the library",
+  "sc.img.rename": "Rename",
+  "sc.img.renameAria": "Rename {name}",
+  "sc.img.renamed": "File renamed successfully.",
+  "sc.img.renameTitle": "Rename photo",
+  "sc.img.renameDesc": "Enter a new file name. If named after a SKU (e.g. SKU.MAIN.jpg), it will automatically link to that listing.",
   "sc.img.addTitle": "Add photos",
   "sc.img.drop": "Drop photos, a folder or a ZIP here",
   "sc.img.browse": "or choose files",
@@ -760,5 +765,8 @@
   "sc.pf.moreDetails": "More details (optional, {count})",
   "sc.pf.handlingDays": "{count} business day(s)",
   "sc.billing.expires": "Expires {date}",
-  "sc.billing.expired": "Expired"
+  "sc.billing.expired": "Expired",
+  "sc.coupons.delete": "Delete",
+  "sc.coupons.deleteConfirm": "Delete coupon {code}? Customers will no longer be able to use it.",
+  "sc.coupons.deleted": "Coupon deleted"
 }

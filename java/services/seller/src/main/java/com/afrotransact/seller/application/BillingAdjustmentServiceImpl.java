@@ -28,11 +28,8 @@ import com.afrotransact.seller.domain.SubscriptionStatus;
 import com.afrotransact.seller.port.BillingGrantRepository;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.InvoiceRepository;
-import com.afrotransact.seller.port.InvoiceSnapshot;
 import com.afrotransact.seller.port.Page;
-import com.afrotransact.seller.port.StripeBillingGateway;
 import com.afrotransact.seller.port.SubscriptionRepository;
-import com.afrotransact.seller.port.SubscriptionSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -48,7 +45,6 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
     private final BillingGrantRepository grants;
     private final SubscriptionRepository subs;
     private final InvoiceRepository invoices;
-    private final StripeBillingGateway stripe;
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
@@ -56,12 +52,11 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
     private final Clock clock;
 
     BillingAdjustmentServiceImpl(BillingGrantRepository grants, SubscriptionRepository subs, InvoiceRepository invoices,
-                                 StripeBillingGateway stripe, AccessGuard access, DomainEventPublisher events,
+                                 AccessGuard access, DomainEventPublisher events,
                                  TransactionOperations tx, SellerSettings settings, Clock clock) {
         this.grants = grants;
         this.subs = subs;
         this.invoices = invoices;
-        this.stripe = stripe;
         this.access = access;
         this.events = events;
         this.tx = tx;
@@ -75,11 +70,7 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
         if (amountCents <= 0 || amountCents > MAX_CREDIT_CENTS) {
             throw invalid("amountCents", "$0.01 to $10,000");
         }
-        Subscription sub = subscription(orgId);
-        if (sub.stripeCustomerId() == null) {
-            throw new SellerStateConflict("seller.no-stripe-customer", "This organisation has no Stripe customer "
-                    + "yet (free plan or not activated)");
-        }
+        subscription(orgId);
         return record(manual(orgId, actor, GrantType.CREDIT, amountCents, null, null, null, null, reasonCode, note,
                 requestKey, PlanPricing.usd(amountCents) + " credit"));
     }
@@ -90,7 +81,10 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
         if (days < 1 || days > 365) {
             throw invalid("days", "1 to 365 days");
         }
-        requireStripeSubscription(subscription(orgId));
+        Subscription sub = subscription(orgId);
+        if (sub.status() == SubscriptionStatus.CANCELED) {
+            throw new SellerStateConflict("seller.no-paid-subscription", "This organisation has no active subscription");
+        }
         return record(manual(orgId, actor, GrantType.FREE_DAYS, null, days, null, null, null, reasonCode, note,
                 requestKey, RewardLabels.days(days) + " free"));
     }
@@ -118,7 +112,7 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
         }
         Subscription sub = subscription(orgId);
         Instant trialEnd = null;
-        if (sub.status() == SubscriptionStatus.TRIALING && sub.stripeSubscriptionId() != null) {
+        if (sub.status() == SubscriptionStatus.TRIALING) {
             Instant start = sub.currentPeriodStart() == null ? Instant.now(clock) : sub.currentPeriodStart();
             trialEnd = start.plus(Duration.ofDays(days));
             if (!trialEnd.isAfter(Instant.now(clock).plus(Duration.ofHours(1)))) {
@@ -181,77 +175,61 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
         return applied;
     }
 
-    /** Calls Stripe for one grant; every call carries the grant's own idempotency key. */
+    /** Applies the grant locally to subscription / credit balance / invoice. */
     private BillingGrant.StripeRefs applyAtStripe(BillingGrant g) {
         Subscription sub = tx.execute(s -> subs.find(g.orgId())).orElseThrow(() -> new SellerStateConflict(
                 "seller.no-subscription", "Organisation " + g.orgId() + " has no subscription"));
         Instant now = Instant.now(clock);
         return switch (g.type()) {
             case CREDIT -> {
-                requireCustomer(sub);
-                StripeBillingGateway.BalanceCredit c = stripe.creditBalance(sub.stripeCustomerId(), g.creditCents(),
-                        g.summary(), g.stripeKey("balance"));
-                tx.executeWithoutResult(s -> subs.setCreditBalance(g.orgId(), Math.max(0, -c.endingBalanceCents())));
-                yield new BillingGrant.StripeRefs(sub.stripeCustomerId(), sub.stripeSubscriptionId(), c.id(), null,
+                long newBalance = tx.execute(s -> subs.adjustCreditBalance(g.orgId(), g.creditCents()));
+                yield new BillingGrant.StripeRefs(null, null, "local-credit-" + g.id(), null,
                         null, null);
             }
             case FREE_DAYS -> {
-                requireStripeSubscription(sub);
                 Instant next = FreeDays.newTrialEnd(sub.status(), sub.trialEndsAt(), sub.currentPeriodEnd(), now,
                         g.freeDays());
-                SubscriptionSnapshot snap = stripe.setTrialEnd(sub.stripeSubscriptionId(), next, g.stripeKey("trial"));
-                mirror(g.orgId(), snap);
-                yield new BillingGrant.StripeRefs(sub.stripeCustomerId(), sub.stripeSubscriptionId(), null, null,
-                        sub.trialEndsAt(), snap.trialEnd() == null ? next : snap.trialEnd());
+                tx.executeWithoutResult(s -> subs.lock(g.orgId()).ifPresent(locked ->
+                        subs.update(new Subscription(locked.orgId(), locked.planCode(), locked.planVersion(),
+                                locked.cadence(), locked.status(), locked.paymentMethodKind(), locked.anchorDate(),
+                                next, locked.currentPeriodStart(), locked.currentPeriodEnd(), locked.cancelAtPeriodEnd(),
+                                locked.pendingPlanCode(), locked.pendingCadence(), locked.pendingEffectiveAt(),
+                                locked.dunning(), locked.failedPaymentAttempts(), locked.nextPaymentAttemptAt(),
+                                now, locked.version()))));
+                yield new BillingGrant.StripeRefs(null, null, null, null,
+                        sub.trialEndsAt(), next);
             }
             case PERCENT_OFF -> {
-                requireStripeSubscription(sub);
-                String coupon = "at_" + g.id().toString().replace("-", "").substring(0, 20);
-                long months = FreeDays.couponMonths(sub.cadence(), g.durationInvoices() == null ? 1
-                        : g.durationInvoices());
-                stripe.createCoupon(coupon, g.percentOff() == null ? BigDecimal.ZERO : g.percentOff(), months,
-                        g.summary(), g.stripeKey("coupon"));
-                stripe.addDiscount(sub.stripeSubscriptionId(), coupon, g.stripeKey("discount"));
-                yield new BillingGrant.StripeRefs(sub.stripeCustomerId(), sub.stripeSubscriptionId(), null, coupon,
+                yield new BillingGrant.StripeRefs(null, null, null, "local-coupon-" + g.id(),
                         null, null);
             }
             case WAIVE_INVOICE -> {
-                InvoiceSnapshot v = stripe.voidInvoice(g.invoiceId(), g.stripeKey("void"));
                 tx.executeWithoutResult(s -> invoices.find(g.orgId(), g.invoiceId()).ifPresent(i ->
                         invoices.upsert(new Invoice(i.stripeInvoiceId(), i.orgId(), i.number(), i.periodStart(),
                                 i.periodEnd(), i.amountDueCents(), i.amountPaidCents(), i.currency(),
-                                v.status() == null ? "void" : v.status(), i.billingReason(), i.hostedInvoiceUrl(),
+                                "void", i.billingReason(), i.hostedInvoiceUrl(),
                                 i.invoicePdf(), i.createdAt(), i.lines()))));
-                yield new BillingGrant.StripeRefs(sub.stripeCustomerId(), sub.stripeSubscriptionId(), null, null,
+                yield new BillingGrant.StripeRefs(null, null, null, null,
                         null, null);
             }
             case TRIAL_END -> {
-                if (g.trialEnd() == null) {
-                    tx.executeWithoutResult(s -> subs.setTrialOverride(g.orgId(), g.freeDays(), g.reasonCode(),
-                            g.note(), g.actorId()));
-                    yield BillingGrant.StripeRefs.NONE;
-                }
-                requireStripeSubscription(sub);
-                SubscriptionSnapshot snap = stripe.setTrialEnd(sub.stripeSubscriptionId(), g.trialEnd(),
-                        g.stripeKey("trial"));
-                mirror(g.orgId(), snap);
-                tx.executeWithoutResult(s -> subs.setTrialOverride(g.orgId(), g.freeDays(), g.reasonCode(),
-                        g.note(), g.actorId()));
-                yield new BillingGrant.StripeRefs(sub.stripeCustomerId(), sub.stripeSubscriptionId(), null, null,
-                        sub.trialEndsAt(), snap.trialEnd());
+                Instant newEnd = g.trialEnd();
+                tx.executeWithoutResult(s -> {
+                    subs.setTrialOverride(g.orgId(), g.freeDays(), g.reasonCode(), g.note(), g.actorId());
+                    if (newEnd != null) {
+                        subs.lock(g.orgId()).ifPresent(locked ->
+                                subs.update(new Subscription(locked.orgId(), locked.planCode(), locked.planVersion(),
+                                        locked.cadence(), locked.status(), locked.paymentMethodKind(), locked.anchorDate(),
+                                        newEnd, locked.currentPeriodStart(), locked.currentPeriodEnd(), locked.cancelAtPeriodEnd(),
+                                        locked.pendingPlanCode(), locked.pendingCadence(), locked.pendingEffectiveAt(),
+                                        locked.dunning(), locked.failedPaymentAttempts(), locked.nextPaymentAttemptAt(),
+                                        now, locked.version())));
+                    }
+                });
+                yield new BillingGrant.StripeRefs(null, null, null, null,
+                        sub.trialEndsAt(), newEnd);
             }
         };
-    }
-
-    /** Stores Stripe's answer (trial end, status, period) on the subscription. */
-    private void mirror(String orgId, SubscriptionSnapshot snap) {
-        tx.executeWithoutResult(s -> subs.lock(orgId).ifPresent(sub -> subs.update(sub.withStripe(
-                sub.stripeCustomerId(), sub.stripeSubscriptionId(), snap.itemId() == null ? sub.stripeItemId()
-                        : snap.itemId(), snap.status() == null ? sub.status()
-                        : SubscriptionStatus.fromStripe(snap.status()), snap.trialEnd(),
-                snap.currentPeriodStart() == null ? sub.currentPeriodStart() : snap.currentPeriodStart(),
-                snap.currentPeriodEnd() == null ? sub.currentPeriodEnd() : snap.currentPeriodEnd(),
-                snap.cancelAtPeriodEnd(), Instant.now(clock)))));
     }
 
     private void publish(BillingGrant g) {
@@ -296,19 +274,6 @@ class BillingAdjustmentServiceImpl implements BillingAdjustmentService {
     private Subscription subscription(String orgId) {
         return tx.execute(s -> subs.find(orgId)).orElseThrow(() -> new NotFoundException("seller.no-subscription",
                 "Organisation " + orgId + " has no subscription yet"));
-    }
-
-    private static void requireCustomer(Subscription sub) {
-        if (sub.stripeCustomerId() == null) {
-            throw new SellerStateConflict("seller.no-stripe-customer", "No Stripe customer yet");
-        }
-    }
-
-    private static void requireStripeSubscription(Subscription sub) {
-        if (sub.stripeSubscriptionId() == null || sub.status() == SubscriptionStatus.CANCELED) {
-            throw new SellerStateConflict("seller.no-paid-subscription", "This organisation has no paid "
-                    + "subscription to give free days or a discount on");
-        }
     }
 
     private static SellerRuleViolation invalid(String field, String message) {

@@ -684,5 +684,9 @@
   "st.rates.annual": "Owó ọdún ($, òfo = oṣù 10)",
   "st.rates.badPrice": "Tẹ iye owó dọ́là, bí 29.00",
   "st.rates.createPlan": "Ṣẹ̀dá kí o sì pè",
-  "st.rates.planCreated": "A ti ṣẹ̀dá {plan}"
+  "st.rates.planCreated": "A ti ṣẹ̀dá {plan}",
+  "st.marketing.tabs": "Titaja",
+  "st.marketing.tab.announcements": "Awọn ikede",
+  "st.marketing.tab.placements": "Awọn ibi ati ipolowo",
+  "st.marketing.tab.coupons": "Awọn kuponi pẹpẹ"
 }

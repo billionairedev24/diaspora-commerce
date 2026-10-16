@@ -29,6 +29,9 @@ public interface SubscriptionRepository {
     /** Subscriptions whose pending plan / cadence change is due at {@code now}. */
     List<Subscription> dueChanges(Instant now, int limit);
 
+    /** Subscriptions whose current billing period has ended by {@code now} and are due for renewal. */
+    List<Subscription> dueRenewals(Instant now, int limit);
+
     /** Trial override, campaign, credit balance and plan fee collection (none when there is no subscription row). */
     SubscriptionTerms terms(String orgId);
 
@@ -37,6 +40,9 @@ public interface SubscriptionRepository {
     void setTrialSource(String orgId, TrialSource source, UUID campaignId);
 
     void setCreditBalance(String orgId, long creditCents);
+
+    /** Adjusts the credit balance by delta (positive = add credit, negative = deduct credit) and returns the new balance. */
+    long adjustCreditBalance(String orgId, long deltaCents);
 
     /** How the organisation pays its plan (S298) and who chose it (DEFAULT, ONBOARDING, SELLER, STAFF). */
     void setPlanFeeCollection(String orgId, PlanFeeCollection mode, String source, String actor, Instant at);

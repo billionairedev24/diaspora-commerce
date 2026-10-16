@@ -684,5 +684,9 @@
   "st.rates.annual": "Prix annuel ($, vide = 10 mois)",
   "st.rates.badPrice": "Saisissez un montant en dollars, p. ex. 29.00",
   "st.rates.createPlan": "Créer et inviter",
-  "st.rates.planCreated": "{plan} créé"
+  "st.rates.planCreated": "{plan} créé",
+  "st.marketing.tabs": "Marketing",
+  "st.marketing.tab.announcements": "Annonces",
+  "st.marketing.tab.placements": "Emplacements et publicités",
+  "st.marketing.tab.coupons": "Bons de réduction de la plateforme"
 }

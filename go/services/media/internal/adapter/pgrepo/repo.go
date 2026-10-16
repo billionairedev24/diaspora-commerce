@@ -252,6 +252,18 @@ func (r *repoImpl) RemoveFromLibrary(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *repoImpl) RenameLibraryImage(ctx context.Context, id, newFileName string, sku, slot *string) error {
+	tag, err := r.pool.Exec(ctx, `update asset set file_name = $2, library_sku = $3, library_slot = $4, updated_at = now()
+		where id = $1 and library`, id, newFileName, sku, slot)
+	if err != nil {
+		return fmt.Errorf("rename library image: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *repoImpl) Ping(ctx context.Context) error {
 	if err := r.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("ping: %w", err)

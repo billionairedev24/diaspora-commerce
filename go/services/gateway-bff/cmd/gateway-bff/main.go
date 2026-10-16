@@ -120,6 +120,7 @@ func run() error {
 
 		// S307/S308: product edits, form drafts and bulk uploads at catalog; the AI listing writer at ai-gateway.
 		Listing: upstreams.NewSellerListing(catalogClient), Writer: upstreams.NewListingWriter(client("ai-gateway", up.AIGateway)),
+		ListingCache: app.NewListingCache(time.Now),
 	}
 	verifier := upstreams.NewTokenVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.ClientID,
 		&http.Client{Timeout: up.Identity.Timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)})

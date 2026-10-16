@@ -14,4 +14,7 @@ public interface InvoiceRepository {
 
     /** One invoice of the organisation by Stripe invoice id. */
     Optional<Invoice> find(String orgId, String stripeInvoiceId);
+
+    /** One invoice by invoice id. */
+    Optional<Invoice> findById(String invoiceId);
 }

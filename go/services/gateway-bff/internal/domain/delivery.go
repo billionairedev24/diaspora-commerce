@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -9,6 +10,10 @@ import (
 type DeliveryPolicy struct {
 	SellerShippingMinor        int64
 	FreeShippingThresholdMinor int64
+	PlatformDeliveryMode       string // "FLAT", "PER_WEIGHT", or "DISTANCE"
+	PlatformDeliveryFlatMinor  int64
+	PlatformDeliveryBaseMinor  int64
+	PlatformDeliveryPerLbMinor int64
 	Location                   *time.Location
 }
 
@@ -79,7 +84,16 @@ func (e *estimatorImpl) Promise(fulfilment string, days int, now time.Time) Deli
 func (e *estimatorImpl) Options(fulfilment string, days int, subtotalMinor int64, now time.Time) []DeliveryOption {
 	d := e.days(fulfilment, days)
 	if fulfilment == AfroTransactDelivery {
-		return []DeliveryOption{{Key: "afrotransact_delivery", Label: LocalDeliveryOptionLabel, ETA: e.DayLabel(d, now)}}
+		label := LocalDeliveryOptionLabel
+		fee := int64(0)
+		free := false
+		if strings.EqualFold(e.p.PlatformDeliveryMode, TariffFlat) && e.p.PlatformDeliveryFlatMinor > 0 {
+			fee = e.p.PlatformDeliveryFlatMinor
+			label = fmt.Sprintf("AfroTransact Delivery · %s flat delivery", Money(fee))
+		} else if strings.EqualFold(e.p.PlatformDeliveryMode, TariffPerWeight) && (e.p.PlatformDeliveryBaseMinor > 0 || e.p.PlatformDeliveryPerLbMinor > 0) {
+			label = fmt.Sprintf("AfroTransact Delivery · %s + %s/lb", Money(e.p.PlatformDeliveryBaseMinor), Money(e.p.PlatformDeliveryPerLbMinor))
+		}
+		return []DeliveryOption{{Key: "afrotransact_delivery", Label: label, ETA: e.DayLabel(d, now), FeeMinor: fee, Free: free}}
 	}
 	isAT := fulfilment == FulfilledByAfroTransact
 	free := isAT || (e.p.FreeShippingThresholdMinor > 0 && subtotalMinor >= e.p.FreeShippingThresholdMinor)

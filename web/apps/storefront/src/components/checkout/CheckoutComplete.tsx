@@ -45,6 +45,19 @@ export function CheckoutComplete({ pollMs = 1000, polls = 10 }: { pollMs?: numbe
         }
         if (cancelled) return;
         if (status.status !== 'placed') return setState({ kind: 'pending' });
+        qc.setQueryData(cartKeys.current(), (old: any) =>
+          old
+            ? {
+                ...old,
+                packages: [],
+                itemCount: 0,
+                selectedCount: 0,
+                subtotalMinor: 0,
+                allSelected: false,
+                sellerCount: 0
+              }
+            : old
+        );
         await Promise.all([qc.invalidateQueries({ queryKey: cartKeys.all }), qc.invalidateQueries({ queryKey: orderKeys.all })]);
         router.replace(`/orders?placed=${encodeURIComponent(status.orderNumber)}`);
       } catch (e) {

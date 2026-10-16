@@ -837,10 +837,27 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]any{"id": r.PathValue("id"), "url": "https://img.example/asset-1.webp", "contentType": "image/webp", "bytes": 182000, "width": 1600, "height": 1600, "status": "READY"})
 	})
-	mux.HandleFunc("POST /v1/rates", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"quotes": []map[string]any{
+	mux.HandleFunc("POST /v1/rates", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Carriers []string `json:"carriers"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		allQuotes := []map[string]any{
+			{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "serviceName": "USPS Ground Advantage", "amountMinor": 845, "currency": "USD", "transitDays": 4},
+			{"carrier": "usps", "service": "PRIORITY_MAIL", "serviceName": "USPS Priority Mail", "amountMinor": 1250, "currency": "USD", "transitDays": 2},
 			{"carrier": "ups", "service": "03", "serviceName": "UPS Ground", "amountMinor": 1189, "currency": "USD", "transitDays": 3},
-			{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "serviceName": "USPS Ground Advantage", "amountMinor": 845, "currency": "USD", "transitDays": 4}}, "partial": false})
+			{"carrier": "ups", "service": "02", "serviceName": "UPS 2nd Day Air", "amountMinor": 2250, "currency": "USD", "transitDays": 2},
+			{"carrier": "fedex", "service": "FEDEX_GROUND", "serviceName": "FedEx Ground", "amountMinor": 1145, "currency": "USD", "transitDays": 4},
+			{"carrier": "fedex", "service": "FEDEX_2_DAY", "serviceName": "FedEx 2Day", "amountMinor": 2095, "currency": "USD", "transitDays": 2},
+			{"carrier": "dhl", "service": "P", "serviceName": "DHL Express Worldwide", "amountMinor": 3495, "currency": "USD", "transitDays": 3},
+		}
+		selected := []map[string]any{}
+		for _, q := range allQuotes {
+			if len(req.Carriers) == 0 || slices.Contains(req.Carriers, q["carrier"].(string)) {
+				selected = append(selected, q)
+			}
+		}
+		writeJSON(w, 200, map[string]any{"quotes": selected, "partial": false})
 	})
 	// Customer pickup locations (sellers' own, kind SELLER): kept per id for the test run.
 	pickups := map[string]map[string]any{}

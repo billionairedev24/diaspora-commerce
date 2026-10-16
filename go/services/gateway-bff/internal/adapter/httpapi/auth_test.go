@@ -235,6 +235,45 @@ func TestSignInFromAnotherAppReturnsThere(t *testing.T) {
 	}
 }
 
+func TestForeignOriginErrorRedirectsToLoginWithoutStorefrontError(t *testing.T) {
+	bff, b := setup(t, testkit.Options{})
+	// Sign in to storefront first to establish a storefront session.
+	mustStatus(t, signIn(t, bff, b, "/"), 302)
+	if b.cookie == "" {
+		t.Fatal("expected storefront session cookie")
+	}
+
+	// Now navigate towards Seller Center.
+	r := b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/orders"), nil)
+	mustStatus(t, r, 302)
+	loc, _ := url.Parse(r.header.Get("Location"))
+	state := loc.Query().Get("state")
+
+	// If identity returns an error, gateway-bff routes directly to Seller Center's login start
+	// with prompt=login, never showing an intermediate storefront error page.
+	r = b.do("GET", "/v1/auth/oidc/callback?error=access_denied&state="+state, nil)
+	mustStatus(t, r, 302)
+	wantLoc := testkit.SellerCenterOrigin + "/api/bff/v1/auth/login?prompt=login&returnTo=" + url.QueryEscape(testkit.SellerCenterOrigin+"/orders")
+	if got := r.header.Get("Location"); got != wantLoc {
+		t.Fatalf("location = %s, want %s", got, wantLoc)
+	}
+
+	// Cross-app session ID difference does not trigger state_mismatch for foreign origins.
+	r = b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/dashboard"), nil)
+	mustStatus(t, r, 302)
+	loc, _ = url.Parse(r.header.Get("Location"))
+	q := loc.Query()
+	code := bff.Upstreams.IssueCode(q.Get("code_challenge"), q.Get("nonce"), "user-1", testkit.SellerCenterRedirectURI)
+
+	// Simulate different cookie context on Seller Center origin proxy
+	b.cookie = "other-cookie"
+	r = b.do("GET", "/v1/auth/oidc/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")), nil)
+	mustStatus(t, r, 302)
+	if to := r.header.Get("Location"); to != testkit.SellerCenterOrigin+"/dashboard" {
+		t.Fatalf("callback redirect = %s, want %s", to, testkit.SellerCenterOrigin+"/dashboard")
+	}
+}
+
 // Signing out of each web app ends the identity session too (single sign-out) and comes back to that app: the
 // storefront stays signed out on the page (with signedOut=1 for the toast), Seller Center and the staff console go
 // straight to their own branded sign-in (prompt=login, notice=signed_out) and return there afterwards.

@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 
+import com.afrotransact.seller.domain.Invoice;
 import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.port.EarningsCollectionRepository;
@@ -14,8 +15,8 @@ import com.afrotransact.seller.port.EarningsCollectionRepository.Release;
 import com.afrotransact.seller.port.EarningsCollectionRepository.Row;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.GatewayException;
+import com.afrotransact.seller.port.InvoiceRepository;
 import com.afrotransact.seller.port.InvoiceSnapshot;
-import com.afrotransact.seller.port.StripeBillingGateway;
 import com.afrotransact.seller.port.StripeEvent;
 import com.afrotransact.seller.port.SubscriptionRepository;
 import com.afrotransact.seller.port.SubscriptionTerms;
@@ -51,17 +52,17 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
     private final EarningsWithholdingGateway payments;
     private final EarningsCollectionRepository collections;
     private final SubscriptionRepository subs;
-    private final StripeBillingGateway stripe;
+    private final InvoiceRepository invoices;
     private final TransactionOperations tx;
     private final Clock clock;
 
     EarningsCollectionServiceImpl(EarningsWithholdingGateway payments, EarningsCollectionRepository collections,
-                                  SubscriptionRepository subs, StripeBillingGateway stripe, TransactionOperations tx,
+                                  SubscriptionRepository subs, InvoiceRepository invoices, TransactionOperations tx,
                                   Clock clock) {
         this.payments = payments;
         this.collections = collections;
         this.subs = subs;
-        this.stripe = stripe;
+        this.invoices = invoices;
         this.tx = tx;
         this.clock = clock;
     }
@@ -159,11 +160,11 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
     /** One step of a locked, open collection: withhold (REQUESTED), then credit the customer balance (WITHHELD). */
     private Outcome step(Row r) {
         Instant now = Instant.now(clock);
-        InvoiceSnapshot inv = stripe.retrieveInvoice(r.invoiceId());
-        if (!"draft".equals(inv.status())) {
-            // Stripe finalised the invoice first: the card paid it. Anything withheld (now or by a rolled-back attempt)
-            // goes back to the seller.
-            collections.transition(r.invoiceId(), r.status(), MISSED, Change.reason("Stripe finalised the invoice "
+        // Retrieve invoice status from the local invoice repository.
+        Invoice inv = invoices.findById(r.invoiceId()).orElse(null);
+        if (inv == null || !"draft".equals(inv.status())) {
+            // Invoice finalised before earnings could pay: release anything withheld.
+            collections.transition(r.invoiceId(), r.status(), MISSED, Change.reason("Invoice finalised "
                     + "before it could be paid from sales; the card paid it"), now);
             collections.requestRelease("plan-fee-release-" + r.invoiceId(), r.invoiceId(), r.amountCents(),
                     "invoice finalised before the credit", false, now);
@@ -183,10 +184,11 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
                     w.reason()), now);
         }
         Subscription sub = subs.find(r.orgId()).orElseThrow();
-        StripeBillingGateway.BalanceCredit c = stripe.creditBalance(sub.stripeCustomerId(), withheld,
-                "Plan fee paid from your sales (invoice " + label(r) + ")", "earnings-" + r.invoiceId());
-        collections.transition(r.invoiceId(), WITHHELD, CREDITED, new Change(null, withheld, null, c.id(), null), now);
-        subs.setCreditBalance(r.orgId(), Math.max(0, -c.endingBalanceCents()));
+        // Credit the local balance (replaces Stripe customer.balanceTransactions.create).
+        long newBalance = subs.adjustCreditBalance(r.orgId(), withheld);
+        collections.transition(r.invoiceId(), WITHHELD, CREDITED,
+                new Change(null, withheld, null, "local-balance-" + r.invoiceId(), null), now);
+        subs.setCreditBalance(r.orgId(), Math.max(0, newBalance));
         LOG.info("Invoice {} of {}: {} cents paid from sales (of {} asked)", r.invoiceId(), r.orgId(), withheld,
                 r.amountCents());
         return Outcome.DONE;
@@ -240,12 +242,11 @@ class EarningsCollectionServiceImpl implements EarningsCollectionService {
         String txn = rel.balanceTransactionId();
         if (rel.debitBalance() && txn == null) {
             Subscription sub = subs.find(rel.orgId()).orElseThrow();
-            StripeBillingGateway.BalanceCredit d = stripe.debitBalance(sub.stripeCustomerId(), rel.amountCents(),
-                    "Plan fee paid from your sales returned (invoice " + label(r) + " " + rel.reason() + ")",
-                    "earnings-" + rel.idempotencyKey());
-            txn = d.id();
+            // Debit the local balance (replaces Stripe customer.balanceTransactions.create).
+            long newBalance = subs.adjustCreditBalance(rel.orgId(), -rel.amountCents());
+            txn = "local-debit-" + rel.idempotencyKey();
             collections.releaseDebited(rel.idempotencyKey(), txn, now);
-            subs.setCreditBalance(rel.orgId(), Math.max(0, -d.endingBalanceCents()));
+            subs.setCreditBalance(rel.orgId(), Math.max(0, newBalance));
         }
         payments.release(rel.orgId(), rel.invoiceId(), rel.amountCents(), rel.reason(), rel.idempotencyKey());
         boolean fully = CREDITED.equals(r.status()) && r.releasedCents() + rel.amountCents() >= r.creditedCents();

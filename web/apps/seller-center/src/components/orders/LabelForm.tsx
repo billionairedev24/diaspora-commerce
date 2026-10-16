@@ -46,6 +46,7 @@ export function LabelForm({ order, shipmentId, suggested }: { order: SellerOrder
   const [weight, setWeight] = useState(suggested ? String(suggested.weightLb) : '');
   const [dims, setDims] = useState({ l: suggested ? String(suggested.lengthIn) : '', w: suggested ? String(suggested.widthIn) : '', h: suggested ? String(suggested.heightIn) : '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [carrierFilter, setCarrierFilter] = useState<string>('all');
   const [quotes, setQuotes] = useState<RateQuote[] | null>(null);
   const [choice, setChoice] = useState<string>('');
   const key = useRef(idempotencyKey());
@@ -97,7 +98,8 @@ export function LabelForm({ order, shipmentId, suggested }: { order: SellerOrder
   };
 
   const rates = useMutation({
-    mutationFn: (f: ShipFromForm) => api.quoteRates(order.orderNumber, shipmentId, parcel(), toSellerAddress(f)),
+    mutationFn: (f: ShipFromForm) =>
+      api.quoteRates(order.orderNumber, shipmentId, parcel(), toSellerAddress(f), carrierFilter === 'all' ? undefined : carrierFilter),
     onSuccess: (r) => {
       setQuotes(r.quotes);
       setChoice(r.quotes[0] ? `${r.quotes[0].carrier}:${r.quotes[0].service}` : '');
@@ -173,6 +175,32 @@ export function LabelForm({ order, shipmentId, suggested }: { order: SellerOrder
         <TextField label="Width (in)" inputMode="decimal" value={dims.w} onChange={(e) => setDims({ ...dims, w: e.target.value })} />
         <TextField label="Height (in)" inputMode="decimal" value={dims.h} onChange={(e) => setDims({ ...dims, h: e.target.value })} />
       </fieldset>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Select
+          label="Carrier"
+          value={carrierFilter}
+          onChange={(e) => {
+            const next = e.target.value;
+            setCarrierFilter(next);
+            const f = validate();
+            if (f) {
+              api.quoteRates(order.orderNumber, shipmentId, parcel(), toSellerAddress(f), next === 'all' ? undefined : next)
+                .then((r) => {
+                  setQuotes(r.quotes);
+                  setChoice(r.quotes[0] ? `${r.quotes[0].carrier}:${r.quotes[0].service}` : '');
+                })
+                .catch((e) => toast.show(problemMessage(e), 'error'));
+            }
+          }}
+          options={[
+            { value: 'all', label: 'All carriers (compare rates)' },
+            { value: 'usps', label: 'USPS' },
+            { value: 'ups', label: 'UPS' },
+            { value: 'fedex', label: 'FedEx' },
+            { value: 'dhl', label: 'DHL' }
+          ]}
+        />
+      </div>
       <div>
         <Button variant="neutral" size="sm" loading={rates.isPending} onClick={getRates}>
           Get rates

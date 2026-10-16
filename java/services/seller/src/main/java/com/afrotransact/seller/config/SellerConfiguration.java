@@ -3,6 +3,7 @@ package com.afrotransact.seller.config;
 import java.time.Clock;
 import java.util.Set;
 
+import com.afrotransact.seller.adapter.out.billing.RruleBillingScheduler;
 import com.afrotransact.seller.adapter.out.crypto.AesGcmFieldCipher;
 import com.afrotransact.seller.adapter.out.geo.HttpGeoClient;
 import com.afrotransact.seller.adapter.out.localtest.LocalTestStripeBilling;
@@ -29,6 +30,7 @@ import com.afrotransact.seller.domain.PhoneNumbers;
 import com.afrotransact.seller.port.ConnectedAccountRegistry;
 import com.afrotransact.seller.port.AdSpendSource;
 import com.afrotransact.seller.port.AiUsageSource;
+import com.afrotransact.seller.port.BillingScheduler;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.MediaClient;
@@ -64,6 +66,11 @@ class SellerConfiguration {
     @Bean
     ApplicationRules applicationRules(PhoneNumbers phones) {
         return new DefaultApplicationRules(phones);
+    }
+
+    @Bean
+    BillingScheduler billingScheduler() {
+        return new RruleBillingScheduler();
     }
 
     @Bean

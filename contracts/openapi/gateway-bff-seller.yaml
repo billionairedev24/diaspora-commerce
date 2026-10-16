@@ -737,6 +737,18 @@ paths:
         '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/SellerCoupon'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+  /v1/seller/coupons/{couponId}:
+    delete:
+      tags: [Growth]
+      operationId: deleteSellerCoupon
+      security: [{sessionCookie: []}]
+      summary: Delete a seller-funded coupon
+      parameters:
+        - {name: couponId, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Deleted}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── listings
@@ -1233,6 +1245,30 @@ paths:
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/image-library/{assetId}:
+    patch:
+      tags: [Image library]
+      operationId: renameLibraryImage
+      security: [{sessionCookie: []}]
+      summary: Rename an image in the library
+      description: media `PATCH /v1/library/{id}`. Updates the file name and re-matches SKU/slot.
+      parameters: [{name: assetId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName]
+              properties:
+                fileName: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200': {description: Renamed, content: {application/json: {schema: {$ref: '#/components/schemas/ImageLibraryItem'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
     delete:
       tags: [Image library]
       operationId: removeLibraryImage
@@ -3111,6 +3147,7 @@ components:
       type: object
       required: [parcel, shipFrom]
       properties:
+        carrier: {$ref: '#/components/schemas/Carrier', description: Optional carrier filter}
         parcel: {$ref: '#/components/schemas/Parcel'}
         shipFrom: {$ref: '#/components/schemas/PostalAddress'}
     Carrier: {type: string, enum: [usps, ups, fedex, dhl]}

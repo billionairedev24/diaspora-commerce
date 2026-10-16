@@ -2,8 +2,7 @@
 
 import { type CheckoutPackage, type DeliveryMethod, type DeliveryPreferences } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, ImagePlaceholder, Key, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
-import { useState } from 'react';
+import { AirplaneTilt, Button, ImagePlaceholder, Key, Lightning, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
 
 import { useT } from '@/i18n/t';
 
@@ -34,14 +33,26 @@ function LocalDeliveryQuote({ pkg, onRemove, onChangeAddress, removing }: { pkg:
   if (ld.available) {
     return (
       <div className={styles.localQuote} data-testid="local-delivery-quote">
-        <strong>{t('ld.title', { city })}</strong>
-        {ld.chargeMinor !== null && ld.roadMiles !== null ? (
-          <span>
-            {t('ld.quote', { miles: fmt.number(ld.roadMiles, { maximumFractionDigits: 1 }), city, minutes: Math.round(ld.durationMinutes ?? 0) })} · {t('ld.charge', { amount: fmt.money(ld.chargeMinor) })}
+        <div className={styles.localQuoteHead}>
+          <span className={styles.localQuoteBadge}>
+            <Lightning weight="fill" aria-hidden /> AfroTransact Local Delivery
           </span>
-        ) : (
-          <span className={styles.muted}>{ld.message ?? t('ld.pricedLater')}</span>
-        )}
+          {ld.chargeMinor !== null && (
+            <strong className={styles.localQuoteCharge}>
+              {fmt.money(ld.chargeMinor)}
+            </strong>
+          )}
+        </div>
+        <div className={styles.localQuoteDetails}>
+          <strong>{t('ld.title', { city })}</strong>
+          {ld.chargeMinor !== null && ld.roadMiles !== null ? (
+            <span>
+              {t('ld.quote', { miles: fmt.number(ld.roadMiles, { maximumFractionDigits: 1 }), city, minutes: Math.round(ld.durationMinutes ?? 0) })} · {t('ld.charge', { amount: fmt.money(ld.chargeMinor) })}
+            </span>
+          ) : (
+            <span className={styles.muted}>{ld.message ?? t('ld.pricedLater')}</span>
+          )}
+        </div>
       </div>
     );
   }
@@ -64,8 +75,13 @@ function LocalDeliveryQuote({ pkg, onRemove, onChangeAddress, removing }: { pkg:
 }
 
 /**
- * One seller group, compact: the items as thumbnails, Delivery | Pickup, and the chosen option or pickup point on one
- * line with Change (the other options or nearby points as a short list). Delivery instructions stay behind a link.
+ * Redesigned PackageCard:
+ * - Package items with data-testid="checkout-item", title, thumbnail, quantity, price, and fresh tag.
+ * - Delivery | Pickup mode toggle (pill segmented controls).
+ * - Proper delivery method cards displayed directly (AfroTransact Delivery, Carrier Standard, Express)
+ *   with carrier badges, arrival promise, pricing badges, and seamless selection.
+ * - AfroTransact Delivery preferences and safe-place choices when platform delivery is selected.
+ * - Pickup points listed as selectable cards with distance, address, hours, and free badge.
  */
 export function PackageCard({
   pkg,
@@ -107,151 +123,223 @@ export function PackageCard({
       : onChoice({ ...choice, option: deliveryOptions[0]?.key ?? 'carrier' });
   const promise = pickup ? (point?.ready ?? selected?.eta ?? '') : (selected?.eta ?? pkg.delivery.label);
   const group = `pkg-${pkg.packageId}`;
-  const [listOpen, setListOpen] = useState(false);
-  const [prefsOpen, setPrefsOpen] = useState(!!(choice.preferences.instructions || choice.preferences.safePlace));
 
   return (
     <article className={styles.package} data-testid="checkout-package" aria-labelledby={`${group}-title`}>
       <header className={styles.packageHead}>
         <div className={styles.packageHeadMain}>
           <div className={styles.packageTitle}>
-            <strong id={`${group}-title`}>{pkg.seller.name}</strong>
+            <strong id={`${group}-title`} className={styles.sellerTitle}>{pkg.seller.name}</strong>
             <span className={styles.muted}>
               {pkg.heading} · {t('cart.package', { n, total })}
             </span>
           </div>
-          <ul className={styles.itemStrip} aria-label={t('co.itemsOf', { seller: pkg.seller.name })}>
-            {pkg.lines.map((l) => (
-              <li key={l.lineId} className={styles.itemStripCell} data-testid="checkout-item-thumb">
-                <ImagePlaceholder src={l.imageUrl} alt="" className={styles.stripThumb} />
-                {l.quantity > 1 ? <span className={styles.stripQty}>{l.quantity}</span> : null}
-              </li>
-            ))}
-          </ul>
         </div>
-        <strong className={styles.arriving} data-testid="package-promise">
-          {pickup ? t('co.pickupReady', { ready: promise }) : t('cart.arriving', { eta: promise })}
-        </strong>
+        <div className={styles.arrivingTag} data-testid="package-promise">
+          <Truck aria-hidden className={styles.arrivingIcon} />
+          <strong>{pickup ? t('co.pickupReady', { ready: promise }) : t('cart.arriving', { eta: promise })}</strong>
+        </div>
       </header>
+
+      {/* Package Items */}
+      <div className={styles.packageItems}>
+        <ul className={styles.itemsList} aria-label={t('co.itemsOf', { seller: pkg.seller.name })}>
+          {pkg.lines.map((l) => (
+            <li key={l.lineId} className={styles.itemRow} data-testid="checkout-item">
+              <div className={styles.itemThumbWrap}>
+                <ImagePlaceholder src={l.imageUrl} alt="" className={styles.itemThumb} />
+                {l.quantity > 1 && <span className={styles.itemQtyBadge}>{l.quantity}</span>}
+              </div>
+              <div className={styles.itemInfo}>
+                <span className={styles.itemTitle}>{l.title}</span>
+                <span className={styles.itemMeta}>
+                  <span>Qty {l.quantity}</span>
+                  <span className={styles.itemDot}>·</span>
+                  <span>{fmt.money(l.priceMinor)} each</span>
+                  {l.perishable && (
+                    <>
+                      <span className={styles.itemDot}>·</span>
+                      <span className={styles.perishableTag}>Fresh / Perishable</span>
+                    </>
+                  )}
+                </span>
+              </div>
+              <div className={styles.itemPrice}>
+                {fmt.money(l.lineTotalMinor)}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <div className={styles.packageBody}>
         {canPickup && (
           <div className={styles.toggle} role="radiogroup" aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
-            {(['delivery', 'pickup'] as const).map((m) => {
-              const on = (m === 'pickup') === pickup;
-              return (
-                <button key={m} type="button" role="radio" aria-checked={on} className={on ? styles.toggleOn : styles.toggleOff} onClick={() => { setMode(m); setListOpen(false); }} data-testid={`fulfil-${m}`}>
-                  {m === 'pickup' ? <Storefront aria-hidden /> : <Truck aria-hidden />}
-                  {m === 'pickup' ? t('co.fulfil.pickup') : t('co.fulfil.delivery')}
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={!pickup}
+              className={!pickup ? styles.toggleOn : styles.toggleOff}
+              onClick={() => setMode('delivery')}
+              data-testid="fulfil-delivery"
+            >
+              <Truck aria-hidden />
+              <span>{t('co.fulfil.delivery')}</span>
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={pickup}
+              className={pickup ? styles.toggleOn : styles.toggleOff}
+              onClick={() => setMode('pickup')}
+              data-testid="fulfil-pickup"
+            >
+              <Storefront aria-hidden />
+              <span>{t('co.fulfil.pickup')}</span>
+            </button>
           </div>
         )}
 
         {!pickup && <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />}
 
-        {pickup ? (
-          points.length === 0 ? (
-            <p className={styles.muted} role="status">
-              {t('co.pickupNoneNear')}
-            </p>
-          ) : (
-            <div className={styles.choiceBlock} data-testid="pickup-points">
-              {point && (
-                <div className={styles.choiceLine} data-testid="pickup-point">
-                  <MapPin aria-hidden className={styles.choiceIcon} />
-                  <span className={styles.choiceText}>
-                    <strong>{point.name}</strong>
-                    <span className={styles.muted}>
-                      {point.address}
-                      {point.distanceMiles != null ? ` · ${t('co.distance', { miles: fmt.number(point.distanceMiles, { maximumFractionDigits: 1 }) })}` : ''} · {point.ready}
-                    </span>
-                  </span>
-                  <span className={styles.optionFee}>{t('co.free')}</span>
-                  {points.length > 1 && (
-                    <button type="button" className="link-button" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)}>
-                      {listOpen ? t('common.cancel') : t('co.change')}
-                    </button>
-                  )}
-                </div>
-              )}
-              {listOpen && (
-                <fieldset className={styles.choiceList}>
-                  <legend className="at-visually-hidden">{t('co.pickupChoose')}</legend>
-                  {points.map((pt) => (
-                    <label key={pt.id} className={styles.choiceRow}>
-                      <input type="radio" name={`pt-${pkg.packageId}`} checked={point?.id === pt.id} onChange={() => { onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id }); setListOpen(false); }} />
-                      <span className={styles.choiceText}>
-                        <strong>{pt.name}</strong>
-                        <span className={styles.muted}>
-                          {pt.address}
-                          {pt.distanceMiles != null ? ` · ${t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })}` : ''} · {pt.ready}
+        {!pickup ? (
+          <fieldset className={styles.deliveryOptionsSection} disabled={undeliverable}>
+            <legend className={styles.optionsSectionTitle}>{t('co.deliveryOption')}</legend>
+            <div className={styles.deliveryGrid}>
+              {deliveryOptions.map((o) => {
+                const isSelected = choice.option === o.key;
+                const isATD = o.key === 'afrotransact_delivery';
+                const isExpress = o.key === 'express';
+                const isFree = o.free || o.feeMinor === 0;
+
+                return (
+                  <label
+                    key={o.key}
+                    className={`${styles.deliveryOptionCard} ${isSelected ? styles.deliveryOptionCardActive : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      role="radio"
+                      name={`opt-${pkg.packageId}`}
+                      checked={isSelected}
+                      onChange={() => onChoice({ ...choice, option: o.key })}
+                      disabled={undeliverable}
+                      aria-label={`${o.label} ${o.eta}`}
+                    />
+                    <div className={styles.optionCardIcon}>
+                      {isATD ? (
+                        <Lightning weight="fill" className={styles.atdIcon} aria-hidden />
+                      ) : isExpress ? (
+                        <AirplaneTilt weight="fill" className={styles.expressIcon} aria-hidden />
+                      ) : (
+                        <Truck weight="fill" className={styles.carrierIcon} aria-hidden />
+                      )}
+                    </div>
+                    <div className={styles.optionCardContent}>
+                      <div className={styles.optionCardHeader}>
+                        <div className={styles.optionTitleRow}>
+                          <strong className={styles.optionCardTitle}>{o.eta}</strong>
+                          {isATD && <span className={styles.atdBadge}>⚡ AfroTransact Fast</span>}
+                          {isExpress && <span className={styles.expressBadge}>Express Air</span>}
+                        </div>
+                        <span className={isFree ? styles.optionFeeFree : styles.optionFee}>
+                          {isFree ? t('co.free') : fmt.money(o.feeMinor)}
                         </span>
-                      </span>
-                      <span className={styles.tag}>{pt.setBy === 'seller' ? t('co.setBySeller') : t('co.setByPlatform')}</span>
-                    </label>
-                  ))}
-                </fieldset>
-              )}
-            </div>
-          )
-        ) : (
-          <div className={styles.choiceBlock}>
-            {selected && (
-              <div className={styles.choiceLine} data-testid="delivery-choice">
-                <Truck aria-hidden className={styles.choiceIcon} />
-                <span className={styles.choiceText}>
-                  <strong>{selected.eta}</strong>
-                  <span className={styles.muted}>
-                    {undeliverable ? t('ld.notAvailableOption') : selected.label}
-                    {selected.cutoffLabel ? ` · ${selected.cutoffLabel}` : ''}
-                  </span>
-                </span>
-                <span className={styles.optionFee}>{selected.free || selected.feeMinor === 0 ? t('co.free') : fmt.money(selected.feeMinor)}</span>
-                {deliveryOptions.length > 1 && !undeliverable && (
-                  <button type="button" className="link-button" aria-expanded={listOpen} onClick={() => setListOpen(!listOpen)} aria-label={t('co.changeAria', { step: t('co.deliveryOption') })}>
-                    {listOpen ? t('common.cancel') : t('co.change')}
-                  </button>
-                )}
-              </div>
-            )}
-            {listOpen && (
-              <fieldset className={styles.choiceList} disabled={undeliverable}>
-                <legend className="at-visually-hidden">{t('co.deliveryOption')}</legend>
-                {deliveryOptions.map((o) => (
-                  <label key={o.key} className={styles.choiceRow}>
-                    <input type="radio" name={`opt-${pkg.packageId}`} checked={choice.option === o.key} onChange={() => { onChoice({ ...choice, option: o.key }); setListOpen(false); }} />
-                    <span className={styles.choiceText}>
-                      <strong>{o.eta}</strong>
-                      <span className={styles.muted}>{o.label}</span>
-                    </span>
-                    <span className={styles.optionFee}>{o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}</span>
+                      </div>
+                      <p className={styles.optionCardDesc}>
+                        {undeliverable ? t('ld.notAvailableOption') : o.label}
+                        {o.cutoffLabel ? ` · ${o.cutoffLabel}` : ''}
+                      </p>
+                    </div>
                   </label>
-                ))}
+                );
+              })}
+            </div>
+          </fieldset>
+        ) : (
+          <div className={styles.pickupSection}>
+            {points.length === 0 ? (
+              <p className={styles.muted} role="status">
+                {t('co.pickupNoneNear')}
+              </p>
+            ) : (
+              <fieldset className={styles.pickupGrid} data-testid="pickup-points">
+                <legend className={styles.optionsSectionTitle}>{t('co.pickupChoose')}</legend>
+                {points.map((pt) => {
+                  const isPtSelected = point?.id === pt.id;
+                  return (
+                    <label
+                      key={pt.id}
+                      className={`${styles.pickupOptionCard} ${isPtSelected ? styles.pickupOptionCardActive : ''}`}
+                      data-testid="pickup-point"
+                    >
+                      <input
+                        type="radio"
+                        role="radio"
+                        name={`pt-${pkg.packageId}`}
+                        checked={isPtSelected}
+                        onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id })}
+                        aria-label={`${pt.name} ${pt.address}`}
+                      />
+                      <div className={styles.pickupCardIcon}>
+                        <MapPin weight="fill" aria-hidden />
+                      </div>
+                      <div className={styles.pickupCardContent}>
+                        <div className={styles.pickupCardHeader}>
+                          <strong className={styles.pickupPointName}>{pt.name}</strong>
+                          <span className={styles.optionFeeFree}>{t('co.free')}</span>
+                        </div>
+                        <p className={styles.pickupPointAddress}>{pt.address}</p>
+                        <div className={styles.pickupPointMeta}>
+                          {pt.distanceMiles != null && (
+                            <span className={styles.pickupDistance}>
+                              {t('co.distance', { miles: fmt.number(pt.distanceMiles, { maximumFractionDigits: 1 }) })}
+                            </span>
+                          )}
+                          <span className={styles.pickupHours}>· Mon–Sat 8 am–8 pm · Ready {pt.ready}</span>
+                          <span className={styles.pickupTag}>
+                            {pt.setBy === 'seller' ? t('co.setBySeller') : t('co.setByPlatform')}
+                          </span>
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
               </fieldset>
             )}
           </div>
         )}
 
         {atd && !undeliverable && (
-          prefsOpen ? (
-            <fieldset className={styles.prefs}>
-              <legend className={styles.legend}>{t('co.prefs')}</legend>
-              <label className={styles.field}>
-                {t('co.handoverLabel')}
-                <select value={handover} onChange={(e) => prefs({ handover: e.target.value as DeliveryPreferences['handover'] })}>
-                  {(['hand', 'door', 'desk'] as const).map((h) => (
+          <fieldset className={styles.prefsBox}>
+            <legend className={styles.prefsLegend}>
+              <span className={styles.prefsTitle}>{t('co.prefs')}</span>
+              <span className={styles.prefsSubtitle}>Safe place, handover instructions & driver contact</span>
+            </legend>
+            <div className={styles.prefGrid}>
+              <label className={styles.prefField}>
+                <span className={styles.prefFieldLabel}>{t('co.handoverLabel')}</span>
+                <select
+                  className={styles.prefSelect}
+                  value={handover}
+                  onChange={(e) => prefs({ handover: e.target.value as DeliveryPreferences['handover'] })}
+                >
+                  {(['door', 'hand', 'desk'] as const).map((h) => (
                     <option key={h} value={h} disabled={perishable && h !== 'hand'}>
                       {t(`co.handover.${h}`)}
                     </option>
                   ))}
                 </select>
               </label>
+
               {handover === 'door' && (
-                <label className={styles.field}>
-                  {t('co.safePlace')}
-                  <select value={choice.preferences.safePlace ?? ''} onChange={(e) => prefs({ safePlace: e.target.value })}>
+                <label className={styles.prefField}>
+                  <span className={styles.prefFieldLabel}>{t('co.safePlace')}</span>
+                  <select
+                    className={styles.prefSelect}
+                    value={choice.preferences.safePlace ?? ''}
+                    onChange={(e) => prefs({ safePlace: e.target.value })}
+                  >
                     <option value="">{t('co.safePlace')}</option>
                     {['Front door', 'Back porch', 'Garage', 'Mailroom'].map((pl) => (
                       <option key={pl} value={pl}>
@@ -261,25 +349,35 @@ export function PackageCard({
                   </select>
                 </label>
               )}
-              <label className={styles.field}>
-                {t('co.instructions')}
-                <textarea rows={2} maxLength={240} placeholder={t('co.instructionsPlaceholder')} value={choice.preferences.instructions ?? ''} onChange={(e) => prefs({ instructions: e.target.value })} />
-              </label>
-              <label className={styles.field}>
-                {t('co.contact')}
-                <select value={choice.preferences.contact ?? 'text'} onChange={(e) => prefs({ contact: e.target.value as DeliveryPreferences['contact'] })}>
+
+              <label className={styles.prefField}>
+                <span className={styles.prefFieldLabel}>{t('co.contact')}</span>
+                <select
+                  className={styles.prefSelect}
+                  value={choice.preferences.contact ?? 'text'}
+                  onChange={(e) => prefs({ contact: e.target.value as DeliveryPreferences['contact'] })}
+                >
                   <option value="text">{t('co.contact.text')}</option>
                   <option value="call">{t('co.contact.call')}</option>
                   <option value="none">{t('co.contact.none')}</option>
                 </select>
               </label>
-            </fieldset>
-          ) : (
-            <button type="button" className={`link-button ${styles.prefsLink}`} onClick={() => setPrefsOpen(true)} data-testid="add-instructions">
-              {t('co.addInstructions')}
-            </button>
-          )
+            </div>
+
+            <label className={styles.prefFieldFull}>
+              <span className={styles.prefFieldLabel}>{t('co.instructions')}</span>
+              <textarea
+                className={styles.prefTextarea}
+                rows={2}
+                maxLength={240}
+                placeholder={t('co.instructionsPlaceholder')}
+                value={choice.preferences.instructions ?? ''}
+                onChange={(e) => prefs({ instructions: e.target.value })}
+              />
+            </label>
+          </fieldset>
         )}
+
         {needsCode && (
           <p className={styles.codeNote}>
             <Key aria-hidden /> {perishable ? t('co.codePerishable') : t('co.codeHand')}

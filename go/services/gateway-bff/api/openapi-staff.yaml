@@ -4895,7 +4895,7 @@ components:
     StaffModuleKey:
       type: string
       description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders, plans]
+      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, orgs, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders, plans]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -4992,7 +4992,7 @@ components:
     # ── resources
     ResourceKey:
       type: string
-      enum: [users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, purchase-orders,
+      enum: [users, roles, applications, organisations, connect-accounts, orders, products, moderation, claims, returns, payouts, inventory, purchase-orders,
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, dispatch-shipments, sos-alerts, vehicle-defects,
         driver-events, pickup-locations, coupons]
@@ -5743,14 +5743,15 @@ components:
         feeMinor: {type: integer, format: int64, minimum: 0}
     DeliveryTariff:
       type: object
-      description: 'FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee of the band covering the distance, else
+      description: 'FLAT: flatPerPackageMinor × packages. PER_WEIGHT: baseMinor + perLbMinor × weightLb. DISTANCE (per trip): the fee of the band covering the distance, else
         baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor (null = no cap)'
       required: [mode, flatPerPackageMinor, baseMinor, perMileMinor, bands, minMinor, maxMinor]
       properties:
-        mode: {type: string, enum: [FLAT, DISTANCE]}
+        mode: {type: string, enum: [FLAT, DISTANCE, PER_WEIGHT]}
         flatPerPackageMinor: {type: [integer, 'null'], format: int64, minimum: 0}
         baseMinor: {type: [integer, 'null'], format: int64, minimum: 0}
         perMileMinor: {type: [integer, 'null'], format: int64, minimum: 0, description: '85 = $0.85 per mile'}
+        perLbMinor: {type: [integer, 'null'], format: int64, minimum: 0, description: '50 = $0.50 per pound'}
         bands: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/DeliveryBand'}}
         minMinor: {type: [integer, 'null'], format: int64, minimum: 0}
         maxMinor: {type: [integer, 'null'], format: int64, minimum: 0}

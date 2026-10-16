@@ -87,8 +87,16 @@ function validateTariff(errs: Record<string, string>, key: string, t: DeliveryTa
     amount('flatPerPackageMinor', t.flatPerPackageMinor, true);
     return;
   }
+  if (t.mode === 'PER_WEIGHT') {
+    amount('baseMinor', t.baseMinor, true);
+    amount('perLbMinor', (t as any).perLbMinor ?? null, true);
+    amount('minMinor', t.minMinor, false);
+    amount('maxMinor', t.maxMinor, false);
+    if (t.minMinor !== null && t.maxMinor !== null && t.minMinor > t.maxMinor && !errs[`${key}.maxMinor`]) errs[`${key}.maxMinor`] = 'The maximum must not be below the minimum';
+    return;
+  }
   if (t.mode !== 'DISTANCE') {
-    errs[`${key}.mode`] = 'Choose flat or by distance';
+    errs[`${key}.mode`] = 'Choose flat, per-weight or by distance';
     return;
   }
   amount('baseMinor', t.baseMinor, true);

@@ -136,7 +136,7 @@ describe('legal markdown', () => {
 
 describe('/legal/[doc] routing', () => {
   const run = async (doc: string, version?: string) => {
-    const { default: Page } = await import('@/app/(shop)/legal/[doc]/page');
+    const { default: Page } = await import('@/app/legal/[doc]/page');
     return Page({ params: Promise.resolve({ doc }), searchParams: Promise.resolve(version ? { version } : {}) });
   };
 

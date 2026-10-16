@@ -131,7 +131,7 @@ class TestUserServiceImplTest {
                 "seller.catalog");
         assertThat(members).containsEntry("org_afrotransact_retail/"
                 + byEmail.get("retail.operator@afrotransact.test").id(), "seller.admin");
-        assertThat(r.awaitingOrgs()).containsExactly("org_aminatas_braids");
+        assertThat(r.awaitingOrgs()).containsExactlyInAnyOrder("org_aminatas_braids", "org_bamako_home");
         assertThat(r.membershipsLinked()).isEqualTo(3);
         assertThat(book).extracting(PostalAddress::postalCode).containsExactlyInAnyOrder("77042", "79401");
         assertThat(book).allMatch(PostalAddress::verified);

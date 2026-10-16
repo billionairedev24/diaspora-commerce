@@ -1140,5 +1140,18 @@
   "pay.verificationPending": "Ìfọwọ́sí ń dúró",
   "co.useAnotherMethod": "Lo ọ̀nà ìsanwó míràn",
   "co.useThisMethod": "Lo ọ̀nà ìsanwó yìí",
-  "co.newMethodEntered": "tí a tẹ̀ fún àṣẹ yìí"
+  "co.newMethodEntered": "tí a tẹ̀ fún àṣẹ yìí",
+  "pay.acceptedWallets": "Apple Pay · Google Pay · Link · US bank (ACH)",
+  "co.pickupNoneNear": "Kò sí ibi ìgbàgbé lẹ́gbẹ̀ẹ́ àdírẹ́sì yìí. Yan ìfiranṣẹ́ tàbí lo àdírẹ́sì mìíràn.",
+  "co.shippingWas": "tẹ́lẹ̀ jẹ́ {amount}",
+  "co.discount": "Ẹ̀dínwó",
+  "co.coupon": "Kóòdù ẹ̀dínwó",
+  "co.couponPlaceholder": "Tẹ kóòdù",
+  "co.couponApply": "Lò ó",
+  "co.couponApplied": "A ti lo kóòdù {code}",
+  "co.couponRemove": "Yọ ọ́",
+  "co.couponFundedPlatform": "Ẹ̀dínwó tí AfroTransact ṣe onígbọ̀wọ́ rẹ̀.",
+  "co.couponFundedPlatformShort": "èbúté",
+  "co.couponFundedSeller": "Ẹ̀dínwó tí {seller} ṣe onígbọ̀wọ́ rẹ̀.",
+  "co.couponFundedSellerShort": "olùtajà"
 }

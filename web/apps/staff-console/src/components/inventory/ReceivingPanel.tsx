@@ -140,16 +140,20 @@ function InboundReceiving({ shipment }: { shipment: InboundShipment }) {
       </div>
       <Timeline shipment={s} />
       <form
-        className="flex flex-wrap items-end gap-2"
+        className="w-full"
         onSubmit={(e) => {
           e.preventDefault();
           onScan();
         }}
       >
-        <TextField label="Scan a box (LPN), a case (GS1-128) or a unit label" value={scan} onChange={(e) => setScan(e.target.value)} placeholder="LPN… · (01)…(17)…(10)… · ATF…" className="min-w-[260px] flex-1" autoComplete="off" />
-        <Button type="submit" variant="neutral" icon={<BarcodeIcon size={16} aria-hidden />}>
-          Scan
-        </Button>
+        <TextField
+          label="Barcode, LPN, GS1-128 or unit label (press Enter)"
+          value={scan}
+          onChange={(e) => setScan(e.target.value)}
+          placeholder="Enter LPN, GS1-128, or SKU/unit label… (e.g. ATF…)"
+          className="w-full"
+          autoComplete="off"
+        />
       </form>
       {scanMsg ? <span role="status" className="text-sm">{scanMsg}</span> : null}
       {boxes.length ? <span className="text-xs text-muted">Boxes scanned: {boxes.join(', ')}</span> : null}

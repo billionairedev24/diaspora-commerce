@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import com.afrotransact.seller.domain.Cadence;
+import com.afrotransact.seller.domain.Invoice;
 import com.afrotransact.seller.domain.PlanFeeCollection;
 import com.afrotransact.seller.domain.Subscription;
 import com.afrotransact.seller.port.EarningsCollectionRepository;
@@ -24,8 +25,8 @@ import com.afrotransact.seller.port.EarningsCollectionRepository.Change;
 import com.afrotransact.seller.port.EarningsCollectionRepository.Row;
 import com.afrotransact.seller.port.EarningsWithholdingGateway;
 import com.afrotransact.seller.port.GatewayException;
+import com.afrotransact.seller.port.InvoiceRepository;
 import com.afrotransact.seller.port.InvoiceSnapshot;
-import com.afrotransact.seller.port.StripeBillingGateway;
 import com.afrotransact.seller.port.StripeEvent;
 import com.afrotransact.seller.port.SubscriptionRepository;
 import com.afrotransact.seller.port.SubscriptionTerms;
@@ -40,9 +41,9 @@ class EarningsCollectionServiceImplTest {
     private final EarningsWithholdingGateway payments = mock(EarningsWithholdingGateway.class);
     private final EarningsCollectionRepository collections = mock(EarningsCollectionRepository.class);
     private final SubscriptionRepository subs = mock(SubscriptionRepository.class);
-    private final StripeBillingGateway stripe = mock(StripeBillingGateway.class);
+    private final InvoiceRepository invoices = mock(InvoiceRepository.class);
     private final EarningsCollectionServiceImpl service = new EarningsCollectionServiceImpl(payments, collections,
-            subs, stripe, TransactionOperations.withoutTransaction(), Clock.fixed(NOW, ZoneOffset.UTC));
+            subs, invoices, TransactionOperations.withoutTransaction(), Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
     void theKillSwitchOffClaimsNothing() {
@@ -83,18 +84,17 @@ class EarningsCollectionServiceImplTest {
     void withheldEarningsBecomeABalanceCreditWithPerInvoiceKeys() {
         when(payments.enabled()).thenReturn(true);
         when(collections.lock("in_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
-        when(stripe.retrieveInvoice("in_1")).thenReturn(invoice("draft", "subscription_cycle", 3900));
+        when(invoices.findById("in_1")).thenReturn(Optional.of(domainInvoice("draft", "subscription_cycle", 3900)));
         when(payments.withhold("org_1", "in_1", "INV-1", 3900, "usd")).thenReturn(
                 new EarningsWithholdingGateway.Withholding(true, 2500, "wh_1", "Only $25.00 was available"));
         when(subs.find("org_1")).thenReturn(Optional.of(sub("org_1")));
-        when(stripe.creditBalance(eq("cus_org_1"), eq(2500L), anyString(), eq("earnings-in_1")))
-                .thenReturn(new StripeBillingGateway.BalanceCredit("cbtxn_1", -2500));
+        when(subs.adjustCreditBalance("org_1", 2500)).thenReturn(2500L);
         when(collections.dueReleases(NOW, "in_1", 50)).thenReturn(List.of());
 
         assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
         verify(collections).transition("in_1", "REQUESTED", "WITHHELD",
                 new Change(2500L, null, "wh_1", null, "Only $25.00 was available"), NOW);
-        verify(collections).transition("in_1", "WITHHELD", "CREDITED", new Change(null, 2500L, null, "cbtxn_1",
+        verify(collections).transition("in_1", "WITHHELD", "CREDITED", new Change(null, 2500L, null, "local-balance-in_1",
                 null), NOW);
         verify(subs).setCreditBalance("org_1", 2500);
     }
@@ -103,17 +103,16 @@ class EarningsCollectionServiceImplTest {
     void declinedOrFinalisedInvoicesAreLeftToTheCard() {
         when(payments.enabled()).thenReturn(true);
         when(collections.lock("in_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
-        when(stripe.retrieveInvoice("in_1")).thenReturn(invoice("draft", "subscription_cycle", 3900));
+        when(invoices.findById("in_1")).thenReturn(Optional.of(domainInvoice("draft", "subscription_cycle", 3900)));
         when(payments.withhold("org_1", "in_1", "INV-1", 3900, "usd")).thenReturn(
                 new EarningsWithholdingGateway.Withholding(false, 0, "wh_1", "No delivered earnings"));
         assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.DONE);
         verify(collections).transition("in_1", "REQUESTED", "DECLINED", new Change(0L, null, "wh_1", null,
                 "No delivered earnings"), NOW);
-        verify(stripe, never()).creditBalance(anyString(), anyLong(), anyString(), anyString());
 
         when(collections.lock("in_2")).thenReturn(Optional.of(new Row("in_2", "org_1", "INV-2", 3900L, 3900, "WITHHELD",
                 3900, 0, 0, "wh_2", null, null, 0, null, null, NOW, NOW)));
-        when(stripe.retrieveInvoice("in_2")).thenReturn(invoice("open", "subscription_cycle", 3900));
+        when(invoices.findById("in_2")).thenReturn(Optional.of(domainInvoice("open", "subscription_cycle", 3900)));
         assertThat(service.collect("in_2")).isEqualTo(EarningsCollectionService.Outcome.DONE);
         verify(collections).transition(eq("in_2"), eq("WITHHELD"), eq("MISSED"), any(), eq(NOW));
         verify(collections).requestRelease("plan-fee-release-in_2", "in_2", 3900, "invoice finalised before the "
@@ -124,7 +123,7 @@ class EarningsCollectionServiceImplTest {
     void aTransientFailureAsksForARetryAndGivesUpAfterMaxAttempts() {
         when(payments.enabled()).thenReturn(true);
         when(collections.lock("in_1")).thenReturn(Optional.of(row("REQUESTED", 3900, 0)));
-        when(stripe.retrieveInvoice("in_1")).thenReturn(invoice("draft", "subscription_cycle", 3900));
+        when(invoices.findById("in_1")).thenReturn(Optional.of(domainInvoice("draft", "subscription_cycle", 3900)));
         when(payments.withhold(anyString(), anyString(), any(), anyLong(), anyString()))
                 .thenThrow(new GatewayException("seller.payments-unavailable", "down", false, null));
         assertThat(service.collect("in_1")).isEqualTo(EarningsCollectionService.Outcome.RETRY);
@@ -160,13 +159,12 @@ class EarningsCollectionServiceImplTest {
                 .Release("plan-fee-release-in_1", "in_1", "org_1", 3900, "invoice voided", true, null, 0)));
         when(collections.find("in_1")).thenReturn(Optional.of(row("CREDITED", 3900, 3900)));
         when(subs.find("org_1")).thenReturn(Optional.of(sub("org_1")));
-        when(stripe.debitBalance(eq("cus_org_1"), eq(3900L), anyString(),
-                eq("earnings-plan-fee-release-in_1"))).thenReturn(new StripeBillingGateway.BalanceCredit("cbtxn_d", 0));
+        when(subs.adjustCreditBalance("org_1", -3900L)).thenReturn(0L);
         service.release("in_1");
-        verify(collections).releaseDebited("plan-fee-release-in_1", "cbtxn_d", NOW);
+        verify(collections).releaseDebited("plan-fee-release-in_1", "local-debit-plan-fee-release-in_1", NOW);
         verify(payments).release("org_1", "in_1", 3900, "invoice voided", "plan-fee-release-in_1");
         verify(collections).addReleased("in_1", 3900, "RELEASED", NOW);
-        verify(collections).releaseDone("plan-fee-release-in_1", "cbtxn_d", NOW);
+        verify(collections).releaseDone("plan-fee-release-in_1", "local-debit-plan-fee-release-in_1", NOW);
     }
 
     private static Row row(String status, long withheld, long credited) {
@@ -179,12 +177,15 @@ class EarningsCollectionServiceImplTest {
     }
 
     private static Subscription sub(String org) {
-        Subscription s = Subscription.selected(org, "seller_growth", 1, Cadence.MONTHLY, null, NOW);
-        return s.withStripe("cus_" + org, "sub_" + org, "si_" + org, s.status(), null, NOW, NOW, false, NOW);
+        return Subscription.selected(org, "seller_growth", 1, Cadence.MONTHLY, null, NOW);
     }
 
     private static InvoiceSnapshot invoice(String status, String reason, long amount) {
         return new InvoiceSnapshot("in_1", "cus_1", "sub_1", "INV-1", status, reason, amount, 0, "usd", NOW, NOW, null,
                 null, 0, null, NOW, List.of(), null);
+    }
+
+    private static Invoice domainInvoice(String status, String reason, long amount) {
+        return new Invoice("in_1", "org_1", "INV-1", NOW, NOW, amount, 0, "usd", status, reason, null, null, NOW, List.of());
     }
 }

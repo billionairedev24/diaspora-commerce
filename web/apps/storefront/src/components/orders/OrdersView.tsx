@@ -65,9 +65,11 @@ function OrderCard({ order }: { order: OrderSummary }) {
             )}
           </div>
           <div className={styles.shipActions}>
-            <Link href={`/orders/${encodeURIComponent(order.orderNumber)}#${s.shipmentId}`} className={buttonClassName({ variant: 'primary', size: 'sm', block: true })}>
-              {t('ord.track')}
-            </Link>
+            {s.status.toLowerCase() !== 'cancelled' && (
+              <Link href={`/orders/${encodeURIComponent(order.orderNumber)}#${s.shipmentId}`} className={buttonClassName({ variant: 'primary', size: 'sm', block: true })}>
+                {t('ord.track')}
+              </Link>
+            )}
             {s.cancellable && (
               <Button size="sm" variant="neutral" block onClick={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending && cancel.variables === s.shipmentId}>
                 {t('ord.cancelItems')}

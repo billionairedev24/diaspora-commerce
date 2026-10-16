@@ -135,6 +135,17 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "PACKED"}), 409)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "CONFIRMED"}), 200)
 	mustStatus(t, b.do("POST", orderPath+"/rates", map[string]any{"parcel": parcel, "shipFrom": from}), 200)
+	rateRes := b.do("POST", orderPath+"/rates", map[string]any{"carrier": "fedex", "parcel": parcel, "shipFrom": from})
+	mustStatus(t, rateRes, 200)
+	if quotes, ok := rateRes.json(t)["quotes"].([]any); !ok || len(quotes) == 0 {
+		t.Fatalf("expected fedex quotes, got %v", rateRes.body)
+	} else {
+		for _, q := range quotes {
+			if q.(map[string]any)["carrier"] != "fedex" {
+				t.Fatalf("expected only fedex quotes, got %v", q)
+			}
+		}
+	}
 	mustStatus(t, b.do("POST", orderPath+"/rates", map[string]any{"parcel": map[string]any{"weightLb": 0}, "shipFrom": from}), 422)
 	mustStatus(t, b.do("POST", orderPath+"/labels", map[string]any{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "parcel": parcel, "shipFrom": from}), 422)
 	b.headers["Idempotency-Key"] = "label-0123456789"

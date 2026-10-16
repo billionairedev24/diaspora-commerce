@@ -18,13 +18,16 @@ type SellerOffersService interface {
 	SetFulfilment(ctx context.Context, c *domain.Caller, offerID string, in domain.OfferFulfilmentRequest) (domain.SellerOffer, error)
 }
 
-type sellerOffersImpl struct{ r *orgResolver }
+type sellerOffersImpl struct {
+	r     *orgResolver
+	cache *scanCache[domain.ListingRow]
+}
 
 var _ SellerOffersService = (*sellerOffersImpl)(nil)
 
 // NewSellerOffersService returns the SellerOffersService.
 func NewSellerOffersService(d SellerDeps) SellerOffersService {
-	return &sellerOffersImpl{r: newResolver(d)}
+	return &sellerOffersImpl{r: newResolver(d), cache: d.listingCache()}
 }
 
 // offerPages caps how many pages of 100 offers one listing lookup reads.
@@ -107,6 +110,9 @@ func (s *sellerOffersImpl) SetFulfilment(ctx context.Context, c *domain.Caller, 
 	o, err := s.r.d.Offers.Update(ctx, c.BearerToken, offerID, body)
 	if err != nil {
 		return domain.SellerOffer{}, offerErr(err)
+	}
+	if s.cache != nil {
+		s.cache.drop("listings")
 	}
 	return sellerOfferOf(o), nil
 }

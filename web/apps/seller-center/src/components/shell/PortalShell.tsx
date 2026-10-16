@@ -13,6 +13,7 @@ import { sellerApi } from '@/lib/api';
 import { setFormatPreferences } from '@/lib/format';
 import { navGuard, useShellRedirect } from '@/lib/nav-guard';
 import { type ApplyRole, applyRoleOf, entryDecision, kindOf } from '@/lib/onboarding-entry';
+import { redirectFor } from '@/lib/onboarding-wizard';
 import { hrefOf, moduleOf } from '@/lib/routes';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { SellerSessionProvider } from '@/lib/session';
@@ -86,27 +87,28 @@ function useOnboardingEntry(session: SellerSession | undefined, role: ApplyRole 
         qc.setQueryData(sellerKeys.session(), next);
       }
       if (decision.action === 'home') {
+        done();
+        setState({ phase: 'idle' });
         redirect(hrefOf(next.landing));
         return;
       }
       // Start, or resume: the same idempotent call (a resumed draft gets what the account knows in empty answers).
       const st: OnboardingStatus = await api.startOnboarding(kindOf(role));
       qc.setQueryData(sellerKeys.onboarding(st.orgId), st);
+      done();
+      setState({ phase: 'idle' });
       await qc.invalidateQueries({ queryKey: sellerKeys.session() });
-      redirect('/onboarding');
+      const target = redirectFor(st, null) ?? '/onboarding';
+      redirect(target);
     };
     run()
-      .then(() => {
-        setState({ phase: 'idle' });
-        done();
-      })
       .catch((e: unknown) => {
         if (isApiError(e) && e.code === 'ALREADY_APPROVED') {
           // Approved in the meantime (identity had not listed the organisation yet): open the back office.
+          done();
+          setState({ phase: 'idle' });
           void qc.invalidateQueries({ queryKey: sellerKeys.session() });
           redirect('/');
-          setState({ phase: 'idle' });
-          done();
           return;
         }
         setState({ phase: 'failed', message: (isApiError(e) && e.problem.detail) || t('sc.portalShell.couldNotStartApplication') });
@@ -147,7 +149,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const accountPage = accountSectionOf(pathname) !== null;
   // Read once on arrival (no useSearchParams: the shell renders on every page, statically).
   const [applyRole, setApplyRole] = useState<ApplyRole | null>(() =>
-    typeof window === 'undefined' || moduleOf(window.location.pathname) !== 'onboarding' ? null : applyRoleOf(window.location.search)
+    typeof window === 'undefined' || moduleOf(pathname) !== 'onboarding' ? null : applyRoleOf(window.location.search)
   );
   const entry = useOnboardingEntry(q.data, applyRole, () => setApplyRole(null));
   const entering = applyRole !== null || entry.phase === 'working';
@@ -180,6 +182,9 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const showsPage = !!session && !entering && !needsOnboarding && !leaveTo && !loop;
   useEffect(() => {
     if (showsPage) navGuard.loaded();
+    return () => {
+      navGuard.loaded();
+    };
   }, [showsPage]);
 
   if (loop) {

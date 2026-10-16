@@ -1,6 +1,6 @@
 'use client';
 
-import { type ApiError, type AttributeDef, isApiError, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries } from '@afrotransact/api-client';
+import { type ApiError, type AttributeDef, isApiError, type ListingRow, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries } from '@afrotransact/api-client';
 import { Button, Checkbox, Field, fieldStyles, Select, TextField, useToast } from '@afrotransact/ui';
 import { Sparkle } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -180,6 +180,16 @@ export function ProductForm({ productId }: { productId?: string }) {
     },
     onSuccess: (row) => {
       dirty.current = false;
+      qc.setQueriesData<{ items: ListingRow[]; total: number }>({ queryKey: sellerKeys.listings(orgId) }, (old) => {
+        if (!old || !old.items) return old;
+        return {
+          ...old,
+          items: old.items.map((r) => (r.productId === row.productId ? { ...r, ...row } : r))
+        };
+      });
+      if (productId) {
+        void qc.invalidateQueries({ queryKey: sellerKeys.product(orgId, productId) });
+      }
       void qc.invalidateQueries({ queryKey: sellerKeys.listings(orgId) });
       void qc.invalidateQueries({ queryKey: sellerKeys.productDrafts(orgId) });
       toast.show(row.status === 'PENDING_CATEGORY_APPROVAL' ? t('sc.pf.toast.pendingCategory') : row.status === 'IN_REVIEW' ? t('sc.pf.toast.inReview') : t('sc.pf.toast.saved'));
@@ -395,11 +405,24 @@ export function ProductForm({ productId }: { productId?: string }) {
             <Section id="fulfilment" title={t('sc.pf.s.fulfilment')}>
               <div role="radiogroup" aria-label={t('sc.pf.s.fulfilment')} className="grid gap-2 sm:grid-cols-2">
                 {(['SELLER', 'AFROTRANSACT'] as const).map((f) => (
-                  <label key={f} aria-label={t(`sc.pf.fulfilment.${f}` as MessageKey)} className={`flex cursor-pointer gap-2 rounded-sm border p-3 ${s.fulfilment === f ? 'border-gold-500 bg-gold-50' : 'border-border-strong bg-surface'}`}>
-                    <input type="radio" name="pf-fulfilment" value={f} checked={s.fulfilment === f} onChange={() => patch({ fulfilment: f })} className="mt-1" />
-                    <span className="flex flex-col">
-                      <strong className="text-sm">{t(`sc.pf.fulfilment.${f}` as MessageKey)}</strong>
-                      {s.fulfilment === f ? <span className="text-xs text-muted">{t(`sc.pf.fulfilment.${f}.hint` as MessageKey)}</span> : null}
+                  <label
+                    key={f}
+                    aria-label={t(`sc.pf.fulfilment.${f}` as MessageKey)}
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-sm border p-3.5 transition-colors ${
+                      s.fulfilment === f ? 'border-gold-500 bg-gold-50' : 'border-border-strong bg-surface hover:bg-subtle'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="pf-fulfilment"
+                      value={f}
+                      checked={s.fulfilment === f}
+                      onChange={() => patch({ fulfilment: f })}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <span className="flex flex-col gap-0.5">
+                      <strong className="text-sm font-semibold">{t(`sc.pf.fulfilment.${f}` as MessageKey)}</strong>
+                      <span className="text-xs text-muted">{t(`sc.pf.fulfilment.${f}.hint` as MessageKey)}</span>
                     </span>
                   </label>
                 ))}

@@ -130,7 +130,7 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const api = client();
     const session = await api.getSession();
     expect(session.portal).toBe('SELLER_CENTER');
-    expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'storefront', 'payouts', 'fees', 'billing', 'account-health', 'team']);
+    expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'coupons', 'storefront', 'payouts', 'fees', 'billing', 'account-health', 'team']);
     expect(session.navGroups.map((g) => g.label)).toEqual(['Overview', 'Commerce', 'Growth', 'Finance', 'Trust & compliance', 'Settings']);
     await expect(api.getCompliance()).resolves.toMatchObject({ showBanner: true, tone: 'warning', openItems: 2 });
     // Account health: each item names the Stripe embedded component that collects it; the payout bank is changed in
@@ -174,6 +174,17 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     }
     const from = { name: 'Ade’s Kitchen', phone: null, line1: '1 Bellaire Blvd', line2: null, city: 'Houston', state: 'TX', postalCode: '77036', country: 'US' };
     const rates = await api.quoteRates(row.orderNumber, row.shipmentId, { weightLb: 3 }, from);
+    expect(rates.quotes.length).toBeGreaterThanOrEqual(4);
+    const carriers = new Set(rates.quotes.map((quote) => quote.carrier));
+    expect(carriers.has('usps')).toBe(true);
+    expect(carriers.has('ups')).toBe(true);
+    expect(carriers.has('fedex')).toBe(true);
+    expect(carriers.has('dhl')).toBe(true);
+
+    const fedexRates = await api.quoteRates(row.orderNumber, row.shipmentId, { weightLb: 3 }, from, 'fedex');
+    expect(fedexRates.quotes.length).toBeGreaterThan(0);
+    expect(fedexRates.quotes.every((quote) => quote.carrier === 'fedex')).toBe(true);
+
     const q = rates.quotes[0];
     if (!q) throw new Error('quotes');
     const label = await api.buyLabel(row.orderNumber, row.shipmentId, { carrier: q.carrier, service: q.service, parcel: { weightLb: 3 }, shipFrom: from }, 'key-123456789');

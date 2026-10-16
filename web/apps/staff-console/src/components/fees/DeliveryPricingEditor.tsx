@@ -40,9 +40,10 @@ function TariffEditor({ name, prefix, value, onChange, errors }: { name: string;
         error={err('mode')}
         options={[
           { value: 'FLAT', label: t('st.delivery.mode.flat') },
+          { value: 'PER_WEIGHT', label: 'By weight (base + per lb)' },
           { value: 'DISTANCE', label: t('st.delivery.mode.distance') }
         ]}
-        onChange={(e) => set('mode', e.currentTarget.value === 'DISTANCE' ? 'DISTANCE' : 'FLAT')}
+        onChange={(e) => set('mode', e.currentTarget.value as any)}
       />
       {value.mode === 'FLAT' ? (
         <TextField
@@ -55,6 +56,16 @@ function TariffEditor({ name, prefix, value, onChange, errors }: { name: string;
           help={t('st.delivery.flatHelp')}
           onChange={(e) => set('flat', e.currentTarget.value)}
         />
+      ) : value.mode === 'PER_WEIGHT' ? (
+        <>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">
+            <TextField id={id('baseMinor')} inputMode="decimal" label={t('st.delivery.base')} value={value.base} error={err('baseMinor')} onChange={(e) => set('base', e.currentTarget.value)} />
+            <TextField id={id('perLbMinor')} inputMode="decimal" label="Per-pound rate ($)" value={value.perLb} error={err('perLbMinor')} onChange={(e) => set('perLb', e.currentTarget.value)} />
+            <TextField id={id('minMinor')} inputMode="decimal" label={t('st.delivery.min')} value={value.min} error={err('minMinor')} help={t('st.delivery.optional')} onChange={(e) => set('min', e.currentTarget.value)} />
+            <TextField id={id('maxMinor')} inputMode="decimal" label={t('st.delivery.max')} value={value.max} error={err('maxMinor')} help={t('st.delivery.noCap')} onChange={(e) => set('max', e.currentTarget.value)} />
+          </div>
+          <p className="m-0 text-xs text-muted">Base fee + per-pound rate × package weight in lbs (rounded half up), raised to the minimum and capped at the maximum.</p>
+        </>
       ) : (
         <>
           <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">

@@ -52,6 +52,8 @@ import {
   EarningsSchema,
   type GtinCheck,
   GtinCheckSchema,
+  type ImageLibraryItem,
+  ImageLibraryItemSchema,
   type ImageLibraryPage,
   ImageLibraryPageSchema,
   type ImageLibraryQuery,
@@ -257,8 +259,8 @@ export function createSellerApiClient(options: ApiClientOptions) {
     getOrder: (orderNumber: string, signal?: AbortSignal): Promise<SellerOrderDetail> => request(`/v1/seller/orders/${enc(orderNumber)}`, SellerOrderDetailSchema, { signal }),
     updateShipmentStatus: (orderNumber: string, shipmentId: string, status: SellerStatusAction, key?: string): Promise<SellerOrderDetail> =>
       request(`${shipment(orderNumber, shipmentId)}/status`, SellerOrderDetailSchema, { method: 'POST', body: { status }, headers: idem(key) }),
-    quoteRates: (orderNumber: string, shipmentId: string, parcel: Parcel, shipFrom: SellerAddress): Promise<RateQuotes> =>
-      request(`${shipment(orderNumber, shipmentId)}/rates`, RateQuotesSchema, { method: 'POST', body: { parcel, shipFrom } }),
+    quoteRates: (orderNumber: string, shipmentId: string, parcel: Parcel, shipFrom: SellerAddress, carrier?: string): Promise<RateQuotes> =>
+      request(`${shipment(orderNumber, shipmentId)}/rates`, RateQuotesSchema, { method: 'POST', body: { parcel, shipFrom, ...(carrier ? { carrier } : {}) } }),
     buyLabel: (orderNumber: string, shipmentId: string, body: { carrier: string; service: string; parcel: Parcel; shipFrom: SellerAddress }, key: string): Promise<LabelPurchase> =>
       request(`${shipment(orderNumber, shipmentId)}/labels`, LabelPurchaseSchema, { method: 'POST', body, headers: idem(key) }),
 
@@ -287,6 +289,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/coupons', SellerCouponSchema, { method: 'POST', body }),
     setCouponStatus: (id: string, status: 'ACTIVE' | 'PAUSED' | 'EXPIRED'): Promise<SellerCoupon> =>
       request(`/v1/seller/coupons/${enc(id)}/status`, SellerCouponSchema, { method: 'POST', body: { status } }),
+    deleteCoupon: async (id: string): Promise<void> => {
+      await request(`/v1/seller/coupons/${enc(id)}`, z.unknown(), { method: 'DELETE' });
+    },
 
     /* Listings & builder */
     listListings: (q: ListingsQuery, signal?: AbortSignal): Promise<ListingPage> =>
@@ -350,6 +355,8 @@ export function createSellerApiClient(options: ApiClientOptions) {
       }),
     removeLibraryImage: (assetId: string): Promise<undefined> =>
       request(`/v1/seller/image-library/${enc(assetId)}`, z.undefined(), { method: 'DELETE' }),
+    renameLibraryImage: (assetId: string, fileName: string): Promise<ImageLibraryItem> =>
+      request(`/v1/seller/image-library/${enc(assetId)}`, ImageLibraryItemSchema, { method: 'PATCH', body: { fileName } }),
     attachLibraryImages: (skus?: string[]): Promise<AttachLibraryImagesResult> =>
       request('/v1/seller/image-library/attach', AttachLibraryImagesResultSchema, { method: 'POST', body: { skus: skus ?? [] } }),
     listBrands: (q: string, signal?: AbortSignal): Promise<BrandList> =>
