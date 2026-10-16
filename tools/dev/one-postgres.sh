@@ -38,10 +38,12 @@ if lsof -nP -iTCP:5432 -sTCP:LISTEN >/dev/null 2>&1 || sudo lsof -nP -iTCP:5432 
   fi
 fi
 
-say "3/7 Waiting for port 5432 to be free"
+say "3/7 Waiting for port 5432 to be free of other users' servers"
+# Homebrew's own server runs as you (a re-run finds it already up); the EDB daemon runs as "postgres".
+foreign() { sudo lsof -nP -iTCP:5432 -sTCP:LISTEN 2>/dev/null | awk -v me="$(whoami)" 'NR > 1 && $3 != me'; }
 i=0
-while sudo lsof -nP -iTCP:5432 -sTCP:LISTEN >/dev/null 2>&1; do
-  i=$((i + 1)); [[ $i -gt 20 ]] && die "something still listens on 5432: $(sudo lsof -nP -iTCP:5432 -sTCP:LISTEN | tail -1)"
+while [[ -n "$(foreign)" ]]; do
+  i=$((i + 1)); [[ $i -gt 20 ]] && die "another user's server still listens on 5432: $(foreign | head -1)"
   sleep 1
 done
 echo "free"
@@ -68,7 +70,16 @@ if [[ -n "$CLASH" ]]; then
   for d in $CLASH; do
     printf '  %-24s %s\n' "$d" "$(psql_b -d postgres -c "select pg_size_pretty(pg_database_size('$d'))")"
   done
-  [[ "${RENAME_CLASHES:-0}" == 1 ]] || die "restoring would mix data. To keep both copies, re-run with RENAME_CLASHES=1: the Homebrew copies are renamed to <name>_brew_$(date +%Y%m%d) (nothing is dropped) and the backup's copies take the original names."
+  if [[ "${DROP_CLASHES:-0}" == 1 ]]; then
+    for d in $CLASH; do
+      psql_b -d postgres -c "drop database \"$d\" with (force)" >/dev/null || die "could not drop $d."
+      echo "dropped the Homebrew copy of $d"
+    done
+    CLASH=""
+  fi
+fi
+if [[ -n "$CLASH" ]]; then
+  [[ "${RENAME_CLASHES:-0}" == 1 ]] || die "restoring would mix data. To keep both copies, re-run with RENAME_CLASHES=1 (or DROP_CLASHES=1 to discard the Homebrew copies): the Homebrew copies are renamed to <name>_brew_$(date +%Y%m%d) (nothing is dropped) and the backup's copies take the original names."
   for d in $CLASH; do
     n="${d}_brew_$(date +%Y%m%d)"
     psql_b -d postgres -c "alter database \"$d\" rename to \"$n\"" >/dev/null || die "could not rename $d (is something connected to it? stop that app and re-run)."
