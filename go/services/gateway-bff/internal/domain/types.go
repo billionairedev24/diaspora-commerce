@@ -399,12 +399,14 @@ type OrderShipment struct {
 	Status     string `json:"status"`
 	Items      string `json:"items"`
 	// Optional facts from orders (Your orders cards): cancel button, tracking, handover code.
-	Cancellable    bool    `json:"cancellable,omitempty"`
-	Carrier        *string `json:"carrier,omitempty"`
-	TrackingNumber *string `json:"trackingNumber,omitempty"`
-	PromisedBy     *string `json:"promisedBy,omitempty"`
-	DeliveredAt    *string `json:"deliveredAt,omitempty"`
-	DeliveryCode   *string `json:"deliveryCode,omitempty"`
+	Cancellable bool `json:"cancellable,omitempty"`
+	// CancellableUntil is when Cancel stops being offered (null when it is not offered now).
+	CancellableUntil *string `json:"cancellableUntil,omitempty"`
+	Carrier          *string `json:"carrier,omitempty"`
+	TrackingNumber   *string `json:"trackingNumber,omitempty"`
+	PromisedBy       *string `json:"promisedBy,omitempty"`
+	DeliveredAt      *string `json:"deliveredAt,omitempty"`
+	DeliveryCode     *string `json:"deliveryCode,omitempty"`
 	// Returns (S148/S166).
 	Returnable         bool    `json:"returnable,omitempty"`
 	ReturnWindowEndsAt *string `json:"returnWindowEndsAt,omitempty"`
@@ -564,13 +566,13 @@ type CheckoutSummary struct {
 	// DiscountMinor is the item discount from an applied coupon (subtotal reduction before tax).
 	DiscountMinor int64 `json:"discountMinor"`
 	// ShippingDiscountMinor is free-shipping (or partial) from the coupon.
-	ShippingDiscountMinor int64 `json:"shippingDiscountMinor"`
-	TaxMinor              int64 `json:"taxMinor"`
-	TaxRateLabel          string            `json:"taxRateLabel"`
-	TotalMinor            int64             `json:"totalMinor"`
-	Currency              string            `json:"currency"`
-	SellerCount           int               `json:"sellerCount"`
-	Coupon                *CheckoutCoupon   `json:"coupon,omitempty"`
+	ShippingDiscountMinor int64           `json:"shippingDiscountMinor"`
+	TaxMinor              int64           `json:"taxMinor"`
+	TaxRateLabel          string          `json:"taxRateLabel"`
+	TotalMinor            int64           `json:"totalMinor"`
+	Currency              string          `json:"currency"`
+	SellerCount           int             `json:"sellerCount"`
+	Coupon                *CheckoutCoupon `json:"coupon,omitempty"`
 	// PublishableKey is the Stripe key for Stripe.js (Payment Element, Express Checkout Element).
 	PublishableKey string `json:"publishableKey,omitempty"`
 	// StripeCustomerID is the shopper's Stripe Customer (cus_...); passed to the Payment Element to show saved cards.

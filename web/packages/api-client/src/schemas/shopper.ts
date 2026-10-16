@@ -59,6 +59,18 @@ export type OrderLineView = z.infer<typeof OrderLineViewSchema>;
 export const OrderPickupSchema = z.object({ id: z.string(), name: z.string(), address: z.string(), hours: z.string(), ready: z.string(), setBy: z.enum(['platform', 'seller']) });
 export type OrderPickup = z.infer<typeof OrderPickupSchema>;
 
+/** How our driver handed a parcel over (photo, who received it); the links last about five minutes. */
+export const DeliveryProofSchema = z.object({
+  method: z.enum(['CUSTOMER', 'SOMEONE_ELSE', 'SAFE_PLACE']),
+  recipientName: nullableString,
+  relationship: nullableString,
+  safePlace: nullableString,
+  photoUrl: nullableString,
+  signatureUrl: nullableString,
+  at: z.string()
+});
+export type DeliveryProof = z.infer<typeof DeliveryProofSchema>;
+
 export const ShipmentDetailSchema = z.object({
   shipmentId: z.string(),
   label: z.string(),
@@ -68,11 +80,15 @@ export const ShipmentDetailSchema = z.object({
   sellerName: z.string(),
   deliveryMethod: DeliveryMethodSchema,
   cancellable: z.boolean(),
+  /** When Cancel stops being offered (before packing, inside the cancellation window); null when it is not offered. */
+  cancellableUntil: z.string().nullable().optional(),
   carrier: nullableString,
   trackingNumber: nullableString,
   promisedFrom: nullableString,
   promisedBy: nullableString,
   deliveredAt: nullableString,
+  /** How our driver handed it over; null for carrier, pickup and by-hand deliveries. */
+  proof: DeliveryProofSchema.nullable().optional(),
   deliveryCode: nullableString,
   lines: z.array(OrderLineViewSchema),
   timeline: z.array(TimelineEventSchema),

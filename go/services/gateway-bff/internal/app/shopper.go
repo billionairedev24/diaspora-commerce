@@ -263,7 +263,7 @@ func toOrderSummary(o port.UpOrder) domain.OrderSummary {
 	}
 	for _, s := range o.Shipments {
 		out.Shipments = append(out.Shipments, domain.OrderShipment{ShipmentID: firstNonEmpty(s.ShipmentID, s.ID), Label: s.Label,
-			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, Carrier: optStr(s.Carrier),
+			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, CancellableUntil: optStr(s.CancellableUntil), Carrier: optStr(s.Carrier),
 			TrackingNumber: optStr(s.TrackingNumber), PromisedBy: optStr(s.PromisedBy), DeliveredAt: optStr(s.DeliveredAt),
 			DeliveryCode: optStr(s.HandoverCode), Returnable: s.Returnable, ReturnWindowEndsAt: optStr(s.ReturnWindowEndsAt),
 			ProblemReportOnly: s.ProblemReportOnly})

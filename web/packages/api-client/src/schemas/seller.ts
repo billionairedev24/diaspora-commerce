@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { BookingTakeHomeSchema, SellerNegotiatedRateSchema, SellerRateCardSchema } from '../fee-rates';
+import { DeliveryProofSchema } from './shopper';
 
 /* Zod schemas for contracts/openapi/gateway-bff-seller.yaml (Seller Center & Provider Hub). Every response is
    validated at runtime; test/seller-contract.test.ts keeps them assignable to the generated contract types. */
@@ -475,6 +476,8 @@ export const SellerShipmentSchema = z.object({
   hasLabel: z.boolean().default(false),
   /** The products' listed package (lb / in), to prefill the label form. */
   suggestedParcel: SuggestedParcelSchema.nullable().default(null),
+  /** How our driver handed it over (photo, who received it); null for carrier, pickup and by-hand deliveries. */
+  proof: DeliveryProofSchema.nullable().default(null),
   timeline: z.array(z.object({ status: z.string(), at: z.string(), actor: z.string() })),
   /** AfroTransact Delivery from the seller's store (S255): the seller delivery fee is deducted from the payout. */
   localDelivery: z

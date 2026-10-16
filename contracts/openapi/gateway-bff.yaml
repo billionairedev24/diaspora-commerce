@@ -3325,7 +3325,8 @@ components:
               label: {type: string}
               status: {type: string}
               items: {type: string}
-              cancellable: {type: boolean, description: The customer can still cancel it (until packed)}
+              cancellable: {type: boolean, description: 'The customer can still cancel it: before the parcel is packed and inside the cancellation window'}
+              cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered; null when it is not offered now'}
               carrier: {type: [string, 'null']}
               trackingNumber: {type: [string, 'null']}
               promisedBy: {type: [string, 'null']}

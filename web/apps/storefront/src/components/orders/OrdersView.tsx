@@ -14,6 +14,7 @@ import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
+import { CancelShipment } from './CancelShipment';
 import styles from './Orders.module.css';
 import { PickupDetails } from './PickupDetails';
 
@@ -70,11 +71,7 @@ function OrderCard({ order }: { order: OrderSummary }) {
                 {t('ord.track')}
               </Link>
             )}
-            {s.cancellable && (
-              <Button size="sm" variant="neutral" block onClick={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending && cancel.variables === s.shipmentId}>
-                {t('ord.cancelItems')}
-              </Button>
-            )}
+            <CancelShipment shipment={s} block onCancel={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending && cancel.variables === s.shipmentId} />
             {(s.returnable ?? Boolean(s.deliveredAt)) && (
               <Link href={`/account/returns/new?order=${encodeURIComponent(order.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm', block: true })}>
                 {t('ord.returnItems')}

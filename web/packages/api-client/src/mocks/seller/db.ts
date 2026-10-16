@@ -159,6 +159,7 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           nextActions: next,
           canBuyLabel: !fba && !local && !tracking && ['CONFIRMED', 'PACKED', 'READY'].includes(status),
           hasLabel: !fba && !local && Boolean(tracking),
+          proof: null,
           suggestedParcel: { weightLb: 1.2, lengthIn: 9, widthIn: 6, heightIn: 2 },
           timeline: [{ status: 'PLACED', at: iso(placed), actor: 'customer' }],
           localDelivery: local

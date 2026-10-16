@@ -12,6 +12,8 @@ import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 import { productHref } from '@/lib/links';
 
+import { CancelShipment } from './CancelShipment';
+import { DeliveryProofCard } from './DeliveryProofCard';
 import styles from './Orders.module.css';
 import { placedDate } from './OrdersView';
 import { PickupDetails } from './PickupDetails';
@@ -91,6 +93,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                       </li>
                     ))}
                   </ol>
+                  {s.proof && <DeliveryProofCard proof={s.proof} />}
                   <ul className={styles.lines}>
                     {s.lines.map((l) => (
                       <li key={l.lineId} className={styles.line}>
@@ -104,11 +107,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                     ))}
                   </ul>
                   <div className={pageStyles.actions}>
-                    {s.cancellable && (
-                      <Button size="sm" variant="neutral" onClick={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending}>
-                        {t('ord.cancelItems')}
-                      </Button>
-                    )}
+                    <CancelShipment shipment={s} onCancel={() => cancel.mutate(s.shipmentId)} loading={cancel.isPending} />
                     {(s.returnable ?? Boolean(s.deliveredAt)) && (
                       <Link href={`/account/returns/new?order=${encodeURIComponent(o.orderNumber)}`} className={buttonClassName({ variant: 'neutral', size: 'sm' })}>
                         {t('ord.returnItems')}

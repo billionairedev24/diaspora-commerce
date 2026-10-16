@@ -14,6 +14,7 @@ import { dateTime, idempotencyKey, money } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
 import { LabelForm } from './LabelForm';
+import { ProofOfDelivery } from './ProofOfDelivery';
 
 export const ACTION_LABEL: Record<SellerStatusAction, string> = { CONFIRMED: 'Confirm order', PACKED: 'Mark packed', READY: 'Mark ready to ship', PICKED_UP: 'Mark shipped' };
 
@@ -123,6 +124,7 @@ export function OrderSheet({ orderNumber, onClose }: { orderNumber: string | nul
                   ))}
                 </div>
               ) : null}
+              {s.proof ? <ProofOfDelivery proof={s.proof} /> : null}
               {editable && s.canBuyLabel ? <LabelForm order={o} shipmentId={s.shipmentId} suggested={s.suggestedParcel} /> : null}
               <details className="text-xs text-muted">
                 <summary className="cursor-pointer">Timeline</summary>

@@ -44,6 +44,7 @@ export const OrderSummarySchema = z.object({
       status: z.string(),
       items: z.string(),
       cancellable: z.boolean().optional(),
+      cancellableUntil: z.string().nullable().optional(),
       carrier: z.string().nullable().optional(),
       trackingNumber: z.string().nullable().optional(),
       promisedBy: z.string().nullable().optional(),
