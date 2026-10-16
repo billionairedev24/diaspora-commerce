@@ -260,7 +260,7 @@ PSQL_MODE=""
 psql_su() {
   case "$PSQL_MODE" in
     tcp) psql -w -h localhost -p 5432 -U "${PG_SUPERUSER:-$(whoami)}" -v ON_ERROR_STOP=1 -qtA "$@" ;;
-    socket) psql -w -U "$(whoami)" -v ON_ERROR_STOP=1 -qtA "$@" ;;
+    socket) psql -w -p 5432 -U "$(whoami)" -v ON_ERROR_STOP=1 -qtA "$@" ;;
     sudo) sudo -u postgres psql -w -p 5432 -v ON_ERROR_STOP=1 -qtA "$@" ;;
   esac
 }
@@ -296,7 +296,10 @@ setup_host_postgres() {
     echo "  PG_EXTERNAL=0 POSTGRES_HOST_PORT=5433 make up  # use the Docker Postgres next to yours instead" >&2
     exit 1; }
   [[ "$(psql_su -d postgres -c "select count(*) from pg_available_extensions where name = 'postgis'")" == 1 ]] || {
-    echo "Your Postgres has no PostGIS (geo, fulfilment need it): brew install postgis, then re-run." >&2; exit 1; }
+    echo "Your Postgres on localhost:5432 (version $(psql_su -d postgres -c 'show server_version' 2>/dev/null), connected via $PSQL_MODE) has no PostGIS (geo, fulfilment need it)." >&2
+    echo "  brew install postgis (it must match that server's major version), restart Postgres, then re-run." >&2
+    echo "  Or: PG_EXTERNAL=0 POSTGRES_HOST_PORT=5433 make up  # the Docker Postgres, which ships PostGIS" >&2
+    exit 1; }
   local maxconn
   maxconn=$(psql_su -d postgres -c 'show max_connections')
   if ((maxconn < 200)); then
