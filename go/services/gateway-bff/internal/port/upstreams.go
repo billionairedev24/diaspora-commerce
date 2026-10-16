@@ -595,6 +595,9 @@ type AuthRequest struct {
 	Origin string `json:"origin,omitempty"`
 	// RedirectURI is the callback sent to identity, needed again for the code exchange.
 	RedirectURI string `json:"redirectUri,omitempty"`
+	// Retried marks a sign-in an app restarted after a failed one; a second failure stops at the storefront's error page
+	// instead of looping.
+	Retried bool `json:"retried,omitempty"`
 }
 
 // Challenge is a pending sign-up verification.

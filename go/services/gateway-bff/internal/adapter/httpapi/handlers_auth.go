@@ -23,7 +23,7 @@ func (h *handlersImpl) startLogin(w http.ResponseWriter, r *http.Request, provid
 		returnTo = "/"
 	}
 	url, err := h.s.Auth.AuthorizeURL(r.Context(), callerFrom(r.Context()), app.LoginRequest{Provider: provider, ReturnTo: returnTo,
-		Prompt: q.Get("prompt"), LoginHint: q.Get("login_hint"), Invitation: q.Get("invitation"), Intent: q.Get("intent")})
+		Prompt: q.Get("prompt"), LoginHint: q.Get("login_hint"), Invitation: q.Get("invitation"), Intent: q.Get("intent"), Retried: q.Get("retried") == "1"})
 	if err != nil {
 		h.reply(w, r, 0, nil, err)
 		return

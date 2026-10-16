@@ -253,7 +253,7 @@ func TestForeignOriginErrorRedirectsToLoginWithoutStorefrontError(t *testing.T) 
 	// with prompt=login, never showing an intermediate storefront error page.
 	r = b.do("GET", "/v1/auth/oidc/callback?error=access_denied&state="+state, nil)
 	mustStatus(t, r, 302)
-	wantLoc := testkit.SellerCenterOrigin + "/api/bff/v1/auth/login?prompt=login&returnTo=" + url.QueryEscape(testkit.SellerCenterOrigin+"/orders")
+	wantLoc := testkit.SellerCenterOrigin + "/api/bff/v1/auth/login?prompt=login&retried=1&returnTo=" + url.QueryEscape(testkit.SellerCenterOrigin+"/orders")
 	if got := r.header.Get("Location"); got != wantLoc {
 		t.Fatalf("location = %s, want %s", got, wantLoc)
 	}

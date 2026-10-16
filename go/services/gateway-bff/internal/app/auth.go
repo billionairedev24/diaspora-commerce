@@ -54,6 +54,8 @@ type LoginRequest struct {
 	// SignedOut marks the sign-in an app starts right after signing out: identity's page says "You've been signed
 	// out" (notice=signed_out).
 	SignedOut bool
+	// Retried marks the automatic second attempt after a failed cross-app sign-in (see signinError).
+	Retried bool
 }
 
 // AuthOptions configure sign-in.
@@ -194,7 +196,7 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, in
 	origin, path := a.destination(in.ReturnTo)
 	redirectURI := a.redirectURI(origin)
 	verifier, state, nonce := randomID(48), randomID(32), randomID(24)
-	req := port.AuthRequest{Verifier: verifier, Nonce: nonce, ReturnTo: path, Provider: provider, Origin: origin, RedirectURI: redirectURI}
+	req := port.AuthRequest{Verifier: verifier, Nonce: nonce, ReturnTo: path, Provider: provider, Origin: origin, RedirectURI: redirectURI, Retried: in.Retried}
 	if c.Session != nil && !c.App {
 		req.SessionID = c.Session.ID
 	}
@@ -240,12 +242,14 @@ func emailLike(v string) bool {
 
 // signinError sends the browser back to start sign-in again towards the original destination.
 // When the request belongs to another app (e.g. Seller Center), it goes directly to that app's login start
-// instead of showing an intermediate Storefront error page.
+// instead of showing an intermediate Storefront error page — once: a second failure (the request is marked Retried)
+// ends on the Storefront error page, so a persistent error can never loop.
 func (a *authServiceImpl) signinError(reason string, req *port.AuthRequest) string {
-	if req != nil && req.Origin != "" && !strings.EqualFold(req.Origin, a.o.WebOrigin) {
+	if req != nil && req.Origin != "" && !strings.EqualFold(req.Origin, a.o.WebOrigin) && !req.Retried {
 		dest := domain.SafeReturnTo(req.ReturnTo)
 		q := url.Values{
 			"prompt":   {"login"},
+			"retried":  {"1"},
 			"returnTo": {req.Origin + dest},
 		}
 		return req.Origin + a.o.BFFPath + "/v1/auth/login?" + q.Encode()
