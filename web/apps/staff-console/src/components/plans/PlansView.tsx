@@ -7,6 +7,7 @@ import { ModulePage } from '@/components/module/ModulePage';
 import { useT } from '@/i18n/t';
 
 import { CataloguePanel } from './CataloguePanel';
+import { FeatureMatrixPanel } from './FeatureMatrixPanel';
 import { GrantsPanel } from './GrantsPanel';
 import { RewardsPanel } from './RewardsPanel';
 import { SellerBillingPanel } from './SellerBillingPanel';
@@ -32,6 +33,7 @@ export function PlansView() {
         onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
         items={[
           { value: 'plans', label: t('st.plans.tab.plans'), content: <CataloguePanel /> },
+          { value: 'features', label: t('st.plans.tab.features'), content: <FeatureMatrixPanel /> },
           { value: 'trials', label: t('st.plans.tab.trials'), content: <TrialsPanel /> },
           { value: 'rewards', label: t('st.plans.tab.rewards'), content: <RewardsPanel /> },
           { value: 'grants', label: t('st.plans.tab.grants'), content: <GrantsPanel /> },

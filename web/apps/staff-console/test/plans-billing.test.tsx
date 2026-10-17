@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { CataloguePanel } from '@/components/plans/CataloguePanel';
+import { FeatureMatrixPanel } from '@/components/plans/FeatureMatrixPanel';
 import { RewardsPanel } from '@/components/plans/RewardsPanel';
 import { SellerBillingPanel } from '@/components/plans/SellerBillingPanel';
 import { SettingsPanel } from '@/components/plans/SettingsPanel';
@@ -74,6 +75,15 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(getStaffDb().plans.plans.find((p) => p.code === 'seller_essentials')?.limits).toMatchObject({ listings: '120', aiListingWriter: 'true', lolaTier: 'GROWTH', bulkUpload: 'true', coupons: 'false' });
     expect(await within(table).findByText('Up to 120 listings · Bulk upload · AI listing writer · Lola Growth assistant')).toBeInTheDocument();
+  });
+
+  it('shows which plans unlock each feature', async () => {
+    await renderScreen(<FeatureMatrixPanel />);
+    const table = await screen.findByRole('table', { name: 'Seller plans' });
+    const bulk = within(table).getByRole('row', { name: /Bulk upload/ });
+    expect(within(bulk).getAllByLabelText('Included').length).toBeGreaterThan(0);
+    expect(within(bulk).getAllByLabelText('Not included').length).toBeGreaterThan(0);
+    expect(within(within(table).getByRole('row', { name: /Lola assistant/ })).getByText('Growth')).toBeInTheDocument();
   });
 
   it('creates a promo-code trial campaign', async () => {
