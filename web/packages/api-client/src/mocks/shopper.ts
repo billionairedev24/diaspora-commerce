@@ -434,13 +434,20 @@ export const shopperHandlers = [
   })),
 
   /* Orders */
-  http.get('*/v1/account/orders', route((ctx) => json({
-    items: me(ctx).orders.map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
+  http.get('*/v1/account/orders', route((ctx) => {
+    // Cursor paging like the BFF: `limit` per page, the cursor is where the next page starts.
+    const q = new URL(ctx.request.url).searchParams;
+    const limit = Math.min(100, Math.max(1, Number(q.get('limit') ?? 20)));
+    const start = Math.max(0, Number(q.get('cursor') ?? 0) || 0);
+    const all = me(ctx).orders;
+    return json({
+    items: all.slice(start, start + limit).map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
       shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.statusLabel, items: s.items, cancellable: s.cancellable, carrier: s.carrier,
         trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode,
         ...returnFacts(me(ctx), o, s.shipmentId, ctx.now) })) })),
-    nextCursor: null
-  }))),
+    nextCursor: start + limit < all.length ? String(start + limit) : null
+  });
+  })),
   http.get('*/v1/account/orders/:orderNumber', route((ctx, p) => {
     const o = me(ctx).orders.find((x) => x.orderNumber === p.orderNumber);
     if (!o) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');

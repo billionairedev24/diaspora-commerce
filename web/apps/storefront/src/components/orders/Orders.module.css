@@ -6,6 +6,18 @@
 .shipment { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-3); padding: var(--at-space-4) var(--at-space-5); border-top: 1px solid var(--at-color-border); }
 .shipment:first-of-type { border-top: 0; }
 .shipStatus { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
+.statusBlock { display: flex; flex-direction: column; gap: var(--at-space-2); }
+.shipStatus.success { color: var(--at-color-success); }
+.shipStatus.brand { color: var(--at-color-text); }
+.shipStatus.neutral { color: var(--at-color-text-muted); }
+.shipStatus.danger { color: var(--at-color-danger); }
+.track { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--at-space-1); max-width: 420px; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.track li { padding-top: var(--at-space-2); border-top: 4px solid var(--at-color-border); }
+.track li.done { border-top-color: var(--at-color-action-secondary); color: var(--at-color-text); }
+.track li.current { font-weight: var(--at-weight-bold); }
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--at-space-3); align-items: flex-end; justify-content: space-between; }
+.toolbar > :last-child { flex: 1 1 220px; max-width: 320px; }
+.more { display: flex; flex-direction: column; gap: var(--at-space-2); align-items: center; padding: var(--at-space-3) 0; }
 .shipActions { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 180px; }
 .code { display: inline-flex; gap: var(--at-space-2); align-items: center; padding: var(--at-space-1) var(--at-space-3); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); font-size: var(--at-text-sm); }
 .aside { display: flex; flex-direction: column; gap: var(--at-space-4); position: sticky; top: var(--at-space-4); }

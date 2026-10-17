@@ -1,4 +1,4 @@
-import { keepPreviousData, queryOptions } from '@tanstack/react-query';
+import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type ApiClient } from '../client';
 import { type SlotQuery } from '../shopper-client';
@@ -68,6 +68,15 @@ export const shopperQueries = {
   addresses: (api: ApiClient) => queryOptions({ queryKey: accountKeys.addresses(), queryFn: () => api.getAddresses(), staleTime: MINUTE }),
   paymentMethods: (api: ApiClient) => queryOptions({ queryKey: accountKeys.paymentMethods(), queryFn: () => api.getPaymentMethods(), staleTime: MINUTE }),
   orders: (api: ApiClient) => queryOptions({ queryKey: orderKeys.lists(), queryFn: ({ signal }) => api.getOrderPage(undefined, signal), staleTime: 30_000 }),
+  /** Every page of the shopper's orders, newest first: `fetchNextPage` follows the cursor. */
+  infiniteOrders: (api: ApiClient) =>
+    infiniteQueryOptions({
+      queryKey: [...orderKeys.lists(), 'infinite'] as const,
+      queryFn: ({ pageParam, signal }) => api.getOrderPage(pageParam, signal),
+      initialPageParam: undefined as string | undefined,
+      getNextPageParam: (last) => last.nextCursor ?? undefined,
+      staleTime: 30_000
+    }),
   order: (api: ApiClient, orderNumber: string) =>
     queryOptions({ queryKey: orderKeys.detail(orderNumber), queryFn: ({ signal }) => api.getOrder(orderNumber, signal), staleTime: 30_000 }),
   returnable: (api: ApiClient, orderNumber: string) =>

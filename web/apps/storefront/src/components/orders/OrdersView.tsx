@@ -2,10 +2,11 @@
 
 import { isApiError, orderKeys, type OrderSummary } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CheckCircle, Key, Skeleton, Sparkle, useToast } from '@afrotransact/ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, buttonClassName, CheckCircle, ChipGroup, Key, Skeleton, Sparkle, TextField, useToast } from '@afrotransact/ui';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { useMemo, useState } from 'react';
 
 import pageStyles from '@/components/account/Pages.module.css';
 import { PlacedConfirmation } from '@/components/preorder/PreorderConfirmation';
@@ -16,9 +17,31 @@ import { shopperQueries } from '@/lib/api/queries';
 
 import { CancelShipment } from './CancelShipment';
 import styles from './Orders.module.css';
+import { matchesOrder, type OrderGroup, orderGroup, shipmentLook } from './orderStatus';
 import { PickupDetails } from './PickupDetails';
 
 export const placedDate = (tag: string, iso: string) => new Date(iso).toLocaleDateString(tag, { month: 'long', day: 'numeric', year: 'numeric' });
+
+/** "On the way" with a four-step track (ordered, packed, on the way, delivered); closed shipments just say what happened. */
+function ShipmentStatus({ status, deliveredAt }: { status: string; deliveredAt?: string | null }) {
+  const t = useT();
+  const look = shipmentLook(status, deliveredAt);
+  const steps = ['ordered', 'packed', 'onTheWay', 'delivered'] as const;
+  return (
+    <div className={styles.statusBlock}>
+      <p className={`${styles.shipStatus} ${styles[look.tone]}`}>{t(`ord.s.${look.key}`)}</p>
+      {look.step >= 0 && (
+        <ol className={styles.track} aria-label={t('ord.progress')}>
+          {steps.map((k, i) => (
+            <li key={k} className={i < look.step ? styles.done : i === look.step - 1 ? styles.current : undefined} aria-current={i === look.step - 1 ? 'step' : undefined}>
+              {t(`ord.step.${k}`)}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
 
 function OrderCard({ order }: { order: OrderSummary }) {
   const fmt = useFormatters();
@@ -56,7 +79,7 @@ function OrderCard({ order }: { order: OrderSummary }) {
       {order.shipments.map((s) => (
         <div key={s.shipmentId} className={styles.shipment}>
           <div>
-            <p className={styles.shipStatus}>{s.status}</p>
+            <ShipmentStatus status={s.status} deliveredAt={s.deliveredAt} />
             <p className={pageStyles.muted}>{s.label}</p>
             <p className={pageStyles.muted}>{s.items}</p>
             {s.deliveryCode && (
@@ -109,10 +132,15 @@ function PlacedPickups({ orderNumber }: { orderNumber: string }) {
 export function OrdersView() {
   const t = useT();
   const api = browserApi();
-  const orders = useQuery(shopperQueries.orders(api));
+  const orders = useInfiniteQuery(shopperQueries.infiniteOrders(api));
   const placed = useSearchParams().get('placed');
   const lola = useLolaLauncher();
-  const items = orders.data?.items ?? [];
+  const [group, setGroup] = useState<'ALL' | OrderGroup>('ALL');
+  const [text, setText] = useState('');
+  const items = useMemo(() => orders.data?.pages.flatMap((p) => p.items) ?? [], [orders.data]);
+  const count = (g: OrderGroup) => items.filter((o) => orderGroup(o.shipments) === g).length;
+  const shown = items.filter((o) => (group === 'ALL' || orderGroup(o.shipments) === group) && matchesOrder(o, text));
+  const filtering = group !== 'ALL' || text.trim() !== '';
   const codes = items.flatMap((o) => o.shipments.filter((s) => s.deliveryCode && !s.deliveredAt).map((s) => ({ order: o.orderNumber, code: s.deliveryCode, label: s.label })));
   return (
     <div className={pageStyles.page}>
@@ -135,7 +163,27 @@ export function OrdersView() {
       <div className={styles.layout}>
         <div className={pageStyles.form}>
           {orders.isPending && <Skeleton height={180} />}
-          {orders.isError && <p className={pageStyles.error} role="alert">{t('acct.loadError')}</p>}
+          {orders.isError && (
+            <p className={pageStyles.error} role="alert">
+              {t('acct.loadError')} <Button variant="link" onClick={() => void orders.refetch()}>{t('ord.retry')}</Button>
+            </p>
+          )}
+          {items.length > 0 && (
+            <div className={styles.toolbar}>
+              <ChipGroup
+                label={t('ord.filters')}
+                value={group}
+                onChange={setGroup}
+                options={[
+                  { value: 'ALL', label: `${t('ord.f.all')} (${items.length}${orders.hasNextPage ? '+' : ''})` },
+                  { value: 'IN_PROGRESS', label: `${t('ord.f.inProgress')} (${count('IN_PROGRESS')})` },
+                  { value: 'DELIVERED', label: `${t('ord.f.delivered')} (${count('DELIVERED')})` },
+                  { value: 'CLOSED', label: `${t('ord.f.closed')} (${count('CLOSED')})` }
+                ]}
+              />
+              <TextField label={t('ord.search')} placeholder={t('ord.searchPlaceholder')} type="search" value={text} onChange={(e) => setText(e.currentTarget.value)} />
+            </div>
+          )}
           {orders.isSuccess && items.length === 0 && (
             <div className={pageStyles.empty}>
               <p className={pageStyles.muted}>{t('ord.none')}</p>
@@ -144,9 +192,25 @@ export function OrdersView() {
               </Link>
             </div>
           )}
-          {items.map((o) => (
+          {items.length > 0 && shown.length === 0 && (
+            <div className={pageStyles.empty}>
+              <p className={pageStyles.muted}>{t('ord.noMatch')}</p>
+              {orders.hasNextPage && <p className={pageStyles.muted}>{t('ord.noMatchMore')}</p>}
+            </div>
+          )}
+          {shown.map((o) => (
             <OrderCard key={o.orderNumber} order={o} />
           ))}
+          {items.length > 0 && (
+            <div className={styles.more}>
+              <p className={pageStyles.muted} role="status">{t(filtering ? 'ord.showingFiltered' : 'ord.showing', { shown: shown.length, count: items.length })}</p>
+              {orders.hasNextPage && (
+                <Button variant="neutral" loading={orders.isFetchingNextPage} onClick={() => void orders.fetchNextPage()}>
+                  {t('ord.loadMore')}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         <aside className={styles.aside}>
           <section className={pageStyles.card} aria-labelledby="codes-title">
