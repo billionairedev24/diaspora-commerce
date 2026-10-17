@@ -780,7 +780,7 @@ links() {
   secrets_summary
   echo "  Payments: without STRIPE_SECRET_KEY a local stand-in authorises every card like test card 4242 (no money moves)."
   echo "  For Stripe test mode put the keys in .local/secrets.env, and for webhooks:"
-  echo "  stripe listen --forward-to localhost:8105/v1/webhooks/stripe   (its whsec_… → STRIPE_WEBHOOK_SECRET)"
+  echo "  stripe listen --events <list in docs/engineering/secrets-and-configuration.md> --forward-to localhost:8105/v1/webhooks/stripe   (its whsec_… → STRIPE_WEBHOOK_SECRET)"
   echo "──────────────────────────────────────────────────────────────────────────────────────────────"
 }
 

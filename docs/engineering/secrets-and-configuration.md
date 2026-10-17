@@ -99,12 +99,14 @@ Prices and free tiers change: check the provider's pricing page.
   Stripe verification step, with no redirect to Stripe: see "Seller accounts and liability" in
   docs/engineering/payments-idempotency.md).
 - **Webhooks locally:** install the [Stripe CLI](https://docs.stripe.com/stripe-cli), then
-  `stripe login` and `stripe listen --forward-to localhost:8105/v1/webhooks/stripe`. It prints
-  `Your webhook signing secret is whsec_…` → `STRIPE_WEBHOOK_SECRET`, then `tools/dev/local.sh restart payments`. Keep
-  it running. The secret stays the same for your machine across runs. For seller events run a second listener:
-  `stripe listen --forward-connect-to localhost:8106/v1/webhooks/stripe-connect` → `STRIPE_CONNECT_WEBHOOK_SECRET`, and
-  `stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.created,invoice.finalized,invoice.paid,invoice.payment_failed,invoice.voided,invoice.deleted,credit_note.created --forward-to
-  localhost:8106/v1/webhooks/stripe-billing` → `STRIPE_BILLING_WEBHOOK_SECRET` (each listener prints its own secret).
+  `stripe login` and, in a terminal you keep open:
+  `stripe listen --events payment_intent.succeeded,payment_intent.amount_capturable_updated,payment_intent.payment_failed,payment_intent.requires_action,payment_intent.canceled,charge.refunded,charge.dispute.created,charge.dispute.closed,transfer.reversed,payout.paid,payout.failed,setup_intent.succeeded,setup_intent.requires_action,payment_method.attached,payment_method.detached --forward-to localhost:8105/v1/webhooks/stripe`.
+  The CLI refuses to start without `--events`; do **not** use `--all-thin` (thin events are a different payload and every
+  delivery answers 400) and `--all-snapshot` only works if you accept noisy 200s for events we ignore. It prints
+  `Your webhook signing secret is whsec_…` → `STRIPE_WEBHOOK_SECRET`, then `tools/dev/local.sh restart payments`. The secret
+  stays the same for your machine across runs. For seller events run a second listener:
+  `stripe listen --events account.updated,capability.updated,person.created,person.updated,account.external_account.created,account.external_account.updated,account.external_account.deleted,payout.failed --forward-connect-to localhost:8106/v1/webhooks/stripe-connect` → `STRIPE_CONNECT_WEBHOOK_SECRET`, and, for bank debits of plan fees that settle days later,
+  `stripe listen --events payment_intent.succeeded,payment_intent.payment_failed --forward-to localhost:8106/v1/webhooks/stripe-billing` → `STRIPE_BILLING_WEBHOOK_SECRET` (each listener prints its own secret).
 - **Deployed:** Developers → **Webhooks** → Add endpoint `https://<api host>/payments/v1/webhooks/stripe` (and the two
   seller endpoints); the endpoint's *Signing secret* goes into the secret store. Events per endpoint:
 

@@ -426,7 +426,7 @@ of yesterday (`RECONCILIATION_CRON`, 03:10): ledger 1000 per Stripe object vs St
 | `SETTLEMENT_HOLD` (7d), `PAYOUT_MINIMUM_MINOR` (2500), `PAYMENTS_ZONE` | business settings |
 
 Local: `local` profile uses Stripe **test mode** on api.stripe.com — export a real `sk_test_…` key and run
-`stripe listen --forward-to localhost:8105/v1/webhooks/stripe` for the webhook secret. Test cards:
+`stripe listen --events payment_intent.succeeded,payment_intent.amount_capturable_updated,payment_intent.payment_failed,payment_intent.requires_action,payment_intent.canceled,charge.refunded,charge.dispute.created,charge.dispute.closed,transfer.reversed,payout.paid,payout.failed,setup_intent.succeeded,setup_intent.requires_action,payment_method.attached,payment_method.detached --forward-to localhost:8105/v1/webhooks/stripe` for the webhook secret (the CLI needs `--events`; never `--all-thin`: thin events are a different payload this endpoint rejects with 400). Test cards:
 `4000 0027 6000 3184` (3-D Secure → `REQUIRES_ACTION`), `4000 0000 0000 9995` (declined → `FAILED`).
 
 ## Build, test, deploy
