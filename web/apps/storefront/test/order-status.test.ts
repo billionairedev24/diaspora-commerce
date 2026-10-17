@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { inRange, matchesOrder, orderGroup, rangeOptions, shipmentLook } from '@/components/orders/orderStatus';
+import { inRange, matchesOrder, orderGroup, rangeOptions, rangeStart, shipmentLook } from '@/components/orders/orderStatus';
 
 describe('how a shipment reads to a shopper', () => {
   it('names the stage in plain words and says how far along it is', () => {
@@ -43,5 +43,10 @@ describe('time range filter', () => {
   });
   it('offers this year and the two before', () => {
     expect(rangeOptions(now).map((o) => o.value)).toEqual(['all', '3m', '6m', 'y2026', 'y2025', 'y2024']);
+  });
+  it('says where a range starts, so loading can stop once older orders arrive', () => {
+    expect(rangeStart('all', now)).toBeNull();
+    expect(rangeStart('3m', now)?.toISOString().slice(0, 10)).toBe('2026-07-17');
+    expect(rangeStart('y2025', now)?.getFullYear()).toBe(2025);
   });
 });

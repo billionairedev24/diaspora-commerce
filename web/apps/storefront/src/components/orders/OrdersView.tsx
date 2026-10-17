@@ -6,7 +6,7 @@ import { Button, buttonClassName, CheckCircle, ChipGroup, Key, Select, Skeleton,
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import pageStyles from '@/components/account/Pages.module.css';
 import { PlacedConfirmation } from '@/components/preorder/PreorderConfirmation';
@@ -17,8 +17,10 @@ import { shopperQueries } from '@/lib/api/queries';
 
 import { CancelShipment } from './CancelShipment';
 import styles from './Orders.module.css';
-import { inRange, matchesOrder, type OrderGroup, orderGroup, type OrderRange, rangeOptions, shipmentLook } from './orderStatus';
+import { inRange, matchesOrder, type OrderGroup, orderGroup, type OrderRange, rangeOptions, rangeStart, shipmentLook } from './orderStatus';
 import { PickupDetails } from './PickupDetails';
+
+const MAX_FILTER_PAGES = 10;
 
 export const placedDate = (tag: string, iso: string) => new Date(iso).toLocaleDateString(tag, { month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -192,6 +194,22 @@ export function OrdersView() {
   const now = useMemo(() => new Date(), []);
   const shown = items.filter((o) => (group === 'ALL' || orderGroup(o.shipments) === group) && inRange(o.placedAt, range, now) && matchesOrder(o, text));
   const filtering = group !== 'ALL' || range !== 'all' || text.trim() !== '';
+  /* Scroll-based paging: the next page loads when the end of the list comes into view. Orders are newest first, so a time
+     range stops loading once an order older than it has arrived; a search or status filter looks at most MAX_FILTER_PAGES
+     pages back, then offers the button (a server-side filter would not have this limit). */
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  const pagesLoaded = orders.data?.pages.length ?? 0;
+  const from = rangeStart(range, now);
+  const pastRange = from !== null && items.length > 0 && new Date(items[items.length - 1]?.placedAt ?? now) < from;
+  const canAutoLoad = Boolean(orders.hasNextPage) && !orders.isFetchingNextPage && !pastRange && (!filtering || range !== 'all' || pagesLoaded < MAX_FILTER_PAGES);
+  const { fetchNextPage } = orders;
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !canAutoLoad || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) void fetchNextPage(); }, { rootMargin: '400px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [canAutoLoad, fetchNextPage, pagesLoaded]);
   return (
     <div className={pageStyles.page}>
       {placed && (
@@ -220,6 +238,10 @@ export function OrdersView() {
           )}
           {items.length > 0 && (
             <div className={styles.toolbar}>
+              <div className={styles.filters}>
+                <TextField label={t('ord.search')} placeholder={t('ord.searchPlaceholder')} type="search" value={text} onChange={(e) => setText(e.currentTarget.value)} />
+                <Select label={t('ord.range')} value={range} onChange={(e) => setRange(e.currentTarget.value as OrderRange)} options={rangeOptions(now).map((o) => ({ value: o.value, label: t(o.labelKey, o.vars) }))} />
+              </div>
               <ChipGroup
                 label={t('ord.filters')}
                 value={group}
@@ -231,8 +253,6 @@ export function OrdersView() {
                   { value: 'CLOSED', label: `${t('ord.f.closed')} (${count('CLOSED')})` }
                 ]}
               />
-              <Select label={t('ord.range')} value={range} onChange={(e) => setRange(e.currentTarget.value as OrderRange)} options={rangeOptions(now).map((o) => ({ value: o.value, label: t(o.labelKey, o.vars) }))} />
-              <TextField label={t('ord.search')} placeholder={t('ord.searchPlaceholder')} type="search" value={text} onChange={(e) => setText(e.currentTarget.value)} />
             </div>
           )}
           {orders.isSuccess && items.length === 0 && (
@@ -255,7 +275,8 @@ export function OrdersView() {
           {items.length > 0 && (
             <div className={styles.more}>
               <p className={pageStyles.muted} role="status">{t(filtering ? 'ord.showingFiltered' : 'ord.showing', { shown: shown.length, count: items.length })}</p>
-              {orders.hasNextPage && (
+              <div ref={sentinel} aria-hidden />
+              {orders.hasNextPage && !pastRange && (
                 <Button variant="neutral" loading={orders.isFetchingNextPage} onClick={() => void orders.fetchNextPage()}>
                   {t('ord.loadMore')}
                 </Button>

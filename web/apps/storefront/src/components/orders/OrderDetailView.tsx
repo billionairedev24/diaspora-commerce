@@ -2,7 +2,7 @@
 
 import { isApiError, orderKeys } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, ImagePlaceholder, Key, Skeleton, Truck, useToast } from '@afrotransact/ui';
+import { buttonClassName, ImagePlaceholder, Key, Skeleton, Truck, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 

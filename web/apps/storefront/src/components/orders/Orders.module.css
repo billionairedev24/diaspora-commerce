@@ -15,8 +15,8 @@
 .track li { padding-top: var(--at-space-2); border-top: 4px solid var(--at-color-border); }
 .track li.done { border-top-color: var(--at-color-action-secondary); color: var(--at-color-text); }
 .track li.current { font-weight: var(--at-weight-bold); }
-.toolbar { display: flex; flex-wrap: wrap; gap: var(--at-space-3); align-items: flex-end; justify-content: space-between; }
-.toolbar > :last-child { flex: 1 1 220px; max-width: 320px; }
+.toolbar { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.filters { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: var(--at-space-3); align-items: end; }
 .more { display: flex; flex-direction: column; gap: var(--at-space-2); align-items: center; padding: var(--at-space-3) 0; }
 .shipActions { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 180px; }
 .code { display: inline-flex; gap: var(--at-space-2); align-items: center; padding: var(--at-space-1) var(--at-space-3); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); font-size: var(--at-text-sm); }
@@ -46,6 +46,7 @@
 .codeWhat { overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 899px) {
+  .filters { grid-template-columns: 1fr; }
   .layout { grid-template-columns: 1fr; }
   .aside { position: static; }
   .orderHead { grid-template-columns: 1fr 1fr; }

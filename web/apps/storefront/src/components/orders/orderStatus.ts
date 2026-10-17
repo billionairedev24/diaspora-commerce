@@ -66,6 +66,17 @@ export function rangeOptions(now: Date): Array<{ value: OrderRange; labelKey: 'o
   ];
 }
 
+/** The start of the range (null for all orders and for a calendar year, which has its own end). */
+export function rangeStart(range: OrderRange, now: Date): Date | null {
+  if (range === 'all') return null;
+  if (range === '3m' || range === '6m') {
+    const from = new Date(now);
+    from.setMonth(from.getMonth() - (range === '3m' ? 3 : 6));
+    return from;
+  }
+  return new Date(Number(range.slice(1)), 0, 1);
+}
+
 /** True when the order was placed inside the range. */
 export function inRange(placedAt: string, range: OrderRange, now: Date): boolean {
   if (range === 'all') return true;
