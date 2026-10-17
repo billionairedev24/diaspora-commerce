@@ -486,12 +486,12 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 				"features": []string{"Unlimited listings"}, "version": 1, "visibility": "PUBLIC", "entitlements": entitlementsOfPlan("seller_pro"), "prices": []any{}},
 			{"code": "seller_growth", "kind": "SELLER", "name": "Seller Growth", "tagline": "Most popular", "monthlyCents": 3900, "trialDays": 60,
 				"features": []string{"Up to 1,000 listings"}, "version": 2, "visibility": "PUBLIC",
-				"entitlements": map[string]any{"listings": 1000, "listingsUnlimited": false, "aiListingWriter": true, "lolaTier": "GROWTH"}, "prices": []any{
+				"entitlements": entitlementsOfPlan("seller_growth"), "prices": []any{
 					map[string]any{"cadence": "QUARTERLY", "months": 3, "totalCents": 11115, "perMonthCents": 3705, "savingCents": 585,
 						"perMonthLabel": "$37.05/mo", "billedLabel": "Billed $111.15 every 3 months", "savingLabel": "Save $5.85 vs monthly"}}},
 			{"code": "seller_partner", "kind": "SELLER", "name": "Growth Partner", "tagline": "Invited", "monthlyCents": 2900, "trialDays": 30,
 				"features": []string{"Priority support"}, "version": 1, "visibility": "INVITE_ONLY",
-				"entitlements": map[string]any{"listings": nil, "listingsUnlimited": true, "aiListingWriter": true, "lolaTier": "GROWTH"}, "prices": []any{}},
+				"entitlements": entitlementsOfPlan("seller_pro"), "prices": []any{}},
 		})
 	})
 	mux.HandleFunc("GET /v1/orgs/{id}/billing/rewards", func(w http.ResponseWriter, _ *http.Request) {
@@ -1349,10 +1349,10 @@ func (u *Upstreams) bookingsRoutes(mux *http.ServeMux) {
 func entitlementsOfPlan(plan string) map[string]any {
 	switch {
 	case strings.HasSuffix(plan, "_pro"):
-		return map[string]any{"listings": nil, "listingsUnlimited": true, "aiListingWriter": true, "lolaTier": "PRO"}
+		return map[string]any{"listings": nil, "listingsUnlimited": true, "aiListingWriter": true, "lolaTier": "PRO", "bulkUpload": true, "imageLibrary": true, "coupons": true}
 	case strings.HasSuffix(plan, "_growth"):
-		return map[string]any{"listings": 1000, "listingsUnlimited": false, "aiListingWriter": true, "lolaTier": "GROWTH"}
+		return map[string]any{"listings": 1000, "listingsUnlimited": false, "aiListingWriter": true, "lolaTier": "GROWTH", "bulkUpload": true, "imageLibrary": true, "coupons": true}
 	default:
-		return map[string]any{"listings": 50, "listingsUnlimited": false, "aiListingWriter": false, "lolaTier": "ESSENTIALS"}
+		return map[string]any{"listings": 50, "listingsUnlimited": false, "aiListingWriter": false, "lolaTier": "ESSENTIALS", "bulkUpload": false, "imageLibrary": false, "coupons": false}
 	}
 }

@@ -56,7 +56,7 @@ import { mockAddressSuggestions, mockResolveAddress } from '../addresses';
 import { exportFileOf } from '../export-file';
 import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
-import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
+import { capabilitiesOf, CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, resetSellerDb, SELLER_ORG } from './db';
 import {
   advanceImport,
   categoryLeaves,
@@ -283,7 +283,9 @@ function session(ctx: Ctx): SellerSession {
   const badges: Partial<Record<ModuleKey, number>> = { 'account-health': org.kind === 'SELLER' ? 2 : 0 };
   if (org.kind === 'SELLER') badges.orders = toShip(db);
   else badges.requests = requested(db).length;
-  const navGroups = navigation(org.kind, role, approved, badges);
+  const capabilities = capabilitiesOf(db.subscription[org.kind].planCode);
+  const allGroups = navigation(org.kind, role, approved, badges);
+  const navGroups = capabilities.includes('coupons') ? allGroups : allGroups.map((g) => ({ ...g, modules: g.modules.filter((m) => m.key !== 'coupons') })).filter((g) => g.modules.length > 0);
   return {
     user: { ...db.user, initials: (db.user.firstName[0] ?? '') + (db.user.lastName[0] ?? '') },
     orgs: db.orgs.map((o) => orgSummary(o, o.id === org.id ? role : o.role)),
@@ -292,7 +294,8 @@ function session(ctx: Ctx): SellerSession {
     approved,
     navGroups,
     landing: navGroups[0]?.modules[0]?.key ?? 'home',
-    accessNote: approved ? 'Least-privilege by role · enforced server-side' : 'Token scope: onboarding only'
+    accessNote: approved ? 'Least-privilege by role · enforced server-side' : 'Token scope: onboarding only',
+    capabilities: approved ? capabilities : []
   };
 }
 
@@ -804,7 +807,7 @@ export const sellerHandlers = [
       // A customer who has not applied: no organisation, no navigation (Seller Center starts the application).
       return {
         user: { ...db.user, initials: (db.user.firstName[0] ?? '') + (db.user.lastName[0] ?? '') },
-        orgs: [], activeOrg: null, portal: null, approved: false, navGroups: [], landing: 'onboarding', accessNote: 'Least-privilege by role · enforced server-side'
+        orgs: [], activeOrg: null, portal: null, approved: false, navGroups: [], landing: 'onboarding', accessNote: 'Least-privilege by role · enforced server-side', capabilities: []
       };
     })
   ),

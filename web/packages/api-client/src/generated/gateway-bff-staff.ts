@@ -161,6 +161,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/resources/{resource}/{id}/files/{fileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open a file attached to a record (an application's uploaded document)
+         * @description Redirects (302) to a short-lived signed URL of the file; the upstream logs who opened it. Needs view access to
+         *     the resource. Applications: `fileId` is the document's `assetId` from the record's `links`.
+         */
+        get: operations["openStaffRecordFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/resources/{resource}/{id}/notes": {
         parameters: {
             query?: never;
@@ -3598,7 +3619,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @description What the plan lets an organisation do (read from `limits`). */
+        /** @description What the plan lets an organisation do (read from `limits`). A capability that is off is not offered to the plan's members. */
         StaffPlanEntitlements: {
             /**
              * Format: int64
@@ -3607,8 +3628,14 @@ export interface components {
             listings: number | null;
             listingsUnlimited: boolean;
             aiListingWriter: boolean;
-            /** @enum {string} */
-            lolaTier: "ESSENTIALS" | "GROWTH" | "PRO";
+            /**
+             * @description NONE = Lola is not included
+             * @enum {string}
+             */
+            lolaTier: "NONE" | "ESSENTIALS" | "GROWTH" | "PRO";
+            bulkUpload: boolean;
+            imageLibrary: boolean;
+            coupons: boolean;
         };
         StaffPlanVersionPrice: {
             /** @enum {string} */
@@ -3639,7 +3666,7 @@ export interface components {
             name: string;
             tagline?: string | null;
             features: string[];
-            /** @description The plan's settings. `listings` (a number or `unlimited`), `aiListingWriter` (`true`/`false`) and `lolaTier` (`ESSENTIALS`, `GROWTH`, `PRO`) are entitlements the platform enforces; any other key is shown as plan information. There is no limit on shops or users. */
+            /** @description The plan's settings. `listings` (a number or `unlimited`), `bulkUpload`, `imageLibrary`, `coupons` and `aiListingWriter` (`true`/`false`) and `lolaTier` (`NONE`, `ESSENTIALS`, `GROWTH`, `PRO`) are the capabilities the platform enforces; any other key is shown as plan information. The plan's `features` list is derived from them (only what the plan allows is listed), whatever is sent. */
             limits?: {
                 [key: string]: string;
             };
@@ -4491,6 +4518,8 @@ export interface components {
         Form: {
             title: string;
             submitLabel: string;
+            /** @description What submitting does, in a sentence or two (shown above the fields) */
+            intro?: string;
             fields: components["schemas"]["FormField"][];
         };
         ResourcePage: {
@@ -4560,8 +4589,10 @@ export interface components {
         };
         RecordLink: {
             label: string;
-            /** @description Console path, for example /support?customer=… or /orders?open=AT-… */
+            /** @description Console path, for example /support?customer=… or /orders?open=AT-…, or (external) a same-origin BFF path */
             href: string;
+            /** @description Open in a new tab (an uploaded document the reviewer reads) */
+            external?: boolean;
         };
         RecordDetail: {
             resource: components["schemas"]["ResourceKey"];
@@ -6377,6 +6408,30 @@ export interface operations {
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    openStaffRecordFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                resource: string;
+                id: string;
+                fileId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the file */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
         };
     };
     addStaffNote: {

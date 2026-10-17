@@ -2442,7 +2442,7 @@ components:
         modules: {type: array, items: {$ref: '#/components/schemas/NavModule'}}
     SellerSession:
       type: object
-      required: [user, orgs, activeOrg, portal, approved, navGroups, landing, accessNote]
+      required: [user, orgs, activeOrg, portal, approved, navGroups, landing, accessNote, capabilities]
       properties:
         user: {$ref: '#/components/schemas/SellerUser'}
         orgs: {type: array, items: {$ref: '#/components/schemas/OrgSummary'}}
@@ -2461,6 +2461,12 @@ components:
           items: {$ref: '#/components/schemas/NavGroup'}
         landing: {$ref: '#/components/schemas/ModuleKey'}
         accessNote: {type: string}
+        capabilities:
+          type: array
+          description: >-
+            What the active organisation's plan includes. Anything not listed is not shown (Seller Center hides it, the
+            BFF refuses it with 403 PLAN_FEATURE_REQUIRED).
+          items: {type: string, enum: [bulkUpload, imageLibrary, coupons, aiListingWriter, lola]}
     ActiveOrgRequest:
       type: object
       required: [orgId]
@@ -4049,14 +4055,17 @@ components:
     PlanEntitlements:
       type: object
       description: >-
-        What a plan lets an organisation do; staff set it per plan. There is no limit on shops or users, only on live
-        listings. Null when the seller service did not say.
-      required: [listings, listingsUnlimited, aiListingWriter, lolaTier]
+        What a plan lets an organisation do; staff set it per plan. A capability that is off is not offered to the plan's
+        members at all. Null when the seller service did not say.
+      required: [listings, listingsUnlimited, aiListingWriter, lolaTier, bulkUpload, imageLibrary, coupons]
       properties:
         listings: {type: [integer, 'null'], format: int64, description: The most live listings; null = unlimited}
         listingsUnlimited: {type: boolean}
         aiListingWriter: {type: boolean, description: The AI listing writer is included}
-        lolaTier: {type: string, enum: [ESSENTIALS, GROWTH, PRO], description: 'What Lola, the seller assistant, can do'}
+        lolaTier: {type: string, enum: [NONE, ESSENTIALS, GROWTH, PRO], description: 'What Lola, the seller assistant, can do; NONE = not included'}
+        bulkUpload: {type: boolean, description: Listings can be uploaded in bulk}
+        imageLibrary: {type: boolean, description: The bulk image library is included}
+        coupons: {type: boolean, description: Coupon codes for the seller's listings are included}
     BillingPaymentMethod:
       type: object
       required: [id, kind, brand, last4, expMonth, expYear, bankName, accountType, verified, receivesPayouts, isDefault, label]

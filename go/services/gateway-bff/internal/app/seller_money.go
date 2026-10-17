@@ -206,7 +206,8 @@ func entitlementsOf(e *port.SellerEntitlements) *domain.PlanEntitlementsView {
 		return nil
 	}
 	return &domain.PlanEntitlementsView{Listings: e.Listings, ListingsUnlimited: e.ListingsUnlimited || e.Listings == nil,
-		AIListingWriter: e.AIListingWriter, LolaTier: strings.ToUpper(firstNonEmpty(e.LolaTier, "ESSENTIALS"))}
+		AIListingWriter: e.AIListingWriter, LolaTier: strings.ToUpper(firstNonEmpty(e.LolaTier, "ESSENTIALS")),
+		BulkUpload: e.BulkUpload, ImageLibrary: e.ImageLibrary, Coupons: e.Coupons}
 }
 
 func chargeGateOf(g *port.SellerChargeGate) *domain.ChargeGateView {

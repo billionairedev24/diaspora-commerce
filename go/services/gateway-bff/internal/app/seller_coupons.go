@@ -35,7 +35,7 @@ func sellerCouponOf(c port.SellerCouponUp, editable bool) domain.SellerCoupon {
 }
 
 func (s *sellerCouponsImpl) List(ctx context.Context, c *domain.Caller) ([]domain.SellerCoupon, error) {
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelView, domain.CapCoupons); err != nil {
 		return nil, err
 	}
 	if s.r.d.Offers == nil {
@@ -57,7 +57,7 @@ func (s *sellerCouponsImpl) List(ctx context.Context, c *domain.Caller) ([]domai
 }
 
 func (s *sellerCouponsImpl) Create(ctx context.Context, c *domain.Caller, in domain.CreateSellerCoupon) (domain.SellerCoupon, error) {
-	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit)
+	sc, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit, domain.CapCoupons)
 	if err != nil {
 		return domain.SellerCoupon{}, err
 	}
@@ -81,7 +81,7 @@ func (s *sellerCouponsImpl) Create(ctx context.Context, c *domain.Caller, in dom
 }
 
 func (s *sellerCouponsImpl) SetStatus(ctx context.Context, c *domain.Caller, id, status string) (domain.SellerCoupon, error) {
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit, domain.CapCoupons); err != nil {
 		return domain.SellerCoupon{}, err
 	}
 	if s.r.d.Offers == nil {
@@ -95,7 +95,7 @@ func (s *sellerCouponsImpl) SetStatus(ctx context.Context, c *domain.Caller, id,
 }
 
 func (s *sellerCouponsImpl) Delete(ctx context.Context, c *domain.Caller, id string) error {
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "coupons", domain.LevelEdit, domain.CapCoupons); err != nil {
 		return err
 	}
 	if s.r.d.Offers == nil {

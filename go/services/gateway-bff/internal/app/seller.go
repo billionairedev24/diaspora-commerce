@@ -91,7 +91,10 @@ func (s sellerCtx) provider() port.ProviderRef {
 }
 
 // orgResolver resolves the active organisation and the role's module access for every seller route.
-type orgResolver struct{ d SellerDeps }
+type orgResolver struct {
+	d    SellerDeps
+	memo *planMemo
+}
 
 func newResolver(d SellerDeps) *orgResolver {
 	if d.Log == nil {
@@ -103,7 +106,7 @@ func newResolver(d SellerDeps) *orgResolver {
 	if d.MatrixTTL <= 0 {
 		d.MatrixTTL = time.Minute
 	}
-	return &orgResolver{d: d}
+	return &orgResolver{d: d, memo: &planMemo{}}
 }
 
 func normalizeKind(k string) string {
@@ -348,7 +351,7 @@ func summaryOf(o port.MemberOrg) domain.OrgSummary {
 // session builds the shell's session; stale names an organisation the seller service shows approved while identity
 // does not (PENDING there, or not listed at all although the application was approved), which the caller may repair.
 func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.Member) (out domain.SellerSession, stale string, err error) {
-	out = domain.SellerSession{User: userOf(m), Orgs: []domain.OrgSummary{}, NavGroups: []domain.NavGroup{}, Landing: "onboarding",
+	out = domain.SellerSession{User: userOf(m), Orgs: []domain.OrgSummary{}, NavGroups: []domain.NavGroup{}, Capabilities: []string{}, Landing: "onboarding",
 		AccessNote: "Least-privilege by role · enforced server-side"}
 	for _, o := range memberOrgs(m) {
 		out.Orgs = append(out.Orgs, summaryOf(o))
@@ -388,6 +391,16 @@ func (s *sellerShellImpl) session(ctx context.Context, c *domain.Caller, m port.
 		out.AccessNote = "Token scope: onboarding only"
 	}
 	out.NavGroups = domain.Navigation(sc.access, sc.approved, badges)
+	out.Capabilities = []string{}
+	if sc.approved {
+		// What the plan includes decides what is shown: a module the plan does not include is not in the navigation.
+		if e, err := s.r.entitlements(ctx, c, sc.org.ID); err == nil {
+			out.Capabilities = e.Capabilities()
+			if sc.kind() == domain.OrgKindSeller && !e.Allows(domain.CapCoupons) {
+				out.NavGroups = domain.WithoutModules(out.NavGroups, "coupons")
+			}
+		}
+	}
 	out.Landing = domain.Landing(out.NavGroups)
 	return out, stale, nil
 }

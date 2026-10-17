@@ -84,7 +84,7 @@ func (s *sellerImportImpl) Template(ctx context.Context, c *domain.Caller, produ
 	if err != nil {
 		return domain.FileDownload{}, err
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapBulkUpload); err != nil {
 		return domain.FileDownload{}, err
 	}
 	cl, err := s.client()
@@ -126,7 +126,7 @@ func (s *sellerImportImpl) Upload(ctx context.Context, c *domain.Caller, f port.
 	if len(errs) > 0 {
 		return domain.ProductImport{}, domain.ValidationProblem(errs)
 	}
-	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit)
+	sc, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapBulkUpload)
 	if err != nil {
 		return domain.ProductImport{}, err
 	}
@@ -155,7 +155,7 @@ func (s *sellerImportImpl) List(ctx context.Context, c *domain.Caller, page, siz
 	if page < 0 || size < 1 || size > 100 {
 		return domain.ProductImportPage{}, domain.ValidationProblem(map[string]string{"size": "Between 1 and 100", "page": "Must be 0 or more"})
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapBulkUpload); err != nil {
 		return domain.ProductImportPage{}, err
 	}
 	cl, err := s.client()
@@ -174,7 +174,7 @@ func (s *sellerImportImpl) List(ctx context.Context, c *domain.Caller, page, siz
 }
 
 func (s *sellerImportImpl) Get(ctx context.Context, c *domain.Caller, id string) (domain.ProductImport, error) {
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapBulkUpload); err != nil {
 		return domain.ProductImport{}, err
 	}
 	cl, err := s.client()
@@ -208,7 +208,7 @@ func (s *sellerImportImpl) Rows(ctx context.Context, c *domain.Caller, id, statu
 	if len(errs) > 0 {
 		return domain.ProductImportRowPage{}, domain.ValidationProblem(errs)
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapBulkUpload); err != nil {
 		return domain.ProductImportRowPage{}, err
 	}
 	cl, err := s.client()
@@ -246,7 +246,7 @@ func (s *sellerImportImpl) Report(ctx context.Context, c *domain.Caller, id, for
 	if err != nil {
 		return domain.FileDownload{}, err
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapBulkUpload); err != nil {
 		return domain.FileDownload{}, err
 	}
 	cl, err := s.client()
@@ -261,7 +261,7 @@ func (s *sellerImportImpl) Report(ctx context.Context, c *domain.Caller, id, for
 }
 
 func (s *sellerImportImpl) Start(ctx context.Context, c *domain.Caller, id string, validOnly bool) (domain.ProductImport, error) {
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapBulkUpload); err != nil {
 		return domain.ProductImport{}, err
 	}
 	cl, err := s.client()

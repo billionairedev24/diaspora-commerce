@@ -83,6 +83,16 @@ func (s *sellerAssistantImpl) plan(ctx context.Context, c *domain.Caller, orgID 
 	return tier, domain.AssistantUpgradeFrom(tier, offered)
 }
 
+// requireLola refuses the assistant for a plan that does not include it (Lola tier NONE). An unreadable plan keeps Lola
+// available, as plan() does.
+func (s *sellerAssistantImpl) requireLola(ctx context.Context, c *domain.Caller, orgID string) error {
+	e, err := s.r.entitlements(ctx, c, orgID)
+	if err != nil || e == nil || e.Allows(domain.CapLola) {
+		return nil
+	}
+	return domain.NewProblem(http.StatusForbidden, domain.CodePlanFeatureRequired, "Not part of your plan", "Lola isn't part of your plan.")
+}
+
 func (s *sellerAssistantImpl) status(tier domain.AssistantTier, used int, up *domain.AssistantUpgradeOffer) domain.AssistantStatus {
 	l := domain.AssistantLimitsOf(tier)
 	return domain.AssistantStatus{Tier: tier, Limits: l, Used: min(used, l.DailyMessages), Remaining: max(0, l.DailyMessages-used), Upgrade: up}
@@ -99,6 +109,9 @@ func (s *sellerAssistantImpl) Status(ctx context.Context, c *domain.Caller) (dom
 			return domain.AssistantStatus{}, mapErr("valkey", err)
 		}
 	}
+	if err := s.requireLola(ctx, c, sc.org.ID); err != nil {
+		return domain.AssistantStatus{}, err
+	}
 	tier, up := s.plan(ctx, c, sc.org.ID)
 	return s.status(tier, used, up), nil
 }
@@ -113,6 +126,9 @@ func (s *sellerAssistantImpl) Chat(ctx context.Context, c *domain.Caller, in dom
 	}
 	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "", "")
 	if err != nil {
+		return domain.AssistantReply{}, err
+	}
+	if err := s.requireLola(ctx, c, sc.org.ID); err != nil {
 		return domain.AssistantReply{}, err
 	}
 	if s.a.Model == nil || s.a.Counter == nil {

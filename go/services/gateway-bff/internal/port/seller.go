@@ -469,13 +469,16 @@ type SellerChargeGate struct {
 	Label      string     `json:"label"`
 }
 
-// SellerEntitlements is seller's PlanEntitlements: what a plan lets an organisation do. There is no limit on shops or
-// users.
+// SellerEntitlements is seller's PlanEntitlements: what a plan lets an organisation do. A capability that is off is not
+// offered to the plan's members at all.
 type SellerEntitlements struct {
 	Listings          *int64 `json:"listings"`
 	ListingsUnlimited bool   `json:"listingsUnlimited"`
 	AIListingWriter   bool   `json:"aiListingWriter"`
 	LolaTier          string `json:"lolaTier"`
+	BulkUpload        bool   `json:"bulkUpload"`
+	ImageLibrary      bool   `json:"imageLibrary"`
+	Coupons           bool   `json:"coupons"`
 }
 
 // SellerInvoice is seller's Invoice: a plan invoice AfroTransact issued itself.

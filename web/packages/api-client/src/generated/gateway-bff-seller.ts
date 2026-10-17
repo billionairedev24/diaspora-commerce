@@ -2335,6 +2335,8 @@ export interface components {
             navGroups: components["schemas"]["NavGroup"][];
             landing: components["schemas"]["ModuleKey"];
             accessNote: string;
+            /** @description What the active organisation's plan includes. Anything not listed is not shown (Seller Center hides it, the BFF refuses it with 403 PLAN_FEATURE_REQUIRED). */
+            capabilities: ("bulkUpload" | "imageLibrary" | "coupons" | "aiListingWriter" | "lola")[];
         };
         ActiveOrgRequest: {
             orgId: string;
@@ -3863,7 +3865,7 @@ export interface components {
             /** @description What the plan allows; null when the seller service did not say */
             entitlements?: components["schemas"]["PlanEntitlements"] | null;
         };
-        /** @description What a plan lets an organisation do; staff set it per plan. There is no limit on shops or users, only on live listings. Null when the seller service did not say. */
+        /** @description What a plan lets an organisation do; staff set it per plan. A capability that is off is not offered to the plan's members at all. Null when the seller service did not say. */
         PlanEntitlements: {
             /**
              * Format: int64
@@ -3874,10 +3876,16 @@ export interface components {
             /** @description The AI listing writer is included */
             aiListingWriter: boolean;
             /**
-             * @description What Lola, the seller assistant, can do
+             * @description What Lola, the seller assistant, can do; NONE = not included
              * @enum {string}
              */
-            lolaTier: "ESSENTIALS" | "GROWTH" | "PRO";
+            lolaTier: "NONE" | "ESSENTIALS" | "GROWTH" | "PRO";
+            /** @description Listings can be uploaded in bulk */
+            bulkUpload: boolean;
+            /** @description The bulk image library is included */
+            imageLibrary: boolean;
+            /** @description Coupon codes for the seller's listings are included */
+            coupons: boolean;
         };
         BillingPaymentMethod: {
             id: string;

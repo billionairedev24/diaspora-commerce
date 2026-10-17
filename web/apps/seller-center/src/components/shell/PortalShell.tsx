@@ -290,7 +290,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         </main>
       </BackofficeFrame>
       <SupportChat orgName={session.activeOrg.name} />
-      {session.portal === 'SELLER_CENTER' && session.approved ? <LolaLauncher /> : null}
+      {session.portal === 'SELLER_CENTER' && session.approved && session.capabilities.includes('lola') ? <LolaLauncher /> : null}
     </SellerSessionProvider>
   );
 }

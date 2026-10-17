@@ -536,6 +536,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/native/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign in inside the customer or driver app with email and password
+         * @description The native apps show their own sign-in form instead of identity's hosted page. The BFF checks the credentials
+         *     with identity's first-party sign-in API and either asks for a second factor (`MFA_REQUIRED`, continue at
+         *     `/v1/auth/native/mfa/verify`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
+         *     request and returns the authorization `code` (`AUTHENTICATED`). The app exchanges the code with its PKCE
+         *     verifier at identity's `/oauth2/token` and receives its own access and refresh tokens. A wrong password is 401
+         *     `INVALID_CREDENTIALS` (no token was sent, so the app shows it on the form), repeated failures 429 `RATE_LIMITED`.
+         */
+        post: operations["nativePasswordSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Text a sign-in code for a second-factor step */
+        post: operations["nativeSendSmsCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/native/mfa/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify the second factor and get the authorization code */
+        post: operations["nativeVerifySecondFactor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/sign-out": {
         parameters: {
             query?: never;
@@ -1914,6 +1973,58 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        NativeApp: "customer" | "driver";
+        NativePasswordRequest: {
+            app: components["schemas"]["NativeApp"];
+            email: string;
+            password: string;
+            /** @description From an earlier verification with trustDevice=true */
+            trustedDeviceToken?: string;
+            /** @description PKCE S256 challenge of the app's verifier */
+            codeChallenge: string;
+            /** @description The app's redirect URI registered at identity */
+            redirectUri: string;
+        };
+        NativeSmsRequest: {
+            app: components["schemas"]["NativeApp"];
+            /** Format: uuid */
+            challengeId: string;
+            codeChallenge: string;
+            redirectUri: string;
+        };
+        NativeVerifyRequest: {
+            app: components["schemas"]["NativeApp"];
+            /** Format: uuid */
+            challengeId: string;
+            /** @enum {string} */
+            factor: "TOTP" | "SMS" | "RECOVERY_CODE";
+            code: string;
+            /** @description Return a trustedDeviceToken so this phone skips the second factor for 30 days */
+            trustDevice?: boolean;
+            codeChallenge: string;
+            redirectUri: string;
+        };
+        NativeSignInResult: {
+            /** @enum {string} */
+            status: "MFA_REQUIRED" | "AUTHENTICATED";
+            /**
+             * Format: uuid
+             * @description MFA_REQUIRED only
+             */
+            challengeId?: string;
+            /** Format: date-time */
+            challengeExpiresAt?: string;
+            factors?: {
+                totp?: boolean;
+                sms?: boolean;
+                smsHint?: string;
+                recoveryCode?: boolean;
+            };
+            /** @description AUTHENTICATED only: authorization code to exchange at identity /oauth2/token with the PKCE verifier */
+            code?: string;
+            trustedDeviceToken?: string;
+        };
         PayLinkToken: {
             /** @description The token of the SMS pay-now link */
             token: string;
@@ -2400,6 +2511,8 @@ export interface components {
             }[];
             contacts: {
                 phone: string;
+                /** @description The support phone in E.164 (+18335550199); also the number of the WhatsApp chat button in the storefront and Seller Center. Empty when not set (the button is then hidden). */
+                phoneE164: string;
                 privacyEmail: string;
                 accessibilityEmail: string;
                 legalEmail: string;
@@ -2732,8 +2845,22 @@ export interface components {
                 label: string;
                 status: string;
                 items: string;
-                /** @description The customer can still cancel it (until packed) */
+                /** @description Who sells and ships this shipment */
+                sellerName?: string;
+                /** @description What is in the shipment (name, photo, quantity) */
+                lines?: {
+                    title: string;
+                    quantity: number;
+                    imageUrl?: string | null;
+                    productAtin?: string;
+                }[];
+                /** @description The customer can still cancel it: before the parcel is packed and inside the cancellation window */
                 cancellable?: boolean;
+                /**
+                 * Format: date-time
+                 * @description When Cancel stops being offered; null when it is not offered now
+                 */
+                cancellableUntil?: string | null;
                 carrier?: string | null;
                 trackingNumber?: string | null;
                 promisedBy?: string | null;
@@ -3133,6 +3260,36 @@ export interface components {
             ephemeralKey: string;
             publishableKey: string;
         };
+        /**
+         * @description How our driver handed the parcel over, shown on a delivered shipment. Null for carrier deliveries (the carrier's
+         *     tracking is the record), pickups and deliveries staff confirmed by hand. The photo and signature links are
+         *     short-lived (about 5 minutes): read the order again for fresh ones. The driver's GPS position is for staff only.
+         */
+        DeliveryProof: {
+            /**
+             * @description To the customer (who gave their code), to someone else (name, relationship, signature), or left in a safe place
+             * @enum {string}
+             */
+            method: "CUSTOMER" | "SOMEONE_ELSE" | "SAFE_PLACE";
+            recipientName: string | null;
+            relationship: string | null;
+            safePlace: string | null;
+            /**
+             * Format: uri
+             * @description Proof photo; null when none or it cannot be shown right now
+             */
+            photoUrl: string | null;
+            /**
+             * Format: uri
+             * @description Recipient's signature (someone-else handovers)
+             */
+            signatureUrl: string | null;
+            /**
+             * Format: date-time
+             * @description When it was delivered
+             */
+            at: string;
+        } | null;
         TimelineEvent: {
             status: string;
             label: string;
@@ -3186,12 +3343,19 @@ export interface components {
                 sellerName: string;
                 /** @enum {string} */
                 deliveryMethod: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+                /** @description Cancel is offered: before the parcel is packed and inside the cancellation window */
                 cancellable: boolean;
+                /**
+                 * Format: date-time
+                 * @description When Cancel stops being offered (the window's end); null when it is not offered now
+                 */
+                cancellableUntil?: string | null;
                 carrier: string | null;
                 trackingNumber: string | null;
                 promisedFrom: string | null;
                 promisedBy: string | null;
                 deliveredAt: string | null;
+                proof?: components["schemas"]["DeliveryProof"];
                 /** @description One-time handover code (hand delivery or perishables) */
                 deliveryCode: string | null;
                 lines: components["schemas"]["OrderLineView"][];
@@ -4506,6 +4670,95 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    nativePasswordSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Second factor needed, or signed in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeSignInResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeSendSmsCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeSmsRequest"];
+            };
+        };
+        responses: {
+            /** @description Code sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description Masked phone
+                         * @example •••• 0142
+                         */
+                        sentTo?: string;
+                        /** Format: date-time */
+                        expiresAt?: string;
+                    };
+                };
+            };
+            410: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+        };
+    };
+    nativeVerifySecondFactor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NativeVerifyRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed in */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NativeSignInResult"];
+                };
+            };
+            410: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
         };
     };
     signOut: {

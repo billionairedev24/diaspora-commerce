@@ -636,6 +636,77 @@ paths:
           headers:
             Location: {schema: {type: string}}
             Set-Cookie: {schema: {type: string}, description: 'at_session=…; HttpOnly; Secure; SameSite=Lax; Path=/'}
+  /v1/auth/native/password:
+    post:
+      tags: [Auth]
+      operationId: nativePasswordSignIn
+      security: [{}]
+      summary: Sign in inside the customer or driver app with email and password
+      description: |
+        The native apps show their own sign-in form instead of identity's hosted page. The BFF checks the credentials
+        with identity's first-party sign-in API and either asks for a second factor (`MFA_REQUIRED`, continue at
+        `/v1/auth/native/mfa/verify`) or redeems the one-time login ticket for the app's own authorization-code + PKCE
+        request and returns the authorization `code` (`AUTHENTICATED`). The app exchanges the code with its PKCE
+        verifier at identity's `/oauth2/token` and receives its own access and refresh tokens. A wrong password is 401
+        `INVALID_CREDENTIALS` (no token was sent, so the app shows it on the form), repeated failures 429 `RATE_LIMITED`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativePasswordRequest'}
+      responses:
+        '200':
+          description: Second factor needed, or signed in
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSignInResult'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/sms:
+    post:
+      tags: [Auth]
+      operationId: nativeSendSmsCode
+      security: [{}]
+      summary: Text a sign-in code for a second-factor step
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeSmsRequest'}
+      responses:
+        '202':
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sentTo: {type: string, description: Masked phone, example: '•••• 0142'}
+                  expiresAt: {type: string, format: date-time}
+        '410': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+  /v1/auth/native/mfa/verify:
+    post:
+      tags: [Auth]
+      operationId: nativeVerifySecondFactor
+      security: [{}]
+      summary: Verify the second factor and get the authorization code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NativeVerifyRequest'}
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeSignInResult'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
   /v1/auth/sign-out:
     post:
       tags: [Auth]
@@ -2405,6 +2476,54 @@ components:
       headers:
         Location: {schema: {type: string}}
   schemas:
+    NativeApp:
+      type: string
+      enum: [customer, driver]
+    NativePasswordRequest:
+      type: object
+      required: [app, email, password, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        email: {type: string, maxLength: 254}
+        password: {type: string, maxLength: 1024}
+        trustedDeviceToken: {type: string, description: From an earlier verification with trustDevice=true}
+        codeChallenge: {type: string, description: PKCE S256 challenge of the app's verifier, minLength: 43, maxLength: 43}
+        redirectUri: {type: string, description: The app's redirect URI registered at identity}
+    NativeSmsRequest:
+      type: object
+      required: [app, challengeId, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        challengeId: {type: string, format: uuid}
+        codeChallenge: {type: string}
+        redirectUri: {type: string}
+    NativeVerifyRequest:
+      type: object
+      required: [app, challengeId, factor, code, codeChallenge, redirectUri]
+      properties:
+        app: {$ref: '#/components/schemas/NativeApp'}
+        challengeId: {type: string, format: uuid}
+        factor: {type: string, enum: [TOTP, SMS, RECOVERY_CODE]}
+        code: {type: string, maxLength: 32}
+        trustDevice: {type: boolean, description: Return a trustedDeviceToken so this phone skips the second factor for 30 days}
+        codeChallenge: {type: string, minLength: 43, maxLength: 43}
+        redirectUri: {type: string}
+    NativeSignInResult:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [MFA_REQUIRED, AUTHENTICATED]}
+        challengeId: {type: string, format: uuid, description: MFA_REQUIRED only}
+        challengeExpiresAt: {type: string, format: date-time}
+        factors:
+          type: object
+          properties:
+            totp: {type: boolean}
+            sms: {type: boolean}
+            smsHint: {type: string}
+            recoveryCode: {type: boolean}
+        code: {type: string, description: 'AUTHENTICATED only: authorization code to exchange at identity /oauth2/token with the PKCE verifier'}
+        trustedDeviceToken: {type: string}
     PayLinkToken:
       type: object
       required: [token]
@@ -3326,6 +3445,18 @@ components:
               label: {type: string}
               status: {type: string}
               items: {type: string}
+              sellerName: {type: string, description: Who sells and ships this shipment}
+              lines:
+                type: array
+                description: What is in the shipment (name, photo, quantity)
+                items:
+                  type: object
+                  required: [title, quantity]
+                  properties:
+                    title: {type: string}
+                    quantity: {type: integer}
+                    imageUrl: {type: [string, 'null']}
+                    productAtin: {type: string}
               cancellable: {type: boolean, description: 'The customer can still cancel it: before the parcel is packed and inside the cancellation window'}
               cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered; null when it is not offered now'}
               carrier: {type: [string, 'null']}

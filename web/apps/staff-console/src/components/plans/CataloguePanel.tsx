@@ -1,6 +1,6 @@
 'use client';
 
-import { type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
+import { planFeatureList, type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, DotsThreeVertical, Menu, MenuItem, MenuSeparator, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,10 +26,11 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
   const plan = editing?.mode === 'edit' ? editing.plan : null;
   const open = editing?.mode === 'create' || editing?.mode === 'edit';
   const [f, setF] = useState(() => ({
-    code: '', kind: 'SELLER', name: plan?.name ?? '', tagline: plan?.tagline ?? '', features: plan?.features.join('\n') ?? '', visibility: plan?.visibility ?? 'PUBLIC',
+    code: '', kind: plan?.kind ?? 'SELLER', name: plan?.name ?? '', tagline: plan?.tagline ?? '', visibility: plan?.visibility ?? 'PUBLIC',
     sortOrder: String(plan?.sortOrder ?? 100), monthly: '', quarterly: '', annual: '', trialDays: '30',
     unlimited: plan?.entitlements?.listingsUnlimited ?? false, listings: String(plan?.entitlements?.listings ?? 50), aiWriter: plan?.entitlements?.aiListingWriter ?? false,
-    lola: plan?.entitlements?.lolaTier ?? 'ESSENTIALS'
+    lola: plan?.entitlements?.lolaTier ?? 'ESSENTIALS', bulkUpload: plan?.entitlements?.bulkUpload ?? false, imageLibrary: plan?.entitlements?.imageLibrary ?? false,
+    coupons: plan?.entitlements?.coupons ?? false
   }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useMutation({
@@ -37,8 +38,11 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
       const cap = intOf(f.listings);
       if (!f.unlimited && (cap == null || Number.isNaN(cap) || cap < 0)) throw new Error(t('st.plans.badListings'));
       // Entitlements live in `limits` (the seller service enforces them); other keys stay as plan information.
-      const limits = { ...(plan?.limits ?? {}), listings: f.unlimited ? 'unlimited' : String(cap), aiListingWriter: String(f.aiWriter), lolaTier: f.lola };
-      const meta = { name: f.name.trim(), tagline: f.tagline.trim() || null, features: f.features.split('\n').map((x) => x.trim()).filter(Boolean),
+      const seller = f.kind === 'SELLER';
+      const limits = { ...(plan?.limits ?? {}), listings: f.unlimited ? 'unlimited' : String(cap), aiListingWriter: String(f.aiWriter), lolaTier: f.lola,
+        bulkUpload: String(seller && f.bulkUpload), imageLibrary: String(seller && f.imageLibrary), coupons: String(seller && f.coupons) };
+      // The plan's feature list is derived from what it includes (the server does it too): nothing is typed.
+      const meta = { name: f.name.trim(), tagline: f.tagline.trim() || null, features: [] as string[],
         visibility: f.visibility as PlanVisibility, sortOrder: intOf(f.sortOrder) ?? 100, limits };
       if (plan) return plansApi().updatePlan(plan.code, meta, plan.rowVersion);
       const prices = { monthlyCents: centsOf(f.monthly) ?? 0, quarterlyCents: centsOf(f.quarterly) ?? 0, annualCents: centsOf(f.annual) ?? 0, trialDays: intOf(f.trialDays) ?? 0 };
@@ -73,18 +77,14 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
         ) : null}
         <TextField id="plan-name" label={t('st.plans.name')} value={f.name} error={errors.name} onChange={set('name')} />
         <TextField id="plan-tagline" label={t('st.plans.tagline')} value={f.tagline} error={errors.tagline} onChange={set('tagline')} />
-        <label className="flex flex-col gap-1 text-sm font-semibold" htmlFor="plan-features">
-          {t('st.plans.features')}
-          <textarea id="plan-features" rows={4} className="rounded-sm border border-border-strong bg-surface p-2 font-normal" value={f.features} onChange={set('features')} />
-        </label>
         <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
           <Select id="plan-visibility" label={t('st.plans.visibility')} value={f.visibility} onChange={set('visibility')}
             options={VISIBILITY.map((v) => ({ value: v, label: t(`st.plans.visibility.${v}`) }))} />
           <TextField id="plan-sort" label={t('st.plans.sortOrder')} inputMode="numeric" value={f.sortOrder} onChange={set('sortOrder')} />
         </div>
-        <fieldset className="m-0 flex flex-col gap-2 rounded-md border border-border p-3">
-          <legend className="px-1 text-sm font-semibold">{t('st.plans.allows')}</legend>
-          <p className="m-0 text-xs text-muted">{t('st.plans.allowsHelp')}</p>
+        <fieldset className="m-0 flex flex-col gap-3 rounded-md border border-border p-3">
+          <legend className="px-1 text-sm font-semibold">{t('st.plans.includes')}</legend>
+          <p className="m-0 text-xs text-muted">{t('st.plans.includesHelp')}</p>
           <div className="grid grid-cols-1 items-end gap-x-3 md:grid-cols-2">
             <TextField id="plan-listings" label={t('st.plans.listings')} inputMode="numeric" value={f.unlimited ? '' : f.listings} disabled={f.unlimited} error={errors['limits.listings']}
               onChange={set('listings')} />
@@ -93,13 +93,22 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
               {t('st.plans.listingsUnlimited')}
             </label>
           </div>
-          <div className="grid grid-cols-1 items-end gap-x-3 md:grid-cols-2">
-            <Select id="plan-lola" label={t('st.plans.lolaTier')} value={f.lola} onChange={set('lola')}
-              options={(['ESSENTIALS', 'GROWTH', 'PRO'] as const).map((v) => ({ value: v, label: t(`st.plans.lola.${v}`) }))} />
-            <label className="mb-2 inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={f.aiWriter} onChange={(e) => setF((x) => ({ ...x, aiWriter: e.target.checked }))} />
-              {t('st.plans.aiWriter')}
-            </label>
+          <div className="flex flex-col gap-2">
+            {f.kind === 'SELLER' ? (
+              <>
+                <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={f.bulkUpload} onChange={(e) => setF((x) => ({ ...x, bulkUpload: e.target.checked }))} />{t('st.plans.cap.bulkUpload')}</label>
+                <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={f.imageLibrary} onChange={(e) => setF((x) => ({ ...x, imageLibrary: e.target.checked }))} />{t('st.plans.cap.imageLibrary')}</label>
+                <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={f.coupons} onChange={(e) => setF((x) => ({ ...x, coupons: e.target.checked }))} />{t('st.plans.cap.coupons')}</label>
+              </>
+            ) : null}
+            <label className="inline-flex items-center gap-2 text-sm"><input type="checkbox" checked={f.aiWriter} onChange={(e) => setF((x) => ({ ...x, aiWriter: e.target.checked }))} />{t('st.plans.aiWriter')}</label>
+          </div>
+          <Select id="plan-lola" label={t('st.plans.lolaTier')} value={f.lola} onChange={set('lola')}
+            options={(['NONE', 'ESSENTIALS', 'GROWTH', 'PRO'] as const).map((v) => ({ value: v, label: t(`st.plans.lola.${v}`) }))} />
+          <div className="rounded-sm bg-surface-muted p-2 text-sm" aria-live="polite">
+            <strong className="block text-xs uppercase text-muted">{t('st.plans.membersSee')}</strong>
+            {planFeatureList({ listings: f.unlimited ? null : intOf(f.listings) ?? 0, listingsUnlimited: f.unlimited, aiListingWriter: f.aiWriter, lolaTier: f.lola,
+              bulkUpload: f.kind === 'SELLER' && f.bulkUpload, imageLibrary: f.kind === 'SELLER' && f.imageLibrary, coupons: f.kind === 'SELLER' && f.coupons }).join(' · ')}
           </div>
         </fieldset>
         {!plan ? (
@@ -207,13 +216,8 @@ function MigrationDialog({ plan, onClose, t }: { plan: StaffPlan | null; onClose
 }
 
 /** "1,000 listings · AI writer · Lola Growth": what the plan allows, from its entitlements. */
-export function allowsOf(e: StaffPlanEntitlements | undefined, t: T): string {
-  if (!e) return '—';
-  return [
-    e.listingsUnlimited || e.listings === null ? t('st.plans.listingsUnlimitedShort') : t('st.plans.listingsShort', { count: e.listings.toLocaleString('en-US') }),
-    e.aiListingWriter ? t('st.plans.aiWriterShort') : null,
-    t(`st.plans.lola.${e.lolaTier}`)
-  ].filter(Boolean).join(' · ');
+export function allowsOf(e: StaffPlanEntitlements | undefined, _t: T): string {
+  return e ? planFeatureList(e).join(' · ') : '—';
 }
 
 /** Everything about a plan, read only: what it costs, what it allows, its versions and how many subscribe. */

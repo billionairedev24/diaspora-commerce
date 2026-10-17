@@ -36,14 +36,31 @@ export const StaffPlanVersionPriceSchema = z.object({
 });
 export type StaffPlanVersionPrice = z.infer<typeof StaffPlanVersionPriceSchema>;
 
-/** What a plan lets an organisation do (read from `limits`); there is no limit on shops or users. */
+/** What a plan lets an organisation do (read from `limits`): the listing cap and the capabilities it includes. */
 export const StaffPlanEntitlementsSchema = z.object({
   listings: nullableInt,
   listingsUnlimited: z.boolean(),
   aiListingWriter: z.boolean(),
-  lolaTier: z.enum(['ESSENTIALS', 'GROWTH', 'PRO'])
+  lolaTier: z.enum(['NONE', 'ESSENTIALS', 'GROWTH', 'PRO']),
+  bulkUpload: z.boolean().default(false),
+  imageLibrary: z.boolean().default(false),
+  coupons: z.boolean().default(false)
 });
 export type StaffPlanEntitlements = z.infer<typeof StaffPlanEntitlementsSchema>;
+
+/**
+ * What a plan includes, in plain words: the plan's feature list is derived from its capabilities (never typed), and only
+ * what the plan allows is listed. Mirrors the seller service (PlanEntitlements.featureList).
+ */
+export function planFeatureList(e: StaffPlanEntitlements): string[] {
+  const out = [e.listingsUnlimited || e.listings === null ? 'Unlimited listings' : `Up to ${e.listings.toLocaleString('en-US')} listings`];
+  if (e.bulkUpload) out.push('Bulk upload');
+  if (e.imageLibrary) out.push('Image library');
+  if (e.coupons) out.push('Coupons');
+  if (e.aiListingWriter) out.push('AI listing writer');
+  if (e.lolaTier !== 'NONE') out.push(`Lola ${e.lolaTier.charAt(0)}${e.lolaTier.slice(1).toLowerCase()} assistant`);
+  return out;
+}
 
 export const StaffPlanVersionSchema = z.object({
   version: z.number().int(),

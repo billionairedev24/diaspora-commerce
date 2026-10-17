@@ -26,7 +26,7 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const table = await screen.findByRole('table', { name: 'Plans' });
     const growth = await within(table).findByRole('row', { name: /Seller Growth/ });
     expect(within(growth).getByText('$39.00')).toBeInTheDocument();
-    expect(within(growth).getByText('1,000 listings · AI writer · Lola Growth')).toBeInTheDocument();
+    expect(within(growth).getByText('Up to 1,000 listings · Bulk upload · Image library · Coupons · AI listing writer · Lola Growth assistant')).toBeInTheDocument();
     await user.click(within(growth).getByRole('button', { name: 'More actions for Seller Growth' }));
     await user.click(await screen.findByRole('menuitem', { name: 'New prices or trial' }));
     const dialog = await screen.findByRole('dialog', { name: 'New prices or trial for Seller Growth' });
@@ -50,28 +50,30 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'View' }));
     const dialog = await screen.findByRole('dialog', { name: /Seller Growth/ });
     expect(within(dialog).getByText('$39.00')).toBeInTheDocument();
-    expect(within(dialog).getByText('1,000 listings · AI writer · Lola Growth')).toBeInTheDocument();
+    expect(within(dialog).getByText('Up to 1,000 listings · Bulk upload · Image library · Coupons · AI listing writer · Lola Growth assistant')).toBeInTheDocument();
     expect(within(dialog).getByText('v1')).toBeInTheDocument();
   });
 
-  it('edits what a plan allows: the listing cap, the AI writer and the Lola tier', async () => {
+  it('edits what a plan includes: the listing cap, bulk upload, the AI writer and the Lola tier', async () => {
     const user = userEvent.setup();
     await renderScreen(<CataloguePanel />);
     const table = await screen.findByRole('table', { name: 'Plans' });
     const essentials = await within(table).findByRole('row', { name: /Seller Essentials/ });
-    expect(within(essentials).getByText('50 listings · Lola Essentials')).toBeInTheDocument();
+    expect(within(essentials).getByText('Up to 50 listings · Lola Essentials assistant')).toBeInTheDocument();
     await user.click(within(essentials).getByRole('button', { name: 'More actions for Seller Essentials' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog', { name: /Edit Seller Essentials/ });
     const cap = within(dialog).getByLabelText('Live listings');
     await user.clear(cap);
     await user.type(cap, '120');
-    await user.click(within(dialog).getByLabelText('AI listing writer included'));
+    await user.click(within(dialog).getByLabelText('AI listing writer'));
+    await user.click(within(dialog).getByLabelText('Bulk upload of listings'));
     await user.selectOptions(within(dialog).getByLabelText('Lola (seller assistant)'), 'GROWTH');
+    expect(within(dialog).getByText('Up to 120 listings · Bulk upload · AI listing writer · Lola Growth assistant')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(getStaffDb().plans.plans.find((p) => p.code === 'seller_essentials')?.limits).toMatchObject({ listings: '120', aiListingWriter: 'true', lolaTier: 'GROWTH' });
-    expect(await within(table).findByText('120 listings · AI writer · Lola Growth')).toBeInTheDocument();
+    expect(getStaffDb().plans.plans.find((p) => p.code === 'seller_essentials')?.limits).toMatchObject({ listings: '120', aiListingWriter: 'true', lolaTier: 'GROWTH', bulkUpload: 'true', coupons: 'false' });
+    expect(await within(table).findByText('Up to 120 listings · Bulk upload · AI listing writer · Lola Growth assistant')).toBeInTheDocument();
   });
 
   it('creates a promo-code trial campaign', async () => {
@@ -182,7 +184,7 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     await renderScreen(<SellerBillingPanel />);
     await user.type(screen.getByRole('searchbox'), 'ade');
     await user.click(await screen.findByRole('button', { name: /Ade’s Kitchen/ }));
-    expect(await screen.findByTestId('panel-entitlements')).toHaveTextContent('1,000 listings · AI writer · Lola Growth');
+    expect(await screen.findByTestId('panel-entitlements')).toHaveTextContent('Up to 1,000 listings · Bulk upload · Image library · Coupons · AI listing writer · Lola Growth assistant');
     await user.click(screen.getByRole('button', { name: 'Give free months' }));
     const months = await screen.findByRole('dialog', { name: 'Give free months' });
     await user.type(within(months).getByLabelText('Free months'), '2');

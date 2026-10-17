@@ -35,7 +35,7 @@ func (s *sellerImportImpl) ImageLibrary(ctx context.Context, c *domain.Caller, q
 	if len(errs) > 0 {
 		return domain.ImageLibraryPage{}, domain.ValidationProblem(errs)
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapImageLibrary); err != nil {
 		return domain.ImageLibraryPage{}, err
 	}
 	if s.r.d.Media == nil {
@@ -93,7 +93,7 @@ func (s *sellerImportImpl) RemoveLibraryImage(ctx context.Context, c *domain.Cal
 	if strings.TrimSpace(assetID) == "" {
 		return domain.ValidationProblem(map[string]string{"assetId": "Required"})
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapImageLibrary); err != nil {
 		return err
 	}
 	if s.r.d.Media == nil {
@@ -118,7 +118,7 @@ func (s *sellerImportImpl) RenameLibraryImage(ctx context.Context, c *domain.Cal
 	if len(errs) > 0 {
 		return domain.ImageLibraryItem{}, domain.ValidationProblem(errs)
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapImageLibrary); err != nil {
 		return domain.ImageLibraryItem{}, err
 	}
 	if s.r.d.Media == nil {
@@ -151,7 +151,7 @@ func (s *sellerImportImpl) AttachLibraryImages(ctx context.Context, c *domain.Ca
 			clean = append(clean, k)
 		}
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelEdit, domain.CapImageLibrary); err != nil {
 		return domain.AttachLibraryImagesResult{}, err
 	}
 	cl, err := s.client()
@@ -169,7 +169,7 @@ func (s *sellerImportImpl) Brands(ctx context.Context, c *domain.Caller, q strin
 	if len(q) > 80 {
 		return domain.BrandList{}, domain.ValidationProblem(map[string]string{"q": "At most 80 characters"})
 	}
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView); err != nil {
+	if _, err := s.r.requireCap(ctx, c, domain.OrgKindSeller, "listings", domain.LevelView, domain.CapImageLibrary); err != nil {
 		return domain.BrandList{}, err
 	}
 	cl, err := s.client()

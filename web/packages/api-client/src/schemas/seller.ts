@@ -43,6 +43,9 @@ export type NavModule = z.infer<typeof NavModuleSchema>;
 export const NavGroupSchema = z.object({ key: z.string(), label: z.string(), modules: z.array(NavModuleSchema) });
 export type NavGroup = z.infer<typeof NavGroupSchema>;
 
+export const PlanCapabilitySchema = z.enum(['bulkUpload', 'imageLibrary', 'coupons', 'aiListingWriter', 'lola']);
+export type PlanCapability = z.infer<typeof PlanCapabilitySchema>;
+
 export const SellerSessionSchema = z.object({
   user: SellerUserSchema,
   orgs: z.array(OrgSummarySchema),
@@ -51,7 +54,9 @@ export const SellerSessionSchema = z.object({
   approved: z.boolean(),
   navGroups: z.array(NavGroupSchema),
   landing: ModuleKeySchema,
-  accessNote: z.string()
+  accessNote: z.string(),
+  /** What the active organisation's plan includes: anything not listed is not shown (and the BFF refuses it). */
+  capabilities: z.array(PlanCapabilitySchema).default([])
 });
 export type SellerSession = z.infer<typeof SellerSessionSchema>;
 
@@ -1235,12 +1240,15 @@ export const PlanPriceSchema = z.object({
   savingLabel: z.string()
 });
 export type PlanPrice = z.infer<typeof PlanPriceSchema>;
-/** What a plan allows: only live listings are capped (no limit on shops or users). */
+/** What a plan allows: the live-listing cap and the capabilities it includes (a capability that is off is not offered). */
 export const PlanEntitlementsSchema = z.object({
   listings: z.number().int().nullable(),
   listingsUnlimited: z.boolean(),
   aiListingWriter: z.boolean(),
-  lolaTier: z.enum(['ESSENTIALS', 'GROWTH', 'PRO'])
+  lolaTier: z.enum(['NONE', 'ESSENTIALS', 'GROWTH', 'PRO']),
+  bulkUpload: z.boolean().default(false),
+  imageLibrary: z.boolean().default(false),
+  coupons: z.boolean().default(false)
 });
 export type PlanEntitlements = z.infer<typeof PlanEntitlementsSchema>;
 export const PlanSchema = z.object({

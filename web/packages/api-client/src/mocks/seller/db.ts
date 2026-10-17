@@ -16,6 +16,7 @@ import {
   type OrgStatus,
   type Payout,
   type Plan,
+  type PlanCapability,
   type PlanEntitlements,
   type PlanFeeCollectionMode,
   type PlanFeeDeduction,
@@ -275,14 +276,27 @@ const PLAN_CATALOG: Record<OrgKind, { code: string; name: string; tagline: strin
 const usd = (minor: number) => `$${(minor / 100).toLocaleString('en-US', { minimumFractionDigits: minor % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 const ENTITLEMENTS: Record<string, PlanEntitlements> = {
-  seller_essentials: { listings: 50, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS' },
-  seller_growth: { listings: 1000, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH' },
-  seller_pro: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO' },
-  provider_solo: { listings: 20, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS' },
-  provider_studio: { listings: 100, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH' },
-  provider_business: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO' }
+  seller_essentials: { listings: 50, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS', bulkUpload: false, imageLibrary: false, coupons: false },
+  seller_growth: { listings: 1000, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH', bulkUpload: true, imageLibrary: true, coupons: true },
+  seller_pro: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO', bulkUpload: true, imageLibrary: true, coupons: true },
+  provider_solo: { listings: 20, listingsUnlimited: false, aiListingWriter: false, lolaTier: 'ESSENTIALS', bulkUpload: false, imageLibrary: false, coupons: false },
+  provider_studio: { listings: 100, listingsUnlimited: false, aiListingWriter: true, lolaTier: 'GROWTH', bulkUpload: false, imageLibrary: false, coupons: false },
+  provider_business: { listings: null, listingsUnlimited: true, aiListingWriter: true, lolaTier: 'PRO', bulkUpload: false, imageLibrary: false, coupons: false }
 };
 export const entitlementsOf = (code: string): PlanEntitlements | null => ENTITLEMENTS[code] ?? null;
+
+/** The capabilities a plan includes, as the BFF lists them in the session. */
+export function capabilitiesOf(code: string): PlanCapability[] {
+  const e = entitlementsOf(code);
+  if (!e) return [];
+  const out: PlanCapability[] = [];
+  if (e.bulkUpload) out.push('bulkUpload');
+  if (e.imageLibrary) out.push('imageLibrary');
+  if (e.coupons) out.push('coupons');
+  if (e.aiListingWriter) out.push('aiListingWriter');
+  if (e.lolaTier !== 'NONE') out.push('lola');
+  return out;
+}
 
 /** Plans with monthly, quarterly (5% off) and annual (2 months free) prices, as the seller service computes them. */
 export function plansFor(kind: OrgKind, currentCode: string): Plan[] {

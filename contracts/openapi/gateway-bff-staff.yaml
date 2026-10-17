@@ -4333,13 +4333,16 @@ components:
     # ── Plans & billing (S292–S297) ─────────────────────────────────────────
     StaffPlanEntitlements:
       type: object
-      description: What the plan lets an organisation do (read from `limits`).
-      required: [listings, listingsUnlimited, aiListingWriter, lolaTier]
+      description: What the plan lets an organisation do (read from `limits`). A capability that is off is not offered to the plan's members.
+      required: [listings, listingsUnlimited, aiListingWriter, lolaTier, bulkUpload, imageLibrary, coupons]
       properties:
         listings: {type: [integer, 'null'], format: int64, description: The most live listings; null = unlimited}
         listingsUnlimited: {type: boolean}
         aiListingWriter: {type: boolean}
-        lolaTier: {type: string, enum: [ESSENTIALS, GROWTH, PRO]}
+        lolaTier: {type: string, enum: [NONE, ESSENTIALS, GROWTH, PRO], description: 'NONE = Lola is not included'}
+        bulkUpload: {type: boolean}
+        imageLibrary: {type: boolean}
+        coupons: {type: boolean}
     StaffPlanVersionPrice:
       type: object
       required: [cadence, amountCents]
@@ -4373,9 +4376,10 @@ components:
           type: object
           additionalProperties: {type: string}
           description: >-
-            The plan's settings. `listings` (a number or `unlimited`), `aiListingWriter` (`true`/`false`) and `lolaTier`
-            (`ESSENTIALS`, `GROWTH`, `PRO`) are entitlements the platform enforces; any other key is shown as plan
-            information. There is no limit on shops or users.
+            The plan's settings. `listings` (a number or `unlimited`), `bulkUpload`, `imageLibrary`, `coupons` and
+            `aiListingWriter` (`true`/`false`) and `lolaTier` (`NONE`, `ESSENTIALS`, `GROWTH`, `PRO`) are the
+            capabilities the platform enforces; any other key is shown as plan information. The plan's `features` list
+            is derived from them (only what the plan allows is listed), whatever is sent.
         entitlements: {$ref: '#/components/schemas/StaffPlanEntitlements'}
         visibility: {type: string, enum: [PUBLIC, HIDDEN, INVITE_ONLY]}
         status: {type: string, enum: [DRAFT, ACTIVE, RETIRED]}

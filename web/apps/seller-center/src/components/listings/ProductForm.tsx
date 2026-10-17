@@ -72,7 +72,7 @@ export function ProductForm({ productId }: { productId?: string }) {
   const toast = useToast();
   const router = useRouter();
   const params = useSearchParams();
-  const { orgId } = useSeller();
+  const { orgId, has } = useSeller();
   const editing = Boolean(productId);
   const draftParam = params.get('draft') ?? '';
 
@@ -303,7 +303,7 @@ export function ProductForm({ productId }: { productId?: string }) {
       <PageHeader
         title={editing ? t('sc.pf.titleEdit') : t('sc.pf.titleNew')}
         description={editing ? d?.title : t('sc.pf.descriptionNew')}
-        actions={editing ? null : <Link href="/listings/bulk" className="text-sm">{t('sc.pf.bulkLink')}</Link>}
+        actions={editing || !has('bulkUpload') ? null : <Link href="/listings/bulk" className="text-sm">{t('sc.pf.bulkLink')}</Link>}
       />
       {d?.status === 'REJECTED' && d.moderationNote ? <Notice tone="danger" title={t('sc.pf.rejected')} role="alert">{d.moderationNote}</Notice> : null}
       {live ? <Notice tone="info" title={t('sc.pf.liveTitle')}>{t('sc.pf.liveBody')}</Notice> : null}

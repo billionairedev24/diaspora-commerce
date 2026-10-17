@@ -16,6 +16,7 @@ import {
   type StaffChargeGate,
   type StaffEarningsCollection,
   type StaffPlan,
+  planFeatureList,
   type StaffPlanEntitlements,
   type StaffPlanFeeCollection,
   type StaffPlanFeeCollectionChange,
@@ -87,13 +88,15 @@ const SEED_PLANS: [string, 'SELLER' | 'PROVIDER', string, string, number, number
   ['provider_business', 'PROVIDER', 'Provider Business', 'Multi-location', 9900, 14, ['Unlimited staff', '6% booking fee', 'Multiple locations and API']]
 ];
 
+const off = { bulkUpload: 'false', imageLibrary: 'false', coupons: 'false' };
+const on = { bulkUpload: 'true', imageLibrary: 'true', coupons: 'true' };
 const LIMITS: Record<string, Record<string, string>> = {
-  seller_essentials: { listings: '50', aiListingWriter: 'false', lolaTier: 'ESSENTIALS' },
-  seller_growth: { listings: '1000', aiListingWriter: 'true', lolaTier: 'GROWTH' },
-  seller_pro: { listings: 'unlimited', aiListingWriter: 'true', lolaTier: 'PRO' },
-  provider_solo: { listings: '20', aiListingWriter: 'false', lolaTier: 'ESSENTIALS' },
-  provider_studio: { listings: '100', aiListingWriter: 'true', lolaTier: 'GROWTH' },
-  provider_business: { listings: 'unlimited', aiListingWriter: 'true', lolaTier: 'PRO' }
+  seller_essentials: { listings: '50', aiListingWriter: 'false', lolaTier: 'ESSENTIALS', ...off },
+  seller_growth: { listings: '1000', aiListingWriter: 'true', lolaTier: 'GROWTH', ...on },
+  seller_pro: { listings: 'unlimited', aiListingWriter: 'true', lolaTier: 'PRO', ...on },
+  provider_solo: { listings: '20', aiListingWriter: 'false', lolaTier: 'ESSENTIALS', ...off },
+  provider_studio: { listings: '100', aiListingWriter: 'true', lolaTier: 'GROWTH', ...off },
+  provider_business: { listings: 'unlimited', aiListingWriter: 'true', lolaTier: 'PRO', ...off }
 };
 
 /** Reads a plan's entitlements from its `limits`, as the seller service does. */
@@ -104,7 +107,8 @@ export function entitlementsFrom(limits: Record<string, string>): StaffPlanEntit
   const tier = (limits.lolaTier ?? 'ESSENTIALS').toUpperCase();
   return {
     listings: unlimited ? null : n, listingsUnlimited: unlimited, aiListingWriter: limits.aiListingWriter === 'true',
-    lolaTier: tier === 'PRO' || tier === 'GROWTH' ? tier : 'ESSENTIALS'
+    lolaTier: tier === 'PRO' || tier === 'GROWTH' || tier === 'NONE' ? tier : 'ESSENTIALS',
+    bulkUpload: limits.bulkUpload === 'true', imageLibrary: limits.imageLibrary === 'true', coupons: limits.coupons === 'true'
   };
 }
 
@@ -113,7 +117,7 @@ function seedPlan([code, kind, name, tagline, monthly, trial, features]: (typeof
   const annual = monthly * 10;
   const amounts: Record<PlanCadence, number> = { MONTHLY: monthly, QUARTERLY: quarterly, ANNUAL: annual };
   return {
-    code, kind, name, tagline, features, limits: LIMITS[code] ?? {}, entitlements: entitlementsFrom(LIMITS[code] ?? {}), visibility: 'PUBLIC', status: 'ACTIVE', sortOrder: (i + 1) * 10, currentVersion: 1,
+    code, kind, name, tagline, features: planFeatureList(entitlementsFrom(LIMITS[code] ?? {})), limits: LIMITS[code] ?? {}, entitlements: entitlementsFrom(LIMITS[code] ?? {}), visibility: 'PUBLIC', status: 'ACTIVE', sortOrder: (i + 1) * 10, currentVersion: 1,
     monthlyCents: monthly, quarterlyCents: quarterly, annualCents: annual, trialDays: trial, rowVersion: 0,
     subscribers: monthly ? 3 - (i % 3) : 0, invites: [],
     versions: [{
@@ -202,7 +206,7 @@ const GateBody = z.object({
   note: z.string().max(500).nullish()
 });
 const PlanBody = z.object({
-  name: z.string().trim().min(1, 'Enter a name').max(80), tagline: z.string().max(120).nullish(), features: z.array(z.string().max(200)).max(20),
+  name: z.string().trim().min(1, 'Enter a name').max(80), tagline: z.string().max(120).nullish(), features: z.array(z.string().max(200)).max(20).default([]),
   limits: z.record(z.string(), z.string()).optional(), visibility: z.enum(['PUBLIC', 'HIDDEN', 'INVITE_ONLY']), sortOrder: z.number().int().optional()
 });
 const PricesBody = z.object({
@@ -367,7 +371,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const plan = planOf(ctx, p.code);
       const b = await json(ctx.request, PlanBody.extend({ expectedVersion: z.number().int() }));
       if (b.expectedVersion !== plan.rowVersion) throw problem(409, 'CONFLICT', 'Changed by someone else', 'This plan was changed by someone else. Refresh to see the latest.');
-      Object.assign(plan, { name: b.name, tagline: b.tagline ?? null, features: b.features, limits: b.limits ?? plan.limits, entitlements: entitlementsFrom(b.limits ?? plan.limits), visibility: b.visibility, sortOrder: b.sortOrder ?? plan.sortOrder, rowVersion: plan.rowVersion + 1 });
+      Object.assign(plan, { name: b.name, tagline: b.tagline ?? null, features: planFeatureList(entitlementsFrom(b.limits ?? plan.limits)), limits: b.limits ?? plan.limits, entitlements: entitlementsFrom(b.limits ?? plan.limits), visibility: b.visibility, sortOrder: b.sortOrder ?? plan.sortOrder, rowVersion: plan.rowVersion + 1 });
       return plan;
     })),
     http.put(`${B}/plans/:code/draft`, route(async (ctx, p) => {

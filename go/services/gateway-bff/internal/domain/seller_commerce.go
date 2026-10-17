@@ -853,12 +853,56 @@ type ChargeGateView struct {
 	Label     string     `json:"label"`
 }
 
-// PlanEntitlementsView is what a plan lets an organisation do (there is no limit on shops or users).
+// PlanEntitlementsView is what a plan lets an organisation do. A capability that is off is not offered to the plan's
+// members: the BFF refuses it (403 PLAN_FEATURE_REQUIRED) and Seller Center does not show it.
 type PlanEntitlementsView struct {
 	Listings          *int64 `json:"listings"`
 	ListingsUnlimited bool   `json:"listingsUnlimited"`
 	AIListingWriter   bool   `json:"aiListingWriter"`
 	LolaTier          string `json:"lolaTier"`
+	BulkUpload        bool   `json:"bulkUpload"`
+	ImageLibrary      bool   `json:"imageLibrary"`
+	Coupons           bool   `json:"coupons"`
+}
+
+// Plan capabilities: the keys of PlanEntitlementsView and of the session's capabilities list.
+const (
+	CapBulkUpload   = "bulkUpload"
+	CapImageLibrary = "imageLibrary"
+	CapCoupons      = "coupons"
+	CapAIWriter     = "aiListingWriter"
+	CapLola         = "lola"
+)
+
+// Allows reports whether the plan includes a capability.
+func (e *PlanEntitlementsView) Allows(capability string) bool {
+	if e == nil {
+		return false
+	}
+	switch capability {
+	case CapBulkUpload:
+		return e.BulkUpload
+	case CapImageLibrary:
+		return e.ImageLibrary
+	case CapCoupons:
+		return e.Coupons
+	case CapAIWriter:
+		return e.AIListingWriter
+	case CapLola:
+		return !strings.EqualFold(e.LolaTier, "NONE")
+	}
+	return false
+}
+
+// Capabilities lists the keys the plan includes (what Seller Center may show).
+func (e *PlanEntitlementsView) Capabilities() []string {
+	out := []string{}
+	for _, c := range []string{CapBulkUpload, CapImageLibrary, CapCoupons, CapAIWriter, CapLola} {
+		if e.Allows(c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // BillingView is GET /v1/seller/billing.

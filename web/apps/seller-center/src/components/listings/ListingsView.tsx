@@ -31,7 +31,7 @@ export function ListingsView() {
   const [fulfilment, setFulfilment] = useState<ListingRow | null>(null);
   const [stockOf, setStockOf] = useState<ListingRow | null>(null);
   const toast = useToast();
-  const { orgId, can } = useSeller();
+  const { orgId, can, has } = useSeller();
   const editable = can('listings');
   const state = useTableState({ searchParams: useSearchParams() });
   const q = useQuery({
@@ -124,12 +124,16 @@ export function ListingsView() {
       module="listings"
       actions={editable ? (
         <>
-          <Link href="/listings/images" className={buttonClassName({ variant: 'neutral' })}>
-            <ImagesSquare size={18} aria-hidden /> {t('sc.listings.images')}
-          </Link>
-          <Link href="/listings/bulk" className={buttonClassName({ variant: 'neutral' })}>
-            <FileArrowUp size={18} aria-hidden /> {t('sc.listings.bulk')}
-          </Link>
+          {has('imageLibrary') ? (
+            <Link href="/listings/images" className={buttonClassName({ variant: 'neutral' })}>
+              <ImagesSquare size={18} aria-hidden /> {t('sc.listings.images')}
+            </Link>
+          ) : null}
+          {has('bulkUpload') ? (
+            <Link href="/listings/bulk" className={buttonClassName({ variant: 'neutral' })}>
+              <FileArrowUp size={18} aria-hidden /> {t('sc.listings.bulk')}
+            </Link>
+          ) : null}
           <Link href="/listings/new" className={buttonClassName({ variant: 'primary' })}>
             <Plus size={18} aria-hidden /> Add a product
           </Link>

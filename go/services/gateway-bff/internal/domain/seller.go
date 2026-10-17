@@ -102,6 +102,9 @@ type SellerSession struct {
 	NavGroups  []NavGroup   `json:"navGroups"`
 	Landing    string       `json:"landing"`
 	AccessNote string       `json:"accessNote"`
+	// Capabilities are what the active organisation's plan includes (bulkUpload, imageLibrary, coupons,
+	// aiListingWriter, lola). Anything not listed is not shown: Seller Center hides it and the BFF refuses it.
+	Capabilities []string `json:"capabilities"`
 }
 
 // PortalOf returns the portal for an organisation kind.
@@ -334,6 +337,24 @@ func Navigation(a Access, approved bool, badges map[string]int) []NavGroup {
 	for _, g := range navGroupOrder {
 		if len(groups[g]) > 0 {
 			out = append(out, NavGroup{Key: g, Label: navGroupLabels[g], Modules: groups[g]})
+		}
+	}
+	return out
+}
+
+// WithoutModules drops navigation entries (and groups left empty): the modules a plan does not include.
+func WithoutModules(groups []NavGroup, keys ...string) []NavGroup {
+	out := make([]NavGroup, 0, len(groups))
+	for _, g := range groups {
+		kept := make([]NavModule, 0, len(g.Modules))
+		for _, m := range g.Modules {
+			if !slices.Contains(keys, m.Key) {
+				kept = append(kept, m)
+			}
+		}
+		if len(kept) > 0 {
+			g.Modules = kept
+			out = append(out, g)
 		}
 	}
 	return out
