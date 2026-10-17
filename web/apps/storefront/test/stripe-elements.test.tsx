@@ -26,7 +26,7 @@ const TOKENS: Record<string, string> = {
   '--at-color-danger': '#C62828',
   '--at-color-action-secondary': '#1E7B3C',
   '--at-color-link': '#17602F',
-  '--at-font-sans': '"Figtree", ui-sans-serif, system-ui',
+  '--at-font-sans': '"Inter", ui-sans-serif, system-ui',
   '--at-radius-sm': '6px'
 };
 
@@ -35,11 +35,11 @@ const cents = (text: string) => Math.round(Number(text.replace(/[^0-9.]/g, '')) 
 describe('Stripe Appearance and deferred-intent options', () => {
   afterEach(() => Object.keys(TOKENS).forEach((k) => document.documentElement.style.removeProperty(k)));
 
-  it('reads the design tokens at runtime: gold primary, Figtree, radius, colours, designed tabs', () => {
+  it('reads the design tokens at runtime: gold primary, the platform font, radius, colours, designed tabs', () => {
     Object.entries(TOKENS).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
     const a = stripeAppearance();
     expect(a.variables).toMatchObject({ colorPrimary: '#FFD400', colorText: '#1F1F1F', colorDanger: '#C62828', borderRadius: '6px' });
-    expect(a.variables.fontFamily).toContain('Figtree');
+    expect(a.variables.fontFamily).toContain('Inter');
     expect(a.rules['.Tab--selected']).toMatchObject({ borderColor: '#1E7B3C', color: '#17602F' });
   });
 

@@ -169,7 +169,7 @@ export const locName = (targets: string[]): string => {
 
 /** A placeholder creative (SVG data URL at the asset's size) for seeded slots. */
 function placeholderCreative(slot: CreativeSlot, width: number, height: number, label: string): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#067457"/><circle cx="${width * 0.82}" cy="${height * 0.3}" r="${Math.min(width, height) * 0.35}" fill="#FFD400"/><text x="6%" y="55%" font-family="Figtree, sans-serif" font-size="${Math.round(Math.min(width, height) / 7)}" font-weight="900" fill="#FFFFFF">${label}</text><text x="6%" y="72%" font-family="Figtree, sans-serif" font-size="${Math.round(Math.min(width, height) / 16)}" fill="#FFF4BF">${slot} · ${width}×${height}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#067457"/><circle cx="${width * 0.82}" cy="${height * 0.3}" r="${Math.min(width, height) * 0.35}" fill="#FFD400"/><text x="6%" y="55%" font-family="Inter, sans-serif" font-size="${Math.round(Math.min(width, height) / 7)}" font-weight="900" fill="#FFFFFF">${label}</text><text x="6%" y="72%" font-family="Inter, sans-serif" font-size="${Math.round(Math.min(width, height) / 16)}" fill="#FFF4BF">${slot} · ${width}×${height}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 

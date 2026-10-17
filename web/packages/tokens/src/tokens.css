@@ -2,7 +2,7 @@
    Layer 1: primitives (raw ramps). Layer 2: semantic roles (what UI uses). Layer 3: store theme (seller-overridable, vetted by the theme service).
    Components reference ONLY layer 2/3 tokens. Brand values from afrotransact-v2-ui/app/globals.css.
    The TypeScript object in src/generated/tokens.ts is generated from this file (`pnpm --filter @afrotransact/tokens generate`).
-   Fonts: import "@afrotransact/tokens/fonts.css" (self-hosted Figtree) instead of the Google Fonts @import of the prototype. */
+   Fonts: import "@afrotransact/tokens/fonts.css" (self-hosted fonts, set in fonts.config.json) instead of the Google Fonts @import of the prototype. */
 
 :root {
   /* ── Primitives ─────────────────────────────── */
@@ -84,8 +84,11 @@
   --at-color-placeholder-a: var(--at-ink-100);        --at-color-placeholder-b: var(--at-ink-50);
 
   /* ── Type ───────────────────────────────────── */
-  --at-font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* fonts:start — generated from fonts.config.json (the one place fonts are set); do not edit by hand */
+  --at-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --at-font-display: "Fraunces", Georgia, "Times New Roman", serif;
   --at-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* fonts:end */
   --at-text-2xs: 11px; --at-text-xs: 12px; --at-text-sm: 13px; --at-text-md: 14px; --at-text-base: 15px; --at-text-lg: 17px;
   --at-text-xl: 20px; --at-text-2xl: 24px; --at-text-3xl: 30px; --at-text-4xl: 38px; --at-text-5xl: 52px;
   --at-weight-regular: 400; --at-weight-medium: 500; --at-weight-semibold: 600; --at-weight-bold: 700; --at-weight-black: 800;
@@ -151,6 +154,8 @@
   /* Links inside running text are underlined, not told apart by colour alone (WCAG 1.4.1). */
   :where(p, li, label, small, dd, td, figcaption) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; }
   ::selection { background: var(--at-gold-200); }
+  /* Fraunces for headings and display numbers only ("a warm optical serif used with restraint"); everything else is Inter. */
+  h1, h2, h3, .at-display { font-family: var(--at-font-display); }
   button, input, select, textarea { font-family: inherit; }
   /* No double-tap-to-zoom delay on controls (the page itself can still be pinch-zoomed). */
   a, button, input, select, textarea, label, summary, [role="button"] { touch-action: manipulation; }

@@ -11,6 +11,8 @@
    Mock mode (publishable key pk_test_mock…, or none: the local BFF without STRIPE_PUBLISHABLE_KEY) renders the
    storefront's own labelled test form instead; gateway-bff refuses to start without a real key outside local. */
 
+import { fonts } from '@afrotransact/tokens';
+
 export interface StripeError {
   type?: string;
   code?: string;
@@ -95,8 +97,8 @@ declare global {
 
 export const STRIPE_JS = 'https://js.stripe.com/v3/';
 
-/** Figtree inside Stripe's iframes (they cannot use the page's self-hosted font files). */
-export const STRIPE_FONTS = [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap' }];
+/** The platform fonts inside Stripe's iframes (they cannot use the page's self-hosted font files). */
+export const STRIPE_FONTS = [{ cssSrc: fonts.googleFontsUrl }];
 
 /** True for the mock BFF's key or no key at all (local without STRIPE_PUBLISHABLE_KEY): the labelled test form. */
 export const isMockKey = (publishableKey: string | null | undefined): boolean => !publishableKey || publishableKey.startsWith('pk_test_mock');
@@ -160,7 +162,7 @@ function tokenReader(): (name: string) => string {
   return (name: string) => css?.getPropertyValue(name).trim() ?? '';
 }
 
-/** Payment / Express Checkout Element appearance: gold primary, Figtree, our radius and colours (Shop design). */
+/** Payment / Express Checkout Element appearance: gold primary, the platform font, our radius and colours (Shop design). */
 export function stripeAppearance(): StripeAppearance {
   const v = tokenReader();
   const variables: Record<string, string> = { fontWeightNormal: '400', fontWeightMedium: '600', fontWeightBold: '700', spacingUnit: '3px', gridRowSpacing: '12px' };

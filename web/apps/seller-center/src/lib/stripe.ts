@@ -11,6 +11,8 @@
      (a SetupIntent confirmed in the browser; S292–S297).
    Without a publishable key (local stack without Stripe, mock BFF) the wizard shows its labelled local stand-ins. */
 
+import { fonts } from '@afrotransact/tokens';
+
 const CONNECT_JS = 'https://connect-js.stripe.com/v1.0/connect.js';
 const STRIPE_JS = 'https://js.stripe.com/v3/';
 
@@ -150,7 +152,7 @@ export function appearance(): { variables: Record<string, string> } {
     colorText: v('--at-color-text'),
     colorBackground: v('--at-color-surface'),
     colorDanger: v('--at-color-danger'),
-    fontFamily: 'Figtree, system-ui, sans-serif',
+    fontFamily: fonts.sans.stack,
     borderRadius: v('--at-radius-sm')
   };
   return {
@@ -159,14 +161,14 @@ export function appearance(): { variables: Record<string, string> } {
 }
 
 /**
- * Connect.js appearance for the embedded components, from the same tokens: Stripe's own first button ("Get started", "Add information") is our gold primary pill, the form uses Figtree and
+ * Connect.js appearance for the embedded components, from the same tokens: Stripe's own first button ("Get started", "Add information") is our gold primary pill, the form uses the platform font and
  * our radii, and borders stay as quiet as the rest of the wizard.
  */
 function connectAppearance(): { overlays: 'dialog'; variables: Record<string, string> } {
   const css = getComputedStyle(document.documentElement);
   const v = (name: string) => css.getPropertyValue(name).trim();
   const vars: Record<string, string> = {
-    fontFamily: 'Figtree, system-ui, sans-serif',
+    fontFamily: fonts.sans.stack,
     fontSizeBase: '16px',
     colorPrimary: v('--at-color-text'),
     colorText: v('--at-color-text'),
@@ -193,8 +195,8 @@ function connectAppearance(): { overlays: 'dialog'; variables: Record<string, st
   };
 }
 
-/** Figtree for the components (they render in Stripe's iframe, so they load the font themselves). */
-const FONTS = [{ cssSrc: 'https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap' }];
+/** The platform fonts for the components (they render in Stripe's iframe, so they load the fonts themselves). */
+const FONTS = [{ cssSrc: fonts.googleFontsUrl }];
 
 /** Connect.js with the Account Session's client secret (fetched again by Stripe when the session expires). */
 export async function initConnect(publishableKey: string, fetchClientSecret: () => Promise<string>): Promise<ConnectInstance> {

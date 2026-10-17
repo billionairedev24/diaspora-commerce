@@ -39,7 +39,7 @@ function installFakeStripe() {
                 calls.push(['mount', type]);
                 const box = document.createElement('div');
                 box.setAttribute('data-fake-stripe', type);
-                box.style.cssText = 'border:1px solid #c9c9c9;border-radius:6px;padding:12px;font:14px Figtree,sans-serif;background:#fff';
+                box.style.cssText = 'border:1px solid #c9c9c9;border-radius:6px;padding:12px;font:14px Inter,sans-serif;background:#fff';
                 box.style.padding = '0';
                 const row = (label: string, open: boolean) =>
                   `<div style="border-bottom:1px solid #e0e0e0;padding:12px 14px"><label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="radio" name="fake-pm" ${open ? 'checked' : ''}> ${label}</label>` +

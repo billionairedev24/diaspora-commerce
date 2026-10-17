@@ -229,7 +229,7 @@ Card 3-D Secure opens in Stripe's modal; redirect methods (Cash App Pay, Affirm,
 `/checkout/complete?order=…`, which asks the BFF to confirm the order's payment (orders reads the PaymentIntent from
 payments, refreshed from Stripe) before showing the order. Your Payments and booking deposits use the same Payment
 Element and Appearance on a SetupIntent. The Appearance is read from the design tokens at runtime (gold primary,
-Figtree, radius, colours).
+the platform font, radius, colours).
 
 **Without a key (local only).** When `STRIPE_SECRET_KEY` is not set, the local profile's payments use a stand-in for
 Stripe (`at.payments.stripe.mode=auto`, `LocalTestStripeGateway`): every PaymentIntent is authorised like test card

@@ -69,7 +69,7 @@ design/         the Claude Design prototypes (read-only reference)
 - Strict TS, no `any`, ESLint import rules (no namespace imports of app code, ordered imports).
 - Design tokens only (`@afrotransact/tokens`) — no raw hex colours in components.
 - Data fetching via TanStack Query key factories; tables via TanStack Table (server-driven).
-- No visible scrollbars anywhere (global CSS), white canvas, Figtree font.
+- No visible scrollbars anywhere (global CSS), white canvas, Inter (UI) and Fraunces (headings) set only in `web/packages/tokens/src/fonts.config.json`.
 
 ## Deployability
 Every service is independently buildable, testable, containerised and deployable to Kubernetes:
