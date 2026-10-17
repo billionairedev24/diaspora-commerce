@@ -58,7 +58,7 @@ public record IdentityProperties(
         social = social == null ? Map.of() : Map.copyOf(social);
         bootstrapAdmin = bootstrapAdmin == null ? new BootstrapAdmin(null, null, null, null, null) : bootstrapAdmin;
         clients = clients == null ? List.of() : List.copyOf(clients);
-        firstParty = firstParty == null ? new FirstParty(null) : firstParty;
+        firstParty = firstParty == null ? new FirstParty(null, null) : firstParty;
         signInProtection = signInProtection == null ? new SignInProtection(null, null) : signInProtection;
         invitations = invitations == null ? new Invitations(null) : invitations;
         dataProtection = dataProtection == null ? new DataProtection(null, null, null, null, null) : dataProtection;
@@ -153,11 +153,17 @@ public record IdentityProperties(
     public record Invitations(String acceptUrl) {
     }
 
-    /** @param clientIds confidential clients allowed to use the first-party sign-in API (default gateway-bff) */
-    public record FirstParty(List<String> clientIds) {
+    /**
+     * @param clientIds       confidential clients allowed to use the first-party sign-in API (default gateway-bff)
+     * @param nativeClientIds public native-app clients a login ticket may be issued for (default customer-app,
+     *                        driver-app)
+     */
+    public record FirstParty(List<String> clientIds, List<String> nativeClientIds) {
 
         public FirstParty {
             clientIds = clientIds == null || clientIds.isEmpty() ? List.of("gateway-bff") : List.copyOf(clientIds);
+            nativeClientIds = nativeClientIds == null || nativeClientIds.isEmpty()
+                    ? List.of("customer-app", "driver-app") : List.copyOf(nativeClientIds);
         }
     }
 

@@ -87,6 +87,11 @@ func (v *jwksVerifier) Verify(ctx context.Context, raw string) (Actor, error) {
 		}
 	}
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenInvalidIssuer) {
+			// The usual local cause of a signed-in app getting 401 on everything: it signed in at a different identity
+			// address (localhost vs the LAN IP) than the issuer this service was started with.
+			err = fmt.Errorf("token not issued by %s (check AUTH_ISSUER_URL / MOBILE_HOST): %w", v.issuer, err)
+		}
 		return Actor{}, fmt.Errorf("%w: %w", ErrUnauthenticated, err)
 	}
 	perms := append([]string{}, c.Perms...)

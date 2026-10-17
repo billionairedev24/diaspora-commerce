@@ -1,7 +1,10 @@
 /* Bearer JSON requester for fulfilment, media and identity (problems → ApiProblemError). */
 export interface TokenSource {
   getAccessToken(): Promise<string | null>;
+  /** null = the session is gone; rejects when identity could not be reached (the session is kept). */
   refreshAccessToken(): Promise<string | null>;
+  /** The refresh token is no longer accepted: the app returns to sign-in. */
+  onSessionExpired?(): void;
 }
 
 export type Fetch = (req: Request) => Promise<Response>;
@@ -64,8 +67,15 @@ export function createJson(baseUrl: string, tokens: TokenSource, doFetch: Fetch)
   return async function json<T>(path: string, opts: JsonOptions = {}): Promise<T> {
     let res = await send(path, opts, await tokens.getAccessToken());
     if (res.status === 401) {
-      const fresh = await tokens.refreshAccessToken();
+      let fresh: string | null = null;
+      let reachable = true;
+      try {
+        fresh = await tokens.refreshAccessToken();
+      } catch {
+        reachable = false;
+      }
       if (fresh) res = await send(path, opts, fresh);
+      else if (reachable) tokens.onSessionExpired?.();
     }
     const text = await res.text();
     const body: unknown = text ? JSON.parse(text) : undefined;

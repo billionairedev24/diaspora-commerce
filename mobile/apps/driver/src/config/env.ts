@@ -11,6 +11,8 @@ export type AppEnv = 'local' | 'dev' | 'uat' | 'prod';
 
 export interface EnvConfig {
   appEnv: AppEnv;
+  /** gateway-bff: the in-app sign-in (/v1/auth/native/*). */
+  bffUrl: string;
   /** fulfilment-service (driver API: /v1/driver/**). */
   fulfilmentUrl: string;
   /** media-service (proof photos, signatures: POST /v1/uploads). */
@@ -23,19 +25,20 @@ export interface EnvConfig {
   mocks: boolean;
 }
 
-type Urls = Pick<EnvConfig, 'fulfilmentUrl' | 'mediaUrl' | 'oidcIssuer' | 'identityApiUrl'>;
+type Urls = Pick<EnvConfig, 'bffUrl' | 'fulfilmentUrl' | 'mediaUrl' | 'oidcIssuer' | 'identityApiUrl'>;
 
-/** The local stack on the dev machine (infra/local/PORTS.md): fulfilment 8108, media 8207, identity 8100. */
+/** The local stack on the dev machine (infra/local/PORTS.md): gateway-bff 8200, fulfilment 8108, media 8207, identity 8100. */
 export function localUrls(devHost = 'localhost'): Urls {
   const h = devHost.trim() || 'localhost';
-  return { fulfilmentUrl: `http://${h}:8108`, mediaUrl: `http://${h}:8207`, oidcIssuer: `http://${h}:8100`, identityApiUrl: `http://${h}:8100` };
+  return { bffUrl: `http://${h}:8200`, fulfilmentUrl: `http://${h}:8108`, mediaUrl: `http://${h}:8207`, oidcIssuer: `http://${h}:8100`, identityApiUrl: `http://${h}:8100` };
 }
 
 /** URL variables a dev/uat/prod build must set (checked by app.config.ts). */
-export const REQUIRED_URL_VARS = ['EXPO_PUBLIC_FULFILMENT_URL', 'EXPO_PUBLIC_MEDIA_URL', 'EXPO_PUBLIC_OIDC_ISSUER', 'EXPO_PUBLIC_IDENTITY_URL'] as const;
+export const REQUIRED_URL_VARS = ['EXPO_PUBLIC_BFF_URL', 'EXPO_PUBLIC_FULFILMENT_URL', 'EXPO_PUBLIC_MEDIA_URL', 'EXPO_PUBLIC_OIDC_ISSUER', 'EXPO_PUBLIC_IDENTITY_URL'] as const;
 
 export interface RawEnv {
   appEnv?: string;
+  bffUrl?: string;
   fulfilmentUrl?: string;
   mediaUrl?: string;
   oidcIssuer?: string;
@@ -55,6 +58,7 @@ export function resolveEnv(raw: RawEnv): EnvConfig {
   const url = (v: string | undefined, f: string) => pick(v, f).replace(/\/+$/, '');
   return {
     appEnv,
+    bffUrl: url(raw.bffUrl, d.bffUrl),
     fulfilmentUrl: url(raw.fulfilmentUrl, d.fulfilmentUrl),
     mediaUrl: url(raw.mediaUrl, d.mediaUrl),
     oidcIssuer: url(raw.oidcIssuer, d.oidcIssuer),
@@ -67,6 +71,7 @@ export function resolveEnv(raw: RawEnv): EnvConfig {
 
 export const env: EnvConfig = resolveEnv({
   appEnv: process.env.EXPO_PUBLIC_APP_ENV,
+  bffUrl: process.env.EXPO_PUBLIC_BFF_URL,
   fulfilmentUrl: process.env.EXPO_PUBLIC_FULFILMENT_URL,
   mediaUrl: process.env.EXPO_PUBLIC_MEDIA_URL,
   oidcIssuer: process.env.EXPO_PUBLIC_OIDC_ISSUER,

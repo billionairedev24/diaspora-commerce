@@ -124,7 +124,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Storefront: upstreams.NewStorefront(client("storefront", base)), InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)),
 		Bookings: upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
 		ListingCache: app.NewListingCache(clock.Now),
-		Clock: clock.Now, Log: log, PublishableKey: u.opts.SellerPublishableKey}
+		Clock:        clock.Now, Log: log, PublishableKey: u.opts.SellerPublishableKey}
 
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
 	sellers := app.SellerDirectory{RetailOrgID: "org_afrotransact_retail", Names: map[string]string{"org_kente": "Kente Naturals"}}
@@ -142,6 +142,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 				StaffConsoleOrigin: StaffConsoleRedirectURI},
 			AppOrigins: map[string]string{"storefront": WebOrigin, "seller-center": SellerCenterOrigin, "staff-console": StaffConsoleOrigin},
 			BFFPath:    "/api/bff", Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Clock: clock.Now, Log: log}),
+		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, upstreams.NewServiceTokens(identityClient, clientCreds)), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,

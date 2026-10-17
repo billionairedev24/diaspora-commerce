@@ -120,3 +120,18 @@ pnpm --filter @afrotransact/customer-app export:web      # build sanity check (w
 - Identity: per-category push switches (orders/restock/deals/Lola) are device-local; "sign out of all devices" has no
   API (the app signs out locally and revokes its own refresh token); see client registration above.
 - Fonts: Figtree is not bundled for native yet (system font is used).
+
+## Sign-in
+
+Email, password and the 2-step code are entered in the app (`src/app/sign-in.tsx`, `src/features/auth/SecondFactorView.tsx`).
+`src/domain/nativeSignIn.ts` posts them to gateway-bff `POST /v1/auth/native/{password,mfa/sms,mfa/verify}` with the app's
+PKCE challenge; the BFF checks them with identity's first-party sign-in API and redeems the one-time login ticket for
+`customer-app`, so the app receives an authorization code and exchanges it (with its verifier) at identity for its own
+access and refresh tokens. The first sign-in on a phone continues into setup (Face ID, passcode, notifications); later
+opens use Face ID or the passcode. Social providers, passkeys and "Create your account" still open identity's secure
+page. In mock mode any password works; `mfa…@…` emails ask for the code `123456`; the password `wrong` is rejected.
+
+A 401 never signs you out by itself: the session ends only when identity refuses the refresh token. If identity cannot be
+reached the request fails and the session is kept. A 401 on every request in local development usually means the app
+signed in at a different identity address than the one the services were started with (`MOBILE_HOST=lan`); the BFF log
+says "token not issued by …".

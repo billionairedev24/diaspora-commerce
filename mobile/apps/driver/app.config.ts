@@ -6,7 +6,7 @@ const APP_ENV = process.env.EXPO_PUBLIC_APP_ENV ?? 'local';
 
 /* A dev/uat/prod build must name its own hosts: src/config/env.ts would otherwise fall back to the local stack.
    Keep in sync with REQUIRED_URL_VARS there. */
-const REQUIRED_URL_VARS = ['EXPO_PUBLIC_FULFILMENT_URL', 'EXPO_PUBLIC_MEDIA_URL', 'EXPO_PUBLIC_OIDC_ISSUER', 'EXPO_PUBLIC_IDENTITY_URL'];
+const REQUIRED_URL_VARS = ['EXPO_PUBLIC_BFF_URL', 'EXPO_PUBLIC_FULFILMENT_URL', 'EXPO_PUBLIC_MEDIA_URL', 'EXPO_PUBLIC_OIDC_ISSUER', 'EXPO_PUBLIC_IDENTITY_URL'];
 if (APP_ENV === 'dev' || APP_ENV === 'uat' || APP_ENV === 'prod') {
   const missing = REQUIRED_URL_VARS.filter((name) => !process.env[name]?.trim());
   if (missing.length) throw new Error(`app.config: EXPO_PUBLIC_APP_ENV=${APP_ENV} needs ${missing.join(', ')} (set them in the eas.json build profile)`);

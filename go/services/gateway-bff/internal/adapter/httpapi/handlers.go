@@ -17,6 +17,9 @@ import (
 type Services struct {
 	Sessions app.SessionService
 	Auth     app.AuthService
+	// Native signs the customer and driver apps in with email and password (in-app form, no hosted page); routes are
+	// registered when set.
+	Native   app.NativeAuthService
 	Site     app.SiteService
 	Location app.LocationService
 	Search   app.SearchService
@@ -141,6 +144,11 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/auth/login", auth(h.login))
 	route("GET /v1/auth/oidc/{provider}/authorize", auth(h.socialLogin))
 	route("GET /v1/auth/oidc/callback", auth(h.callback))
+	if h.s.Native != nil {
+		route("POST /v1/auth/native/password", auth(h.nativePassword))
+		route("POST /v1/auth/native/mfa/sms", auth(h.nativeSMS))
+		route("POST /v1/auth/native/mfa/verify", auth(h.nativeVerify))
+	}
 	route("POST /v1/auth/sign-out", h.signOut)
 	route("GET /v1/auth/signed-out/{app}", auth(h.signedOut))
 	// Account

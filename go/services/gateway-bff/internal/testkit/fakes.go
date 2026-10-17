@@ -952,6 +952,57 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 			writeJSON(w, 400, map[string]any{"error": "unsupported_grant_type"})
 		}
 	})
+	// First-party sign-in API (scope auth:first-party) and the login-ticket redemption on /oauth2/authorize.
+	// adaeze@example.com / Passw0rd! signs in; mfa@example.com / Passw0rd! needs the code 123456 first.
+	mux.HandleFunc("POST /v1/auth/password", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if r.Header.Get("Authorization") != "Bearer svc-auth:first-party" || b["appClientId"] == "" || b["clientIp"] == "" {
+			problem(w, 403, "identity.first-party-client-required", "Forbidden", nil)
+			return
+		}
+		email, _ := b["email"].(string)
+		if b["password"] != "Passw0rd!" || (email != "adaeze@example.com" && email != "mfa@example.com") {
+			problem(w, 401, "identity.invalid-credentials", "Email or password is incorrect", nil)
+			return
+		}
+		if email == "mfa@example.com" {
+			writeJSON(w, 200, map[string]any{"status": "MFA_REQUIRED", "challengeId": "chal-1", "challengeExpiresAt": "2026-10-10T12:05:00Z",
+				"factors": map[string]any{"totp": true, "sms": true, "smsHint": "•••• 0142", "recoveryCode": true}})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"status": "AUTHENTICATED", "userId": "user-1", "loginTicket": "ticket-" + b["appClientId"].(string)})
+	})
+	mux.HandleFunc("POST /v1/auth/mfa/sms", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 202, map[string]any{"sentTo": "•••• 0142", "expiresAt": "2026-10-10T12:05:00Z"})
+	})
+	mux.HandleFunc("POST /v1/auth/mfa/verify", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b["challengeId"] != "chal-1" {
+			problem(w, 422, "identity.challenge-invalid", "This sign-in expired", nil)
+			return
+		}
+		if b["code"] != "123456" {
+			problem(w, 422, "identity.invalid-code", "That code isn't right", nil)
+			return
+		}
+		out := map[string]any{"status": "AUTHENTICATED", "userId": "user-1", "loginTicket": "ticket-" + b["appClientId"].(string)}
+		if b["trustDevice"] == true {
+			out["trustedDeviceToken"] = "trusted-1"
+		}
+		writeJSON(w, 200, out)
+	})
+	mux.HandleFunc("GET /oauth2/authorize", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("login_ticket") != "ticket-"+q.Get("client_id") || q.Get("code_challenge_method") != "S256" {
+			writeJSON(w, 400, map[string]any{"error": "invalid_grant"})
+			return
+		}
+		code := u.IssueCode(q.Get("code_challenge"), "", "user-1", q.Get("redirect_uri"))
+		w.Header().Set("Location", q.Get("redirect_uri")+"?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")))
+		w.WriteHeader(http.StatusFound)
+	})
 	mux.HandleFunc("POST /oauth2/revoke", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()

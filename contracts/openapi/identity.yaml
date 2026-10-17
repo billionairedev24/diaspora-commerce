@@ -2748,6 +2748,10 @@ components:
           type: string
           description: End user's User-Agent
           maxLength: 512
+        appClientId:
+          type: string
+          description: Native app the login ticket is for (customer-app, driver-app); omit for web sessions
+          maxLength: 64
           minLength: 0
       required:
       - clientIp
@@ -2871,6 +2875,10 @@ components:
         userAgent:
           type: string
           maxLength: 512
+        appClientId:
+          type: string
+          description: Native app the login ticket is for (customer-app, driver-app); omit for web sessions
+          maxLength: 64
           minLength: 0
       required:
       - challengeId

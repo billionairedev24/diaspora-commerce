@@ -150,7 +150,8 @@ class IdentityConfiguration {
 
     @Bean
     FirstPartySignInSettings firstPartySignInSettings(IdentityProperties props) {
-        return new FirstPartySignInSettings(Set.copyOf(props.firstParty().clientIds()));
+        return new FirstPartySignInSettings(Set.copyOf(props.firstParty().clientIds()),
+                Set.copyOf(props.firstParty().nativeClientIds()));
     }
 
     private static DefaultSignInThrottlePolicy.Limits limits(IdentityProperties.Limit l) {

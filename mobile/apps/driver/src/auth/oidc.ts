@@ -57,14 +57,37 @@ export async function signInWithIdentity(loginHint?: string): Promise<TokenSet> 
   return toTokenSet(tokens);
 }
 
+/** Trades the authorization code from the in-app sign-in (and its PKCE verifier) for this app's own tokens. */
+export async function exchangeSignInCode(code: string, verifier: string): Promise<TokenSet> {
+  const tokens = await AuthSession.exchangeCodeAsync({ clientId: env.oidcClientId, code, redirectUri: redirectUri(), extraParams: { code_verifier: verifier } }, await discovery());
+  return toTokenSet(tokens);
+}
+
+/** The refresh token is no longer accepted: sign in again. A network or server failure is not that: the session is kept. */
+export class SessionGone extends Error {
+  constructor() {
+    super('Your session ended');
+    this.name = 'SessionGone';
+  }
+}
+
+export function isInvalidGrant(e: unknown): boolean {
+  const code = (e as { code?: string } | null)?.code;
+  return code === 'invalid_grant' || code === 'invalid_token' || code === 'invalid_client' || code === 'unauthorized_client';
+}
+
 export async function refreshTokens(current: TokenSet): Promise<TokenSet> {
   if (env.mocks) {
     const c = decodeJwt(current.accessToken);
     return mockTokens(DEMO_DRIVERS.find((d) => d.sub === c?.sub)?.email);
   }
-  if (!current.refreshToken) throw new Error('No refresh token');
-  const r = await AuthSession.refreshAsync({ clientId: env.oidcClientId, refreshToken: current.refreshToken, scopes: SCOPES }, await discovery());
-  return toTokenSet(r, current.refreshToken);
+  if (!current.refreshToken) throw new SessionGone();
+  try {
+    const r = await AuthSession.refreshAsync({ clientId: env.oidcClientId, refreshToken: current.refreshToken, scopes: SCOPES }, await discovery());
+    return toTokenSet(r, current.refreshToken);
+  } catch (e) {
+    throw isInvalidGrant(e) ? new SessionGone() : e;
+  }
 }
 
 export async function revokeTokens(current: TokenSet): Promise<void> {
@@ -88,7 +111,7 @@ function b64url(s: string): string {
 }
 
 /** Dev mocks: demo accounts from the design (tunde = driver, daniel = ops admin with access, kofi = no access). */
-function mockTokens(email?: string): TokenSet {
+export function mockTokens(email?: string): TokenSet {
   const d = DEMO_DRIVERS.find((x) => x.email === (email ?? '').trim().toLowerCase()) ?? DEMO_DRIVERS[0];
   const exp = Math.floor(Date.now() / 1000) + 300;
   const [given, family] = (d?.name ?? 'Driver').split(' ');

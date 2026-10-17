@@ -152,6 +152,7 @@ func run() error {
 			IdentityPublicURL: cfg.OIDC.PublicURL, ClientID: cfg.OIDC.ClientID, RedirectURI: cfg.OIDC.RedirectURI,
 			RedirectURIs: cfg.RedirectURIs(), AppOrigins: cfg.AppOrigins(), BFFPath: cfg.Web.BFFPath,
 			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Applications: sellerDeps.Sellers, OrgSync: sellerDeps.Orgs, Log: log}),
+		Native: app.NewNativeAuthService(upstreams.NewNativeSignIn(identityClient, serviceTokens), app.NativeAuthOptions{}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
 			Offers: storefrontOffers, Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
 		Location: location,
