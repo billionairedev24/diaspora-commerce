@@ -1089,13 +1089,23 @@ cmd_apk() {
   out="$STATE/apk/afrotransact-$app.apk"
   cp "$built" "$out"
   echo "  ✓ $out (talks to http://$host; package com.afrotransact.$app.local)"
-  if command -v adb >/dev/null 2>&1 && adb devices | awk 'NR > 1 && $2 == "device"' | grep -q .; then
-    echo "==> installing on the connected phone"
-    adb install -r "$out"
-    echo "  ✓ installed: open \"$( [[ "$app" == customer ]] && echo AfroTransact || echo 'AfroTransact Delivery')\" on the phone"
-    return 0
+  # A phone on USB gets the app; an emulator alone does not stop the Wi-Fi download below (the phone is what you test on).
+  local serial=""
+  if command -v adb >/dev/null 2>&1; then
+    serial=$(adb devices | awk 'NR > 1 && $2 == "device" && $1 !~ /^emulator-/ {print $1; exit}')
+    if [[ -n "$serial" ]]; then
+      echo "==> installing on the phone $serial"
+      adb -s "$serial" install -r "$out"
+      echo "  ✓ installed: open \"$( [[ "$app" == customer ]] && echo AfroTransact || echo 'AfroTransact Delivery')\" on the phone"
+      return 0
+    fi
+    serial=$(adb devices | awk 'NR > 1 && $2 == "device" {print $1; exit}')
+    if [[ -n "$serial" ]]; then
+      echo "==> installing on the emulator $serial (no phone on USB; the Wi-Fi download for a phone follows)"
+      adb -s "$serial" install -r "$out" || true
+    fi
   fi
-  echo "==> no phone on USB: serving the APK on your Wi-Fi (Ctrl-C when the phone has it)"
+  echo "==> serving the APK on your Wi-Fi (Ctrl-C when the phone has it)"
   echo "  On the phone (same Wi-Fi), open:  http://$host:8765/afrotransact-$app.apk"
   echo "  Allow \"Install unknown apps\" for the browser when Android asks, then open the downloaded file."
   python3 -m http.server 8765 --bind 0.0.0.0 --directory "$STATE/apk"
