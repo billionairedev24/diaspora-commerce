@@ -297,7 +297,7 @@ describe('Seller Center while the application is in progress', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(screen.getByText('Seller Central')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Account menu/ })).not.toBeInTheDocument();
-    expect(screen.queryByText(/My account|Open the storefront/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/My account|Open AfroTransact/)).not.toBeInTheDocument();
     unmount();
     const approved = await mockApi().setActiveOrg('org-ade-kitchen');
     renderWithProviders(<Header session={approved} />);

@@ -66,7 +66,7 @@ describe('My account in Seller Center', () => {
     nav.replace.mockReset();
   });
 
-  it('keeps the account menu inside Seller Center; only the storefront link leaves it', async () => {
+  it('keeps the account menu inside Seller Center; only the AfroTransact link leaves it', async () => {
     nav.pathname = '/';
     const user = userEvent.setup();
     renderWithProviders(
@@ -80,7 +80,7 @@ describe('My account in Seller Center', () => {
     const items = await screen.findAllByRole('menuitem');
     const links = Object.fromEntries(items.map((i) => [i.textContent?.trim() ?? '', i.getAttribute('href')]));
     expect(links).toMatchObject({ 'My account': '/account', 'Sign-in & security': '/account/security', Notifications: '/account/notifications', Preferences: '/account/preferences' });
-    const storefront = items.find((i) => i.textContent?.includes('Open the storefront'));
+    const storefront = items.find((i) => i.textContent?.includes('Open AfroTransact'));
     expect(storefront).toHaveAttribute('target', '_blank');
     expect(storefront?.getAttribute('href')).toMatch(/^http/);
   });
