@@ -417,7 +417,7 @@
   "st.plans.editTitle": "Edit {name}",
   "st.plans.eligiblePlans": "Eligible plans (none = every plan)",
   "st.plans.end": "End",
-  "st.plans.features": "Features (one per line)",
+  "st.plans.features": "Features",
   "st.plans.findOrg": "Find a seller or provider",
   "st.plans.findOrgPlaceholder": "Seller or provider name, or org id",
   "st.plans.freeDays": "Free days",
@@ -716,5 +716,8 @@
   "st.plans.lolaTier": "Lola (seller assistant)",
   "st.plans.lola.ESSENTIALS": "Lola Essentials",
   "st.plans.lola.GROWTH": "Lola Growth",
-  "st.plans.lola.PRO": "Lola Pro"
+  "st.plans.lola.PRO": "Lola Pro",
+  "st.plans.moreFor": "More actions for {name}",
+  "st.plans.versions": "Versions",
+  "st.plans.subscribersCount": "{count} subscribers"
 }

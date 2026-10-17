@@ -420,7 +420,7 @@
   "st.plans.editTitle": "تعديل {name}",
   "st.plans.eligiblePlans": "الخطط المؤهلة (لا شيء = كل الخطط)",
   "st.plans.end": "إنهاء",
-  "st.plans.features": "الميزات (واحدة في كل سطر)",
+  "st.plans.features": "Features",
   "st.plans.findOrg": "ابحث عن بائع أو مقدم خدمة",
   "st.plans.findOrgPlaceholder": "اسم البائع أو مقدم الخدمة، أو معرّف المؤسسة",
   "st.plans.freeDays": "أيام مجانية",
@@ -500,7 +500,7 @@
   "st.plans.trialEnds": "نهاية التجربة",
   "st.plans.trialLength": "مدة التجربة (أيام من بدايتها)",
   "st.plans.versionNote": "ملاحظة لهذا الإصدار (اختياري)",
-  "st.plans.view": "عرض",
+  "st.plans.view": "View",
   "st.plans.visibility": "الظهور",
   "st.plans.visibility.HIDDEN": "مخفي",
   "st.plans.visibility.INVITE_ONLY": "بالدعوة فقط",
@@ -723,5 +723,8 @@
   "st.plans.lolaTier": "Lola (seller assistant)",
   "st.plans.lola.ESSENTIALS": "Lola Essentials",
   "st.plans.lola.GROWTH": "Lola Growth",
-  "st.plans.lola.PRO": "Lola Pro"
+  "st.plans.lola.PRO": "Lola Pro",
+  "st.plans.moreFor": "More actions for {name}",
+  "st.plans.versions": "Versions",
+  "st.plans.subscribersCount": "{count} subscribers"
 }

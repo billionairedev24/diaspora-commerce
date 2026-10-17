@@ -420,7 +420,7 @@
   "st.plans.editTitle": "Ṣàtúnṣe {name}",
   "st.plans.eligiblePlans": "Ètò tó yẹ (kò sí = gbogbo ètò)",
   "st.plans.end": "Parí",
-  "st.plans.features": "Àwọn ẹ̀yà (ọ̀kan ní ìlà kọ̀ọ̀kan)",
+  "st.plans.features": "Features",
   "st.plans.findOrg": "Wá olùtajà tàbí olùpèsè",
   "st.plans.findOrgPlaceholder": "Orúkọ olùtajà tàbí olùpèsè, tàbí id àjọ",
   "st.plans.freeDays": "Ọjọ́ ọ̀fẹ́",
@@ -500,7 +500,7 @@
   "st.plans.trialEnds": "Ìdánwò parí",
   "st.plans.trialLength": "Gígùn ìdánwò (ọjọ́ láti ìbẹ̀rẹ̀)",
   "st.plans.versionNote": "Àkíyèsí fún ẹ̀dà yìí (kò pọndandan)",
-  "st.plans.view": "Wò ó",
+  "st.plans.view": "View",
   "st.plans.visibility": "Ìfarahàn",
   "st.plans.visibility.HIDDEN": "Farasin",
   "st.plans.visibility.INVITE_ONLY": "Nípa ìpè nìkan",
@@ -723,5 +723,8 @@
   "st.plans.lolaTier": "Lola (seller assistant)",
   "st.plans.lola.ESSENTIALS": "Lola Essentials",
   "st.plans.lola.GROWTH": "Lola Growth",
-  "st.plans.lola.PRO": "Lola Pro"
+  "st.plans.lola.PRO": "Lola Pro",
+  "st.plans.moreFor": "More actions for {name}",
+  "st.plans.versions": "Versions",
+  "st.plans.subscribersCount": "{count} subscribers"
 }

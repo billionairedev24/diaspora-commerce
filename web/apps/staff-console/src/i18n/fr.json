@@ -420,7 +420,7 @@
   "st.plans.editTitle": "Modifier {name}",
   "st.plans.eligiblePlans": "Forfaits éligibles (aucun = tous)",
   "st.plans.end": "Terminer",
-  "st.plans.features": "Fonctionnalités (une par ligne)",
+  "st.plans.features": "Features",
   "st.plans.findOrg": "Rechercher un vendeur ou un prestataire",
   "st.plans.findOrgPlaceholder": "Nom du vendeur ou du prestataire, ou identifiant",
   "st.plans.freeDays": "Jours gratuits",
@@ -500,7 +500,7 @@
   "st.plans.trialEnds": "Fin de l’essai",
   "st.plans.trialLength": "Durée de l’essai (jours depuis le début)",
   "st.plans.versionNote": "Note pour cette version (facultatif)",
-  "st.plans.view": "Voir",
+  "st.plans.view": "View",
   "st.plans.visibility": "Visibilité",
   "st.plans.visibility.HIDDEN": "Masqué",
   "st.plans.visibility.INVITE_ONLY": "Sur invitation",
@@ -723,5 +723,8 @@
   "st.plans.lolaTier": "Lola (seller assistant)",
   "st.plans.lola.ESSENTIALS": "Lola Essentials",
   "st.plans.lola.GROWTH": "Lola Growth",
-  "st.plans.lola.PRO": "Lola Pro"
+  "st.plans.lola.PRO": "Lola Pro",
+  "st.plans.moreFor": "More actions for {name}",
+  "st.plans.versions": "Versions",
+  "st.plans.subscribersCount": "{count} subscribers"
 }

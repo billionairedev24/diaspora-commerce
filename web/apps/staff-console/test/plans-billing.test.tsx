@@ -27,7 +27,8 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const growth = await within(table).findByRole('row', { name: /Seller Growth/ });
     expect(within(growth).getByText('$39.00')).toBeInTheDocument();
     expect(within(growth).getByText('1,000 listings · AI writer · Lola Growth')).toBeInTheDocument();
-    await user.click(within(growth).getByRole('button', { name: 'New prices or trial' }));
+    await user.click(within(growth).getByRole('button', { name: 'More actions for Seller Growth' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'New prices or trial' }));
     const dialog = await screen.findByRole('dialog', { name: 'New prices or trial for Seller Growth' });
     const monthly = within(dialog).getByLabelText('Monthly ($)');
     await user.clear(monthly);
@@ -37,7 +38,20 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const plan = getStaffDb().plans.plans.find((p) => p.code === 'seller_growth');
     expect(plan).toMatchObject({ currentVersion: 2, monthlyCents: 4500 });
     expect(await within(table).findByText('$45.00')).toBeInTheDocument();
-    expect(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'Migrate subscribers' })).toBeInTheDocument();
+    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'More actions for Seller Growth' }));
+    expect(await screen.findByRole('menuitem', { name: 'Migrate subscribers' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+  });
+
+  it('shows a plan read only with View: prices, what it allows and its versions', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<CataloguePanel />);
+    const table = await screen.findByRole('table', { name: 'Plans' });
+    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'View' }));
+    const dialog = await screen.findByRole('dialog', { name: /Seller Growth/ });
+    expect(within(dialog).getByText('$39.00')).toBeInTheDocument();
+    expect(within(dialog).getByText('1,000 listings · AI writer · Lola Growth')).toBeInTheDocument();
+    expect(within(dialog).getByText('v1')).toBeInTheDocument();
   });
 
   it('edits what a plan allows: the listing cap, the AI writer and the Lola tier', async () => {
@@ -46,7 +60,8 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     const table = await screen.findByRole('table', { name: 'Plans' });
     const essentials = await within(table).findByRole('row', { name: /Seller Essentials/ });
     expect(within(essentials).getByText('50 listings · Lola Essentials')).toBeInTheDocument();
-    await user.click(within(essentials).getByRole('button', { name: 'Edit' }));
+    await user.click(within(essentials).getByRole('button', { name: 'More actions for Seller Essentials' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
     const dialog = await screen.findByRole('dialog', { name: /Edit Seller Essentials/ });
     const cap = within(dialog).getByLabelText('Live listings');
     await user.clear(cap);

@@ -420,7 +420,7 @@
   "st.plans.editTitle": "Editar {name}",
   "st.plans.eligiblePlans": "Planes elegibles (ninguno = todos)",
   "st.plans.end": "Finalizar",
-  "st.plans.features": "Funciones (una por línea)",
+  "st.plans.features": "Features",
   "st.plans.findOrg": "Buscar un vendedor o proveedor",
   "st.plans.findOrgPlaceholder": "Nombre del vendedor o proveedor, o id",
   "st.plans.freeDays": "Días gratis",
@@ -500,7 +500,7 @@
   "st.plans.trialEnds": "Fin de la prueba",
   "st.plans.trialLength": "Duración de la prueba (días desde el inicio)",
   "st.plans.versionNote": "Nota para esta versión (opcional)",
-  "st.plans.view": "Ver",
+  "st.plans.view": "View",
   "st.plans.visibility": "Visibilidad",
   "st.plans.visibility.HIDDEN": "Oculto",
   "st.plans.visibility.INVITE_ONLY": "Solo por invitación",
@@ -723,5 +723,8 @@
   "st.plans.lolaTier": "Lola (seller assistant)",
   "st.plans.lola.ESSENTIALS": "Lola Essentials",
   "st.plans.lola.GROWTH": "Lola Growth",
-  "st.plans.lola.PRO": "Lola Pro"
+  "st.plans.lola.PRO": "Lola Pro",
+  "st.plans.moreFor": "More actions for {name}",
+  "st.plans.versions": "Versions",
+  "st.plans.subscribersCount": "{count} subscribers"
 }

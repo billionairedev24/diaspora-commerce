@@ -2,7 +2,7 @@
 
 import { type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog, DotsThreeVertical, Menu, MenuItem, MenuSeparator, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -15,7 +15,7 @@ import { dateTime, humanize, money } from '@/lib/format';
 
 import { centsOf, dollarsOf, errorsOf, intOf, plansApi, STATUS_TONE, type T, usePlanRights } from './kit';
 
-type Editing = { mode: 'create' } | { mode: 'edit'; plan: StaffPlan } | { mode: 'prices'; plan: StaffPlan } | { mode: 'migrate'; plan: StaffPlan } | null;
+type Editing = { mode: 'create' } | { mode: 'view'; plan: StaffPlan } | { mode: 'edit'; plan: StaffPlan } | { mode: 'prices'; plan: StaffPlan } | { mode: 'migrate'; plan: StaffPlan } | null;
 
 const VISIBILITY: PlanVisibility[] = ['PUBLIC', 'HIDDEN', 'INVITE_ONLY'];
 
@@ -216,6 +216,54 @@ export function allowsOf(e: StaffPlanEntitlements | undefined, t: T): string {
   ].filter(Boolean).join(' · ');
 }
 
+/** Everything about a plan, read only: what it costs, what it allows, its versions and how many subscribe. */
+function PlanViewDialog({ plan, onClose, onEdit, canEdit, t }: { plan: StaffPlan | null; onClose: () => void; onEdit: (p: StaffPlan) => void; canEdit: boolean; t: T }) {
+  const row = (label: string, value: string) => (
+    <div className="flex gap-3 text-sm">
+      <dt className="w-36 shrink-0 text-muted">{label}</dt>
+      <dd className="m-0 min-w-0 flex-1">{value}</dd>
+    </div>
+  );
+  return (
+    <Dialog open={plan !== null} onOpenChange={(o) => (o ? undefined : onClose())} title={plan?.name ?? ''} description={plan ? `${plan.code} · ${t(`st.plans.kind.${plan.kind}`)}` : undefined} width={560}>
+      {plan ? (
+        <div className="flex flex-col gap-4">
+          {plan.tagline ? <p className="m-0 text-sm">{plan.tagline}</p> : null}
+          <dl className="m-0 flex flex-col gap-2">
+            {row(t('st.plans.col.status'), humanize(plan.status))}
+            {row(t('st.plans.visibility'), t(`st.plans.visibility.${plan.visibility}`))}
+            {row(t('st.plans.monthly'), money(plan.monthlyCents))}
+            {row(t('st.plans.quarterly'), money(plan.quarterlyCents))}
+            {row(t('st.plans.annual'), money(plan.annualCents))}
+            {row(t('st.plans.trialDays'), String(plan.trialDays))}
+            {row(t('st.plans.allows'), allowsOf(plan.entitlements, t))}
+            {row(t('st.plans.col.subscribers'), String(plan.subscribers))}
+          </dl>
+          {plan.features.length > 0 ? (
+            <section>
+              <strong className="text-sm">{t('st.plans.features')}</strong>
+              <ul className="m-0 mt-1 list-disc pl-5 text-sm">{plan.features.map((f) => <li key={f}>{f}</li>)}</ul>
+            </section>
+          ) : null}
+          <section>
+            <strong className="text-sm">{t('st.plans.versions')}</strong>
+            <ul className="m-0 mt-1 flex list-none flex-col gap-1 p-0 text-sm">
+              {plan.versions.map((v) => (
+                <li key={v.version} className="flex gap-3">
+                  <span className="w-10 font-semibold">v{v.version}</span>
+                  <span className="flex-1">{humanize(v.status)}{v.publishedAt ? ` · ${dateTime(v.publishedAt)}` : ''}{v.note ? ` · ${v.note}` : ''}</span>
+                  <span className="text-muted">{t('st.plans.subscribersCount', { count: v.subscribers })}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          {canEdit ? <div className="flex justify-end"><Button size="sm" onClick={() => onEdit(plan)}>{t('st.plans.edit')}</Button></div> : null}
+        </div>
+      ) : null}
+    </Dialog>
+  );
+}
+
 /** Plans: the catalogue with versions, publish, retire, migrations and what each plan allows. */
 export function CataloguePanel() {
   const t = useT();
@@ -248,19 +296,24 @@ export function CataloguePanel() {
     { id: 'status', accessorFn: (p) => p.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
     { id: 'subscribers', accessorFn: (p) => p.subscribers, header: t('st.plans.col.subscribers'), size: 110, meta: { kind: 'number', align: 'end' } },
     {
-      id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 300, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
+      id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 150, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
       cell: ({ row }) => {
         const p = row.original;
-        if (!manage) return null;
         const draft = p.versions.some((v) => v.status === 'DRAFT');
         const old = p.versions.some((v) => v.status === 'SUPERSEDED' && v.subscribers > 0);
         return (
-          <div className="flex flex-wrap gap-1">
-            <Button size="sm" variant="link" onClick={() => setEditing({ mode: 'edit', plan: p })}>{t('st.plans.edit')}</Button>
-            <Button size="sm" variant="link" onClick={() => setEditing({ mode: 'prices', plan: p })}>{t('st.plans.newVersion')}</Button>
-            {draft ? <Button size="sm" variant="link" onClick={() => act.mutate({ code: p.code, op: 'publish' })}>{t('st.plans.publish')}</Button> : null}
-            {old ? <Button size="sm" variant="link" onClick={() => setEditing({ mode: 'migrate', plan: p })}>{t('st.plans.migrate')}</Button> : null}
-            {p.status !== 'RETIRED' ? <Button size="sm" variant="link" className="text-danger" onClick={() => act.mutate({ code: p.code, op: 'retire' })}>{t('st.plans.retire')}</Button> : null}
+          <div className="flex items-center justify-end gap-1">
+            <Button size="sm" variant="neutral" onClick={() => setEditing({ mode: 'view', plan: p })}>{t('st.plans.view')}</Button>
+            {manage ? (
+              <Menu label={t('st.plans.moreFor', { name: p.name })} width={220}
+                trigger={<Button size="sm" variant="neutral" aria-label={t('st.plans.moreFor', { name: p.name })}><DotsThreeVertical size={16} weight="bold" aria-hidden /></Button>}>
+                <MenuItem onSelect={() => setEditing({ mode: 'edit', plan: p })}>{t('st.plans.edit')}</MenuItem>
+                <MenuItem onSelect={() => setEditing({ mode: 'prices', plan: p })}>{t('st.plans.newVersion')}</MenuItem>
+                {draft ? <MenuItem onSelect={() => act.mutate({ code: p.code, op: 'publish' })}>{t('st.plans.publish')}</MenuItem> : null}
+                {old ? <MenuItem onSelect={() => setEditing({ mode: 'migrate', plan: p })}>{t('st.plans.migrate')}</MenuItem> : null}
+                {p.status !== 'RETIRED' ? <><MenuSeparator /><MenuItem className="text-danger" onSelect={() => act.mutate({ code: p.code, op: 'retire' })}>{t('st.plans.retire')}</MenuItem></> : null}
+              </Menu>
+            ) : null}
           </div>
         );
       }
@@ -271,6 +324,7 @@ export function CataloguePanel() {
       <DataTable<StaffPlan> id="staff.plans.catalogue" label={t('st.plans.tab.plans')} columns={columns} data={plans.data ?? []} getRowId={(p) => p.code} rowLabel={(p) => p.name}
         state={state} mode="client" loading={plans.isPending} fetching={plans.isFetching} error={plans.isError ? <ErrorState error={plans.error} onRetry={() => void plans.refetch()} /> : undefined}
         toolbar={manage ? <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>{t('st.plans.newPlan')}</Button> : null} empty={t('st.plans.noPlans')} />
+      <PlanViewDialog plan={editing?.mode === 'view' ? editing.plan : null} onClose={() => setEditing(null)} onEdit={(p) => setEditing({ mode: 'edit', plan: p })} canEdit={manage} t={t} />
       <PlanDialog key={editing?.mode === 'edit' ? editing.plan.code : editing?.mode ?? 'none'} editing={editing} onClose={() => setEditing(null)} t={t} />
       <PricesDialog key={editing?.mode === 'prices' ? `p-${editing.plan.code}` : 'p'} plan={editing?.mode === 'prices' ? editing.plan : null} onClose={() => setEditing(null)} t={t} />
       <MigrationDialog plan={editing?.mode === 'migrate' ? editing.plan : null} onClose={() => setEditing(null)} t={t} />
