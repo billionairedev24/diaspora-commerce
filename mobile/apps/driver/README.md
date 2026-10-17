@@ -41,7 +41,7 @@ and SQLite; the web preview uses a `localStorage` outbox and the browser camera.
 
 The URLs come from the EAS build profile (`eas.json`: `development` = dev, `preview` = uat, `production` = prod;
 `development-mocks` = local on mocks); hosts per environment are in `docs/engineering/environments.md`. The code names
-no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (default `localhost`; the
+no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (when that is unset, a development phone uses the address Metro serves its JS from, `src/config/devHost.ts`, so `localhost` — the phone itself — is never tried by accident; otherwise `localhost`; the
 dev machine's LAN IP for a physical device, `10.0.2.2` for the Android emulator), and `app.config.ts` fails a dev, uat or
 prod build that leaves one of the URL variables unset.
 
