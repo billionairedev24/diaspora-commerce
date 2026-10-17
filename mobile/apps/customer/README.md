@@ -135,3 +135,8 @@ A 401 never signs you out by itself: the session ends only when identity refuses
 reached the request fails and the session is kept. A 401 on every request in local development usually means the app
 signed in at a different identity address than the one the services were started with (`MOBILE_HOST=lan`); the BFF log
 says "token not issued by …".
+
+Sign-in hardening: "Don't ask again on this phone" is off by default; the BFF limits password attempts per email (10 per
+15 minutes, independent of source IP) on top of the per-IP limit and identity's account lockout. Production must run with
+`TRUST_FORWARDED_FOR=true` only behind a proxy that overwrites `X-Forwarded-For`. Device attestation (App Attest / Play
+Integrity) is not built: it needs Apple and Google credentials.

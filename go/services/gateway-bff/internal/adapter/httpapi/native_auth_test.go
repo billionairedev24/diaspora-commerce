@@ -80,3 +80,14 @@ func TestNativeSignInValidatesTheRequest(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/auth/native/password", nativeBody(map[string]any{"codeChallenge": "short", "email": "a@b.co", "password": "x"})), 422)
 	mustStatus(t, b.do("POST", "/v1/auth/native/password", nativeBody(map[string]any{"email": "", "password": ""})), 422)
 }
+
+func TestNativeSignInIsThrottledPerEmail(t *testing.T) {
+	_, b := setup(t, testkit.Options{})
+	var last resp
+	for i := 0; i < 12; i++ {
+		last = b.do("POST", "/v1/auth/native/password", nativeBody(map[string]any{"email": "victim@example.com", "password": "guess"}))
+	}
+	mustStatus(t, last, 429)
+	// Another account is unaffected.
+	mustStatus(t, b.do("POST", "/v1/auth/native/password", nativeBody(map[string]any{"email": "adaeze@example.com", "password": "Passw0rd!"})), 200)
+}

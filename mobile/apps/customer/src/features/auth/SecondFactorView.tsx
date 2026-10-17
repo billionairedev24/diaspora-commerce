@@ -19,7 +19,7 @@ export function SecondFactorView({ factors, onBack }: { factors: Factors; onBack
   const { verifySecondFactor, sendSignInCode } = useAuth();
   const [factor, setFactor] = useState<SecondFactor>(firstFactor(factors));
   const [code, setCode] = useState('');
-  const [trust, setTrust] = useState(true);
+  const [trust, setTrust] = useState(false);
   const [busy, setBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState('');
