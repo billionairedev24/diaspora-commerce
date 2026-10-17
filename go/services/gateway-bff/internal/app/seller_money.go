@@ -254,7 +254,7 @@ func (s *sellerMoneyImpl) billingView(b port.SellerBilling, plans []port.SellerP
 	for _, p := range plans {
 		plan := domain.Plan{Code: p.Code, Name: p.Name, Tagline: p.Tagline, MonthlyMinor: p.MonthlyCents, TrialDays: p.TrialDays,
 			Features: append([]string{}, p.Features...), Prices: []domain.PlanPrice{}, Current: p.Code == b.PlanCode,
-			Entitlements: entitlementsOf(p.Entitlements)}
+			Entitlements: entitlementsOf(p.Entitlements), ChargeTerms: p.ChargeTerms}
 		for _, pr := range p.Prices {
 			plan.Prices = append(plan.Prices, priceOf(pr))
 		}

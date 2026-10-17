@@ -620,13 +620,15 @@ type SellerAppliedRate struct {
 
 // SellerNegotiatedRate is one of the organisation's negotiated rates (active or scheduled).
 type SellerNegotiatedRate struct {
-	Type     string     `json:"type"`
-	Category string     `json:"category"`
-	Label    string     `json:"label"`
-	RateBps  int        `json:"rateBps"`
-	StartsAt time.Time  `json:"startsAt"`
-	EndsAt   *time.Time `json:"endsAt"`
-	Status   string     `json:"status"`
+	Type     string `json:"type"`
+	Category string `json:"category"`
+	Label    string `json:"label"`
+	RateBps  int    `json:"rateBps"`
+	// AmountMinor is the FBA fee per unit of an FBA_FEE (nil for rates in basis points).
+	AmountMinor *int64     `json:"amountMinor"`
+	StartsAt    time.Time  `json:"startsAt"`
+	EndsAt      *time.Time `json:"endsAt"`
+	Status      string     `json:"status"`
 }
 
 // SellerRateCard is what the organisation pays on one kind of line now (commission or connection fee).

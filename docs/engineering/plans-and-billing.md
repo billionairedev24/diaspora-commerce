@@ -265,3 +265,43 @@ earlier plan fees are never withheld.
 | balance credit | `earnings-<invoice>` | Stripe (24 h); CREDITED is terminal |
 | balance debit on void | `earnings-plan-fee-release-<invoice>` | Stripe replays the key; `earnings_release` is DONE once payments released |
 | release at payments | `plan-fee-release-<invoice or credit note>` | `plan_fee_release` primary key = the key |
+
+## Plans: capabilities, charge terms and negotiated deals
+
+A plan is configuration, edited by staff in Plans & billing › Plans (and read in Plans & billing › Features, one row per
+capability, one column per plan). Everything lives in the plan's `limits`:
+
+| Area | Keys | Enforced by |
+|---|---|---|
+| Listing cap | `listings` (a number or `unlimited`) | seller service (`EntitlementsService`) and the BFF |
+| Capabilities | `bulkUpload`, `imageLibrary`, `coupons`, `aiListingWriter`, `lolaTier` | BFF `requireCap` (403 `PLAN_FEATURE_REQUIRED`), session `capabilities`, Seller Center nav |
+| Charge terms | `chargeFreeMonths`, `chargeThen` (`CHARGE`, `CHARGE_WHEN`, `WAIVE_WHILE`), `chargeMatch` (`ALL`/`ANY`), `chargeClauses` (`METRIC:amount,…`), `chargeWindowMonths` | `InvoiceIssuingServiceImpl` (`PlanChargePolicy`) |
+
+A capability a plan does not include is not shown to its members and is refused by the API. The price is set per
+version (monthly, quarterly, annual); a monthly price of $0 is a commission-only plan. Commission and FBA fee per unit
+are set per plan in Fees, commissions & tax (the commission matrix and *New version › FBA fee per unit, by plan*).
+
+### Example: Seller Growth
+
+| | |
+|---|---|
+| Price | $39/mo (quarterly $111.15, yearly $390) |
+| Charge terms | `chargeFreeMonths=3`, `chargeThen=CHARGE`: "First 3 months free, then $39/mo" |
+| Listings | up to 1,000 |
+| Unlocks | Bulk upload, Image library, Coupons, AI listing writer, Lola Growth assistant |
+| Does not get | anything else: a feature that is not ticked is hidden and returns 403 |
+| Commission | 8–12 % by category (Fees › Product commission, Seller Growth column) |
+| FBA fee | the plan's own per-unit fee, or the default |
+
+Other shapes use the same keys: *no charge until $1,000 in sales* is `chargeThen=CHARGE_WHEN`,
+`chargeClauses=GROSS_SALES:100000`; *free while 20 listings are live* is `chargeThen=WAIVE_WHILE`,
+`chargeClauses=ACTIVE_LISTINGS:20`; *3 months free, then charge only once 20 listings or $1,000 in sales* is
+`chargeFreeMonths=3`, `chargeThen=CHARGE_WHEN`, `chargeMatch=ANY`, `chargeClauses=ACTIVE_LISTINGS:20,GROSS_SALES:100000`.
+A staff charge condition on one organisation (charge gate, free months) replaces the plan's terms for it.
+
+### Negotiated deals (one organisation)
+
+- Commission, connection fee and **FBA fee per unit**: Fees › Negotiated rates (dated, with a reason, audited).
+  A negotiated FBA fee applies to every FBA line of the organisation and wins over its plan's FBA fee.
+- Plan price, capabilities and charge terms: *Negotiate plan* on the seller's billing panel makes a private
+  (invite-only) copy of a catalogue plan, including its charge terms; edit that plan to change what it unlocks or charges.

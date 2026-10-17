@@ -45,6 +45,7 @@ public final class PlanCatalogRules {
                     + "characters");
         } else {
             e.putAll(PlanEntitlements.validate(in.limits()));
+            e.putAll(PlanChargePolicy.validateLimits(in.limits()));
         }
         throwIfAny(e);
     }

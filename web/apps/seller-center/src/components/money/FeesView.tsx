@@ -63,7 +63,7 @@ function NegotiatedList({ rates, t }: { rates: SellerNegotiatedRate[]; t: T }) {
             {r.endsAt ? t('sc.fees.negotiatedPeriod', { from: shortDate(r.startsAt), to: shortDate(r.endsAt) }) : t('sc.fees.negotiatedFrom', { from: shortDate(r.startsAt) })}
           </span>
           <StatusPill tone={r.status === 'ACTIVE' ? 'good' : 'info'}>{t(`sc.fees.negotiatedStatus.${r.status}`)}</StatusPill>
-          <strong className="w-16 text-right">{formatBps(r.rateBps)}</strong>
+          <strong className="w-24 text-right">{r.amountMinor === null ? formatBps(r.rateBps) : t('sc.fees.perUnit', { amount: money(r.amountMinor) })}</strong>
         </li>
       ))}
     </ul>

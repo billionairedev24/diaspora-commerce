@@ -414,7 +414,7 @@ export function mockConnectionFees(): SellerRateCard {
     kind: 'SERVICE', version: 2, effectiveFrom: '2026-08-01T05:00:00Z', planCode: 'provider_studio', planName: 'Provider Studio',
     other: { category: '', label: 'Other services', bps: 800, source: 'PLAN', planCode: 'provider_studio', planName: 'Provider Studio', negotiatedUntil: null },
     categories: [{ category: 'hair & beauty', label: 'Hair & beauty', bps: 700, source: 'OVERRIDE', planCode: 'provider_studio', planName: 'Provider Studio', negotiatedUntil: MOCK_NEGOTIATED_UNTIL }],
-    negotiated: [{ type: 'CONNECTION_FEE', category: 'hair & beauty', label: 'Hair & beauty', rateBps: 700, startsAt: '2026-10-01T00:00:00Z', endsAt: MOCK_NEGOTIATED_UNTIL, status: 'ACTIVE' }]
+    negotiated: [{ type: 'CONNECTION_FEE', category: 'hair & beauty', label: 'Hair & beauty', rateBps: 700, amountMinor: null, startsAt: '2026-10-01T00:00:00Z', endsAt: MOCK_NEGOTIATED_UNTIL, status: 'ACTIVE' }]
   };
 }
 
@@ -513,7 +513,7 @@ function sellerFees(kind: string, now: Date): SellerFeesView {
     negotiated:
       kind === 'PROVIDER'
         ? []
-        : [{ type: 'COMMISSION', category: 'groceries', label: 'Groceries', rateBps: 700, startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-12-31T23:59:59Z', status: 'ACTIVE' }],
+        : [{ type: 'COMMISSION', category: 'groceries', label: 'Groceries', rateBps: 700, amountMinor: null, startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-12-31T23:59:59Z', status: 'ACTIVE' }, { type: 'FBA_FEE', category: '*', label: 'All categories', rateBps: 0, amountMinor: 250, startsAt: '2026-10-01T00:00:00Z', endsAt: null, status: 'ACTIVE' }],
     connectionFees: kind === 'PROVIDER' ? mockConnectionFees() : null
   };
 }

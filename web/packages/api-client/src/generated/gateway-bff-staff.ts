@@ -3666,11 +3666,13 @@ export interface components {
             name: string;
             tagline?: string | null;
             features: string[];
-            /** @description The plan's settings. `listings` (a number or `unlimited`), `bulkUpload`, `imageLibrary`, `coupons` and `aiListingWriter` (`true`/`false`) and `lolaTier` (`NONE`, `ESSENTIALS`, `GROWTH`, `PRO`) are the capabilities the platform enforces; any other key is shown as plan information. The plan's `features` list is derived from them (only what the plan allows is listed), whatever is sent. */
+            /** @description The plan's settings. `listings` (a number or `unlimited`), `bulkUpload`, `imageLibrary`, `coupons` and `aiListingWriter` (`true`/`false`) and `lolaTier` (`NONE`, `ESSENTIALS`, `GROWTH`, `PRO`) are the capabilities the platform enforces; any other key is shown as plan information. The plan's `features` list is derived from them (only what the plan allows is listed), whatever is sent. Charge terms are the keys `chargeFreeMonths` (months free first), `chargeThen` (`CHARGE`, `CHARGE_WHEN`: start charging once the condition is met, `WAIVE_WHILE`: free while it holds), `chargeMatch` (`ALL`/`ANY`), `chargeClauses` (`METRIC:amount,…` with METRIC one of GROSS_SALES (cents), COMPLETED_ORDERS, COMPLETED_BOOKINGS, ACTIVE_LISTINGS) and `chargeWindowMonths` (sales and orders counted over the last N months). */
             limits?: {
                 [key: string]: string;
             };
             entitlements?: components["schemas"]["StaffPlanEntitlements"];
+            /** @description What the plan charges, in words (free months and conditions), from its charge* limits */
+            chargeTerms?: string;
             /** @enum {string} */
             visibility: "PUBLIC" | "HIDDEN" | "INVITE_ONLY";
             /** @enum {string} */

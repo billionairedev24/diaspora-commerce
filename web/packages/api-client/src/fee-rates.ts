@@ -183,6 +183,8 @@ export const SellerNegotiatedRateSchema = z.object({
   category: z.string(),
   label: z.string(),
   rateBps: z.number().int(),
+  /** FBA_FEE: the fee per unit in minor units; null for rates in basis points. */
+  amountMinor: z.number().int().nullable().default(null),
   startsAt: z.string(),
   endsAt: nullableString,
   status: NegotiatedRateStatusSchema

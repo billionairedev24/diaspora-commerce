@@ -92,7 +92,7 @@ const off = { bulkUpload: 'false', imageLibrary: 'false', coupons: 'false' };
 const on = { bulkUpload: 'true', imageLibrary: 'true', coupons: 'true' };
 const LIMITS: Record<string, Record<string, string>> = {
   seller_essentials: { listings: '50', aiListingWriter: 'false', lolaTier: 'ESSENTIALS', ...off },
-  seller_growth: { listings: '1000', aiListingWriter: 'true', lolaTier: 'GROWTH', ...on },
+  seller_growth: { listings: '1000', aiListingWriter: 'true', lolaTier: 'GROWTH', ...on, chargeFreeMonths: '3', chargeThen: 'CHARGE' },
   seller_pro: { listings: 'unlimited', aiListingWriter: 'true', lolaTier: 'PRO', ...on },
   provider_solo: { listings: '20', aiListingWriter: 'false', lolaTier: 'ESSENTIALS', ...off },
   provider_studio: { listings: '100', aiListingWriter: 'true', lolaTier: 'GROWTH', ...off },

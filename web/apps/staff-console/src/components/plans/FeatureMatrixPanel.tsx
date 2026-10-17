@@ -1,6 +1,6 @@
 'use client';
 
-import { type StaffPlan, type StaffPlanEntitlements, staffPlanQueries } from '@afrotransact/api-client';
+import { chargeTermsOf, type StaffPlan, type StaffPlanEntitlements, staffPlanQueries } from '@afrotransact/api-client';
 import { useQuery } from '@tanstack/react-query';
 
 import { Card } from '@/components/ui/Card';
@@ -67,6 +67,12 @@ export function FeatureMatrixPanel() {
                     })}
                   </tr>
                 ))}
+                <tr className="border-t border-border">
+                  <th scope="row" className="px-3 py-2 text-left font-medium">{t('st.plans.charges.preview')}</th>
+                  {g.plans.map((p) => (
+                    <td key={p.code} className="px-3 py-2 text-center text-xs">{chargeTermsOf(p.limits, p.monthlyCents)}</td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </div>

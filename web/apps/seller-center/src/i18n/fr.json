@@ -423,6 +423,8 @@
   "sc.fees.negotiatedHelp": "Convenus avec AfroTransact. Ils remplacent les taux de votre forfait et de la catégorie tant qu’ils sont actifs.",
   "sc.fees.negotiatedType.COMMISSION": "Commission",
   "sc.fees.negotiatedType.CONNECTION_FEE": "Frais de mise en relation",
+  "sc.fees.negotiatedType.FBA_FEE": "Frais FBA",
+  "sc.fees.perUnit": "{amount} / unité",
   "sc.fees.negotiatedPeriod": "du {from} au {to}",
   "sc.fees.negotiatedFrom": "À partir du {from}",
   "sc.fees.negotiatedStatus.ACTIVE": "Actif",

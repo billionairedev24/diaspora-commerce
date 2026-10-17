@@ -403,6 +403,8 @@ type SellerPlan struct {
 	Visibility string `json:"visibility"`
 	// Entitlements is what the plan allows (listing cap, AI listing writer, Lola tier).
 	Entitlements *SellerEntitlements `json:"entitlements"`
+	// ChargeTerms is what the plan charges in words (free months, conditions); empty when the seller service did not say.
+	ChargeTerms string `json:"chargeTerms"`
 }
 
 // SellerPaymentMethod is seller's PaymentMethod.

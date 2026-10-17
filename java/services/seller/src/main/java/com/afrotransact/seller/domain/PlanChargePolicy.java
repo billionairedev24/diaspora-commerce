@@ -169,4 +169,108 @@ public record PlanChargePolicy(int freeMonths, Then then, Match match, List<Clau
         }
         return e;
     }
+
+    public static final String FREE_MONTHS = "chargeFreeMonths";
+    public static final String THEN = "chargeThen";
+    public static final String MATCH = "chargeMatch";
+    public static final String WINDOW_MONTHS = "chargeWindowMonths";
+    public static final String CLAUSES = "chargeClauses";
+
+    /** Reads the policy from a plan's limits; a missing or malformed value means the plan always charges. */
+    public static PlanChargePolicy of(Map<String, String> limits) {
+        if (limits == null || limits.isEmpty()) {
+            return ALWAYS;
+        }
+        try {
+            int free = limits.containsKey(FREE_MONTHS) ? Integer.parseInt(limits.get(FREE_MONTHS).trim()) : 0;
+            Then then = limits.containsKey(THEN) ? Then.valueOf(limits.get(THEN).trim()) : Then.CHARGE;
+            Match match = limits.containsKey(MATCH) ? Match.valueOf(limits.get(MATCH).trim()) : Match.ALL;
+            Integer window = limits.containsKey(WINDOW_MONTHS) && !limits.get(WINDOW_MONTHS).isBlank()
+                    ? Integer.valueOf(limits.get(WINDOW_MONTHS).trim()) : null;
+            List<Clause> clauses = new ArrayList<>();
+            String raw = limits.get(CLAUSES);
+            if (raw != null && !raw.isBlank()) {
+                for (String part : raw.split(",")) {
+                    String[] kv = part.trim().split(":");
+                    clauses.add(new Clause(RewardMetric.valueOf(kv[0].trim()), Long.parseLong(kv[1].trim())));
+                }
+            }
+            return new PlanChargePolicy(free, then, match, clauses, window);
+        } catch (RuntimeException e) {
+            return ALWAYS;
+        }
+    }
+
+    /** The limits keys that hold this policy (nothing for the plain charge-always policy). */
+    public Map<String, String> toLimits() {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (isPlainCharge()) {
+            return out;
+        }
+        out.put(FREE_MONTHS, Integer.toString(freeMonths));
+        out.put(THEN, then.name());
+        if (!clauses.isEmpty()) {
+            out.put(MATCH, match.name());
+            StringBuilder sb = new StringBuilder();
+            for (Clause c : clauses) {
+                sb.append(sb.isEmpty() ? "" : ",").append(c.metric().name()).append(':').append(c.threshold());
+            }
+            out.put(CLAUSES, sb.toString());
+        }
+        if (windowMonths != null) {
+            out.put(WINDOW_MONTHS, windowMonths.toString());
+        }
+        return out;
+    }
+
+    /** Field errors of the charge keys in {@code limits} (keys {@code chargePolicy.*}); empty when valid. */
+    public static Map<String, String> validateLimits(Map<String, String> limits) {
+        if (limits == null || limits.keySet().stream().noneMatch(k -> k.startsWith("charge"))) {
+            return Map.of();
+        }
+        Map<String, String> errors = new LinkedHashMap<>();
+        try {
+            Integer.parseInt(limits.getOrDefault(FREE_MONTHS, "0").trim());
+        } catch (NumberFormatException e) {
+            errors.put("chargePolicy.freeMonths", "A whole number of months");
+        }
+        try {
+            Then.valueOf(limits.getOrDefault(THEN, "CHARGE").trim());
+            Match.valueOf(limits.getOrDefault(MATCH, "ALL").trim());
+        } catch (IllegalArgumentException e) {
+            errors.put("chargePolicy.then", "CHARGE, CHARGE_WHEN or WAIVE_WHILE (and ALL or ANY)");
+        }
+        String window = limits.get(WINDOW_MONTHS);
+        if (window != null && !window.isBlank()) {
+            try {
+                Integer.parseInt(window.trim());
+            } catch (NumberFormatException e) {
+                errors.put("chargePolicy.windowMonths", "A whole number of months");
+            }
+        }
+        String raw = limits.get(CLAUSES);
+        if (raw != null && !raw.isBlank()) {
+            for (String part : raw.split(",")) {
+                try {
+                    String[] kv = part.trim().split(":");
+                    RewardMetric.valueOf(kv[0].trim());
+                    Long.parseLong(kv[1].trim());
+                } catch (RuntimeException e) {
+                    errors.put("chargePolicy.clauses", "Use METRIC:amount, e.g. ACTIVE_LISTINGS:20");
+                }
+            }
+        }
+        if (errors.isEmpty()) {
+            errors.putAll(of(limits).validate());
+        }
+        return errors;
+    }
+
+    /** What the plan charges, in a sentence: "$39/mo", "First 3 months free, then $39/mo", or commission only. */
+    public static String termsOf(Plan plan) {
+        if (plan.monthlyCents() <= 0) {
+            return "No monthly fee — commission only";
+        }
+        return of(plan.limits()).summary(PlanPricing.usd(plan.monthlyCents()) + "/mo");
+    }
 }

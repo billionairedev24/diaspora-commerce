@@ -17,6 +17,7 @@ import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.InvoicePayment;
 import com.afrotransact.seller.domain.PaymentMethod;
 import com.afrotransact.seller.domain.PaymentSource;
+import com.afrotransact.seller.domain.PlanChargePolicy;
 import com.afrotransact.seller.domain.PlanEntitlements;
 import com.afrotransact.seller.domain.PlanPricing;
 import com.afrotransact.seller.domain.PlanQuote;
@@ -75,7 +76,9 @@ final class BillingDtos {
                         int trialDays, List<String> features, List<PriceView> prices,
                         @Schema(description = "Current version (prices)") int version,
                         @Schema(allowableValues = {"PUBLIC", "HIDDEN", "INVITE_ONLY"}) String visibility,
-                        Map<String, String> limits, EntitlementsView entitlements) {
+                        Map<String, String> limits, EntitlementsView entitlements,
+                        @Schema(description = "What the plan charges, in words (free months, conditions)")
+                        String chargeTerms) {
 
         static PlanResponse of(PlanOffer o) {
             var p = o.plan();
@@ -85,7 +88,7 @@ final class BillingDtos {
             }
             return new PlanResponse(p.code(), p.kind().name(), p.name(), p.tagline(), p.monthlyCents(), o.trialDays(),
                     PlanEntitlements.of(p.limits()).featureList(), prices, p.version(), p.visibility().name(),
-                    p.limits(), EntitlementsView.of(PlanEntitlements.of(p.limits())));
+                    p.limits(), EntitlementsView.of(PlanEntitlements.of(p.limits())), PlanChargePolicy.termsOf(p));
         }
     }
 

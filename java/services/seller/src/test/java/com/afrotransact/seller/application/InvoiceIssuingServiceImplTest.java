@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -34,7 +35,9 @@ import com.afrotransact.seller.domain.UsageDay;
 import com.afrotransact.seller.domain.UsageMeter;
 import com.afrotransact.seller.port.BillingGrantRepository;
 import com.afrotransact.seller.port.InvoiceRepository;
+import com.afrotransact.seller.port.PlanPolicyStateRepository;
 import com.afrotransact.seller.port.PlanRepository;
+import com.afrotransact.seller.port.SellerMetricRepository;
 import com.afrotransact.seller.port.UsageRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -51,8 +54,10 @@ class InvoiceIssuingServiceImplTest {
     private final BillingGrantRepository grants = mock(BillingGrantRepository.class);
     private final UsageRepository usage = mock(UsageRepository.class);
     private final ChargeGateEvaluator gates = mock(ChargeGateEvaluator.class);
+    private final PlanPolicyStateRepository policyState = mock(PlanPolicyStateRepository.class);
+    private final SellerMetricRepository metrics = mock(SellerMetricRepository.class);
     private final InvoiceIssuingServiceImpl service = new InvoiceIssuingServiceImpl(plans, invoices, grants, usage,
-            gates, Clock.fixed(NOW, ZoneOffset.UTC));
+            gates, policyState, metrics, Clock.fixed(NOW, ZoneOffset.UTC));
     private final Plan growth = Plan.standard("seller_growth", OrgKind.SELLER, "Growth", null, 4900, 30, List.of(), 2);
 
     InvoiceIssuingServiceImplTest() {
@@ -61,6 +66,7 @@ class InvoiceIssuingServiceImplTest {
         when(invoices.nextNumber()).thenReturn(1001L);
         when(invoices.findById(any())).thenReturn(Optional.empty());
         when(gates.decide("org_1", NOW)).thenReturn(Optional.empty());
+        when(policyState.metAt(any())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -114,6 +120,39 @@ class InvoiceIssuingServiceImplTest {
         assertThat(issued.lines()).extracting(InvoiceLine::kind).containsExactly(InvoiceLine.PLAN, InvoiceLine.WAIVER);
         assertThat(issued.lines().get(1).description()).contains("$1,000 in sales");
         verify(gates).afterIssue("org_1", held, NOW);
+    }
+
+    @Test
+    void aPlanWithFreeMonthsWaivesThePlanFeeAndSaysWhy() {
+        Plan promo = new Plan("seller_growth", OrgKind.SELLER, "Growth", null, 1, 4900, 13965, 49000, 0, List.of(), 2,
+                null, null, Map.of("chargeFreeMonths", "3", "chargeThen", "CHARGE"));
+        when(plans.find("seller_growth", 1)).thenReturn(Optional.of(promo));
+        Invoice issued = issue();
+        assertThat(issued.amountDueCents()).isZero();
+        assertThat(issued.lines()).extracting(InvoiceLine::kind).containsExactly(InvoiceLine.PLAN, InvoiceLine.WAIVER);
+        assertThat(issued.lines().get(1).description()).contains("Free for your first 3 months");
+    }
+
+    @Test
+    void aPlanThatStartsChargingWhenTheConditionIsMetRemembersIt() {
+        Plan promo = new Plan("seller_growth", OrgKind.SELLER, "Growth", null, 1, 4900, 13965, 49000, 0, List.of(), 2,
+                null, null, Map.of("chargeThen", "CHARGE_WHEN", "chargeClauses", "ACTIVE_LISTINGS:20"));
+        when(plans.find("seller_growth", 1)).thenReturn(Optional.of(promo));
+        when(metrics.activeListings("org_1")).thenReturn(5L);
+        assertThat(issue().amountDueCents()).as("below the condition").isZero();
+        verify(policyState, never()).markMet(any(), any());
+        when(metrics.activeListings("org_1")).thenReturn(25L);
+        assertThat(service.issue(sub(Cadence.MONTHLY), START.plusSeconds(1), END, Invoice.REASON_CYCLE)).isPresent();
+        verify(policyState).markMet("org_1", NOW);
+    }
+
+    @Test
+    void anOrganisationGateReplacesThePlanTerms() {
+        Plan promo = new Plan("seller_growth", OrgKind.SELLER, "Growth", null, 1, 4900, 13965, 49000, 0, List.of(), 2,
+                null, null, Map.of("chargeFreeMonths", "3"));
+        when(plans.find("seller_growth", 1)).thenReturn(Optional.of(promo));
+        when(gates.decide("org_1", NOW)).thenReturn(Optional.of(new ChargeGate.Decision(true, null, false, false)));
+        assertThat(issue().amountDueCents()).isEqualTo(4900);
     }
 
     @Test

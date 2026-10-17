@@ -436,6 +436,8 @@
   "sc.fees.negotiatedHelp": "Agreed with AfroTransact. They apply instead of your plan and category rates while active.",
   "sc.fees.negotiatedType.COMMISSION": "Commission",
   "sc.fees.negotiatedType.CONNECTION_FEE": "Connection fee",
+  "sc.fees.negotiatedType.FBA_FEE": "FBA fee",
+  "sc.fees.perUnit": "{amount} / unit",
   "sc.fees.negotiatedPeriod": "{from} – {to}",
   "sc.fees.negotiatedFrom": "From {from}",
   "sc.fees.negotiatedStatus.ACTIVE": "Active",

@@ -11,6 +11,7 @@ import com.afrotransact.seller.domain.CampaignInput;
 import com.afrotransact.seller.domain.CampaignStatus;
 import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.domain.Plan;
+import com.afrotransact.seller.domain.PlanChargePolicy;
 import com.afrotransact.seller.domain.PlanEntitlements;
 import com.afrotransact.seller.domain.PlanInput;
 import com.afrotransact.seller.domain.PlanPricesInput;
@@ -84,8 +85,8 @@ final class PlanAdminDtos {
 
     @Schema(name = "PlanAdmin", description = "A plan for staff: metadata, versions with prices, invites")
     record PlanAdminResponse(String code, String kind, String name, String tagline, List<String> features,
-                             Map<String, String> limits, BillingDtos.EntitlementsView entitlements, String visibility,
-                             String status, int sortOrder,
+                             Map<String, String> limits, BillingDtos.EntitlementsView entitlements,
+                             String chargeTerms, String visibility, String status, int sortOrder,
                              int currentVersion, long monthlyCents, long quarterlyCents, long annualCents,
                              int trialDays, long rowVersion, long subscribers,
                              List<String> invites, List<VersionView> versions) {
@@ -94,8 +95,8 @@ final class PlanAdminDtos {
             Plan p = v.plan();
             return new PlanAdminResponse(p.code(), p.kind().name(), p.name(), p.tagline(),
                     PlanEntitlements.of(p.limits()).featureList(), p.limits(),
-                    BillingDtos.EntitlementsView.of(PlanEntitlements.of(p.limits())), p.visibility().name(),
-                    p.status().name(), p.sortOrder(), p.version(), p.monthlyCents(), p.quarterlyCents(),
+                    BillingDtos.EntitlementsView.of(PlanEntitlements.of(p.limits())), PlanChargePolicy.termsOf(p),
+                    p.visibility().name(), p.status().name(), p.sortOrder(), p.version(), p.monthlyCents(), p.quarterlyCents(),
                     p.annualCents(), p.trialDays(), v.rowVersion(),
                     v.subscribers(), v.invites(), v.versions().stream().map(VersionView::of).toList());
         }

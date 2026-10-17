@@ -751,6 +751,8 @@ type Plan struct {
 	Current      bool        `json:"current"`
 	// Entitlements is what the plan allows: the live-listing cap, the AI listing writer and Lola's tier.
 	Entitlements *PlanEntitlementsView `json:"entitlements"`
+	// ChargeTerms is what the plan charges, in words: "First 3 months free, then $39/mo", or commission only.
+	ChargeTerms string `json:"chargeTerms"`
 }
 
 // BillingPaymentMethod is a card or bank account the plan is charged to.

@@ -423,6 +423,8 @@
   "sc.fees.negotiatedHelp": "متفق عليها مع AfroTransact. تُطبَّق بدل أسعار خطتك والفئة طالما كانت سارية.",
   "sc.fees.negotiatedType.COMMISSION": "العمولة",
   "sc.fees.negotiatedType.CONNECTION_FEE": "رسوم الربط",
+  "sc.fees.negotiatedType.FBA_FEE": "رسوم FBA",
+  "sc.fees.perUnit": "{amount} / وحدة",
   "sc.fees.negotiatedPeriod": "{from} – {to}",
   "sc.fees.negotiatedFrom": "من {from}",
   "sc.fees.negotiatedStatus.ACTIVE": "سارٍ",

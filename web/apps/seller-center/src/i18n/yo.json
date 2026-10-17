@@ -423,6 +423,8 @@
   "sc.fees.negotiatedHelp": "A gbà wọ́n pẹ̀lú AfroTransact. Wọ́n ló ń ṣiṣẹ́ dípò ìdíyelé ètò àti ẹ̀ka rẹ nígbà tí wọ́n bá ń ṣiṣẹ́.",
   "sc.fees.negotiatedType.COMMISSION": "Kọmíṣọ̀n",
   "sc.fees.negotiatedType.CONNECTION_FEE": "Owó ìsopọ̀",
+  "sc.fees.negotiatedType.FBA_FEE": "Owó FBA",
+  "sc.fees.perUnit": "{amount} / ẹyọ kan",
   "sc.fees.negotiatedPeriod": "{from} – {to}",
   "sc.fees.negotiatedFrom": "Láti {from}",
   "sc.fees.negotiatedStatus.ACTIVE": "Ń ṣiṣẹ́",

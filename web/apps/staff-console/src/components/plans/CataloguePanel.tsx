@@ -1,6 +1,6 @@
 'use client';
 
-import { planFeatureList, type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
+import { CHARGE_KEYS, CHARGE_METRICS, type ChargeMetric, type ChargePolicy, chargePolicyLimits, chargePolicyOf, chargeTermsOf, planFeatureList, type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, DotsThreeVertical, Menu, MenuItem, MenuSeparator, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -19,6 +19,29 @@ type Editing = { mode: 'create' } | { mode: 'view'; plan: StaffPlan } | { mode: 
 
 const VISIBILITY: PlanVisibility[] = ['PUBLIC', 'HIDDEN', 'INVITE_ONLY'];
 
+type ChargeRow = { rowId: number; metric: ChargeMetric; amount: string };
+let chargeRowSeq = 0;
+
+/** The plan's charge terms as form text: sales in dollars, counts as they are. */
+function chargeFormOf(plan: StaffPlan | null) {
+  const p = chargePolicyOf(plan?.limits);
+  return {
+    freeMonths: String(p.freeMonths), chargeThen: p.then as ChargePolicy['then'], chargeMatch: p.match as ChargePolicy['match'], chargeWindow: p.windowMonths === null ? '' : String(p.windowMonths),
+    conditions: p.clauses.map((c): ChargeRow => ({ rowId: ++chargeRowSeq, metric: c.metric, amount: c.metric === 'GROSS_SALES' ? String(c.threshold / 100) : String(c.threshold) }))
+  };
+}
+
+/** The policy the form describes, or null when a condition amount is not a positive number. */
+function chargePolicyFrom(f: { freeMonths: string; chargeThen: ChargePolicy['then']; chargeMatch: ChargePolicy['match']; chargeWindow: string; conditions: ChargeRow[] }): ChargePolicy | null {
+  const free = Number.parseInt(f.freeMonths || '0', 10);
+  if (!Number.isInteger(free) || free < 0 || free > 36) return null;
+  const clauses = f.conditions.map((c) => ({ metric: c.metric, threshold: Math.round(Number(c.amount) * (c.metric === 'GROSS_SALES' ? 100 : 1)) }));
+  if (f.chargeThen !== 'CHARGE' && (clauses.length === 0 || clauses.some((c) => !(c.threshold > 0)))) return null;
+  const window = f.chargeWindow.trim() ? Number.parseInt(f.chargeWindow, 10) : null;
+  if (window !== null && !(window >= 1 && window <= 24)) return null;
+  return { freeMonths: free, then: f.chargeThen, match: f.chargeMatch, clauses: f.chargeThen === 'CHARGE' ? [] : clauses, windowMonths: f.chargeThen === 'CHARGE' ? null : window };
+}
+
 /** Create a plan, or edit its name, tagline, features, visibility and order (prices and trial are versioned: see PricesDialog). */
 function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => void; t: T }) {
   const qc = useQueryClient();
@@ -30,7 +53,8 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
     sortOrder: String(plan?.sortOrder ?? 100), monthly: '', quarterly: '', annual: '', trialDays: '30',
     unlimited: plan?.entitlements?.listingsUnlimited ?? false, listings: String(plan?.entitlements?.listings ?? 50), aiWriter: plan?.entitlements?.aiListingWriter ?? false,
     lola: plan?.entitlements?.lolaTier ?? 'ESSENTIALS', bulkUpload: plan?.entitlements?.bulkUpload ?? false, imageLibrary: plan?.entitlements?.imageLibrary ?? false,
-    coupons: plan?.entitlements?.coupons ?? false
+    coupons: plan?.entitlements?.coupons ?? false,
+    ...chargeFormOf(plan)
   }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useMutation({
@@ -39,7 +63,10 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
       if (!f.unlimited && (cap == null || Number.isNaN(cap) || cap < 0)) throw new Error(t('st.plans.badListings'));
       // Entitlements live in `limits` (the seller service enforces them); other keys stay as plan information.
       const seller = f.kind === 'SELLER';
-      const limits = { ...(plan?.limits ?? {}), listings: f.unlimited ? 'unlimited' : String(cap), aiListingWriter: String(f.aiWriter), lolaTier: f.lola,
+      const policy = chargePolicyFrom(f);
+      if (!policy) throw new Error(f.chargeThen !== 'CHARGE' && f.conditions.length === 0 ? t('st.plans.charges.needCondition') : t('st.plans.charges.badFree'));
+      const kept = Object.fromEntries(Object.entries(plan?.limits ?? {}).filter(([k]) => !(CHARGE_KEYS as readonly string[]).includes(k)));
+      const limits = { ...kept, ...chargePolicyLimits(policy), listings: f.unlimited ? 'unlimited' : String(cap), aiListingWriter: String(f.aiWriter), lolaTier: f.lola,
         bulkUpload: String(seller && f.bulkUpload), imageLibrary: String(seller && f.imageLibrary), coupons: String(seller && f.coupons) };
       // The plan's feature list is derived from what it includes (the server does it too): nothing is typed.
       const meta = { name: f.name.trim(), tagline: f.tagline.trim() || null, features: [] as string[],
@@ -109,6 +136,40 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
             <strong className="block text-xs uppercase text-muted">{t('st.plans.membersSee')}</strong>
             {planFeatureList({ listings: f.unlimited ? null : intOf(f.listings) ?? 0, listingsUnlimited: f.unlimited, aiListingWriter: f.aiWriter, lolaTier: f.lola,
               bulkUpload: f.kind === 'SELLER' && f.bulkUpload, imageLibrary: f.kind === 'SELLER' && f.imageLibrary, coupons: f.kind === 'SELLER' && f.coupons }).join(' · ')}
+          </div>
+        </fieldset>
+        <fieldset className="m-0 flex flex-col gap-3 rounded-md border border-border p-3">
+          <legend className="px-1 text-sm font-semibold">{t('st.plans.charges')}</legend>
+          <p className="m-0 text-xs text-muted">{t('st.plans.charges.help')}</p>
+          <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
+            <TextField id="plan-free-months" label={t('st.plans.charges.free')} inputMode="numeric" value={f.freeMonths} error={errors['chargePolicy.freeMonths']} onChange={set('freeMonths')} />
+            <Select id="plan-charge-then" label={t('st.plans.charges.then')} value={f.chargeThen} onChange={set('chargeThen')}
+              options={(['CHARGE', 'CHARGE_WHEN', 'WAIVE_WHILE'] as const).map((v) => ({ value: v, label: t(`st.plans.charges.then.${v}`) }))} />
+          </div>
+          {f.chargeThen !== 'CHARGE' ? (
+            <div className="flex flex-col gap-2">
+              <Select id="plan-charge-match" label={t('st.plans.charges.match')} value={f.chargeMatch} onChange={set('chargeMatch')}
+                options={(['ALL', 'ANY'] as const).map((v) => ({ value: v, label: t(`st.plans.charges.match.${v}`) }))} />
+              {f.conditions.map((c, i) => (
+                <div key={c.rowId} className="grid grid-cols-[1fr_8rem_auto] items-end gap-x-2">
+                  <Select id={`plan-cond-metric-${i}`} label={t('st.plans.charges.metric')} value={c.metric}
+                    onChange={(e) => { const v = e.currentTarget.value as ChargeMetric; setF((x) => ({ ...x, conditions: x.conditions.map((r) => (r.rowId === c.rowId ? { ...r, metric: v } : r)) })); }}
+                    options={CHARGE_METRICS.map((v) => ({ value: v, label: t(`st.plans.charges.metric.${v}`) }))} />
+                  <TextField id={`plan-cond-amount-${i}`} label={t('st.plans.charges.amount')} inputMode="decimal" value={c.amount}
+                    onChange={(e) => { const v = e.currentTarget.value; setF((x) => ({ ...x, conditions: x.conditions.map((r) => (r.rowId === c.rowId ? { ...r, amount: v } : r)) })); }} />
+                  <Button variant="neutral" size="sm" className="mb-[calc(var(--at-space-1)+14px)]" onClick={() => setF((x) => ({ ...x, conditions: x.conditions.filter((r) => r.rowId !== c.rowId) }))}>{t('st.plans.charges.remove')}</Button>
+                </div>
+              ))}
+              {errors['chargePolicy.clauses'] ? <p role="alert" className="m-0 text-xs text-danger">{errors['chargePolicy.clauses']}</p> : null}
+              <div>
+                <Button variant="neutral" size="sm" onClick={() => setF((x) => ({ ...x, conditions: [...x.conditions, { rowId: ++chargeRowSeq, metric: 'ACTIVE_LISTINGS', amount: '' }] }))}>{t('st.plans.charges.addCondition')}</Button>
+              </div>
+              <TextField id="plan-charge-window" label={t('st.plans.charges.window')} inputMode="numeric" value={f.chargeWindow} error={errors['chargePolicy.windowMonths']} onChange={set('chargeWindow')} />
+            </div>
+          ) : null}
+          <div className="rounded-sm bg-surface-muted p-2 text-sm" aria-live="polite">
+            <strong className="block text-xs uppercase text-muted">{t('st.plans.charges.preview')}</strong>
+            {chargeTermsOf({ ...Object.fromEntries(Object.entries(chargePolicyLimits(chargePolicyFrom(f) ?? { freeMonths: 0, then: 'CHARGE', match: 'ALL', clauses: [], windowMonths: null }))) }, plan?.monthlyCents ?? centsOf(f.monthly) ?? 0)}
           </div>
         </fieldset>
         {!plan ? (
@@ -241,6 +302,7 @@ function PlanViewDialog({ plan, onClose, onEdit, canEdit, t }: { plan: StaffPlan
             {row(t('st.plans.annual'), money(plan.annualCents))}
             {row(t('st.plans.trialDays'), String(plan.trialDays))}
             {row(t('st.plans.allows'), allowsOf(plan.entitlements, t))}
+            {row(t('st.plans.charges.preview'), chargeTermsOf(plan.limits, plan.monthlyCents))}
             {row(t('st.plans.col.subscribers'), String(plan.subscribers))}
           </dl>
           {plan.features.length > 0 ? (

@@ -540,6 +540,7 @@ export function BillingView() {
               <strong className="text-2xl">{price?.perMonthLabel}</strong>
               <span className="text-xs text-muted">{price?.billedLabel}</span>
               {price?.savingLabel ? <span className="text-xs font-semibold text-success">{price.savingLabel}</span> : null}
+              {p.chargeTerms ? <span className="text-xs text-muted" data-testid="plan-charge-terms">{p.chargeTerms}</span> : null}
               <ul className="m-0 flex flex-col gap-1 pl-4 text-sm">
                 {p.features.map((f) => <li key={f}>{f}</li>)}
               </ul>

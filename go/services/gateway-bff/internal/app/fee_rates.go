@@ -32,7 +32,7 @@ func appliedRate(r port.AppliedRateResponse, fallbackLabel string) domain.Seller
 func sellerNegotiated(list []port.NegotiatedRateResponse) []domain.SellerNegotiatedRate {
 	out := []domain.SellerNegotiatedRate{}
 	for _, n := range list {
-		out = append(out, domain.SellerNegotiatedRate{Type: n.Type, Category: n.Category, Label: domain.FeeCategoryLabel(n.Category), RateBps: n.RateBps,
+		out = append(out, domain.SellerNegotiatedRate{Type: n.Type, Category: n.Category, Label: domain.FeeCategoryLabel(n.Category), RateBps: n.RateBps, AmountMinor: n.AmountMinor,
 			StartsAt: n.StartsAt, EndsAt: n.EndsAt, Status: n.Status})
 	}
 	return out

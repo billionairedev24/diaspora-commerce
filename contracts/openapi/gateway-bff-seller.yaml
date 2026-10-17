@@ -4047,6 +4047,7 @@ components:
         features: {type: array, items: {type: string}}
         prices: {type: array, items: {$ref: '#/components/schemas/PlanPrice'}}
         current: {type: boolean}
+        chargeTerms: {type: string, description: 'What the plan charges, in words (free months, conditions), e.g. First 3 months free, then $39/mo; empty when not known'}
         entitlements:
           description: What the plan allows; null when the seller service did not say
           oneOf:
@@ -4426,12 +4427,13 @@ components:
         negotiatedUntil: {type: [string, 'null'], format: date-time, description: 'Source OVERRIDE: when the negotiated rate ends (null = open-ended)'}
     SellerNegotiatedRate:
       type: object
-      required: [type, category, label, rateBps, startsAt, endsAt, status]
+      required: [type, category, label, rateBps, amountMinor, startsAt, endsAt, status]
       properties:
-        type: {type: string, enum: [COMMISSION, CONNECTION_FEE]}
+        type: {type: string, enum: [COMMISSION, CONNECTION_FEE, FBA_FEE]}
         category: {type: string, description: "'*' = every category"}
         label: {type: string}
         rateBps: {type: integer}
+        amountMinor: {type: [integer, 'null'], format: int64, description: 'FBA_FEE: the fee per unit in minor units; null for rates in basis points'}
         startsAt: {type: string, format: date-time}
         endsAt: {type: [string, 'null'], format: date-time}
         status: {type: string, enum: [SCHEDULED, ACTIVE, ENDED, EXPIRED]}

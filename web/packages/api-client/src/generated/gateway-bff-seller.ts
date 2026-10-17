@@ -3862,6 +3862,8 @@ export interface components {
             features: string[];
             prices: components["schemas"]["PlanPrice"][];
             current: boolean;
+            /** @description What the plan charges, in words (free months, conditions), e.g. First 3 months free, then $39/mo; empty when not known */
+            chargeTerms?: string;
             /** @description What the plan allows; null when the seller service did not say */
             entitlements?: components["schemas"]["PlanEntitlements"] | null;
         };
@@ -4350,11 +4352,16 @@ export interface components {
         };
         SellerNegotiatedRate: {
             /** @enum {string} */
-            type: "COMMISSION" | "CONNECTION_FEE";
+            type: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
             /** @description '*' = every category */
             category: string;
             label: string;
             rateBps: number;
+            /**
+             * Format: int64
+             * @description FBA_FEE: the fee per unit in minor units; null for rates in basis points
+             */
+            amountMinor: number | null;
             /** Format: date-time */
             startsAt: string;
             /** Format: date-time */

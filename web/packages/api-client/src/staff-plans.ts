@@ -62,6 +62,77 @@ export function planFeatureList(e: StaffPlanEntitlements): string[] {
   return out;
 }
 
+/** How a plan charges its fee (stored in the plan's `limits` as charge* keys; mirrors the seller service's PlanChargePolicy). */
+export type ChargeThen = 'CHARGE' | 'CHARGE_WHEN' | 'WAIVE_WHILE';
+export type ChargeMetric = 'GROSS_SALES' | 'COMPLETED_ORDERS' | 'COMPLETED_BOOKINGS' | 'ACTIVE_LISTINGS';
+export interface ChargeClause {
+  metric: ChargeMetric;
+  /** Cents for GROSS_SALES, a count otherwise. */
+  threshold: number;
+}
+export interface ChargePolicy {
+  /** Months free at the start. */
+  freeMonths: number;
+  then: ChargeThen;
+  match: 'ALL' | 'ANY';
+  clauses: ChargeClause[];
+  /** Sales and orders are counted over the last N months; null = since the subscription started. */
+  windowMonths: number | null;
+}
+export const CHARGE_METRICS: ChargeMetric[] = ['GROSS_SALES', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'ACTIVE_LISTINGS'];
+export const CHARGE_KEYS = ['chargeFreeMonths', 'chargeThen', 'chargeMatch', 'chargeClauses', 'chargeWindowMonths'] as const;
+
+export function chargePolicyOf(limits: Record<string, string> | undefined): ChargePolicy {
+  const l = limits ?? {};
+  const clauses: ChargeClause[] = (l.chargeClauses ?? '')
+    .split(',')
+    .map((p) => p.trim().split(':'))
+    .filter((kv) => CHARGE_METRICS.includes(kv[0] as ChargeMetric) && Number.isFinite(Number(kv[1])))
+    .map((kv) => ({ metric: kv[0] as ChargeMetric, threshold: Number(kv[1]) }));
+  const then = (['CHARGE', 'CHARGE_WHEN', 'WAIVE_WHILE'] as const).find((v) => v === l.chargeThen) ?? 'CHARGE';
+  const window = Number.parseInt(l.chargeWindowMonths ?? '', 10);
+  return {
+    freeMonths: Number.parseInt(l.chargeFreeMonths ?? '0', 10) || 0,
+    then,
+    match: l.chargeMatch === 'ANY' ? 'ANY' : 'ALL',
+    clauses,
+    windowMonths: Number.isFinite(window) && window > 0 ? window : null
+  };
+}
+
+/** The charge* limits of a policy ({} for "charge every period from the start"), without touching other limits. */
+export function chargePolicyLimits(p: ChargePolicy): Record<string, string> {
+  if (p.freeMonths === 0 && p.then === 'CHARGE') return {};
+  const out: Record<string, string> = { chargeFreeMonths: String(p.freeMonths), chargeThen: p.then };
+  if (p.clauses.length) {
+    out.chargeMatch = p.match;
+    out.chargeClauses = p.clauses.map((c) => `${c.metric}:${c.threshold}`).join(',');
+  }
+  if (p.windowMonths !== null) out.chargeWindowMonths = String(p.windowMonths);
+  return out;
+}
+
+const usdWhole = (cents: number) => `$${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: cents % 100 === 0 ? 0 : 2, maximumFractionDigits: 2 })}`;
+const metricWords = (c: ChargeClause) =>
+  c.metric === 'GROSS_SALES' ? `reach ${usdWhole(c.threshold)} in sales`
+    : c.metric === 'ACTIVE_LISTINGS' ? `have ${c.threshold} active listings`
+      : c.metric === 'COMPLETED_ORDERS' ? `reach ${c.threshold} completed orders` : `reach ${c.threshold} completed bookings`;
+
+/** "First 3 months free, then $39/mo": what a plan charges, in words (mirrors PlanChargePolicy.summary). */
+export function chargeTermsOf(limits: Record<string, string> | undefined, monthlyCents: number): string {
+  if (monthlyCents <= 0) return 'No monthly fee — commission only';
+  const p = chargePolicyOf(limits);
+  const price = `${usdWhole(monthlyCents)}/mo`;
+  const parts: string[] = [];
+  if (p.freeMonths > 0) parts.push(p.freeMonths === 1 ? 'First month free' : `First ${p.freeMonths} months free`);
+  const words = p.clauses.map(metricWords).join(p.match === 'ALL' ? ' and ' : ' or ');
+  const lead = p.freeMonths > 0 ? 'then ' : '';
+  if (p.then === 'CHARGE') parts.push(p.freeMonths > 0 ? `then ${price}` : price);
+  else if (p.then === 'CHARGE_WHEN') parts.push(`${lead}free until you ${words}`);
+  else parts.push(`${lead}${price}, free while you ${words}`);
+  return parts.join(', ');
+}
+
 export const StaffPlanVersionSchema = z.object({
   version: z.number().int(),
   status: z.enum(['DRAFT', 'PUBLISHED', 'SUPERSEDED']),
@@ -83,6 +154,8 @@ export const StaffPlanSchema = z.object({
   features: z.array(z.string()),
   limits: z.record(z.string(), z.string()).default({}),
   entitlements: StaffPlanEntitlementsSchema.optional(),
+  /** What the plan charges, in words (from its charge* limits). */
+  chargeTerms: z.string().optional(),
   visibility: PlanVisibilitySchema,
   status: PlanStatusSchema,
   sortOrder: z.number().int().default(0),

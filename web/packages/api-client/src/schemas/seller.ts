@@ -1260,6 +1260,8 @@ export const PlanSchema = z.object({
   features: z.array(z.string()),
   prices: z.array(PlanPriceSchema),
   current: z.boolean(),
+  /** What the plan charges, in words (free months and conditions). */
+  chargeTerms: z.string().default(''),
   entitlements: PlanEntitlementsSchema.nullable().default(null)
 });
 export type Plan = z.infer<typeof PlanSchema>;
