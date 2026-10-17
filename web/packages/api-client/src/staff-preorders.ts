@@ -9,6 +9,7 @@ import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
 import { absolute, type ApiClientOptions, type FetchLike, joinUrl, type Requester } from './http';
 import { tableSearchParams } from './table-query';
+import { randomUuid } from './uuid';
 
 /* ── Enums ─────────────────────────────────────────────── */
 
@@ -230,7 +231,7 @@ export const PreorderOrderLineSchema = z.object({ atin: z.string(), name: z.stri
 export type PreorderOrderLine = z.infer<typeof PreorderOrderLineSchema>;
 
 /** A late add's Idempotency-Key (16–64 characters), made when the dialog opens and kept until the order is added. */
-export const newLateAddKey = (random: () => string = () => crypto.randomUUID()): string => `late-${random()}`;
+export const newLateAddKey = (random: () => string = randomUuid): string => `late-${random()}`;
 
 export const PreorderOrderSchema = z.object({
   orderId: z.string(),

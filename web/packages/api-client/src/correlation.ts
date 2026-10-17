@@ -1,8 +1,10 @@
+import { randomUuid } from './uuid';
+
 /** Same header as gateway-bff, Java {@code CorrelationIdFilter}, and go/pkg/httpserver. */
 export const CORRELATION_HEADER = 'X-Correlation-Id';
 
 export function newCorrelationId(): string {
-  return crypto.randomUUID();
+  return randomUuid();
 }
 
 /** Ensures every outbound BFF request carries a correlation id (reuse when already set). */

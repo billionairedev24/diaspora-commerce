@@ -1,6 +1,6 @@
 'use client';
 
-import { isApiError, orderKeys, RETURN_REASONS, type ReturnableLine, returnKeys, type ReturnMethod, type ReturnReason, type ReturnSummary, SELLER_FAULT_REASONS } from '@afrotransact/api-client';
+import { isApiError, orderKeys, randomUuid,RETURN_REASONS, type ReturnableLine, returnKeys, type ReturnMethod, type ReturnReason, type ReturnSummary, SELLER_FAULT_REASONS } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, QrCode, Skeleton } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -38,7 +38,7 @@ export function StartReturnView({ orderNumber }: { orderNumber: string }) {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<ReturnSummary | null>(null);
   // One idempotency key per attempt: a double click or a retry replays the same RMA.
-  const [key] = useState(() => `ret-${crypto.randomUUID()}`);
+  const [key] = useState(() => `ret-${randomUuid()}`);
 
   const shipments = elig.data?.shipments ?? [];
   const active = shipments.find((s) => s.shipmentId === shipmentId) ?? shipments.find((s) => s.lines.some((l) => l.eligible));

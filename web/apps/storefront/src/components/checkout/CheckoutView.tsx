@@ -9,7 +9,7 @@ import {
   type DeliverySelection,
   isApiError,
   type OrderConfirmation,
-  orderKeys,
+  orderKeys, randomUuid
 } from '@afrotransact/api-client';
 import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -94,7 +94,7 @@ export function CheckoutView() {
   const [addrDialog, setAddrDialog] = useState<{ open: boolean; address: Address | null }>({ open: false, address: null });
   const [placing, setPlacing] = useState(-1);
   const [error, setError] = useState<string | null>(null);
-  const keyRef = useRef<string>(crypto.randomUUID());
+  const keyRef = useRef<string>(randomUuid());
   /** Single-flight guard, set synchronously before any await (state updates are too late for a double click). */
   const busyRef = useRef(false);
   /** The order the current key created, once orders answered (checked after an error before a new key is made). */
@@ -241,7 +241,7 @@ export function CheckoutView() {
       }
     }
     if (over) {
-      keyRef.current = crypto.randomUUID();
+      keyRef.current = randomUuid();
       orderRef.current = null;
     }
     end();

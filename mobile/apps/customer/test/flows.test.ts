@@ -1,7 +1,7 @@
 /* The customer journeys end to end through the app's real API layer (auth fetch, Zod-validated BFF client, JSON
    requesters) against the in-app mock backend: what every screen does when you tap through it, minus the pixels. */
 import { SearchQuerySchema } from '@afrotransact/api-client';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createCustomerApi } from '../src/api/client';
 import { resetMockDb } from '../src/api/mock/db';
@@ -168,5 +168,16 @@ describe('account', () => {
     const a = api();
     await a.identity.registerDevice({ token: 'ExponentPushToken[x]', provider: 'fcm', app: 'customer' } as Parameters<typeof a.identity.registerDevice>[0]);
     await a.identity.unregisterDevice('ExponentPushToken[x]');
+  });
+});
+
+describe('a phone has no global crypto (Hermes)', () => {
+  it('still makes API calls: the correlation id does not need crypto.randomUUID', async () => {
+    vi.stubGlobal('crypto', undefined);
+    try {
+      expect((await api().bff.getCart()).itemCount).toBeGreaterThanOrEqual(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -6,6 +6,7 @@ export * from './fee-rates';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { type DownloadedFile, type RequestOptions } from './http';
 export { definitiveFailure, keepIdempotencyKey } from './idempotency';
+export { randomUuid } from './uuid';
 export * from './inventory-hub';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';
 export { formatMoney, percentOff, splitMoney } from './money';
