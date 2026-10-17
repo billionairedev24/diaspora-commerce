@@ -19,8 +19,8 @@
 | mcp-server | Spring Boot + Spring AI MCP | 8114 | MCP tools for shoppers, sellers, staff | — |
 | delivery-runs | Spring Boot | 8115 | community delivery runs: locations, runs (cutoff, minimum, capacity), run slots, subscriptions, run economics; pre-order windows, coverage, waitlist, late adds | Postgres `deliveryruns` |
 | gateway-bff | Go | 8200 | screen-shaped APIs for web/mobile, token relay | Redis |
-| search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Elasticsearch |
-| indexer | Go | 8202 | Kafka → Elasticsearch projection | Elasticsearch |
+| search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Elasticsearch or Meilisearch (`SEARCH_PROVIDER`) |
+| indexer | Go | 8202 | Kafka → search index projection | Elasticsearch or Meilisearch (`SEARCH_PROVIDER`) |
 | cart | Go | 8203 | carts, save-for-later, merge on login | Redis + Postgres `cart` |
 | promise | Go | 8204 | delivery promises per ZIP | Redis |
 | geo | Go | 8205 | address autocomplete (Google Places / OSM Nominatim), validation | Postgres/PostGIS `geo` |
@@ -74,6 +74,7 @@ remembered in `.local/web-ports`.
 | Kafka (KRaft) | 9092 |
 | Kafka UI | 8090 |
 | Elasticsearch 9 | 9200 |
+| Meilisearch (`SEARCH_PROVIDER=meilisearch`, instead of Elasticsearch) | 7700 |
 | Kibana | 5601 |
 | Temporal / UI | 7233 / 8088 |
 | OTel Collector (gRPC/HTTP) | 4317 / 4318 |

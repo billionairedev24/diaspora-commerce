@@ -21,7 +21,7 @@ acceptance criteria are met and verified.
 | Node | 22 LTS, pnpm 10 |
 | Next.js | 16, React 19, TanStack Query 5 / Table, Zod 4, Tailwind 4 |
 | Mobile | Expo / React Native |
-| Search | Elasticsearch 9 |
+| Search | Elasticsearch 9 (default) or Meilisearch 1.12: `SEARCH_PROVIDER`, `docs/engineering/search-providers.md` |
 | Data | PostgreSQL 17 (one database per service), Redis/Valkey 8, Kafka (KRaft), Temporal |
 
 ## Repository layout

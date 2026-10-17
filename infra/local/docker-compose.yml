@@ -249,6 +249,28 @@ services:
       - ./elasticsearch:/init:ro
     restart: "no"
 
+  # Search engine alternative to Elasticsearch (SEARCH_PROVIDER=meilisearch): started instead of elasticsearch by
+  # tools/dev/local.sh, never together with it by default.
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    <<: [*restart, *logging]
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-local-meili-master-key}
+      MEILI_NO_ANALYTICS: "true"
+    ports: ["7700:7700"]
+    volumes:
+      - meili-data:/meili_data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:7700/health | grep -q available"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    deploy:
+      resources:
+        limits: {memory: 1g}
+
   kibana:
     image: kibana:9.3.0
     <<: [*restart, *logging]
@@ -714,6 +736,7 @@ volumes:
   valkey-data:
   kafka-data:
   es-data:
+  meili-data:
   minio-data:
   prometheus-data:
   alertmanager-data:

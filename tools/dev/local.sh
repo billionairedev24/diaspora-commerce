@@ -375,6 +375,11 @@ infra_up() {
   command -v docker >/dev/null || { echo "Docker is required (Docker Desktop)." >&2; exit 1; }
   docker info >/dev/null 2>&1 || { echo "Docker is not running: start Docker Desktop first." >&2; exit 1; }
   local infra="$INFRA_BASE" waitfor="kafka elasticsearch temporal" i unhealthy=""
+  if [[ "${SEARCH_PROVIDER:-elasticsearch}" == meilisearch ]]; then
+    # Meilisearch instead of Elasticsearch (search and indexer read SEARCH_PROVIDER): lighter, one container.
+    echo "==> search engine: Meilisearch (SEARCH_PROVIDER=meilisearch)"
+    infra="${infra/elasticsearch elasticsearch-init/meilisearch}"; waitfor="${waitfor/elasticsearch/meilisearch}"
+  fi
   if [[ "$(external "${PG_EXTERNAL:-}" 5432 postgres)" == 1 ]]; then
     echo "==> using your Postgres on localhost:5432"
     setup_host_postgres
@@ -388,7 +393,8 @@ infra_up() {
     infra="valkey $infra"
   fi
   if [[ "${OBS:-1}" != 0 ]]; then
-    infra="$infra $OBS_BASE"
+    infra="$infra ${OBS_BASE}"
+    [[ "${SEARCH_PROVIDER:-elasticsearch}" == meilisearch ]] && infra="${infra/elasticsearch-exporter/}"
     [[ "$infra" == "postgres "* ]] && infra="$infra postgres-exporter"
     [[ "$infra" == *"valkey "* ]] && infra="$infra redis-exporter"
     mkdir -p "$LOGS"
