@@ -31,10 +31,10 @@ export function OrgSearch({
   const hits = useQuery({ ...staffQueries.feeOrgs(staffApi(), q), enabled: q.length >= 2 });
   return (
     <div className="flex flex-col gap-2">
-      <label className="flex h-10 max-w-xl items-center gap-2 rounded-pill border border-border-strong bg-surface px-3">
+      <label className="flex h-10 max-w-xl items-center gap-2 rounded-sm border border-border-strong bg-surface px-3 focus-within:border-focus focus-within:shadow-focus">
         <MagnifyingGlass size={16} aria-hidden className="text-muted" />
         <span className="at-visually-hidden">{label}</span>
-        <input type="search" className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Seller or provider name" value={text} onChange={(e) => setText(e.currentTarget.value)} />
+        <input type="search" className="min-w-0 flex-1 border-0 bg-transparent text-sm !outline-none" placeholder="Seller or provider name" value={text} onChange={(e) => setText(e.currentTarget.value)} />
       </label>
       {hits.isError ? <p className="m-0 text-sm text-danger">{problemMessage(hits.error)}</p> : null}
       {hits.data ? (

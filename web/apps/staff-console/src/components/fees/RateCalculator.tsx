@@ -39,7 +39,7 @@ export function RateCalculator() {
         <datalist id="calc-categories">
           {categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
         </datalist>
-        <Button type="submit" disabled={!org || !category.trim()}>{t('st.rates.calculate')}</Button>
+        <Button type="submit" className="mb-[calc(var(--at-space-1)+14px)]" disabled={!org || !category.trim()}>{t('st.rates.calculate')}</Button>
       </form>
       {quote.isFetching && !quote.data ? <Spinner /> : null}
       {quote.isError ? <ErrorState error={quote.error} onRetry={() => void quote.refetch()} /> : null}
