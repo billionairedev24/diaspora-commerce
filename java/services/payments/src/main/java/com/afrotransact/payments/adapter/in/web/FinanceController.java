@@ -123,7 +123,8 @@ class FinanceController {
                 : body.overrides().stream().map(OverrideRequest::toOverride).toList(), body.cardPctBps(),
                 body.cardFixedMinor(), body.fbaPerUnitMinor(), !Boolean.FALSE.equals(body.reverseCommissionOnRefund()),
                 body.note(), body.deliveryPricing() == null ? null : body.deliveryPricing().toCommand(),
-                body.planBps(), body.connectionFee() == null ? null : body.connectionFee().toTable())));
+                body.planBps(), body.connectionFee() == null ? null : body.connectionFee().toTable(),
+                body.planFbaMinor())));
     }
 
     @Operation(summary = "Price an AfroTransact Delivery trip from a seller's store (S255)",

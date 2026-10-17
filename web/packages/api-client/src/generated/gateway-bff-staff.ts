@@ -4934,6 +4934,8 @@ export interface components {
             deliveryPricing: components["schemas"]["DeliveryPricing"] | null;
             /** @description Product commission per plan, after negotiated rates and before category rates */
             planRates: components["schemas"]["FeePlanRate"][];
+            /** @description FBA fee per unit of the plans that have their own; every other plan pays fbaPerUnitMinor */
+            planFba: components["schemas"]["FeePlanFba"][];
             /** @description Connection fees on service bookings; null for versions created before they existed (services paid the 'services' commission) */
             connectionFee: components["schemas"]["FeeConnectionFee"] | null;
             note: string | null;
@@ -4993,6 +4995,17 @@ export interface components {
             planWarnings: string[];
             /** @description Service categories the connection-fee sections price */
             serviceCategories: components["schemas"]["FeeCategory"][];
+        };
+        FeePlanFba: {
+            planCode: string;
+            planName: string;
+            /** Format: int64 */
+            feeMinor: number;
+        };
+        FeeDraftPlanFba: {
+            planCode: string;
+            /** Format: int64 */
+            feeMinor: number;
         };
         FeePlanRate: {
             /** @example seller_growth */
@@ -5228,6 +5241,8 @@ export interface components {
             deliveryPricing?: components["schemas"]["DeliveryPricingDraft"] | null;
             /** @description Product commission per plan. Omitted or null = carried over from the latest live version; [] = no plan rates */
             planRates?: components["schemas"]["FeeDraftPlanRate"][] | null;
+            /** @description FBA fee per unit per plan; plans left out pay fbaPerUnitMinor. Omitted or null = carried over from the latest live version; [] = every plan pays the default */
+            planFba?: components["schemas"]["FeeDraftPlanFba"][] | null;
             /** @description Connection fees on service bookings. Omitted or null = carried over from the latest live version */
             connectionFee?: components["schemas"]["FeeConnectionDraft"] | null;
             /** @description Why the fees change (required) */

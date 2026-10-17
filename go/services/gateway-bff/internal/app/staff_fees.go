@@ -81,6 +81,7 @@ type paymentsSchedule struct {
 	ReverseCommissionOnRefund bool                      `json:"reverseCommissionOnRefund"`
 	DeliveryPricing           *domain.DeliveryPricing   `json:"deliveryPricing"`
 	PlanBps                   map[string]map[string]int `json:"planBps"`
+	PlanFbaMinor              map[string]int64          `json:"planFbaMinor"`
 	ConnectionFee             *struct {
 		DefaultBps  int                       `json:"defaultBps"`
 		CategoryBps map[string]int            `json:"categoryBps"`
@@ -224,7 +225,7 @@ func (s *staffFeesImpl) view(p paymentsSchedule, t feeTimeline, now time.Time, l
 		DefaultCommissionBps: p.DefaultCommissionBps, CategoryRates: []domain.FeeCategoryRate{}, Overrides: []domain.FeeOverride{}, CardPctBps: p.CardPctBps,
 		CardFixedMinor: p.CardFixedMinor, FbaPerUnitMinor: p.FbaPerUnitMinor, ReverseCommissionOnRefund: p.ReverseCommissionOnRefund, Note: strPtr(p.Note),
 		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, CancelledAt: p.CancelledAt, CancelledBy: strPtr(p.CancelledBy), CancelReason: strPtr(p.CancelReason),
-		Cancellable: canConfigure && status == domain.FeeStatusScheduled, PlanRates: domain.PlanRatesOf(p.PlanBps, label)}
+		Cancellable: canConfigure && status == domain.FeeStatusScheduled, PlanRates: domain.PlanRatesOf(p.PlanBps, label), PlanFba: domain.PlanFbaOf(p.PlanFbaMinor)}
 	if cf := p.ConnectionFee; cf != nil {
 		section := &domain.FeeConnectionFee{DefaultBps: cf.DefaultBps, CategoryRates: []domain.FeeRate{}, PlanRates: domain.PlanRatesOf(cf.PlanBps, label)}
 		keys := make([]string, 0, len(cf.CategoryBps))
@@ -473,6 +474,9 @@ func (s *staffFeesImpl) Create(ctx context.Context, c *domain.Caller, d domain.F
 	}
 	if d.PlanRates != nil { // omitted = payments carries the latest live version's plan rates over
 		body["planBps"] = domain.PlanBpsBody(d.PlanRates)
+	}
+	if d.PlanFba != nil { // omitted = payments carries the latest live version's plan FBA fees over
+		body["planFbaMinor"] = domain.PlanFbaBody(d.PlanFba)
 	}
 	if cf := d.ConnectionFee; cf != nil {
 		cats := map[string]int{}

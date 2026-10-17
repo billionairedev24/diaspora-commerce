@@ -32,6 +32,8 @@ export interface MockFeeSchedule {
   deliveryPricing: MockDeliveryPricing | null;
   /** Product commission per plan (plan → category → bps, '*' = the plan's other categories). */
   planBps: Record<string, Record<string, number>>;
+  /** FBA fee per unit (minor units) of the plans that have their own. */
+  planFbaMinor: Record<string, number>;
   /** Connection fees on service bookings; null on versions before them. */
   connectionFee: MockConnectionFee | null;
   note: string | null;
@@ -164,7 +166,7 @@ export function seedFeeSchedules(now: Date): MockFeeSchedule[] {
   const ago = (days: number) => new Date(now.getTime() - days * 86_400_000).toISOString();
   const ahead = (days: number) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + days, 5, 0, 0)).toISOString();
   const base = { cardPctBps: 290, cardFixedMinor: 30, reverseCommissionOnRefund: true, cancelledAt: null, cancelledBy: null, cancelReason: null,
-    planBps: structuredClone(SEED_PLAN_BPS), connectionFee: structuredClone(SEED_CONNECTION_FEE) };
+    planBps: structuredClone(SEED_PLAN_BPS), planFbaMinor: {}, connectionFee: structuredClone(SEED_CONNECTION_FEE) };
   return [
     { ...base, id: 'fee-1', version: 1, effectiveFrom: '2020-01-01T00:00:00Z', categoryBps: { ...LAUNCH }, defaultCommissionBps: 1000, overrides: [], fbaPerUnitMinor: 325,
       deliveryPricing: null, note: 'Launch defaults', createdBy: 'system:seed', createdAt: '2020-01-01T00:00:00Z' },
@@ -238,6 +240,7 @@ export function feeView(s: MockFeeSchedule, all: MockFeeSchedule[], now: Date, c
     reverseCommissionOnRefund: s.reverseCommissionOnRefund,
     deliveryPricing: deliveryView(s.deliveryPricing),
     planRates: planRatesOf(s.planBps),
+    planFba: Object.entries(s.planFbaMinor).map(([code, feeMinor]) => ({ planCode: code, planName: planName(code), feeMinor })).sort((a, b) => a.planCode.localeCompare(b.planCode)),
     connectionFee: s.connectionFee
       ? {
           defaultBps: s.connectionFee.defaultBps,
@@ -390,6 +393,9 @@ export function createFeeSchedule(all: MockFeeSchedule[], d: FeeScheduleDraft, n
           return acc;
         }, {})
       : structuredClone(t.latest?.planBps ?? {}),
+    planFbaMinor: d.planFba
+      ? Object.fromEntries(d.planFba.map((r) => [r.planCode.trim().toLowerCase(), r.feeMinor]))
+      : structuredClone(t.latest?.planFbaMinor ?? {}),
     connectionFee: d.connectionFee
       ? {
           defaultBps: d.connectionFee.defaultBps,

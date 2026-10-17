@@ -65,7 +65,7 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
             Money commission = line.isService() ? zero : take;
             Money connectionFee = line.isService() ? take : zero;
             boolean fba = line.fulfilment() == Fulfilment.FBA;
-            Money fbaFee = fba && !retail ? schedule.fbaPerUnit().times(line.quantity()) : zero;
+            Money fbaFee = fba && !retail ? schedule.fbaPerUnitFor(line.rate() == null ? null : line.rate().planCode()).times(line.quantity()) : zero;
             Money deliveryFee = line.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY && !retail
                     ? line.deliveryFee() : zero;
             boolean preorder = line.fulfilment().shippingIsLocalDeliveryFee();

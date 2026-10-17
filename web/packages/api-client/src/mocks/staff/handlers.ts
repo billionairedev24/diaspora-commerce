@@ -574,6 +574,7 @@ const FeeDraftBody = z.object({
     .nullable()
     .optional(),
   planRates: z.array(z.object({ planCode: z.string(), category: z.string(), bps: z.number().int() })).nullable().optional(),
+  planFba: z.array(z.object({ planCode: z.string(), feeMinor: z.number().int() })).nullable().optional(),
   connectionFee: z
     .object({
       defaultBps: z.number().int(),

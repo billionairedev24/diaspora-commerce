@@ -37,7 +37,8 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
                           List<CommissionOverride> overrides, int cardPctBps, Money cardFixed, Money fbaPerUnit,
                           boolean reverseCommissionOnRefund, String note, String createdBy, Instant createdAt,
                           Cancellation cancellation, DeliveryPricing deliveryPricing,
-                          Map<String, Map<String, Integer>> planBps, RateTable connectionFee) {
+                          Map<String, Map<String, Integer>> planBps, RateTable connectionFee,
+                          Map<String, Long> planFbaMinor) {
 
     /**
      * Withdrawal of a scheduled version: who, when and why (append-only, like the version itself).
@@ -65,6 +66,17 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         this(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixed,
                 fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt, cancellation, deliveryPricing,
                 Map.of(), null);
+    }
+
+    /** A version whose plans all pay the default FBA fee. */
+    public FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency, Map<String, Integer> categoryBps,
+                       int defaultCommissionBps, List<CommissionOverride> overrides, int cardPctBps, Money cardFixed,
+                       Money fbaPerUnit, boolean reverseCommissionOnRefund, String note, String createdBy,
+                       Instant createdAt, Cancellation cancellation, DeliveryPricing deliveryPricing,
+                       Map<String, Map<String, Integer>> planBps, RateTable connectionFee) {
+        this(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixed,
+                fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt, cancellation, deliveryPricing,
+                planBps, connectionFee, Map.of());
     }
 
     /** A version that has not been cancelled and offers no AfroTransact Delivery pricing. */
@@ -101,6 +113,17 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         categoryBps = Map.copyOf(normalised);
         overrides = List.copyOf(overrides);
         planBps = new RateTable(defaultCommissionBps, Map.of(), planBps).planBps();
+        Map<String, Long> fbaByPlan = new LinkedHashMap<>();
+        if (planFbaMinor != null) {
+            planFbaMinor.forEach((plan, minor) -> {
+                if (plan == null || plan.isBlank() || minor == null || minor < 0) {
+                    throw new PaymentsRuleViolation("payments.invalid-fee-schedule",
+                            "Plan FBA fees need a plan and a fee of zero or more");
+                }
+                fbaByPlan.put(plan.trim().toLowerCase(Locale.ROOT), minor);
+            });
+        }
+        planFbaMinor = Map.copyOf(fbaByPlan);
         requireBps(defaultCommissionBps, "default");
         requireBps(cardPctBps, "card fee");
         if (cardFixed.isNegative() || fbaPerUnit.isNegative()) {
@@ -234,6 +257,15 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         return effectiveFor(FeeKind.PRODUCT, orgId, category, null, List.of(), effectiveFrom, retailOrgId);
     }
 
+    /** The FBA fee per unit of {@code planCode}: its own when the version sets one, else the default. */
+    public Money fbaPerUnitFor(String planCode) {
+        if (planCode == null || planCode.isBlank()) {
+            return fbaPerUnit;
+        }
+        Long minor = planFbaMinor.get(planCode.trim().toLowerCase(Locale.ROOT));
+        return minor == null ? fbaPerUnit : Money.of(minor, currency);
+    }
+
     /** The fees of one organisation, kind and category at {@code at}: {@link #rateFor} plus card and FBA fees. */
     public EffectiveFees effectiveFor(FeeKind kind, String orgId, String category, String planCode,
                                       List<NegotiatedRate> negotiated, Instant at, String retailOrgId) {
@@ -241,7 +273,8 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         boolean retail = rate.source() == RateSource.RETAIL;
         return new EffectiveFees(id, version, effectiveFrom, currency, rate.category(), orgId, rate.bps(),
                 rate.source().name(), cardPctBps, cardFixed,
-                retail || kind == FeeKind.SERVICE ? Money.zero(currency) : fbaPerUnit, reverseCommissionOnRefund,
+                retail || kind == FeeKind.SERVICE ? Money.zero(currency) : fbaPerUnitFor(rate.planCode()),
+                reverseCommissionOnRefund,
                 retail, kind, rate.planCode(), rate.negotiatedRateId(), rate.negotiatedUntil());
     }
 
@@ -272,7 +305,7 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         }
         return new FeeSchedule(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides,
                 cardPctBps, cardFixed, fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt,
-                new Cancellation(now, by, reason), deliveryPricing, planBps, connectionFee);
+                new Cancellation(now, by, reason), deliveryPricing, planBps, connectionFee, planFbaMinor);
     }
 
     /**

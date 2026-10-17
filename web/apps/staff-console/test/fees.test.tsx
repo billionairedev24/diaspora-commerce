@@ -27,7 +27,7 @@ const base: FeeScheduleView = {
     sellerOverrides: [{ orgId: 'org-kente', orgName: 'Kente Naturals', sellerFee: { mode: 'FLAT', flatPerPackageMinor: 150, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null } }]
   },
   cancelledAt: null, cancelledBy: null, cancelReason: null, cancellable: false,
-  planRates: [], connectionFee: null
+  planRates: [], planFba: [], connectionFee: null
 };
 
 const overview: Pick<FeesOverview, 'minEffectiveFrom' | 'immediateAllowed' | 'retail' | 'limits'> = {
@@ -205,4 +205,15 @@ describe('fee schedules screen', () => {
     const fees = await mockApi().getFees();
     expect(fees.schedules.find((s) => s.version === 4)).toMatchObject({ status: 'CANCELLED', cancelReason: 'Holiday promo postponed' });
   }, 20_000);
+});
+
+describe('FBA fee by plan', () => {
+  it('sends only the plans that have their own fee and checks the amounts', () => {
+    const form = formFrom({ ...base, planFba: [{ planCode: 'seller_pro', planName: 'Seller Pro', feeMinor: 200 }] }, overview, NOW);
+    expect(form.planFba).toEqual({ seller_pro: '2.00' });
+    const ok = toDraft({ ...form, note: 'Pro plan FBA discount' }, overview, NOW);
+    expect(ok.draft?.planFba).toEqual([{ planCode: 'seller_pro', feeMinor: 200 }]);
+    const bad = toDraft({ ...form, planFba: { seller_pro: 'abc' }, note: 'Pro plan FBA discount' }, overview, NOW);
+    expect(bad.errors['planFba.seller_pro']).toBeDefined();
+  });
 });

@@ -102,3 +102,20 @@ func TestRateSectionsValidateAndShape(t *testing.T) {
 		t.Error("explanation")
 	}
 }
+
+func TestPlanFbaBodyAndValidation(t *testing.T) {
+	two, big := int64(200), int64(DefaultFeeLimits.FbaPerUnitMaxMinor+1)
+	rows := []FeeDraftPlanFba{{PlanCode: " Seller_Pro ", FeeMinor: &two}}
+	if body := PlanFbaBody(rows); body["seller_pro"] != 200 {
+		t.Fatalf("body = %v", body)
+	}
+	if e := ValidatePlanFba(rows, DefaultFeeLimits); len(e) != 0 {
+		t.Fatalf("errors = %v", e)
+	}
+	e := ValidatePlanFba([]FeeDraftPlanFba{{PlanCode: "seller_pro", FeeMinor: &two}, {PlanCode: "seller_pro", FeeMinor: &big}, {PlanCode: "", FeeMinor: nil}}, DefaultFeeLimits)
+	for _, k := range []string{"planFba.1.planCode", "planFba.1.feeMinor", "planFba.2.planCode", "planFba.2.feeMinor"} {
+		if e[k] == "" {
+			t.Errorf("missing error %s in %v", k, e)
+		}
+	}
+}

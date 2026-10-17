@@ -16,7 +16,7 @@ import { dateTime, idempotencyKey, money } from '@/lib/format';
 
 import { previewQuote } from './delivery-model';
 import { deliveryFieldId, DeliveryPricingEditor } from './DeliveryPricingEditor';
-import { affectedSellers, categoryLabel, diffDraft, type FeeForm, formFrom, impactRows, localInput, rowId, toDraft } from './model';
+import { affectedSellers, categoryLabel, diffDraft, type FeeForm, formFrom, impactRows, localInput, planFbaError, rowId, toDraft } from './model';
 import { OrgSearch } from './OrgSearch';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold text-muted';
@@ -417,6 +417,26 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
           <TextField id="fee-card-pct" inputMode="decimal" label="Card fee estimate (%)" value={form.cardPct} onChange={(e) => set('cardPct', e.currentTarget.value)} error={errors.cardPctBps} help={`Per charge, 0.00–${formatBps(overview.limits.cardPctMaxBps)}`} />
           <TextField id="fee-card-fixed" inputMode="decimal" label="Card fee, fixed ($)" value={form.cardFixed} onChange={(e) => set('cardFixed', e.currentTarget.value)} error={errors.cardFixedMinor} help={`Per charge, up to ${money(overview.limits.cardFixedMaxMinor)}`} />
           <TextField id="fee-fba" inputMode="decimal" label="FBA fee per unit ($)" value={form.fbaPerUnit} onChange={(e) => set('fbaPerUnit', e.currentTarget.value)} error={errors.fbaPerUnitMinor} help={`Up to ${money(overview.limits.fbaPerUnitMaxMinor)}`} />
+        </div>
+        <div className="flex flex-col gap-2">
+          <h3 className="m-0 text-sm font-semibold">FBA fee per unit, by plan</h3>
+          <p className="m-0 text-sm text-muted">Leave a plan blank and it pays the default above. Applies to FBA lines of sellers on that plan.</p>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
+            {overview.plans
+              .filter((p) => p.kind !== 'PROVIDER')
+              .map((p) => (
+                <TextField
+                  key={p.code}
+                  id={`fee-fba-${p.code}`}
+                  inputMode="decimal"
+                  label={`${p.name} ($)`}
+                  placeholder={form.fbaPerUnit}
+                  value={form.planFba[p.code] ?? ''}
+                  onChange={(e) => set('planFba', { ...form.planFba, [p.code]: e.currentTarget.value })}
+                  error={planFbaError(form, errors, p.code)}
+                />
+              ))}
+          </div>
         </div>
         <Checkbox id="fee-reverse" checked={form.reverseOnRefund} onChange={(e) => set('reverseOnRefund', e.currentTarget.checked)} label="Reverse commission on refunds" description={`— ${overview.reverseOnRefundHelp}`} />
       </Card>

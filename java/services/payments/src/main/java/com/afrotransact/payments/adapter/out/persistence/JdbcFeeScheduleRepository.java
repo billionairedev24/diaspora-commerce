@@ -60,6 +60,10 @@ class JdbcFeeScheduleRepository implements FeeScheduleRepository {
                     .param("bps", o.commissionBps()).update();
         }
         insertPlanRates(s.id(), "COMMISSION", s.planBps());
+        s.planFbaMinor().forEach((plan, minor) -> jdbc.sql("""
+                insert into fee_schedule_plan_fba (schedule_id, plan_code, fba_per_unit_minor)
+                values (:id, :plan, :fba)
+                """).param("id", s.id()).param("plan", plan).param("fba", minor).update());
         RateTable connection = s.connectionFee();
         if (connection != null) {
             jdbc.sql("insert into fee_schedule_connection_fee (schedule_id, default_bps) values (:id, :bps)")
@@ -200,6 +204,11 @@ class JdbcFeeScheduleRepository implements FeeScheduleRepository {
             connection.put(id, new RateTable(rs.getInt("default_bps"), connectionRates.getOrDefault(id, Map.of()),
                     plans.getOrDefault(id, Map.of()).getOrDefault("CONNECTION_FEE", Map.of())));
         });
+        Map<UUID, Map<String, Long>> planFba = new HashMap<>();
+        jdbc.sql("select schedule_id, plan_code, fba_per_unit_minor from fee_schedule_plan_fba").query(rs -> {
+            planFba.computeIfAbsent(rs.getObject("schedule_id", UUID.class), k -> new HashMap<>())
+                    .put(rs.getString("plan_code"), rs.getLong("fba_per_unit_minor"));
+        });
         return jdbc.sql("select * from fee_schedule order by version")
                 .query((rs, n) -> {
                     UUID id = rs.getObject("id", UUID.class);
@@ -212,7 +221,7 @@ class JdbcFeeScheduleRepository implements FeeScheduleRepository {
                             rs.getBoolean("reverse_commission_on_refund"), rs.getString("note"),
                             rs.getString("created_by"), Sql.instant(rs, "created_at"), cancellations.get(id),
                             delivery.get(id), plans.getOrDefault(id, Map.of()).getOrDefault("COMMISSION", Map.of()),
-                            connection.get(id));
+                            connection.get(id), planFba.getOrDefault(id, Map.of()));
                 })
                 .list();
     }

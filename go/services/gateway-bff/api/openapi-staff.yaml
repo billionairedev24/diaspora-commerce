@@ -5569,7 +5569,7 @@ components:
     FeeScheduleView:
       type: object
       required: [id, version, status, effectiveFrom, currency, defaultCommissionBps, categoryRates, overrides, cardPctBps, cardFixedMinor, fbaPerUnitMinor,
-        reverseCommissionOnRefund, deliveryPricing, planRates, connectionFee, note, createdBy, createdAt, cancelledAt, cancelledBy, cancelReason, cancellable]
+        reverseCommissionOnRefund, deliveryPricing, planRates, planFba, connectionFee, note, createdBy, createdAt, cancelledAt, cancelledBy, cancelReason, cancellable]
       properties:
         id: {type: string}
         version: {type: integer}
@@ -5590,6 +5590,10 @@ components:
           type: array
           items: {$ref: '#/components/schemas/FeePlanRate'}
           description: Product commission per plan, after negotiated rates and before category rates
+        planFba:
+          type: array
+          items: {$ref: '#/components/schemas/FeePlanFba'}
+          description: FBA fee per unit of the plans that have their own; every other plan pays fbaPerUnitMinor
         connectionFee:
           oneOf: [{$ref: '#/components/schemas/FeeConnectionFee'}, {type: 'null'}]
           description: Connection fees on service bookings; null for versions created before they existed (services paid the 'services' commission)
@@ -5631,6 +5635,19 @@ components:
         plansAvailable: {type: boolean, description: false when the plan catalogue could not be read}
         planWarnings: {type: array, items: {type: string}, description: Plans whose feature text advertises a fee the version in force does not charge}
         serviceCategories: {type: array, items: {$ref: '#/components/schemas/FeeCategory'}, description: Service categories the connection-fee sections price}
+    FeePlanFba:
+      type: object
+      required: [planCode, planName, feeMinor]
+      properties:
+        planCode: {type: string}
+        planName: {type: string}
+        feeMinor: {type: integer, format: int64, minimum: 0}
+    FeeDraftPlanFba:
+      type: object
+      required: [planCode, feeMinor]
+      properties:
+        planCode: {type: string, maxLength: 80}
+        feeMinor: {type: integer, format: int64, minimum: 0, maximum: 10000}
     FeePlanRate:
       type: object
       required: [planCode, planName, category, label, bps]
@@ -5848,6 +5865,11 @@ components:
           maxItems: 500
           items: {$ref: '#/components/schemas/FeeDraftPlanRate'}
           description: Product commission per plan. Omitted or null = carried over from the latest live version; [] = no plan rates
+        planFba:
+          type: [array, 'null']
+          maxItems: 100
+          items: {$ref: '#/components/schemas/FeeDraftPlanFba'}
+          description: FBA fee per unit per plan; plans left out pay fbaPerUnitMinor. Omitted or null = carried over from the latest live version; [] = every plan pays the default
         connectionFee:
           oneOf: [{$ref: '#/components/schemas/FeeConnectionDraft'}, {type: 'null'}]
           description: Connection fees on service bookings. Omitted or null = carried over from the latest live version

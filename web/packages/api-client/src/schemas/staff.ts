@@ -395,6 +395,8 @@ export const FeeScheduleViewSchema = z.object({
   deliveryPricing: DeliveryPricingSchema.nullable(),
   /** Product commission per plan, after negotiated rates and before category rates. */
   planRates: z.array(FeePlanRateSchema).default([]),
+  /** FBA fee per unit of the plans that have their own; the others pay fbaPerUnitMinor. */
+  planFba: z.array(z.object({ planCode: z.string(), planName: z.string(), feeMinor: z.number().int() })).default([]),
   /** Connection fees on service bookings; null for versions created before they existed. */
   connectionFee: FeeConnectionFeeSchema.nullable().default(null),
   note: nullableString,
@@ -459,6 +461,8 @@ export interface FeeScheduleDraft {
   deliveryPricing?: DeliveryPricingDraft | null;
   /** Omitted or null = carried over from the latest live version; [] = no plan rates. */
   planRates?: FeeDraftPlanRate[] | null;
+  /** FBA fee per unit per plan; plans left out pay fbaPerUnitMinor. Omitted or null = carried over; [] = none. */
+  planFba?: { planCode: string; feeMinor: number }[] | null;
   /** Omitted or null = carried over from the latest live version. */
   connectionFee?: FeeConnectionDraft | null;
   note: string;

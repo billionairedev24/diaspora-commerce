@@ -70,6 +70,62 @@ type FeePlanRate struct {
 	Bps      int    `json:"bps"`
 }
 
+// FeePlanFba is one plan's FBA fee per unit (plans without one pay the version's default).
+type FeePlanFba struct {
+	PlanCode string `json:"planCode"`
+	PlanName string `json:"planName"`
+	FeeMinor int64  `json:"feeMinor"`
+}
+
+// FeeDraftPlanFba is a draft's FBA fee per unit for one plan.
+type FeeDraftPlanFba struct {
+	PlanCode string `json:"planCode"`
+	FeeMinor *int64 `json:"feeMinor"`
+}
+
+// PlanFbaBody turns draft plan FBA fees into payments' planFbaMinor (plan → minor units).
+func PlanFbaBody(rows []FeeDraftPlanFba) map[string]int64 {
+	out := map[string]int64{}
+	for _, r := range rows {
+		out[strings.ToLower(strings.TrimSpace(r.PlanCode))] = *r.FeeMinor
+	}
+	return out
+}
+
+// PlanFbaOf turns payments' planFbaMinor into rows sorted by plan.
+func PlanFbaOf(plans map[string]int64) []FeePlanFba {
+	out := []FeePlanFba{}
+	for code, fee := range plans {
+		out = append(out, FeePlanFba{PlanCode: code, PlanName: PlanName(code), FeeMinor: fee})
+	}
+	slices.SortFunc(out, func(a, b FeePlanFba) int { return strings.Compare(a.PlanCode, b.PlanCode) })
+	return out
+}
+
+// ValidatePlanFba checks a draft's plan FBA fees (keys like planFba.0.feeMinor).
+func ValidatePlanFba(rows []FeeDraftPlanFba, l FeeLimits) map[string]string {
+	errs := map[string]string{}
+	seen := map[string]bool{}
+	for i, r := range rows {
+		field := fmt.Sprintf("planFba.%d", i)
+		code := strings.ToLower(strings.TrimSpace(r.PlanCode))
+		switch {
+		case !planCodePattern.MatchString(code):
+			errs[field+".planCode"] = "Choose a plan"
+		case seen[code]:
+			errs[field+".planCode"] = "This plan already has an FBA fee"
+		}
+		seen[code] = true
+		switch {
+		case r.FeeMinor == nil:
+			errs[field+".feeMinor"] = "Enter a fee"
+		case *r.FeeMinor < 0 || *r.FeeMinor > l.FbaPerUnitMaxMinor:
+			errs[field+".feeMinor"] = "Enter a fee between $0.00 and " + FormatMinor(l.FbaPerUnitMaxMinor)
+		}
+	}
+	return errs
+}
+
 // FeeConnectionFee is the connection-fee section of a fee-schedule version (service bookings).
 type FeeConnectionFee struct {
 	DefaultBps    int           `json:"defaultBps"`
@@ -228,6 +284,9 @@ func ValidateRateSections(d FeeScheduleDraft, l FeeLimits) map[string]string {
 		}
 	}
 	plans("planRates", d.PlanRates)
+	for k, v := range ValidatePlanFba(d.PlanFba, l) {
+		errs[k] = v
+	}
 	if c := d.ConnectionFee; c != nil {
 		bpsIn("connectionFee.defaultBps", c.DefaultBps)
 		seen := map[string]bool{}

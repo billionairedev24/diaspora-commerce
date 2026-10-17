@@ -364,7 +364,10 @@ final class PaymentsDtos {
             Map<String, Map<String, @Min(0) @Max(10000) Integer>> planBps,
             @Valid @Schema(description = "Service connection fees (on service bookings). Omit to carry the latest "
                     + "version's section over")
-            ConnectionFeeRequest connectionFee) {
+            ConnectionFeeRequest connectionFee,
+            @Schema(description = "FBA fee per unit per plan code, in minor units; plans not listed pay "
+                    + "fbaPerUnitMinor. Omit to carry the latest version's plan FBA fees over; {} removes them")
+            Map<String, @PositiveOrZero Long> planFbaMinor) {
     }
 
     @Schema(name = "ConnectionFee", description = "The connection fee providers pay on each booking's service amount, "
@@ -514,7 +517,9 @@ final class PaymentsDtos {
                                Map<String, Map<String, Integer>> planBps,
                                @Schema(description = "Service connection fees; null for versions created before "
                                        + "they existed (services then paid the 'services' commission)")
-                               ConnectionFeeRequest connectionFee) {
+                               ConnectionFeeRequest connectionFee,
+                               @Schema(description = "FBA fee per unit (minor units) per plan code; plans not "
+                                       + "listed pay fbaPerUnitMinor") Map<String, Long> planFbaMinor) {
 
         static FeeScheduleResponse of(FeeSchedule s) {
             FeeSchedule.Cancellation c = s.cancellation();
@@ -524,7 +529,7 @@ final class PaymentsDtos {
                     s.cardPctBps(), s.cardFixed().minor(), s.fbaPerUnit().minor(), s.reverseCommissionOnRefund(),
                     s.note(), s.createdBy(), s.createdAt(), c == null ? null : c.at(), c == null ? null : c.by(),
                     c == null ? null : c.reason(), DeliveryPricingResponse.of(s.deliveryPricing()),
-                    sorted(s.planBps()), ConnectionFeeRequest.of(s.connectionFee()));
+                    sorted(s.planBps()), ConnectionFeeRequest.of(s.connectionFee()), new TreeMap<>(s.planFbaMinor()));
         }
     }
 

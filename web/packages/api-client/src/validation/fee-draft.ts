@@ -44,6 +44,14 @@ export function validateFeeDraft(d: FeeScheduleDraft, r: FeeDraftRules): Record<
   bps('cardPctBps', d.cardPctBps, l.cardPctMaxBps);
   minor('cardFixedMinor', d.cardFixedMinor, l.cardFixedMaxMinor);
   minor('fbaPerUnitMinor', d.fbaPerUnitMinor, l.fbaPerUnitMaxMinor);
+  const fbaSeen = new Set<string>();
+  (d.planFba ?? []).forEach((r, i) => {
+    const code = r.planCode.trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9_-]{0,79}$/.test(code)) errs[`planFba.${i}.planCode`] = 'Choose a plan';
+    else if (fbaSeen.has(code)) errs[`planFba.${i}.planCode`] = 'This plan already has an FBA fee';
+    fbaSeen.add(code);
+    minor(`planFba.${i}.feeMinor`, r.feeMinor, l.fbaPerUnitMaxMinor);
+  });
   const note = d.note.trim().length;
   if (note < l.noteMinLength || note > l.noteMaxLength) errs.note = `Explain the change (${l.noteMinLength} to ${l.noteMaxLength} characters)`;
   if (d.categoryRates.length > l.maxCategoryRates) errs.categoryRates = `At most ${l.maxCategoryRates} categories`;

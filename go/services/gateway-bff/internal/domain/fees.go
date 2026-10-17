@@ -91,13 +91,15 @@ type FeeScheduleView struct {
 	// versions created before connection fees existed).
 	PlanRates     []FeePlanRate     `json:"planRates"`
 	ConnectionFee *FeeConnectionFee `json:"connectionFee"`
-	Note          *string           `json:"note"`
-	CreatedBy     string            `json:"createdBy"`
-	CreatedAt     *time.Time        `json:"createdAt"`
-	CancelledAt   *time.Time        `json:"cancelledAt"`
-	CancelledBy   *string           `json:"cancelledBy"`
-	CancelReason  *string           `json:"cancelReason"`
-	Cancellable   bool              `json:"cancellable"`
+	// PlanFba is the FBA fee per unit of the plans that have their own; the others pay FbaPerUnitMinor.
+	PlanFba      []FeePlanFba `json:"planFba"`
+	Note         *string      `json:"note"`
+	CreatedBy    string       `json:"createdBy"`
+	CreatedAt    *time.Time   `json:"createdAt"`
+	CancelledAt  *time.Time   `json:"cancelledAt"`
+	CancelledBy  *string      `json:"cancelledBy"`
+	CancelReason *string      `json:"cancelReason"`
+	Cancellable  bool         `json:"cancellable"`
 }
 
 // FeeRetail describes AfroTransact Retail (merchant of record): never charged commission or fees, never overridden.
@@ -168,6 +170,8 @@ type FeeScheduleDraft struct {
 	DeliveryPricing *DeliveryPricingDraft `json:"deliveryPricing"`
 	// PlanRates nil = carried over from the latest live version; [] = no plan rates.
 	PlanRates []FeeDraftPlanRate `json:"planRates"`
+	// PlanFba nil = carried over from the latest live version; [] = every plan pays the default.
+	PlanFba []FeeDraftPlanFba `json:"planFba"`
 	// ConnectionFee nil = carried over from the latest live version.
 	ConnectionFee *FeeConnectionDraft `json:"connectionFee"`
 	Note          string              `json:"note"`

@@ -165,11 +165,13 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
                     : latest.map(FeeSchedule::planBps).orElse(Map.of());
             RateTable connectionFee = cmd.connectionFee() != null ? cmd.connectionFee()
                     : latest.map(FeeSchedule::connectionFee).orElse(null);
+            Map<String, Long> planFba = cmd.planFbaMinor() != null ? cmd.planFbaMinor()
+                    : latest.map(FeeSchedule::planFbaMinor).orElse(Map.of());
             FeeSchedule schedule = new FeeSchedule(UUID.randomUUID(), FeeSchedule.nextVersion(history),
                     effective, currency, cmd.categoryBps(), cmd.defaultCommissionBps(), cmd.overrides(),
                     cmd.cardPctBps(), Money.of(cmd.cardFixedMinor(), currency),
                     Money.of(cmd.fbaPerUnitMinor(), currency), cmd.reverseCommissionOnRefund(), cmd.note(),
-                    actor.subject(), now, null, delivery, planBps, connectionFee);
+                    actor.subject(), now, null, delivery, planBps, connectionFee, planFba);
             schedules.insert(schedule);
             AUDIT.info("fee schedule v{} ({}) created by {}, effective {}", schedule.version(), schedule.id(),
                     actor.subject(), schedule.effectiveFrom());

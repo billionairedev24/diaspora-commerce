@@ -16,16 +16,29 @@ import com.afrotransact.payments.domain.RateTable;
  * @param planBps         product commission per plan (plan → category → bps, {@code *} = the plan's other
  *                        categories); null = carried over from the latest live version, empty = no plan rates
  * @param connectionFee   the service connection-fee section; null = carried over from the latest live version
+ * @param planFbaMinor    FBA fee per unit per plan code (minor units); null = carried over, empty = every plan pays
+ *                        the default
  */
 public record NewFeeScheduleCommand(Instant effectiveFrom, String currency, Map<String, Integer> categoryBps,
                                     int defaultCommissionBps, List<CommissionOverride> overrides, int cardPctBps,
                                     long cardFixedMinor, long fbaPerUnitMinor, boolean reverseCommissionOnRefund,
                                     String note, DeliveryPricingCommand deliveryPricing,
-                                    Map<String, Map<String, Integer>> planBps, RateTable connectionFee) {
+                                    Map<String, Map<String, Integer>> planBps, RateTable connectionFee,
+                                    Map<String, Long> planFbaMinor) {
 
     public NewFeeScheduleCommand {
         categoryBps = categoryBps == null ? Map.of() : Map.copyOf(categoryBps);
         overrides = overrides == null ? List.of() : List.copyOf(overrides);
+    }
+
+    /** A version that carries the plan FBA fees over from the latest one. */
+    public NewFeeScheduleCommand(Instant effectiveFrom, String currency, Map<String, Integer> categoryBps,
+                                 int defaultCommissionBps, List<CommissionOverride> overrides, int cardPctBps,
+                                 long cardFixedMinor, long fbaPerUnitMinor, boolean reverseCommissionOnRefund,
+                                 String note, DeliveryPricingCommand deliveryPricing,
+                                 Map<String, Map<String, Integer>> planBps, RateTable connectionFee) {
+        this(effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixedMinor,
+                fbaPerUnitMinor, reverseCommissionOnRefund, note, deliveryPricing, planBps, connectionFee, null);
     }
 
     /** A version that carries plan rates and the connection-fee section over from the latest one. */
@@ -34,7 +47,7 @@ public record NewFeeScheduleCommand(Instant effectiveFrom, String currency, Map<
                                  long cardFixedMinor, long fbaPerUnitMinor, boolean reverseCommissionOnRefund,
                                  String note, DeliveryPricingCommand deliveryPricing) {
         this(effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixedMinor,
-                fbaPerUnitMinor, reverseCommissionOnRefund, note, deliveryPricing, null, null);
+                fbaPerUnitMinor, reverseCommissionOnRefund, note, deliveryPricing, null, null, null);
     }
 
     /** A version that carries the delivery pricing over from the latest one. */

@@ -45,6 +45,8 @@ export interface FeeForm {
   cardPct: string;
   cardFixed: string;
   fbaPerUnit: string;
+  /** FBA fee per unit by plan code, in dollars; blank = the plan pays the default above. */
+  planFba: Record<string, string>;
   reverseOnRefund: boolean;
   /** AfroTransact Delivery pricing (S255); left out = carried over from the latest live version. */
   delivery: DeliveryForm;
@@ -76,6 +78,7 @@ export function formFrom(base: FeeScheduleView | null, overview: Pick<FeesOvervi
     cardPct: bpsToPercentText(base?.cardPctBps ?? 290),
     cardFixed: dollarsText(base?.cardFixedMinor ?? 30),
     fbaPerUnit: dollarsText(base?.fbaPerUnitMinor ?? 325),
+    planFba: Object.fromEntries((base?.planFba ?? []).map((p) => [p.planCode, dollarsText(p.feeMinor)])),
     reverseOnRefund: base?.reverseCommissionOnRefund ?? true,
     delivery: deliveryFormFrom(base),
     note: ''
@@ -86,6 +89,17 @@ export interface DraftResult {
   draft: FeeScheduleDraft | null;
   /** Keyed like the BFF's field errors (categoryRates.2.commissionBps…). */
   errors: Record<string, string>;
+}
+
+/** The plans that have their own FBA fee, in the order the draft sends them. */
+export function filledPlanFba(form: Pick<FeeForm, 'planFba'>): [string, string][] {
+  return Object.entries(form.planFba).filter(([, text]) => text.trim() !== '');
+}
+
+/** The error for one plan's FBA fee: a typing error (keyed by code) or the range error (keyed by position). */
+export function planFbaError(form: Pick<FeeForm, 'planFba'>, errors: Record<string, string>, code: string): string | undefined {
+  const i = filledPlanFba(form).findIndex(([c]) => c === code);
+  return errors[`planFba.${code}`] ?? (i >= 0 ? (errors[`planFba.${i}.feeMinor`] ?? errors[`planFba.${i}.planCode`]) : undefined);
 }
 
 /** Converts the form to the BFF draft (percent → bps, dollars → minor units) and validates it with the BFF's rules. */
@@ -127,6 +141,7 @@ export function toDraft(
     cardFixedMinor: usd('cardFixedMinor', form.cardFixed),
     fbaPerUnitMinor: usd('fbaPerUnitMinor', form.fbaPerUnit),
     reverseCommissionOnRefund: form.reverseOnRefund,
+    planFba: filledPlanFba(form).map(([planCode, text]) => ({ planCode, feeMinor: usd(`planFba.${planCode}`, text) })),
     deliveryPricing: toDeliveryDraft(form.delivery, errors, t),
     note: form.note
   };
@@ -186,6 +201,14 @@ export function diffDraft(base: FeeScheduleView | null, d: FeeScheduleDraft, cat
   });
   cmp('cardFee', 'Card fee estimate', base ? `${formatBps(base.cardPctBps)} + ${money(base.cardFixedMinor)}` : null, `${formatBps(d.cardPctBps)} + ${money(d.cardFixedMinor)}`);
   cmp('fbaPerUnitMinor', 'FBA fee per unit', base ? money(base.fbaPerUnitMinor) : null, money(d.fbaPerUnitMinor));
+  const planFbaOf = (rows: { planCode: string; feeMinor: number }[] | null | undefined) => new Map((rows ?? []).map((r) => [r.planCode.trim().toLowerCase(), r.feeMinor]));
+  const fbaFrom = planFbaOf(base?.planFba);
+  const fbaTo = d.planFba ? planFbaOf(d.planFba) : fbaFrom;
+  [...new Set([...fbaFrom.keys(), ...fbaTo.keys()])].sort().forEach((code) => {
+    const f = fbaFrom.get(code);
+    const to = fbaTo.get(code);
+    cmp(`planFba:${code}`, `FBA fee per unit · ${code.replace(/[_-]+/g, ' ')}`, f === undefined ? null : money(f), to === undefined ? null : money(to));
+  });
   cmp('reverseCommissionOnRefund', 'Commission on refunds', base ? yesNo(base.reverseCommissionOnRefund) : null, yesNo(d.reverseCommissionOnRefund));
   rows.push(...diffDelivery(base?.deliveryPricing ?? null, d.deliveryPricing ?? undefined, orgName, t));
   return rows;

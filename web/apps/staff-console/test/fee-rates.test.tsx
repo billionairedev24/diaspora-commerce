@@ -26,7 +26,7 @@ const base: FeeScheduleView = {
   cardPctBps: 290, cardFixedMinor: 30, fbaPerUnitMinor: 325, reverseCommissionOnRefund: true, note: 'Q3', createdBy: 'Musa Bello', createdAt: null,
   deliveryPricing: null,
   cancelledAt: null, cancelledBy: null, cancelReason: null, cancellable: false,
-  planRates: [
+  planFba: [], planRates: [
     { planCode: 'seller_growth', planName: 'Seller Growth', category: '*', label: 'Other categories', bps: 1000 },
     { planCode: 'seller_growth', planName: 'Seller Growth', category: 'fashion', label: 'Fashion', bps: 1200 }
   ],
