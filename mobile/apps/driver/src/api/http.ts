@@ -18,11 +18,17 @@ export class ApiProblemError extends Error {
 }
 
 export class NetworkError extends Error {
-  constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : 'Network request failed');
+  readonly timedOut: boolean;
+
+  constructor(cause: unknown, readonly host = '', timedOut = false) {
+    super(timedOut ? `${host || 'The server'} did not answer in time` : host ? `Could not reach ${host}` : cause instanceof Error ? cause.message : 'Network request failed');
     this.name = 'NetworkError';
+    this.timedOut = timedOut;
   }
 }
+
+/** Every request has a deadline: a host that never answers (wrong LAN address, a dead tunnel) would otherwise hang the sync. */
+export const REQUEST_TIMEOUT_MS = 20_000;
 
 export interface JsonOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
@@ -37,10 +43,22 @@ export function createJson(baseUrl: string, tokens: TokenSource, doFetch: Fetch)
     const headers: Record<string, string> = { Accept: 'application/json', 'X-Client': 'driver-app', ...opts.headers };
     if (token) headers.Authorization = `Bearer ${token}`;
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      ctrl.abort();
+    }, REQUEST_TIMEOUT_MS);
+    const callerAbort = () => ctrl.abort();
+    if (opts.signal?.aborted) ctrl.abort();
+    else opts.signal?.addEventListener('abort', callerAbort, { once: true });
     try {
-      return await doFetch(new Request(`${base}${path}`, { method: opts.method ?? 'GET', headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: opts.signal }));
+      return await doFetch(new Request(`${base}${path}`, { method: opts.method ?? 'GET', headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: ctrl.signal }));
     } catch (e) {
-      throw new NetworkError(e);
+      throw new NetworkError(e, new URL(base).host, timedOut);
+    } finally {
+      clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', callerAbort);
     }
   };
   return async function json<T>(path: string, opts: JsonOptions = {}): Promise<T> {
