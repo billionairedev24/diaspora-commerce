@@ -48,7 +48,10 @@ export function ShipmentProgress({ shipment, editable, loading, onMove }: Props)
   const next = editable ? shipment.nextActions[0] : undefined;
   const needsLabel = next === 'PICKED_UP' && !shipment.trackingNumber;
   const [code, setCode] = useState('');
-  const needsCode = next === 'DELIVERED';
+  // Only a pickup order waiting at the shop is handed over against the buyer's code; a shipped parcel is just confirmed.
+  const needsCode = next === 'DELIVERED' && shipment.status === 'READY';
+  const hint = next === 'DELIVERED' && !needsCode ? t('sc.ship.hint.DELIVERED_SHIPPED') : next ? t(`sc.ship.hint.${next}`) : '';
+  const doLabel = next === 'DELIVERED' && !needsCode ? t('sc.ship.do.DELIVERED_SHIPPED') : next ? t(`sc.ship.do.${next}`) : '';
   const codeOk = /^\d{4}$/.test(code);
   return (
     <div className="flex flex-col gap-3" data-testid="shipment-progress">
@@ -73,9 +76,9 @@ export function ShipmentProgress({ shipment, editable, loading, onMove }: Props)
             </div>
           ) : null}
           <Button size="sm" loading={loading} disabled={needsLabel || (needsCode && !codeOk)} onClick={() => onMove(next, needsCode ? code : undefined)}>
-            {t(`sc.ship.do.${next}`)}
+            {doLabel}
           </Button>
-          <span className="text-xs text-muted">{needsLabel ? t('sc.ship.needLabel') : needsCode && !codeOk ? t('sc.ship.needCode') : t(`sc.ship.hint.${next}`)}</span>
+          <span className="text-xs text-muted">{needsLabel ? t('sc.ship.needLabel') : needsCode && !codeOk ? t('sc.ship.needCode') : hint}</span>
         </div>
       ) : null}
     </div>

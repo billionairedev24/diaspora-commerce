@@ -856,5 +856,7 @@
   "sc.billing.unpaidTitle": "Invoice {number} is unpaid",
   "sc.billing.unpaidDetail": "We couldn’t collect it. Update your payment method, then retry.",
   "sc.billing.unpaidNext": "We’ll try again on {date}.",
-  "sc.billing.invoiceOrder": "Each invoice is paid in this order: your credit and coupons first, then your sales if you chose that, then your card or bank account."
+  "sc.billing.invoiceOrder": "Each invoice is paid in this order: your credit and coupons first, then your sales if you chose that, then your card or bank account.",
+  "sc.ship.do.DELIVERED_SHIPPED": "Mark delivered",
+  "sc.ship.hint.DELIVERED_SHIPPED": "Use this if the carrier shows it arrived or the buyer confirmed. The buyer is told it is done."
 }

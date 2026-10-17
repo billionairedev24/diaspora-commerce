@@ -313,14 +313,18 @@ func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, k
 		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack, mark ready, mark shipped and hand a pickup order over"})
 	}
 	handoverCode = strings.TrimSpace(handoverCode)
-	if status == "DELIVERED" && !domain.IsHandoverCode(handoverCode) {
-		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"handoverCode": "Ask the buyer for their 4-digit code"})
-	}
 	if status != "DELIVERED" {
 		handoverCode = ""
 	}
 	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelEdit); err != nil {
 		return domain.SellerOrderDetail{}, err
+	}
+	if status == "DELIVERED" && !domain.IsHandoverCode(handoverCode) {
+		// A pickup order is handed over against the buyer's code; a parcel the seller shipped is confirmed delivered
+		// without one (orders refuses any other case).
+		if handoverCode != "" || s.waitingForHandover(ctx, c, orderNumber, shipmentID) {
+			return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"handoverCode": "Ask the buyer for their 4-digit code"})
+		}
 	}
 	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status), handoverCode)
 	if err != nil {
@@ -334,6 +338,17 @@ func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, k
 	out := orderOf(o)
 	s.withProofLinks(ctx, &out)
 	return out, nil
+}
+
+// waitingForHandover: the shipment is ready at the seller's shop (a pickup order), which only the buyer's code releases.
+// When it cannot be read, the code is asked for, the safe side.
+func (s *sellerOrdersImpl) waitingForHandover(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) bool {
+	o, err := s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber)
+	if err != nil {
+		return true
+	}
+	sh, ok := orderOf(o).Shipment(shipmentID)
+	return !ok || sh.Status == "READY"
 }
 
 // withProofLinks gives the shipments' delivery proofs their short-lived photo and signature links.

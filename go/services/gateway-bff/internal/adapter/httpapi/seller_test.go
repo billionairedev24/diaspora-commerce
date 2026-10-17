@@ -135,7 +135,8 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/orders?status=SHIPPED_NOPE", nil), 422)
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-0000", nil), 404)
-	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED"}), 422)
+	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED", "handoverCode": "12"}), 422) // a code, when given, has 4 digits
+	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED"}), 409)                  // no code: orders decides (placed → delivered is not a step)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "PACKED"}), 409)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "CONFIRMED"}), 200)
 	mustStatus(t, b.do("POST", orderPath+"/rates", map[string]any{"parcel": parcel, "shipFrom": from}), 200)

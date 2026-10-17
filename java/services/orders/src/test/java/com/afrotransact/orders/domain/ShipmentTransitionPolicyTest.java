@@ -54,6 +54,8 @@ class ShipmentTransitionPolicyTest {
                     m.put(READY, EnumSet.of(PACKED));
                     // Carrier parcels (the matrix uses the carrier method): shipped once the label exists.
                     m.put(PICKED_UP, EnumSet.of(READY));
+                    // ... and confirmed delivered by the seller when the carrier's tracking has not reported it.
+                    m.put(DELIVERED, EnumSet.of(PICKED_UP, IN_TRANSIT, OUT));
                 }
             }
             case PLATFORM_ADMIN, FULFILMENT_OPS -> {
@@ -161,9 +163,27 @@ class ShipmentTransitionPolicyTest {
     }
 
     @Test
-    void sellersCannotMarkDelivered() {
-        Shipment shipped = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, IN_TRANSIT);
-        assertThatThrownBy(() -> POLICY.decide(shipped, DELIVERED, ActorKind.SELLER))
+    void sellersConfirmDeliveryOfCarrierParcelsOnceShipped() {
+        for (ShipmentStatus on : List.of(PICKED_UP, IN_TRANSIT, OUT)) {
+            Shipment shipped = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, on);
+            assertThat(POLICY.decide(shipped, DELIVERED, ActorKind.SELLER).kind())
+                    .isEqualTo(TransitionDecision.Kind.ALLOW);
+            assertThat(POLICY.nextFor(shipped, ActorKind.SELLER)).containsExactly(DELIVERED);
+        }
+    }
+
+    @Test
+    void sellersCannotMarkDeliveredBeforeTheParcelIsShipped() {
+        Shipment ready = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, READY);
+        assertThatThrownBy(() -> POLICY.decide(ready, DELIVERED, ActorKind.SELLER))
+                .isInstanceOf(TransitionRefused.class);
+    }
+
+    @Test
+    void sellersCannotMarkDeliveredOnCourierDeliveries() {
+        Shipment onTheWay = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.AFROTRANSACT_DELIVERY,
+                OUT);
+        assertThatThrownBy(() -> POLICY.decide(onTheWay, DELIVERED, ActorKind.SELLER))
                 .isInstanceOf(TransitionRefused.class)
                 .satisfies(e -> assertThat(((TransitionRefused) e).forbidden()).isTrue());
     }

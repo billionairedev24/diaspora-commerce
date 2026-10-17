@@ -11,7 +11,7 @@ import java.util.Set;
  * Architecture §17c "Who can do what", enforced here rather than in any UI:
  * <ul>
  *   <li><b>Seller-fulfilled</b>: only the seller confirms, packs and marks ready, marks a carrier parcel shipped
- *       (handed to the carrier, once a label exists) and hands a pickup order to the customer at its own shop. Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
+ *       (handed to the carrier, once a label exists), confirms it delivered when the carrier's tracking has not, and hands a pickup order to the customer at its own shop. Carriers (webhooks) and AfroTransact Delivery couriers move the transit steps.
  *       Platform admins may confirm delivery, record a failure, process returns or cancel — never "packed" (nor
  *       confirmed / ready).</li>
  *   <li><b>Fulfilled by AfroTransact / AfroTransact Retail</b>: admins and fulfilment ops own every step; carriers
@@ -155,6 +155,11 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         if (method == DeliveryMethod.CARRIER) {
             // "Shipped": the parcel with its label is handed to the carrier; the carrier's tracking moves it on.
             m.put(ShipmentStatus.PICKED_UP, EnumSet.of(ShipmentStatus.READY));
+            // "Delivered": the carrier's tracking normally reports it; when it does not (no webhook, a tracking gap)
+            // the seller confirms it so the order does not sit "in progress" for ever. Later carrier events for a
+            // delivered shipment are ignored.
+            m.put(ShipmentStatus.DELIVERED, EnumSet.of(ShipmentStatus.PICKED_UP, ShipmentStatus.IN_TRANSIT,
+                    ShipmentStatus.OUT_FOR_DELIVERY));
         }
         return m;
     }
