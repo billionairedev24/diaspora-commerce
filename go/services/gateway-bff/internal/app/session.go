@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"github.com/golang-jwt/jwt/v5"
 	"log/slog"
 	"strings"
 	"time"
@@ -144,7 +145,13 @@ func (s *sessionServiceImpl) resolveApp(ctx context.Context, c *domain.Caller, i
 		sub, _, err := s.verifier.VerifyAccess(ctx, in.BearerToken)
 		if err != nil {
 			s.o.Log.Warn("app bearer token rejected", "error", err)
-			return nil, domain.NewProblem(401, domain.CodeUnauthenticated, "Sign in required", "Invalid or expired token.").WithCause(err)
+			detail := "Invalid or expired token."
+			if errors.Is(err, jwt.ErrTokenInvalidIssuer) {
+				// Said plainly because it is the usual local-development cause: the app signed in at another identity
+				// address than the one this stack was started with.
+				detail = "The app signed in at a different identity address than this server expects (local: restart the stack with the same MOBILE_HOST)."
+			}
+			return nil, domain.NewProblem(401, domain.CodeUnauthenticated, "Sign in required", detail).WithCause(err)
 		}
 		c.Subject = sub
 	} else {

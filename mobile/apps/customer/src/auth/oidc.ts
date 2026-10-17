@@ -85,7 +85,7 @@ export async function exchangeSignInCode(code: string, verifier: string): Promis
 /** The refresh token is no longer accepted (expired, revoked, already used): the person has to sign in again. A network
     or server failure is not that: the session is still good and the next request tries again. */
 export class SessionGone extends Error {
-  constructor() {
+  constructor(readonly reason = 'refresh token refused') {
     super('Your session ended');
     this.name = 'SessionGone';
   }
@@ -98,13 +98,13 @@ export function isInvalidGrant(e: unknown): boolean {
 
 export async function refreshTokens(current: TokenSet): Promise<TokenSet> {
   if (env.mocks) return mockTokens();
-  if (!current.refreshToken) throw new SessionGone();
+  if (!current.refreshToken) throw new SessionGone('no refresh token was issued at sign-in');
   const doc = await discovery();
   try {
     const r = await AuthSession.refreshAsync({ clientId: env.oidcClientId, refreshToken: current.refreshToken, scopes: SCOPES }, doc);
     return toTokenSet(r, current.refreshToken);
   } catch (e) {
-    throw isInvalidGrant(e) ? new SessionGone() : e;
+    throw isInvalidGrant(e) ? new SessionGone(`identity refused the refresh token (${(e as { code?: string }).code ?? 'invalid_grant'})`) : e;
   }
 }
 

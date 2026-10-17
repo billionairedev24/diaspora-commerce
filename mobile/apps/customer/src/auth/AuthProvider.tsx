@@ -5,6 +5,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { AppState } from 'react-native';
 
 import { type TokenSource } from '@/api/http';
+import { env } from '@/config/env';
 import { decodeJwt, initialsOf, isExpiring } from '@/domain/jwt';
 import { phaseOnLaunch, type SessionPhase, shouldLockOnResume } from '@/domain/lockPolicy';
 import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
@@ -87,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const tokens = useRef<TokenSet | null>(null);
   const refreshing = useRef<Promise<string | null> | null>(null);
   const attempt = useRef<NativeAttempt | null>(null);
+  const goneReason = useRef('');
   const hooks = useRef(new Set<() => Promise<void>>());
   const backgroundedAt = useRef<number | null>(null);
   const phaseRef = useRef(phase);
@@ -161,7 +163,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await persistTokens(t);
         return t.accessToken;
       } catch (e) {
-        if (e instanceof SessionGone) return null;
+        if (e instanceof SessionGone) {
+          goneReason.current = e.reason;
+          return null;
+        }
         throw e;
       } finally {
         refreshing.current = null;
@@ -182,7 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     refreshAccessToken,
-    onSessionExpired: () => { void signOut({ flash: 'Your session ended. Sign in again.' }); }
+    onSessionExpired: () => { void signOut({ flash: `Your session ended. Sign in again.${env.appEnv !== 'prod' && goneReason.current ? ` (${goneReason.current})` : ''}` }); }
   }), [refreshAccessToken, signOut]);
 
   /* A new sign-in on this phone starts the first-time setup (Face ID → passcode → notifications) unless it was done. */

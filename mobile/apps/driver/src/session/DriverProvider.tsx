@@ -16,6 +16,7 @@ import { type TokenSource } from '@/api/http';
 import { beginNativeSignIn, type NativeAttempt } from '@/auth/nativeAuth';
 import { refreshTokens, revokeTokens, SessionGone, type TokenSet } from '@/auth/oidc';
 import { secureStorage } from '@/auth/secureStorage';
+import { env } from '@/config/env';
 import { decideAccess } from '@/domain/access';
 import { decodeJwt, isExpiring } from '@/domain/jwt';
 import { type SecondFactor, type SignInStep } from '@/domain/nativeSignIn';
@@ -75,6 +76,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const pushToken = useRef<string | null>(null);
   const attempt = useRef<NativeAttempt | null>(null);
   const expire = useRef<() => void>(() => undefined);
+  const goneReason = useRef('');
   const [notice, setNotice] = useState('');
   const [phase, setPhase] = useState<Phase>('booting');
   const [user, setUser] = useState<DriverUser | null>(null);
@@ -88,7 +90,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       if (!tokens.current) return null;
       refreshing.current ??= refreshTokens(tokens.current)
         .then(async (t) => { tokens.current = t; await secureStorage.set(TOKENS, JSON.stringify(t)); return t.accessToken; })
-        .catch((e: unknown) => { if (e instanceof SessionGone) return null; throw e; })
+        .catch((e: unknown) => { if (e instanceof SessionGone) { goneReason.current = e.reason; return null; } throw e; })
         .finally(() => { refreshing.current = null; });
       return refreshing.current;
     };
@@ -281,7 +283,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       await clearSession();
       setUser(null);
       setDenied(null);
-      setNotice('Your session ended. Sign in again.');
+      setNotice(`Your session ended. Sign in again.${env.appEnv !== 'prod' && goneReason.current ? ` (${goneReason.current})` : ''}`);
       setPhase('signed-out');
     })();
   };
