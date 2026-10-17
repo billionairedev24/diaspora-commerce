@@ -589,11 +589,17 @@ web_build_fresh() {
     \( -name node_modules -o -name .next -o -name .next-prod \) -prune -o -type f -newer "$id" -print -quit 2>/dev/null)" ]]
 }
 
+# True when node_modules is missing or older than pnpm-lock.yaml (a pull added or changed a dependency): the web and
+# mobile apps then install first instead of failing to build on a package that is not there.
+deps_stale() {
+  [[ ! -f "$ROOT/node_modules/.modules.yaml" || "$ROOT/pnpm-lock.yaml" -nt "$ROOT/node_modules/.modules.yaml" ]]
+}
+
 web_up() {
   local app name url port i mode
   if [[ "${WEB:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || { echo "pnpm not found: web apps skipped (corepack enable; then make up again)." >&2; return 0; }
-  if [[ ! -x "$ROOT/web/apps/storefront/node_modules/.bin/next" ]]; then
+  if [[ ! -x "$ROOT/web/apps/storefront/node_modules/.bin/next" ]] || deps_stale; then
     echo "==> installing web dependencies (pnpm install)"
     (cd "$ROOT" && pnpm install --frozen-lockfile)
   fi
@@ -963,7 +969,7 @@ mobile_up() {
   local app name port i mocks host clear
   if [[ "${MOBILE:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || return 0
-  if [[ ! -x "$ROOT/mobile/apps/customer/node_modules/.bin/expo" ]]; then
+  if [[ ! -x "$ROOT/mobile/apps/customer/node_modules/.bin/expo" ]] || deps_stale; then
     echo "==> installing mobile dependencies (pnpm install)"
     (cd "$ROOT" && pnpm install --frozen-lockfile)
   fi
