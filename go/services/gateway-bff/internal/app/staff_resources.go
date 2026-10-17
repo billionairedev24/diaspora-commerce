@@ -85,6 +85,8 @@ type staffResource struct {
 	links              func(o jobj) []domain.RecordLink
 	version            func(o jobj) string
 	actions            []staffAction
+	// actionsFor adds actions that depend on the record (one tap per shipment's next step); looked up like actions.
+	actionsFor func(o jobj) []staffAction
 	edit               *staffEdit
 	create             *staffCreate
 }
@@ -94,6 +96,14 @@ func (r *staffResource) id(o jobj) string {
 		return r.idOf(o)
 	}
 	return jstr(o, "id")
+}
+
+// actionList is the static actions plus the ones this record's state calls for.
+func (r *staffResource) actionList(o jobj) []staffAction {
+	if r.actionsFor == nil {
+		return r.actions
+	}
+	return append(slices.Clone(r.actions), r.actionsFor(o)...)
 }
 
 func (r *staffResource) statusOf(o jobj) string {

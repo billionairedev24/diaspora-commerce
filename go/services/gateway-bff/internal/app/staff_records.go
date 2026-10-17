@@ -220,7 +220,7 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 			d.Version = &v
 		}
 	}
-	for _, a := range r.actions {
+	for _, a := range r.actionList(o) {
 		d.Actions = append(d.Actions, actionView(ctx, r, sc, a, o))
 	}
 	if r.edit != nil && sc.access.Can(r.edit.permission) && sc.access.Allows(r.module, domain.LevelEdit) {
@@ -270,15 +270,16 @@ func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, 
 		return domain.RecordDetail{}, err
 	}
 	sc.idem = idem
-	idx := slices.IndexFunc(r.actions, func(a staffAction) bool { return a.key == action })
-	if idx < 0 {
-		return domain.RecordDetail{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such action.")
-	}
-	a := r.actions[idx]
 	o, err := r.get(ctx, sc, id)
 	if err != nil {
 		return domain.RecordDetail{}, err
 	}
+	actions := r.actionList(o)
+	idx := slices.IndexFunc(actions, func(a staffAction) bool { return a.key == action })
+	if idx < 0 {
+		return domain.RecordDetail{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such action.")
+	}
+	a := actions[idx]
 	if reason, perm := actionReason(r, sc, a, o); reason != "" {
 		if perm {
 			return domain.RecordDetail{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", reason)

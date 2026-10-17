@@ -66,7 +66,7 @@ Staff can confirm a pickup handover without the code by giving a reason.
 | Who | When | Where |
 |---|---|---|
 | The customer | Only before the parcel is packed (`placed` or `confirmed`) **and** inside the cancellation window: 30 minutes after placing by default (`ORDERS_CANCELLATION_WINDOW`), or until a pre-order's window closes | Orders → Cancel |
-| A platform admin | Any shipment that has not been picked up (`placed` to `ready`), with a reason | Staff › Orders › Update a shipment |
+| A platform admin | Any shipment that has not been picked up (`placed` to `ready`), with a reason | Staff › Orders › More options |
 | The seller | Never. A seller who cannot ship asks support | — |
 
 The Cancel button is shown only while the cancel would be accepted. After the window, or once the seller packs, it is gone and
@@ -138,7 +138,7 @@ is unreachable the fulfilment service queues the events and retries them, so a v
 | orders `OrderView` shipment | New `cancellableUntil`; `cancellable` now also needs the cancellation window. Timeline entries carry `proof` (`DeliveryProof`: handover method, recipient, safe place, failure reason, photo and signature asset ids; GPS for staff only) |
 | gateway-bff customer API | Order summary and detail shipments: `cancellableUntil`. Detail: `proof` (`DeliveryProof` with `photoUrl` and `signatureUrl`) |
 | gateway-bff Seller Center API | `POST /v1/seller/orders/{n}/shipments/{id}/status` accepts `DELIVERED` with `handoverCode`; the shipment has `proof` |
-| gateway-bff staff API | "Update a shipment" is one `step` choice plus `reason` and `handoverCode`; the order sheet has a Proof of delivery section |
+| gateway-bff staff API | Each shipment's next daily step is a one-tap action (`step:<shipmentId>:<STATUS>`, no form); "More options" is one `step` choice plus `reason` and `handoverCode` for cancel, failed delivery and hand-over by code. Driver steps (picked up, out for delivery, delivered) come from the driver app. The order sheet has a Proof of delivery section |
 | media `GET /v1/assets/{id}` | `gateway-bff` may read `proof-photo` assets with `media:read` |
 | identity | The `gateway-bff` client gets the `media:read` scope |
 | carrier-gateway | Dev, UAT and prod poll every carrier slowly as the net under webhooks |

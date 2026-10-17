@@ -99,10 +99,23 @@ func ordersResource() *staffResource {
 			return out
 		},
 		links: func(o jobj) []domain.RecordLink {
-			return []domain.RecordLink{{Label: "Open in customer support", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId"))}}
+			links := []domain.RecordLink{{Label: "Open in customer support", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId"))}}
+			// An AfroTransact driver takes it from the dock: assign one in Delivery dispatch, then the driver app does the rest
+			// (scan at pickup, the route, proof of delivery).
+			for _, sh := range objs(o, "shipments") {
+				st := strings.ToUpper(jstr(sh, "status"))
+				if strings.EqualFold(jstr(sh, "deliveryMethod"), domain.AfroTransactDelivery) && (st == "READY" || st == "PACKED") {
+					links = append(links, domain.RecordLink{Label: "Assign a driver", Href: "/dispatch?tab=pickups"})
+					break
+				}
+			}
+			return links
 		},
+		// The steps people take every day are one tap each ("Mark packed", "Mark ready"); the form below is for the rare
+		// ones: cancel, a failed delivery, handing over a pickup order with the customer's code.
+		actionsFor: shipmentNextStepActions,
 		actions: []staffAction{
-			{key: "shipment-status", label: "Update a shipment", tone: "primary", permission: "orders:manage", also: []string{"orders:update-status"},
+			{key: "shipment-status", label: "More options", tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
 				form: func(_ context.Context, _ staffCtx, o jobj) *domain.Form {
 					return &domain.Form{Title: "What happened to the shipment?", SubmitLabel: "Save", Fields: []domain.FormField{
 						withOptions(ff("step", "Next step", "select", true), shipmentSteps(o)),
@@ -134,6 +147,42 @@ func ordersResource() *staffResource {
 				}},
 		},
 	}
+}
+
+// driverSteps are the steps an AfroTransact driver takes in the driver app (scan at pickup, route, proof of delivery), so
+// staff do not tap them for an AfroTransact Delivery shipment.
+var driverSteps = map[string]bool{"PICKED_UP": true, "IN_TRANSIT": true, "OUT_FOR_DELIVERY": true, "DELIVERED": true}
+
+// shipmentNextStepActions gives each shipment its one next step as a single button, with no form. A step that needs a
+// reason or the customer's code (delivered), exceptions (cancel, failed, returned) and the driver's own steps are left out.
+func shipmentNextStepActions(o jobj) []staffAction {
+	ships := objs(o, "shipments")
+	out := []staffAction{}
+	for _, s := range ships {
+		id := firstNonEmpty(jstr(s, "shipmentId"), jstr(s, "id"))
+		next := map[string]bool{}
+		for _, a := range strs(s, "nextActions") {
+			next[strings.ToUpper(a)] = true
+		}
+		driverOwned := strings.EqualFold(jstr(s, "deliveryMethod"), domain.AfroTransactDelivery)
+		for _, step := range shipmentLifecycle {
+			if !next[step] || reasonRequired(step) || step == "RETURNED" || (driverOwned && driverSteps[step]) {
+				continue
+			}
+			label := shipmentStepVerbs[step]
+			if len(ships) > 1 {
+				label += " · " + jstr(s, "label")
+			}
+			shipmentID, to := id, step
+			out = append(out, staffAction{
+				key: "step:" + shipmentID + ":" + to, label: label, tone: "primary", permission: "orders:manage", also: []string{"orders:update-status"},
+				run: func(ctx context.Context, sc staffCtx, _ jobj, _ jobj) error {
+					return sc.post(ctx, sc.up.Orders, "/v1/shipments/"+url.PathEscape(shipmentID)+"/transitions", jobj{"to": to}, nil)
+				}})
+			break // one next step per shipment
+		}
+	}
+	return out
 }
 
 // shipmentLifecycle is the order of the steps staff may take on a shipment (orders-service state machine).
