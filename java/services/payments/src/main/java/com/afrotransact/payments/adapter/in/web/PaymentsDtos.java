@@ -607,7 +607,9 @@ final class PaymentsDtos {
             @NotBlank @Size(max = 80) String orgId,
             @NotNull NegotiatedRateType type,
             @Size(max = 80) @Schema(description = "One category; omit or '*' for every category") String category,
-            @Min(0) @Max(10000) @Schema(description = "Basis points (800 = 8 %)") int rateBps,
+            @Min(0) @Max(10000) @Schema(description = "Basis points (800 = 8 %); 0 for FBA_FEE") int rateBps,
+            @PositiveOrZero @Schema(description = "FBA_FEE only: the fee per unit in minor units; it applies to every "
+                    + "FBA line of the organisation and wins over its plan's FBA fee") Long amountMinor,
             @Schema(description = "Default now; never in the past") Instant startsAt,
             @Schema(description = "Omit for open-ended; a job records the expiry at this time") Instant endsAt,
             @NotBlank @Size(max = 500) @Schema(description = "Why (kept in the audit trail)") String reason,
@@ -617,7 +619,7 @@ final class PaymentsDtos {
 
         NewNegotiatedRateCommand toCommand() {
             return new NewNegotiatedRateCommand(orgId, type, category, rateBps, startsAt, endsAt, reason,
-                    negotiatedBy, reference);
+                    negotiatedBy, reference, amountMinor);
         }
     }
 
@@ -632,9 +634,10 @@ final class PaymentsDtos {
 
     @Schema(name = "NegotiatedRate", description = "A negotiated commission or connection fee with its status now")
     record NegotiatedRateResponse(UUID id, String orgId,
-                                  @Schema(allowableValues = {"COMMISSION", "CONNECTION_FEE"}) String type,
+                                  @Schema(allowableValues = {"COMMISSION", "CONNECTION_FEE", "FBA_FEE"}) String type,
                                   @Schema(description = "'*' = every category") String category, int rateBps,
-                                  Instant startsAt, Instant endsAt,
+                                  @Schema(description = "FBA_FEE: the fee per unit in minor units; null otherwise")
+                                  Long amountMinor, Instant startsAt, Instant endsAt,
                                   @Schema(allowableValues = {"SCHEDULED", "ACTIVE", "ENDED", "EXPIRED"}) String status,
                                   String reason, String negotiatedBy, String reference, String createdBy,
                                   Instant createdAt, Instant endedAt, String endedBy, String endReason,
@@ -643,7 +646,7 @@ final class PaymentsDtos {
         static NegotiatedRateResponse of(NegotiatedRate r, NegotiatedRateStatus status,
                                          List<NegotiatedRateAudit> audit) {
             return new NegotiatedRateResponse(r.id(), r.orgId(), r.type().name(), r.category(), r.rateBps(),
-                    r.startsAt(), r.endsAt(), status.name(), r.reason(), r.negotiatedBy(), r.reference(),
+                    r.amountMinor(), r.startsAt(), r.endsAt(), status.name(), r.reason(), r.negotiatedBy(), r.reference(),
                     r.createdBy(), r.createdAt(), r.endedAt(), r.endedBy(), r.endReason(), r.expiredAt(), r.version(),
                     audit.stream().map(a -> new NegotiatedRateAuditResponse(a.action(), a.actor(), a.reason(),
                             a.at())).toList());

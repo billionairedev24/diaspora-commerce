@@ -24,9 +24,10 @@ import { type PreorderCtx, type PreorderHandlerDeps } from './preorders';
 export interface MockNegotiatedRate {
   id: string;
   orgId: string;
-  type: 'COMMISSION' | 'CONNECTION_FEE';
+  type: 'COMMISSION' | 'CONNECTION_FEE' | 'FBA_FEE';
   category: string;
   rateBps: number;
+  amountMinor: number | null;
   startsAt: string;
   endsAt: string | null;
   reason: string;
@@ -52,7 +53,7 @@ export function seedFeeRates(now: Date): MockFeeRatesState {
   const day = 86_400_000;
   const at = (d: number) => new Date(now.getTime() + d * day).toISOString();
   const rate = (r: Partial<MockNegotiatedRate> & Pick<MockNegotiatedRate, 'id' | 'orgId' | 'type' | 'category' | 'rateBps' | 'startsAt' | 'reason'>): MockNegotiatedRate => ({
-    endsAt: null, negotiatedBy: 'Musa Bello', reference: null, createdBy: 'Musa Bello', createdAt: r.startsAt, endedAt: null, endedBy: null, endReason: null, expiredAt: null,
+    amountMinor: null, endsAt: null, negotiatedBy: 'Musa Bello', reference: null, createdBy: 'Musa Bello', createdAt: r.startsAt, endedAt: null, endedBy: null, endReason: null, expiredAt: null,
     audit: [{ action: 'CREATED', actor: 'Musa Bello', reason: r.reason, at: r.startsAt }], ...r
   });
   return {
@@ -111,6 +112,7 @@ const NegotiatedBody = z.object({
   type: z.string(),
   category: z.string().nullish(),
   rateBps: z.number().int().nullish(),
+  amountMinor: z.number().int().nullish(),
   startsAt: z.string().nullish(),
   endsAt: z.string().nullish(),
   reason: z.string(),
@@ -150,7 +152,7 @@ export function feeRateHandlers(W: string, deps: PreorderHandlerDeps, activeSche
         const type = q.get('type') ?? '';
         const errors: Record<string, string> = {};
         if (status && !NegotiatedRateStatusSchema.safeParse(status).success) errors.status = 'SCHEDULED, ACTIVE, ENDED or EXPIRED';
-        if (type && !NegotiatedRateTypeSchema.safeParse(type).success) errors.type = 'COMMISSION or CONNECTION_FEE';
+        if (type && !NegotiatedRateTypeSchema.safeParse(type).success) errors.type = 'COMMISSION, CONNECTION_FEE or FBA_FEE';
         if (Object.keys(errors).length) throw invalid(errors);
         const page = Number(q.get('page') ?? 0);
         const size = Number(q.get('size') ?? 25);
@@ -174,8 +176,11 @@ export function feeRateHandlers(W: string, deps: PreorderHandlerDeps, activeSche
         const orgId = b.orgId.trim();
         if (!orgId) errors.orgId = 'Choose a seller or provider organisation';
         else if (orgId === MOCK_RETAIL_ORG_ID) errors.orgId = 'AfroTransact Retail pays no commission and no fees (merchant of record); nothing to negotiate';
-        if (b.type !== 'COMMISSION' && b.type !== 'CONNECTION_FEE') errors.type = 'Choose commission or connection fee';
-        if (b.rateBps === null || b.rateBps === undefined) errors.rateBps = 'Enter a rate';
+        if (b.type !== 'COMMISSION' && b.type !== 'CONNECTION_FEE' && b.type !== 'FBA_FEE') errors.type = 'Choose commission, connection fee or FBA fee';
+        if (b.type === 'FBA_FEE') {
+          if (b.amountMinor === null || b.amountMinor === undefined) errors.amountMinor = 'Enter the fee per unit';
+          else if (b.amountMinor < 0 || b.amountMinor > 10_000) errors.amountMinor = 'Enter a fee between $0.00 and $100.00';
+        } else if (b.rateBps === null || b.rateBps === undefined) errors.rateBps = 'Enter a rate';
         else if (b.rateBps < 0 || b.rateBps > 5000) errors.rateBps = 'Enter a rate between 0.00% and 50.00%';
         const start = b.startsAt && new Date(b.startsAt).getTime() > ctx.now.getTime() ? new Date(b.startsAt) : ctx.now;
         if (b.startsAt && new Date(b.startsAt).getTime() < ctx.now.getTime() - 60_000) errors.startsAt = 'Choose now or a later time: a negotiated rate never re-prices past orders';
@@ -183,7 +188,7 @@ export function feeRateHandlers(W: string, deps: PreorderHandlerDeps, activeSche
         const reason = b.reason.trim();
         if (reason.length < 3 || reason.length > 500) errors.reason = 'Say why this rate was negotiated (3 to 500 characters)';
         if (Object.keys(errors).length) throw invalid(errors);
-        const category = b.category && normalizeFeeCategory(b.category) ? normalizeFeeCategory(b.category) : ALL_CATEGORIES;
+        const category = b.type !== 'FBA_FEE' && b.category && normalizeFeeCategory(b.category) ? normalizeFeeCategory(b.category) : ALL_CATEGORIES;
         const type = b.type as MockNegotiatedRate['type'];
         const end = b.endsAt ? new Date(b.endsAt).getTime() : Infinity;
         const clash = st(ctx).rates.find((r) => {
@@ -191,9 +196,9 @@ export function feeRateHandlers(W: string, deps: PreorderHandlerDeps, activeSche
           const rEnd = r.endedAt ? new Date(r.endedAt).getTime() : r.endsAt ? new Date(r.endsAt).getTime() : Infinity;
           return start.getTime() < rEnd && new Date(r.startsAt).getTime() < end;
         });
-        if (clash) throw problem(409, 'CONFLICT', 'Conflict', `A negotiated ${type === 'COMMISSION' ? 'commission' : 'connection fee'} for ${catLabel(category).toLowerCase()} already applies; end it first.`);
+        if (clash) throw problem(409, 'CONFLICT', 'Conflict', `A negotiated ${type === 'COMMISSION' ? 'commission' : type === 'FBA_FEE' ? 'FBA fee' : 'connection fee'} for ${catLabel(category).toLowerCase()} already applies; end it first.`);
         const created: MockNegotiatedRate = {
-          id: `nr-${st(ctx).seq++}`, orgId, type, category, rateBps: b.rateBps ?? 0, startsAt: start.toISOString(), endsAt: b.endsAt ? new Date(b.endsAt).toISOString() : null,
+          id: `nr-${st(ctx).seq++}`, orgId, type, category, rateBps: type === 'FBA_FEE' ? 0 : (b.rateBps ?? 0), amountMinor: type === 'FBA_FEE' ? (b.amountMinor ?? 0) : null, startsAt: start.toISOString(), endsAt: b.endsAt ? new Date(b.endsAt).toISOString() : null,
           reason, negotiatedBy: b.negotiatedBy?.trim() || ctx.action.actor, reference: b.reference?.trim() || null, createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(),
           endedAt: null, endedBy: null, endReason: null, expiredAt: null, audit: [{ action: 'CREATED', actor: ctx.action.actor, reason, at: ctx.now.toISOString() }]
         };

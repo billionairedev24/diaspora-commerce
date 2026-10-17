@@ -114,7 +114,7 @@ func serviceCategories(all []paymentsSchedule) []domain.FeeCategory {
 
 func (s *staffFeesImpl) negotiatedView(n port.NegotiatedRateResponse, names map[string]string, canConfigure bool) domain.NegotiatedRateView {
 	v := domain.NegotiatedRateView{ID: n.ID, OrgID: n.OrgID, Type: n.Type, Category: n.Category, CategoryLabel: domain.FeeCategoryLabel(n.Category),
-		RateBps: n.RateBps, StartsAt: n.StartsAt, EndsAt: n.EndsAt, Status: n.Status, Reason: n.Reason, NegotiatedBy: n.NegotiatedBy,
+		RateBps: n.RateBps, AmountMinor: n.AmountMinor, StartsAt: n.StartsAt, EndsAt: n.EndsAt, Status: n.Status, Reason: n.Reason, NegotiatedBy: n.NegotiatedBy,
 		Reference: n.Reference, CreatedBy: n.CreatedBy, CreatedAt: n.CreatedAt, EndedAt: n.EndedAt, EndedBy: n.EndedBy, EndReason: n.EndReason,
 		ExpiredAt: n.ExpiredAt, Audit: []domain.NegotiatedRateAuditEntry{},
 		CanEnd: canConfigure && (n.Status == "ACTIVE" || n.Status == "SCHEDULED")}
@@ -159,8 +159,8 @@ func (s *staffFeesImpl) namesOf(ctx context.Context, sc staffCtx, ids []string) 
 
 func (s *staffFeesImpl) NegotiatedRates(ctx context.Context, c *domain.Caller, q NegotiatedRateQuery) (domain.NegotiatedRatePage, error) {
 	errs := map[string]string{}
-	if q.Type != "" && q.Type != domain.NegotiatedCommission && q.Type != domain.NegotiatedConnectionFee {
-		errs["type"] = "COMMISSION or CONNECTION_FEE"
+	if q.Type != "" && q.Type != domain.NegotiatedCommission && q.Type != domain.NegotiatedConnectionFee && q.Type != domain.NegotiatedFbaFee {
+		errs["type"] = "COMMISSION, CONNECTION_FEE or FBA_FEE"
 	}
 	if q.Status != "" && !slices.Contains(domain.NegotiatedStatuses, q.Status) {
 		errs["status"] = "SCHEDULED, ACTIVE, ENDED or EXPIRED"
@@ -227,8 +227,13 @@ func (s *staffFeesImpl) CreateNegotiatedRate(ctx context.Context, c *domain.Call
 	if errs := domain.ValidateNegotiatedRateDraft(d, sc.now, s.retail, domain.DefaultFeeLimits); len(errs) > 0 {
 		return domain.NegotiatedRateView{}, domain.ValidationProblem(errs)
 	}
-	body := jobj{"orgId": strings.TrimSpace(d.OrgID), "type": d.Type, "rateBps": *d.RateBps, "reason": strings.TrimSpace(d.Reason)}
-	if d.Category != nil && domain.NormalizeFeeCategory(*d.Category) != "" {
+	body := jobj{"orgId": strings.TrimSpace(d.OrgID), "type": d.Type, "rateBps": 0, "reason": strings.TrimSpace(d.Reason)}
+	if d.Type == domain.NegotiatedFbaFee {
+		body["amountMinor"] = *d.AmountMinor // one fee per unit for every FBA line: no category
+	} else {
+		body["rateBps"] = *d.RateBps
+	}
+	if d.Type != domain.NegotiatedFbaFee && d.Category != nil && domain.NormalizeFeeCategory(*d.Category) != "" {
 		body["category"] = domain.NormalizeFeeCategory(*d.Category)
 	}
 	if d.StartsAt != nil && d.StartsAt.After(sc.now) {

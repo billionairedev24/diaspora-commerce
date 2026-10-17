@@ -13,7 +13,7 @@ export const RateSourceSchema = z.enum(['OVERRIDE', 'PLAN', 'CATEGORY', 'DEFAULT
 export type RateSource = z.infer<typeof RateSourceSchema>;
 export const FeeKindSchema = z.enum(['PRODUCT', 'SERVICE']);
 export type FeeKind = z.infer<typeof FeeKindSchema>;
-export const NegotiatedRateTypeSchema = z.enum(['COMMISSION', 'CONNECTION_FEE']);
+export const NegotiatedRateTypeSchema = z.enum(['COMMISSION', 'CONNECTION_FEE', 'FBA_FEE']);
 export type NegotiatedRateType = z.infer<typeof NegotiatedRateTypeSchema>;
 export const NegotiatedRateStatusSchema = z.enum(['SCHEDULED', 'ACTIVE', 'ENDED', 'EXPIRED']);
 export type NegotiatedRateStatus = z.infer<typeof NegotiatedRateStatusSchema>;
@@ -74,6 +74,8 @@ export const NegotiatedRateSchema = z.object({
   category: z.string(),
   categoryLabel: z.string(),
   rateBps: z.number().int(),
+  /** FBA_FEE: the fee per unit in minor units; null for rates in basis points. */
+  amountMinor: z.number().int().nullable().default(null),
   startsAt: z.string(),
   endsAt: nullableString,
   status: NegotiatedRateStatusSchema,
@@ -105,6 +107,8 @@ export interface NegotiatedRateDraft {
   /** null or '*' = every category. */
   category: string | null;
   rateBps: number;
+  /** FBA_FEE only: the fee per unit in minor units, for every FBA line of the organisation. */
+  amountMinor?: number | null;
   startsAt: string | null;
   endsAt: string | null;
   reason: string;

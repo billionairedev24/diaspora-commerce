@@ -420,6 +420,7 @@ paths:
           enum:
           - COMMISSION
           - CONNECTION_FEE
+          - FBA_FEE
       - name: status
         in: query
         required: false
@@ -2605,6 +2606,7 @@ components:
           enum:
           - COMMISSION
           - CONNECTION_FEE
+          - FBA_FEE
         category:
           type: string
           description: One category; omit or '*' for every category
@@ -2615,6 +2617,11 @@ components:
           format: int32
           description: Basis points (800 = 8 %)
           maximum: 10000
+          minimum: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'FBA_FEE only: the fee per unit in minor units; applies to every FBA line of the organisation and wins over its plan''s FBA fee'
           minimum: 0
         startsAt:
           type: string
@@ -2657,12 +2664,17 @@ components:
           enum:
           - COMMISSION
           - CONNECTION_FEE
+          - FBA_FEE
         category:
           type: string
           description: '''*'' = every category'
         rateBps:
           type: integer
           format: int32
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'FBA_FEE: the fee per unit in minor units; null otherwise'
         startsAt:
           type: string
           format: date-time

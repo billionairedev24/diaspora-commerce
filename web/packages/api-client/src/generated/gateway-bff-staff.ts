@@ -5059,11 +5059,16 @@ export interface components {
             orgId: string;
             orgName: string | null;
             /** @enum {string} */
-            type: "COMMISSION" | "CONNECTION_FEE";
+            type: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
             /** @description '*' = every category */
             category: string;
             categoryLabel: string;
             rateBps: number;
+            /**
+             * Format: int64
+             * @description FBA_FEE: the fee per unit in minor units for every FBA line; null otherwise
+             */
+            amountMinor: number | null;
             /** Format: date-time */
             startsAt: string;
             /** Format: date-time */
@@ -5096,10 +5101,16 @@ export interface components {
         NegotiatedRateDraft: {
             orgId: string;
             /** @enum {string} */
-            type: "COMMISSION" | "CONNECTION_FEE";
+            type: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
             /** @description One category; null or '*' = every category */
             category?: string | null;
-            rateBps: number;
+            /** @description Required for COMMISSION and CONNECTION_FEE */
+            rateBps?: number;
+            /**
+             * Format: int64
+             * @description Required for FBA_FEE: the fee per unit in minor units, for every FBA line of the organisation (no category)
+             */
+            amountMinor?: number;
             /**
              * Format: date-time
              * @description Default now; never in the past
@@ -7981,7 +7992,7 @@ export interface operations {
         parameters: {
             query?: {
                 orgId?: string;
-                type?: "COMMISSION" | "CONNECTION_FEE";
+                type?: "COMMISSION" | "CONNECTION_FEE" | "FBA_FEE";
                 status?: "SCHEDULED" | "ACTIVE" | "ENDED" | "EXPIRED";
                 q?: string;
                 page?: number;

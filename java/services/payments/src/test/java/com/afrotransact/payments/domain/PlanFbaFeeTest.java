@@ -31,4 +31,21 @@ class PlanFbaFeeTest {
     void negativePlanFeesAreRejected() {
         assertThatThrownBy(() -> withPlanFba(Map.of("pro", -1L))).isInstanceOf(PaymentsRuleViolation.class);
     }
+
+    @Test
+    void aNegotiatedFbaFeeWinsOverThePlanFeeWhileActive() {
+        Instant now = Instant.parse("2026-10-12T12:00:00Z");
+        NegotiatedRate deal = NegotiatedRate.create(UUID.randomUUID(), "org_a", NegotiatedRateType.FBA_FEE, "fashion", 0,
+                150L, null, now.plusSeconds(86_400), "Volume deal", null, null, "fin-1", now);
+        assertThat(deal.category()).isEqualTo("*");
+        assertThat(deal.rateBps()).isZero();
+        FeeSchedule s = withPlanFba(Map.of("pro", 200L));
+        assertThat(FeeSchedule.negotiatedFba("org_a", List.of(deal), now).map(NegotiatedRate::amountMinor)).contains(150L);
+        assertThat(FeeSchedule.negotiatedFba("org_b", List.of(deal), now)).isEmpty();
+        assertThat(FeeSchedule.negotiatedFba("org_a", List.of(deal), now.plusSeconds(2 * 86_400))).isEmpty();
+        assertThat(s.effectiveFor(FeeKind.PRODUCT, "org_a", "fashion", "pro", List.of(deal), now, "retail")
+                .fbaPerUnit().minor()).isEqualTo(150);
+        assertThatThrownBy(() -> NegotiatedRate.create(UUID.randomUUID(), "org_a", NegotiatedRateType.FBA_FEE, null, 0,
+                null, null, null, "x", null, null, "fin-1", now)).isInstanceOf(PaymentsRuleViolation.class);
+    }
 }

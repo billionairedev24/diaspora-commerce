@@ -119,3 +119,16 @@ func TestPlanFbaBodyAndValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestNegotiatedFbaDraftNeedsAnAmountNotARate(t *testing.T) {
+	now := time.Now()
+	amt := int64(150)
+	ok := NegotiatedRateDraft{OrgID: "org-a", Type: NegotiatedFbaFee, AmountMinor: &amt, Reason: "Volume deal"}
+	if e := ValidateNegotiatedRateDraft(ok, now, "retail", DefaultFeeLimits); len(e) != 0 {
+		t.Fatalf("errors = %v", e)
+	}
+	bad := NegotiatedRateDraft{OrgID: "org-a", Type: NegotiatedFbaFee, Reason: "Volume deal"}
+	if e := ValidateNegotiatedRateDraft(bad, now, "retail", DefaultFeeLimits); e["amountMinor"] == "" {
+		t.Fatalf("errors = %v", e)
+	}
+}

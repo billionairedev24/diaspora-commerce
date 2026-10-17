@@ -1276,7 +1276,7 @@ paths:
         status, and `q` over organisation, reason, reference and negotiator. Needs VIEW on the fees module.
       parameters:
         - {name: orgId, in: query, schema: {type: string, maxLength: 80}}
-        - {name: type, in: query, schema: {type: string, enum: [COMMISSION, CONNECTION_FEE]}}
+        - {name: type, in: query, schema: {type: string, enum: [COMMISSION, CONNECTION_FEE, FBA_FEE]}}
         - {name: status, in: query, schema: {type: string, enum: [SCHEDULED, ACTIVE, ENDED, EXPIRED]}}
         - {name: q, in: query, schema: {type: string, maxLength: 120}}
         - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
@@ -5700,16 +5700,17 @@ components:
         at: {type: string, format: date-time}
     NegotiatedRate:
       type: object
-      required: [id, orgId, orgName, type, category, categoryLabel, rateBps, startsAt, endsAt, status, reason, negotiatedBy, reference, createdBy,
+      required: [id, orgId, orgName, type, category, categoryLabel, rateBps, amountMinor, startsAt, endsAt, status, reason, negotiatedBy, reference, createdBy,
         createdAt, endedAt, endedBy, endReason, expiredAt, audit, canEnd]
       properties:
         id: {type: string}
         orgId: {type: string}
         orgName: {type: [string, 'null']}
-        type: {type: string, enum: [COMMISSION, CONNECTION_FEE]}
+        type: {type: string, enum: [COMMISSION, CONNECTION_FEE, FBA_FEE]}
         category: {type: string, description: "'*' = every category"}
         categoryLabel: {type: string}
         rateBps: {type: integer, minimum: 0, maximum: 10000}
+        amountMinor: {type: [integer, 'null'], format: int64, minimum: 0, description: 'FBA_FEE: the fee per unit in minor units for every FBA line; null otherwise'}
         startsAt: {type: string, format: date-time}
         endsAt: {type: [string, 'null'], format: date-time}
         status: {type: string, enum: [SCHEDULED, ACTIVE, ENDED, EXPIRED]}
@@ -5735,12 +5736,13 @@ components:
         canConfigure: {type: boolean}
     NegotiatedRateDraft:
       type: object
-      required: [orgId, type, rateBps, reason]
+      required: [orgId, type, reason]
       properties:
         orgId: {type: string, maxLength: 80}
-        type: {type: string, enum: [COMMISSION, CONNECTION_FEE]}
+        type: {type: string, enum: [COMMISSION, CONNECTION_FEE, FBA_FEE]}
         category: {type: [string, 'null'], maxLength: 80, description: "One category; null or '*' = every category"}
-        rateBps: {type: integer, minimum: 0, maximum: 5000}
+        rateBps: {type: integer, minimum: 0, maximum: 5000, description: Required for COMMISSION and CONNECTION_FEE}
+        amountMinor: {type: integer, format: int64, minimum: 0, maximum: 10000, description: 'Required for FBA_FEE: the fee per unit in minor units, for every FBA line of the organisation (no category)'}
         startsAt: {type: [string, 'null'], format: date-time, description: Default now; never in the past}
         endsAt: {type: [string, 'null'], format: date-time, description: Omit for open-ended}
         reason: {type: string, minLength: 3, maxLength: 500}

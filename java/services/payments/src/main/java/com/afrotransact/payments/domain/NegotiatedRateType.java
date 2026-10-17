@@ -1,9 +1,11 @@
 package com.afrotransact.payments.domain;
 
-/** What a negotiated rate replaces: the product commission or the service connection fee. */
+/** What a negotiated rate replaces: the product commission, the service connection fee or the FBA fee per unit. */
 public enum NegotiatedRateType {
     COMMISSION(FeeKind.PRODUCT),
-    CONNECTION_FEE(FeeKind.SERVICE);
+    CONNECTION_FEE(FeeKind.SERVICE),
+    /** A per-unit FBA fee for every FBA line of the organisation (in minor units, not basis points). */
+    FBA_FEE(FeeKind.PRODUCT);
 
     private final FeeKind kind;
 

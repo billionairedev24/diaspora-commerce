@@ -21,6 +21,7 @@ const (
 	FeeKindService          = "SERVICE"
 	NegotiatedCommission    = "COMMISSION"
 	NegotiatedConnectionFee = "CONNECTION_FEE"
+	NegotiatedFbaFee        = "FBA_FEE"
 )
 
 // Rate sources, in precedence order (RETAIL: AfroTransact Retail pays none).
@@ -368,26 +369,28 @@ type NegotiatedRateAuditEntry struct {
 
 // NegotiatedRateView is a negotiated commission or connection fee as the console shows it.
 type NegotiatedRateView struct {
-	ID            string                     `json:"id"`
-	OrgID         string                     `json:"orgId"`
-	OrgName       *string                    `json:"orgName"`
-	Type          string                     `json:"type"`
-	Category      string                     `json:"category"`
-	CategoryLabel string                     `json:"categoryLabel"`
-	RateBps       int                        `json:"rateBps"`
-	StartsAt      time.Time                  `json:"startsAt"`
-	EndsAt        *time.Time                 `json:"endsAt"`
-	Status        string                     `json:"status"`
-	Reason        string                     `json:"reason"`
-	NegotiatedBy  string                     `json:"negotiatedBy"`
-	Reference     *string                    `json:"reference"`
-	CreatedBy     string                     `json:"createdBy"`
-	CreatedAt     time.Time                  `json:"createdAt"`
-	EndedAt       *time.Time                 `json:"endedAt"`
-	EndedBy       *string                    `json:"endedBy"`
-	EndReason     *string                    `json:"endReason"`
-	ExpiredAt     *time.Time                 `json:"expiredAt"`
-	Audit         []NegotiatedRateAuditEntry `json:"audit"`
+	ID            string  `json:"id"`
+	OrgID         string  `json:"orgId"`
+	OrgName       *string `json:"orgName"`
+	Type          string  `json:"type"`
+	Category      string  `json:"category"`
+	CategoryLabel string  `json:"categoryLabel"`
+	RateBps       int     `json:"rateBps"`
+	// AmountMinor is the FBA fee per unit of an FBA_FEE (nil for rates in basis points).
+	AmountMinor  *int64                     `json:"amountMinor"`
+	StartsAt     time.Time                  `json:"startsAt"`
+	EndsAt       *time.Time                 `json:"endsAt"`
+	Status       string                     `json:"status"`
+	Reason       string                     `json:"reason"`
+	NegotiatedBy string                     `json:"negotiatedBy"`
+	Reference    *string                    `json:"reference"`
+	CreatedBy    string                     `json:"createdBy"`
+	CreatedAt    time.Time                  `json:"createdAt"`
+	EndedAt      *time.Time                 `json:"endedAt"`
+	EndedBy      *string                    `json:"endedBy"`
+	EndReason    *string                    `json:"endReason"`
+	ExpiredAt    *time.Time                 `json:"expiredAt"`
+	Audit        []NegotiatedRateAuditEntry `json:"audit"`
 	// CanEnd: the caller configures fees and the rate is scheduled or active.
 	CanEnd bool `json:"canEnd"`
 }
@@ -407,6 +410,7 @@ type NegotiatedRateDraft struct {
 	Type         string     `json:"type"`
 	Category     *string    `json:"category"`
 	RateBps      *int       `json:"rateBps"`
+	AmountMinor  *int64     `json:"amountMinor"`
 	StartsAt     *time.Time `json:"startsAt"`
 	EndsAt       *time.Time `json:"endsAt"`
 	Reason       string     `json:"reason"`
@@ -429,13 +433,20 @@ func ValidateNegotiatedRateDraft(d NegotiatedRateDraft, now time.Time, retailOrg
 	case retailOrgID != "" && org == retailOrgID:
 		errs["orgId"] = "AfroTransact Retail pays no commission and no fees (merchant of record); nothing to negotiate"
 	}
-	if d.Type != NegotiatedCommission && d.Type != NegotiatedConnectionFee {
-		errs["type"] = "Choose commission or connection fee"
+	if d.Type != NegotiatedCommission && d.Type != NegotiatedConnectionFee && d.Type != NegotiatedFbaFee {
+		errs["type"] = "Choose commission, connection fee or FBA fee"
 	}
 	if d.Category != nil && len(NormalizeFeeCategory(*d.Category)) > 80 {
 		errs["category"] = "Keep the category under 80 characters"
 	}
 	switch {
+	case d.Type == NegotiatedFbaFee:
+		switch {
+		case d.AmountMinor == nil:
+			errs["amountMinor"] = "Enter the fee per unit"
+		case *d.AmountMinor < 0 || *d.AmountMinor > l.FbaPerUnitMaxMinor:
+			errs["amountMinor"] = "Enter a fee between $0.00 and " + FormatMinor(l.FbaPerUnitMaxMinor)
+		}
 	case d.RateBps == nil:
 		errs["rateBps"] = "Enter a rate"
 	case *d.RateBps < 0 || *d.RateBps > l.CommissionMaxBps:

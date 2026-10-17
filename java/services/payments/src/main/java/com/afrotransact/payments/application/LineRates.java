@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.afrotransact.payments.domain.AppliedRate;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.NegotiatedRate;
 import com.afrotransact.payments.domain.OrderLine;
@@ -41,7 +42,12 @@ class LineRates {
      */
     List<OrderLine> snapshot(FeeSchedule schedule, List<OrderLine> lines, Instant placedAt, Map<String, String> plans) {
         List<NegotiatedRate> rates = negotiated.forOrgs(orgsOf(lines));
-        return lines.stream().map(l -> l.withRate(schedule.rateFor(l.kind(), l.sellerOrg(), l.category(),
-                plans.get(l.sellerOrg()), rates, placedAt, settings.retailOrgId()))).toList();
+        return lines.stream().map(l -> {
+            AppliedRate rate = schedule.rateFor(l.kind(), l.sellerOrg(), l.category(), plans.get(l.sellerOrg()), rates,
+                    placedAt, settings.retailOrgId());
+            Long fba = FeeSchedule.negotiatedFba(l.sellerOrg(), rates, placedAt).map(NegotiatedRate::amountMinor)
+                    .orElse(null);
+            return l.withRate(rate.withNegotiatedFba(fba));
+        }).toList();
     }
 }

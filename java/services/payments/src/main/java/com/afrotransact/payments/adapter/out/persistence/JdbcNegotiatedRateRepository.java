@@ -29,16 +29,16 @@ class JdbcNegotiatedRateRepository implements NegotiatedRateRepository {
     public void insert(NegotiatedRate r) {
         jdbc.sql("""
                 insert into negotiated_rate (id, org_id, type, category, rate_bps, starts_at, ends_at, reason,
-                    negotiated_by, reference, created_by, created_at, version)
+                    negotiated_by, reference, created_by, created_at, version, amount_minor)
                 values (:id, :org, :type, :category, :bps, :starts, :ends, :reason, :negotiatedBy, :reference,
-                    :createdBy, :createdAt, 0)
+                    :createdBy, :createdAt, 0, :amount)
                 """)
                 .param("id", r.id()).param("org", r.orgId()).param("type", r.type().name())
                 .param("category", r.category()).param("bps", r.rateBps()).param("starts", Sql.ts(r.startsAt()))
                 .param("ends", Sql.ts(r.endsAt())).param("reason", r.reason())
                 .param("negotiatedBy", r.negotiatedBy()).param("reference", r.reference())
                 .param("createdBy", r.createdBy()).param("createdAt", Sql.ts(r.createdAt()))
-                .update();
+                .param("amount", r.amountMinor()).update();
     }
 
     @Override
@@ -57,7 +57,7 @@ class JdbcNegotiatedRateRepository implements NegotiatedRateRepository {
         }
         return new NegotiatedRate(r.id(), r.orgId(), r.type(), r.category(), r.rateBps(), r.startsAt(), r.endsAt(),
                 r.reason(), r.negotiatedBy(), r.reference(), r.createdBy(), r.createdAt(), r.endedAt(), r.endedBy(),
-                r.endReason(), r.expiredAt(), r.version() + 1);
+                r.endReason(), r.expiredAt(), r.version() + 1, r.amountMinor());
     }
 
     @Override
@@ -140,6 +140,7 @@ class JdbcNegotiatedRateRepository implements NegotiatedRateRepository {
                 Sql.instant(rs, "starts_at"), Sql.instant(rs, "ends_at"), rs.getString("reason"),
                 rs.getString("negotiated_by"), rs.getString("reference"), rs.getString("created_by"),
                 Sql.instant(rs, "created_at"), Sql.instant(rs, "ended_at"), rs.getString("ended_by"),
-                rs.getString("end_reason"), Sql.instant(rs, "expired_at"), rs.getLong("version"));
+                rs.getString("end_reason"), Sql.instant(rs, "expired_at"), rs.getLong("version"),
+                (Long) rs.getObject("amount_minor"));
     }
 }

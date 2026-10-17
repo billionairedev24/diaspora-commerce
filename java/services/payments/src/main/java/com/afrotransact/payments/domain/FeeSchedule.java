@@ -257,6 +257,15 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         return effectiveFor(FeeKind.PRODUCT, orgId, category, null, List.of(), effectiveFrom, retailOrgId);
     }
 
+    /** The FBA fee per unit negotiated for {@code orgId} and active at {@code at} (the latest started wins). */
+    public static Optional<NegotiatedRate> negotiatedFba(String orgId, List<NegotiatedRate> negotiated, Instant at) {
+        if (orgId == null || negotiated == null) {
+            return Optional.empty();
+        }
+        return negotiated.stream().filter(n -> n.type() == NegotiatedRateType.FBA_FEE && n.orgId().equals(orgId)
+                && n.activeAt(at)).max(Comparator.comparing(NegotiatedRate::startsAt));
+    }
+
     /** The FBA fee per unit of {@code planCode}: its own when the version sets one, else the default. */
     public Money fbaPerUnitFor(String planCode) {
         if (planCode == null || planCode.isBlank()) {
@@ -273,7 +282,9 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         boolean retail = rate.source() == RateSource.RETAIL;
         return new EffectiveFees(id, version, effectiveFrom, currency, rate.category(), orgId, rate.bps(),
                 rate.source().name(), cardPctBps, cardFixed,
-                retail || kind == FeeKind.SERVICE ? Money.zero(currency) : fbaPerUnitFor(rate.planCode()),
+                retail || kind == FeeKind.SERVICE ? Money.zero(currency)
+                        : negotiatedFba(orgId, negotiated, at).map(n -> Money.of(n.amountMinor(), currency))
+                        .orElse(fbaPerUnitFor(rate.planCode())),
                 reverseCommissionOnRefund,
                 retail, kind, rate.planCode(), rate.negotiatedRateId(), rate.negotiatedUntil());
     }

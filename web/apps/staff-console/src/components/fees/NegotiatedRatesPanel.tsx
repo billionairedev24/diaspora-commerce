@@ -25,8 +25,9 @@ import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
-import { dateTime, shortDate } from '@/lib/format';
+import { dateTime, money, shortDate } from '@/lib/format';
 
+import { parseDollars } from './money-input';
 import { OrgSearch } from './OrgSearch';
 
 type T = Translator<MessageKey>;
@@ -34,7 +35,7 @@ type T = Translator<MessageKey>;
 export const feeRatesApi = () => staffApi().feeRates;
 
 const TONE: Record<NegotiatedRateStatus, RecordTone> = { ACTIVE: 'good', SCHEDULED: 'info', ENDED: 'bad', EXPIRED: 'brand' };
-const TYPES: NegotiatedRateType[] = ['COMMISSION', 'CONNECTION_FEE'];
+const TYPES: NegotiatedRateType[] = ['COMMISSION', 'CONNECTION_FEE', 'FBA_FEE'];
 const STATUSES: NegotiatedRateStatus[] = ['ACTIVE', 'SCHEDULED', 'ENDED', 'EXPIRED'];
 
 export function errorsOf(e: unknown): Record<string, string> {
@@ -58,24 +59,26 @@ export function NegotiateRateDialog({ open, onClose, org, t }: { open: boolean; 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useMutation({
     mutationFn: () => {
-      const bps = parsePercent(rate);
+      const isFba = type === 'FBA_FEE';
+      const bps = isFba ? 0 : parsePercent(rate);
+      const minor = isFba ? parseDollars(rate) : null;
       const local: Record<string, string> = {};
       if (!picked) local.orgId = t('st.rates.pickOrg');
-      if (bps === null) local.rateBps = t('st.rates.badRate');
+      if (isFba ? minor === null : bps === null) local[isFba ? 'amountMinor' : 'rateBps'] = isFba ? t('st.rates.badAmount') : t('st.rates.badRate');
       if (reason.trim().length < 3) local.reason = t('st.rates.reasonRequired');
       if (Object.keys(local).length) {
         setErrors(local);
         throw new Error('invalid');
       }
       const body: NegotiatedRateDraft = {
-        orgId: picked?.orgId ?? '', type, category: category.trim() || null, rateBps: bps ?? 0,
+        orgId: picked?.orgId ?? '', type, category: isFba ? null : category.trim() || null, rateBps: bps ?? 0, amountMinor: isFba ? minor : null,
         startsAt: startsAt ? new Date(startsAt).toISOString() : null, endsAt: endsAt ? new Date(endsAt).toISOString() : null,
         reason: reason.trim(), negotiatedBy: negotiatedBy.trim() || null, reference: reference.trim() || null
       };
       return feeRatesApi().createNegotiatedRate(body);
     },
     onSuccess: (r) => {
-      toast.show(t('st.rates.negotiated', { org: r.orgName ?? r.orgId, rate: formatBps(r.rateBps) }));
+      toast.show(t('st.rates.negotiated', { org: r.orgName ?? r.orgId, rate: r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor) }));
       void qc.invalidateQueries({ queryKey: staffFeeRateKeys.all });
       onClose();
     },
@@ -102,8 +105,10 @@ export function NegotiateRateDialog({ open, onClose, org, t }: { open: boolean; 
         {errors.orgId ? <p role="alert" className="m-0 text-sm text-danger">{errors.orgId}</p> : null}
         <Select id="nr-type" label={t('st.rates.type')} value={type} error={errors.type} onChange={(e) => setType(e.currentTarget.value as NegotiatedRateType)}
           options={TYPES.map((x) => ({ value: x, label: t(`st.rates.type.${x}`) }))} />
-        <TextField id="nr-category" label={t('st.rates.categoryOptional')} value={category} error={errors.category} onChange={(e) => setCategory(e.currentTarget.value)} />
-        <TextField id="nr-rate" label={t('st.rates.ratePercent')} inputMode="decimal" value={rate} error={errors.rateBps} onChange={(e) => setRate(e.currentTarget.value)} />
+        {type === 'FBA_FEE' ? null : (
+          <TextField id="nr-category" label={t('st.rates.categoryOptional')} value={category} error={errors.category} onChange={(e) => setCategory(e.currentTarget.value)} />
+        )}
+        <TextField id="nr-rate" label={type === 'FBA_FEE' ? t('st.rates.amountDollars') : t('st.rates.ratePercent')} inputMode="decimal" value={rate} error={errors.rateBps ?? errors.amountMinor} onChange={(e) => setRate(e.currentTarget.value)} />
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-2">
           <TextField id="nr-start" type="datetime-local" label={t('st.rates.startsAt')} value={startsAt} error={errors.startsAt} onChange={(e) => setStartsAt(e.currentTarget.value)} />
           <TextField id="nr-end" type="datetime-local" label={t('st.rates.endsAt')} value={endsAt} error={errors.endsAt} onChange={(e) => setEndsAt(e.currentTarget.value)} />
@@ -175,7 +180,7 @@ export function NegotiatedRatesPanel({ org }: { org?: { orgId: string; name: str
     ...(org ? [] : [{ id: 'org', accessorFn: (r: NegotiatedRate) => r.orgName ?? r.orgId, header: t('st.rates.col.org'), size: 180, meta: { kind: 'strong' as const } }]),
     { id: 'type', accessorFn: (r) => r.type, header: t('st.rates.col.type'), size: 130, cell: ({ row }) => t(`st.rates.type.${row.original.type}`) },
     { id: 'category', accessorFn: (r) => r.categoryLabel, header: t('st.rates.col.category'), size: 140 },
-    { id: 'rateBps', accessorFn: (r) => r.rateBps, header: t('st.rates.col.rate'), size: 90, meta: { align: 'end' }, cell: ({ row }) => formatBps(row.original.rateBps) },
+    { id: 'rateBps', accessorFn: (r) => r.rateBps, header: t('st.rates.col.rate'), size: 90, meta: { align: 'end' }, cell: ({ row }) => (row.original.amountMinor === null ? formatBps(row.original.rateBps) : `${money(row.original.amountMinor)} / unit`) },
     { id: 'period', accessorFn: (r) => r.startsAt, header: t('st.rates.col.period'), size: 190,
       cell: ({ row }) => `${shortDate(row.original.startsAt)} – ${row.original.endsAt ? shortDate(row.original.endsAt) : t('st.rates.openEnded')}` },
     { id: 'status', accessorFn: (r) => r.status, header: t('st.rates.col.status'), size: 110, meta: { kind: 'status' },
@@ -196,7 +201,7 @@ export function NegotiatedRatesPanel({ org }: { org?: { orgId: string; name: str
   return (
     <>
       <DataTable<NegotiatedRate> id={org ? 'staff.fees.org-negotiated-rates' : 'staff.fees.negotiated-rates'} label={t('st.rates.negotiatedTitle')} columns={columns}
-        data={rates.data?.items ?? []} getRowId={(r) => r.id} rowLabel={(r) => `${r.orgName ?? r.orgId} ${formatBps(r.rateBps)}`} state={state} mode="server" paging="pages"
+        data={rates.data?.items ?? []} getRowId={(r) => r.id} rowLabel={(r) => `${r.orgName ?? r.orgId} ${r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor)}`} state={state} mode="server" paging="pages"
         total={rates.data?.total ?? null} loading={rates.isPending} fetching={rates.isFetching}
         error={rates.isError ? <ErrorState error={rates.error} onRetry={() => void rates.refetch()} /> : undefined}
         searchPlaceholder={t('st.rates.search')} empty={t('st.rates.none')}

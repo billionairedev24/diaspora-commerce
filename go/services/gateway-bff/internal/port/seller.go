@@ -1229,6 +1229,7 @@ type NegotiatedRateResponse struct {
 	Type         string     `json:"type"`
 	Category     string     `json:"category"`
 	RateBps      int        `json:"rateBps"`
+	AmountMinor  *int64     `json:"amountMinor"`
 	StartsAt     time.Time  `json:"startsAt"`
 	EndsAt       *time.Time `json:"endsAt"`
 	Status       string     `json:"status"`

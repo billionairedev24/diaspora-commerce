@@ -65,7 +65,7 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
             Money commission = line.isService() ? zero : take;
             Money connectionFee = line.isService() ? take : zero;
             boolean fba = line.fulfilment() == Fulfilment.FBA;
-            Money fbaFee = fba && !retail ? schedule.fbaPerUnitFor(line.rate() == null ? null : line.rate().planCode()).times(line.quantity()) : zero;
+            Money fbaFee = fba && !retail ? fbaPerUnit(schedule, line).times(line.quantity()) : zero;
             Money deliveryFee = line.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY && !retail
                     ? line.deliveryFee() : zero;
             boolean preorder = line.fulfilment().shippingIsLocalDeliveryFee();
@@ -161,5 +161,14 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
         private Money gross() {
             return items.plus(shipping).plus(tax);
         }
+    }
+
+    /** The seller's negotiated FBA fee snapshotted on the line, else its plan's, else the version's default. */
+    private static Money fbaPerUnit(FeeSchedule schedule, OrderLine line) {
+        AppliedRate rate = line.rate();
+        if (rate != null && rate.negotiatedFbaMinor() != null) {
+            return Money.of(rate.negotiatedFbaMinor(), schedule.currency());
+        }
+        return schedule.fbaPerUnitFor(rate == null ? null : rate.planCode());
     }
 }

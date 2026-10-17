@@ -54,8 +54,8 @@ class NegotiatedRateServiceImpl implements NegotiatedRateService {
         return tx.serializable(() -> {
             Instant now = Instant.now(clock);
             NegotiatedRate rate = NegotiatedRate.create(UUID.randomUUID(), cmd.orgId(), cmd.type(), cmd.category(),
-                    cmd.rateBps(), cmd.startsAt(), cmd.endsAt(), cmd.reason(), cmd.negotiatedBy(), cmd.reference(),
-                    actor.subject(), now);
+                    cmd.rateBps(), cmd.amountMinor(), cmd.startsAt(), cmd.endsAt(), cmd.reason(), cmd.negotiatedBy(),
+                    cmd.reference(), actor.subject(), now);
             for (NegotiatedRate other : rates.lockForOrg(rate.orgId(), rate.type())) {
                 if (other.overlaps(rate)) {
                     throw new PaymentsStateConflict("payments.negotiated-rate-overlap", "A negotiated "

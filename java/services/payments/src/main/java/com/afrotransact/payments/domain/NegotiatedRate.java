@@ -17,14 +17,25 @@ import java.util.UUID;
  * @param endedAt      set when staff ended it early
  * @param expiredAt    set by the expiry job once {@code endsAt} passed
  * @param version      optimistic-locking version of the row
+ * @param amountMinor  the per-unit amount of an {@link NegotiatedRateType#FBA_FEE} (minor units); null for rates
+ *                     in basis points
  */
 public record NegotiatedRate(UUID id, String orgId, NegotiatedRateType type, String category, int rateBps,
                              Instant startsAt, Instant endsAt, String reason, String negotiatedBy, String reference,
                              String createdBy, Instant createdAt, Instant endedAt, String endedBy, String endReason,
-                             Instant expiredAt, long version) {
+                             Instant expiredAt, long version, Long amountMinor) {
 
     public static final String ANY = CommissionOverride.ANY;
     public static final int MAX_REASON = 500;
+
+    /** A negotiated rate in basis points (commission or connection fee). */
+    public NegotiatedRate(UUID id, String orgId, NegotiatedRateType type, String category, int rateBps,
+                          Instant startsAt, Instant endsAt, String reason, String negotiatedBy, String reference,
+                          String createdBy, Instant createdAt, Instant endedAt, String endedBy, String endReason,
+                          Instant expiredAt, long version) {
+        this(id, orgId, type, category, rateBps, startsAt, endsAt, reason, negotiatedBy, reference, createdBy,
+                createdAt, endedAt, endedBy, endReason, expiredAt, version, null);
+    }
 
     public NegotiatedRate {
         Objects.requireNonNull(id, "id");
@@ -35,6 +46,16 @@ public record NegotiatedRate(UUID id, String orgId, NegotiatedRateType type, Str
         }
         orgId = orgId.trim();
         category = normaliseCategory(category);
+        if (type == NegotiatedRateType.FBA_FEE) {
+            if (amountMinor == null || amountMinor < 0) {
+                throw new PaymentsRuleViolation("payments.invalid-request", "The FBA fee per unit is required",
+                        Map.of("amountMinor", "Enter an amount of zero or more"));
+            }
+            category = ANY;
+            rateBps = 0;
+        } else {
+            amountMinor = null;
+        }
         FeeSchedule.requireBps(rateBps, "negotiated rate");
         if (reason == null || reason.isBlank()) {
             throw new PaymentsRuleViolation("payments.invalid-request", "A reason is required",
@@ -65,6 +86,14 @@ public record NegotiatedRate(UUID id, String orgId, NegotiatedRateType type, Str
     public static NegotiatedRate create(UUID id, String orgId, NegotiatedRateType type, String category, int rateBps,
                                         Instant startsAt, Instant endsAt, String reason, String negotiatedBy,
                                         String reference, String createdBy, Instant now) {
+        return create(id, orgId, type, category, rateBps, null, startsAt, endsAt, reason, negotiatedBy, reference,
+                createdBy, now);
+    }
+
+    /** As above, with the per-unit amount of an FBA fee. */
+    public static NegotiatedRate create(UUID id, String orgId, NegotiatedRateType type, String category, int rateBps,
+                                        Long amountMinor, Instant startsAt, Instant endsAt, String reason,
+                                        String negotiatedBy, String reference, String createdBy, Instant now) {
         Instant start = startsAt == null ? now : startsAt;
         if (start.isBefore(now.minusSeconds(60))) {
             throw new PaymentsRuleViolation("payments.negotiated-rate-backdated",
@@ -76,7 +105,7 @@ public record NegotiatedRate(UUID id, String orgId, NegotiatedRateType type, Str
                     Map.of("endsAt", "Must be in the future"));
         }
         return new NegotiatedRate(id, orgId, type, category, rateBps, start.isBefore(now) ? now : start, endsAt,
-                reason, negotiatedBy, reference, createdBy, now, null, null, null, null, 0);
+                reason, negotiatedBy, reference, createdBy, now, null, null, null, null, 0, amountMinor);
     }
 
     /** The moment it stops applying: the earlier of its end date and the time staff ended it (null = never). */
@@ -126,13 +155,13 @@ public record NegotiatedRate(UUID id, String orgId, NegotiatedRateType type, Str
             throw new PaymentsStateConflict("payments.negotiated-rate-ended", "This negotiated rate already ended");
         }
         return new NegotiatedRate(id, orgId, type, category, rateBps, startsAt, endsAt, reason, negotiatedBy,
-                reference, createdBy, createdAt, now, by, why.trim(), expiredAt, version);
+                reference, createdBy, createdAt, now, by, why.trim(), expiredAt, version, amountMinor);
     }
 
     /** Records that the end date passed (the expiry job). */
     public NegotiatedRate expire(Instant now) {
         return new NegotiatedRate(id, orgId, type, category, rateBps, startsAt, endsAt, reason, negotiatedBy,
-                reference, createdBy, createdAt, endedAt, endedBy, endReason, now, version);
+                reference, createdBy, createdAt, endedAt, endedBy, endReason, now, version, amountMinor);
     }
 
     /** Due for the expiry job: past its end date, not ended early and not recorded yet. */

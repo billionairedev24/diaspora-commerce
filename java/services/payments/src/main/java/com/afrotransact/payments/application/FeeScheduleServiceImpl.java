@@ -105,7 +105,8 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
         FeeKind k = kind == null ? FeeKind.PRODUCT : kind;
         String plan = plans.planOf(org).orElse(null);
         NegotiatedRateType type = NegotiatedRateType.of(k);
-        List<NegotiatedRate> own = negotiated.forOrgs(List.of(org)).stream().filter(n -> n.type() == type).toList();
+        List<NegotiatedRate> own = negotiated.forOrgs(List.of(org)).stream().filter(n -> n.type() == type
+                || k == FeeKind.PRODUCT && n.type() == NegotiatedRateType.FBA_FEE).toList();
         RateTable table = schedule.section(k);
         Set<String> categories = new TreeSet<>(table.categoryBps().keySet());
         if (plan != null) {
@@ -128,7 +129,8 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
         return new RateCard(org, k, schedule.id(), schedule.version(), schedule.effectiveFrom(), when,
                 schedule.currency(), plan, other, rates, isRetail ? List.of() : current, schedule.cardPctBps(),
                 schedule.cardFixed(), isRetail || k == FeeKind.SERVICE ? Money.zero(schedule.currency())
-                : schedule.fbaPerUnit(), schedule.reverseCommissionOnRefund(), isRetail);
+                : FeeSchedule.negotiatedFba(org, own, when).map(n -> Money.of(n.amountMinor(), schedule.currency()))
+                .orElse(schedule.fbaPerUnitFor(plan)), schedule.reverseCommissionOnRefund(), isRetail);
     }
 
     @Override
