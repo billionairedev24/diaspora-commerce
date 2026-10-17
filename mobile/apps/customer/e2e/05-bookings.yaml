@@ -1,0 +1,7 @@
+appId: com.afrotransact.customer.local
+---
+- runFlow: _sign-in.yaml
+- tapOn: "Account"
+- tapOn: "Book a pro"
+- assertVisible: "Book a pro"
+- assertVisible: "Search services"

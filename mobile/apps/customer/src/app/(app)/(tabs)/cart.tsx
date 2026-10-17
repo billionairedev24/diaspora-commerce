@@ -42,7 +42,7 @@ export default function CartScreen() {
           <SectionLabel>{pkg.heading.toUpperCase()}</SectionLabel>
           {pkg.lines.map((l) => (
             <View key={l.lineId} style={styles.line}>
-              <ProductImage title={l.title} size={72} />
+              <ProductImage title={l.title} uri={l.imageUrl} size={72} />
               <View style={{ flex: 1, gap: 4 }}>
                 <AppText numberOfLines={2}>{l.title}</AppText>
                 <AppText variant="bodyStrong">{fmt.money(l.lineTotalMinor, data.currency)}</AppText>

@@ -7,7 +7,7 @@ import { Share, StyleSheet, View } from 'react-native';
 import { useAddresses, useProduct } from '@/api/queries';
 import { env } from '@/config/env';
 import { useQuantity } from '@/features/shop/cartHooks';
-import { ProductImage, QtyStepper } from '@/features/shop/components';
+import { ProductGallery, QtyStepper } from '@/features/shop/components';
 import { c, sp, t } from '@/theme';
 import { AppText, Button, IconButton, Loading } from '@/ui/primitives';
 import { Screen } from '@/ui/Screen';
@@ -43,7 +43,7 @@ export default function ProductScreen() {
 
   return (
     <Screen header={header} footer={footer}>
-      <ProductImage title={d.product.title} height={240} />
+      <ProductGallery title={d.product.title} images={d.product.images} height={260} />
       <View style={{ gap: 4 }}>
         <AppText variant="small" color={c.link}>{d.soldBy}</AppText>
         <AppText variant="title" accessibilityRole="header">{d.product.title}</AppText>

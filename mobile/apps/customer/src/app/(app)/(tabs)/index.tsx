@@ -102,7 +102,7 @@ export default function Home() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: sp['3'] }}>
               {reorder.map((p) => (
                 <Pressable key={p.atin} accessibilityRole="button" accessibilityLabel={p.title} onPress={() => router.push(`/product/${p.atin}`)} style={{ width: 110, gap: 4 }}>
-                  <ProductImage title={p.title} size={110} />
+                  <ProductImage title={p.title} uri={p.imageUrl} size={110} />
                   <AppText variant="caption" numberOfLines={2}>{p.title}</AppText>
                   <AppText variant="small" style={{ fontWeight: t.fontWeight.bold }}>{fmt.money(p.priceMinor, p.currency)}</AppText>
                 </Pressable>
