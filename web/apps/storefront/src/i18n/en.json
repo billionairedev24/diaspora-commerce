@@ -1204,5 +1204,7 @@
   "ord.r.year": "{year}",
   "ord.codesIntro": "Show the code to the driver or seller when you receive the order. Each code is for the order below it.",
   "ord.andMore": "+ {count} more",
-  "ord.codeOrder": "Order {number}"
+  "ord.codeOrder": "Order {number}",
+  "ord.showCode": "Show delivery code",
+  "ord.hideCode": "Hide delivery code"
 }

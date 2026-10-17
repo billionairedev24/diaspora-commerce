@@ -35,6 +35,7 @@
 .item { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
 .itemTitle { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); border: 1px solid var(--at-color-border); }
+.codeBlock { display: flex; flex-direction: column; align-items: flex-start; gap: var(--at-space-2); }
 .codeCallout { display: flex; gap: var(--at-space-3); align-items: flex-start; padding: var(--at-space-3) var(--at-space-4); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); max-width: 420px; }
 .codeCallout > div { display: flex; flex-direction: column; gap: var(--at-space-1); font-size: var(--at-text-sm); }
 .codeCallout p { margin: 0; }

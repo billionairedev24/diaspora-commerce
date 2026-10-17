@@ -43,6 +43,28 @@ function ShipmentStatus({ status, deliveredAt }: { status: string; deliveredAt?:
   );
 }
 
+/** The delivery code stays hidden (it is a secret until the handover) behind a link on the shipment; clicking shows it. */
+function DeliveryCode({ code }: { code: string }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={styles.codeBlock}>
+      <Button variant="link" icon={<Key aria-hidden />} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        {open ? t('ord.hideCode') : t('ord.showCode')}
+      </Button>
+      {open && (
+        <div className={styles.codeCallout} role="status">
+          <div>
+            <span>{t('ord.deliveryCode')}</span>
+            <strong className={styles.codeDigits}>{code}</strong>
+            <p className={pageStyles.muted}>{t('ord.codeHelp')}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const isClosed = (status: string) => ['cancelled', 'canceled', 'returned'].includes(status.toLowerCase());
 
 /** What is in the shipment: up to three products with photo, name and quantity, then "+ N more"; sold by the seller. */
@@ -113,16 +135,7 @@ function OrderCard({ order }: { order: OrderSummary }) {
           <div className={styles.shipMain}>
             <ShipmentStatus status={s.status} deliveredAt={s.deliveredAt} />
             <ShipmentItems shipment={s} />
-            {s.deliveryCode && !s.deliveredAt && !isClosed(s.status) && (
-              <div className={styles.codeCallout}>
-                <Key aria-hidden />
-                <div>
-                  <span>{t('ord.deliveryCode')}</span>
-                  <strong className={styles.codeDigits}>{s.deliveryCode}</strong>
-                  <p className={pageStyles.muted}>{t('ord.codeHelp')}</p>
-                </div>
-              </div>
-            )}
+            {s.deliveryCode && !s.deliveredAt && !isClosed(s.status) && <DeliveryCode code={s.deliveryCode} />}
           </div>
           <div className={styles.shipActions}>
             {s.status.toLowerCase() !== 'cancelled' && (
@@ -179,7 +192,6 @@ export function OrdersView() {
   const now = useMemo(() => new Date(), []);
   const shown = items.filter((o) => (group === 'ALL' || orderGroup(o.shipments) === group) && inRange(o.placedAt, range, now) && matchesOrder(o, text));
   const filtering = group !== 'ALL' || range !== 'all' || text.trim() !== '';
-  const codes = items.flatMap((o) => o.shipments.filter((s) => s.deliveryCode && !s.deliveredAt && !isClosed(s.status)).map((s) => ({ order: o.orderNumber, placedAt: o.placedAt, code: s.deliveryCode ?? '', what: s.lines?.[0]?.title ?? s.label, more: Math.max(0, (s.lines?.length ?? 1) - 1), seller: s.sellerName })));
   return (
     <div className={pageStyles.page}>
       {placed && (
@@ -252,32 +264,6 @@ export function OrdersView() {
           )}
         </div>
         <aside className={styles.aside}>
-          <section className={pageStyles.card} aria-labelledby="codes-title">
-            <strong id="codes-title">
-              <Key aria-hidden /> {t('ord.yourCodes')}
-            </strong>
-            {codes.length === 0 ? (
-              <p className={pageStyles.muted}>{t('ord.noCodes')}</p>
-            ) : (
-              <>
-                <p className={pageStyles.muted}>{t('ord.codesIntro')}</p>
-                <ul className={styles.codeList}>
-                  {codes.map((c) => (
-                    <li key={`${c.order}-${c.code}`} className={styles.codeRow}>
-                      <span className={styles.codeWhat}>
-                        <strong>{c.what}</strong>
-                        {c.more > 0 && <span className={pageStyles.muted}> {t('ord.andMore', { count: c.more })}</span>}
-                      </span>
-                      <span className={pageStyles.muted}>
-                        {t('ord.codeOrder', { number: c.order })} · <Link href={`/orders/${encodeURIComponent(c.order)}`}>{t('ord.details')}</Link>
-                      </span>
-                      <span className={styles.codeDigits}>{c.code}</span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </section>
           <section className={pageStyles.card}>
             <strong>{t('ord.helpTitle')}</strong>
             <p className={pageStyles.muted}>{t('ord.helpBody')}</p>
