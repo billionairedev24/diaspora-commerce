@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 // @ts-expect-error -- plain ESM script without type declarations
 import { fontDeclarations, render, renderFontsCss, renderFontsTs, withFonts } from '../scripts/generate.mjs';
-import fontsConfig from '../src/fonts.config.json';
 import { cssVar, cssVariables, fonts, tokens } from '../src';
+import fontsConfig from '../src/fonts.config.json';
 
 const css = readFileSync(resolve(__dirname, '../src/tokens.css'), 'utf8');
 const design = readFileSync(resolve(__dirname, '../../../../design/afrotransact-tokens.css'), 'utf8');
