@@ -66,9 +66,10 @@ INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal temporal-
 OBS_BASE="otel-collector prometheus alertmanager loki tempo grafana host-log-shipper elasticsearch-exporter kafka-exporter"
 
 # Everything the storefront (incl. services/bookings), checkout, pre-orders, AfroTransact Retail (1P), delivery dispatch,
-# returns and the staff console use. Identity first.
+# returns, the staff console and every AI chat (ai-gateway: Lola, the listing writer; needs OPENROUTER_API_KEY in
+# .local/secrets.env) use. Identity first.
 DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops tax-returns seller
-  bookings retail fulfilment mcp-server geo media cart notifications search indexer promise storefront gateway-bff
+  bookings retail fulfilment mcp-server ai-gateway geo media cart notifications search indexer promise storefront gateway-bff
   carrier-gateway"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns

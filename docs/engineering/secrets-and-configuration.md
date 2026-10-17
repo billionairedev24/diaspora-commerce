@@ -164,7 +164,7 @@ Prices and free tiers change: check the provider's pricing page.
   all through ai-gateway (OpenAI-compatible API, model routing per task).
 - **Create:** [openrouter.ai](https://openrouter.ai) → **Keys → Create Key** → `OPENROUTER_API_KEY` (`sk-or-v1-…`); add
   credit under **Credits** (some models are free).
-- **Note:** ai-gateway is not in `make up`'s default set: `tools/dev/local.sh restart ai-gateway` starts it.
+- **Note:** ai-gateway starts with `make up`. After adding the key, `tools/dev/local.sh restart ai-gateway` re-reads it. Without a key, AI chats answer 503. Every task defaults to the cheapest models (Gemini 2.5 Flash-Lite, then GPT-5 Nano); raise one with `AI_MODELS_<TASK>` (`INTENT`, `PLANNING`, `CHAT`, `LISTING_WRITER`, `TRANSLATION`, `TRIAGE`, `IMAGE_MODERATION`), a comma-separated list in fallback order.
 - **Cost:** pay per token; set a credit limit on the key.
 
 ### Social sign-in (optional): identity

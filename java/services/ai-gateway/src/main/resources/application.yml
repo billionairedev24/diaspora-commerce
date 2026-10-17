@@ -121,35 +121,39 @@ at:
     embeddings:
       # Must match the dense_vector dims of the search index.
       dimensions: ${EMBEDDING_DIMENSIONS:1536}
-    # Task → OpenRouter models in fallback order. INTENT uses a fast, cheap model; PLANNING / CHAT a strong one.
+    # Task → OpenRouter models in fallback order. DEFAULT: the cheapest capable models for every text task, so a fresh
+    # install never spends on premium models by accident (Gemini 2.5 Flash-Lite $0.10 / $0.40, then GPT-5 Nano $0.05 / $0.40
+    # per million tokens in / out). Each task can be raised with one variable, comma-separated in fallback order, e.g.
+    #   AI_MODELS_CHAT=anthropic/claude-sonnet-4.5,openai/gpt-5-mini
+    # See docs/runbooks/cost.md. Image moderation needs vision and embeddings need an embedding model; both stay cheap.
     routes:
       intent:
-        models: [google/gemini-2.5-flash-lite, openai/gpt-5-nano]
+        models: ${AI_MODELS_INTENT:google/gemini-2.5-flash-lite,openai/gpt-5-nano}
         timeout: 8s
         max-retries: 1
         backoff: 250ms
       planning:
-        models: [anthropic/claude-sonnet-4.5, openai/gpt-5, google/gemini-2.5-pro]
+        models: ${AI_MODELS_PLANNING:google/gemini-2.5-flash-lite,openai/gpt-5-nano}
         timeout: 30s
         max-retries: 1
         backoff: 500ms
       chat:
-        models: [anthropic/claude-sonnet-4.5, openai/gpt-5-mini, google/gemini-2.5-flash]
+        models: ${AI_MODELS_CHAT:google/gemini-2.5-flash-lite,openai/gpt-5-nano}
         timeout: 30s
         max-retries: 1
         backoff: 500ms
       listing-writer:
-        models: [anthropic/claude-haiku-4.5, openai/gpt-5-mini]
+        models: ${AI_MODELS_LISTING_WRITER:google/gemini-2.5-flash-lite,openai/gpt-5-nano}
         timeout: 30s
         max-retries: 1
         backoff: 500ms
       translation:
-        models: [google/gemini-2.5-flash, openai/gpt-5-mini]
+        models: ${AI_MODELS_TRANSLATION:google/gemini-2.5-flash-lite,openai/gpt-5-nano}
         timeout: 20s
         max-retries: 1
         backoff: 500ms
       triage:
-        models: [anthropic/claude-sonnet-4.5, openai/gpt-5]
+        models: ${AI_MODELS_TRIAGE:google/gemini-2.5-flash-lite,openai/gpt-5-nano}
         timeout: 45s
         max-retries: 1
         backoff: 500ms
@@ -160,7 +164,7 @@ at:
         backoff: 200ms
       # Vision models for media-service's image moderation hook (POST /v1/ai/moderate-image).
       image-moderation:
-        models: [google/gemini-2.5-flash, openai/gpt-5-mini]
+        models: ${AI_MODELS_IMAGE_MODERATION:google/gemini-2.5-flash-lite,openai/gpt-5-nano}
         timeout: 8s
         max-retries: 1
         backoff: 250ms
