@@ -87,8 +87,8 @@ type staffResource struct {
 	actions            []staffAction
 	// actionsFor adds actions that depend on the record (one tap per shipment's next step); looked up like actions.
 	actionsFor func(o jobj) []staffAction
-	edit               *staffEdit
-	create             *staffCreate
+	edit       *staffEdit
+	create     *staffCreate
 }
 
 func (r *staffResource) id(o jobj) string {

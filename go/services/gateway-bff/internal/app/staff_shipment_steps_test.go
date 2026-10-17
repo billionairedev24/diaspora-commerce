@@ -40,7 +40,22 @@ func TestDriverAndExceptionStepsAreNotStaffButtons(t *testing.T) {
 	o := jobj{"shipments": []any{
 		ship("s1", "Local", "READY", "AFROTRANSACT_DELIVERY", "picked_up", "cancelled"),
 		ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered", "delivery_failed")}}
-	if got := keysOf(shipmentNextStepActions(o)); got != "" {
+	// No buttons; the driver shipment only carries the "waiting for the driver" note.
+	if got := keysOf(shipmentNextStepActions(o)); got != "driver:s1=Waiting for the driver · Local" {
 		t.Fatalf("got %s", got)
+	}
+}
+
+func TestDriverShipmentsShowWhoMovesThemNext(t *testing.T) {
+	o := jobj{"shipments": []any{ship("s1", "Local", "OUT_FOR_DELIVERY", "AFROTRANSACT_DELIVERY", "delivered", "delivery_failed")}}
+	got := shipmentNextStepActions(o)
+	if len(got) != 1 || got[0].key != "driver:s1" || got[0].label != "Waiting for the driver" {
+		t.Fatalf("got %s", keysOf(got))
+	}
+	if why := got[0].when(staffCtx{}, o); !strings.Contains(why, "proof in the driver app") || !strings.Contains(why, "More options") {
+		t.Fatalf("reason %q", why)
+	}
+	if shipmentNextStepActions(jobj{"shipments": []any{ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered")}}) != nil && len(shipmentNextStepActions(jobj{"shipments": []any{ship("s2", "Carrier", "OUT_FOR_DELIVERY", "CARRIER", "delivered")}})) != 0 {
+		t.Fatal("carrier shipments are not driver-owned")
 	}
 }

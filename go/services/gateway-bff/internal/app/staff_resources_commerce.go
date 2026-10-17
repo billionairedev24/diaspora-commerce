@@ -181,8 +181,34 @@ func shipmentNextStepActions(o jobj) []staffAction {
 				}})
 			break // one next step per shipment
 		}
+		if hint := driverHint(jstr(s, "status"), driverOwned); hint != "" {
+			label := "Waiting for the driver"
+			if len(ships) > 1 {
+				label += " · " + jstr(s, "label")
+			}
+			// A button that cannot be pressed: it says who moves this shipment next and where.
+			out = append(out, staffAction{key: "driver:" + id, label: label, tone: "neutral", permission: "orders:manage", also: []string{"orders:update-status"},
+				when: func(staffCtx, jobj) string { return hint },
+				run:  func(context.Context, staffCtx, jobj, jobj) error { return nil }})
+		}
 	}
 	return out
+}
+
+// driverHint says what happens next to an AfroTransact Delivery shipment that is with the driver side of the flow.
+func driverHint(status string, driverOwned bool) string {
+	if !driverOwned {
+		return ""
+	}
+	switch strings.ToUpper(status) {
+	case "READY":
+		return "Assign a driver in Delivery dispatch. The driver scans the packages at pickup in the driver app, which marks it picked up."
+	case "PICKED_UP", "IN_TRANSIT":
+		return "With the driver. It becomes out for delivery when the driver starts the route in the driver app."
+	case "OUT_FOR_DELIVERY":
+		return "Out with the driver. It becomes delivered when the driver records proof in the driver app (the customer's code, a signature or a photo). To confirm it yourself, use More options and give a reason."
+	}
+	return ""
 }
 
 // shipmentLifecycle is the order of the steps staff may take on a shipment (orders-service state machine).
