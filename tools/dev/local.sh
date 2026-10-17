@@ -1078,7 +1078,7 @@ cmd_apk() {
   if [[ -n "$java17" ]]; then export JAVA_HOME="$java17"; fi
   echo "==> building the standalone $app app for $host (release, JavaScript inside; first build: several minutes)"
   (cd "$ROOT/mobile/apps/$app" || exit 1
-    export CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=0 \
+    export SENTRY_DISABLE_AUTO_UPLOAD=true CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=0 \
       EXPO_PUBLIC_DEV_HOST="$host" EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY="${STRIPE_PUBLISHABLE_KEY:-}"
     # android/ is generated (git-ignored): --clean regenerates it so the local settings (plain HTTP to the LAN) apply.
     ./node_modules/.bin/expo prebuild --platform android --clean --no-install
