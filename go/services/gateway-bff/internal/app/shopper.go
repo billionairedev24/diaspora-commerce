@@ -262,7 +262,12 @@ func toOrderSummary(o port.UpOrder) domain.OrderSummary {
 		out.ShipTo = strings.TrimSpace(o.ShippingAddress.Line1 + ", " + o.ShippingAddress.City)
 	}
 	for _, s := range o.Shipments {
+		lines := make([]domain.OrderShipmentLine, 0, len(s.Lines))
+		for _, l := range s.Lines {
+			lines = append(lines, domain.OrderShipmentLine{Title: l.Title, Quantity: l.Quantity, ImageURL: optStr(l.ImageURL), ProductATIN: l.ProductATIN})
+		}
 		out.Shipments = append(out.Shipments, domain.OrderShipment{ShipmentID: firstNonEmpty(s.ShipmentID, s.ID), Label: s.Label,
+			SellerName: s.SellerName, Lines: lines,
 			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, CancellableUntil: optStr(s.CancellableUntil), Carrier: optStr(s.Carrier),
 			TrackingNumber: optStr(s.TrackingNumber), PromisedBy: optStr(s.PromisedBy), DeliveredAt: optStr(s.DeliveredAt),
 			DeliveryCode: optStr(s.HandoverCode), Returnable: s.Returnable, ReturnWindowEndsAt: optStr(s.ReturnWindowEndsAt),

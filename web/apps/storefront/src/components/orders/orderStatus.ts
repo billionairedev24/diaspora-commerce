@@ -50,3 +50,31 @@ export function matchesOrder(o: { orderNumber: string; shipTo: string; shipments
   if (!needle) return true;
   return [o.orderNumber, o.shipTo, ...o.shipments.flatMap((s) => [s.label, s.items])].some((v) => v.toLowerCase().includes(needle));
 }
+
+export type OrderRange = 'all' | '3m' | '6m' | `y${number}`;
+
+/** Amazon-style time filter: the past 3 or 6 months, then this year and the previous two years. */
+export function rangeOptions(now: Date): Array<{ value: OrderRange; labelKey: 'ord.r.all' | 'ord.r.3m' | 'ord.r.6m' | 'ord.r.year'; vars?: Record<string, number> }> {
+  const y = now.getFullYear();
+  return [
+    { value: 'all', labelKey: 'ord.r.all' },
+    { value: '3m', labelKey: 'ord.r.3m' },
+    { value: '6m', labelKey: 'ord.r.6m' },
+    { value: `y${y}`, labelKey: 'ord.r.year', vars: { year: y } },
+    { value: `y${y - 1}`, labelKey: 'ord.r.year', vars: { year: y - 1 } },
+    { value: `y${y - 2}`, labelKey: 'ord.r.year', vars: { year: y - 2 } }
+  ];
+}
+
+/** True when the order was placed inside the range. */
+export function inRange(placedAt: string, range: OrderRange, now: Date): boolean {
+  if (range === 'all') return true;
+  const at = new Date(placedAt);
+  if (Number.isNaN(at.getTime())) return true;
+  if (range === '3m' || range === '6m') {
+    const from = new Date(now);
+    from.setMonth(from.getMonth() - (range === '3m' ? 3 : 6));
+    return at >= from;
+  }
+  return at.getFullYear() === Number(range.slice(1));
+}

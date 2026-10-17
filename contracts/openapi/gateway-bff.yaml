@@ -3445,6 +3445,18 @@ components:
               label: {type: string}
               status: {type: string}
               items: {type: string}
+              sellerName: {type: string, description: Who sells and ships this shipment}
+              lines:
+                type: array
+                description: What is in the shipment (name, photo, quantity)
+                items:
+                  type: object
+                  required: [title, quantity]
+                  properties:
+                    title: {type: string}
+                    quantity: {type: integer}
+                    imageUrl: {type: [string, 'null']}
+                    productAtin: {type: string}
               cancellable: {type: boolean, description: 'The customer can still cancel it: before the parcel is packed and inside the cancellation window'}
               cancellableUntil: {type: [string, 'null'], format: date-time, description: 'When Cancel stops being offered; null when it is not offered now'}
               carrier: {type: [string, 'null']}

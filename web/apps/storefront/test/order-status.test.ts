@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { matchesOrder, orderGroup, shipmentLook } from '@/components/orders/orderStatus';
+import { inRange, matchesOrder, orderGroup, rangeOptions, shipmentLook } from '@/components/orders/orderStatus';
 
 describe('how a shipment reads to a shopper', () => {
   it('names the stage in plain words and says how far along it is', () => {
@@ -28,5 +28,20 @@ describe('how a shipment reads to a shopper', () => {
     expect(matchesOrder(o, 'houston')).toBe(true);
     expect(matchesOrder(o, 'turmeric')).toBe(false);
     expect(matchesOrder(o, '  ')).toBe(true);
+  });
+});
+
+describe('time range filter', () => {
+  const now = new Date('2026-10-17T12:00:00Z');
+  it('keeps orders from the past 3 or 6 months, or from one calendar year', () => {
+    expect(inRange('2026-09-01T00:00:00Z', '3m', now)).toBe(true);
+    expect(inRange('2026-06-01T00:00:00Z', '3m', now)).toBe(false);
+    expect(inRange('2026-06-01T00:00:00Z', '6m', now)).toBe(true);
+    expect(inRange('2025-12-31T23:00:00Z', 'y2025', now)).toBe(true);
+    expect(inRange('2025-12-31T23:00:00Z', 'y2026', now)).toBe(false);
+    expect(inRange('2020-01-01T00:00:00Z', 'all', now)).toBe(true);
+  });
+  it('offers this year and the two before', () => {
+    expect(rangeOptions(now).map((o) => o.value)).toEqual(['all', '3m', '6m', 'y2026', 'y2025', 'y2024']);
   });
 });

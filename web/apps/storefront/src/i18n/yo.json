@@ -588,7 +588,7 @@
   "ord.notFound": "A kò rí ìbéèrè yẹn.",
   "ord.detailTitle": "Ìbéèrè {number}",
   "ord.placedOn": "A fi sílẹ̀ ní {date}",
-  "ord.soldBy": "{seller} ló tà á",
+  "ord.soldBy": "Sold by {seller}",
   "ord.arriving": "Yóò dé ní {date}",
   "ord.trackingNo": "Ìtọpinpin {carrier} {number}",
   "ord.codeHint": "fún awakọ̀ ní ẹnu ọ̀nà",
@@ -1200,5 +1200,16 @@
   "ord.step.ordered": "Ordered",
   "ord.step.packed": "Packed",
   "ord.step.onTheWay": "On the way",
-  "ord.step.delivered": "Delivered"
+  "ord.step.delivered": "Delivered",
+  "ord.codeHelp": "Give this code to the driver or seller when your order is handed to you. Don't share it before.",
+  "ord.qty": "Qty {count}",
+  "ord.moreItems": "+ {count} more items",
+  "ord.range": "Placed in",
+  "ord.r.all": "All orders",
+  "ord.r.3m": "Past 3 months",
+  "ord.r.6m": "Past 6 months",
+  "ord.r.year": "{year}",
+  "ord.codesIntro": "Show the code to the driver or seller when you receive the order. Each code is for the order below it.",
+  "ord.andMore": "+ {count} more",
+  "ord.codeOrder": "Order {number}"
 }

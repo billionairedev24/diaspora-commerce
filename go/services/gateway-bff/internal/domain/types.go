@@ -398,6 +398,9 @@ type OrderShipment struct {
 	Label      string `json:"label"`
 	Status     string `json:"status"`
 	Items      string `json:"items"`
+	// SellerName and Lines say what is in the shipment (name, photo, quantity) so Your orders can show it.
+	SellerName string              `json:"sellerName,omitempty"`
+	Lines      []OrderShipmentLine `json:"lines,omitempty"`
 	// Optional facts from orders (Your orders cards): cancel button, tracking, handover code.
 	Cancellable bool `json:"cancellable,omitempty"`
 	// CancellableUntil is when Cancel stops being offered (null when it is not offered now).
@@ -411,6 +414,14 @@ type OrderShipment struct {
 	Returnable         bool    `json:"returnable,omitempty"`
 	ReturnWindowEndsAt *string `json:"returnWindowEndsAt,omitempty"`
 	ProblemReportOnly  bool    `json:"problemReportOnly,omitempty"`
+}
+
+// OrderShipmentLine is one product in a shipment of Your orders.
+type OrderShipmentLine struct {
+	Title       string  `json:"title"`
+	Quantity    int     `json:"quantity"`
+	ImageURL    *string `json:"imageUrl,omitempty"`
+	ProductATIN string  `json:"productAtin,omitempty"`
 }
 
 // OrderSummary is one order in Your orders.

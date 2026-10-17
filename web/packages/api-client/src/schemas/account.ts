@@ -43,6 +43,8 @@ export const OrderSummarySchema = z.object({
       label: z.string(),
       status: z.string(),
       items: z.string(),
+      sellerName: z.string().optional(),
+      lines: z.array(z.object({ title: z.string(), quantity: z.number().int(), imageUrl: z.string().nullable().optional(), productAtin: z.string().optional() })).optional(),
       cancellable: z.boolean().optional(),
       cancellableUntil: z.string().nullable().optional(),
       carrier: z.string().nullable().optional(),

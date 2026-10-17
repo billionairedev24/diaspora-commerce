@@ -29,6 +29,21 @@
 .line { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
 .placed { display: flex; gap: var(--at-space-3); align-items: center; padding: var(--at-space-4); border-radius: var(--at-radius-md); background: var(--at-color-success-bg); color: var(--at-color-success); }
 
+.shipMain { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
+.items { display: flex; flex-direction: column; gap: var(--at-space-2); }
+.itemList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
+.item { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
+.itemTitle { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); border: 1px solid var(--at-color-border); }
+.codeCallout { display: flex; gap: var(--at-space-3); align-items: flex-start; padding: var(--at-space-3) var(--at-space-4); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); max-width: 420px; }
+.codeCallout > div { display: flex; flex-direction: column; gap: var(--at-space-1); font-size: var(--at-text-sm); }
+.codeCallout p { margin: 0; }
+.codeDigits { font-family: var(--at-font-mono, monospace); font-size: var(--at-text-xl); letter-spacing: 0.2em; font-weight: var(--at-weight-bold); }
+.codeList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); }
+.codeRow { display: flex; flex-direction: column; gap: var(--at-space-1); padding-top: var(--at-space-3); border-top: 1px solid var(--at-color-border); font-size: var(--at-text-sm); }
+.codeRow:first-child { border-top: 0; padding-top: 0; }
+.codeWhat { overflow: hidden; text-overflow: ellipsis; }
+
 @media (max-width: 899px) {
   .layout { grid-template-columns: 1fr; }
   .aside { position: static; }

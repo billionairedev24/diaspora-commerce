@@ -2,7 +2,7 @@
 
 import { isApiError, orderKeys, type OrderSummary } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CheckCircle, ChipGroup, Key, Skeleton, Sparkle, TextField, useToast } from '@afrotransact/ui';
+import { Button, buttonClassName, CheckCircle, ChipGroup, Key, Select, Skeleton, Sparkle, TextField, useToast } from '@afrotransact/ui';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -17,7 +17,7 @@ import { shopperQueries } from '@/lib/api/queries';
 
 import { CancelShipment } from './CancelShipment';
 import styles from './Orders.module.css';
-import { matchesOrder, type OrderGroup, orderGroup, shipmentLook } from './orderStatus';
+import { inRange, matchesOrder, type OrderGroup, orderGroup, type OrderRange, rangeOptions, shipmentLook } from './orderStatus';
 import { PickupDetails } from './PickupDetails';
 
 export const placedDate = (tag: string, iso: string) => new Date(iso).toLocaleDateString(tag, { month: 'long', day: 'numeric', year: 'numeric' });
@@ -39,6 +39,38 @@ function ShipmentStatus({ status, deliveredAt }: { status: string; deliveredAt?:
           ))}
         </ol>
       )}
+    </div>
+  );
+}
+
+const isClosed = (status: string) => ['cancelled', 'canceled', 'returned'].includes(status.toLowerCase());
+
+/** What is in the shipment: up to three products with photo, name and quantity, then "+ N more"; sold by the seller. */
+function ShipmentItems({ shipment }: { shipment: OrderSummary['shipments'][number] }) {
+  const t = useT();
+  const lines = shipment.lines ?? [];
+  if (lines.length === 0) {
+    return (
+      <>
+        <p className={pageStyles.muted}>{shipment.label}</p>
+        <p className={pageStyles.muted}>{shipment.items}</p>
+      </>
+    );
+  }
+  const shown = lines.slice(0, 3);
+  return (
+    <div className={styles.items}>
+      <ul className={styles.itemList}>
+        {shown.map((l, i) => (
+          <li key={`${l.productAtin ?? l.title}-${i}`} className={styles.item}>
+            {l.imageUrl ? <img src={l.imageUrl} alt="" loading="lazy" className={styles.thumb} /> : <span className={styles.thumb} aria-hidden />}
+            <span className={styles.itemTitle}>{l.title}</span>
+            {l.quantity > 1 && <span className={pageStyles.muted}>{t('ord.qty', { count: l.quantity })}</span>}
+          </li>
+        ))}
+      </ul>
+      {lines.length > shown.length && <p className={pageStyles.muted}>{t('ord.moreItems', { count: lines.length - shown.length })}</p>}
+      {shipment.sellerName && <p className={pageStyles.muted}>{t('ord.soldBy', { seller: shipment.sellerName })}</p>}
     </div>
   );
 }
@@ -78,14 +110,18 @@ function OrderCard({ order }: { order: OrderSummary }) {
       </div>
       {order.shipments.map((s) => (
         <div key={s.shipmentId} className={styles.shipment}>
-          <div>
+          <div className={styles.shipMain}>
             <ShipmentStatus status={s.status} deliveredAt={s.deliveredAt} />
-            <p className={pageStyles.muted}>{s.label}</p>
-            <p className={pageStyles.muted}>{s.items}</p>
-            {s.deliveryCode && (
-              <span className={styles.code}>
-                <Key aria-hidden /> {t('ord.deliveryCode')} <strong>{s.deliveryCode}</strong>
-              </span>
+            <ShipmentItems shipment={s} />
+            {s.deliveryCode && !s.deliveredAt && !isClosed(s.status) && (
+              <div className={styles.codeCallout}>
+                <Key aria-hidden />
+                <div>
+                  <span>{t('ord.deliveryCode')}</span>
+                  <strong className={styles.codeDigits}>{s.deliveryCode}</strong>
+                  <p className={pageStyles.muted}>{t('ord.codeHelp')}</p>
+                </div>
+              </div>
             )}
           </div>
           <div className={styles.shipActions}>
@@ -137,11 +173,13 @@ export function OrdersView() {
   const lola = useLolaLauncher();
   const [group, setGroup] = useState<'ALL' | OrderGroup>('ALL');
   const [text, setText] = useState('');
+  const [range, setRange] = useState<OrderRange>('all');
   const items = useMemo(() => orders.data?.pages.flatMap((p) => p.items) ?? [], [orders.data]);
   const count = (g: OrderGroup) => items.filter((o) => orderGroup(o.shipments) === g).length;
-  const shown = items.filter((o) => (group === 'ALL' || orderGroup(o.shipments) === group) && matchesOrder(o, text));
-  const filtering = group !== 'ALL' || text.trim() !== '';
-  const codes = items.flatMap((o) => o.shipments.filter((s) => s.deliveryCode && !s.deliveredAt).map((s) => ({ order: o.orderNumber, code: s.deliveryCode, label: s.label })));
+  const now = useMemo(() => new Date(), []);
+  const shown = items.filter((o) => (group === 'ALL' || orderGroup(o.shipments) === group) && inRange(o.placedAt, range, now) && matchesOrder(o, text));
+  const filtering = group !== 'ALL' || range !== 'all' || text.trim() !== '';
+  const codes = items.flatMap((o) => o.shipments.filter((s) => s.deliveryCode && !s.deliveredAt && !isClosed(s.status)).map((s) => ({ order: o.orderNumber, placedAt: o.placedAt, code: s.deliveryCode ?? '', what: s.lines?.[0]?.title ?? s.label, more: Math.max(0, (s.lines?.length ?? 1) - 1), seller: s.sellerName })));
   return (
     <div className={pageStyles.page}>
       {placed && (
@@ -181,6 +219,7 @@ export function OrdersView() {
                   { value: 'CLOSED', label: `${t('ord.f.closed')} (${count('CLOSED')})` }
                 ]}
               />
+              <Select label={t('ord.range')} value={range} onChange={(e) => setRange(e.currentTarget.value as OrderRange)} options={rangeOptions(now).map((o) => ({ value: o.value, label: t(o.labelKey, o.vars) }))} />
               <TextField label={t('ord.search')} placeholder={t('ord.searchPlaceholder')} type="search" value={text} onChange={(e) => setText(e.currentTarget.value)} />
             </div>
           )}
@@ -220,11 +259,23 @@ export function OrdersView() {
             {codes.length === 0 ? (
               <p className={pageStyles.muted}>{t('ord.noCodes')}</p>
             ) : (
-              codes.map((c) => (
-                <p key={`${c.order}-${c.code}`} className={pageStyles.muted}>
-                  {c.order} · <span className={pageStyles.code}>{c.code}</span>
-                </p>
-              ))
+              <>
+                <p className={pageStyles.muted}>{t('ord.codesIntro')}</p>
+                <ul className={styles.codeList}>
+                  {codes.map((c) => (
+                    <li key={`${c.order}-${c.code}`} className={styles.codeRow}>
+                      <span className={styles.codeWhat}>
+                        <strong>{c.what}</strong>
+                        {c.more > 0 && <span className={pageStyles.muted}> {t('ord.andMore', { count: c.more })}</span>}
+                      </span>
+                      <span className={pageStyles.muted}>
+                        {t('ord.codeOrder', { number: c.order })} · <Link href={`/orders/${encodeURIComponent(c.order)}`}>{t('ord.details')}</Link>
+                      </span>
+                      <span className={styles.codeDigits}>{c.code}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </section>
           <section className={pageStyles.card}>

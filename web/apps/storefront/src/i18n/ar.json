@@ -588,7 +588,7 @@
   "ord.notFound": "لم نتمكن من العثور على هذا الطلب.",
   "ord.detailTitle": "الطلب {number}",
   "ord.placedOn": "تم في {date}",
-  "ord.soldBy": "يبيعه {seller}",
+  "ord.soldBy": "Sold by {seller}",
   "ord.arriving": "يصل بحلول {date}",
   "ord.trackingNo": "تتبع {carrier} {number}",
   "ord.codeHint": "أعطه للسائق عند الباب",
@@ -1200,5 +1200,16 @@
   "ord.step.ordered": "Ordered",
   "ord.step.packed": "Packed",
   "ord.step.onTheWay": "On the way",
-  "ord.step.delivered": "Delivered"
+  "ord.step.delivered": "Delivered",
+  "ord.codeHelp": "Give this code to the driver or seller when your order is handed to you. Don't share it before.",
+  "ord.qty": "Qty {count}",
+  "ord.moreItems": "+ {count} more items",
+  "ord.range": "Placed in",
+  "ord.r.all": "All orders",
+  "ord.r.3m": "Past 3 months",
+  "ord.r.6m": "Past 6 months",
+  "ord.r.year": "{year}",
+  "ord.codesIntro": "Show the code to the driver or seller when you receive the order. Each code is for the order below it.",
+  "ord.andMore": "+ {count} more",
+  "ord.codeOrder": "Order {number}"
 }
