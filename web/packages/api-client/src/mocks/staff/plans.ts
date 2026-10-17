@@ -8,6 +8,7 @@ import { z } from 'zod';
 import {
   type GrantType,
   type PlanCadence,
+  planFeatureList,
   type RewardMetric,
   type StaffBillingGrant,
   type StaffBillingInvoice,
@@ -16,7 +17,6 @@ import {
   type StaffChargeGate,
   type StaffEarningsCollection,
   type StaffPlan,
-  planFeatureList,
   type StaffPlanEntitlements,
   type StaffPlanFeeCollection,
   type StaffPlanFeeCollectionChange,
@@ -112,7 +112,7 @@ export function entitlementsFrom(limits: Record<string, string>): StaffPlanEntit
   };
 }
 
-function seedPlan([code, kind, name, tagline, monthly, trial, features]: (typeof SEED_PLANS)[number], i: number, now: Date): StaffPlan {
+function seedPlan([code, kind, name, tagline, monthly, trial]: (typeof SEED_PLANS)[number], i: number, now: Date): StaffPlan {
   const quarterly = Math.round(monthly * 3 * 0.95);
   const annual = monthly * 10;
   const amounts: Record<PlanCadence, number> = { MONTHLY: monthly, QUARTERLY: quarterly, ANNUAL: annual };

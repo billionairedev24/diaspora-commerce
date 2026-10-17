@@ -33,6 +33,7 @@ import {
   type Subscription,
   type TeamMember
 } from '../../schemas/seller';
+import { planFeatureList } from '../../staff-plans';
 import { type MockDraft, type MockImport } from './listing-form';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
 import { type MockApplication } from './onboarding';
@@ -317,7 +318,7 @@ export function plansFor(kind: OrgKind, currentCode: string): Plan[] {
         savingLabel: saving > 0 ? `Save ${usd(saving)} vs monthly` : ''
       };
     });
-    return { code: p.code, name: p.name, tagline: p.tagline, monthlyMinor: m, trialDays: p.trial, features: p.features, prices, current: p.code === currentCode, entitlements: entitlementsOf(p.code) };
+    return { code: p.code, name: p.name, tagline: p.tagline, monthlyMinor: m, trialDays: p.trial, features: planFeatureList(entitlementsOf(p.code) ?? ENTITLEMENTS.seller_essentials!), prices, current: p.code === currentCode, entitlements: entitlementsOf(p.code) };
   });
 }
 

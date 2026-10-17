@@ -136,7 +136,7 @@ var navGroupOrder = []string{"overview", "commerce", "bookings", "setup", "growt
 
 // SellerModules is the Seller Center module catalogue (identity portal SELLER), in sidebar order.
 var SellerModules = []ModuleDef{
-	{"sHome", "home", "Home", "overview", "the store overview"},
+	{"sHome", "home", "Home", "overview", "the business overview"},
 	{"sOrders", "orders", "Orders", "commerce", "orders, shipping labels and refunds"},
 	{"sListings", "listings", "Listings", "commerce", "product listings"},
 	{"sInventory", "inventory", "Inventory & FBA", "commerce", "stock levels"},
@@ -185,12 +185,12 @@ type RoleDef struct {
 
 // SellerRoles and ProviderRoles mirror identity's seeded organisation roles (V2__seed_rbac.sql).
 var SellerRoles = []RoleDef{
-	{"seller.owner", "Owner", "Everything in Seller Center, including billing and team", "The owner can do everything, including transferring ownership and closing the store."},
-	{"seller.admin", "Admin", "Everything except plan and billing changes", "Admins run the store day to day but cannot change the plan or payout bank account."},
-	{"seller.catalog", "Catalog manager", "Listings, inventory and storefront content", ""},
+	{"seller.owner", "Owner", "Everything in Seller Center, including billing and team", "The owner can do everything, including transferring ownership and closing the account."},
+	{"seller.admin", "Admin", "Everything except plan and billing changes", "Admins run the account day to day but cannot change the plan or payout bank account."},
+	{"seller.catalog", "Catalog manager", "Listings, inventory and product content", ""},
 	{"seller.fulfilment", "Fulfilment", "Orders, shipping and inventory", "Fulfilment can buy labels and confirm, pack and mark orders ready — never refunds or payouts."},
 	{"seller.finance", "Finance", "Payouts, billing and compliance", "Finance can see money but cannot change listings or orders."},
-	{"seller.ads", "Marketing", "Advertising and storefront", ""},
+	{"seller.ads", "Marketing", "Coupons and advertising", ""},
 	{"seller.support", "Support agent", "Customer messages, orders and returns", ""},
 }
 
