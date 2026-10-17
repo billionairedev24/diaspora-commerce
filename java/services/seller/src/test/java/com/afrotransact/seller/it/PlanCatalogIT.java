@@ -143,9 +143,14 @@ class PlanCatalogIT extends SellerIntegrationTest {
         assertThat(bad.status()).isEqualTo(422);
         assertThat(bad.body().path("fieldErrors").has("limits.listings")).isTrue();
         body.put("limits", Map.of("listings", "2", "aiListingWriter", "true", "lolaTier", "GROWTH",
-                "support", "Priority email"));
+                "bulkUpload", "true", "support", "Priority email"));
         Response created = post(PLANS, body);
         assertThat(created.status()).isEqualTo(201);
+        assertThat(created.body().at("/entitlements/bulkUpload").asBoolean()).isTrue();
+        assertThat(created.body().at("/entitlements/coupons").asBoolean()).as("off unless switched on").isFalse();
+        assertThat(created.body().path("features").toString()).as("features list what the plan allows, not typed text")
+                .contains("Up to 2 listings", "Bulk upload", "AI listing writer", "Lola Growth assistant")
+                .doesNotContain("Coupons", "Up to 10 listings");
         assertThat(created.body().at("/entitlements/listings").asLong()).isEqualTo(2);
         assertThat(created.body().at("/entitlements/aiListingWriter").asBoolean()).isTrue();
         assertThat(created.text("/entitlements/lolaTier")).isEqualTo("GROWTH");

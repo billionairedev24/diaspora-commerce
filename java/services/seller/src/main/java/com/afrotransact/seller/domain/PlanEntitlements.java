@@ -1,34 +1,45 @@
 package com.afrotransact.seller.domain;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 /**
- * What a plan lets an organisation do, configured per plan by staff in the plan's {@code limits}:
+ * What a plan lets an organisation do. Staff configure it per plan in the plan's {@code limits}; a capability that is
+ * not switched on is not offered to the plan's members at all (the BFF refuses it and Seller Center does not show it):
  * <ul>
  *   <li>{@code listings}: the most live listings (a number, or {@code unlimited}; absent = unlimited);</li>
+ *   <li>{@code bulkUpload}: {@code true} when listings can be uploaded in bulk (CSV/Excel import);</li>
+ *   <li>{@code imageLibrary}: {@code true} when the bulk image library is included;</li>
+ *   <li>{@code coupons}: {@code true} when the seller can create coupon codes for their listings;</li>
  *   <li>{@code aiListingWriter}: {@code true} when the AI listing writer is included;</li>
- *   <li>{@code lolaTier}: {@code ESSENTIALS}, {@code GROWTH} or {@code PRO} — what Lola, the seller assistant, can do.</li>
+ *   <li>{@code lolaTier}: {@code NONE} (no assistant), {@code ESSENTIALS}, {@code GROWTH} or {@code PRO}.</li>
  * </ul>
- * There is no limit on shops or users. Any other key in {@code limits} is shown as plan information only.
+ * There is no limit on users. Any other key in {@code limits} is shown as plan information only.
  *
  * @param listings the live-listing cap, null when unlimited
  */
-public record PlanEntitlements(Long listings, boolean aiListingWriter, LolaTier lolaTier) {
+public record PlanEntitlements(Long listings, boolean aiListingWriter, LolaTier lolaTier, boolean bulkUpload,
+                               boolean imageLibrary, boolean coupons) {
 
     public static final String LISTINGS = "listings";
+    public static final String BULK_UPLOAD = "bulkUpload";
+    public static final String IMAGE_LIBRARY = "imageLibrary";
+    public static final String COUPONS = "coupons";
     public static final String AI_LISTING_WRITER = "aiListingWriter";
     public static final String LOLA_TIER = "lolaTier";
     public static final String UNLIMITED = "unlimited";
     /** The largest listing cap staff can set (use {@code unlimited} beyond it). */
     public static final long MAX_LISTINGS = 10_000_000L;
 
-    /** Lola's tiers. */
-    public enum LolaTier { ESSENTIALS, GROWTH, PRO }
+    /** Lola's tiers; NONE switches the assistant off for the plan. */
+    public enum LolaTier { NONE, ESSENTIALS, GROWTH, PRO }
 
     /** What a plan with no entitlements configured gives: nothing capped, no extras, Lola Essentials. */
-    public static final PlanEntitlements NONE = new PlanEntitlements(null, false, LolaTier.ESSENTIALS);
+    public static final PlanEntitlements NONE = new PlanEntitlements(null, false, LolaTier.ESSENTIALS, false, false,
+            false);
 
     public PlanEntitlements {
         lolaTier = lolaTier == null ? LolaTier.ESSENTIALS : lolaTier;
@@ -39,13 +50,45 @@ public record PlanEntitlements(Long listings, boolean aiListingWriter, LolaTier 
         if (limits == null || limits.isEmpty()) {
             return NONE;
         }
-        return new PlanEntitlements(parseListings(limits.get(LISTINGS)),
-                "true".equalsIgnoreCase(limits.get(AI_LISTING_WRITER)), parseTier(limits.get(LOLA_TIER)));
+        return new PlanEntitlements(parseListings(limits.get(LISTINGS)), flag(limits.get(AI_LISTING_WRITER)),
+                parseTier(limits.get(LOLA_TIER)), flag(limits.get(BULK_UPLOAD)), flag(limits.get(IMAGE_LIBRARY)),
+                flag(limits.get(COUPONS)));
     }
 
     /** Whether {@code live} listings leave room for another one. */
     public boolean allowsAnotherListing(long live) {
         return listings == null || live < listings;
+    }
+
+    /** Whether Lola, the seller assistant, is part of the plan. */
+    public boolean lolaIncluded() {
+        return lolaTier != LolaTier.NONE;
+    }
+
+    /**
+     * What the plan includes, in plain words, for the plan cards and the plan page. Only what is allowed is listed: a
+     * capability the plan does not include is not mentioned.
+     */
+    public List<String> featureList() {
+        List<String> out = new ArrayList<>();
+        out.add(listings == null ? "Unlimited listings" : "Up to " + String.format(Locale.ROOT, "%,d", listings)
+                + " listings");
+        if (bulkUpload) {
+            out.add("Bulk upload");
+        }
+        if (imageLibrary) {
+            out.add("Image library");
+        }
+        if (coupons) {
+            out.add("Coupons");
+        }
+        if (aiListingWriter) {
+            out.add("AI listing writer");
+        }
+        if (lolaIncluded()) {
+            out.add("Lola " + capitalise(lolaTier.name()) + " assistant");
+        }
+        return out;
     }
 
     /** Field errors of the entitlement keys in {@code limits} (empty when they are valid). */
@@ -58,15 +101,25 @@ public record PlanEntitlements(Long listings, boolean aiListingWriter, LolaTier 
                 errors.put("limits.listings", "A number from 0 to " + MAX_LISTINGS + ", or unlimited");
             }
         }
-        String ai = limits.get(AI_LISTING_WRITER);
-        if (ai != null && !"true".equalsIgnoreCase(ai) && !"false".equalsIgnoreCase(ai)) {
-            errors.put("limits.aiListingWriter", "true or false");
+        for (String key : List.of(AI_LISTING_WRITER, BULK_UPLOAD, IMAGE_LIBRARY, COUPONS)) {
+            String v = limits.get(key);
+            if (v != null && !"true".equalsIgnoreCase(v) && !"false".equalsIgnoreCase(v)) {
+                errors.put("limits." + key, "true or false");
+            }
         }
         String tier = limits.get(LOLA_TIER);
         if (tier != null && parseTier(tier) == null) {
-            errors.put("limits.lolaTier", "ESSENTIALS, GROWTH or PRO");
+            errors.put("limits.lolaTier", "NONE, ESSENTIALS, GROWTH or PRO");
         }
         return errors;
+    }
+
+    private static boolean flag(String raw) {
+        return "true".equalsIgnoreCase(raw);
+    }
+
+    private static String capitalise(String s) {
+        return s.charAt(0) + s.substring(1).toLowerCase(Locale.ROOT);
     }
 
     private static Long parseListings(String raw) {

@@ -44,14 +44,20 @@ final class BillingDtos {
     }
 
     @Schema(name = "PlanEntitlements", description = "What a plan lets an organisation do; staff set them per plan. "
-            + "There is no limit on shops or users")
+            + "A capability that is off is not offered to the plan's members at all")
     record EntitlementsView(@Schema(description = "The most live listings; null = unlimited") Long listings,
                             boolean listingsUnlimited, boolean aiListingWriter,
-                            @Schema(allowableValues = {"ESSENTIALS", "GROWTH", "PRO"},
-                                    description = "What Lola, the seller assistant, can do") String lolaTier) {
+                            @Schema(allowableValues = {"NONE", "ESSENTIALS", "GROWTH", "PRO"},
+                                    description = "What Lola, the seller assistant, can do; NONE = not included")
+                            String lolaTier,
+                            @Schema(description = "Listings can be uploaded in bulk") boolean bulkUpload,
+                            @Schema(description = "The bulk image library is included") boolean imageLibrary,
+                            @Schema(description = "Coupon codes for the seller's listings are included")
+                            boolean coupons) {
 
         static EntitlementsView of(PlanEntitlements e) {
-            return new EntitlementsView(e.listings(), e.listings() == null, e.aiListingWriter(), e.lolaTier().name());
+            return new EntitlementsView(e.listings(), e.listings() == null, e.aiListingWriter(), e.lolaTier().name(),
+                    e.bulkUpload(), e.imageLibrary(), e.coupons());
         }
     }
 
@@ -78,8 +84,8 @@ final class BillingDtos {
                 prices.add(PriceView.of(o.quotes().get(i), o.firstCharges().get(i), p.isFree()));
             }
             return new PlanResponse(p.code(), p.kind().name(), p.name(), p.tagline(), p.monthlyCents(), o.trialDays(),
-                    p.features(), prices, p.version(), p.visibility().name(), p.limits(),
-                    EntitlementsView.of(PlanEntitlements.of(p.limits())));
+                    PlanEntitlements.of(p.limits()).featureList(), prices, p.version(), p.visibility().name(),
+                    p.limits(), EntitlementsView.of(PlanEntitlements.of(p.limits())));
         }
     }
 

@@ -13,6 +13,7 @@ import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.Plan;
 import com.afrotransact.seller.domain.PlanCatalogRules;
+import com.afrotransact.seller.domain.PlanEntitlements;
 import com.afrotransact.seller.domain.PlanInput;
 import com.afrotransact.seller.domain.PlanPricesInput;
 import com.afrotransact.seller.domain.PlanStatus;
@@ -57,6 +58,12 @@ class PlanAdminServiceImpl implements PlanAdminService {
         return tx.execute(s -> plans.findAll().stream().map(p -> view(p, counts)).toList());
     }
 
+    /** A plan's feature list is what its capabilities allow (not typed text): only allowed features are listed. */
+    private static PlanInput withDerivedFeatures(PlanInput in) {
+        return new PlanInput(in.code(), in.kind(), in.name(), in.tagline(),
+                PlanEntitlements.of(in.limits()).featureList(), in.limits(), in.visibility(), in.sortOrder());
+    }
+
     @Override
     public PlanAdminView plan(String code) {
         readAccess();
@@ -64,8 +71,9 @@ class PlanAdminServiceImpl implements PlanAdminService {
     }
 
     @Override
-    public PlanAdminView create(PlanInput in, PlanPricesInput prices) {
+    public PlanAdminView create(PlanInput given, PlanPricesInput prices) {
         Actor actor = access.staff(SellerPermissions.PLANS_MANAGE);
+        PlanInput in = withDerivedFeatures(given);
         PlanCatalogRules.validate(in, true);
         PlanCatalogRules.validate(prices);
         Instant now = Instant.now(clock);
@@ -85,14 +93,14 @@ class PlanAdminServiceImpl implements PlanAdminService {
     @Override
     public PlanAdminView update(String code, PlanInput in, long expectedVersion) {
         Actor actor = access.staff(SellerPermissions.PLANS_MANAGE);
-        PlanInput named = new PlanInput(code, null, in.name(), in.tagline(), in.features(), in.limits(),
-                in.visibility(), in.sortOrder());
+        PlanInput named = withDerivedFeatures(new PlanInput(code, null, in.name(), in.tagline(), in.features(),
+                in.limits(), in.visibility(), in.sortOrder()));
         PlanCatalogRules.validate(named, false);
         tx.executeWithoutResult(s -> {
             Plan p = plans.lock(code).orElseThrow(() -> notFound(code));
             // Leaving the limits out keeps the plan's entitlements (an edit of the name must not wipe them).
-            PlanInput effective = named.limits().isEmpty() ? new PlanInput(code, null, named.name(),
-                    named.tagline(), named.features(), p.limits(), named.visibility(), named.sortOrder()) : named;
+            PlanInput effective = named.limits().isEmpty() ? withDerivedFeatures(new PlanInput(code, null, named.name(),
+                    named.tagline(), named.features(), p.limits(), named.visibility(), named.sortOrder())) : named;
             plans.update(effective, p.status(), expectedVersion, actor.subject(), Instant.now(clock));
         });
         return plan(code);

@@ -6,7 +6,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
-/** Plan entitlements are read from the plan's limits; there is no limit on shops or users. */
+/** Plan entitlements are read from the plan's limits; only what a plan allows is listed as its features. */
 class PlanEntitlementsTest {
 
     @Test
@@ -45,5 +45,40 @@ class PlanEntitlementsTest {
                 "support", "Priority"))).isEmpty();
         assertThat(PlanEntitlements.validate(Map.of("listings", "-5"))).containsKey("limits.listings");
         assertThat(PlanEntitlements.validate(Map.of("listings", "99999999999"))).containsKey("limits.listings");
+    }
+
+    @Test
+    void capabilitiesAreOffUnlessThePlanSwitchesThemOn() {
+        PlanEntitlements none = PlanEntitlements.of(Map.of("listings", "50"));
+        assertThat(none.bulkUpload()).isFalse();
+        assertThat(none.imageLibrary()).isFalse();
+        assertThat(none.coupons()).isFalse();
+        PlanEntitlements on = PlanEntitlements.of(Map.of("bulkUpload", "true", "imageLibrary", "TRUE", "coupons",
+                "true"));
+        assertThat(on.bulkUpload()).isTrue();
+        assertThat(on.imageLibrary()).isTrue();
+        assertThat(on.coupons()).isTrue();
+        assertThat(PlanEntitlements.validate(Map.of("bulkUpload", "yes"))).containsKey("limits.bulkUpload");
+    }
+
+    @Test
+    void lolaCanBeSwitchedOffForAPlan() {
+        PlanEntitlements off = PlanEntitlements.of(Map.of("lolaTier", "none"));
+        assertThat(off.lolaTier()).isEqualTo(PlanEntitlements.LolaTier.NONE);
+        assertThat(off.lolaIncluded()).isFalse();
+        assertThat(PlanEntitlements.of(Map.of("lolaTier", "PRO")).lolaIncluded()).isTrue();
+        assertThat(PlanEntitlements.validate(Map.of("lolaTier", "NONE"))).isEmpty();
+    }
+
+    @Test
+    void theFeatureListNamesOnlyWhatThePlanAllows() {
+        assertThat(PlanEntitlements.of(Map.of("listings", "50", "lolaTier", "NONE")).featureList())
+                .containsExactly("Up to 50 listings");
+        assertThat(PlanEntitlements.of(Map.of("listings", "1,000", "bulkUpload", "true", "imageLibrary", "true",
+                "coupons", "true", "aiListingWriter", "true", "lolaTier", "GROWTH")).featureList())
+                .containsExactly("Up to 1,000 listings", "Bulk upload", "Image library", "Coupons",
+                        "AI listing writer", "Lola Growth assistant");
+        assertThat(PlanEntitlements.of(Map.of("listings", "unlimited", "lolaTier", "NONE")).featureList())
+                .containsExactly("Unlimited listings");
     }
 }

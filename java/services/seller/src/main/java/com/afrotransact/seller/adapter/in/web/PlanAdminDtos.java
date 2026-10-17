@@ -92,7 +92,8 @@ final class PlanAdminDtos {
 
         static PlanAdminResponse of(PlanAdminView v) {
             Plan p = v.plan();
-            return new PlanAdminResponse(p.code(), p.kind().name(), p.name(), p.tagline(), p.features(), p.limits(),
+            return new PlanAdminResponse(p.code(), p.kind().name(), p.name(), p.tagline(),
+                    PlanEntitlements.of(p.limits()).featureList(), p.limits(),
                     BillingDtos.EntitlementsView.of(PlanEntitlements.of(p.limits())), p.visibility().name(),
                     p.status().name(), p.sortOrder(), p.version(), p.monthlyCents(), p.quarterlyCents(),
                     p.annualCents(), p.trialDays(), v.rowVersion(),
