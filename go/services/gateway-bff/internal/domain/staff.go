@@ -324,9 +324,11 @@ type FormField struct {
 
 // Form is a create, edit or action form.
 type Form struct {
-	Title       string      `json:"title"`
-	SubmitLabel string      `json:"submitLabel"`
-	Fields      []FormField `json:"fields"`
+	Title       string `json:"title"`
+	SubmitLabel string `json:"submitLabel"`
+	// Intro says in a sentence or two what submitting does (shown above the fields).
+	Intro  string      `json:"intro,omitempty"`
+	Fields []FormField `json:"fields"`
 }
 
 // ResourcePage is GET /v1/staff/resources/{resource}.
@@ -404,6 +406,8 @@ type RecordAction struct {
 type RecordLink struct {
 	Label string `json:"label"`
 	Href  string `json:"href"`
+	// External opens the link in a new tab (an uploaded document the reviewer reads).
+	External bool `json:"external,omitempty"`
 }
 
 // RecordDetail is the detail sheet of one record.

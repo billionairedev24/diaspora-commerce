@@ -293,6 +293,21 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/resources/{resource}/{id}/files/{fileId}:
+    get:
+      tags: [Resources]
+      operationId: openStaffRecordFile
+      summary: Open a file attached to a record (an application's uploaded document)
+      description: |
+        Redirects (302) to a short-lived signed URL of the file; the upstream logs who opened it. Needs view access to
+        the resource. Applications: `fileId` is the document's `assetId` from the record's `links`.
+      parameters:
+        - {name: resource, in: path, required: true, schema: {type: string}}
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: fileId, in: path, required: true, schema: {type: string}}
+      responses:
+        '302': {description: Redirect to the file, headers: {Location: {schema: {type: string}}}}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/staff/resources/{resource}/{id}/notes:
     post:
       tags: [Resources]
@@ -5162,6 +5177,7 @@ components:
       properties:
         title: {type: string}
         submitLabel: {type: string}
+        intro: {type: string, description: 'What submitting does, in a sentence or two (shown above the fields)'}
         fields: {type: array, items: {$ref: '#/components/schemas/FormField'}}
     ResourcePage:
       type: object
@@ -5237,7 +5253,8 @@ components:
       required: [label, href]
       properties:
         label: {type: string}
-        href: {type: string, description: 'Console path, for example /support?customer=… or /orders?open=AT-…'}
+        href: {type: string, description: 'Console path, for example /support?customer=… or /orders?open=AT-…, or (external) a same-origin BFF path'}
+        external: {type: boolean, description: 'Open in a new tab (an uploaded document the reviewer reads)'}
     RecordDetail:
       type: object
       required: [resource, id, title, subtitle, status, tone, sections, tables, activity, notes, notesEnabled, actions, editForm, links, version]

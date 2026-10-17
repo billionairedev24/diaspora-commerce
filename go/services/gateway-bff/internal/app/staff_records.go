@@ -32,6 +32,8 @@ type StaffRecordsService interface {
 	Update(ctx context.Context, c *domain.Caller, resource, id string, values map[string]any, version string) (domain.RecordDetail, error)
 	Act(ctx context.Context, c *domain.Caller, resource, id, action string, values map[string]any, idem string) (domain.RecordDetail, error)
 	AddNote(ctx context.Context, c *domain.Caller, resource, id, text string) (domain.RecordDetail, error)
+	// FileURL is where to open one file attached to a record (view access; the upstream logs who opened it).
+	FileURL(ctx context.Context, c *domain.Caller, resource, id, fileID string) (string, error)
 }
 
 // staffQueryInput is the table query as the HTTP adapter parsed it.
@@ -176,6 +178,17 @@ func (s *staffRecordsImpl) Get(ctx context.Context, c *domain.Caller, name, id s
 		return domain.RecordDetail{}, err
 	}
 	return s.sheet(ctx, r, sc, id)
+}
+
+func (s *staffRecordsImpl) FileURL(ctx context.Context, c *domain.Caller, name, id, fileID string) (string, error) {
+	r, sc, err := s.open(ctx, c, name, domain.LevelView)
+	if err != nil {
+		return "", err
+	}
+	if r.file == nil {
+		return "", notFoundResource()
+	}
+	return r.file(ctx, sc, id, fileID)
 }
 
 func (s *staffRecordsImpl) sheet(ctx context.Context, r *staffResource, sc staffCtx, id string) (domain.RecordDetail, error) {

@@ -83,8 +83,11 @@ type staffResource struct {
 	tables             func(o jobj) []domain.DetailTable
 	activity           func(ctx context.Context, sc staffCtx, o jobj) []domain.ActivityEntry
 	links              func(o jobj) []domain.RecordLink
-	version            func(o jobj) string
-	actions            []staffAction
+	// file returns the URL of one file attached to the record (an application's uploaded document); the BFF sends the
+	// reviewer there (GET /v1/staff/resources/{resource}/{id}/files/{fileId}).
+	file    func(ctx context.Context, sc staffCtx, id, fileID string) (string, error)
+	version func(o jobj) string
+	actions []staffAction
 	// actionsFor adds actions that depend on the record (one tap per shipment's next step); looked up like actions.
 	actionsFor func(o jobj) []staffAction
 	edit       *staffEdit

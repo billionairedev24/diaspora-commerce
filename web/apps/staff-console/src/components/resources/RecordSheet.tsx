@@ -250,7 +250,7 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
             <ul className="m-0 flex list-none flex-wrap gap-3 p-0 text-sm">
               {record.links.map((l) => (
                 <li key={l.href}>
-                  {l.href.startsWith('/') ? <Link href={l.href}>{l.label}</Link> : <a href={l.href}>{l.label}</a>}
+                  {l.external ? <a href={l.href} target="_blank" rel="noreferrer">{l.label}</a> : l.href.startsWith('/') ? <Link href={l.href}>{l.label}</Link> : <a href={l.href}>{l.label}</a>}
                 </li>
               ))}
             </ul>

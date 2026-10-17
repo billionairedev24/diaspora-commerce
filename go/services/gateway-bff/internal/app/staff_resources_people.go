@@ -204,6 +204,10 @@ func rolesResource() *staffResource {
 
 // ---------------------------------------------------------------- applications (seller, two-step review)
 
+// staffBFFPath is where each web app proxies the BFF (config.Web.BFFPath default): document links are same-origin URLs
+// that the browser opens with the staff session.
+const staffBFFPath = "/api/bff"
+
 func applicationsResource() *staffResource {
 	reasonOptions := func(ctx context.Context, sc staffCtx) []domain.FieldOption {
 		var codes []jobj
@@ -218,12 +222,12 @@ func applicationsResource() *staffResource {
 		}
 		return opts
 	}
-	decision := func(path, action, title, submit string, noteRequired bool, extra ...domain.FormField) (func(context.Context, staffCtx, jobj) *domain.Form, func(context.Context, staffCtx, jobj, jobj) error) {
+	decision := func(path, action, title, submit, intro string, noteRequired bool, extra ...domain.FormField) (func(context.Context, staffCtx, jobj) *domain.Form, func(context.Context, staffCtx, jobj, jobj) error) {
 		form := func(ctx context.Context, sc staffCtx, _ jobj) *domain.Form {
 			fields := []domain.FormField{withOptions(ff("reasonCode", "Reason", "select", true), reasonOptions(ctx, sc))}
 			fields = append(fields, extra...)
 			fields = append(fields, withMax(ff("note", "Note", "textarea", noteRequired), 2000))
-			return &domain.Form{Title: title, SubmitLabel: submit, Fields: fields}
+			return &domain.Form{Title: title, SubmitLabel: submit, Intro: intro, Fields: fields}
 		}
 		// The console's Idempotency-Key is relayed: seller replays a retried decision instead of refusing it. Slow: a
 		// final approval activates the Stripe subscription before it answers.
@@ -241,14 +245,20 @@ func applicationsResource() *staffResource {
 		}
 		return form, run
 	}
-	approveForm, approveRun := decision("/review", "APPROVE", "Approve for final review (step 1)", "Approve", false)
-	flagForm, flagRun := decision("/review", "FLAG", "Flag the application", "Flag", false,
+	approveForm, approveRun := decision("/review", "APPROVE", "Approve for final review (step 1)", "Approve",
+		"The documents and details check out. The application goes to a different approver for the final decision; the applicant is not told yet.", false)
+	flagForm, flagRun := decision("/review", "FLAG", "Flag the application", "Flag",
+		"Something does not check out. The application moves to the final approver with the failed checks and your note, who then approves it, sends it back to you or rejects it. The applicant is not told, and cannot change anything, until a decision is made.", false,
 		withOptions(ff("failedChecks", "Failed checks", "multiselect", true), domain.StaffOptions("TIN_MISMATCH", "IDENTITY_UNVERIFIED", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "ADDRESS_UNVERIFIED")))
-	infoForm, infoRun := decision("/review", "REQUEST_INFO", "Ask the applicant for more", "Send request", false,
+	infoForm, infoRun := decision("/review", "REQUEST_INFO", "Ask the applicant for more", "Send request",
+		"The applicant is emailed what is missing and can edit and resubmit; the review pauses until they do.", false,
 		domain.FormField{Key: "requestedItems", Label: "What is missing (one per line)", Type: "textarea", Required: true})
-	finalForm, finalRun := decision("/decision", "FINAL_APPROVE", "Give final approval (step 2)", "Approve", false)
-	backForm, backRun := decision("/decision", "SEND_BACK", "Send back to step 1", "Send back", true)
-	rejectForm, rejectRun := decision("/decision", "REJECT", "Reject the application", "Reject", true)
+	finalForm, finalRun := decision("/decision", "FINAL_APPROVE", "Give final approval (step 2)", "Approve",
+		"Approves the seller or provider: their account opens and their plan starts. This cannot be undone here.", false)
+	backForm, backRun := decision("/decision", "SEND_BACK", "Send back to step 1", "Send back",
+		"Returns the application to the reviewer to check again; your note tells them what to look at.", true)
+	rejectForm, rejectRun := decision("/decision", "REJECT", "Reject the application", "Reject",
+		"Declines the application and tells the applicant, with the reason you pick.", true)
 	// Step 2 (final approve, send back, reject) follows seller's state machine: awaiting final approval or flagged,
 	// never by the step-one reviewer.
 	finalStep := func(sc staffCtx, o jobj) string {
@@ -275,6 +285,31 @@ func applicationsResource() *staffResource {
 		get:    getByPath("/v1/applications/", upSeller),
 		cells: func(o jobj) map[string]any {
 			return map[string]any{"displayName": cellValue(firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "businessDetails.legalName")))}
+		},
+		// The documents the applicant uploaded open in a new tab for the reviewer; seller logs each opening.
+		file: func(ctx context.Context, sc staffCtx, id, assetID string) (string, error) {
+			var doc jobj
+			if err := sc.get(ctx, sc.up.Seller, "/v1/applications/"+url.PathEscape(id)+"/documents/"+url.PathEscape(assetID), nil, &doc); err != nil {
+				return "", err
+			}
+			u := jstr(doc, "url")
+			if u == "" {
+				return "", domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "That document is not available.")
+			}
+			return u, nil
+		},
+		links: func(o jobj) []domain.RecordLink {
+			docs, _ := o["documents"].([]any)
+			out := make([]domain.RecordLink, 0, len(docs))
+			for _, d := range docs {
+				doc, ok := d.(map[string]any)
+				if !ok || jstr(doc, "assetId") == "" {
+					continue
+				}
+				out = append(out, domain.RecordLink{Label: "View " + firstNonEmpty(jstr(doc, "label"), domain.Humanize(jstr(doc, "kind"))),
+					Href: staffBFFPath + "/v1/staff/resources/applications/" + url.PathEscape(jstr(o, "id")) + "/files/" + url.PathEscape(jstr(doc, "assetId")), External: true})
+			}
+			return out
 		},
 		titleOf: func(o jobj) string {
 			return firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "reference"))

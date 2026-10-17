@@ -58,6 +58,7 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	route("PATCH /v1/staff/resources/{resource}/{id}", h.staffUpdate)
 	route("POST /v1/staff/resources/{resource}/{id}/actions/{action}", h.staffAction)
 	route("POST /v1/staff/resources/{resource}/{id}/notes", h.staffNote)
+	route("GET /v1/staff/resources/{resource}/{id}/files/{fileId}", h.staffFile)
 	route("GET /v1/staff/exports", h.staffExports)
 	route("POST /v1/staff/exports", h.staffCreateExport)
 	route("GET /v1/staff/exports/{exportId}", h.staffExport)
@@ -200,6 +201,24 @@ func (h *handlersImpl) staffRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.Staff.Records.Get(r.Context(), callerFrom(r.Context()), name, r.PathValue("id"))
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// staffFile sends the reviewer to one file attached to a record (an application's document): the upstream answers with
+// a short-lived signed URL and logs the access.
+func (h *handlersImpl) staffFile(w http.ResponseWriter, r *http.Request) {
+	name, err := staffResource(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	u, err := h.s.Staff.Records.FileURL(r.Context(), callerFrom(r.Context()), name, r.PathValue("id"), r.PathValue("fileId"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.finish(w, callerFrom(r.Context()))
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, u, http.StatusFound)
 }
 
 func (h *handlersImpl) staffUpdate(w http.ResponseWriter, r *http.Request) {

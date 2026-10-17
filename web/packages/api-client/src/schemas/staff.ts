@@ -99,7 +99,7 @@ export const FormFieldSchema = z.object({
   value: FieldValueSchema.optional()
 });
 export type FormField = z.infer<typeof FormFieldSchema>;
-export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), fields: z.array(FormFieldSchema) });
+export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), intro: z.string().optional(), fields: z.array(FormFieldSchema) });
 export type StaffForm = z.infer<typeof StaffFormSchema>;
 
 export const ResourcePageSchema = z.object({
@@ -151,7 +151,7 @@ export const RecordActionSchema = z.object({
   form: StaffFormSchema.nullable()
 });
 export type RecordAction = z.infer<typeof RecordActionSchema>;
-export const RecordLinkSchema = z.object({ label: z.string(), href: z.string() });
+export const RecordLinkSchema = z.object({ label: z.string(), href: z.string(), external: z.boolean().optional() });
 export type RecordLink = z.infer<typeof RecordLinkSchema>;
 
 export const RecordDetailSchema = z.object({

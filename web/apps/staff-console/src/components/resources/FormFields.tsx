@@ -146,6 +146,7 @@ export function FormFields({
   };
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-3">
+      {form.intro ? <p className="m-0 text-sm text-muted">{form.intro}</p> : null}
       <FormErrors errors={shown} ids={Object.fromEntries(form.fields.map((f) => [f.key, fieldId(f.key)]))} submitCount={attempts} />
       {form.fields.map((f) => (
         <Input key={f.key} f={f} value={draft[f.key]} error={shown[f.key]} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} />

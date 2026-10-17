@@ -26,6 +26,10 @@ func (s *fakeReview) serve(w http.ResponseWriter, r *http.Request, body map[stri
 	if !strings.HasPrefix(p, "/v1/applications/app-7") {
 		return false
 	}
+	if r.Method == http.MethodGet && p == "/v1/applications/app-7/documents/asset-1" {
+		writeJ(w, 200, map[string]any{"assetId": "asset-1", "kind": "FORMATION_DOCUMENT", "label": "Formation document", "url": "https://media.example/signed/asset-1?sig=abc"})
+		return true
+	}
 	if r.Method == http.MethodPost {
 		s.decisions = append(s.decisions, body)
 		s.keys = append(s.keys, r.Header.Get("Idempotency-Key"))
@@ -41,7 +45,8 @@ func (s *fakeReview) serve(w http.ResponseWriter, r *http.Request, body map[stri
 		}
 	}
 	writeJ(w, 200, map[string]any{"id": "app-7", "reference": "APP-30200", "kind": "SELLER", "status": s.status, "reviewerId": "stf-9",
-		"business": map[string]any{"storeName": "Kente Naturals"}})
+		"business":  map[string]any{"storeName": "Kente Naturals"},
+		"documents": []map[string]any{{"assetId": "asset-1", "kind": "FORMATION_DOCUMENT", "label": "Formation document"}}})
 	return true
 }
 
@@ -140,5 +145,31 @@ func TestApplicationDecisionsAreIdempotentAndAlreadyDoneIsInformation(t *testing
 		if actionOf(t, flagged, key)["allowed"] != true {
 			t.Fatalf("%s on a flagged application: %v", key, actionOf(t, flagged, key))
 		}
+	}
+}
+
+// The documents an applicant uploaded are links on the review sheet that open in a new tab; the BFF redirects to the
+// signed URL seller answers with (seller logs the opening).
+func TestApplicationDocumentsOpenForTheReviewer(t *testing.T) {
+	rev := &fakeReview{status: "PENDING_REVIEW"}
+	do := staffBFF(t, &fakePlatform{override: rev.serve})
+	sheet := jsonOf(t, do("admin", "GET", "/v1/staff/resources/applications/app-7", nil))
+	links := sheet["links"].([]any)
+	if len(links) != 1 {
+		t.Fatalf("links = %v", links)
+	}
+	l := links[0].(map[string]any)
+	if l["label"] != "View Formation document" || l["external"] != true || l["href"] != "/api/bff/v1/staff/resources/applications/app-7/files/asset-1" {
+		t.Fatalf("document link = %v", l)
+	}
+	rec := do("admin", "GET", "/v1/staff/resources/applications/app-7/files/asset-1", nil)
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "https://media.example/signed/asset-1?sig=abc" {
+		t.Fatalf("file = %d Location %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if rec := do("admin", "GET", "/v1/staff/resources/applications/app-7/files/nope", nil); rec.Code == http.StatusFound {
+		t.Fatalf("an unknown document must not redirect")
+	}
+	if rec := do("admin", "GET", "/v1/staff/resources/sellers/app-7/files/asset-1", nil); rec.Code != http.StatusNotFound {
+		t.Fatalf("a resource without files = %d", rec.Code)
 	}
 }
