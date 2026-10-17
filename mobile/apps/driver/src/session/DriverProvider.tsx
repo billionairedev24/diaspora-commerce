@@ -278,7 +278,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   }, [clearSession, engine]);
 
   expire.current = () => {
-    if (phase === 'signed-out') return;
+    if (phase === 'signed-out' || !tokens.current) return; // the first failure ends the session; the rest must not repeat it
     void (async () => {
       await clearSession();
       setUser(null);

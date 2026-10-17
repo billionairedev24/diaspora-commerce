@@ -23,6 +23,7 @@ import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { Logo } from '@/ui/Logo';
 import { AppText, Banner, Button, Field, MAX_FONT_SCALE } from '@/ui/primitives';
+import { useKeyboardHeight } from '@/ui/useKeyboardHeight';
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
@@ -82,7 +83,9 @@ export default function SignIn() {
   const open = (path: string) => void WebBrowser.openBrowserAsync(`${env.webUrl}${path}`);
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
-  const heroHeight = Math.max(280, Math.round(height * 0.46));
+  const keyboard = useKeyboardHeight();
+  // With the keyboard up the picture gives way to the form, and the form lifts above the keyboard.
+  const heroHeight = keyboard > 0 ? insets.top + 96 : Math.max(280, Math.round(height * 0.46));
 
   return (
     <View style={styles.root}>
@@ -97,7 +100,7 @@ export default function SignIn() {
           </View>
         </Hero>
       </View>
-      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: insets.bottom + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: Math.max(insets.bottom, keyboard) + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
       {factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : (<>
       <AppText variant="display">{tr('cu.signIn.signIn')}</AppText>
       {flash ? <Banner tone="info" icon={Info}>{flash}</Banner> : null}

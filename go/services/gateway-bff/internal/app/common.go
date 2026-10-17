@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
@@ -49,7 +50,11 @@ func mapErr(upstream string, err error) error {
 	if p, ok := port.AsUpstreamProblem(err); ok {
 		switch p.Status {
 		case http.StatusUnauthorized:
-			return domain.Unauthenticated().WithCause(err)
+			// Says which service refused the sign-in: with a valid token at the BFF this is a service started with another
+			// identity address (issuer) or an older build, and the log line names it too.
+			slog.Warn("upstream rejected the caller's token", "upstream", upstream, "error", err)
+			return domain.NewProblem(http.StatusUnauthorized, domain.CodeUnauthenticated, "Sign in required",
+				"Sign in to continue. ("+upstream+" did not accept the sign-in)").WithCause(err)
 		case http.StatusForbidden:
 			return domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", "You can't do that.").WithCause(err)
 		case http.StatusNotFound:

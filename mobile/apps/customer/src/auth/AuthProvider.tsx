@@ -89,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshing = useRef<Promise<string | null> | null>(null);
   const attempt = useRef<NativeAttempt | null>(null);
   const goneReason = useRef('');
+  const ending = useRef(false);
   const hooks = useRef(new Set<() => Promise<void>>());
   const backgroundedAt = useRef<number | null>(null);
   const phaseRef = useRef(phase);
@@ -187,11 +188,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     refreshAccessToken,
-    onSessionExpired: () => { void signOut({ flash: `Your session ended. Sign in again.${env.appEnv !== 'prod' && goneReason.current ? ` (${goneReason.current})` : ''}` }); }
+    onSessionExpired: () => {
+      // Several requests fail together: the first one ends the session, the rest must not overwrite its reason.
+      if (ending.current || !tokens.current) return;
+      ending.current = true;
+      void signOut({ flash: `Your session ended. Sign in again.${env.appEnv !== 'prod' && goneReason.current ? ` (${goneReason.current})` : ''}` });
+    }
   }), [refreshAccessToken, signOut]);
 
   /* A new sign-in on this phone starts the first-time setup (Face ID → passcode → notifications) unless it was done. */
   const startSession = useCallback(async (t: TokenSet) => {
+    ending.current = false;
+    goneReason.current = '';
     await persistTokens(t);
     setUser(userFrom(t));
     setFlash('');

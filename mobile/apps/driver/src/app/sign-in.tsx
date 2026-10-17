@@ -20,6 +20,7 @@ import { useDriver } from '@/session/DriverProvider';
 import { c, sp, t } from '@/theme';
 import { Logo } from '@/ui/Logo';
 import { AppText, Banner, Button, Field } from '@/ui/primitives';
+import { useKeyboardHeight } from '@/ui/useKeyboardHeight';
 
 export default function SignIn() {
   const tr = useT();
@@ -55,7 +56,9 @@ export default function SignIn() {
     setPassword('');
     setMessage(m ?? '');
   };
-  const heroHeight = Math.max(280, Math.round(height * 0.46));
+  const keyboard = useKeyboardHeight();
+  // With the keyboard up the picture gives way to the form, and the form lifts above the keyboard.
+  const heroHeight = keyboard > 0 ? insets.top + 96 : Math.max(280, Math.round(height * 0.46));
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
@@ -67,7 +70,7 @@ export default function SignIn() {
           </View>
         </Hero>
       </View>
-      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: insets.bottom + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: Math.max(insets.bottom, keyboard) + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {factors ? <SecondFactorView factors={factors} onBack={backToPassword} /> : (<>
         <AppText color={c.textMuted}>{tr('dr.signIn.useYourAfrotransactStaffAccount')}</AppText>
         {notice ? <Banner tone="info" icon={Info}>{notice}</Banner> : null}
