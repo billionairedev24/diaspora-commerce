@@ -1,7 +1,8 @@
 # Copy to terraform.tfvars and commit it: non-secret values only (credentials come from OIDC / env vars).
 # ---- the one switch -------------------------------------------------------------------------------
-cloud  = "gcp" # aws | gcp | azure. The USD 200/month lean profile assumes gcp (free-tier zonal control plane).
-region = "us-central1" # gcp: us-central1 is the cheapest US region for e2 nodes | aws: us-east-1 | azure: eastus
+cloud  = "gcp" # aws | gcp | azure. The lean profile is cheapest on gcp (free-tier zonal control plane).
+region = "us-east4" # MUST be where Layerbase runs: virginia = gcp us-east4 | aws us-east-1 | azure eastus (docs/engineering/cloud-cost.md)
+layerbase_region = "virginia" # virginia | oregon (Layerbase Dedicated 16 GB is Virginia only)
 
 # ---- identity of the account/project/subscription (only the selected cloud's line matters) ----------
 gcp_project_id        = "afrotransact-prod"

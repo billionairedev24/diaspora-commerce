@@ -24,7 +24,7 @@ locals {
     ha                  = false
     saas_profile        = "small"
     kyc_retention_days  = 2555
-    monthly_budget      = 200 # USD, cloud spend only (modules/<cloud>/budget); alerts at 50/80/100% actual, 100% forecast
+    monthly_budget      = 135 # USD, cloud spend only: the USD 200 ceiling = 135 + Layerbase Dedicated 8 GB (65); alerts at 50/80/100% actual, 100% forecast
     managed_data        = false
     deletion_protection = true
   }

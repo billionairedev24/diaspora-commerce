@@ -48,6 +48,13 @@ locals {
     azure = local.is_azure && local.sizing.managed_data ? toset(["azure"]) : toset([])
   }
 
+  # The cluster must sit next to the external database server (latency, and cross-region traffic is billed). Layerbase
+  # Dedicated runs in US East (Virginia) and US West (Oregon) only.
+  layerbase_regions = {
+    virginia = { aws = "us-east-1", gcp = "us-east4", azure = "eastus" }
+    oregon   = { aws = "us-west-2", gcp = "us-west1", azure = "" }
+  }
+
   context = {
     name                = "${var.name_prefix}-${local.environment}"
     environment         = local.environment
@@ -132,6 +139,16 @@ locals {
   }
 
   gh_subject_env = "repo:${var.github_repository}:environment:${local.environment}"
+}
+
+# The region is where everything lives: cluster, buckets, secrets, and (via layerbase_region) Postgres/Valkey/Meilisearch.
+resource "terraform_data" "database_location" {
+  lifecycle {
+    precondition {
+      condition     = local.sizing.managed_data || var.region == local.layerbase_regions[var.layerbase_region][var.cloud]
+      error_message = "With external data (Layerbase) the region must match layerbase_region (${var.layerbase_region}): that is ${local.layerbase_regions[var.layerbase_region][var.cloud] == "" ? "not available on " : local.layerbase_regions[var.layerbase_region][var.cloud] + " on "}${var.cloud}, but region is ${var.region}."
+    }
+  }
 }
 
 # =========================================================================================== AWS

@@ -151,3 +151,13 @@ variable "azure_tenant_id" {
   type        = string
   default     = ""
 }
+
+variable "layerbase_region" {
+  description = "Where the external Layerbase server runs (sizing.managed_data = false): virginia | oregon. The cluster's region must be in the same place (plan check), so database traffic stays in one metro: virginia = aws us-east-1, gcp us-east4, azure eastus; oregon = aws us-west-2, gcp us-west1 (Azure has no Oregon region next to Layerbase: use virginia)."
+  type        = string
+  default     = "virginia"
+  validation {
+    condition     = contains(["virginia", "oregon"], var.layerbase_region)
+    error_message = "layerbase_region must be virginia or oregon."
+  }
+}
