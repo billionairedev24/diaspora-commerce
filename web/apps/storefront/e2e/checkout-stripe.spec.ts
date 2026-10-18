@@ -45,7 +45,9 @@ function installFakeStripe() {
                   `<div style="border-bottom:1px solid #e0e0e0;padding:12px 14px"><label style="display:flex;gap:10px;align-items:center;font-weight:600"><input type="radio" name="fake-pm" ${open ? 'checked' : ''}> ${label}</label>` +
                   (open ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px"><input aria-label="Fake Stripe card number" placeholder="1234 1234 1234 1234" style="grid-column:1/-1;min-width:0;box-sizing:border-box;width:100%;height:40px;border:1px solid #c9c9c9;border-radius:6px;padding:0 10px"><input aria-label="Fake Stripe expiry" placeholder="MM / YY" style="min-width:0;box-sizing:border-box;width:100%;height:40px;border:1px solid #c9c9c9;border-radius:6px;padding:0 10px"><input aria-label="Fake Stripe CVC" placeholder="CVC" style="min-width:0;box-sizing:border-box;width:100%;height:40px;border:1px solid #c9c9c9;border-radius:6px;padding:0 10px"></div>' : '') +
                   '</div>';
-                box.innerHTML = ['Card', 'Apple Pay', 'Klarna', 'Amazon Pay', 'Cash App Pay'].map((l, i) => row(l, i === 0)).join('');
+                // Static markup of this fake only (no user input): parsed, not written through innerHTML.
+                const markup = ['Card', 'Apple Pay', 'Klarna', 'Amazon Pay', 'Cash App Pay'].map((l, i) => row(l, i === 0)).join('');
+                box.replaceChildren(...new DOMParser().parseFromString(markup, 'text/html').body.children);
                 el.appendChild(box);
                 box.addEventListener('input', () => on.change?.({ complete: true, empty: false, value: { type: 'card' } }));
                 setTimeout(() => {
