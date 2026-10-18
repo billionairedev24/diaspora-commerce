@@ -28,13 +28,13 @@ func MeiliIndexUID(market string) string { return Alias(market) }
 //	sort            an explicit sort (price, rating, newest) wins; a no-op when the query has none
 //	words           every query word must match (matchingStrategy "all"), last word as a prefix
 //	in_stock_rank   in-stock products first among equally matching ones
-//	typo ... exactness   Meilisearch's text relevance, fields ranked title, brand, category, description
+//	typo ... exactness   Meilisearch's text relevance, fields ranked title, brand, keywords, category, description
 //	rank_boost      fulfilled-by-AfroTransact, rating × review volume and fast delivery, computed by the indexer (MeiliBoost)
 //
 // synonyms nil leaves the index's synonyms as they are (the indexer ensures the index but does not own them).
 func MeiliSettings(synonyms map[string][]string) map[string]any {
 	settings := map[string]any{
-		"searchableAttributes": []string{"title", "brand", "category_path", "description"},
+		"searchableAttributes": []string{"title", "brand", "keywords", "category_path", "description"},
 		"filterableAttributes": []string{"status", "department", "communities", "fulfilment", "seller_kind", "seller_id", "rating",
 			"price_minor", "delivery_days", "in_stock", "atin", "variant_atins", "has_embedding", "seller_name", "_geo"},
 		"sortableAttributes": []string{"price_minor", "rating", "review_count", "updated_ts", "atin"},

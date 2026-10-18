@@ -24,13 +24,16 @@ import com.afrotransact.catalog.domain.ShipFromRef;
  * @param fulfilment   SELLER or AFROTRANSACT (Fulfilled by AfroTransact)
  * @param handlingDays business days from order to dispatch
  * @param shipFrom     the seller's ship-from location; null = the seller's default
+ * @param description  the shopper description (searched); null when none
+ * @param keywords     the seller's search keywords (searched, as well as the title and description)
  */
 public record ProductEventPayload(UUID productId, String atin, String ownerKind, String ownerOrgId, String status,
                                   String title, UUID categoryId, String productTypeCode,
                                   List<VariantPayload> variants, String note, boolean sellerHidden,
                                   String reasonCode, boolean preorderEligible, boolean shipsNow, String imageUrl,
                                   String brand, List<String> communities, String condition, String fulfilment,
-                                  int handlingDays, ShipFromRef shipFrom) {
+                                  int handlingDays, ShipFromRef shipFrom, String description,
+                                  List<String> keywords) {
 
     /** Variant part of the payload; {@code compareAtMinor} is the offer's list price ("was" price), may be null. */
     public record VariantPayload(String atin, String sellerSku, String gtin, long priceMinor, String currency,
@@ -52,7 +55,7 @@ public record ProductEventPayload(UUID productId, String atin, String ownerKind,
                 p.images() == null || p.images().isEmpty() ? null : p.images().getFirst().url(),
                 blankToNull(attribute(p.attributes(), "brand")), communities(p.attributes()),
                 p.details().condition().name(), p.details().fulfilment().name(), p.details().handlingDays(),
-                p.details().shipFrom());
+                p.details().shipFrom(), p.details().description(), p.details().keywords());
     }
 
     private static List<String> communities(Map<String, String> attributes) {

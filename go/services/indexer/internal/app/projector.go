@@ -133,6 +133,8 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 		ATIN:         pe.ATIN,
 		Title:        pe.Title,
 		Brand:        pe.Brand,
+		Description:  pe.Description,
+		Keywords:     pe.Keywords,
 		Communities:  pe.Communities,
 		ImageURL:     pe.ImageURL,
 		Department:   cat.Department,
@@ -155,7 +157,7 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 			}
 		}
 	}
-	doc.Embedding = p.embed(ctx, searchindex.EmbeddingText(doc.Title, doc.Brand, doc.CategoryPath, doc.Description))
+	doc.Embedding = p.embed(ctx, searchindex.EmbeddingText(doc.Title, doc.Brand, doc.CategoryPath, strings.TrimSpace(doc.Description+" "+strings.Join(doc.Keywords, " "))))
 	if err := p.index.UpsertProduct(ctx, p.market, doc, version,
 		port.UpsertOptions{PreserveSellerName: !known}); err != nil {
 		return fmt.Errorf("upsert %s: %w", pe.ATIN, err)

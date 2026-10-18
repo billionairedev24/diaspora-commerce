@@ -12,8 +12,8 @@ type object = map[string]any
 // Ranking holds the relevance tuning (S039). Text relevance (BM25 over boosted fields) is multiplied by commercial
 // boosts that never zero a score, so an unrated new listing still ranks by how well it matches.
 type Ranking struct {
-	// Field boosts: title, brand, category path, and attribute text (description and attribute values).
-	TitleBoost, BrandBoost, CategoryBoost, AttributeBoost float64
+	// Field boosts: title, brand, the seller's keywords, category path, and attribute text (description and attribute values).
+	TitleBoost, BrandBoost, KeywordBoost, CategoryBoost, AttributeBoost float64
 	// ExactBoost rewards documents whose title or brand contains the query words without typos.
 	ExactBoost float64
 	// PhraseBoost rewards the query appearing as a phrase in the title.
@@ -30,7 +30,7 @@ type Ranking struct {
 // DefaultRanking is the tuned configuration measured by the relevance harness (relevance/judgements.yaml).
 func DefaultRanking() Ranking {
 	return Ranking{
-		TitleBoost: 5, BrandBoost: 3, CategoryBoost: 2, AttributeBoost: 1,
+		TitleBoost: 5, BrandBoost: 3, KeywordBoost: 3, CategoryBoost: 2, AttributeBoost: 1,
 		ExactBoost: 1.5, PhraseBoost: 2,
 		InStock: 3, Fulfilled: 1.2, RatingWeight: 0.08, FastDelivery: 1.05, FastDeliveryDays: 2,
 	}
@@ -47,7 +47,7 @@ var sourceFields = []string{"atin", "title", "brand", "department", "category_pa
 	"delivery_days", "image_url", "offer_count", "variant_atins"}
 
 func (r Ranking) textFields() []string {
-	return []string{"title^" + num(r.TitleBoost), "brand^" + num(r.BrandBoost),
+	return []string{"title^" + num(r.TitleBoost), "brand^" + num(r.BrandBoost), "keywords^" + num(r.KeywordBoost),
 		"category_path.text^" + num(r.CategoryBoost), "description^" + num(r.AttributeBoost)}
 }
 

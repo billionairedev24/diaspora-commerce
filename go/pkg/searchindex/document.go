@@ -54,6 +54,7 @@ type ProductDocument struct {
 	Title        string         `json:"title"`
 	Brand        string         `json:"brand,omitempty"`
 	Description  string         `json:"description,omitempty"`
+	Keywords     []string       `json:"keywords,omitempty"`
 	Department   string         `json:"department"`
 	CategoryPath string         `json:"category_path"`
 	Communities  []string       `json:"communities,omitempty"`
@@ -84,3 +85,7 @@ type GeoPoint struct {
 	Lat float64 `json:"lat"`
 	Lon float64 `json:"lon"`
 }
+
+// LateMappings are the fields added to the mapping after the first release (strict mapping rejects unknown fields), put
+// onto an existing index so it accepts them without a reindex. Documents indexed earlier simply lack them.
+const LateMappings = `{"properties":{"keywords":{"type":"text","analyzer":"product_index","search_analyzer":"product_search"}}}`
