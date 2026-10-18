@@ -163,11 +163,11 @@ describe('fee schedules screen', () => {
     await user.clear(fashion);
     await user.type(fashion, '12.5');
     await user.type(screen.getByRole('combobox', { name: 'Seller or provider' }), 'retail');
-    const retail = await screen.findByRole('option', { name: /AfroTransact Retail/ });
+    const retail = await within(await screen.findByRole('listbox')).findByRole('option', { name: /AfroTransact Retail/ });
     expect(retail).toHaveAttribute('aria-disabled', 'true');
     await user.clear(screen.getByRole('combobox', { name: 'Seller or provider' }));
     await user.type(screen.getByRole('combobox', { name: 'Seller or provider' }), 'lagos');
-    await user.click(await screen.findByRole('option', { name: /Lagos Threads/ }));
+    await user.click(await within(await screen.findByRole('listbox')).findByRole('option', { name: /Lagos Threads/ }));
     await user.selectOptions(screen.getByLabelText('Category for Lagos Threads'), 'fashion');
     const rate = screen.getByLabelText('Commission for Lagos Threads (%)');
     await user.clear(rate);
