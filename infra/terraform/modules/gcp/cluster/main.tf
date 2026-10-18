@@ -1,4 +1,5 @@
-# GCP cluster: regional GKE Standard (so node pools mirror EKS/AKS exactly) with
+# GCP cluster: GKE Standard, regional (zone_count > 1) or ZONAL (zone_count = 1: the control plane is then covered by
+# the free-tier credit of one zonal cluster per billing account, ~$73/mo saved) with (so node pools mirror EKS/AKS exactly) with
 #   - "system" pool: small amd64 e2 nodes for third-party images that ship amd64 only
 #   - "general" pool: Axion C4A arm64 on-demand (GKE taints arm nodes kubernetes.io/arch=arm64:NoSchedule;
 #     set nodeSelector kubernetes.io/arch: arm64 in platform-values.yaml and GKE adds the toleration)
@@ -26,7 +27,13 @@ locals {
     small  = "c4a-standard-2"
     medium = "c4a-standard-4"
     large  = "c4a-standard-8"
+    lean   = "e2-standard-4" # 4 vCPU / 16 GB x86, the whole platform on one node
   }
+  lean     = var.node_size == "lean"
+  zonal    = length(local.zones) == 1
+  # No Cloud NAT (egress = "none") means nodes need their own public address to pull images and call SaaS APIs;
+  # inbound stays closed (default-deny VPC firewall, Cloudflare Tunnel for traffic in).
+  nat      = try(var.network.egress, "single") != "none"
   zones = slice(data.google_compute_zones.this.names, 0, min(var.network.zone_count, length(data.google_compute_zones.this.names)))
 }
 
@@ -80,8 +87,8 @@ resource "google_container_cluster" "this" {
   provider            = google
   project             = local.project
   name                = local.name
-  location            = var.context.region
-  node_locations      = local.zones
+  location            = local.zonal ? local.zones[0] : var.context.region
+  node_locations      = local.zonal ? null : local.zones
   network             = var.network.id
   subnetwork          = var.network.cluster_subnet_id
   min_master_version  = var.kubernetes_version
@@ -99,7 +106,7 @@ resource "google_container_cluster" "this" {
   }
 
   private_cluster_config {
-    enable_private_nodes    = true
+    enable_private_nodes    = local.nat
     enable_private_endpoint = var.private_endpoint
   }
 
@@ -170,13 +177,15 @@ resource "google_project_iam_member" "admins" {
 # ---------------------------------------------------------------- node pools
 locals {
   pools = merge(
-    {
+    local.lean ? {} : {
       system = {
         machine = "e2-standard-2", spot = false, min = 1, max = 2, arm = false
         labels  = { "afrotransact.com/pool" = "system" }, taints = []
       }
+    },
+    {
       general = {
-        machine = local.machine[var.node_size], spot = false, min = var.min_nodes, max = var.max_nodes, arm = true
+        machine = local.machine[var.node_size], spot = false, min = var.min_nodes, max = var.max_nodes, arm = !local.lean
         labels  = { "afrotransact.com/pool" = "general" }, taints = []
       }
     },
@@ -195,7 +204,7 @@ resource "google_container_node_pool" "this" {
   project  = local.project
   name     = each.key
   cluster  = google_container_cluster.this.id
-  location = var.context.region
+  location = local.zonal ? local.zones[0] : var.context.region
 
   autoscaling {
     location_policy      = each.value.spot ? "ANY" : "BALANCED"
@@ -218,7 +227,7 @@ resource "google_container_node_pool" "this" {
     machine_type    = each.value.machine
     spot            = each.value.spot
     disk_type       = each.value.arm ? "hyperdisk-balanced" : "pd-balanced"
-    disk_size_gb    = 50
+    disk_size_gb    = local.lean ? 60 : 50
     image_type      = "COS_CONTAINERD"
     service_account = google_service_account.nodes.email
     oauth_scopes    = ["https://www.googleapis.com/auth/cloud-platform"]

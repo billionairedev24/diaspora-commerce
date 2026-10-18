@@ -5,6 +5,8 @@
 #   - per-PR preview namespaces scale to zero when idle (KEDA/kube-downscaler in infra/k8s)
 #   - Elastic hot-only, Confluent Basic (pay per use)
 #   - short backups, KYC retention 1 day, no deletion protection
+# NOTE: not part of the $200/month production budget. Keep this environment destroyed (local stack + CI previews cover
+# development) and apply it only for a short, deliberate test; docs/engineering/cloud-cost.md.
 locals {
   environment = "dev"
   sizing = {
@@ -23,6 +25,7 @@ locals {
     saas_profile        = "small"
     kyc_retention_days  = 1
     monthly_budget      = 1000 # USD, cloud spend only (modules/<cloud>/budget); alerts at 50/80/100% actual, 100% forecast
+    managed_data        = true  # Terraform creates Postgres + Valkey; false = external (Layerbase), see prod
     deletion_protection = false
   }
 }

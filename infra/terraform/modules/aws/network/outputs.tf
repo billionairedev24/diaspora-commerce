@@ -20,9 +20,11 @@ output "network" {
     id                 = aws_vpc.this.id
     cidr_block         = aws_vpc.this.cidr_block
     zones              = local.azs
+    zone_count         = var.zone_count # zones with nodes; subnets span at least two (EKS needs two)
     cluster_subnet_ids = aws_subnet.cluster[*].id
     data_subnet_ids    = aws_subnet.data[*].id
     public_subnet_ids  = aws_subnet.public[*].id
+    egress             = var.egress
     egress_ips         = aws_eip.nat[*].public_ip # allow-list these at Elastic Cloud / Confluent / Stripe
   }
 }

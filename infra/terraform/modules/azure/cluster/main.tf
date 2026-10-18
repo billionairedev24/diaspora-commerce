@@ -20,11 +20,14 @@ locals {
   name = var.context.name
   tags = merge(var.context.tags, { service = "platform", module = "cluster" })
   vm_size = {
+    lean   = "Standard_D4ps_v6"
     small  = "Standard_D2ps_v6"
     medium = "Standard_D4ps_v6"
     large  = "Standard_D8ps_v6"
   }
   zones = [for z in range(1, var.network.zone_count + 1) : tostring(z)]
+  # lean: the AKS system pool IS the node (AKS requires one); no user pools, free control plane tier (no uptime SLA).
+  lean = var.node_size == "lean"
 }
 
 resource "azurerm_user_assigned_identity" "control_plane" {
@@ -47,7 +50,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   resource_group_name       = local.rg
   dns_prefix                = local.name
   kubernetes_version        = var.kubernetes_version
-  sku_tier                  = var.context.environment == "prod" ? "Standard" : "Free"
+  sku_tier                  = var.context.environment == "prod" && !local.lean ? "Standard" : "Free"
   automatic_upgrade_channel = "patch"
   node_os_upgrade_channel   = "NodeImage"
   oidc_issuer_enabled       = true
@@ -60,14 +63,14 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   default_node_pool {
     name                         = "system"
-    vm_size                      = local.vm_size["small"]
+    vm_size                      = local.lean ? local.vm_size["lean"] : local.vm_size["small"]
     os_sku                       = "AzureLinux"
     vnet_subnet_id               = var.network.cluster_subnet_id
     zones                        = local.zones
     auto_scaling_enabled         = true
     min_count                    = 1
-    max_count                    = 3
-    only_critical_addons_enabled = var.context.environment == "prod"
+    max_count                    = local.lean ? 1 : 3
+    only_critical_addons_enabled = var.context.environment == "prod" && !local.lean
     temporary_name_for_rotation  = "systemtmp"
     node_labels                  = { "afrotransact.com/pool" = "system" }
     upgrade_settings {
@@ -131,6 +134,7 @@ resource "azurerm_kubernetes_cluster" "this" {
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "general" {
+  count                 = local.lean ? 0 : 1
   name                  = "general"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.this.id
   mode                  = "User"
@@ -152,7 +156,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "general" {
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "spot" {
-  count                 = var.spot_enabled ? 1 : 0
+  count                 = var.spot_enabled && !local.lean ? 1 : 0
   name                  = "spot"
   kubernetes_cluster_id = azurerm_kubernetes_cluster.this.id
   mode                  = "User"

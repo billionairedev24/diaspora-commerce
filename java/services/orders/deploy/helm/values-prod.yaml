@@ -1,25 +1,26 @@
 env: prod
-replicas: 3
+replicas: 1
 autoscaling:
-  enabled: true
-  min: 3
-  max: 12
-  cpu: 70
+  enabled: false
 rollout:
-  enabled: true
+  enabled: false
 resources:
-  requests: {cpu: 500m, memory: 1Gi}
-  limits: {memory: 2Gi}
+  requests: {cpu: 100m, memory: 384Mi}
+  limits: {memory: 640Mi}
+monitoring:
+  serviceMonitor: false     # no in-cluster Prometheus on the lean footprint (docs/engineering/cloud-cost.md)
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampling: "0.1"
 tolerations: []
-# Temporal Cloud: one namespace per environment (<namespace>.<account>); mTLS cert/key come from the secret store
-# (TEMPORAL_TLS_CERT / TEMPORAL_TLS_KEY). Override TEMPORAL_TARGET / TEMPORAL_NAMESPACE with the account suffix in
-# infra/argocd/envs/prod/platform-values.yaml if it differs.
+# Temporal runs in the cluster (infra/k8s/platform/lean/temporal), same namespace name as local. Temporal Cloud instead:
+# set TEMPORAL_TARGET/TEMPORAL_NAMESPACE to the account values, add the `temporal-cloud` profile and the mTLS secrets.
 extraEnv:
+  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
   RETAIL_ORG_ID: org_afrotransact_retail
   ORDERS_ZONE: America/Chicago
-  TEMPORAL_NAMESPACE: afrotransact-prod
-  TEMPORAL_TARGET: afrotransact-prod.tmprl.cloud:7233
+  TEMPORAL_NAMESPACE: afrotransact
+  TEMPORAL_TARGET: temporal.temporal.svc.cluster.local:7233
   CHECKOUT_PAYMENT_TIMEOUT: 15m

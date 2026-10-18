@@ -5,7 +5,7 @@ kind: Kustomization
 nameSuffix: -prod
 resources:
   - ../../projects
-  - ../../applicationsets
+  - ../../applicationsets/lean
 patches:
   - target: {kind: ApplicationSet}
     patch: |-

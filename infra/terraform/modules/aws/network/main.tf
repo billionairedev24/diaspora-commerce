@@ -13,7 +13,11 @@ data "aws_availability_zones" "this" {
 }
 
 locals {
-  azs  = slice(data.aws_availability_zones.this.names, 0, var.zone_count)
+  # EKS wants subnets in at least two zones even when the workload runs in one (zone_count = 1): the second is empty and free.
+  azs  = slice(data.aws_availability_zones.this.names, 0, max(var.zone_count, 2))
+  # egress "none": no NAT gateway (USD 33/month) and no interface endpoints (~USD 7/month each): nodes get public
+  # addresses and reach the internet through the gateway; inbound stays closed (default-deny groups, Cloudflare Tunnel).
+  public_nodes = var.egress == "none"
   tags = merge(var.context.tags, { service = "platform", module = "network" })
   # /16 -> cluster /19 x3 (8k IPs each for pods with prefix delegation), data /22 x3, public /24 x3
   cluster_cidrs = [for i, _ in local.azs : cidrsubnet(var.cidr_block, 3, i)]
@@ -42,6 +46,7 @@ resource "aws_subnet" "cluster" {
   vpc_id            = aws_vpc.this.id
   availability_zone = local.azs[count.index]
   cidr_block        = local.cluster_cidrs[count.index]
+  map_public_ip_on_launch = local.public_nodes
   tags = merge(local.tags, {
     Name                              = "${var.context.name}-cluster-${local.azs[count.index]}"
     tier                              = "cluster"
@@ -121,6 +126,13 @@ resource "aws_route" "private_nat" {
   nat_gateway_id         = aws_nat_gateway.this[local.nat_count == 1 ? 0 : count.index].id
 }
 
+resource "aws_route" "private_igw" {
+  count                  = local.public_nodes ? length(local.azs) : 0
+  route_table_id         = aws_route_table.private[count.index].id
+  destination_cidr_block = "0.0.0.0/0"
+  gateway_id             = aws_internet_gateway.this.id
+}
+
 resource "aws_route_table_association" "cluster" {
   count          = length(local.azs)
   subnet_id      = aws_subnet.cluster[count.index].id
@@ -159,7 +171,7 @@ resource "aws_vpc_security_group_ingress_rule" "endpoints_https" {
 }
 
 resource "aws_vpc_endpoint" "interface" {
-  for_each            = toset(local.interface_endpoints)
+  for_each            = local.public_nodes ? toset([]) : toset(local.interface_endpoints)
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${var.context.region}.${each.key}"
   vpc_endpoint_type   = "Interface"

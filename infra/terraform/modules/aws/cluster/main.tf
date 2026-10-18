@@ -18,6 +18,7 @@ locals {
   name = var.context.name
   tags = merge(var.context.tags, { service = "platform", module = "cluster" })
   instance_types = {
+    lean   = ["t4g.xlarge"]
     small  = ["t4g.large", "m7g.large"]
     medium = ["m7g.xlarge", "m8g.xlarge"]
     large  = ["m7g.2xlarge", "m8g.2xlarge"]
@@ -186,7 +187,7 @@ resource "aws_eks_node_group" "general" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "general-arm64"
   node_role_arn   = aws_iam_role.node.arn
-  subnet_ids      = var.network.cluster_subnet_ids
+  subnet_ids      = slice(var.network.cluster_subnet_ids, 0, var.network.zone_count)
   ami_type        = "AL2023_ARM_64_STANDARD"
   capacity_type   = "ON_DEMAND"
   instance_types  = local.instance_types[var.node_size]
@@ -224,7 +225,7 @@ resource "aws_eks_node_group" "spot" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "spot-arm64"
   node_role_arn   = aws_iam_role.node.arn
-  subnet_ids      = var.network.cluster_subnet_ids
+  subnet_ids      = slice(var.network.cluster_subnet_ids, 0, var.network.zone_count)
   ami_type        = "AL2023_ARM_64_STANDARD"
   capacity_type   = "SPOT"
   instance_types  = local.spot_instance_types

@@ -1,10 +1,10 @@
 # Copy to terraform.tfvars and commit it: non-secret values only (credentials come from OIDC / env vars).
 # ---- the one switch -------------------------------------------------------------------------------
-cloud  = "aws" # aws | gcp | azure
-region = "us-east-1" # aws: us-east-1 | gcp: us-east4 | azure: eastus
+cloud  = "gcp" # aws | gcp | azure. The USD 200/month lean profile assumes gcp (free-tier zonal control plane).
+region = "us-central1" # gcp: us-central1 is the cheapest US region for e2 nodes | aws: us-east-1 | azure: eastus
 
 # ---- identity of the account/project/subscription (only the selected cloud's line matters) ----------
-# gcp_project_id        = "afrotransact-prod"
+gcp_project_id        = "afrotransact-prod"
 # azure_subscription_id = "00000000-0000-0000-0000-000000000000"
 # azure_tenant_id       = "00000000-0000-0000-0000-000000000000"
 
@@ -25,9 +25,11 @@ create_github_oidc_provider = false
 # github_oidc_provider_ref  = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" # or pool id "github"
 
 # ---- SaaS (same on every cloud) ----------------------------------------------------------------------
-enable_elastic   = true # needs EC_API_KEY
-enable_confluent = true # needs CONFLUENT_CLOUD_API_KEY / CONFLUENT_CLOUD_API_SECRET
-enable_temporal  = true # needs TEMPORAL_CLOUD_API_KEY; namespace afrotransact-<env>
+# Lean profile: all three off. Search is Meilisearch on Layerbase; Kafka and Temporal run in the cluster
+# (infra/k8s/platform/lean). Turn them on only when you outgrow one node (docs/engineering/cloud-cost.md).
+enable_elastic   = false # needs EC_API_KEY
+enable_confluent = false # needs CONFLUENT_CLOUD_API_KEY / CONFLUENT_CLOUD_API_SECRET
+enable_temporal  = false # needs TEMPORAL_CLOUD_API_KEY; namespace afrotransact-<env>
 # temporal_region             = "aws-us-east-1"   # default <cloud>-<region>; required for azure
 # temporal_accepted_client_ca = "LS0tLS1CRUdJTi..." # base64 PEM of the worker client CA (mTLS); empty = API keys
 

@@ -38,7 +38,8 @@ output "github_oidc" {
 }
 
 output "postgres" {
-  value = {
+  description = "null when Postgres is external (sizing.managed_data = false)."
+  value = local.p.postgres == null ? null : {
     endpoint         = local.p.postgres.endpoint
     reader_endpoint  = local.p.postgres.reader_endpoint
     port             = local.p.postgres.port
@@ -49,7 +50,8 @@ output "postgres" {
 }
 
 output "cache" {
-  value = {
+  description = "null when the cache is external (sizing.managed_data = false)."
+  value = local.p.cache == null ? null : {
     host        = local.p.cache.host
     port        = local.p.cache.port
     tls_enabled = local.p.cache.tls_enabled

@@ -19,6 +19,7 @@ output "network" {
     self_link              = google_compute_network.this.self_link
     cidr_block             = var.cidr_block
     zone_count             = var.zone_count
+    egress                 = var.egress
     cluster_subnet_id      = google_compute_subnetwork.cluster.id
     pods_range_name        = "pods"
     services_range_name    = "services"

@@ -40,6 +40,14 @@ locals {
     temporal  = var.enable_temporal ? toset(["temporal"]) : toset([])
   }
 
+  # Postgres and Valkey come from Terraform only when sizing.managed_data; otherwise they are external (Layerbase):
+  # nothing is created, their endpoints and credentials go into the secret store by hand (docs/engineering/cloud-cost.md).
+  on_data = {
+    aws   = local.is_aws && local.sizing.managed_data ? toset(["aws"]) : toset([])
+    gcp   = local.is_gcp && local.sizing.managed_data ? toset(["gcp"]) : toset([])
+    azure = local.is_azure && local.sizing.managed_data ? toset(["azure"]) : toset([])
+  }
+
   context = {
     name                = "${var.name_prefix}-${local.environment}"
     environment         = local.environment
@@ -146,7 +154,7 @@ module "aws_cluster" {
   node_size        = local.sizing.node_size
   min_nodes        = local.sizing.min_nodes
   max_nodes        = local.sizing.max_nodes
-  spot_enabled     = true
+  spot_enabled     = local.sizing.spot_max_nodes > 0
   spot_max_nodes   = local.sizing.spot_max_nodes
   private_endpoint = local.sizing.private_endpoint
   admin_principals = var.cluster_admins
@@ -163,7 +171,7 @@ module "aws_secrets" {
 
 module "aws_postgres" {
   source                = "../../modules/aws/postgres"
-  for_each              = local.on.aws
+  for_each              = local.on_data.aws
   providers             = { aws = aws.this[each.key] }
   context               = local.context
   network               = module.aws_network["aws"].network
@@ -177,7 +185,7 @@ module "aws_postgres" {
 
 module "aws_cache" {
   source            = "../../modules/aws/cache"
-  for_each          = local.on.aws
+  for_each          = local.on_data.aws
   providers         = { aws = aws.this[each.key] }
   context           = local.context
   network           = module.aws_network["aws"].network
@@ -278,7 +286,7 @@ module "gcp_cluster" {
   node_size        = local.sizing.node_size
   min_nodes        = local.sizing.min_nodes
   max_nodes        = local.sizing.max_nodes
-  spot_enabled     = true
+  spot_enabled     = local.sizing.spot_max_nodes > 0
   spot_max_nodes   = local.sizing.spot_max_nodes
   private_endpoint = local.sizing.private_endpoint
   admin_principals = var.cluster_admins
@@ -295,7 +303,7 @@ module "gcp_secrets" {
 
 module "gcp_postgres" {
   source                = "../../modules/gcp/postgres"
-  for_each              = local.on.gcp
+  for_each              = local.on_data.gcp
   providers             = { google = google.this[each.key] }
   context               = local.context
   network               = module.gcp_network["gcp"].network
@@ -309,7 +317,7 @@ module "gcp_postgres" {
 
 module "gcp_cache" {
   source            = "../../modules/gcp/cache"
-  for_each          = local.on.gcp
+  for_each          = local.on_data.gcp
   providers         = { google = google.this[each.key] }
   context           = local.context
   network           = module.gcp_network["gcp"].network
@@ -419,7 +427,7 @@ module "azure_cluster" {
   node_size        = local.sizing.node_size
   min_nodes        = local.sizing.min_nodes
   max_nodes        = local.sizing.max_nodes
-  spot_enabled     = true
+  spot_enabled     = local.sizing.spot_max_nodes > 0
   spot_max_nodes   = local.sizing.spot_max_nodes
   private_endpoint = local.sizing.private_endpoint
   admin_principals = var.cluster_admins
@@ -436,7 +444,7 @@ module "azure_secrets" {
 
 module "azure_postgres" {
   source                = "../../modules/azure/postgres"
-  for_each              = local.on.azure
+  for_each              = local.on_data.azure
   providers             = { azurerm = azurerm.this[each.key] }
   context               = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
   network               = module.azure_network["azure"].network
@@ -450,7 +458,7 @@ module "azure_postgres" {
 
 module "azure_cache" {
   source            = "../../modules/azure/cache"
-  for_each          = local.on.azure
+  for_each          = local.on_data.azure
   providers         = { azurerm = azurerm.this[each.key] }
   context           = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
   network           = module.azure_network["azure"].network
@@ -591,7 +599,10 @@ locals {
         KAFKA_API_KEY       = local.kafka_credentials[k].key
         KAFKA_API_SECRET    = local.kafka_credentials[k].secret
         SCHEMA_REGISTRY_URL = module.confluent["confluent"].schema_registry_url
-      } : {},
+      } : {
+        # Lean profile: single-node Kafka in the cluster (infra/k8s/platform/lean/kafka), plaintext inside the namespace network.
+        KAFKA_BOOTSTRAP = "kafka.kafka.svc.cluster.local:9092"
+      },
       var.enable_elastic && contains(["search", "indexer"], k) ? { ES_URLS = module.elastic["ec"].elasticsearch_url } : {},
       var.enable_temporal && k == "orders" ? {
         TEMPORAL_TARGET    = module.temporal["temporal"].target

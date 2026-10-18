@@ -10,12 +10,12 @@ variable "kubernetes_version" {
 }
 
 variable "node_size" {
-  description = "Size class of the arm64 on-demand pool: small | medium | large (mapped to Graviton / Axion / Cobalt)."
+  description = "Size class of the arm64 on-demand pool: small | medium | large (mapped to Graviton / Axion / Cobalt). lean = ONE 4 vCPU / 16 GB node and nothing else (x86 e2 on GCP, arm64 on AWS/Azure): the single-node footprint of docs/engineering/cloud-cost.md. Pair it with zone_count 1 and egress "none"."
   type        = string
   default     = "small"
   validation {
-    condition     = contains(["small", "medium", "large"], var.node_size)
-    error_message = "node_size must be small, medium or large."
+    condition     = contains(["small", "medium", "large", "lean"], var.node_size)
+    error_message = "node_size must be small, medium, large or lean."
   }
 }
 

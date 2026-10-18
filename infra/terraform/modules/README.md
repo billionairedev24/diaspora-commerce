@@ -36,7 +36,7 @@ Azure tags. Every module adds `service` (`platform` or the service name) and `mo
 | Module | Inputs (besides `context`) | Outputs |
 |---|---|---|
 | `network` | `cidr_block`, `zone_count` (1-3), `egress` (`none`\|`single`\|`per-zone`) | `network_id`, `cluster_subnet_ids`, `data_subnet_ids`, `network` (handle for other modules; includes `egress_ips`) |
-| `cluster` | `network`, `kubernetes_version`, `node_size` (`small`\|`medium`\|`large`), `min_nodes`, `max_nodes`, `spot_enabled`, `spot_max_nodes`, `private_endpoint`, `admin_principals` | `cluster_name`, `cluster_endpoint`, `cluster_ca_certificate`, `oidc_issuer_url`, `workload_identity` (handle), `node_identity`, `kubeconfig_command` |
+| `cluster` | `network`, `kubernetes_version`, `node_size` (`small`\|`medium`\|`large`\|`lean`), `min_nodes`, `max_nodes`, `spot_enabled`, `spot_max_nodes`, `private_endpoint`, `admin_principals` | `cluster_name`, `cluster_endpoint`, `cluster_ca_certificate`, `oidc_issuer_url`, `workload_identity` (handle), `node_identity`, `kubeconfig_command` |
 | `postgres` | `network`, `engine_version` (`17`), `size`, `high_availability`, `storage_gb`, `backup_retention_days`, `databases`, `secret_store` | `endpoint`, `reader_endpoint`, `port`, `admin_username`, `admin_secret_ref`, `databases`, `server_id` |
 | `cache` | `network`, `engine_version` (`8`), `size`, `high_availability` | `host`, `port`, `tls_enabled`, `auth_token` (sensitive), `cache_id` |
 | `bucket` | `network`, `buckets` (map: `versioning`, `object_lock`, `retention_days`, `archive_after_days`, `expire_after_days`, `cors_origins`) | `buckets` (key → `{name,id,url}`), `bucket_names`, `endpoint` |
