@@ -79,8 +79,8 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
             }
             Instant now = Instant.now(clock);
             // The key names the account settings (v2: Stripe-liable): Stripe refuses a key reused with other parameters.
-            // Stripe wants a website or a description of what is sold: give it the business's own website, or the
-            // address of the plain AfroTransact page that business gets when it has none.
+            // Stripe wants a website or a description of what is sold: give it the address of the plain AfroTransact
+            // page every business gets, with the description from its application.
             String description = b.branding() != null && b.branding().description() != null
                     ? b.branding().description() : b.storeName();
             accountId = stripe.createAccount(new CreateConnectedAccount(app.orgId(), app.id(), b.country(),

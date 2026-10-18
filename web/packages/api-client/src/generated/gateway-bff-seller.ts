@@ -2461,7 +2461,12 @@ export interface components {
                 contactEmail: string | null;
                 /** @description E.164 */
                 phone: string | null;
-                website: string | null;
+                /** @description What the business sells or does; shown on its public page and given to Stripe */
+                description: string | null;
+                /** @description #rrggbb, the one colour of its public page */
+                brandColor: string | null;
+                /** @description https URL of its logo */
+                logoUrl: string | null;
             };
             details: {
                 legalFirstName: string | null;
@@ -2548,7 +2553,11 @@ export interface components {
             storeName?: string;
             contactEmail?: string;
             phone?: string;
-            website?: string;
+            /** @description What the business sells or does; shown on its public page and given to Stripe */
+            description?: string;
+            /** @description #rrggbb */
+            brandColor?: string;
+            logoUrl?: string;
         };
         OnboardingAddressInput: {
             line1: string;

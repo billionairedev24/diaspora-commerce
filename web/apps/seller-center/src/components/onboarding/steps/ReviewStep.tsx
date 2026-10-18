@@ -34,10 +34,11 @@ function sectionRows(st: OnboardingStatus): Record<string, Row[]> {
     business: [
       ['Offering', OFFERINGS.find((o) => o.value === b.offering)?.label ?? '—'],
       ['Business type', ENTITY_TYPES.find((e) => e.value === b.entityType)?.label ?? '—'],
-      ['Store name', dash(b.storeName)],
+      ['Business name', dash(b.storeName)],
       ['Business email', dash(b.contactEmail)],
       ['Mobile', dash(displayPhone(b.phone))],
-      ['Website', dash(b.website)]
+      ['What you sell', dash(b.description)],
+      ['Brand colour', dash(b.brandColor)]
     ],
     'business-details': sole
       ? [

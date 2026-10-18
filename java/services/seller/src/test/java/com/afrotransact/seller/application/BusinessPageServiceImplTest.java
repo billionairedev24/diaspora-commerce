@@ -21,7 +21,7 @@ import com.afrotransact.seller.port.BusinessPageRepository;
 import com.afrotransact.seller.port.OrganisationRepository;
 import org.junit.jupiter.api.Test;
 
-/** A business with a website gives Stripe that website; one without gets a plain page whose address Stripe is given. */
+/** Every business gets a plain page, and its address is what Stripe is given as the website. */
 class BusinessPageServiceImplTest {
 
     private final BusinessPageRepository pages = mock(BusinessPageRepository.class);
@@ -35,14 +35,7 @@ class BusinessPageServiceImplTest {
     }
 
     @Test
-    void aBusinessWithItsOwnWebsiteGetsNoPage() {
-        assertThat(service.websiteFor("org_1", business("Ade's Kitchen", " https://ade.example.com "))).isEqualTo(
-                "https://ade.example.com");
-        verify(pages, never()).insert(any());
-    }
-
-    @Test
-    void aBusinessWithoutOneGetsAPageAndItsAddressGoesToStripe() {
+    void everyBusinessGetsAPageAndItsAddressGoesToStripe() {
         when(pages.findByOrg("org_1")).thenReturn(Optional.empty());
         when(pages.insert(any())).thenReturn(true);
         assertThat(service.websiteFor("org_1", business("Ade's Kitchen", null))).isEqualTo(
@@ -56,7 +49,7 @@ class BusinessPageServiceImplTest {
                 false);
         when(pages.insert(new BusinessPage("org_1", "ades-kitchen-2", Instant.parse("2026-10-18T12:00:00Z")))).thenReturn(
                 true);
-        assertThat(service.websiteFor("org_1", business("Ade's Kitchen", ""))).isEqualTo(
+        assertThat(service.websiteFor("org_1", business("Ade's Kitchen", null))).isEqualTo(
                 "https://afrotransact.com/b/ades-kitchen-2");
     }
 

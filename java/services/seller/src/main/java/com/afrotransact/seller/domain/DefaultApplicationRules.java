@@ -84,13 +84,9 @@ public class DefaultApplicationRules implements ApplicationRules {
             }
         }
         e.required(complete && phone == null, "phone");
-        String website = trim(in.website());
-        if (website != null && !website.matches("^https?://\\S+\\.\\S+$")) {
-            e.put("website", "Enter a full URL starting with https://");
-        }
         BusinessSection.Branding branding = branding(in.branding(), e);
         return new Validated<>(new BusinessSection(in.offering(), in.entityType(), country, store,
-                email == null ? null : email.toLowerCase(Locale.ROOT), e164 != null ? e164 : phone, website, branding),
+                email == null ? null : email.toLowerCase(Locale.ROOT), e164 != null ? e164 : phone, null, branding),
                 e.map());
     }
 

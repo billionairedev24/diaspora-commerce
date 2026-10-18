@@ -136,7 +136,7 @@ func (s *sellerShellImpl) SaveOnboardingBusiness(ctx context.Context, c *domain.
 	body := port.SellerApplicationBiz{Offering: strings.ToUpper(strings.TrimSpace(in.Offering)),
 		EntityType: strings.ToLower(strings.TrimSpace(in.EntityType)), Country: strings.ToUpper(strings.TrimSpace(in.Country)),
 		StoreName: strings.TrimSpace(in.StoreName), ContactEmail: strings.TrimSpace(in.ContactEmail), Phone: strings.TrimSpace(in.Phone),
-		Website: strings.TrimSpace(in.Website)}
+		Description: strings.TrimSpace(in.Description), BrandColor: strings.TrimSpace(in.BrandColor), LogoURL: strings.TrimSpace(in.LogoURL)}
 	a, err := s.r.d.Sellers.SaveApplicationStep(ctx, c.BearerToken, "business", body)
 	if err != nil {
 		return domain.OnboardingStatus{}, mapErr("seller", err)
@@ -399,7 +399,10 @@ func onboardingForm(a port.SellerApplication, status string) domain.OnboardingFo
 		Editable:   status == "DRAFT" || status == "INFO_REQUESTED"}
 	if b := a.Business; b != nil {
 		f.Business = domain.OnboardingBusiness{Offering: strPtr(strings.ToUpper(b.Offering)), EntityType: strPtr(strings.ToUpper(b.EntityType)),
-			Country: strPtr(b.Country), StoreName: strPtr(b.StoreName), ContactEmail: strPtr(b.ContactEmail), Phone: strPtr(b.Phone), Website: strPtr(b.Website)}
+			Country: strPtr(b.Country), StoreName: strPtr(b.StoreName), ContactEmail: strPtr(b.ContactEmail), Phone: strPtr(b.Phone)}
+		if br := b.Branding; br != nil {
+			f.Business.Description, f.Business.BrandColor, f.Business.LogoURL = strPtr(br.Description), strPtr(br.BrandColor), strPtr(br.LogoURL)
+		}
 	}
 	if d := a.BusinessDetails; d != nil {
 		f.Details = domain.OnboardingDetails{LegalFirstName: strPtr(d.LegalFirstName), LegalLastName: strPtr(d.LegalLastName), LegalName: strPtr(d.LegalName),

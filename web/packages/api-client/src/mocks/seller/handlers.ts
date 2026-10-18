@@ -725,7 +725,9 @@ const BusinessBody = z.object({
   storeName: z.string().optional(),
   contactEmail: z.string().optional(),
   phone: z.string().optional(),
-  website: z.string().optional()
+  description: z.string().optional(),
+  brandColor: z.string().optional(),
+  logoUrl: z.string().optional()
 });
 const AddressBody = z.object({ line1: z.string(), line2: z.string().optional(), city: z.string(), state: z.string(), postalCode: z.string(), country: z.string().optional() });
 const DetailsBody = z.object({
@@ -839,11 +841,13 @@ export const sellerHandlers = [
   http.put(
     `${W}/onboarding/business`,
     saveStep(BusinessBody, (app, b) => {
-      if (b.storeName !== undefined && b.storeName.trim().length === 1) return { storeName: '2 to 80 characters' };
+      if (b.storeName !== undefined && b.storeName.trim().length === 1) return { storeName: '2 to 80 characters' } as FieldErrors;
+      if (b.brandColor && !/^#[0-9a-fA-F]{6}$/.test(b.brandColor)) return { brandColor: 'Use a colour like #1a7f4b' } as FieldErrors;
+      if (b.description && b.description.length > 500) return { description: 'At most 500 characters' } as FieldErrors;
       const next = {
         ...app.form,
         business: { offering: b.offering ?? null, entityType: b.entityType ?? null, country: blankToNull(b.country)?.toUpperCase() ?? null, storeName: blankToNull(b.storeName),
-          contactEmail: blankToNull(b.contactEmail), phone: blankToNull(b.phone), website: blankToNull(b.website) }
+          contactEmail: blankToNull(b.contactEmail), phone: blankToNull(b.phone), description: blankToNull(b.description), brandColor: blankToNull(b.brandColor)?.toLowerCase() ?? null, logoUrl: blankToNull(b.logoUrl) }
       };
       app.form = { ...next, owners: b.entityType === 'SOLE_PROPRIETOR' ? [] : next.owners, prefilled: app.form.prefilled.filter((k) => !k.startsWith('business.') ||
         JSON.stringify((app.form.business as Record<string, unknown>)[k.slice(9)] ?? null) === JSON.stringify((next.business as Record<string, unknown>)[k.slice(9)] ?? null)) };

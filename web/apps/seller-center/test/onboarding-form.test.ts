@@ -47,7 +47,9 @@ const form = (over: Partial<OnboardingForm> = {}): OnboardingForm => ({
     storeName: null,
     contactEmail: 'ada@example.com',
     phone: '+17132490142',
-    website: null
+    description: null,
+    brandColor: null,
+    logoUrl: null
   },
   details: {
     legalFirstName: 'Adaeze',
@@ -121,16 +123,17 @@ describe('Your business', () => {
     expect(displayPhone('+447700900123')).toBe('+447700900123');
   });
 
-  it('needs offering, business type, store name, email and a US mobile; website must be a full URL', () => {
+  it('needs offering, business type, store name, email and a US mobile; the brand colour must be #rrggbb', () => {
     const v: BusinessValues = {
       offering: '',
       entityType: '',
       storeName: 'A',
       contactEmail: 'nope',
       phone: '713',
-      website: 'adeskitchen.com'
+      description: '',
+      brandColor: 'green'
     };
-    expect(Object.keys(validateBusiness(v, 'SELLER')).sort()).toEqual(['contactEmail', 'entityType', 'offering', 'phone', 'storeName', 'website']);
+    expect(Object.keys(validateBusiness(v, 'SELLER')).sort()).toEqual(['brandColor', 'contactEmail', 'entityType', 'offering', 'phone', 'storeName']);
     expect(
       validateBusiness(
         {
@@ -140,7 +143,7 @@ describe('Your business', () => {
           storeName: 'Ade’s Kitchen',
           contactEmail: 'a@b.co',
           phone: '(713) 249-0142',
-          website: ''
+          brandColor: '#1a7f4b'
         },
         'SELLER'
       )

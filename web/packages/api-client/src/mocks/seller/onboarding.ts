@@ -58,7 +58,7 @@ const trimOrNull = (v: string | null | undefined): string | null => (v && v.trim
 /** A new application's answers: what the account already knows (name, email, phone, default address). */
 export function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
   return {
-    business: { offering: kind === 'PROVIDER' ? 'SERVICES' : null, entityType: null, country: null, storeName: null, contactEmail: db.user.email, phone: '+17132490142', website: null },
+    business: { offering: kind === 'PROVIDER' ? 'SERVICES' : null, entityType: null, country: null, storeName: null, contactEmail: db.user.email, phone: '+17132490142', description: null, brandColor: null, logoUrl: null },
     details: {
       legalFirstName: db.user.firstName, legalLastName: db.user.lastName, legalName: null, dba: null, taxIdType: null, taxIdMasked: null, dateOfBirth: null,
       stateOfFormation: null, dateOfFormation: null, address: { ...ACCOUNT_ADDRESS }, formationDocumentAssetId: null, irsDeterminationLetterAssetId: null
@@ -79,7 +79,7 @@ function submittedForm(db: MockSellerDb, org: MockOrg): OnboardingForm {
   const f = accountForm(db, org.kind);
   return {
     ...f,
-    business: { offering: 'PRODUCTS', entityType: 'SINGLE_MEMBER_LLC', country: 'US', storeName: org.name, contactEmail: 'hello@bonwire.example', phone: '+17132490142', website: null },
+    business: { offering: 'PRODUCTS', entityType: 'SINGLE_MEMBER_LLC', country: 'US', storeName: org.name, contactEmail: 'hello@bonwire.example', phone: '+17132490142', description: null, brandColor: null, logoUrl: null },
     details: { ...f.details, legalName: `${org.name} LLC`, taxIdType: 'EIN', taxIdMasked: '••-•••6789', stateOfFormation: 'TX', dateOfFormation: '2021-03-01', formationDocumentAssetId: 'asset-articles' },
     owners: [{ firstName: 'Kwame', lastName: 'Asante', title: 'Owner', email: 'kwame@bonwire.example', ownershipPercent: 100, significantControl: true, dateOfBirth: '1984-05-02', address: { ...ACCOUNT_ADDRESS } }],
     payouts: { status: 'READY', bankName: 'Chase', accountLast4: '4417', bankStatus: 'verified', linked: true },

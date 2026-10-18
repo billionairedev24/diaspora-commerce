@@ -2591,7 +2591,7 @@ components:
       properties:
         business:
           type: object
-          required: [offering, entityType, country, storeName, contactEmail, phone, website]
+          required: [offering, entityType, country, storeName, contactEmail, phone, description, brandColor, logoUrl]
           properties:
             offering: {$ref: '#/components/schemas/OnboardingOffering'}
             entityType: {$ref: '#/components/schemas/OnboardingEntityType'}
@@ -2599,7 +2599,9 @@ components:
             storeName: {type: [string, 'null']}
             contactEmail: {type: [string, 'null']}
             phone: {type: [string, 'null'], description: E.164}
-            website: {type: [string, 'null']}
+            description: {type: [string, 'null'], description: What the business sells or does; shown on its public page and given to Stripe}
+            brandColor: {type: [string, 'null'], description: '#rrggbb, the one colour of its public page'}
+            logoUrl: {type: [string, 'null'], description: https URL of its logo}
         details:
           type: object
           required: [legalFirstName, legalLastName, legalName, dba, taxIdType, taxIdMasked, dateOfBirth, stateOfFormation, dateOfFormation, address, formationDocumentAssetId, irsDeterminationLetterAssetId]
@@ -2696,7 +2698,9 @@ components:
         storeName: {type: string, maxLength: 120}
         contactEmail: {type: string, maxLength: 254}
         phone: {type: string, maxLength: 32}
-        website: {type: string, maxLength: 200}
+        description: {type: string, maxLength: 500, description: What the business sells or does; shown on its public page and given to Stripe}
+        brandColor: {type: string, maxLength: 7, description: '#rrggbb'}
+        logoUrl: {type: string, maxLength: 500}
     OnboardingAddressInput:
       type: object
       required: [line1, city, state, postalCode]

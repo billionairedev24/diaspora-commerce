@@ -107,7 +107,10 @@ export interface BusinessValues {
   contactEmail: string;
   /** National number as displayed, e.g. "(713) 249-0142" (US). */
   phone: string;
-  website: string;
+  /** What the business sells or does: shown on its public page and given to Stripe. */
+  description: string;
+  /** #rrggbb, or empty for the default. */
+  brandColor: string;
 }
 
 /** National display of a US number (+17132490142 → (713) 249-0142); other numbers are shown as stored. */
@@ -124,7 +127,8 @@ export function businessValues(form: OnboardingForm, kind: OrgKind): BusinessVal
     storeName: text(b.storeName),
     contactEmail: text(b.contactEmail),
     phone: displayPhone(b.phone),
-    website: text(b.website)
+    description: text(b.description),
+    brandColor: text(b.brandColor)
   };
 }
 
@@ -135,11 +139,12 @@ export function validateBusiness(v: BusinessValues, kind: OrgKind): Errors {
   else if (kind === 'PROVIDER' && v.offering === 'PRODUCTS') e.offering = 'Provider accounts offer services (choose services or both)';
   if (!v.entityType) e.entityType = 'Choose your business type';
   const name = v.storeName.trim();
-  if (!name) e.storeName = kind === 'PROVIDER' ? 'Enter your business name' : 'Enter your store name';
+  if (!name) e.storeName = kind === 'PROVIDER' ? 'Enter your business name' : 'Enter your business name';
   else if (name.length < 2 || name.length > 80) e.storeName = '2 to 80 characters';
   if (!EMAIL.test(v.contactEmail.trim())) e.contactEmail = 'Enter a valid email address';
   if (digitsOf(v.phone).length !== 10) e.phone = 'Enter a 10-digit US mobile number';
-  if (v.website.trim() && !/^https?:\/\/\S+\.\S+$/.test(v.website.trim())) e.website = 'Enter a full URL starting with https://';
+  if (v.description.length > 500) e.description = 'At most 500 characters';
+  if (v.brandColor.trim() && !/^#[0-9a-fA-F]{6}$/.test(v.brandColor.trim())) e.brandColor = 'Use a colour like #1a7f4b';
   return e;
 }
 
@@ -151,7 +156,8 @@ export function toBusinessInput(v: BusinessValues): OnboardingBusinessInput {
     storeName: opt(v.storeName),
     contactEmail: opt(v.contactEmail),
     phone: opt(v.phone),
-    website: opt(v.website)
+    description: opt(v.description),
+    brandColor: opt(v.brandColor)
   };
 }
 

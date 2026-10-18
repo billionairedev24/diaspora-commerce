@@ -74,19 +74,16 @@ final class OnboardingDtos {
                             "corporation", "partnership", "nonprofit"}) String entityType,
                         @Schema(example = "US") String country, String storeName, String contactEmail,
                         @Schema(description = "National or international; stored as E.164") String phone,
-                        @Schema(description = "The business's own website. Leave it blank and AfroTransact makes a plain "
-                                + "public page for the business, which is what Stripe is given as its website")
-                        String website,
-                        @Schema(description = "Only used when there is no website: what the business sells or does")
+                        @Schema(description = "What the business sells or does, a few sentences: shown on its public page and given to Stripe")
                         String description,
-                        @Schema(description = "Only used when there is no website: one brand colour, #rrggbb")
+                        @Schema(description = "One brand colour for its public page, #rrggbb")
                         String brandColor,
-                        @Schema(description = "Only used when there is no website: https URL of the uploaded logo")
+                        @Schema(description = "https URL of the uploaded logo")
                         String logoUrl) {
 
         BusinessSection toSection() {
             return new BusinessSection(Inputs.offering(offering), Inputs.entityType(entityType), country, storeName,
-                    contactEmail, phone, website, description == null && brandColor == null && logoUrl == null ? null
+                    contactEmail, phone, null, description == null && brandColor == null && logoUrl == null ? null
                     : new BusinessSection.Branding(description, brandColor, logoUrl));
         }
     }

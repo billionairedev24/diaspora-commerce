@@ -301,7 +301,16 @@ type SellerApplicationBiz struct {
 	StoreName    string `json:"storeName,omitempty"`
 	ContactEmail string `json:"contactEmail,omitempty"`
 	Phone        string `json:"phone,omitempty"`
-	Website      string `json:"website,omitempty"`
+	// Description, BrandColor and LogoURL are written flat (the seller service's BusinessStep) for the business's plain
+	// public page; the service answers them nested in Branding.
+	Description string `json:"description,omitempty"`
+	BrandColor  string `json:"brandColor,omitempty"`
+	LogoURL     string `json:"logoUrl,omitempty"`
+	Branding    *struct {
+		Description string `json:"description"`
+		BrandColor  string `json:"brandColor"`
+		LogoURL     string `json:"logoUrl"`
+	} `json:"branding,omitempty"`
 }
 
 // SellerApplicationDetails is seller's BusinessDetails (BusinessDetailsStep when saving: TaxID is write-only, empty

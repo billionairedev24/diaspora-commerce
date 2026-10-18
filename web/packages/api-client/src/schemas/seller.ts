@@ -154,7 +154,11 @@ export const OnboardingFormSchema = z.object({
     storeName: nullableString,
     contactEmail: nullableString,
     phone: nullableString,
-    website: nullableString
+    /** What the business sells or does: shown on its public page and given to Stripe. */
+    description: nullableString,
+    /** #rrggbb: the one colour of its public page. */
+    brandColor: nullableString,
+    logoUrl: nullableString
   }),
   details: z.object({
     legalFirstName: nullableString,
@@ -234,7 +238,9 @@ export interface OnboardingBusinessInput {
   storeName?: string;
   contactEmail?: string;
   phone?: string;
-  website?: string;
+  description?: string;
+  brandColor?: string;
+  logoUrl?: string;
 }
 
 export interface OnboardingAddressInput {

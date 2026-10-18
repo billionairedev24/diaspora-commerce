@@ -75,7 +75,11 @@ type OnboardingBusiness struct {
 	StoreName    *string `json:"storeName"`
 	ContactEmail *string `json:"contactEmail"`
 	Phone        *string `json:"phone"`
-	Website      *string `json:"website"`
+	// Description, BrandColor and LogoURL are how the business's plain public page looks (and what Stripe is told it
+	// sells): nobody is asked for a website.
+	Description *string `json:"description"`
+	BrandColor  *string `json:"brandColor"`
+	LogoURL     *string `json:"logoUrl"`
 }
 
 // OnboardingDetails is the wizard's "About you" (sole proprietor) / "Business details & TIN" step. The tax ID is only
@@ -216,7 +220,9 @@ type OnboardingBusinessInput struct {
 	StoreName    string `json:"storeName"`
 	ContactEmail string `json:"contactEmail"`
 	Phone        string `json:"phone"`
-	Website      string `json:"website"`
+	Description  string `json:"description"`
+	BrandColor   string `json:"brandColor"`
+	LogoURL      string `json:"logoUrl"`
 }
 
 // OnboardingAddressInput is an address in a step save.

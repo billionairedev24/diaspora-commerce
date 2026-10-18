@@ -79,11 +79,11 @@ describe('application wizard', () => {
     const summary = (await screen.findByText(/There are 2 problems with this step/)).closest('[role="alert"]') as HTMLElement;
     expect(within(summary).getByText(/There are 2 problems with this step/)).toBeInTheDocument();
     expect(within(summary).getByRole('link', { name: 'Choose your business type' })).toHaveAttribute('href', '#ob-entityType');
-    expect(within(summary).getByRole('link', { name: 'Enter your store name' })).toBeInTheDocument();
+    expect(within(summary).getByRole('link', { name: 'Enter your business name' })).toBeInTheDocument();
     expect(nav.push).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('radio', { name: /Single-member LLC/ }));
-    await user.type(screen.getByLabelText(/Store or business display name/), 'Titi Foods');
+    await user.type(screen.getByLabelText(/Business name/), 'Titi Foods');
     await user.click(screen.getByRole('button', { name: 'Save and continue' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/business-details'));
     expect(getSellerDb().onboarding.org_new?.form.business).toMatchObject({

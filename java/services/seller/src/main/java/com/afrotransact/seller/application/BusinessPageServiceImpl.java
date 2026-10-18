@@ -39,9 +39,6 @@ class BusinessPageServiceImpl implements BusinessPageService {
     @Override
     @Transactional
     public String websiteFor(String orgId, BusinessSection business) {
-        if (business != null && !business.needsPage()) {
-            return business.website().trim();
-        }
         BusinessPage page = pages.findByOrg(orgId).orElseGet(() -> create(orgId, business));
         return publicWebUrl + "/b/" + page.slug();
     }
