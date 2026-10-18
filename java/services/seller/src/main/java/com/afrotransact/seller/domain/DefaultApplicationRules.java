@@ -14,6 +14,8 @@ import java.util.regex.Pattern;
 /** Default onboarding rules (architecture §7, chat specs for S090–S096). */
 public class DefaultApplicationRules implements ApplicationRules {
 
+    private static final int MAX_PAGE_DESCRIPTION = 500;
+
     public static final Set<String> FOOD_CATEGORIES = Set.of("groceries", "perishables", "prepared_food");
     public static final Set<String> BEAUTY_CATEGORIES = Set.of("beauty", "cosmetics");
     public static final Set<String> CARD_BRANDS = Set.of("visa", "mastercard", "amex", "discover");
@@ -86,8 +88,10 @@ public class DefaultApplicationRules implements ApplicationRules {
         if (website != null && !website.matches("^https?://\\S+\\.\\S+$")) {
             e.put("website", "Enter a full URL starting with https://");
         }
+        BusinessSection.Branding branding = branding(in.branding(), e);
         return new Validated<>(new BusinessSection(in.offering(), in.entityType(), country, store,
-                email == null ? null : email.toLowerCase(Locale.ROOT), e164 != null ? e164 : phone, website), e.map());
+                email == null ? null : email.toLowerCase(Locale.ROOT), e164 != null ? e164 : phone, website, branding),
+                e.map());
     }
 
     @Override
@@ -508,5 +512,27 @@ public class DefaultApplicationRules implements ApplicationRules {
         Map<String, String> map() {
             return errors;
         }
+    }
+
+    private static BusinessSection.Branding branding(BusinessSection.Branding in, Errors e) {
+        if (in == null) {
+            return null;
+        }
+        String description = trim(in.description());
+        if (description != null && description.length() > MAX_PAGE_DESCRIPTION) {
+            e.put("branding.description", "At most " + MAX_PAGE_DESCRIPTION + " characters");
+        }
+        String color = trim(in.brandColor());
+        if (color != null && !color.matches("^#[0-9a-fA-F]{6}$")) {
+            e.put("branding.brandColor", "Use a colour like #1a7f4b");
+        }
+        String logo = trim(in.logoUrl());
+        if (logo != null && !logo.matches("^https://\\S+$")) {
+            e.put("branding.logoUrl", "Upload your logo again");
+        }
+        if (description == null && color == null && logo == null) {
+            return null;
+        }
+        return new BusinessSection.Branding(description, color == null ? null : color.toLowerCase(Locale.ROOT), logo);
     }
 }

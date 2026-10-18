@@ -58,6 +58,7 @@ public class StripeConnectAdapter implements StripeConnectGateway {
                                 .build())
                         .setTransfers(AccountCreateParams.Capabilities.Transfers.builder().setRequested(true).build())
                         .build())
+                .setBusinessProfile(businessProfile(req))
                 .setSettings(AccountCreateParams.Settings.builder()
                         .setPayouts(AccountCreateParams.Settings.Payouts.builder()
                                 .setSchedule(AccountCreateParams.Settings.Payouts.Schedule.builder()
@@ -71,6 +72,17 @@ public class StripeConnectAdapter implements StripeConnectGateway {
         RequestOptions options = RequestOptions.builder().setIdempotencyKey(req.idempotencyKey()).build();
         Account account = StripeCalls.call("account creation", () -> client.v1().accounts().create(params, options));
         return account.getId();
+    }
+
+    private static AccountCreateParams.BusinessProfile businessProfile(CreateConnectedAccount req) {
+        AccountCreateParams.BusinessProfile.Builder profile = AccountCreateParams.BusinessProfile.builder();
+        if (req.website() != null && !req.website().isBlank()) {
+            profile.setUrl(req.website());
+        }
+        if (req.productDescription() != null && !req.productDescription().isBlank()) {
+            profile.setProductDescription(req.productDescription());
+        }
+        return profile.build();
     }
 
     @Override

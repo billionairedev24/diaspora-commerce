@@ -91,6 +91,8 @@ at:
     live-countries: ${SELLER_LIVE_COUNTRIES:US}
     # AfroTransact Retail (1P): never on a plan, never metered, never suspended.
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # Where AfroTransact's public pages live: a business without a website is given <this>/b/<slug> as its website.
+    public-web-url: ${PUBLIC_WEB_URL:http://localhost:3000}
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
       connect-webhook-secret: ${STRIPE_CONNECT_WEBHOOK_SECRET:}

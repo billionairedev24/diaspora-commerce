@@ -187,7 +187,7 @@ class OnboardingServiceImpl implements OnboardingService {
         String phone = fill(prefilled, PREFILL_PHONE, b.phone(), k.phone());
         String store = fill(prefilled, PREFILL_STORE, b.storeName(), k.store());
         BusinessSection nb = new BusinessSection(b.offering(), b.entityType(), b.country(), store, email, phone,
-                b.website());
+                b.website(), b.branding());
         ApplicationData next = data;
         if (!nb.equals(b) || data.business() != null) {
             next = next.withBusiness(nb);

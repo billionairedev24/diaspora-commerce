@@ -33,6 +33,25 @@ class DefaultApplicationRulesTest {
     }
 
     @Test
+    void brandingForThePlainPageIsCheckedAndNormalised() {
+        BusinessSection.Branding good = new BusinessSection.Branding("  Home-cooked Nigerian meals  ", "#1A7F4B",
+                "https://cdn.example.com/logo.png");
+        Validated<BusinessSection> ok = rules.business(new BusinessSection(Offering.PRODUCTS, null, "US", "Ade's Kitchen",
+                null, null, null, good), SELLER, false);
+        assertThat(ok.errors()).isEmpty();
+        assertThat(ok.value().branding()).isEqualTo(new BusinessSection.Branding("Home-cooked Nigerian meals",
+                "#1a7f4b", "https://cdn.example.com/logo.png"));
+        assertThat(ok.value().needsPage()).isTrue();
+
+        Validated<BusinessSection> bad = rules.business(new BusinessSection(Offering.PRODUCTS, null, "US", null, null,
+                null, "https://ade.example.com", new BusinessSection.Branding("x".repeat(501), "green",
+                "http://insecure.example/logo.png")), SELLER, false);
+        assertThat(bad.errors()).containsKeys("business.branding.description", "business.branding.brandColor",
+                "business.branding.logoUrl");
+        assertThat(bad.value().needsPage()).isFalse();
+    }
+
+    @Test
     void phoneIsNormalisedToE164AndMustBeAValidNumber() {
         Validated<BusinessSection> ok = rules.business(new BusinessSection(Offering.PRODUCTS,
                 EntityType.SOLE_PROPRIETOR, "us", "Ade's Kitchen", "Ade@Example.com", "(713) 249-0142", null),

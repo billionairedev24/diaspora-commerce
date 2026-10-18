@@ -41,12 +41,13 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
     private final ComplianceSync sync;
     private final ApplicationViews views;
     private final AccessGuard access;
+    private final BusinessPageService businessPages;
     private final SellerSettings settings;
     private final Clock clock;
 
     StripeOnboardingServiceImpl(ApplicationRepository apps, ConnectAccountRepository accounts,
                                 StripeConnectGateway stripe, ConnectedAccountRegistry paymentsAccounts,
-                                ComplianceSync sync, ApplicationViews views,
+                                ComplianceSync sync, ApplicationViews views, BusinessPageService businessPages,
                                 AccessGuard access, SellerSettings settings, Clock clock) {
         this.apps = apps;
         this.accounts = accounts;
@@ -54,6 +55,7 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
         this.paymentsAccounts = paymentsAccounts;
         this.sync = sync;
         this.views = views;
+        this.businessPages = businessPages;
         this.access = access;
         this.settings = settings;
         this.clock = clock;
@@ -77,8 +79,13 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
             }
             Instant now = Instant.now(clock);
             // The key names the account settings (v2: Stripe-liable): Stripe refuses a key reused with other parameters.
+            // Stripe wants a website or a description of what is sold: give it the business's own website, or the
+            // address of the plain AfroTransact page that business gets when it has none.
+            String description = b.branding() != null && b.branding().description() != null
+                    ? b.branding().description() : b.storeName();
             accountId = stripe.createAccount(new CreateConnectedAccount(app.orgId(), app.id(), b.country(),
-                    b.contactEmail(), businessType(b.entityType()), "connect-account-v2-" + app.orgId()));
+                    b.contactEmail(), businessType(b.entityType()), "connect-account-v3-" + app.orgId(),
+                    businessPages.websiteFor(app.orgId(), b), description));
             apps.update(app.withStripe(StripeVerification.created(accountId, now), now));
             accounts.insert(ConnectAccount.open(accountId, app.orgId(), now));
             registerPaymentsAccount(app.orgId(), accountId);
