@@ -136,7 +136,7 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-0000", nil), 404)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED", "handoverCode": "12"}), 422) // a code, when given, has 4 digits
-	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED"}), 409)                  // no code: orders decides (placed → delivered is not a step)
+	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "DELIVERED"}), 409)                       // no code: orders decides (placed → delivered is not a step)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "PACKED"}), 409)
 	mustStatus(t, b.do("POST", orderPath+"/status", map[string]any{"status": "CONFIRMED"}), 200)
 	mustStatus(t, b.do("POST", orderPath+"/rates", map[string]any{"parcel": parcel, "shipFrom": from}), 200)
@@ -157,6 +157,26 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", orderPath+"/labels", map[string]any{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "parcel": parcel, "shipFrom": from}), 201)
 	mustStatus(t, b.do("POST", orderPath+"/labels", map[string]any{"carrier": "usps", "service": "USPS_GROUND_ADVANTAGE", "parcel": parcel, "shipFrom": from}), 409)
 	delete(b.headers, "Idempotency-Key")
+	// Plan capabilities: the label bought above can be downloaded again; coupons, the image library and brand suggestions.
+	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123/shipments/sh-1/label", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/orders/AT-2026-000123/shipments/sh-9/label", nil), 404)
+	if r := b.do("GET", "/v1/seller/coupons", nil); r.status != 200 {
+		t.Fatalf("coupons = %d %s", r.status, r.body)
+	} else if items := r.json(t)["items"].([]any); len(items) != 1 || items[0].(map[string]any)["code"] != "WELCOME10" {
+		t.Fatalf("coupons must hide expired ones: %v", items)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/coupons", map[string]any{"code": "SPRING5", "description": "5% off", "type": "PERCENT", "value": 5, "scope": "SELLER",
+		"minSpendMinor": 1000, "totalLimit": 100, "perCustomerLimit": 1}), 201)
+	mustStatus(t, b.do("POST", "/v1/seller/coupons/cp-1/status", map[string]any{"status": "PAUSED"}), 200)
+	mustStatus(t, b.do("DELETE", "/v1/seller/coupons/cp-1", nil), 204)
+	mustStatus(t, b.do("GET", "/v1/seller/image-library?page=0&size=20", nil), 200)
+	mustStatus(t, b.do("GET", "/v1/seller/image-library?status=NOPE", nil), 422)
+	mustStatus(t, b.do("PATCH", "/v1/seller/image-library/img-1", map[string]any{"fileName": "OFADA-5LB-front.jpg"}), 200)
+	mustStatus(t, b.do("PATCH", "/v1/seller/image-library/img-1", map[string]any{"fileName": ""}), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/image-library/attach", map[string]any{"skus": []string{"OFADA-5LB", "NOPE-1"}}), 200)
+	mustStatus(t, b.do("DELETE", "/v1/seller/image-library/img-1", nil), 204)
+	mustStatus(t, b.do("GET", "/v1/seller/catalog/brands?q=ma", nil), 200)
+
 	// Listings and the product builder.
 	mustStatus(t, b.do("GET", "/v1/seller/listings?page=0&size=25", nil), 200)
 	mustStatus(t, b.do("GET", "/v1/seller/listings?status=NOPE", nil), 422)

@@ -247,7 +247,7 @@ func order(n int) map[string]any {
 		"shippingMinor": 599, "taxMinor": 165, "discountMinor": 0, "totalMinor": 2764, "shipTo": "Houston, TX 77042", "paymentId": "pay-1",
 		"shippingAddress": map[string]any{"fullName": "Amara Nwosu"},
 		"shipments": []any{map[string]any{"id": "shp-1", "shipmentId": "shp-1", "label": "Package 1", "sellerName": "Kente Naturals", "status": "PLACED",
-			"cancellable": true, "totalMinor": 2764, "timeline": []any{map[string]any{"to": "PLACED", "at": time.Now().UTC().Format(time.RFC3339), "source": "checkout"}},
+			"nextActions": []any{"CONFIRMED", "CANCELLED"}, "cancellable": true, "totalMinor": 2764, "timeline": []any{map[string]any{"to": "PLACED", "at": time.Now().UTC().Format(time.RFC3339), "source": "checkout"}},
 			"lines": []any{map[string]any{"id": "ln-1", "title": "Shea butter", "category": "BEAUTY", "quantity": 1, "itemsMinor": 2000, "discountMinor": 0}}}}}
 }
 
@@ -299,6 +299,15 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/applications/"):
 		writeJ(w, 200, map[string]any{"id": "app-1", "reference": "APP-1", "kind": "SELLER", "status": "AWAITING_FINAL_APPROVAL", "reviewerId": "stf-1",
 			"business": map[string]any{"storeName": "Kente Naturals", "entityType": "SINGLE_MEMBER_LLC"}, "steps": []string{"business", "bank"}})
+	// offers: platform coupons
+	case p == "/v1/coupons":
+		writeJ(w, 200, []any{map[string]any{"id": "cp-1", "code": "WELCOME5", "description": "$5 off a first order", "type": "FIXED", "value": 500, "currency": "USD",
+			"scope": "CART", "status": "ACTIVE", "funding": "PLATFORM", "redeemedCount": 12, "version": 2}})
+	// carrier-gateway: customer pickup points
+	case p == "/v1/pickup-locations":
+		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"id": "pl-1", "name": "Houston counter", "kind": "PLATFORM_COUNTER", "active": true,
+			"address": map[string]any{"line1": "100 Main St", "city": "Houston", "state": "TX", "postalCode": "77002"},
+			"hours":   []any{map[string]any{"weekday": 1, "open": "09:00", "close": "17:00"}}, "readyHours": 2}}})
 	// orders
 	case p == "/v1/admin/orders":
 		if f.bigOrders && r.URL.Query().Get("customer") == "" && r.URL.Query().Get("from") == "" {
@@ -579,7 +588,7 @@ func staffBFF(t *testing.T, f *fakePlatform) func(token, method, path string, bo
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), Seller: up("seller"), Orders: up("orders"), Catalog: up("catalog"), TrustOps: up("trust-ops"),
 		TaxReturns: up("tax-returns"), Payments: up("payments"), Inventory: up("inventory"), Retail: up("retail"), Fulfilment: up("fulfilment"),
-		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings")},
+		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings"), Carrier: up("carrier-gateway"), Offers: up("offers")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
 		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Renderer: exportfiles.NewRenderer(), ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
@@ -743,7 +752,7 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("decision body = %v", f.bodies["POST /v1/claims/clm-1/decision"])
 	}
 	do("admin", "POST", "/v1/staff/resources/purchase-orders/po-1/actions/approve", map[string]any{"values": map[string]any{"note": "ok"}}, 200)
-	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/shipment-status", map[string]any{"values": map[string]any{"shipmentId": "shp-1", "to": "CANCELLED", "reason": "Customer asked"}}, 200)
+	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/shipment-status", map[string]any{"values": map[string]any{"step": "shp-1|CANCELLED", "reason": "Customer asked"}}, 200)
 	do("admin", "POST", "/v1/staff/resources/orders/AT-000001/actions/nope", nil, 404)
 	// Create and edit with validation.
 	do("admin", "POST", "/v1/staff/resources/tax-rates", map[string]any{"values": map[string]any{"state": "Texas", "zipPrefix": "77", "name": "X", "rate": 0.5}}, 422)

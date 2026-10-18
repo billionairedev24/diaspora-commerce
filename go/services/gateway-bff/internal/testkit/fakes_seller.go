@@ -81,6 +81,7 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 	u.catalogSellerRoutes(mux)
 	u.catalogListingRoutes(mux)
 	u.moneyRoutes(mux)
+	u.libraryRoutes(mux)
 	if u.opts.SellerPending {
 		u.ordersRoutes(mux)
 		u.bookingsRoutes(mux)
@@ -1061,13 +1062,21 @@ func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
 
 // ---------------------------------------------------------------- services still being built (SellerPending)
 
+// carrierFor is the carrier of a recorded tracking number: the fake only ever buys USPS labels.
+func carrierFor(tracking string) any {
+	if tracking == "" {
+		return nil
+	}
+	return "usps"
+}
+
 func (u *Upstreams) orderJSON() map[string]any {
 	st := u.seller.shipStatus
 	next := map[string][]string{"placed": {"confirmed", "cancelled"}, "confirmed": {"packed"}, "packed": {"ready"}}[st]
 	return map[string]any{"id": "o1", "orderNumber": "AT-2026-000123", "status": "in_progress", "placedAt": "2026-10-09T15:00:00Z", "currency": "USD", "totalMinor": 5437,
 		"shipTo": "Houston, TX", "shippingAddress": map[string]any{"fullName": "Adaeze Nwosu", "phone": "+17135550142", "line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"},
 		"shipments": []map[string]any{{"id": "sh-1", "shipmentId": "sh-1", "label": "Shipment 1 of 1 · Seller", "sellerOrgId": SellerOrgID, "fulfilmentType": "SELLER_FULFILLED",
-			"deliveryMethod": "CARRIER", "status": st, "items": "Ofada rice ×2", "itemsMinor": 4998, "shippingMinor": 0, "totalMinor": 5437, "carrier": nil, "trackingNumber": u.seller.tracking,
+			"deliveryMethod": "CARRIER", "status": st, "items": "Ofada rice ×2", "itemsMinor": 4998, "shippingMinor": 0, "totalMinor": 5437, "carrier": carrierFor(u.seller.tracking), "trackingNumber": u.seller.tracking,
 			"nextActions": next, "lines": []map[string]any{{"variantAtin": "ATADEV0001", "title": "Ofada Rice · 5 lb", "quantity": 2, "unitPriceMinor": 2499, "itemsMinor": 4998}},
 			"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "actorType": "SYSTEM", "at": "2026-10-09T15:00:00Z"}}},
 			// AfroTransact Delivery from the seller's store (S255): the seller packs, a driver collects.
