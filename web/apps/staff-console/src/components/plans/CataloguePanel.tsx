@@ -2,7 +2,7 @@
 
 import { CHARGE_KEYS, CHARGE_METRICS, type ChargeMetric, type ChargePolicy, chargePolicyLimits, chargePolicyOf, chargeTermsOf, planFeatureList, type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, DotsThreeVertical, Menu, MenuItem, MenuSeparator, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog, DotsThreeVertical, Menu, MenuItem, MenuSeparator, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -282,7 +282,7 @@ export function allowsOf(e: StaffPlanEntitlements | undefined, _t: T): string {
 }
 
 /** Everything about a plan, read only: what it costs, what it allows, its versions and how many subscribe. */
-function PlanViewDialog({ plan, onClose, onEdit, canEdit, t }: { plan: StaffPlan | null; onClose: () => void; onEdit: (p: StaffPlan) => void; canEdit: boolean; t: T }) {
+function PlanViewSheet({ plan, onClose, onEdit, canEdit, t }: { plan: StaffPlan | null; onClose: () => void; onEdit: (p: StaffPlan) => void; canEdit: boolean; t: T }) {
   const row = (label: string, value: string) => (
     <div className="flex gap-3 text-sm">
       <dt className="w-36 shrink-0 text-muted">{label}</dt>
@@ -290,7 +290,7 @@ function PlanViewDialog({ plan, onClose, onEdit, canEdit, t }: { plan: StaffPlan
     </div>
   );
   return (
-    <Dialog open={plan !== null} onOpenChange={(o) => (o ? undefined : onClose())} title={plan?.name ?? ''} description={plan ? `${plan.code} · ${t(`st.plans.kind.${plan.kind}`)}` : undefined} width={560}>
+    <Sheet open={plan !== null} onOpenChange={(o) => (o ? undefined : onClose())} title={plan?.name ?? ''} description={plan ? `${plan.code} · ${t(`st.plans.kind.${plan.kind}`)}` : undefined} width={480}>
       {plan ? (
         <div className="flex flex-col gap-4">
           {plan.tagline ? <p className="m-0 text-sm">{plan.tagline}</p> : null}
@@ -326,7 +326,7 @@ function PlanViewDialog({ plan, onClose, onEdit, canEdit, t }: { plan: StaffPlan
           {canEdit ? <div className="flex justify-end"><Button size="sm" onClick={() => onEdit(plan)}>{t('st.plans.edit')}</Button></div> : null}
         </div>
       ) : null}
-    </Dialog>
+    </Sheet>
   );
 }
 
@@ -350,36 +350,38 @@ export function CataloguePanel() {
   const columns = useMemo<ColumnDef<StaffPlan>[]>(() => [
     { id: 'name', accessorFn: (p) => p.name, header: t('st.plans.col.plan'), size: 220, meta: { kind: 'strong' },
       cell: ({ row }) => <><strong className="font-semibold">{row.original.name}</strong><span className="block font-mono text-xs text-muted">{row.original.code}</span></> },
-    { id: 'kind', accessorFn: (p) => p.kind, header: t('st.plans.kind'), size: 100, cell: ({ row }) => t(`st.plans.kind.${row.original.kind}`) },
+    { id: 'kind', accessorFn: (p) => p.kind, header: t('st.plans.kind'), size: 120, cell: ({ row }) => t(`st.plans.kind.${row.original.kind}`) },
     { id: 'monthlyCents', accessorFn: (p) => p.monthlyCents, header: t('st.plans.monthly'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.monthlyCents) },
     { id: 'quarterlyCents', accessorFn: (p) => p.quarterlyCents, header: t('st.plans.quarterly'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.quarterlyCents) },
     { id: 'annualCents', accessorFn: (p) => p.annualCents, header: t('st.plans.annual'), size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.annualCents) },
-    { id: 'trialDays', accessorFn: (p) => p.trialDays, header: t('st.plans.trialDays'), size: 90, meta: { kind: 'number', align: 'end' } },
+    { id: 'trialDays', accessorFn: (p) => p.trialDays, header: t('st.plans.trialDays'), size: 120, meta: { kind: 'number', align: 'end' } },
     { id: 'allows', accessorFn: (p) => allowsOf(p.entitlements, t), header: t('st.plans.allows'), size: 240, enableSorting: false },
     { id: 'version', accessorFn: (p) => p.currentVersion, header: t('st.plans.col.version'), size: 110,
       cell: ({ row }) => `v${row.original.currentVersion}${row.original.versions.some((v) => v.status === 'DRAFT') ? ` · ${t('st.plans.draftPending')}` : ''}` },
     { id: 'visibility', accessorFn: (p) => p.visibility, header: t('st.plans.visibility'), size: 120, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.visibility] ?? 'info'}>{t(`st.plans.visibility.${row.original.visibility}`)}</StatusPill> },
     { id: 'status', accessorFn: (p) => p.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
-    { id: 'subscribers', accessorFn: (p) => p.subscribers, header: t('st.plans.col.subscribers'), size: 110, meta: { kind: 'number', align: 'end' } },
+    { id: 'subscribers', accessorFn: (p) => p.subscribers, header: t('st.plans.col.subscribers'), size: 130, meta: { kind: 'number', align: 'end' } },
     {
-      id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 150, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
+      id: 'actions', header: () => <span className="at-visually-hidden">{t('st.plans.col.actions')}</span>, size: 64, enableSorting: false, meta: { export: false, label: t('st.plans.col.actions') },
       cell: ({ row }) => {
         const p = row.original;
         const draft = p.versions.some((v) => v.status === 'DRAFT');
         const old = p.versions.some((v) => v.status === 'SUPERSEDED' && v.subscribers > 0);
         return (
-          <div className="flex items-center justify-end gap-1">
-            <Button size="sm" variant="neutral" onClick={() => setEditing({ mode: 'view', plan: p })}>{t('st.plans.view')}</Button>
-            {manage ? (
-              <Menu label={t('st.plans.moreFor', { name: p.name })} width={220}
-                trigger={<Button size="sm" variant="neutral" aria-label={t('st.plans.moreFor', { name: p.name })}><DotsThreeVertical size={16} weight="bold" aria-hidden /></Button>}>
-                <MenuItem onSelect={() => setEditing({ mode: 'edit', plan: p })}>{t('st.plans.edit')}</MenuItem>
-                <MenuItem onSelect={() => setEditing({ mode: 'prices', plan: p })}>{t('st.plans.newVersion')}</MenuItem>
-                {draft ? <MenuItem onSelect={() => act.mutate({ code: p.code, op: 'publish' })}>{t('st.plans.publish')}</MenuItem> : null}
-                {old ? <MenuItem onSelect={() => setEditing({ mode: 'migrate', plan: p })}>{t('st.plans.migrate')}</MenuItem> : null}
-                {p.status !== 'RETIRED' ? <><MenuSeparator /><MenuItem className="text-danger" onSelect={() => act.mutate({ code: p.code, op: 'retire' })}>{t('st.plans.retire')}</MenuItem></> : null}
-              </Menu>
-            ) : null}
+          <div className="flex items-center justify-end">
+            <Menu label={t('st.plans.moreFor', { name: p.name })} width={220}
+              trigger={<Button size="sm" variant="neutral" aria-label={t('st.plans.moreFor', { name: p.name })}><DotsThreeVertical size={16} weight="bold" aria-hidden /></Button>}>
+              <MenuItem onSelect={() => setEditing({ mode: 'view', plan: p })}>{t('st.plans.view')}</MenuItem>
+              {manage ? (
+                <>
+                  <MenuItem onSelect={() => setEditing({ mode: 'edit', plan: p })}>{t('st.plans.edit')}</MenuItem>
+                  <MenuItem onSelect={() => setEditing({ mode: 'prices', plan: p })}>{t('st.plans.newVersion')}</MenuItem>
+                  {draft ? <MenuItem onSelect={() => act.mutate({ code: p.code, op: 'publish' })}>{t('st.plans.publish')}</MenuItem> : null}
+                  {old ? <MenuItem onSelect={() => setEditing({ mode: 'migrate', plan: p })}>{t('st.plans.migrate')}</MenuItem> : null}
+                  {p.status !== 'RETIRED' ? <><MenuSeparator /><MenuItem className="text-danger" onSelect={() => act.mutate({ code: p.code, op: 'retire' })}>{t('st.plans.retire')}</MenuItem></> : null}
+                </>
+              ) : null}
+            </Menu>
           </div>
         );
       }
@@ -387,10 +389,10 @@ export function CataloguePanel() {
   ], [t, manage, act]);
   return (
     <div className="flex flex-col gap-4">
-      <DataTable<StaffPlan> id="staff.plans.catalogue" label={t('st.plans.tab.plans')} columns={columns} data={plans.data ?? []} getRowId={(p) => p.code} rowLabel={(p) => p.name}
+      <DataTable<StaffPlan> id="staff.plans.catalogue" label={t('st.plans.tab.plans')} columns={columns} data={plans.data ?? []} getRowId={(p) => p.code} rowLabel={(p) => p.name} onRowClick={(p) => setEditing({ mode: 'view', plan: p })}
         state={state} mode="client" loading={plans.isPending} fetching={plans.isFetching} error={plans.isError ? <ErrorState error={plans.error} onRetry={() => void plans.refetch()} /> : undefined}
         toolbar={manage ? <Button size="sm" onClick={() => setEditing({ mode: 'create' })}>{t('st.plans.newPlan')}</Button> : null} empty={t('st.plans.noPlans')} />
-      <PlanViewDialog plan={editing?.mode === 'view' ? editing.plan : null} onClose={() => setEditing(null)} onEdit={(p) => setEditing({ mode: 'edit', plan: p })} canEdit={manage} t={t} />
+      <PlanViewSheet plan={editing?.mode === 'view' ? editing.plan : null} onClose={() => setEditing(null)} onEdit={(p) => setEditing({ mode: 'edit', plan: p })} canEdit={manage} t={t} />
       <PlanDialog key={editing?.mode === 'edit' ? editing.plan.code : editing?.mode ?? 'none'} editing={editing} onClose={() => setEditing(null)} t={t} />
       <PricesDialog key={editing?.mode === 'prices' ? `p-${editing.plan.code}` : 'p'} plan={editing?.mode === 'prices' ? editing.plan : null} onClose={() => setEditing(null)} t={t} />
       <MigrationDialog plan={editing?.mode === 'migrate' ? editing.plan : null} onClose={() => setEditing(null)} t={t} />

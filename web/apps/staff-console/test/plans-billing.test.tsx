@@ -44,11 +44,12 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     await user.keyboard('{Escape}');
   });
 
-  it('shows a plan read only with View: prices, what it allows and its versions', async () => {
+  it('shows a plan read only from the actions menu: prices, what it allows and its versions', async () => {
     const user = userEvent.setup();
     await renderScreen(<CataloguePanel />);
     const table = await screen.findByRole('table', { name: 'Plans' });
-    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'View' }));
+    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'More actions for Seller Growth' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'View' }));
     const dialog = await screen.findByRole('dialog', { name: /Seller Growth/ });
     expect(within(dialog).getByText('$39.00')).toBeInTheDocument();
     expect(within(dialog).getByText('Up to 1,000 listings · Bulk upload · Image library · Coupons · AI listing writer · Lola Growth assistant')).toBeInTheDocument();
