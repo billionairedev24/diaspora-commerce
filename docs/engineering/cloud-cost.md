@@ -40,12 +40,24 @@ The profile is `envs/prod/sizing.tf` (`node_size = "lean"`, `zone_count = 1`, `e
 | Grafana Cloud, R2 (free tiers) | 0 | 0 | 0 |
 | **Subtotal on demand** | **~127** | **~167** | **~204** |
 | **Subtotal with the 1-year commitment** | **~91** | **~127** | **~171** |
-| Layerbase (Postgres + Valkey + Meilisearch) | _your plan_ | _your plan_ | _your plan_ |
+| Layerbase **Dedicated** (from $35 per server, flat, egress included) | 35 | 35 | 35 |
+| Reserve for traffic from the cluster to Layerbase (billed by the cloud, see below) | 10 | 10 | 10 |
+| **Total on demand** | **~172** | **~212** | **~249** |
+| **Total with the 1-year commitment** | **~136** | **~172** | **~216** |
 
 - **GCP is the only cloud that fits on demand with room for Layerbase** (USD 200 minus ~127 = ~73 for Layerbase).
   Azure fits with the reservation. AWS fits only with a Savings Plan and a small Layerbase plan, because the EKS control
   plane alone is USD 73: if AWS is required, plan for ~USD 215-230.
-- I do not have Layerbase's price list; the table leaves that line to you. Anything under the headroom above keeps you under 200.
+- **Layerbase plan: Dedicated, not Pro.** Pro is $15 but allows **10 databases** and this platform needs about 25 (one per
+  service, plus `temporal`, `temporal_visibility` and `openfga`). Solo and Free are 2 databases. Dedicated has no database cap,
+  a private VM, hourly backups and egress included. Its "from $35" is the entry VM: **ask for its RAM and vCPU in writing**
+  (it must hold ~25 small Postgres databases, Valkey and Meilisearch), and which engines are on it.
+- **The hidden cost to watch is cross-provider traffic.** Layerbase's egress is included, but our cluster's traffic *to* it leaves
+  our cloud as internet egress (~$0.08-0.12 per GB on GCP, AWS and Azure). Pin the Layerbase server to the **same region** as the
+  cluster (us-central1 / eastus / us-east-1), keep connection counts low (done) and watch the cloud's egress line the first month.
+  The $10 reserve covers ~100 GB.
+- **Client certificates (mTLS).** Layerbase lists mTLS for Postgres. If it is *required* rather than optional, every service
+  needs the client certificate mounted and `sslmode=verify-full` in its JDBC/pgx URL: ask whether password-over-TLS is allowed.
 - The Terraform budget (`monthly_budget = 200`) alerts at 50/80/100% actual and 100% forecast, so a mistake shows within days.
 
 ## Will it fit on one node?
@@ -65,8 +77,8 @@ Memory (requests) against ~13 GB allocatable on a 16 GB node:
 CPU is ~2.6 of ~3.9 cores requested; services idle at a few percent. The risk is **deploy time**: starting JVMs together
 spikes CPU. Prod syncs are manual (`autoSync: false`): sync a few services at a time.
 
-**Confirm with Layerbase before you commit:** it must offer about 25 databases (or one server with `CREATE DATABASE`), PostGIS,
-TLS, and enough connections.
+**Confirm with Layerbase before you commit** (in writing): ~25 databases, PostGIS, the VM size, connection limit, whether mTLS is
+optional, and what happens at the storage limit (overage price or hard stop).
 
 Database connections: every Java service is capped at 4 connections (`SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE`), about
 60-90 in total with the Go services, OpenFGA (5) and Temporal (5). **Check Layerbase's connection limit** (or use its pooler).
