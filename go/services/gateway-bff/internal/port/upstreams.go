@@ -18,6 +18,7 @@ type SearchParams struct {
 	Community  string
 	Fulfilment string
 	SellerKind string
+	SellerID   string
 	MinRating  *float64
 	MinPrice   int64
 	MaxPrice   int64

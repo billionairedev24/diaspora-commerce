@@ -95,6 +95,9 @@ func buildFilter(q domain.Query) string {
 	if q.SellerKind != "" {
 		f = append(f, "seller_kind = "+meili.Quote(q.SellerKind))
 	}
+	if q.SellerID != "" {
+		f = append(f, "seller_id = "+meili.Quote(q.SellerID))
+	}
 	if q.MinRating > 0 {
 		f = append(f, "rating >= "+strconv.FormatFloat(q.MinRating, 'f', -1, 64))
 	}

@@ -3777,6 +3777,8 @@ export interface components {
             contactEmail: string | null;
             /** @description False until the business is approved */
             indexable: boolean;
+            /** @description A seller's live products (at most twelve, best match first); empty for providers */
+            products: components["schemas"]["ProductSummary"][];
             services: {
                 serviceId: string;
                 name: string;

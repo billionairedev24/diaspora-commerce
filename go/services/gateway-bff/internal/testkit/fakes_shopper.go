@@ -499,6 +499,11 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 			"policy": policy, "instantBooking": false, "services": []any{service}, "team": []map[string]any{{"id": "0c0c0c0c-0000-4000-8000-0000000000aa", "displayName": "Ama"}}})
 	})
 	mux.HandleFunc("GET /v1/public/business-pages/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("slug") == "ades-kitchen" {
+			writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "slug": "ades-kitchen", "kind": "SELLER", "name": "Ade's Kitchen",
+				"description": "Home-style Nigerian pantry.", "brandColor": nil, "logoUrl": nil, "contactEmail": nil, "approved": false})
+			return
+		}
 		if r.PathValue("slug") != "braids-by-ama" {
 			problem(w, 404, "seller.business-page-not-found", "No page", nil)
 			return

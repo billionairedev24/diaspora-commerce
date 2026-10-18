@@ -54,7 +54,7 @@ const maxServiceHits = 4
 // with a local re-sort, maxDays ≥ 1).
 func toParams(q domain.SearchQuery, market string) (port.SearchParams, error) {
 	p := port.SearchParams{Q: strings.TrimSpace(q.Q), Market: market, Department: q.Department, Community: q.Community,
-		Fulfilment: q.Fulfilment, SellerKind: q.SellerKind, MinRating: q.MinRating, Sort: q.Sort, Page: q.Page, Size: q.Size, Ads: q.Ads}
+		Fulfilment: q.Fulfilment, SellerKind: q.SellerKind, SellerID: q.SellerID, MinRating: q.MinRating, Sort: q.Sort, Page: q.Page, Size: q.Size, Ads: q.Ads}
 	if q.Price != "" {
 		b, ok := domain.PriceBucketByID(q.Price)
 		if !ok {

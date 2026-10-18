@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preorders';
 import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './account';
 import { CartPackageSchema } from './cart';
+import { ProductSummarySchema } from './catalog';
 import { MinorSchema } from './common';
 import { RailSchema } from './home';
 
@@ -483,7 +484,9 @@ export const BusinessPageSchema = z.object({
   contactEmail: nullableString,
   /** False until the business is approved: keep the page out of search engines. */
   indexable: z.boolean(),
-  services: z.array(z.object({ serviceId: z.string(), name: z.string(), durationMinutes: z.number().int(), priceMinor: z.number().int(), currency: z.string() }))
+  services: z.array(z.object({ serviceId: z.string(), name: z.string(), durationMinutes: z.number().int(), priceMinor: z.number().int(), currency: z.string() })),
+  /** A seller's live products (at most twelve); empty for providers. */
+  products: z.array(ProductSummarySchema)
 });
 export type BusinessPage = z.infer<typeof BusinessPageSchema>;
 

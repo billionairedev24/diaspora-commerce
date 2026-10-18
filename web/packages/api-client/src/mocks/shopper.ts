@@ -783,7 +783,7 @@ export const shopperHandlers = [
     if (!prov) throw new MockProblem(404, 'NOT_FOUND', 'Page not found', 'There is no business page at this address.');
     const services = SERVICES.filter((s) => s.orgId === prov[0]);
     return json({ slug: prov[1].slug, kind: 'PROVIDER', name: prov[1].displayName, description: prov[1].tagline, brandColor: '#8a3b12', logoUrl: null, contactEmail: 'hello@example.com', indexable: true,
-      services: services.map((s) => ({ serviceId: s.id, name: s.name, durationMinutes: s.durationMinutes, priceMinor: s.priceMinor, currency: s.currency })) });
+      services: services.map((s) => ({ serviceId: s.id, name: s.name, durationMinutes: s.durationMinutes, priceMinor: s.priceMinor, currency: s.currency })), products: [] });
   })),
   http.post('*/v1/services/bookings', route(async (ctx) => {
     const a = me(ctx);

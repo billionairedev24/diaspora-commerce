@@ -87,6 +87,13 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	if page["name"] != "Braids by Ama" || page["brandColor"] != "#8a3b12" || page["indexable"] != true || len(page["services"].([]any)) != 1 {
 		t.Fatalf("business page = %v", page)
 	}
+	// A seller's page lists its live products (through search, limited to the seller) and stays out of search engines
+	// until the organisation is approved.
+	r = b.do("GET", "/v1/business-pages/ades-kitchen", nil)
+	mustStatus(t, r, 200)
+	if sp := r.json(t); sp["indexable"] != false || len(sp["products"].([]any)) == 0 {
+		t.Fatalf("seller business page = %v", sp)
+	}
 	mustStatus(t, b.do("GET", "/v1/business-pages/nobody", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/business-pages/Not%20A%20Slug", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/account/security", nil), 401)

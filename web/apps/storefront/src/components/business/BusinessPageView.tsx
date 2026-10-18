@@ -46,6 +46,19 @@ export async function BusinessPageView({ page }: { page: BusinessPage }) {
           </ul>
         </section>
       ) : null}
+      {page.products.length ? (
+        <section aria-labelledby="biz-products" className={styles.section}>
+          <h2 id="biz-products" className={styles.h2}>{t('biz.products')}</h2>
+          <ul className={styles.list}>
+            {page.products.map((p) => (
+              <li key={p.atin} className={styles.row}>
+                <Link href={`/p/${encodeURIComponent(p.atin)}`} className={styles.serviceLink}>{p.title}</Link>
+                <strong>{money(p.priceMinor, p.currency)}</strong>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <section aria-labelledby="biz-contact" className={styles.section}>
         <h2 id="biz-contact" className={styles.h2}>{t('biz.contact')}</h2>
         <p className={styles.text}>{t('biz.contactHelp')}</p>

@@ -47,5 +47,5 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
 		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
 		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey),
-		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", up.Seller)), d.Bookings)}
+		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", up.Seller)), d.Bookings, s.Search)}
 }

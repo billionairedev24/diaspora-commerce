@@ -19,14 +19,19 @@ type BusinessPageService interface {
 type businessPageServiceImpl struct {
 	pages    port.BusinessPagesClient
 	bookings port.CustomerBookingsClient
+	products SearchService
 }
 
 var _ BusinessPageService = (*businessPageServiceImpl)(nil)
 
-// NewBusinessPageService returns the business page use case; bookings is optional (providers' services).
-func NewBusinessPageService(pages port.BusinessPagesClient, bookings port.CustomerBookingsClient) BusinessPageService {
-	return &businessPageServiceImpl{pages: pages, bookings: bookings}
+// NewBusinessPageService returns the business page use case; bookings (a provider's services) and products (a seller's
+// live products, through search) are optional.
+func NewBusinessPageService(pages port.BusinessPagesClient, bookings port.CustomerBookingsClient, products SearchService) BusinessPageService {
+	return &businessPageServiceImpl{pages: pages, bookings: bookings, products: products}
 }
+
+// maxPageProducts is how many of a seller's products the page lists.
+const maxPageProducts = 12
 
 var businessSlug = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
@@ -44,7 +49,7 @@ func (s *businessPageServiceImpl) Page(ctx context.Context, slug string) (domain
 	}
 	out := domain.BusinessPage{Slug: up.Slug, Kind: up.Kind, Name: up.Name, Description: strPtr(up.Description),
 		BrandColor: validBrandColor(up.BrandColor), LogoURL: strPtr(up.LogoURL), ContactEmail: strPtr(up.ContactEmail),
-		Indexable: up.Approved, Services: []domain.BusinessPageService{}}
+		Indexable: up.Approved, Services: []domain.BusinessPageService{}, Products: []domain.ProductSummary{}}
 	if up.Kind == "PROVIDER" && s.bookings != nil {
 		// Best effort: a provider without published services (or bookings down) still has its page.
 		if p, err := s.bookings.Provider(ctx, up.OrgID); err == nil {
@@ -52,6 +57,12 @@ func (s *businessPageServiceImpl) Page(ctx context.Context, slug string) (domain
 				out.Services = append(out.Services, domain.BusinessPageService{ServiceID: sv.ID, Name: sv.Name, DurationMinutes: sv.DurationMinutes,
 					PriceMinor: sv.PriceMinor, Currency: firstNonEmpty(sv.Currency, domain.Currency)})
 			}
+		}
+	}
+	if up.Kind == "SELLER" && s.products != nil {
+		// Best effort, like services: a seller's page without products (or search down) still renders.
+		if page, err := s.products.Search(ctx, &domain.Caller{}, domain.SearchQuery{SellerID: up.OrgID, Size: maxPageProducts, Sort: domain.SortRelevance}); err == nil {
+			out.Products = append(out.Products, page.Hits...)
 		}
 	}
 	return out, nil

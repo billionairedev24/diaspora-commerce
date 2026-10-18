@@ -4418,7 +4418,7 @@ components:
         providerAnswersWithinMinutes: {type: [integer, 'null']}
     BusinessPage:
       type: object
-      required: [slug, kind, name, description, brandColor, logoUrl, contactEmail, indexable, services]
+      required: [slug, kind, name, description, brandColor, logoUrl, contactEmail, indexable, services, products]
       properties:
         slug: {type: string}
         kind: {type: string, enum: [SELLER, PROVIDER]}
@@ -4428,6 +4428,10 @@ components:
         logoUrl: {type: [string, 'null']}
         contactEmail: {type: [string, 'null']}
         indexable: {type: boolean, description: False until the business is approved}
+        products:
+          type: array
+          description: A seller's live products (at most twelve, best match first); empty for providers
+          items: {$ref: '#/components/schemas/ProductSummary'}
         services:
           type: array
           items:

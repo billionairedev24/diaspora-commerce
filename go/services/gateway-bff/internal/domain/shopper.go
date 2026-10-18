@@ -575,6 +575,8 @@ type BusinessPage struct {
 	// Indexable is false until the business is approved: keep the page out of search engines.
 	Indexable bool                  `json:"indexable"`
 	Services  []BusinessPageService `json:"services"`
+	// Products are a seller's live products (a few, best match first); empty for providers.
+	Products []ProductSummary `json:"products"`
 }
 
 // BusinessPageService is one service a provider offers, as listed on its page.
