@@ -55,3 +55,4 @@ web/apps/*/next-env.d.ts
 # Optional welcome photos / videos for the Expo apps (tools/seed/mobile_hero.py; docs/engineering/mobile-on-your-phone.md)
 mobile/apps/*/assets/hero/
 .junie/
+*.whl
