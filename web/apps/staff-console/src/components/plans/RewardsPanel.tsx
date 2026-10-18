@@ -185,7 +185,7 @@ function RuleDialog({ rule, open, onClose, t }: { rule: StaffRewardRule | null; 
     save.mutate(null);
   };
   return (
-    <Sheet modal open={open} onOpenChange={(o) => !o && onClose()} title={rule ? t('st.plans.editRule') : t('st.plans.newRule')} description={t('st.plans.ruleHelp')} width={720} closeLabel={t('st.plans.close')}>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} title={rule ? t('st.plans.editRule') : t('st.plans.newRule')} description={t('st.plans.ruleHelp')} width={720} closeLabel={t('st.plans.close')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-2">
         <TextField id="rr-name" label={t('st.plans.name')} value={f.name} error={errors.name} onChange={set('name')} />
         <TextField id="rr-desc" label={t('st.plans.description')} value={f.description} onChange={set('description')} />

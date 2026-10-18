@@ -53,7 +53,7 @@ function CampaignDialog({ campaign, open, onClose, t }: { campaign: StaffTrialCa
     save.mutate();
   };
   return (
-    <Sheet modal open={open} onOpenChange={(o) => !o && onClose()} title={campaign ? t('st.plans.editCampaign') : t('st.plans.newCampaign')} description={t('st.plans.campaignHelp')} width={560} closeLabel={t('st.plans.close')}>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} title={campaign ? t('st.plans.editCampaign') : t('st.plans.newCampaign')} description={t('st.plans.campaignHelp')} width={560} closeLabel={t('st.plans.close')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-2">
         <TextField id="tc-name" label={t('st.plans.name')} value={f.name} error={errors.name} onChange={set('name')} />
         <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">

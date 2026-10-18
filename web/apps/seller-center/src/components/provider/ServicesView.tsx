@@ -87,7 +87,7 @@ export function ServicesView() {
         error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
         onRowClick={editable ? (s) => open(s) : undefined}
         empty="No services yet. Add the first thing customers can book." onExport={exportDataset} pollExport={pollExport} />
-      <Sheet modal open={editing !== null} onOpenChange={(o) => (o ? undefined : setEditing(null))} width={520} title={editing === 'new' ? 'Add service' : 'Edit service'}
+      <Sheet open={editing !== null} onOpenChange={(o) => (o ? undefined : setEditing(null))} width={520} title={editing === 'new' ? 'Add service' : 'Edit service'}
         description="Customers pay the deposit when they book; the rest is charged when you mark the booking complete.">
         <form className="flex flex-col gap-1" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           <TextField label="Name" value={draft.name} error={errors.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />

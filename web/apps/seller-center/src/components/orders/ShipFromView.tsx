@@ -220,7 +220,7 @@ function AddressDialog({ open, address, onClose }: { open: boolean; address: Shi
     <TextField id={`sfa-${k}`} label={label} value={form[k]} error={errors[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.currentTarget.value }))} {...extra} />
   );
   return (
-    <Sheet modal width={520} open={open} onOpenChange={(o) => (o ? undefined : onClose())} title={address ? t('sc.shipFrom.editTitle', { label: address.label }) : t('sc.shipFrom.addTitle')}>
+    <Sheet width={520} open={open} onOpenChange={(o) => (o ? undefined : onClose())} title={address ? t('sc.shipFrom.editTitle', { label: address.label }) : t('sc.shipFrom.addTitle')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-3">
         {field('label', t('sc.shipFrom.label'))}
         {field('name', t('sc.shipFrom.name'), { autoComplete: 'name' })}

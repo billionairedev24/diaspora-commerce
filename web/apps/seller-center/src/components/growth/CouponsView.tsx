@@ -222,7 +222,7 @@ export function CouponsView() {
       />
 
       {editable ? (
-        <Sheet modal width={520}
+        <Sheet width={520}
           open={createOpen}
           onOpenChange={setCreateOpen}
           title={t('sc.coupons.createTitle')}
