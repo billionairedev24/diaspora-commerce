@@ -1987,50 +1987,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/seller/storefront": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Draft of the seller storefront or provider public page (layout, colours, gallery, featured work, social links)
-         * @description storefront `GET /v1/storefronts/me/draft`.
-         */
-        get: operations["getPublicPage"];
-        /**
-         * Save the draft (edited social links go back to pending approval)
-         * @description storefront `GET /v1/storefronts/me/draft` merged with the changes, then `PUT /v1/storefronts/me/draft`.
-         */
-        put: operations["savePublicPage"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/seller/storefront/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Publish the draft (blocked with the failing contrast checks)
-         * @description storefront `POST /v1/storefronts/me/publish` then the draft is read back.
-         */
-        post: operations["publishPublicPage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/seller/fba/nodes": {
         parameters: {
             query?: never;
@@ -2295,7 +2251,7 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /** @enum {string} */
-        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "coupons" | "storefront" | "calendar" | "requests" | "hours" | "services" | "policy" | "public-page" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
+        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "coupons" | "calendar" | "requests" | "hours" | "services" | "policy" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
         SellerUser: {
             id: string;
             firstName: string;
@@ -4556,73 +4512,6 @@ export interface components {
             providerFees: components["schemas"]["ProviderFees"];
             /** @description The provider's connection fee now, per service category, with where it comes from; null when payments cannot say */
             connectionFee: components["schemas"]["SellerRateCard"] | null;
-        };
-        SocialLink: {
-            /** @enum {string} */
-            network: "instagram" | "tiktok" | "facebook" | "youtube" | "whatsapp" | "x" | "linkedin" | "website";
-            url: string;
-            /** @enum {string} */
-            status: "PENDING" | "APPROVED" | "REJECTED";
-        };
-        PublicPage: {
-            kind: components["schemas"]["OrgKind"];
-            slug: string;
-            name: string;
-            tagline: string;
-            /** @enum {string} */
-            status: "DRAFT" | "PUBLISHED";
-            /** Format: date-time */
-            publishedAt: string | null;
-            primaryColor: string;
-            accentColor: string;
-            /** @enum {string} */
-            layout: "CLASSIC" | "GALLERY_FIRST" | "STORY";
-            /** @enum {string} */
-            header: "COVER" | "BAND";
-            /** @enum {string} */
-            buttonShape: "ROUNDED" | "SQUARE";
-            gallerySize: number;
-            gallery: {
-                assetId: string;
-                url: string;
-                caption: string;
-            }[];
-            featured: {
-                id: string;
-                headline: string;
-                body: string;
-                serviceId: string | null;
-                published: boolean;
-            }[];
-            social: components["schemas"]["SocialLink"][];
-            /** @description Path of the page in the shop */
-            publicPath: string;
-        };
-        PublicPageInput: {
-            name?: string;
-            tagline?: string;
-            primaryColor?: string;
-            accentColor?: string;
-            /** @enum {string} */
-            layout?: "CLASSIC" | "GALLERY_FIRST" | "STORY";
-            /** @enum {string} */
-            header?: "COVER" | "BAND";
-            /** @enum {string} */
-            buttonShape?: "ROUNDED" | "SQUARE";
-            gallerySize?: number;
-            featured?: {
-                id: string;
-                headline: string;
-                body: string;
-                serviceId?: string | null;
-                published: boolean;
-            }[];
-            social?: {
-                /** @enum {string} */
-                network: "instagram" | "tiktok" | "facebook" | "youtube" | "whatsapp" | "x" | "linkedin" | "website";
-                /** Format: uri */
-                url: string;
-            }[];
         };
         SellerFeeCategory: {
             /** @description payments category key (lower-case) */
@@ -7985,85 +7874,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Earnings"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    getPublicPage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Draft */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPage"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    savePublicPage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PublicPageInput"];
-            };
-        };
-        responses: {
-            /** @description Saved */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPage"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    publishPublicPage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Published page */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPage"];
                 };
             };
             401: components["responses"]["Problem"];

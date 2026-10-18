@@ -33,7 +33,6 @@ import {
   PickupWindowSchema,
   type PlanFeeCollectionView,
   ProductDraftSchema,
-  PublicPageInputSchema,
   SellerAddressSchema,
   type SellerCoupon,
   type SellerFeesView,
@@ -696,12 +695,6 @@ function activeMember(ctx: Ctx, userId: string | undefined): TeamMember {
 }
 
 const owners = (ctx: Ctx) => (ctx.db.team[ctx.org.id] ?? []).filter((m) => m.status !== 'INVITED' && m.roleKey.endsWith('.owner')).length;
-
-function publicPage(ctx: Ctx) {
-  const page = ctx.db.pages[ctx.org.id];
-  if (!page) throw notFound('No storefront yet.');
-  return page;
-}
 
 /** Seller Center FBA routes (S281): approved seller organisations, Inventory module, lists limited to the active org. */
 const fbaGate: HubGate = (request, _area, level) => {
@@ -1976,54 +1969,6 @@ export const sellerHandlers = [
         currency: 'USD', commissionPercent: 8, payoutDay: 'Tuesday', totals, rows, connectionFee: mockConnectionFees(),
         providerFees: { available: true, outstandingMinor: outstandingFees(ctx.db), collectedMinor: items.filter((f) => f.status === 'COLLECTED').reduce((a, f) => a + f.amountMinor, 0), items }
       };
-    })
-  ),
-  http.get(
-    `${W}/storefront`,
-    route((ctx) => {
-      require(ctx, ctx.org.kind === 'PROVIDER' ? 'public-page' : 'storefront', 'VIEW');
-      return publicPage(ctx);
-    })
-  ),
-  http.put(
-    `${W}/storefront`,
-    route(async (ctx) => {
-      const input = await body(ctx.request, PublicPageInputSchema);
-      const hosts: Record<string, string[]> = { instagram: ['instagram.com'], tiktok: ['tiktok.com'], facebook: ['facebook.com', 'fb.com'], youtube: ['youtube.com', 'youtu.be'],
-        whatsapp: ['wa.me', 'whatsapp.com'], x: ['x.com', 'twitter.com'], linkedin: ['linkedin.com'] };
-      const errors: Record<string, string> = {};
-      (input.social ?? []).forEach((s) => {
-        let ok = s.url.startsWith('https://');
-        if (ok && s.network !== 'website') {
-          const host = new URL(s.url).hostname.replace(/^www\./, '');
-          ok = (hosts[s.network] ?? []).includes(host);
-        }
-        if (!ok) errors[`social.${s.network}`] = `Use a https link on ${s.network}`;
-      });
-      if (Object.keys(errors).length) throw invalid(errors);
-      require(ctx, ctx.org.kind === 'PROVIDER' ? 'public-page' : 'storefront', 'EDIT');
-      const page = publicPage(ctx);
-      const { social, featured, ...rest } = input;
-      Object.assign(page, Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)));
-      if (featured) page.featured = featured.map((f) => ({ ...f, serviceId: f.serviceId ?? null }));
-      if (social) {
-        page.social = social.map((s) => {
-          const prev = page.social.find((x) => x.network === s.network);
-          return { network: s.network, url: s.url, status: prev && prev.url === s.url ? prev.status : 'PENDING' };
-        });
-      }
-      page.status = 'DRAFT';
-      return page;
-    })
-  ),
-  http.post(
-    `${W}/storefront/publish`,
-    route((ctx) => {
-      require(ctx, ctx.org.kind === 'PROVIDER' ? 'public-page' : 'storefront', 'EDIT');
-      const page = publicPage(ctx);
-      page.status = 'PUBLISHED';
-      page.publishedAt = ctx.now.toISOString();
-      return page;
     })
   ),
   /* ── Ship-from addresses ── */

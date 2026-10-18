@@ -776,10 +776,7 @@ export const shopperHandlers = [
     const services = SERVICES.filter((s) => s.orgId === p.orgId);
     const first = services[0] as ServiceDetail;
     return json({ orgId: p.orgId, displayName: prov.displayName, timeZone: 'America/Chicago', location: prov.location, policy: first.policy, instantBooking: first.instantBooking,
-      team: first.team, services, design: { slug: prov.slug, tagline: prov.tagline, layout: prov.layout, header: prov.layout === 'CLASSIC' ? 'BAND' : 'COVER',
-        buttonShape: 'ROUNDED', coverUrl: null, tokens: {}, social: [{ network: 'instagram', url: `https://instagram.com/${prov.slug.replace(/-/g, '')}` }, { network: 'website', url: `https://${prov.slug}.example` }],
-        gallery: [{ url: '', caption: 'Recent work' }, { url: '', caption: 'Studio' }, { url: '', caption: 'Happy clients' }],
-        featured: [{ id: 'f1', headline: `Book ${first.name}`, body: first.description, url: null, serviceId: first.id }] } });
+      team: first.team, services });
   })),
   http.get('*/v1/business-pages/:slug', route((_ctx, p) => {
     const prov = Object.entries(PROVIDERS).find(([, v]) => v.slug === p.slug);

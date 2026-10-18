@@ -147,9 +147,6 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/provider/cancellation-policy", h.cancellationPolicy)
 	route("PUT /v1/seller/provider/cancellation-policy", h.saveCancellationPolicy)
 	route("GET /v1/seller/provider/earnings", h.earnings)
-	route("GET /v1/seller/storefront", h.publicPage)
-	route("PUT /v1/seller/storefront", h.savePublicPage)
-	route("POST /v1/seller/storefront/publish", h.publishPublicPage)
 }
 
 func intQuery(r *http.Request, name string, def int) (int, error) {
@@ -691,26 +688,6 @@ func (h *handlersImpl) saveCancellationPolicy(w http.ResponseWriter, r *http.Req
 func (h *handlersImpl) earnings(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	v, err := h.s.ProviderHub.Earnings(r.Context(), callerFrom(r.Context()), q.Get("from"), q.Get("to"))
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) publicPage(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.ProviderHub.PublicPage(r.Context(), callerFrom(r.Context()))
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) savePublicPage(w http.ResponseWriter, r *http.Request) {
-	var b domain.PublicPageInput
-	if err := decode(r, &b, false); err != nil {
-		h.reply(w, r, 0, nil, err)
-		return
-	}
-	v, err := h.s.ProviderHub.SavePublicPage(r.Context(), callerFrom(r.Context()), b)
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) publishPublicPage(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.ProviderHub.PublishPublicPage(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

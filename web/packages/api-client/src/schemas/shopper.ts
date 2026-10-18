@@ -467,21 +467,7 @@ export const ProviderPageSchema = z.object({
   policy: ServicePolicySchema,
   instantBooking: z.boolean(),
   team: z.array(ServiceMemberSchema),
-  services: z.array(ServiceDetailSchema),
-  design: z
-    .object({
-      slug: z.string(),
-      tagline: z.string(),
-      layout: z.enum(['CLASSIC', 'GALLERY_FIRST', 'STORY']),
-      header: z.enum(['COVER', 'BAND']),
-      buttonShape: z.enum(['ROUNDED', 'SQUARE']),
-      coverUrl: nullableString,
-      tokens: z.record(z.string(), z.string()),
-      social: z.array(z.object({ network: z.string(), url: z.string() })),
-      gallery: z.array(z.object({ url: z.string(), caption: z.string() })),
-      featured: z.array(z.object({ id: z.string(), headline: z.string(), body: z.string(), url: nullableString, serviceId: nullableString }))
-    })
-    .nullable()
+  services: z.array(ServiceDetailSchema)
 });
 export type ProviderPage = z.infer<typeof ProviderPageSchema>;
 

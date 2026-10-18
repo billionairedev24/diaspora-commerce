@@ -35,9 +35,8 @@ type SellerDeps struct {
 	// Writer is ai-gateway's AI listing writer (nil: never offered).
 	Writer port.ListingWriterClient
 	// Fees reads payments' fee schedules with the BFF's service token (nil: the Fees page answers 503).
-	Fees       port.FeesClient
-	Storefront port.StorefrontClient
-	Bookings   port.BookingsClient
+	Fees     port.FeesClient
+	Bookings port.BookingsClient
 	// PublishableKey is the Stripe publishable key Connect.js uses for the embedded onboarding (empty locally: the seller
 	// service's local stand-in then answers account sessions with localTest).
 	PublishableKey string

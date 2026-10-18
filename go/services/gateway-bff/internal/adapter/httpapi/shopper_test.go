@@ -68,9 +68,8 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	mustStatus(t, b.do("GET", "/v1/services/"+testkit.ShopperServiceID+"/summary?mode=IN_PERSON", nil), 200)
 	r = b.do("GET", "/v1/service-providers/"+testkit.ShopperProviderID, nil)
 	mustStatus(t, r, 200)
-	design, _ := r.json(t)["design"].(map[string]any)
-	if design == nil || design["layout"] != "GALLERY_FIRST" || len(design["social"].([]any)) != 1 {
-		t.Fatalf("provider page should carry the published layout and only approved links: %v", design)
+	if _, has := r.json(t)["design"]; has {
+		t.Fatal("the provider page no longer carries a designed page")
 	}
 	mustStatus(t, b.do("GET", "/v1/service-providers/org_nope", nil), 404)
 	// The plain public page of a business (what Stripe is given as its website): public, with a provider's services.

@@ -1825,11 +1825,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * A provider's page — bookings profile and services plus the published design (layout, approved links)
-         * @description The storefront service serves published pages by slug only; pass `slug` when known, otherwise the BFF tries the organisation id and returns `design: null` when there is no published page.
-         */
+        /** A provider's page — bookings profile and services */
         get: operations["getProviderPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/business-pages/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A business's plain public page (what Stripe is given as its website)
+         * @description Public, read-only. Name, description, logo and one brand colour from the business's application; providers also list their services. `indexable` is false until the business is approved, so search engines are kept off it.
+         */
+        get: operations["getBusinessPage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3735,6 +3752,27 @@ export interface components {
             instantBooking: boolean;
             providerAnswersWithinMinutes: number | null;
         };
+        BusinessPage: {
+            slug: string;
+            /** @enum {string} */
+            kind: "SELLER" | "PROVIDER";
+            name: string;
+            description: string | null;
+            /** @description #rrggbb, or null for the platform colour */
+            brandColor: string | null;
+            logoUrl: string | null;
+            contactEmail: string | null;
+            /** @description False until the business is approved */
+            indexable: boolean;
+            services: {
+                serviceId: string;
+                name: string;
+                durationMinutes: number;
+                /** Format: int64 */
+                priceMinor: number;
+                currency: string;
+            }[];
+        };
         ProviderPage: {
             orgId: string;
             displayName: string;
@@ -3744,37 +3782,6 @@ export interface components {
             instantBooking: boolean;
             team: components["schemas"]["ServiceMember"][];
             services: components["schemas"]["ServiceDetail"][];
-            /** @description The provider's published page (storefront service); social links are approved ones only. */
-            design: {
-                slug: string;
-                tagline: string;
-                /** @enum {string} */
-                layout: "CLASSIC" | "GALLERY_FIRST" | "STORY";
-                /** @enum {string} */
-                header: "COVER" | "BAND";
-                /** @enum {string} */
-                buttonShape: "ROUNDED" | "SQUARE";
-                coverUrl: string | null;
-                /** @description Vetted theme CSS custom properties (--at-*) */
-                tokens: {
-                    [key: string]: string;
-                };
-                social: {
-                    network: string;
-                    url: string;
-                }[];
-                gallery: {
-                    url: string;
-                    caption: string;
-                }[];
-                featured: {
-                    id: string;
-                    headline: string;
-                    body: string;
-                    url: string | null;
-                    serviceId: string | null;
-                }[];
-            } | null;
         };
         CancellationQuote: {
             refundSharePercent: number;
@@ -6778,9 +6785,7 @@ export interface operations {
     };
     getProviderPage: {
         parameters: {
-            query?: {
-                slug?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 orgId: string;
@@ -6796,6 +6801,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBusinessPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessPage"];
                 };
             };
             404: components["responses"]["Problem"];

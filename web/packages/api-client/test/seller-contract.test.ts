@@ -39,7 +39,6 @@ import {
   type ProductImportPage,
   type ProductImportRowPage,
   type ProductTypeSchema,
-  type PublicPage,
   type RateQuotes,
   type SavedProductDraft,
   type SellerFeesView,
@@ -102,7 +101,6 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<ServiceOffer>().toExtend<S['ServiceOffer']>();
     expectTypeOf<CancellationPolicy>().toExtend<S['CancellationPolicy']>();
     expectTypeOf<Earnings>().toExtend<S['Earnings']>();
-    expectTypeOf<PublicPage>().toExtend<S['PublicPage']>();
     // One-step product form (S307) and bulk upload (S308)
     expectTypeOf<ProductDraft>().toExtend<S['ProductDraft']>();
     expectTypeOf<SellerProductDetail>().toExtend<S['ProductDetail']>();
@@ -130,7 +128,7 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const api = client();
     const session = await api.getSession();
     expect(session.portal).toBe('SELLER_CENTER');
-    expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'coupons', 'storefront', 'payouts', 'fees', 'billing', 'account-health', 'team']);
+    expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'coupons', 'payouts', 'fees', 'billing', 'account-health', 'team']);
     expect(session.navGroups.map((g) => g.label)).toEqual(['Overview', 'Commerce', 'Growth', 'Finance', 'Trust & compliance', 'Settings']);
     await expect(api.getCompliance()).resolves.toMatchObject({ showBanner: true, tone: 'warning', openItems: 2 });
     // Account health: each item names the Stripe embedded component that collects it; the payout bank is changed in
@@ -153,7 +151,6 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     await api.getBilling();
     const team = await api.getTeam();
     expect(team.roles).toHaveLength(7);
-    await api.getPublicPage();
     await api.getCategoryTree();
 
     const fulfil = client(`${MOCK_ROLE_COOKIE}=seller.fulfilment`);

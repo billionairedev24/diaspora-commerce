@@ -512,27 +512,3 @@ func (f *feesImpl) EffectiveKind(ctx context.Context, kind, category, orgID stri
 }
 
 // ---------------------------------------------------------------- storefront (contracts/openapi/storefront.yaml)
-
-type storefrontImpl struct{ c httpclient.Client }
-
-var _ port.StorefrontClient = (*storefrontImpl)(nil)
-
-// NewStorefront returns the storefront-service client (draft, save, publish).
-func NewStorefront(c httpclient.Client) port.StorefrontClient { return &storefrontImpl{c: c} }
-
-func (s *storefrontImpl) Draft(ctx context.Context, bearer string) (port.Storefront, error) {
-	out := port.Storefront{}
-	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/storefronts/me/draft", Bearer: bearer}, &out)
-	return out, err
-}
-
-func (s *storefrontImpl) SaveDraft(ctx context.Context, bearer string, doc port.Storefront) (port.Storefront, error) {
-	out := port.Storefront{}
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/storefronts/me/draft", Bearer: bearer, JSON: doc}, &out)
-	return out, err
-}
-
-func (s *storefrontImpl) Publish(ctx context.Context, bearer string) error {
-	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/storefronts/me/publish", Bearer: bearer}, nil)
-	return err
-}

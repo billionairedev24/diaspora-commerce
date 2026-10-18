@@ -1289,18 +1289,6 @@ type FeesClient interface {
 	RateCard(ctx context.Context, orgID, kind string, at time.Time) (RateCardResponse, error)
 }
 
-// ---------------------------------------------------------------- storefront
-
-// Storefront is the storefront service's Storefront document (kept whole so saves never drop fields).
-type Storefront map[string]any
-
-// StorefrontClient reads, saves and publishes the member's storefront draft.
-type StorefrontClient interface {
-	Draft(ctx context.Context, bearer string) (Storefront, error)
-	SaveDraft(ctx context.Context, bearer string, s Storefront) (Storefront, error)
-	Publish(ctx context.Context, bearer string) error
-}
-
 // ---------------------------------------------------------------- bookings (contracts/openapi/bookings.yaml)
 
 // BookingsEarnings is the provider's earnings mapped from bookings' GET /v1/providers/{orgId}/earnings.

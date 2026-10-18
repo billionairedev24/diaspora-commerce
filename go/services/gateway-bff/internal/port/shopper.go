@@ -671,46 +671,6 @@ type CustomerBookingsClient interface {
 	SyncPayment(ctx context.Context, bearer, id string) (UpBkBooking, error)
 }
 
-// ---------------------------------------------------------------- storefront published pages (contracts/openapi/storefront.yaml)
-
-// UpPublishedPage is the storefront service's public Storefront.
-type UpPublishedPage struct {
-	OrgID    string            `json:"orgId"`
-	Kind     string            `json:"kind"`
-	Slug     string            `json:"slug"`
-	Name     string            `json:"name"`
-	Tagline  string            `json:"tagline"`
-	Tokens   map[string]string `json:"tokens"`
-	Provider *struct {
-		Layout      string `json:"layout"`
-		Header      string `json:"header"`
-		CoverURL    string `json:"coverUrl"`
-		ButtonShape string `json:"buttonShape"`
-	} `json:"provider"`
-	Gallery []struct {
-		URL     string `json:"url"`
-		Caption string `json:"caption"`
-	} `json:"gallery"`
-	Featured []struct {
-		ID        string `json:"id"`
-		Headline  string `json:"headline"`
-		Body      string `json:"body"`
-		URL       string `json:"url"`
-		ServiceID string `json:"serviceId"`
-		Published *bool  `json:"published"`
-	} `json:"featured"`
-	Social []struct {
-		Network string `json:"network"`
-		URL     string `json:"url"`
-		Status  string `json:"status"`
-	} `json:"social"`
-}
-
-// PublishedPagesClient reads published storefront pages by slug (approved links only).
-type PublishedPagesClient interface {
-	Published(ctx context.Context, slug string) (UpPublishedPage, error)
-}
-
 // ---------------------------------------------------------------- ai-gateway (contracts/openapi/ai-gateway.yaml)
 
 // LolaClient streams Lola turns (SSE) and reads stored conversations, always with the shopper's token.

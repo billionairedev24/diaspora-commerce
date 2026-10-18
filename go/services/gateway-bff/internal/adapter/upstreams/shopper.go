@@ -513,23 +513,6 @@ func (b *customerBookingsImpl) SyncPayment(ctx context.Context, bearer, id strin
 	return out, err
 }
 
-// ---------------------------------------------------------------- storefront published pages
-
-type publishedPagesImpl struct{ c httpclient.Client }
-
-var _ port.PublishedPagesClient = (*publishedPagesImpl)(nil)
-
-// NewPublishedPages returns the storefront client for published pages (GET /v1/storefronts/{slug}).
-func NewPublishedPages(c httpclient.Client) port.PublishedPagesClient {
-	return &publishedPagesImpl{c: c}
-}
-
-func (p *publishedPagesImpl) Published(ctx context.Context, slug string) (port.UpPublishedPage, error) {
-	var out port.UpPublishedPage
-	_, err := call(ctx, p.c, httpclient.Request{Path: "/v1/storefronts/" + esc(slug)}, &out)
-	return out, err
-}
-
 // ---------------------------------------------------------------- delivery facts (promise, carrier-gateway, geo)
 
 type deliveryFactsImpl struct {

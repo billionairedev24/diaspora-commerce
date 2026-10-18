@@ -2021,50 +2021,6 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/seller/storefront:
-    get:
-      tags: [Provider Hub]
-      operationId: getPublicPage
-      security: [{sessionCookie: []}]
-      summary: Draft of the seller storefront or provider public page (layout, colours, gallery, featured work, social links)
-      description: storefront `GET /v1/storefronts/me/draft`.
-      responses:
-        '200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPage'}}}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '502': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-    put:
-      tags: [Provider Hub]
-      operationId: savePublicPage
-      security: [{sessionCookie: []}]
-      summary: Save the draft (edited social links go back to pending approval)
-      description: storefront `GET /v1/storefronts/me/draft` merged with the changes, then `PUT /v1/storefronts/me/draft`.
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/PublicPageInput'}}}
-      responses:
-        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPage'}}}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '409': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '502': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
-  /v1/seller/storefront/publish:
-    post:
-      tags: [Provider Hub]
-      operationId: publishPublicPage
-      security: [{sessionCookie: []}]
-      summary: Publish the draft (blocked with the failing contrast checks)
-      description: storefront `POST /v1/storefronts/me/publish` then the draft is read back.
-      responses:
-        '200': {description: Published page, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPage'}}}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '502': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── S281 inventory
   /v1/seller/fba/nodes:
     get:
@@ -2404,7 +2360,7 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     ModuleKey:
       type: string
-      enum: [onboarding, home, orders, listings, inventory, coupons, storefront, calendar, requests, hours, services, policy, public-page, earnings, payouts, fees, billing, account-health, team]
+      enum: [onboarding, home, orders, listings, inventory, coupons, calendar, requests, hours, services, policy, earnings, payouts, fees, billing, account-health, team]
     SellerUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -4645,82 +4601,6 @@ components:
         connectionFee:
           oneOf: [{$ref: '#/components/schemas/SellerRateCard'}, {type: 'null'}]
           description: The provider's connection fee now, per service category, with where it comes from; null when payments cannot say
-    SocialLink:
-      type: object
-      required: [network, url, status]
-      properties:
-        network: {type: string, enum: [instagram, tiktok, facebook, youtube, whatsapp, x, linkedin, website]}
-        url: {type: string}
-        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
-    PublicPage:
-      type: object
-      required: [kind, slug, name, tagline, status, publishedAt, primaryColor, accentColor, layout, header, buttonShape, gallerySize, gallery, featured, social, publicPath]
-      properties:
-        kind: {$ref: '#/components/schemas/OrgKind'}
-        slug: {type: string}
-        name: {type: string}
-        tagline: {type: string}
-        status: {type: string, enum: [DRAFT, PUBLISHED]}
-        publishedAt: {type: [string, 'null'], format: date-time}
-        primaryColor: {type: string}
-        accentColor: {type: string}
-        layout: {type: string, enum: [CLASSIC, GALLERY_FIRST, STORY]}
-        header: {type: string, enum: [COVER, BAND]}
-        buttonShape: {type: string, enum: [ROUNDED, SQUARE]}
-        gallerySize: {type: integer}
-        gallery:
-          type: array
-          items:
-            type: object
-            required: [assetId, url, caption]
-            properties:
-              assetId: {type: string}
-              url: {type: string}
-              caption: {type: string}
-        featured:
-          type: array
-          items:
-            type: object
-            required: [id, headline, body, serviceId, published]
-            properties:
-              id: {type: string}
-              headline: {type: string}
-              body: {type: string}
-              serviceId: {type: [string, 'null']}
-              published: {type: boolean}
-        social: {type: array, items: {$ref: '#/components/schemas/SocialLink'}}
-        publicPath: {type: string, description: Path of the page in the shop}
-    PublicPageInput:
-      type: object
-      properties:
-        name: {type: string, minLength: 2, maxLength: 80}
-        tagline: {type: string, maxLength: 80}
-        primaryColor: {type: string, pattern: '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$'}
-        accentColor: {type: string, pattern: '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$'}
-        layout: {type: string, enum: [CLASSIC, GALLERY_FIRST, STORY]}
-        header: {type: string, enum: [COVER, BAND]}
-        buttonShape: {type: string, enum: [ROUNDED, SQUARE]}
-        gallerySize: {type: integer, minimum: 0, maximum: 24}
-        featured:
-          type: array
-          maxItems: 6
-          items:
-            type: object
-            required: [id, headline, body, published]
-            properties:
-              id: {type: string}
-              headline: {type: string, maxLength: 80}
-              body: {type: string, maxLength: 400}
-              serviceId: {type: [string, 'null']}
-              published: {type: boolean}
-        social:
-          type: array
-          items:
-            type: object
-            required: [network, url]
-            properties:
-              network: {type: string, enum: [instagram, tiktok, facebook, youtube, whatsapp, x, linkedin, website]}
-              url: {type: string, format: uri}
     # ── fees (read-only)
     SellerFeeCategory:
       type: object

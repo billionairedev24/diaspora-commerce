@@ -21,7 +21,6 @@ import {
   type PlanFeeCollectionMode,
   type PlanFeeDeduction,
   type ProductTypeSchema,
-  type PublicPage,
   type SellerCoupon,
   type SellerOffer,
   type SellerOrderDetail,
@@ -76,7 +75,6 @@ export interface MockSellerDb {
   services: ServiceOffer[];
   policy: Required<CancellationPolicyInput>;
   earnings: EarningsRow[];
-  pages: Record<string, PublicPage>;
   /** The application per organisation (S286, S289): answers (prefilled from the account on start), Stripe, submission. */
   onboarding: Record<string, MockApplication>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
@@ -576,19 +574,6 @@ function freshDb(now: Date): MockSellerDb {
     },
     offers: [],
     coupons: [],
-    pages: {
-      [SELLER_ORG]: { kind: 'SELLER', slug: 'ades-kitchen', name: 'Ade’s Kitchen', tagline: 'Home-style Nigerian pantry, shipped from Houston', status: 'PUBLISHED',
-        publishedAt: iso(new Date(now.getTime() - 30 * DAY)), primaryColor: '#0A8264', accentColor: '#FFD400', layout: 'CLASSIC', header: 'BAND', buttonShape: 'ROUNDED',
-        gallerySize: 6, gallery: [], featured: [], social: [{ network: 'instagram', url: 'https://instagram.com/adeskitchen', status: 'APPROVED' }], publicPath: '/store/ades-kitchen' },
-      [PROVIDER_ORG]: { kind: 'PROVIDER', slug: 'amas-braiding-studio', name: 'Ama’s Braiding Studio', tagline: 'Neat, long-lasting braids from a Dakar-trained stylist', status: 'DRAFT',
-        publishedAt: null, primaryColor: '#FFD400', accentColor: '#067457', layout: 'GALLERY_FIRST', header: 'COVER', buttonShape: 'ROUNDED', gallerySize: 8, gallery: [],
-        featured: [
-          { id: 'po1', headline: 'Knotless braids that last 8 weeks', body: 'Pre-stretched, itch-free hair and a hot-water seal on every install.', serviceId: 's1a', published: true },
-          { id: 'po2', headline: 'Back-to-school cornrows for kids', body: 'Gentle, neat rows in under 2 hours.', serviceId: 's1c', published: true }
-        ],
-        social: [{ network: 'instagram', url: 'https://instagram.com/amasbraids', status: 'APPROVED' }, { network: 'facebook', url: 'https://facebook.com/amasbraids', status: 'PENDING' }],
-        publicPath: '/pro/amas-braiding-studio' }
-    },
     seq: 1
   };
   db.offers = seedOffers(db.listings);

@@ -363,43 +363,7 @@ type BookingQuote struct {
 	ProviderAnswersWithinMinutes *int64   `json:"providerAnswersWithinMinutes"`
 }
 
-// ProviderSocialLink is an approved social link on a provider page.
-type ProviderSocialLink struct {
-	Network string `json:"network"`
-	URL     string `json:"url"`
-}
-
-// ProviderGalleryItem is one gallery picture.
-type ProviderGalleryItem struct {
-	URL     string `json:"url"`
-	Caption string `json:"caption"`
-}
-
-// ProviderFeature is a published featured-work post.
-type ProviderFeature struct {
-	ID        string  `json:"id"`
-	Headline  string  `json:"headline"`
-	Body      string  `json:"body"`
-	URL       *string `json:"url"`
-	ServiceID *string `json:"serviceId"`
-}
-
-// ProviderDesign is the provider's published page (storefront service): layout, header, theme tokens, approved
-// links, gallery and featured work.
-type ProviderDesign struct {
-	Slug        string                `json:"slug"`
-	Tagline     string                `json:"tagline"`
-	Layout      string                `json:"layout"`
-	Header      string                `json:"header"`
-	ButtonShape string                `json:"buttonShape"`
-	CoverURL    *string               `json:"coverUrl"`
-	Tokens      map[string]string     `json:"tokens"`
-	Social      []ProviderSocialLink  `json:"social"`
-	Gallery     []ProviderGalleryItem `json:"gallery"`
-	Featured    []ProviderFeature     `json:"featured"`
-}
-
-// ProviderPage is a provider's public page: bookings profile and services plus the designed page when published.
+// ProviderPage is a provider's public page: bookings profile and services.
 type ProviderPage struct {
 	OrgID          string          `json:"orgId"`
 	DisplayName    string          `json:"displayName"`
@@ -409,7 +373,6 @@ type ProviderPage struct {
 	InstantBooking bool            `json:"instantBooking"`
 	Team           []ServiceMember `json:"team"`
 	Services       []ServiceDetail `json:"services"`
-	Design         *ProviderDesign `json:"design"`
 }
 
 // BookedService is the service as booked.

@@ -24,7 +24,6 @@ type ShopperDeps struct {
 	Payments port.OrderPaymentsClient
 	Security port.SecurityClient
 	Bookings port.CustomerBookingsClient
-	Pages    port.PublishedPagesClient
 	Lola     port.LolaClient
 	Delivery port.DeliveryFactsClient
 	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).

@@ -506,19 +506,6 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 		writeJSON(w, 200, map[string]any{"orgId": ShopperProviderID, "slug": "braids-by-ama", "kind": "PROVIDER", "name": "Braids by Ama",
 			"description": "Knotless braids and protective styles in Houston.", "brandColor": "#8A3B12", "logoUrl": nil, "contactEmail": "ama@example.com", "approved": true})
 	})
-	mux.HandleFunc("GET /v1/storefronts/{slug}", func(w http.ResponseWriter, r *http.Request) {
-		if r.PathValue("slug") != ShopperProviderID && r.PathValue("slug") != "braids-by-ama" {
-			problem(w, 404, "storefront.not-found", "No published page", nil)
-			return
-		}
-		writeJSON(w, 200, map[string]any{"orgId": ShopperProviderID, "kind": "PROVIDER", "slug": "braids-by-ama", "name": "Braids by Ama", "tagline": "Protective styles",
-			"tokens":   map[string]string{"--at-brand-500": "#7a1f5c"},
-			"provider": map[string]any{"layout": "GALLERY_FIRST", "header": "COVER", "buttonShape": "ROUNDED"},
-			"gallery":  []map[string]any{{"assetId": "a1", "url": "https://cdn.example/a1.jpg", "caption": "Knotless"}},
-			"featured": []map[string]any{{"id": "f1", "headline": "Bridal braids", "body": "Book early", "serviceId": ShopperServiceID, "published": true}},
-			"social": []map[string]any{{"network": "instagram", "url": "https://instagram.com/braidsbyama", "status": "APPROVED"},
-				{"network": "tiktok", "url": "https://tiktok.com/@ama", "status": "PENDING"}}})
-	})
 	mux.HandleFunc("POST /v1/bookings", customerOnly("bookings.customer-only", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Idempotency-Key") == "" {
 			problem(w, 400, "bookings.idempotency-key-required", "Idempotency-Key required", nil)

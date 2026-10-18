@@ -52,7 +52,6 @@ export const sellerKeys = {
   services: (orgId: string) => [...sellerKeys.org(orgId), 'services'] as const,
   policy: (orgId: string) => [...sellerKeys.org(orgId), 'policy'] as const,
   earnings: (orgId: string, from?: string, to?: string) => [...sellerKeys.org(orgId), 'earnings', from ?? '', to ?? ''] as const,
-  publicPage: (orgId: string) => [...sellerKeys.org(orgId), 'public-page'] as const,
   coupons: (orgId: string) => [...sellerKeys.org(orgId), 'coupons'] as const
 };
 
@@ -144,8 +143,6 @@ export const sellerQueries = {
     queryOptions({ queryKey: sellerKeys.policy(orgId), queryFn: ({ signal }) => api.getCancellationPolicy(signal), staleTime: MINUTE }),
   earnings: (api: SellerApiClient, orgId: string, from?: string, to?: string) =>
     queryOptions({ queryKey: sellerKeys.earnings(orgId, from, to), queryFn: ({ signal }) => api.getEarnings(from, to, signal), staleTime: MINUTE }),
-  publicPage: (api: SellerApiClient, orgId: string) =>
-    queryOptions({ queryKey: sellerKeys.publicPage(orgId), queryFn: ({ signal }) => api.getPublicPage(signal), staleTime: MINUTE }),
   coupons: (api: SellerApiClient, orgId: string) =>
     queryOptions({ queryKey: sellerKeys.coupons(orgId), queryFn: ({ signal }) => api.listCoupons(signal), staleTime: MINUTE })
 };

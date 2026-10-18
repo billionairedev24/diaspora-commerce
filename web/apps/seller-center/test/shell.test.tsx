@@ -27,7 +27,7 @@ describe('portal shell', () => {
 
   it('shows the owner every seller module, grouped, with the payouts-paused banner', async () => {
     renderWithProviders(<PortalShell><p>page body</p></PortalShell>);
-    expect(await navHrefs()).toEqual(['/', '/orders', '/listings', '/inventory', '/coupons', '/storefront', '/payouts', '/fees', '/billing', '/account-health', '/team']);
+    expect(await navHrefs()).toEqual(['/', '/orders', '/listings', '/inventory', '/coupons', '/payouts', '/fees', '/billing', '/account-health', '/team']);
     expect(screen.getByRole('button', { name: /commerce/i })).toHaveAttribute('aria-expanded', 'false');
     expect(await screen.findByText('Payouts are paused.')).toBeInTheDocument();
     expect(screen.getByText('page body')).toBeInTheDocument();
@@ -54,7 +54,7 @@ describe('portal shell', () => {
     await mockApi().setActiveOrg(PROVIDER_ORG);
     renderWithProviders(<PortalShell><p>home</p></PortalShell>);
     const hrefs = await navHrefs();
-    expect(hrefs).toEqual(expect.arrayContaining(['/calendar', '/requests', '/hours', '/services', '/policy', '/public-page', '/earnings']));
+    expect(hrefs).toEqual(expect.arrayContaining(['/calendar', '/requests', '/hours', '/services', '/policy', '/earnings']));
     expect(hrefs).not.toContain('/orders');
   });
 });

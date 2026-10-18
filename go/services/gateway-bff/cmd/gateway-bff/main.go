@@ -116,9 +116,9 @@ func run() error {
 		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient),
 		Media:        media, ProofLinks: proofLinks, Orders: upstreams.NewSellerOrders(ordersClient),
 		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
-		Fees:       upstreams.NewFees(paymentsClient, serviceTokens),
-		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
-		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
+		Fees:     upstreams.NewFees(paymentsClient, serviceTokens),
+		Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
+		Cache:    cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
 
 		// S307/S308: product edits, form drafts and bulk uploads at catalog; the AI listing writer at ai-gateway.
 		Listing: upstreams.NewSellerListing(catalogClient), Writer: upstreams.NewListingWriter(client("ai-gateway", up.AIGateway)),

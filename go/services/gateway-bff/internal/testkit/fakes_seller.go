@@ -59,14 +59,11 @@ type sellerState struct {
 	listingStatus map[string]string
 	shipStatus    string
 	tracking      string
-	storefront    map[string]any
 }
 
 func newSellerState() *sellerState {
 	return &sellerState{drafts: map[string]map[string]any{}, plan: "seller_growth", planFeeMode: "EARNINGS_FIRST", defaultPM: "aaaaaaaa-0000-0000-0000-000000000001", listingStatus: map[string]string{"prod-1": "LIVE"},
-		shipStatus: "placed", storefront: map[string]any{"orgId": SellerOrgID, "kind": "SELLER", "slug": "ade-s-kitchen", "name": "Ade's Kitchen",
-			"tagline": "Home-style Nigerian pantry", "theme": map[string]any{"primary": "#0A8264", "accent": "#FFD400"}, "status": "DRAFT",
-			"social": []any{map[string]any{"network": "instagram", "url": "https://instagram.com/adeskitchen", "status": "APPROVED"}}, "version": 3}}
+		shipStatus: "placed"}
 }
 
 func bearerSub(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -562,30 +559,6 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, 200, u.paymentMethodsJSON()[:1])
-	})
-	// storefront service
-	mux.HandleFunc("GET /v1/storefronts/me/draft", func(w http.ResponseWriter, _ *http.Request) {
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		writeJSON(w, 200, u.seller.storefront)
-	})
-	mux.HandleFunc("PUT /v1/storefronts/me/draft", func(w http.ResponseWriter, r *http.Request) {
-		var doc map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&doc); err != nil {
-			problem(w, 422, "storefront.invalid", "Invalid draft", nil)
-			return
-		}
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		u.seller.storefront = doc
-		writeJSON(w, 200, doc)
-	})
-	mux.HandleFunc("POST /v1/storefronts/me/publish", func(w http.ResponseWriter, _ *http.Request) {
-		u.mu.Lock()
-		defer u.mu.Unlock()
-		u.seller.storefront["status"] = "PUBLISHED"
-		u.seller.storefront["publishedAt"] = "2026-10-10T12:00:00Z"
-		w.WriteHeader(200)
 	})
 }
 

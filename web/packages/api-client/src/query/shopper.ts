@@ -105,7 +105,7 @@ export const shopperQueries = {
   bookingQuote: (api: ApiClient, id: string, q: SlotQuery) =>
     queryOptions({ queryKey: serviceKeys.quote(id, q), queryFn: ({ signal }) => api.getBookingQuote(id, q, signal), staleTime: MINUTE }),
   provider: (api: ApiClient, orgId: string) =>
-    queryOptions({ queryKey: serviceKeys.provider(orgId), queryFn: ({ signal }) => api.getProviderPage(orgId, undefined, signal), staleTime: 5 * MINUTE }),
+    queryOptions({ queryKey: serviceKeys.provider(orgId), queryFn: ({ signal }) => api.getProviderPage(orgId, signal), staleTime: 5 * MINUTE }),
   bookings: (api: ApiClient) => queryOptions({ queryKey: bookingKeys.list(), queryFn: ({ signal }) => api.getMyBookings(signal), staleTime: 30_000 }),
   cancellationQuote: (api: ApiClient, id: string) =>
     queryOptions({ queryKey: bookingKeys.cancellationQuote(id), queryFn: ({ signal }) => api.getBookingCancellationQuote(id, signal), staleTime: 0 }),

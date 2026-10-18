@@ -355,8 +355,6 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/lookup", map[string]any{"token": ""}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenExpired}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenValid}), 200)
-	// Storefront (seller).
-	mustStatus(t, b.do("GET", "/v1/seller/storefront", nil), 200)
 	// Ship-from addresses live in the seller service (no more browser storage).
 	if r := b.do("GET", "/v1/seller/ship-from-addresses", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 0 {
 		t.Fatalf("ship-from list = %d %s", r.status, r.body)
@@ -510,11 +508,6 @@ func TestSellerContractConformance(t *testing.T) {
 			t.Errorf("bookings was not called with %s", call)
 		}
 	}
-	mustStatus(t, b.do("GET", "/v1/seller/storefront", nil), 200)
-	mustStatus(t, b.do("PUT", "/v1/seller/storefront", map[string]any{"tagline": "Neat, long-lasting braids", "layout": "GALLERY_FIRST",
-		"social": []map[string]any{{"network": "instagram", "url": "https://instagram.com/adeskitchen"}, {"network": "tiktok", "url": "https://tiktok.com/@ama"}}}), 200)
-	mustStatus(t, b.do("PUT", "/v1/seller/storefront", map[string]any{"primaryColor": "gold", "social": []map[string]any{{"network": "tiktok", "url": "https://instagram.com/x"}}}), 422)
-	mustStatus(t, b.do("POST", "/v1/seller/storefront/publish", nil), 200)
 
 	// Onboarding wizard (S289): each step's save, embedded Stripe, plans, documents and submit, with their failures.
 	wup, w := startedApplicant(t, "pk_test_x")
@@ -563,7 +556,7 @@ func TestSellerContractConformance(t *testing.T) {
 		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
 		"getPayouts", "requestPayout", "getSellerFees", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
-		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings", "getPublicPage", "savePublicPage", "publishPublicPage",
+		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings",
 		"saveOnboardingOwners", "createSellerStripeSession", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
 		"refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload"} {
 		if validated[op] == 0 {
@@ -586,7 +579,7 @@ func TestSellerNavigationIsRoleAwareAndGatedByApproval(t *testing.T) {
 		t.Fatalf("seller session = %v", s)
 	}
 	keys := moduleKeys(t, s)
-	for _, want := range []string{"home", "orders", "listings", "inventory", "payouts", "billing", "account-health", "team", "storefront"} {
+	for _, want := range []string{"home", "orders", "listings", "inventory", "payouts", "billing", "account-health", "team"} {
 		if !slices.Contains(keys, want) {
 			t.Fatalf("owner nav lacks %s: %v", want, keys)
 		}

@@ -35,7 +35,7 @@ export function CouponsView() {
   const { orgId, can, session } = useSeller();
   const api = sellerApi();
   const role = session.activeOrg?.roleKey ?? '';
-  const editable = can('coupons', 'EDIT') || can('storefront', 'EDIT') || role === 'seller.owner' || role === 'seller.admin' || role === 'seller.ads';
+  const editable = can('coupons', 'EDIT') || role === 'seller.owner' || role === 'seller.admin' || role === 'seller.ads';
   const state = useTableState({ searchParams: useSearchParams(), defaultPageSize: 20 });
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState<CreateSellerCoupon>({

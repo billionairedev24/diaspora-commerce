@@ -358,7 +358,7 @@ func (h *handlersImpl) searchServices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) providerPage(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Shopper.Services.Provider(r.Context(), r.PathValue("orgId"), r.URL.Query().Get("slug"))
+	v, err := h.s.Shopper.Services.Provider(r.Context(), r.PathValue("orgId"))
 	h.ok(w, r, v, err)
 }
 

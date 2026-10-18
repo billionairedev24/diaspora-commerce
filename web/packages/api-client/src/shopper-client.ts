@@ -165,8 +165,7 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
       (await request(`/v1/services/${enc(id)}/slots`, z.object({ slots: z.array(AvailableSlotSchema) }), { query: slotQuery(q), signal })).slots,
     getBookingQuote: (id: string, q: SlotQuery = {}, signal?: AbortSignal): Promise<BookingQuote> =>
       request(`/v1/services/${enc(id)}/summary`, BookingQuoteSchema, { query: slotQuery(q), signal }),
-    getProviderPage: (orgId: string, slug?: string, signal?: AbortSignal): Promise<ProviderPage> =>
-      request(`/v1/service-providers/${enc(orgId)}`, ProviderPageSchema, { query: { slug }, signal }),
+    getProviderPage: (orgId: string, signal?: AbortSignal): Promise<ProviderPage> => request(`/v1/service-providers/${enc(orgId)}`, ProviderPageSchema, { signal }),
     getBusinessPage: (slug: string, signal?: AbortSignal): Promise<BusinessPage> => request(`/v1/business-pages/${enc(slug)}`, BusinessPageSchema, { signal }),
     bookService: (body: BookingRequest, idempotencyKey?: string): Promise<BookingCreated> =>
       request('/v1/services/bookings', BookingCreatedSchema, { method: 'POST', body, headers: idem(idempotencyKey) }),

@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -15,7 +14,7 @@ import (
 
 // ProviderHubService serves the Provider Hub tools inside the portal: calendar with day summaries, booking requests
 // and actions, working hours, services, cancellation policy and earnings (bookings, planned), and the public page
-// (storefront service; also the seller's "Storefront & theme").
+
 type ProviderHubService interface {
 	Calendar(ctx context.Context, c *domain.Caller, from, to string) (domain.CalendarView, error)
 	Requests(ctx context.Context, c *domain.Caller) ([]domain.BookingCard, error)
@@ -28,9 +27,6 @@ type ProviderHubService interface {
 	Policy(ctx context.Context, c *domain.Caller) (domain.CancellationPolicy, error)
 	SavePolicy(ctx context.Context, c *domain.Caller, in domain.PolicyInput) (domain.CancellationPolicy, error)
 	Earnings(ctx context.Context, c *domain.Caller, from, to string) (domain.Earnings, error)
-	PublicPage(ctx context.Context, c *domain.Caller) (domain.PublicPage, error)
-	SavePublicPage(ctx context.Context, c *domain.Caller, in domain.PublicPageInput) (domain.PublicPage, error)
-	PublishPublicPage(ctx context.Context, c *domain.Caller) (domain.PublicPage, error)
 }
 
 type providerHubImpl struct{ r *orgResolver }
@@ -352,221 +348,4 @@ func providerFeesOf(list []port.ProviderFeeResponse, ok bool) domain.ProviderFee
 			Status: st, NextAttemptAt: f.NextAttemptAt, CreatedAt: f.CreatedAt})
 	}
 	return out
-}
-
-// ---------------------------------------------------------------- public page (storefront service)
-
-func pageModule(kind string) string {
-	if kind == domain.OrgKindProvider {
-		return "public-page"
-	}
-	return "storefront"
-}
-
-func str(m map[string]any, k string) string {
-	s, _ := m[k].(string)
-	return s
-}
-
-func obj(m map[string]any, k string) map[string]any {
-	o, _ := m[k].(map[string]any)
-	if o == nil {
-		return map[string]any{}
-	}
-	return o
-}
-
-func list(m map[string]any, k string) []map[string]any {
-	raw, _ := m[k].([]any)
-	out := []map[string]any{}
-	for _, r := range raw {
-		if o, ok := r.(map[string]any); ok {
-			out = append(out, o)
-		}
-	}
-	return out
-}
-
-func pageOf(doc port.Storefront, kind string) domain.PublicPage {
-	theme, prov := obj(doc, "theme"), obj(doc, "provider")
-	out := domain.PublicPage{Kind: firstNonEmpty(strings.ToUpper(str(doc, "kind")), kind), Slug: str(doc, "slug"), Name: str(doc, "name"),
-		Tagline: str(doc, "tagline"), Status: firstNonEmpty(strings.ToUpper(str(doc, "status")), "DRAFT"),
-		PrimaryColor: firstNonEmpty(str(theme, "primary"), "#FFD400"), AccentColor: firstNonEmpty(str(theme, "accent"), "#067457"),
-		Layout: firstNonEmpty(str(prov, "layout"), "CLASSIC"), Header: firstNonEmpty(str(prov, "header"), "COVER"),
-		ButtonShape: firstNonEmpty(str(prov, "buttonShape"), "ROUNDED"), Gallery: []domain.GalleryItem{}, Featured: []domain.FeaturedPost{},
-		Social: []domain.SocialLink{}}
-	if n, ok := prov["gallerySize"].(float64); ok {
-		out.GallerySize = int(n)
-	}
-	if t, err := time.Parse(time.RFC3339, str(doc, "publishedAt")); err == nil {
-		out.PublishedAt = &t
-	}
-	for _, g := range list(doc, "gallery") {
-		out.Gallery = append(out.Gallery, domain.GalleryItem{AssetID: str(g, "assetId"), URL: str(g, "url"), Caption: str(g, "caption")})
-	}
-	for _, f := range list(doc, "featured") {
-		pub, _ := f["published"].(bool)
-		out.Featured = append(out.Featured, domain.FeaturedPost{ID: str(f, "id"), Headline: str(f, "headline"), Body: str(f, "body"),
-			ServiceID: strPtr(str(f, "serviceId")), Published: pub})
-	}
-	for _, s := range list(doc, "social") {
-		out.Social = append(out.Social, domain.SocialLink{Network: str(s, "network"), URL: str(s, "url"), Status: firstNonEmpty(strings.ToUpper(str(s, "status")), "PENDING")})
-	}
-	prefix := "/store/"
-	if out.Kind == domain.OrgKindProvider {
-		prefix = "/pro/"
-	}
-	out.PublicPath = prefix + out.Slug
-	return out
-}
-
-var hexColour = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
-
-func validatePage(in domain.PublicPageInput) map[string]string {
-	errs := map[string]string{}
-	if in.Name != nil {
-		if n := len([]rune(strings.TrimSpace(*in.Name))); n < 2 || n > 80 {
-			errs["name"] = "2–80 characters"
-		}
-	}
-	if in.Tagline != nil && len([]rune(*in.Tagline)) > 80 {
-		errs["tagline"] = "At most 80 characters"
-	}
-	for k, v := range map[string]*string{"primaryColor": in.PrimaryColor, "accentColor": in.AccentColor} {
-		if v != nil && !hexColour.MatchString(*v) {
-			errs[k] = "Use a hex colour like #0A8264"
-		}
-	}
-	check := func(field string, v *string, allowed ...string) {
-		if v != nil && !slices.Contains(allowed, *v) {
-			errs[field] = "Unknown option"
-		}
-	}
-	check("layout", in.Layout, "CLASSIC", "GALLERY_FIRST", "STORY")
-	check("header", in.Header, "COVER", "BAND")
-	check("buttonShape", in.ButtonShape, "ROUNDED", "SQUARE")
-	if in.GallerySize != nil && (*in.GallerySize < 0 || *in.GallerySize > 24) {
-		errs["gallerySize"] = "Up to 24 photos (your plan may allow fewer)"
-	}
-	if len(in.Featured) > 6 {
-		errs["featured"] = "Up to 6 featured posts"
-	}
-	for _, s := range in.Social {
-		if !domain.SocialURLMatches(s.Network, s.URL) {
-			errs["social."+s.Network] = "Use a https link on " + s.Network
-		}
-	}
-	return errs
-}
-
-func applyPage(doc port.Storefront, in domain.PublicPageInput) port.Storefront {
-	set := func(m map[string]any, k string, v *string) {
-		if v != nil {
-			m[k] = strings.TrimSpace(*v)
-		}
-	}
-	set(doc, "name", in.Name)
-	set(doc, "tagline", in.Tagline)
-	theme, prov := obj(doc, "theme"), obj(doc, "provider")
-	set(theme, "primary", in.PrimaryColor)
-	set(theme, "accent", in.AccentColor)
-	set(prov, "layout", in.Layout)
-	set(prov, "header", in.Header)
-	set(prov, "buttonShape", in.ButtonShape)
-	if in.GallerySize != nil {
-		prov["gallerySize"] = *in.GallerySize
-	}
-	doc["theme"], doc["provider"] = theme, prov
-	if in.Featured != nil {
-		posts := make([]any, 0, len(in.Featured))
-		for _, f := range in.Featured {
-			post := map[string]any{"id": f.ID, "headline": f.Headline, "body": f.Body, "published": f.Published}
-			if f.ServiceID != nil {
-				post["serviceId"] = *f.ServiceID
-			}
-			posts = append(posts, post)
-		}
-		doc["featured"] = posts
-	}
-	if in.Social != nil {
-		// Unchanged links keep their approval; new or edited links go back to pending.
-		prev := map[string]map[string]any{}
-		for _, s := range list(doc, "social") {
-			prev[str(s, "network")] = s
-		}
-		links := make([]any, 0, len(in.Social))
-		for _, s := range in.Social {
-			status := "PENDING"
-			if old, ok := prev[s.Network]; ok && str(old, "url") == s.URL {
-				status = firstNonEmpty(str(old, "status"), "PENDING")
-			}
-			links = append(links, map[string]any{"network": s.Network, "url": s.URL, "status": status})
-		}
-		doc["social"] = links
-	}
-	return doc
-}
-
-// pageAccess checks the "Storefront & theme" (sellers) or "Public page" (providers) module.
-func (p *providerHubImpl) pageAccess(ctx context.Context, c *domain.Caller, level string) (sellerCtx, error) {
-	sc, err := p.r.require(ctx, c, "", "", "")
-	if err != nil {
-		return sc, err
-	}
-	if !sc.access.Allows(pageModule(sc.kind()), level) {
-		return sc, domain.AccessDenied(sc.org.Role, level)
-	}
-	return sc, nil
-}
-
-func (p *providerHubImpl) PublicPage(ctx context.Context, c *domain.Caller) (domain.PublicPage, error) {
-	sc, err := p.pageAccess(ctx, c, domain.LevelView)
-	if err != nil {
-		return domain.PublicPage{}, err
-	}
-	doc, err := p.r.d.Storefront.Draft(ctx, c.BearerToken)
-	if err != nil {
-		return domain.PublicPage{}, mapErr("storefront", err)
-	}
-	return pageOf(doc, sc.kind()), nil
-}
-
-func (p *providerHubImpl) SavePublicPage(ctx context.Context, c *domain.Caller, in domain.PublicPageInput) (domain.PublicPage, error) {
-	if errs := validatePage(in); len(errs) > 0 {
-		return domain.PublicPage{}, domain.ValidationProblem(errs)
-	}
-	sc, err := p.pageAccess(ctx, c, domain.LevelEdit)
-	if err != nil {
-		return domain.PublicPage{}, err
-	}
-	doc, err := p.r.d.Storefront.Draft(ctx, c.BearerToken)
-	if err != nil {
-		return domain.PublicPage{}, mapErr("storefront", err)
-	}
-	saved, err := p.r.d.Storefront.SaveDraft(ctx, c.BearerToken, applyPage(doc, in))
-	if err != nil {
-		return domain.PublicPage{}, mapErr("storefront", err)
-	}
-	return pageOf(saved, sc.kind()), nil
-}
-
-func (p *providerHubImpl) PublishPublicPage(ctx context.Context, c *domain.Caller) (domain.PublicPage, error) {
-	sc, err := p.pageAccess(ctx, c, domain.LevelEdit)
-	if err != nil {
-		return domain.PublicPage{}, err
-	}
-	if err := p.r.d.Storefront.Publish(ctx, c.BearerToken); err != nil {
-		return domain.PublicPage{}, mapErr("storefront", err)
-	}
-	doc, err := p.r.d.Storefront.Draft(ctx, c.BearerToken)
-	if err != nil {
-		return domain.PublicPage{}, mapErr("storefront", err)
-	}
-	page := pageOf(doc, sc.kind())
-	if page.Status != "PUBLISHED" {
-		page.Status = "PUBLISHED"
-		now := p.now().UTC()
-		page.PublishedAt = &now
-	}
-	return page, nil
 }

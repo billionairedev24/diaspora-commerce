@@ -19,8 +19,8 @@ export type Portal = z.infer<typeof PortalSchema>;
 export const AccessLevelSchema = z.enum(['VIEW', 'EDIT', 'APPROVE', 'FULL']);
 export type AccessLevel = z.infer<typeof AccessLevelSchema>;
 export const ModuleKeySchema = z.enum([
-  'onboarding', 'home', 'orders', 'listings', 'inventory', 'coupons', 'storefront', 'calendar', 'requests', 'hours', 'services', 'policy',
-  'public-page', 'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
+  'onboarding', 'home', 'orders', 'listings', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
+  'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
 ]);
 export type ModuleKey = z.infer<typeof ModuleKeySchema>;
 
@@ -1716,45 +1716,6 @@ export const EarningsSchema = z.object({
   connectionFee: SellerRateCardSchema.nullable().default(null)
 });
 export type Earnings = z.infer<typeof EarningsSchema>;
-
-export const SocialLinkNetworkSchema = z.enum(['instagram', 'tiktok', 'facebook', 'youtube', 'whatsapp', 'x', 'linkedin', 'website']);
-export type SocialNetworkKey = z.infer<typeof SocialLinkNetworkSchema>;
-export const PageLayoutSchema = z.enum(['CLASSIC', 'GALLERY_FIRST', 'STORY']);
-export const PublicPageSchema = z.object({
-  kind: OrgKindSchema,
-  slug: z.string(),
-  name: z.string(),
-  tagline: z.string(),
-  status: z.enum(['DRAFT', 'PUBLISHED']),
-  publishedAt: nullableString,
-  primaryColor: z.string(),
-  accentColor: z.string(),
-  layout: PageLayoutSchema,
-  header: z.enum(['COVER', 'BAND']),
-  buttonShape: z.enum(['ROUNDED', 'SQUARE']),
-  gallerySize: z.number().int(),
-  gallery: z.array(z.object({ assetId: z.string(), url: z.string(), caption: z.string() })),
-  featured: z.array(z.object({ id: z.string(), headline: z.string(), body: z.string(), serviceId: nullableString, published: z.boolean() })),
-  social: z.array(z.object({ network: SocialLinkNetworkSchema, url: z.string(), status: z.enum(['PENDING', 'APPROVED', 'REJECTED']) })),
-  publicPath: z.string()
-});
-export type PublicPage = z.infer<typeof PublicPageSchema>;
-export const PublicPageInputSchema = z.object({
-  name: z.string().min(2).max(80).optional(),
-  tagline: z.string().max(80).optional(),
-  primaryColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
-  accentColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
-  layout: PageLayoutSchema.optional(),
-  header: z.enum(['COVER', 'BAND']).optional(),
-  buttonShape: z.enum(['ROUNDED', 'SQUARE']).optional(),
-  gallerySize: z.number().int().min(0).max(24).optional(),
-  featured: z
-    .array(z.object({ id: z.string(), headline: z.string().max(80), body: z.string().max(400), serviceId: nullableString.optional(), published: z.boolean() }))
-    .max(6)
-    .optional(),
-  social: z.array(z.object({ network: SocialLinkNetworkSchema, url: z.string() })).optional()
-});
-export type PublicPageInput = z.infer<typeof PublicPageInputSchema>;
 
 /* ── Lola for sellers (plan tiers) ─────────────────────── */
 

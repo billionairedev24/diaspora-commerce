@@ -117,9 +117,6 @@ import {
   type ProductTypeSchema,
   ProductTypeSchemaSchema,
   type ProductUpdate,
-  type PublicPage,
-  type PublicPageInput,
-  PublicPageSchema,
   type RateQuotes,
   RateQuotesSchema,
   type SavedProductDraft,
@@ -452,9 +449,6 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/provider/cancellation-policy', CancellationPolicySchema, { method: 'PUT', body: input }),
     getEarnings: (from: string | undefined, to: string | undefined, signal?: AbortSignal): Promise<Earnings> =>
       request('/v1/seller/provider/earnings', EarningsSchema, { query: { from, to }, signal }),
-    getPublicPage: (signal?: AbortSignal): Promise<PublicPage> => request('/v1/seller/storefront', PublicPageSchema, { signal }),
-    savePublicPage: (input: PublicPageInput): Promise<PublicPage> => request('/v1/seller/storefront', PublicPageSchema, { method: 'PUT', body: input }),
-    publishPublicPage: (): Promise<PublicPage> => request('/v1/seller/storefront/publish', PublicPageSchema, { method: 'POST' }),
 
     /* Send to AfroTransact (S281): inbound plans, labels, lots and expiry for the active organisation */
     fba: createSellerFbaApi(request, options)
