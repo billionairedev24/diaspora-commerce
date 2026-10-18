@@ -18,7 +18,7 @@
     <properties>
         <wiremock.version>3.13.2</wiremock.version>
         <libphonenumber.version>9.0.41</libphonenumber.version>
-        <ical4j.version>4.0.5</ical4j.version>
+        <ical4j.version>4.4.0</ical4j.version>
     </properties>
 
     <dependencies>
