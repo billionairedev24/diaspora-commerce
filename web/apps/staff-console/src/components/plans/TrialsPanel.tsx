@@ -2,7 +2,7 @@
 
 import { staffPlanKeys, staffPlanQueries,type StaffTrialCampaign } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -53,7 +53,7 @@ function CampaignDialog({ campaign, open, onClose, t }: { campaign: StaffTrialCa
     save.mutate();
   };
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={campaign ? t('st.plans.editCampaign') : t('st.plans.newCampaign')} description={t('st.plans.campaignHelp')} width={560} closeLabel={t('st.plans.close')}>
+    <Sheet modal open={open} onOpenChange={(o) => !o && onClose()} title={campaign ? t('st.plans.editCampaign') : t('st.plans.newCampaign')} description={t('st.plans.campaignHelp')} width={560} closeLabel={t('st.plans.close')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-2">
         <TextField id="tc-name" label={t('st.plans.name')} value={f.name} error={errors.name} onChange={set('name')} />
         <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
@@ -75,7 +75,7 @@ function CampaignDialog({ campaign, open, onClose, t }: { campaign: StaffTrialCa
           <Button type="submit" loading={save.isPending}>{t('st.plans.save')}</Button>
         </div>
       </form>
-    </Dialog>
+    </Sheet>
   );
 }
 

@@ -93,7 +93,7 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
     save.mutate();
   };
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={plan ? t('st.plans.editTitle', { name: plan.name }) : t('st.plans.createTitle')} width={560} closeLabel={t('st.plans.close')}>
+    <Sheet modal open={open} onOpenChange={(o) => !o && onClose()} title={plan ? t('st.plans.editTitle', { name: plan.name }) : t('st.plans.createTitle')} width={560} closeLabel={t('st.plans.close')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-2">
         {!plan ? (
           <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
@@ -186,7 +186,7 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
           <Button type="submit" loading={save.isPending}>{plan ? t('st.plans.save') : t('st.plans.createDraft')}</Button>
         </div>
       </form>
-    </Dialog>
+    </Sheet>
   );
 }
 

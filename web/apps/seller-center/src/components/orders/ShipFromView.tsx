@@ -13,7 +13,7 @@ import {
   shipFromToForm,
   validatePickupHours
 } from '@afrotransact/api-client';
-import { AddressFields, Button, buttonClassName, Checkbox, Dialog, PhoneNumberField, Select, TextField, useToast } from '@afrotransact/ui';
+import { AddressFields, Button, buttonClassName, Checkbox, PhoneNumberField, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { MapPin, Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -220,7 +220,7 @@ function AddressDialog({ open, address, onClose }: { open: boolean; address: Shi
     <TextField id={`sfa-${k}`} label={label} value={form[k]} error={errors[k]} onChange={(e) => setForm((f) => ({ ...f, [k]: e.currentTarget.value }))} {...extra} />
   );
   return (
-    <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())} title={address ? t('sc.shipFrom.editTitle', { label: address.label }) : t('sc.shipFrom.addTitle')}>
+    <Sheet modal width={520} open={open} onOpenChange={(o) => (o ? undefined : onClose())} title={address ? t('sc.shipFrom.editTitle', { label: address.label }) : t('sc.shipFrom.addTitle')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-3">
         {field('label', t('sc.shipFrom.label'))}
         {field('name', t('sc.shipFrom.name'), { autoComplete: 'name' })}
@@ -247,7 +247,7 @@ function AddressDialog({ open, address, onClose }: { open: boolean; address: Shi
           </Button>
         </div>
       </form>
-    </Dialog>
+    </Sheet>
   );
 }
 

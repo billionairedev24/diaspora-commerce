@@ -2,7 +2,7 @@
 
 import { type CreateSellerCoupon, type SellerCoupon, sellerKeys, sellerQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
@@ -222,7 +222,7 @@ export function CouponsView() {
       />
 
       {editable ? (
-        <Dialog
+        <Sheet modal width={520}
           open={createOpen}
           onOpenChange={setCreateOpen}
           title={t('sc.coupons.createTitle')}
@@ -272,7 +272,7 @@ export function CouponsView() {
               </Button>
             </div>
           </form>
-        </Dialog>
+        </Sheet>
       ) : null}
 
       {toDelete ? (

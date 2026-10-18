@@ -12,7 +12,7 @@ import {
   type StaffRewardRuleInput
 } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import { useSearchParams } from 'next/navigation';
@@ -185,7 +185,7 @@ function RuleDialog({ rule, open, onClose, t }: { rule: StaffRewardRule | null; 
     save.mutate(null);
   };
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()} title={rule ? t('st.plans.editRule') : t('st.plans.newRule')} description={t('st.plans.ruleHelp')} width={720} closeLabel={t('st.plans.close')}>
+    <Sheet modal open={open} onOpenChange={(o) => !o && onClose()} title={rule ? t('st.plans.editRule') : t('st.plans.newRule')} description={t('st.plans.ruleHelp')} width={720} closeLabel={t('st.plans.close')}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-2">
         <TextField id="rr-name" label={t('st.plans.name')} value={f.name} error={errors.name} onChange={set('name')} />
         <TextField id="rr-desc" label={t('st.plans.description')} value={f.description} onChange={set('description')} />
@@ -234,7 +234,7 @@ function RuleDialog({ rule, open, onClose, t }: { rule: StaffRewardRule | null; 
           {rule?.status !== 'ACTIVE' ? <Button loading={save.isPending && save.variables === 'ACTIVE'} onClick={() => { setErrors({}); save.mutate('ACTIVE'); }}>{t('st.plans.saveAndActivate')}</Button> : null}
         </div>
       </form>
-    </Dialog>
+    </Sheet>
   );
 }
 
