@@ -34,7 +34,7 @@ web/            pnpm: apps/{storefront,seller-center,staff-console}, packages/{t
 mobile/         apps/{customer,driver} (Expo)
 docs/           portal/ (Docusaurus), adr/, runbooks/, backlog/backlog.csv
 infra/          local/ (docker compose), helm/ (library chart + per-service charts),
-                argocd/, terraform/{modules/{aws,gcp,azure},envs/{dev,uat,prod}}, cloudflare/,
+                argocd/, tofu/{modules/{aws,gcp,azure},envs/{dev,uat,prod}}, cloudflare/,
                 observability/
 design/         the Claude Design prototypes (read-only reference)
 ```

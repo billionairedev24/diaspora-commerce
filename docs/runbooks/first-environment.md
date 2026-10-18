@@ -4,7 +4,7 @@
 (`dev` first, then `uat`, then `prod`) on AWS, Google Cloud or Azure
 
 Everything below is code in this repository; this page is the order in which a human with admin rights runs it the
-first time. After the first apply, CI takes over: `terraform.yml` plans every PR and applies dev on merge (uat/prod on
+first time. After the first apply, CI takes over: `tofu.yml` plans every PR and applies dev on merge (uat/prod on
 approval), the service pipelines deploy images through GitOps, and Argo CD syncs the cluster.
 
 Placeholders: `ENV` is `dev`, `uat` or `prod`; `BASE` is `dev.afrotransact.com`, `uat.afrotransact.com` or
@@ -17,11 +17,11 @@ Placeholders: `ENV` is `dev`, `uat` or `prod`; `BASE` is `dev.afrotransact.com`,
 | Cloud admin on the target account / project / subscription (prefer one per environment; prod always separate) | state bucket, first apply |
 | GitHub admin on `REPO` | environments, variables, secrets |
 | Cloudflare account admin, zone `afrotransact.com` on the account | API token, Pages, Tunnel, DNS |
-| Elastic Cloud, Confluent Cloud and Temporal Cloud organisations | their API keys (Terraform providers) |
+| Elastic Cloud, Confluent Cloud and Temporal Cloud organisations | their API keys (OpenTofu providers) |
 | Stripe, OpenRouter, Resend (+ SendGrid, Twilio), Google Maps Platform, Expo, carrier developer accounts | service secrets (step 4) |
 | Tools: `tofu` 1.9+, `kubectl`, `helm`, `jq`, `gh`, `cosign`, the cloud CLI (`aws` / `gcloud` / `az`), `wrangler` (`npx wrangler`), optionally `tcld` | |
 
-Pick the cloud per environment with one variable (`cloud` in `infra/terraform/envs/ENV/terraform.tfvars`); nothing
+Pick the cloud per environment with one variable (`cloud` in `infra/tofu/envs/ENV/terraform.tfvars`); nothing
 else in the repository changes with it.
 
 ## 1. State bucket (once per account / project / subscription)
@@ -29,17 +29,17 @@ else in the repository changes with it.
 ```bash
 # AWS
 aws sso login
-cd infra/terraform/bootstrap/aws   && tofu init && tofu apply -var region=us-east-1
+cd infra/tofu/bootstrap/aws   && tofu init && tofu apply -var region=us-east-1
 # Google Cloud
 gcloud auth application-default login
-cd infra/terraform/bootstrap/gcp   && tofu init && tofu apply -var project_id=afrotransact-ENV -var region=us-east4
+cd infra/tofu/bootstrap/gcp   && tofu init && tofu apply -var project_id=afrotransact-ENV -var region=us-east4
 # Azure (allowed_ips = your egress IP and, later, CI runner ranges; everything else is denied)
 az login
-cd infra/terraform/bootstrap/azure && tofu init && tofu apply -var subscription_id=SUB_ID -var location=eastus \
+cd infra/tofu/bootstrap/azure && tofu init && tofu apply -var subscription_id=SUB_ID -var location=eastus \
   -var 'allowed_ips=["203.0.113.10"]'
 ```
 
-Then in `infra/terraform/envs/ENV`:
+Then in `infra/tofu/envs/ENV`:
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars          # cloud, region, cidr, web_domain, emails, ... (commit it)
@@ -88,7 +88,7 @@ Repository variables (all environments):
 
 | Variable | Value |
 |---|---|
-| `TF_TARGETS` | JSON per environment: cloud, region, state, plan and apply login inputs (example in `docs/engineering/ci-cd.md`). Until it is set, `terraform.yml` runs only the static checks |
+| `TF_TARGETS` | JSON per environment: cloud, region, state, plan and apply login inputs (example in `docs/engineering/ci-cd.md`). Until it is set, `tofu.yml` runs only the static checks |
 | `GITOPS_BRANCH` | `main` (default) or a dedicated `gitops` branch that Argo CD tracks |
 | `DEV_BASE_DOMAIN` | `dev.afrotransact.com` (ZAP baseline, carrier smoke `target: dev`) |
 | `DOCS_PAGES_PROJECT` | `afrotransact-docs` |
@@ -104,10 +104,10 @@ and `main` must accept its pushes, or use a `gitops` branch).
 
 | Secret | Used by | How to get it |
 |---|---|---|
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | web deploys (Workers), docs + Storybook (Pages), `terraform.yml` cloudflare jobs | Cloudflare API token with Zone: Settings, DNS, WAF, SSL, Workers Routes edit; Account: Workers Scripts, Pages, Turnstile, R2, Tunnel, Lists edit |
-| `EC_API_KEY` | Terraform (Elastic Cloud) | Elastic Cloud -> Organization -> API keys |
-| `CONFLUENT_CLOUD_API_KEY`, `CONFLUENT_CLOUD_API_SECRET` | Terraform (Confluent) | Cloud API key of a service account with OrganizationAdmin |
-| `TEMPORAL_CLOUD_API_KEY` | Terraform (Temporal Cloud namespaces) | Temporal Cloud -> Settings -> API keys (Account Owner or a service account with namespace admin) |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | web deploys (Workers), docs + Storybook (Pages), `tofu.yml` cloudflare jobs | Cloudflare API token with Zone: Settings, DNS, WAF, SSL, Workers Routes edit; Account: Workers Scripts, Pages, Turnstile, R2, Tunnel, Lists edit |
+| `EC_API_KEY` | OpenTofu (Elastic Cloud) | Elastic Cloud -> Organization -> API keys |
+| `CONFLUENT_CLOUD_API_KEY`, `CONFLUENT_CLOUD_API_SECRET` | OpenTofu (Confluent) | Cloud API key of a service account with OrganizationAdmin |
+| `TEMPORAL_CLOUD_API_KEY` | OpenTofu (Temporal Cloud namespaces) | Temporal Cloud -> Settings -> API keys (Account Owner or a service account with namespace admin) |
 | `EXPO_TOKEN` | `mobile.yml` (EAS build / update) | expo.dev -> Access tokens (robot user) |
 | `NVD_API_KEY` | `security.yml` OWASP Dependency-Check (weekly) | nvd.nist.gov API key request |
 | `GITOPS_APP_ID`, `GITOPS_APP_PRIVATE_KEY` | `_deploy.yml` GitOps bump (optional) | GitHub App above |
@@ -117,14 +117,14 @@ and `main` must accept its pushes, or use a `gitops` branch).
 
 ### 4.2 Service secrets in the cloud secret store
 
-Terraform creates one secret per service (`afrotransact/ENV/<service>` on AWS, `afrotransact-ENV-<service>` on GCP and
+OpenTofu creates one secret per service (`afrotransact/ENV/<service>` on AWS, `afrotransact-ENV-<service>` on GCP and
 Azure) and seeds the non-secret values once: `APP_ENV`, `DB_NAME`, `DB_USER`, `KAFKA_BOOTSTRAP` + per-service Confluent
 API key, `SCHEMA_REGISTRY_URL`, `ES_URLS` (search, indexer) and `TEMPORAL_TARGET` / `TEMPORAL_NAMESPACE` (orders).
 External Secrets Operator turns each into the Kubernetes Secret `<service>-secrets`. Add the rest with the merge helper,
 which never overwrites keys you do not name:
 
 ```bash
-cd infra/terraform
+cd infra/tofu
 scripts/secret-set.sh <cloud> ENV payments STRIPE_SECRET_KEY=- STRIPE_WEBHOOK_SECRET=-     # prompts, no echo
 scripts/secret-set.sh <cloud> ENV gateway-bff STRIPE_PUBLISHABLE_KEY=-                       # same Stripe account
 scripts/secret-set.sh <cloud> ENV identity SIGNING_KEY_PEM=@signing-key.pem
@@ -152,7 +152,7 @@ The keys each chart expects (from the `Secret keys expected` comment in every `d
 | identity | `DB_*`, `KAFKA_BOOTSTRAP`, `SIGNING_KEY_PEM`, `IDENTITY_DATA_KEY` (+ optional `IDENTITY_DATA_KEY_ID`, `IDENTITY_DATA_KEYS_PREVIOUS`), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `BFF_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET`, `ORDERS_CLIENT_SECRET`, `BOOKINGS_CLIENT_SECRET`, `FULFILMENT_CLIENT_SECRET`, `PAYMENTS_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `SEARCH_CLIENT_SECRET`, `RETAIL_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `OFFERS_CLIENT_SECRET`, `INDEXER_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, `TAX_RETURNS_CLIENT_SECRET`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_PHONE` | `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256` for the signing key; social login consoles; every `*_CLIENT_SECRET` is generated here and copied to the calling service |
 | indexer | `ES_URLS`, `ES_API_KEY`, `KAFKA_BOOTSTRAP`, `INDEXER_CLIENT_SECRET` | `elastic-ilm.sh`; identity client |
 | inventory | `DB_*`, `KAFKA_BOOTSTRAP`, `INVENTORY_CLIENT_SECRET` | identity client |
-| mcp-server | `KAFKA_BOOTSTRAP`, `REDIS_URL` | Terraform seed, `tofu output cache` |
+| mcp-server | `KAFKA_BOOTSTRAP`, `REDIS_URL` | OpenTofu seed, `tofu output cache` |
 | media | `DB_URL`, `UPLOADTHING_API_KEY`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `AZURE_STORAGE_KEY` (azure only, else empty) | UploadThing; Cloudflare R2 API token scoped to `afrotransact-media-ENV` |
 | notifications | `DB_URL`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `FCM_SERVICE_ACCOUNT_JSON`, `APNS_KEY_P8`, `WHATSAPP_TOKEN`, `RESEND_WEBHOOK_SECRET`, `SENDGRID_WEBHOOK_PUBLIC_KEY`, `UNSUBSCRIBE_SIGNING_KEY`, `NOTIFICATIONS_CLIENT_SECRET` | Resend (domain `mail.BASE` verified), SendGrid, Twilio, Vonage, Firebase, Apple, Meta; generated |
 | offers | `DB_*`, `KAFKA_BOOTSTRAP`, `OFFERS_CLIENT_SECRET`, `FGA_API_TOKEN` | identity client, OpenFGA key |
@@ -186,17 +186,17 @@ policy in `modules/<cloud>/identity`.
 
 ### 4.4 Spend alerts in the SaaS consoles
 
-Terraform budgets cover the cloud account only ([cost.md](cost.md)). Set a monthly spend alert in Elastic Cloud,
+OpenTofu budgets cover the cloud account only ([cost.md](cost.md)). Set a monthly spend alert in Elastic Cloud,
 Confluent Cloud, Temporal Cloud, OpenRouter (credit limit per key) and Cloudflare when the accounts are created.
 
 ## 5. tofu plan and apply
 
 ```bash
-cd infra/terraform/envs/ENV
+cd infra/tofu/envs/ENV
 export EC_API_KEY=... CONFLUENT_CLOUD_API_KEY=... CONFLUENT_CLOUD_API_SECRET=... TEMPORAL_CLOUD_API_KEY=...
 tofu plan -out plan.out
 tofu show -json plan.out > plan.json
-conftest test plan.json --policy ../../../policy/terraform   # must pass: public buckets, encryption, tags, ingress
+conftest test plan.json --policy ../../../policy/tofu   # must pass: public buckets, encryption, tags, ingress
 tofu apply plan.out
 ```
 
@@ -225,7 +225,7 @@ tofu output -json turnstile_secrets      # TURNSTILE_SECRET_* into identity / or
 ## 6. Argo CD bootstrap
 
 ```bash
-$(tofu -chdir=infra/terraform/envs/ENV output -json cluster | jq -r .kubeconfig_command)
+$(tofu -chdir=infra/tofu/envs/ENV output -json cluster | jq -r .kubeconfig_command)
 helm upgrade --install argocd oci://ghcr.io/argoproj/argo-helm/argo-cd -n argocd --create-namespace --version 10.10.1 \
   --set configs.params."server\.insecure"=true --wait
 # Private repository: give Argo CD read access (deploy key or GitHub App) before the root app
@@ -261,7 +261,7 @@ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes -days 730 -
 openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes -subj "/CN=orders-ENV" -keyout orders.key -out orders.csr
 openssl x509 -req -in orders.csr -CA temporal-ca.pem -CAkey temporal-ca.key -CAcreateserial -days 365 -out orders.pem
 # trust the CA on the namespace: terraform.tfvars temporal_accepted_client_ca = "$(base64 -w0 temporal-ca.pem)", apply
-infra/terraform/scripts/secret-set.sh <cloud> ENV orders TEMPORAL_TLS_CERT=@orders.pem TEMPORAL_TLS_KEY=@orders.key
+infra/tofu/scripts/secret-set.sh <cloud> ENV orders TEMPORAL_TLS_CERT=@orders.pem TEMPORAL_TLS_KEY=@orders.key
 tofu output temporal       # namespace id (name.account) and the mTLS endpoint
 ```
 
@@ -294,8 +294,8 @@ curl -fsSI https://developers.BASE | head -1             # docs portal on Pages
 # signed images enforced: an unsigned image in a service namespace must be denied by Kyverno
 kubectl -n afrotransact-ENV run unsigned --image=busybox:1.37 --restart=Never -- true   # expect: admission webhook denied
 # Temporal: the orders worker polls its task queue
-temporal task-queue describe --task-queue orders-checkout --namespace "$(tofu -chdir=infra/terraform/envs/ENV output -json temporal | jq -r .namespace)" \
-  --address "$(tofu -chdir=infra/terraform/envs/ENV output -json temporal | jq -r .target)" --tls-cert-path orders.pem --tls-key-path orders.key
+temporal task-queue describe --task-queue orders-checkout --namespace "$(tofu -chdir=infra/tofu/envs/ENV output -json temporal | jq -r .namespace)" \
+  --address "$(tofu -chdir=infra/tofu/envs/ENV output -json temporal | jq -r .target)" --tls-cert-path orders.pem --tls-key-path orders.key
 # carriers (rates only, no labels bought): Actions -> carrier-sandboxes -> target dev, rates_only
 # IaC scan stays clean
 trivy config --config trivy.yaml --severity CRITICAL,HIGH --exit-code 1 infra
@@ -306,9 +306,9 @@ Trivy IaC clean), then repeat from step 1 for uat and prod.
 
 ## Rollback
 
-- Terraform: revert the PR and let CI apply, or `tofu apply` the previous commit. Stateful resources have deletion
+- OpenTofu: revert the PR and let CI apply, or `tofu apply` the previous commit. Stateful resources have deletion
   protection in uat/prod; never `tofu destroy` an environment that holds data without the migration runbook in
-  `infra/terraform/README.md`.
+  `infra/tofu/README.md`.
 - Argo CD: `argocd app rollback <app>` or revert the GitOps commit that bumped `values-ENV.yaml`.
 - Kyverno blocking legitimate pods: set the rule's `failureAction` to `Audit` in `infra/k8s/platform/policies` (PR),
   never delete the policy in place.

@@ -39,7 +39,7 @@ Testcontainers ITs + JaCoCo + `tools/quality/coverage_report.sh` gate; Semgrep i
 | `promote.yml` (generated) | manual | promote a signed image (default: the tag running in the previous env) to uat or prod |
 | `_java-service.yml`, `_go-service.yml`, `_web-app.yml`, `_deploy.yml` | `workflow_call` | reusable pipelines |
 | `contracts.yml` | `contracts/**` | Redocly + Spectral lint, oasdiff breaking changes for every spec, AsyncAPI validate |
-| `terraform.yml` | `infra/terraform/**`, `infra/cloudflare/**`, `infra/policy/**` | fmt, interface drift, validate (all modules, all env x cloud), tflint, conftest tests; plan per env on its cloud with conftest on the plan JSON + PR comment; apply dev on main, uat/prod on dispatch |
+| `tofu.yml` | `infra/tofu/**`, `infra/cloudflare/**`, `infra/policy/**` | fmt, interface drift, validate (all modules, all env x cloud), tflint, conftest tests; plan per env on its cloud with conftest on the plan JSON + PR comment; apply dev on main, uat/prod on dispatch |
 | `security.yml` | main, weekly, manual (+ PRs touching scanner config) | CodeQL (java-kotlin, go, js/ts, actions); Trivy repo SARIF (CRITICAL vulns/secrets fail) and Trivy IaC on `infra/` (CRITICAL/HIGH fail); Semgrep self-test + repo scan (ERROR fails); govulncheck every Go module; osv-scanner every lockfile (SARIF, CVSS >= 9 fails); gitleaks full history; OWASP Dependency-Check (weekly, `NVD_API_KEY`); ZAP baseline vs dev |
 | `carrier-sandboxes.yml` | manual | carrier sandbox smoke (`tools/smoke/carriers.sh`): ephemeral carrier-gateway on the runner with the `carrier-sandbox` environment secrets, or the deployed dev service (docs/runbooks/carrier-sandboxes.md) |
 | `backlog.yml` | `docs/backlog/**` | CSV parses, header, unique ids, valid status/type/priority, parents are epics |
@@ -106,7 +106,7 @@ requests included) before anything is pushed; see change request 5 for the remai
 ## Security of the pipeline
 
 - **No long-lived cloud keys**: `id-token: write` + OIDC federation created by
-  `infra/terraform/modules/<cloud>/github-oidc` - three identities per environment:
+  `infra/tofu/modules/<cloud>/github-oidc` - three identities per environment:
   `deploy` (registry push only; `sub = repo:<repo>:environment:<env>`), `plan` (read-only;
   `sub = repo:<repo>:pull_request`), `apply` (admin; `sub = repo:<repo>:environment:<env>-infra`).
 - Images are signed keylessly (Fulcio/Rekor) and carry an SPDX SBOM attestation; deploy refuses unsigned
@@ -144,7 +144,7 @@ The whole first-time setup in order (state, OIDC, variables, every secret, apply
 [docs/runbooks/first-environment.md](../runbooks/first-environment.md).
 
 **Secrets**: `CLOUDFLARE_API_TOKEN` (Workers, Pages: docs + Storybook), `CLOUDFLARE_ACCOUNT_ID`, `EC_API_KEY`, `CONFLUENT_CLOUD_API_KEY`,
-`CONFLUENT_CLOUD_API_SECRET`, `TEMPORAL_CLOUD_API_KEY` (Terraform: Temporal Cloud namespaces), `EXPO_TOKEN`,
+`CONFLUENT_CLOUD_API_SECRET`, `TEMPORAL_CLOUD_API_KEY` (OpenTofu: Temporal Cloud namespaces), `EXPO_TOKEN`,
 optional `NVD_API_KEY` (weekly OWASP Dependency-Check), `SMOKE_CLIENT_ID`/`SMOKE_CLIENT_SECRET` on `dev` and the carrier
 sandbox keys on the `carrier-sandbox` environment (`carrier-sandboxes.yml`), optional `VERCEL_TOKEN`/`VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`,
 optional `GITOPS_APP_ID`/`GITOPS_APP_PRIVATE_KEY` (a GitHub App allowed to push the GitOps bump through
@@ -211,7 +211,7 @@ One-time setup:
   Edit**) and `CLOUDFLARE_ACCOUNT_ID`. No variables are needed.
 - The Pages projects `afrotransact-storybook` and `afrotransact-docs` (production branch `main`) are created by
   `infra/cloudflare/pages.tf` in the run with `pages_projects_owner = true` (dev); every environment's run adds its
-  `developers.<base>` custom domain to the docs project. Without Terraform:
+  `developers.<base>` custom domain to the docs project. Without OpenTofu:
   `npx wrangler pages project create afrotransact-storybook --production-branch=main`.
 - Create the PR label `update-visual-baselines`. If `main` is protected, the label path pushes only to PR
   branches, never to main.
@@ -227,7 +227,7 @@ must define those three profiles with matching channels.
 
 1. **Helm library secret key** (`infra/helm/library/at-service/templates/_objects.tpl`): the ExternalSecret
    key is hard-coded as `afrotransact/<env>/<svc>`. GCP Secret Manager ids and Azure Key Vault names cannot
-   contain `/`, so Terraform names them `afrotransact-<env>-<svc>`. Proposed: a `secrets.keySeparator`
+   contain `/`, so OpenTofu names them `afrotransact-<env>-<svc>`. Proposed: a `secrets.keySeparator`
    value (default `/`; `-` in platform-values for gcp/azure) used in
    `printf "afrotransact%s%s%s%s" sep .Values.env sep name`. Done: `secrets.keySeparator` is in the library and
    the platform-values examples.

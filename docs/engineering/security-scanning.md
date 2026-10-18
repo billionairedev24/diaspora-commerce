@@ -86,7 +86,7 @@ gitleaks git . --config .gitleaks.toml --redact --log-opts="origin/main..HEAD"  
 ### Trivy — `trivy.yaml`
 
 One scanner for dependency CVEs (Maven `pom.xml`, `go.mod`, `pnpm-lock.yaml`), secrets, IaC misconfiguration
-(Dockerfiles, Kubernetes manifests, Helm charts rendered with the prod platform values, Terraform) and container
+(Dockerfiles, Kubernetes manifests, Helm charts rendered with the prod platform values, OpenTofu) and container
 images. `trivy.yaml` sets scanners, skip dirs, `ignore-unfixed`, the secret allow-rules
 (`tools/security/trivy-secret.yaml`) and the accepted-risk file (`tools/security/trivyignore.yaml`, entries expire).
 Gates narrow it with `--severity … --exit-code 1`.
@@ -243,7 +243,7 @@ starting backlog.
 | Severity | Tool | Finding | Where | Fix |
 |---|---|---|---|---|
 | CRITICAL | Trivy (npm) | CVE-2026-104848, CVE-2026-104849 tinypool 1.1.1 prototype pollution → RCE | `pnpm-lock.yaml` via `@docusaurus/core` (docs portal build) | upgrade Docusaurus / override `tinypool` ≥ 2.1.2 |
-| CRITICAL | Trivy (IaC) | AZU-0012 storage account network rules default action should be deny | `infra/terraform/bootstrap/azure/main.tf:42` | `network_rules { default_action = "Deny" }` + allowed IPs/subnets |
+| CRITICAL | Trivy (IaC) | AZU-0012 storage account network rules default action should be deny | `infra/tofu/bootstrap/azure/main.tf:42` | `network_rules { default_action = "Deny" }` + allowed IPs/subnets |
 | HIGH | govulncheck | Go 1.27.1 stdlib: GO-2026-6617, -6613, -6612, -6611, -6610, -6608, -6607, -6605, -6603, -6600, -6599 (net/http HTTP/2 + HTTP/1, crypto/tls, net/textproto, html/template) — reachable | every Go module | `toolchain go1.27.2` in every `go.mod` (and CI `GO_VERSION`) |
 | HIGH | Trivy/govulncheck | golang.org/x/net v0.59.0 (CVE-2026-78669 et al.) | every Go module (`go.mod`, indirect) | `go get golang.org/x/net@v0.60.0` |
 | HIGH | Trivy (Maven) | jackson-core / jackson-databind 3.1.5 (CVE-2026-89407, -89425, -68497, -91776, -91777) | all Java services (Spring Boot 4.1.1 BOM) | Spring Boot 4.1.4 or `jackson-bom.version` 3.1.7 in `platform-parent` |
@@ -252,7 +252,7 @@ starting backlog.
 | HIGH | Trivy (npm) | glob 10.3.3 (CVE-2025-64756), serialize-javascript 6.0.2 (GHSA-5c6j-r48x-rmvq) | `pnpm-lock.yaml` (build tooling: `@node-minify/core`, webpack plugins of the docs portal) | upgrade parents / pnpm overrides |
 | MEDIUM | Trivy (IaC) | KSV-0013 image tag `latest`, KSV-0125 untrusted registry (charts rendered with default values; tags/registry are set by GitOps) | `*/deploy/helm/templates/all.yaml:52` | set `image.tag`/registry defaults in chart values or ignore with reason |
 | MEDIUM | Trivy (IaC) | DS-0013 `RUN cd …` | `go/services/*/Dockerfile:8,12` | use `WORKDIR` |
-| MEDIUM | Trivy (IaC) | AZU-0057 storage logging disabled | `infra/terraform/bootstrap/azure/main.tf:42` | enable blob logging |
+| MEDIUM | Trivy (IaC) | AZU-0057 storage logging disabled | `infra/tofu/bootstrap/azure/main.tf:42` | enable blob logging |
 | — | Semgrep | 0 ERROR; 116 WARNING `sql-string-concatenation`/`sql-string-building` (dynamic WHERE builders with bound values; reviewed sample: no user input in SQL text) | Java persistence adapters, `go/services/notifications/internal/adapter/postgres/notifications.go:158,191,269,375` | keep fragments constant; review queue |
 | — | gitleaks | 0 findings with `.gitleaks.toml` (11 before allowlisting: all test fixtures/local defaults) | — | — |
 
@@ -276,7 +276,7 @@ Trivy totals for the repo (fs, vuln): 2 CRITICAL, 120 HIGH, 156 MEDIUM occurrenc
 | glob 10.3.3 (GHSA-5j98-mcp5-4vw2 / CVE-2025-64756, high, `>=10.2.0 <10.5.0`) | fixed | root `package.json` `pnpm.overrides` `"glob@>=10.2.0 <10.5.0": "10.5.0"` (only the vulnerable 10.x range; glob 7/8/13 untouched) | `pnpm install --frozen-lockfile`; docs portal build; storefront, seller-center and staff-console `next build` |
 | serialize-javascript 6.0.2 (GHSA-5c6j-r48x-rmvq high `<=7.0.2`, GHSA-qj8w-gfj5-8c6v moderate `<7.0.5`) | fixed | `"serialize-javascript@<7.0.5": "7.1.2"` (same CommonJS `serialize(obj, opts)` export; copy-webpack-plugin 11 and css-minimizer-webpack-plugin 5 of the docs portal; drops `randombytes`) | same builds (the portal's production build minifies CSS through it) |
 | tinypool 1.1.1 (CRITICAL) | fixed (earlier) | `"tinypool@<2.2.0": "2.2.0"` | Trivy: 0 CRITICAL |
-| AZU-0012 state storage account default action | fixed | `network_rules { default_action = "Deny", bypass = [AzureServices, Logging, Metrics], ip_rules = var.allowed_ips }` in `infra/terraform/bootstrap/azure` | `trivy config`: no AZU-0012 |
+| AZU-0012 state storage account default action | fixed | `network_rules { default_action = "Deny", bypass = [AzureServices, Logging, Metrics], ip_rules = var.allowed_ips }` in `infra/tofu/bootstrap/azure` | `trivy config`: no AZU-0012 |
 | AZU-0057 storage logging | accepted (MEDIUM) | queue logging is configured with `azurerm_storage_account_queue_properties` (azurerm 4+ split resource), which Trivy's check does not read; entry with expiry in `tools/security/trivyignore.yaml` | `trivy config` |
 
 Trivy 0.69.1 re-scan of the working tree with `trivy.yaml` (`trivy fs .` and `trivy config infra`):

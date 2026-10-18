@@ -14,7 +14,7 @@ accounts often have vCPU quotas. Ask for a quota increase or pick a smaller regi
 3. **A separate state**: `tofu init -backend-config=backend.hcl` with a different state prefix/key (e.g. `prod-trial`), and
    `name_prefix = "afrotransact-trial"`.
 4. **No commitments, no reservations.** Test on demand.
-5. **Budget alert at $60 and at $120** on the trial billing account (the Terraform budget module does the cloud side; also set one in
+5. **Budget alert at $60 and at $120** on the trial billing account (the OpenTofu budget module does the cloud side; also set one in
    the billing console). The lean node is ~$139/month on demand on GCP, so $300 lasts about two months: do the test in **two weeks**
    and destroy.
 6. **Real secrets only for services you test** (Stripe test keys, not live). No real customer data: use the seed data
@@ -38,13 +38,13 @@ enable_temporal = false
 
 Then follow [first-environment.md](first-environment.md) with three differences:
 
-- **Data stores in the cluster, not Layerbase** (`managed_data = false` already creates none in Terraform). In
+- **Data stores in the cluster, not Layerbase** (`managed_data = false` already creates none in OpenTofu). In
   `infra/k8s/platform/lean/kustomization.yaml` uncomment `data/namespace.yaml`, `valkey.yaml`, `meilisearch.yaml` and
-  `postgres-trial.yaml`. Secrets (`infra/terraform/scripts/secret-set.sh`): `afrotransact/trial-postgres` (password),
+  `postgres-trial.yaml`. Secrets (`infra/tofu/scripts/secret-set.sh`): `afrotransact/trial-postgres` (password),
   `afrotransact/valkey` (password), `afrotransact/meilisearch` (master-key), plus the usual per-service keys with
   `DB_URL` pointing at `postgres.data.svc.cluster.local`, `REDIS_URL` at `valkey.data.svc.cluster.local:6379` and
   `MEILISEARCH_URL` at `http://meilisearch.data.svc.cluster.local:7700`. Create the databases with
-  `infra/terraform/scripts/postgres-bootstrap.sh` through `kubectl -n data port-forward svc/postgres 5432`
+  `infra/tofu/scripts/postgres-bootstrap.sh` through `kubectl -n data port-forward svc/postgres 5432`
   (`DATABASES` = the services' databases plus `temporal temporal_visibility openfga`).
 - **Argo CD** `argocd/envs/prod/platform-values.yaml`: set `cloud: gcp`, the registry and workload identity as in its GCP example.
 - **A throwaway domain** for the trial (a subdomain such as `trial.afrotransact.com` through `infra/cloudflare`, `origin_mode = "tunnel"`).

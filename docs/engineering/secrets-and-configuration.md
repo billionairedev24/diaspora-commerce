@@ -23,7 +23,7 @@ without a key the stack uses a local fallback (Mailpit, the log, OpenStreetMap, 
 | Kind | Examples | Locally | dev / uat / prod |
 |---|---|---|---|
 | **(a) External-provider secrets and ids** | `STRIPE_SECRET_KEY`, `TWILIO_AUTH_TOKEN`, `RESEND_API_KEY`, `OPENROUTER_API_KEY`, `GOOGLE_CLIENT_SECRET` | `.local/secrets.env` (you create them at the provider) | the service's secret in the cloud secret store |
-| **(b) Internal secrets** | `DB_PASSWORD`, `SIGNING_KEY_PEM`, `IDENTITY_DATA_KEY`, `HANDOVER_CODE_KEY`, `*_CLIENT_SECRET` | committed, clearly-labelled local defaults in `application-local.yml` / `config/local.yaml`: **nothing to do** | generated once (`openssl rand`) into the secret store; Terraform creates DB roles |
+| **(b) Internal secrets** | `DB_PASSWORD`, `SIGNING_KEY_PEM`, `IDENTITY_DATA_KEY`, `HANDOVER_CODE_KEY`, `*_CLIENT_SECRET` | committed, clearly-labelled local defaults in `application-local.yml` / `config/local.yaml`: **nothing to do** | generated once (`openssl rand`) into the secret store; OpenTofu creates DB roles |
 | **(c) Plain configuration** | `PUBLIC_WEB_URL`, `AUTH_ISSUER_URL`, ports, timeouts, feature flags | defaults in `application.yml` / `config/local.yaml`, plus what `local.sh` exports | `application-<env>.yml`, `config/<env>.yaml`, Helm `values-<env>.yaml`, `platform-values.yaml` |
 
 Plain configuration is too long to list here (about a thousand variable uses): `python3 tools/dev/secrets_check.py
@@ -330,12 +330,12 @@ loads with `envFrom` (`infra/helm/library/at-service`, `secrets.enabled: true` i
 
 | Cloud | Secret name | Created by |
 |---|---|---|
-| AWS Secrets Manager | `afrotransact/<env>/<service>`, e.g. `afrotransact/uat/payments` | Terraform `modules/aws/secrets` (KMS) |
-| GCP Secret Manager | `afrotransact-<env>-<service>` | Terraform `modules/gcp/secrets` |
-| Azure Key Vault | `afrotransact-<env>-<service>` | Terraform `modules/azure/secrets` |
+| AWS Secrets Manager | `afrotransact/<env>/<service>`, e.g. `afrotransact/uat/payments` | OpenTofu `modules/aws/secrets` (KMS) |
+| GCP Secret Manager | `afrotransact-<env>-<service>` | OpenTofu `modules/gcp/secrets` |
+| Azure Key Vault | `afrotransact-<env>-<service>` | OpenTofu `modules/azure/secrets` |
 
-Terraform seeds the non-secret values once (`APP_ENV`, database name and user, Kafka bootstrap and per-service
-credentials, `ES_URLS`); you add the secrets in the store (Terraform ignores later value drift). On GCP and Azure set
+OpenTofu seeds the non-secret values once (`APP_ENV`, database name and user, Kafka bootstrap and per-service
+credentials, `ES_URLS`); you add the secrets in the store (OpenTofu ignores later value drift). On GCP and Azure set
 `secrets.keySeparator: "-"` in `infra/argocd/envs/<env>/platform-values.yaml`. Example (AWS):
 
 ```bash
@@ -397,11 +397,11 @@ Repository (or environment) **secrets**, Settings → Secrets and variables → 
 | Secret | Workflow | Purpose |
 |---|---|---|
 | `GITOPS_APP_ID`, `GITOPS_APP_PRIVATE_KEY` | `_deploy.yml` | GitHub App that commits image tags to the GitOps branch |
-| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `_web-app.yml`, `docs.yml`, `storybook.yml`, `terraform.yml` | Workers deploys, Cloudflare Terraform |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | `_web-app.yml`, `docs.yml`, `storybook.yml`, `tofu.yml` | Workers deploys, Cloudflare OpenTofu |
 | `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` | `_web-app.yml` | Vercel fallback hosting (`vars.VERCEL_FALLBACK`) |
 | `EXPO_TOKEN` | `mobile.yml` | EAS builds and updates (skipped with a notice while unset) |
 | `UPS_*`, `USPS_*`, `FEDEX_*`, `DHL_*`, `SMOKE_CLIENT_ID`, `SMOKE_CLIENT_SECRET` | `carrier-sandboxes.yml` | carrier sandbox smoke tests |
-| `CONFLUENT_CLOUD_API_KEY`/`_SECRET`, `EC_API_KEY`, `TEMPORAL_CLOUD_API_KEY` | `terraform.yml` | managed Kafka, Elastic Cloud, Temporal Cloud |
+| `CONFLUENT_CLOUD_API_KEY`/`_SECRET`, `EC_API_KEY`, `TEMPORAL_CLOUD_API_KEY` | `tofu.yml` | managed Kafka, Elastic Cloud, Temporal Cloud |
 | `NVD_API_KEY` | `security.yml` | OWASP dependency-check feed |
 
 Repository **variables**: `CLOUD`, `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `GCP_WORKLOAD_IDENTITY_PROVIDER`,
@@ -503,7 +503,7 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 | `CART_CLIENT_SECRET` | cart, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `CATALOG_CLIENT_SECRET` | catalog, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `CLOUDFLARE_API_TOKEN` | GitHub Actions, storefront | storefront service: Cloudflare cache purge (also a GitHub Actions secret) |
-| `DB_PASSWORD` | ai-gateway, bookings, catalog, content, delivery-runs, fulfilment, identity, inventory, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres password (Terraform creates the role; one database per service) |
+| `DB_PASSWORD` | ai-gateway, bookings, catalog, content, delivery-runs, fulfilment, identity, inventory, offers, orders, payments, retail, seller, tax-returns, trust-ops | the service's Postgres password (OpenTofu creates the role; one database per service) |
 | `DB_URL` | ai-gateway, bookings, carrier-gateway, cart, catalog, content, delivery-runs, fulfilment, geo, identity, inventory, media, notifications, offers, orders, payments, retail, seller, storefront, tax-returns, trust-ops | the service's Postgres URL (Go: DSN incl. password; Java: JDBC URL, password in DB_PASSWORD) |
 | `DELIVERY_RUNS_CLIENT_SECRET` | delivery-runs, identity | OAuth2 client-credentials secret of a service at identity (identity holds the same value as <SERVICE>_CLIENT_SECRET) |
 | `EDI_AS2_KEYSTORE_PATH` | retail | retail: AS2 keystore file for supplier EDI |
@@ -550,7 +550,7 @@ Locally each has a committed, labelled default; deployed it goes in the service'
 
 ### Per app: what goes in `afrotransact/<env>/<service>`
 
-Plus the Terraform-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps: see above.
+Plus the OpenTofu-seeded values (`DB_*`, Kafka, `ES_URLS`). Web and mobile apps: see above.
 
 <!-- BEGIN GENERATED by tools/dev/secrets_check.py --write-docs: per-app -->
 | App / service | Provider variables it reads | Internal secrets it reads |

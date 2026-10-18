@@ -15,7 +15,7 @@ The profile is `envs/prod/sizing.tf` (`node_size = "lean"`, `zone_count = 1`, `e
 | Kubernetes | regional GKE, 3 arm64 nodes + system pool + spot pool, autoscaling to 12 | **one zonal cluster, one 4 vCPU / 16 GB node**, no autoscaling, no spare pools |
 | Replicas | 3 per service, HPA to 12, Argo Rollouts canary | **1 per service**, no HPA, no Rollouts, no PodDisruptionBudgets that block drains |
 | Network | VPC per environment, Cloud NAT per zone, flow logs 50% | **one VPC**, no NAT (nodes have public IPs, inbound closed, Cloudflare Tunnel in), flow logs 10% |
-| Postgres, Valkey | Cloud SQL HA + Memorystore (Terraform) | **Layerbase** (external; `managed_data = false` creates nothing) |
+| Postgres, Valkey | Cloud SQL HA + Memorystore (OpenTofu) | **Layerbase** (external; `managed_data = false` creates nothing) |
 | Search | Elastic Cloud / ECK | **Meilisearch on Layerbase** (`SEARCH_PROVIDER=meilisearch`) |
 | Events | Confluent Cloud Standard | **Apache Kafka, one KRaft pod** (`infra/k8s/platform/lean/kafka.yaml`, 10 GiB) |
 | Workflows | Temporal Cloud | **Temporal auto-setup pod**, state in Layerbase Postgres (`lean/temporal.yaml`) |
@@ -85,7 +85,7 @@ Two ways to get under 200 without a commitment, your choice:
 
 Notes:
 
-- **Terraform's budget is the cloud spend only: `monthly_budget = 135`** (200 minus Layerbase's 65). It alerts at 50/80/100% actual
+- **OpenTofu's budget is the cloud spend only: `monthly_budget = 135`** (200 minus Layerbase's 65). It alerts at 50/80/100% actual
   and 100% forecast, so on demand GCP (~139) raises an alert on purpose: it is the signal to buy the commitment or move to option B.
   AWS is over budget on any option because the EKS control plane alone is 73.
 - **Hidden cost: cross-provider traffic.** Layerbase's egress is included, but our cluster's traffic *to* it can leave our cloud as
@@ -132,8 +132,8 @@ Nothing there needs a commitment.
 ## Setting it up
 
 1. `terraform.tfvars` from `envs/prod/terraform.tfvars.example` (the lean defaults are already in it), `tofu apply`.
-2. Put these in the secret store (`infra/terraform/scripts/secret-set.sh`): per service `DB_URL`, `DB_USER`, `DB_PASSWORD`
-   (Layerbase Postgres, one database per service: run `infra/terraform/scripts/postgres-bootstrap.sh` with the admin credential and
+2. Put these in the secret store (`infra/tofu/scripts/secret-set.sh`): per service `DB_URL`, `DB_USER`, `DB_PASSWORD`
+   (Layerbase Postgres, one database per service: run `infra/tofu/scripts/postgres-bootstrap.sh` with the admin credential and
    `DATABASES` = the service databases plus `temporal temporal_visibility openfga`; the `geo` database needs the PostGIS extension),
    `REDIS_URL` (Valkey), `MEILISEARCH_URL` and `MEILISEARCH_API_KEY` for search and indexer, `R2_ACCESS_KEY_ID` and
    `R2_SECRET_ACCESS_KEY` for media, and the platform keys `afrotransact/temporal` (host, port, user, password of the

@@ -1,6 +1,6 @@
 # Postgres 17 + PostGIS in the cluster: FOR THE TRIAL ONLY (free-credit accounts), so the whole workflow can be tested
 # before paying Layerbase. NOT for production: one pod, no replica, backups are your job. ~25 small databases fit in 1 GiB.
-# Create the per-service databases with infra/terraform/scripts/postgres-bootstrap.sh (PGHOST via kubectl port-forward).
+# Create the per-service databases with infra/tofu/scripts/postgres-bootstrap.sh (PGHOST via kubectl port-forward).
 # Admin password: ExternalSecret key afrotransact/trial-postgres, property password. Host: postgres.data.svc.cluster.local.
 # The image is x86 (the GCP lean node); on an arm64 node (AWS/Azure lean) use a multi-arch PostGIS image.
 apiVersion: external-secrets.io/v1

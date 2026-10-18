@@ -1,8 +1,0 @@
-# cloud = aws  ->  uncomment `backend "s3" {}` in main.tf, copy to backend.hcl, then:
-#   tofu init -backend-config=backend.hcl
-# State bucket + lock are created once by infra/terraform/bootstrap/aws.
-# bucket       = "afrotransact-tfstate-<account-id>"
-# key          = "envs/uat/terraform.tfstate"
-# region       = "us-east-1"
-# encrypt      = true
-# use_lockfile = true

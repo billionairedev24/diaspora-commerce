@@ -126,10 +126,10 @@ render: ## Render one service as Argo CD would for an env: make render SERVICE=c
 	  -f infra/argocd/envs/$(ENV)/platform-values.yaml
 
 # ------------------------------------------------------------------------------------------------ infra / security
-tf-check: ## OpenTofu: fmt, module interface drift, conftest policy unit tests (validate needs providers: see infra/terraform/README.md)
-	$(TOFU) fmt -check -recursive infra/terraform infra/cloudflare
-	bash infra/terraform/scripts/sync-interface.sh --check
-	$(CONFTEST) verify --policy infra/policy/terraform
+tf-check: ## OpenTofu: fmt, module interface drift, conftest policy unit tests (validate needs providers: see infra/tofu/README.md)
+	$(TOFU) fmt -check -recursive infra/tofu infra/cloudflare
+	bash infra/tofu/scripts/sync-interface.sh --check
+	$(CONFTEST) verify --policy infra/policy/tofu
 
 security: ## Local security scans that work offline-first: gitleaks, Semgrep rules, govulncheck, Trivy (if installed)
 	@if command -v gitleaks >/dev/null || [ -x $(HOME)/go/bin/gitleaks ]; then \

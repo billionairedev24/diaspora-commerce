@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-18
 - **Deciders:** platform owner
-- **Related:** `docs/engineering/cloud-cost.md`, `docs/engineering/keycloak-migration.md`, `infra/terraform/envs/prod/sizing.tf`
+- **Related:** `docs/engineering/cloud-cost.md`, `docs/engineering/keycloak-migration.md`, `infra/tofu/envs/prod/sizing.tf`
 
 ## Context
 
@@ -13,9 +13,9 @@ Cloud) at a USD 6,500 budget. The limit is now USD 200 a month on any of GCP, Az
 
 ## Decision
 
-1. A **lean profile** in the existing Terraform sizing (`node_size = "lean"`, `zone_count = 1`, `egress = "none"`,
+1. A **lean profile** in the existing OpenTofu sizing (`node_size = "lean"`, `zone_count = 1`, `egress = "none"`,
    `managed_data = false`): one zonal cluster, one 4 vCPU / 16 GB node, one VPC, no NAT, one replica of everything.
-2. **Postgres, Valkey and Meilisearch are external (Layerbase Dedicated, 8 GB at $65)**; Terraform creates none of them.
+2. **Postgres, Valkey and Meilisearch are external (Layerbase Dedicated, 8 GB at $65)**; OpenTofu creates none of them.
    Everything lives in **one location, Virginia** (Layerbase Dedicated offers Virginia, Oregon and Sao Paulo); `tofu plan` fails
    when the cluster's region is not the Layerbase region.
 3. **Kafka and Temporal run in the cluster** (single instances) instead of Confluent Cloud and Temporal Cloud.
