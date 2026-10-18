@@ -29,7 +29,7 @@
     "@docusaurus/module-type-aliases": "3.10.2",
     "@docusaurus/tsconfig": "3.10.2",
     "@docusaurus/types": "3.10.2",
-    "@redocly/openapi-core": "^2.60.0",
+    "@redocly/openapi-core": "^2.64.0",
     "@types/react": "19.3.0",
     "typescript": "5.9.3",
     "yaml": "^2.9.1"
