@@ -597,3 +597,28 @@ func (r PlaceOrderRequest) Selections() []PlaceOrderRequestSelection {
 	}
 	return out
 }
+
+// BusinessPage is the plain public page of a business: name, description, logo and one brand colour, and for providers
+// the services it offers. Nobody edits it as a page; it is made from the application.
+type BusinessPage struct {
+	Slug string `json:"slug"`
+	// Kind is SELLER or PROVIDER.
+	Kind         string  `json:"kind"`
+	Name         string  `json:"name"`
+	Description  *string `json:"description"`
+	BrandColor   *string `json:"brandColor"`
+	LogoURL      *string `json:"logoUrl"`
+	ContactEmail *string `json:"contactEmail"`
+	// Indexable is false until the business is approved: keep the page out of search engines.
+	Indexable bool                  `json:"indexable"`
+	Services  []BusinessPageService `json:"services"`
+}
+
+// BusinessPageService is one service a provider offers, as listed on its page.
+type BusinessPageService struct {
+	ServiceID       string `json:"serviceId"`
+	Name            string `json:"name"`
+	DurationMinutes int    `json:"durationMinutes"`
+	PriceMinor      int64  `json:"priceMinor"`
+	Currency        string `json:"currency"`
+}

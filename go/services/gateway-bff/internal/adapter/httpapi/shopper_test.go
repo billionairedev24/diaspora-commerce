@@ -73,6 +73,15 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 		t.Fatalf("provider page should carry the published layout and only approved links: %v", design)
 	}
 	mustStatus(t, b.do("GET", "/v1/service-providers/org_nope", nil), 404)
+	// The plain public page of a business (what Stripe is given as its website): public, with a provider's services.
+	r = b.do("GET", "/v1/business-pages/braids-by-ama", nil)
+	mustStatus(t, r, 200)
+	page := r.json(t)
+	if page["name"] != "Braids by Ama" || page["brandColor"] != "#8a3b12" || page["indexable"] != true || len(page["services"].([]any)) != 1 {
+		t.Fatalf("business page = %v", page)
+	}
+	mustStatus(t, b.do("GET", "/v1/business-pages/nobody", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/business-pages/Not%20A%20Slug", nil), 404)
 	mustStatus(t, b.do("GET", "/v1/account/security", nil), 401)
 	mustStatus(t, b.do("POST", "/v1/lola/chat", map[string]any{"message": "hi"}), 401)
 

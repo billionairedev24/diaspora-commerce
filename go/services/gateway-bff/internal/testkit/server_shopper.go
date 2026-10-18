@@ -32,6 +32,7 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		Settings: app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(client("identity", base)),
 			Alerts: upstreams.NewAlertPreferences(client("notifications", base))}),
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
-		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", u.URL())), "us"),
-		PayLinks:     app.NewPayLinkService(upstreams.NewPayLinks(client("orders", base), tokens), TestPublishableKey)}
+		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", u.URL())), "us"),
+		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(client("orders", base), tokens), TestPublishableKey),
+		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", base)), d.Bookings)}
 }

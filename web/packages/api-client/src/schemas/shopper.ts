@@ -485,6 +485,22 @@ export const ProviderPageSchema = z.object({
 });
 export type ProviderPage = z.infer<typeof ProviderPageSchema>;
 
+/** A business's plain public page: made from its application, never edited as a page. */
+export const BusinessPageSchema = z.object({
+  slug: z.string(),
+  kind: z.enum(['SELLER', 'PROVIDER']),
+  name: z.string(),
+  description: nullableString,
+  /** #rrggbb, or null for the platform colour. */
+  brandColor: nullableString,
+  logoUrl: nullableString,
+  contactEmail: nullableString,
+  /** False until the business is approved: keep the page out of search engines. */
+  indexable: z.boolean(),
+  services: z.array(z.object({ serviceId: z.string(), name: z.string(), durationMinutes: z.number().int(), priceMinor: z.number().int(), currency: z.string() }))
+});
+export type BusinessPage = z.infer<typeof BusinessPageSchema>;
+
 export const CancellationQuoteSchema = z.object({
   refundSharePercent: z.number().int(),
   depositMinor: MinorSchema,

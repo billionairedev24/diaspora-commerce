@@ -29,6 +29,8 @@ type ShopperServices struct {
 	SearchClicks app.SearchClickService
 	// PayLinks serves the pay-now page of late pre-order adds (optional; public, the link's token is the credential).
 	PayLinks app.PayLinkService
+	// BusinessPages serves a business's plain public page (optional; public, read-only).
+	BusinessPages app.BusinessPageService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -51,6 +53,9 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	// Returns
 	route("GET /v1/account/returns/{rmaId}", h.returnDetail)
 	route("POST /v1/account/returns/{rmaId}/cancel", h.cancelReturn)
+	if h.s.Shopper.BusinessPages != nil {
+		route("GET /v1/business-pages/{slug}", h.businessPage)
+	}
 	// Pay-now page of late pre-order adds (no session: the signed token is the credential; rate-limited per IP)
 	if h.s.Shopper.PayLinks != nil {
 		lookup := func(fn http.HandlerFunc) http.HandlerFunc { return h.rl.wrap("lookup", h.o.LookupPerMinute, fn) }
@@ -153,6 +158,11 @@ func (h *handlersImpl) cancelReturn(w http.ResponseWriter, r *http.Request) {
 
 type payLinkBody struct {
 	Token string `json:"token"`
+}
+
+func (h *handlersImpl) businessPage(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Shopper.BusinessPages.Page(r.Context(), r.PathValue("slug"))
+	h.ok(w, r, v, err)
 }
 
 func (h *handlersImpl) payLinkLookup(w http.ResponseWriter, r *http.Request) {

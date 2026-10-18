@@ -2219,6 +2219,22 @@ paths:
               schema: {$ref: '#/components/schemas/ProviderPage'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/business-pages/{slug}:
+    get:
+      tags: [Services]
+      operationId: getBusinessPage
+      summary: A business's plain public page (what Stripe is given as its website)
+      description: Public, read-only. Name, description, logo and one brand colour from the business's application; providers also list their services. `indexable` is false until the business is approved, so search engines are kept off it.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, maxLength: 80}}
+      responses:
+        '200':
+          description: Page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BusinessPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/services/bookings:
     post:
       tags: [Services]
@@ -4388,6 +4404,29 @@ components:
         policyText: {type: string}
         instantBooking: {type: boolean}
         providerAnswersWithinMinutes: {type: [integer, 'null']}
+    BusinessPage:
+      type: object
+      required: [slug, kind, name, description, brandColor, logoUrl, contactEmail, indexable, services]
+      properties:
+        slug: {type: string}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        name: {type: string}
+        description: {type: [string, 'null']}
+        brandColor: {type: [string, 'null'], description: '#rrggbb, or null for the platform colour'}
+        logoUrl: {type: [string, 'null']}
+        contactEmail: {type: [string, 'null']}
+        indexable: {type: boolean, description: False until the business is approved}
+        services:
+          type: array
+          items:
+            type: object
+            required: [serviceId, name, durationMinutes, priceMinor, currency]
+            properties:
+              serviceId: {type: string}
+              name: {type: string}
+              durationMinutes: {type: integer}
+              priceMinor: {type: integer, format: int64}
+              currency: {type: string}
     ProviderPage:
       type: object
       required: [orgId, displayName, timeZone, location, policy, instantBooking, team, services, design]

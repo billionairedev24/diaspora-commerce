@@ -498,6 +498,14 @@ func (u *Upstreams) shopperBookingRoutes(mux *http.ServeMux, st *shopperState, a
 		writeJSON(w, 200, map[string]any{"orgId": ShopperProviderID, "displayName": "Braids by Ama", "timeZone": "America/Chicago", "location": "Houston, TX",
 			"policy": policy, "instantBooking": false, "services": []any{service}, "team": []map[string]any{{"id": "0c0c0c0c-0000-4000-8000-0000000000aa", "displayName": "Ama"}}})
 	})
+	mux.HandleFunc("GET /v1/public/business-pages/{slug}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("slug") != "braids-by-ama" {
+			problem(w, 404, "seller.business-page-not-found", "No page", nil)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"orgId": ShopperProviderID, "slug": "braids-by-ama", "kind": "PROVIDER", "name": "Braids by Ama",
+			"description": "Knotless braids and protective styles in Houston.", "brandColor": "#8A3B12", "logoUrl": nil, "contactEmail": "ama@example.com", "approved": true})
+	})
 	mux.HandleFunc("GET /v1/storefronts/{slug}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("slug") != ShopperProviderID && r.PathValue("slug") != "braids-by-ama" {
 			problem(w, 404, "storefront.not-found", "No published page", nil)
