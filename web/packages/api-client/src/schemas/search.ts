@@ -57,6 +57,22 @@ export const SearchPageSchema = z.object({
   facets: SearchFacetsSchema,
   deliverToLabel: z.string(),
   tookMs: z.number().int().min(0),
+  /** Services matching the typed words (first page of a text search only): a few, best match first. */
+  services: z
+    .array(
+      z.object({
+        serviceId: z.string(),
+        orgId: z.string(),
+        name: z.string(),
+        providerName: z.string(),
+        category: z.string(),
+        durationMinutes: z.number().int(),
+        priceFromMinor: z.number().int(),
+        currency: z.string(),
+        location: z.string()
+      })
+    )
+    .default([]),
   /** Identifies this search for click reporting (POST /v1/search/clicks). */
   searchId: z.string().optional()
 });

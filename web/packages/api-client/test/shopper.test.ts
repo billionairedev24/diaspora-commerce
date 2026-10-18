@@ -235,6 +235,17 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
   });
 });
 
+describe('mock BFF — services in search', () => {
+  it('a text search also returns the services matching its words, on the first page only', async () => {
+    const api = browserLikeClient().api;
+    const first = await api.search(SearchQuerySchema.parse({ q: 'braids' }));
+    expect(first.services.length).toBeGreaterThan(0);
+    expect(first.services.every((s) => s.name.toLowerCase().includes('braids') || s.category.toLowerCase().includes('braids') || s.providerName.toLowerCase().includes('braids'))).toBe(true);
+    const nothing = await api.search(SearchQuerySchema.parse({ q: 'zzzznothing' }));
+    expect(nothing.services).toEqual([]);
+  });
+});
+
 describe('mock BFF — sponsored search (S240)', () => {
   it('labels ads with the reason and records clicks once per search and product', async () => {
     const api = browserLikeClient().api;

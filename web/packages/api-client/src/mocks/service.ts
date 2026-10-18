@@ -7,6 +7,7 @@ import { type FacetBucket } from '../schemas/common';
 import { type Home } from '../schemas/home';
 import { type DeliveryLocation } from '../schemas/location';
 import { PRICE_BUCKETS, type SearchPage, type SearchQuery, type Suggestions } from '../schemas/search';
+import { PROVIDERS, SERVICES } from './shopper-state';
 import { getDb, type MockOffer, type MockSession, nextId } from './db';
 import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINOR, locationForZip, metroOf, nearestFc, SELLER_SHIPPING_MINOR } from './delivery';
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
@@ -252,8 +253,22 @@ export function search(q: SearchQuery, loc: DeliveryLocation, now: Date): Search
     pageCount,
     facets,
     deliverToLabel: loc.label,
-    tookMs: Date.now() - started
+    tookMs: Date.now() - started,
+    services: page === 0 ? matchingServices(q.q) : []
   };
+}
+
+/** Services whose name, description, category or provider contain every typed word (first page of a text search). */
+function matchingServices(text: string): SearchPage['services'] {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  return SERVICES.filter((s) => {
+    const hay = `${s.name} ${s.description} ${s.category} ${s.providerName}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  })
+    .slice(0, 4)
+    .map((s) => ({ serviceId: s.id, orgId: s.orgId, name: s.name, providerName: s.providerName, category: s.category, durationMinutes: s.durationMinutes,
+      priceFromMinor: s.priceMinor, currency: s.currency, location: PROVIDERS[s.orgId]?.location ?? '' }));
 }
 
 export function suggest(query: string, loc: DeliveryLocation, now: Date): Suggestions {

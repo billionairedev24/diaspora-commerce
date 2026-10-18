@@ -126,6 +126,7 @@
   "results.any": "أي",
   "results.clearAll": "مسح الكل",
   "results.empty": "لا توجد نتائج.",
+  "results.services": "خدمات تطابق بحثك",
   "results.emptyHint": "جرّب إزالة عامل تصفية أو التحقق من الإملاء — يمكن للولا أيضًا البحث عن بائعين يقبلون الطلبات الخاصة.",
   "results.loading": "جارٍ تحديث النتائج…",
   "results.loadingMore": "جارٍ تحميل المزيد من النتائج…",

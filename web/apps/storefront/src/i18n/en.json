@@ -119,6 +119,7 @@
   "results.any": "Any",
   "results.clearAll": "Clear all",
   "results.empty": "No results.",
+  "results.services": "Services matching your search",
   "results.emptyHint": "Try clearing a filter or checking the spelling — Lola can also search sellers who take special orders.",
   "results.loading": "Updating results…",
   "results.loadingMore": "Loading more results…",

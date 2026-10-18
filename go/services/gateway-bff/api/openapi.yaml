@@ -2823,7 +2823,7 @@ components:
         count: {type: integer, minimum: 0}
     SearchPage:
       type: object
-      required: [hits, total, page, size, pageCount, facets, deliverToLabel, tookMs]
+      required: [hits, total, page, size, pageCount, facets, deliverToLabel, tookMs, services]
       properties:
         hits: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
         total: {type: integer}
@@ -2843,6 +2843,22 @@ components:
             delivery: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
         deliverToLabel: {type: string}
         tookMs: {type: integer}
+        services:
+          type: array
+          description: Services matching the typed words (first page of a text search only; at most four, best match first)
+          items:
+            type: object
+            required: [serviceId, orgId, name, providerName, category, durationMinutes, priceFromMinor, currency, location]
+            properties:
+              serviceId: {type: string}
+              orgId: {type: string}
+              name: {type: string}
+              providerName: {type: string}
+              category: {type: string}
+              durationMinutes: {type: integer}
+              priceFromMinor: {type: integer, format: int64}
+              currency: {type: string}
+              location: {type: string}
         searchId: {type: string, description: Identifies this search for click reporting (POST /v1/search/clicks)}
     Suggestions:
       type: object

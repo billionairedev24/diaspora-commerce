@@ -72,6 +72,14 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 		t.Fatal("the provider page no longer carries a designed page")
 	}
 	mustStatus(t, b.do("GET", "/v1/service-providers/org_nope", nil), 404)
+	// A text search also carries the services matching its words (first page only), so "braids" finds a provider.
+	sp := b.do("GET", "/v1/search?q=jollof", nil).json(t)
+	if svc, _ := sp["services"].([]any); len(svc) != 1 || svc[0].(map[string]any)["name"] != "Knotless braids" {
+		t.Fatalf("search services = %v", sp["services"])
+	}
+	if svc, _ := b.do("GET", "/v1/search?q=jollof&page=1", nil).json(t)["services"].([]any); len(svc) != 0 {
+		t.Fatalf("only the first page carries services: %v", svc)
+	}
 	// The plain public page of a business (what Stripe is given as its website): public, with a provider's services.
 	r = b.do("GET", "/v1/business-pages/braids-by-ama", nil)
 	mustStatus(t, r, 200)

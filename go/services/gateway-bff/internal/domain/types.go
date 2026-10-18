@@ -156,10 +156,25 @@ type SearchPage struct {
 	Facets         Facets           `json:"facets"`
 	DeliverToLabel string           `json:"deliverToLabel"`
 	TookMs         int64            `json:"tookMs"`
+	// Services are the services that match the words (first page of a text search only): a few, best match first.
+	Services []SearchServiceHit `json:"services"`
 	// SearchID identifies this search for click reporting (POST /v1/search/clicks).
 	SearchID string `json:"searchId,omitempty"`
 	// Sponsored is true when the page carries ads; such pages are never cached.
 	Sponsored bool `json:"-"`
+}
+
+// SearchServiceHit is a service that matches a product search's words (the full list is the services page).
+type SearchServiceHit struct {
+	ServiceID       string `json:"serviceId"`
+	OrgID           string `json:"orgId"`
+	Name            string `json:"name"`
+	ProviderName    string `json:"providerName"`
+	Category        string `json:"category"`
+	DurationMinutes int    `json:"durationMinutes"`
+	PriceFromMinor  int64  `json:"priceFromMinor"`
+	Currency        string `json:"currency"`
+	Location        string `json:"location"`
 }
 
 // Phrase is a completed typeahead phrase.

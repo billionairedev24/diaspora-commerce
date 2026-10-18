@@ -2327,6 +2327,19 @@ export interface components {
             };
             deliverToLabel: string;
             tookMs: number;
+            /** @description Services matching the typed words (first page of a text search only; at most four, best match first) */
+            services: {
+                serviceId: string;
+                orgId: string;
+                name: string;
+                providerName: string;
+                category: string;
+                durationMinutes: number;
+                /** Format: int64 */
+                priceFromMinor: number;
+                currency: string;
+                location: string;
+            }[];
             /** @description Identifies this search for click reporting (POST /v1/search/clicks) */
             searchId?: string;
         };

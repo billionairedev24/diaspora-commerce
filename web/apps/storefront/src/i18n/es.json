@@ -126,6 +126,7 @@
   "results.any": "Cualquiera",
   "results.clearAll": "Borrar todo",
   "results.empty": "Sin resultados.",
+  "results.services": "Servicios que coinciden con tu búsqueda",
   "results.emptyHint": "Prueba a quitar un filtro o revisar la ortografía; Lola también puede buscar vendedores que aceptan pedidos especiales.",
   "results.loading": "Actualizando resultados…",
   "results.loadingMore": "Cargando más resultados…",
