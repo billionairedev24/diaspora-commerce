@@ -58,6 +58,21 @@ class ConvertTest(unittest.TestCase):
         self.assertIn("insert into federated_identity", sql)
         self.assertTrue(sql.startswith("begin;") and sql.endswith("commit;"))
 
+    def test_every_account_is_a_customer_and_mapped_roles_are_added(self):
+        a = m.convert(row(roles=["default-roles-afrotransact", "seller-admin", "mystery"]), {"seller-admin": "seller.admin"})
+        self.assertEqual(a.roles, ["account.customer", "seller.admin"])
+        self.assertEqual(a.unmapped_roles, ["mystery"])
+        sql = "\n".join(m.statements([a]))
+        self.assertIn("insert into user_role", sql)
+        self.assertIn("'keycloak-import'", sql)
+        self.assertIn("where exists (select 1 from role where key = 'seller.admin')", sql)
+
+    def test_memberships_only_attach_to_organisations_that_exist(self):
+        a = m.convert(row(), None, {row()["id"]: [{"orgId": "0a0a0a0a-0000-4000-8000-000000000009", "role": "seller.owner"}]})
+        sql = "\n".join(m.statements([a]))
+        self.assertIn("insert into org_membership", sql)
+        self.assertIn("exists (select 1 from organization where id = '0a0a0a0a-0000-4000-8000-000000000009'::uuid)", sql)
+
 
 if __name__ == "__main__":
     unittest.main()

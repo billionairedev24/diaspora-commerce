@@ -12,7 +12,10 @@ user id everywhere (orders, carts and addresses keep pointing at them), and nobo
 | phone attribute | `phone_e164` | Only valid E.164 numbers; others are dropped (reported). |
 | **password hash** | `password_hash` as `{kc-pbkdf2-sha256}iterations$salt$key` | Verified by `KeycloakPbkdf2PasswordEncoder` (also `sha512` and legacy `sha1`). Users sign in with the password they have. The first password change or reset stores a normal BCrypt hash. |
 | Google / Apple / Facebook links | `federated_identity` | Same provider subject, so "Continue with Google" lands on the same account. |
-| roles / groups | not copied | Staff and seller roles are assigned in identity (Staff console > Access); sellers' roles follow their organisations. |
+| (nothing: every sign-up gets it) | role `account.customer` | Granted to every imported user, exactly like a new sign-up, so shoppers can use the storefront at once. |
+| Keycloak realm roles | `user_role` via `--role-map roles.json` | e.g. `{"staff-admin": "platform.super_admin", "seller-admin": "seller.admin"}`. Roles with no mapping are listed in the report. Group-inherited roles are not read: map them to a role first. |
+| seller / provider organisations | `organization` + `org_membership` | Organisations are created in identity when seller-service publishes its approvals, not by this script. Replay the approved organisations first (so the rows exist), then pass `--memberships memberships.json` (`{"<user id>": [{"orgId": "...", "role": "seller.owner"}]}`, built from seller-service's own team table). Memberships to a missing organisation are skipped. |
+| addresses, orders, carts, reviews | not in Keycloak | They live in the other services' databases keyed by the same user id. Nothing to copy, and they reappear on sign-in because `sub` is unchanged. Identity's own address book starts empty unless Keycloak held addresses: tell me where they are stored and I will add them to the import. |
 | TOTP, passkeys | not copied | Keycloak's secrets are not portable. Staff and sellers who use MFA enrol again once in identity's security settings. Plan this with the few people affected. |
 | sessions, refresh tokens | not copied | Everybody signs in once after cut-over. Mobile apps return to the sign-in screen once. |
 
@@ -23,7 +26,7 @@ Keycloak's hash is not weakened by the import (it is PBKDF2 with its own iterati
 
 1. **Code and config.** Deploy identity (it already knows the Keycloak hash formats). Keep the issuer URL
    (`https://auth.afrotransact.com`) so tokens, JWKS discovery and the apps' settings do not change.
-2. **Rehearse on a copy.** Restore a Keycloak backup and an empty identity database locally, then:
+2. **Rehearse on a copy** (with `--role-map` and, for sellers, `--memberships`). Restore a Keycloak backup and an empty identity database locally, then:
    ```bash
    python3 tools/migrate/keycloak_to_identity.py report --keycloak "$KC_DB_URL"
    python3 tools/migrate/keycloak_to_identity.py sql    --keycloak "$KC_DB_URL" > import.sql   # read it
