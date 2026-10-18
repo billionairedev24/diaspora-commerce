@@ -123,6 +123,12 @@ One node and one replica of everything means a node restart or a bad deploy is *
 canary. Data is safe: it lives in Layerbase (backups, not this repo's job), Kafka's disk and R2/GCS. Kafka and Temporal
 are single instances; both resume where they stopped. Plan GKE/AKS maintenance windows for a quiet hour.
 
+## Test first, decide later
+
+[trial-environment.md](../runbooks/trial-environment.md) runs the whole workflow on free-credit accounts with everything in the cluster
+(`infra/k8s/platform/lean/data/`), plus a short Layerbase probe, and ends with the table that chooses between option A and B.
+Nothing there needs a commitment.
+
 ## Setting it up
 
 1. `terraform.tfvars` from `envs/prod/terraform.tfvars.example` (the lean defaults are already in it), `tofu apply`.

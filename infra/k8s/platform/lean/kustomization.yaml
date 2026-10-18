@@ -12,3 +12,10 @@ resources:
   - kafka.yaml
   - temporal.yaml
   - grafana-cloud.yaml
+  # In-cluster data stores, OFF by default (production keeps Postgres, Valkey and Meilisearch on Layerbase). Uncomment:
+  #   - the first three for the TRIAL (docs/runbooks/trial-environment.md): everything in the cluster, nothing external
+  #   - data/valkey.yaml + data/meilisearch.yaml for option B of docs/engineering/cloud-cost.md (Layerbase 4 GB = Postgres only)
+  # - data/namespace.yaml
+  # - data/valkey.yaml
+  # - data/meilisearch.yaml
+  # - data/postgres-trial.yaml

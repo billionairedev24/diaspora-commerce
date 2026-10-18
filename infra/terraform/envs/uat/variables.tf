@@ -161,3 +161,9 @@ variable "layerbase_region" {
     error_message = "layerbase_region must be virginia or oregon."
   }
 }
+
+variable "disposable" {
+  description = "true for a trial / test environment (free-credit accounts): deletion protection off and KYC retention 1 day, so `tofu destroy` leaves nothing behind. Never true for the real production state."
+  type        = bool
+  default     = false
+}

@@ -40,12 +40,17 @@ locals {
     temporal  = var.enable_temporal ? toset(["temporal"]) : toset([])
   }
 
+  # sizing.tf as written, except `disposable` (a trial or test run, variables.tf) which removes everything that would make
+  # a teardown hard: no deletion protection, and KYC evidence kept for one day instead of seven years (a locked retention
+  # policy cannot be deleted until it expires).
+  size = merge(local.sizing, var.disposable ? { deletion_protection = false, kyc_retention_days = 1 } : {})
+
   # Postgres and Valkey come from Terraform only when sizing.managed_data; otherwise they are external (Layerbase):
   # nothing is created, their endpoints and credentials go into the secret store by hand (docs/engineering/cloud-cost.md).
   on_data = {
-    aws   = local.is_aws && local.sizing.managed_data ? toset(["aws"]) : toset([])
-    gcp   = local.is_gcp && local.sizing.managed_data ? toset(["gcp"]) : toset([])
-    azure = local.is_azure && local.sizing.managed_data ? toset(["azure"]) : toset([])
+    aws   = local.is_aws && local.size.managed_data ? toset(["aws"]) : toset([])
+    gcp   = local.is_gcp && local.size.managed_data ? toset(["gcp"]) : toset([])
+    azure = local.is_azure && local.size.managed_data ? toset(["azure"]) : toset([])
   }
 
   # The cluster must sit next to the external database server (latency, and cross-region traffic is billed). Layerbase
@@ -61,7 +66,7 @@ locals {
     region              = var.region
     scope               = local.is_gcp ? var.gcp_project_id : (local.is_azure ? "${var.name_prefix}-${local.environment}" : "")
     admin_cidrs         = var.admin_cidrs
-    deletion_protection = local.sizing.deletion_protection
+    deletion_protection = local.size.deletion_protection
     tags = merge(var.extra_tags, {
       env           = local.environment
       owner         = var.owner
@@ -114,7 +119,7 @@ locals {
     }
     labels       = { versioning = true, archive_after_days = 30, expire_after_days = 400 }
     exports      = { versioning = false, expire_after_days = 30 }
-    kyc-evidence = { versioning = true, object_lock = true, retention_days = local.sizing.kyc_retention_days, archive_after_days = 90 }
+    kyc-evidence = { versioning = true, object_lock = true, retention_days = local.size.kyc_retention_days, archive_after_days = 90 }
   }
 
   # Events: at.<aggregate>.events, produced by the owning service, consumed by indexer/notifications/... .
@@ -145,7 +150,7 @@ locals {
 resource "terraform_data" "database_location" {
   lifecycle {
     precondition {
-      condition     = local.sizing.managed_data || var.region == local.layerbase_regions[var.layerbase_region][var.cloud]
+      condition     = local.size.managed_data || var.region == local.layerbase_regions[var.layerbase_region][var.cloud]
       error_message = "With external data (Layerbase) the region must match layerbase_region (${var.layerbase_region}): that is ${local.layerbase_regions[var.layerbase_region][var.cloud] == "" ? "not available on " : local.layerbase_regions[var.layerbase_region][var.cloud] + " on "}${var.cloud}, but region is ${var.region}."
     }
   }
@@ -158,8 +163,8 @@ module "aws_network" {
   providers  = { aws = aws.this[each.key] }
   context    = local.context
   cidr_block = var.cidr_block
-  zone_count = local.sizing.zone_count
-  egress     = local.sizing.egress
+  zone_count = local.size.zone_count
+  egress     = local.size.egress
 }
 
 module "aws_cluster" {
@@ -168,12 +173,12 @@ module "aws_cluster" {
   providers        = { aws = aws.this[each.key] }
   context          = local.context
   network          = module.aws_network["aws"].network
-  node_size        = local.sizing.node_size
-  min_nodes        = local.sizing.min_nodes
-  max_nodes        = local.sizing.max_nodes
-  spot_enabled     = local.sizing.spot_max_nodes > 0
-  spot_max_nodes   = local.sizing.spot_max_nodes
-  private_endpoint = local.sizing.private_endpoint
+  node_size        = local.size.node_size
+  min_nodes        = local.size.min_nodes
+  max_nodes        = local.size.max_nodes
+  spot_enabled     = local.size.spot_max_nodes > 0
+  spot_max_nodes   = local.size.spot_max_nodes
+  private_endpoint = local.size.private_endpoint
   admin_principals = var.cluster_admins
 }
 
@@ -192,10 +197,10 @@ module "aws_postgres" {
   providers             = { aws = aws.this[each.key] }
   context               = local.context
   network               = module.aws_network["aws"].network
-  size                  = local.sizing.db_size
-  high_availability     = local.sizing.ha
-  storage_gb            = local.sizing.db_storage_gb
-  backup_retention_days = local.sizing.backup_days
+  size                  = local.size.db_size
+  high_availability     = local.size.ha
+  storage_gb            = local.size.db_storage_gb
+  backup_retention_days = local.size.backup_days
   databases             = local.databases
   secret_store          = module.aws_secrets["aws"].store
 }
@@ -206,8 +211,8 @@ module "aws_cache" {
   providers         = { aws = aws.this[each.key] }
   context           = local.context
   network           = module.aws_network["aws"].network
-  size              = local.sizing.cache_size
-  high_availability = local.sizing.ha
+  size              = local.size.cache_size
+  high_availability = local.size.ha
 }
 
 module "aws_bucket" {
@@ -233,7 +238,7 @@ module "aws_budget" {
   for_each            = local.on.aws
   providers           = { aws = aws.this[each.key] }
   context             = local.context
-  monthly_limit       = local.sizing.monthly_budget
+  monthly_limit       = local.size.monthly_budget
   notification_emails = var.budget_notification_emails
   shared_account      = var.budget_shared_account
 }
@@ -290,8 +295,8 @@ module "gcp_network" {
   providers  = { google = google.this[each.key] }
   context    = local.context
   cidr_block = var.cidr_block
-  zone_count = local.sizing.zone_count
-  egress     = local.sizing.egress
+  zone_count = local.size.zone_count
+  egress     = local.size.egress
 }
 
 module "gcp_cluster" {
@@ -300,12 +305,12 @@ module "gcp_cluster" {
   providers        = { google = google.this[each.key] }
   context          = local.context
   network          = module.gcp_network["gcp"].network
-  node_size        = local.sizing.node_size
-  min_nodes        = local.sizing.min_nodes
-  max_nodes        = local.sizing.max_nodes
-  spot_enabled     = local.sizing.spot_max_nodes > 0
-  spot_max_nodes   = local.sizing.spot_max_nodes
-  private_endpoint = local.sizing.private_endpoint
+  node_size        = local.size.node_size
+  min_nodes        = local.size.min_nodes
+  max_nodes        = local.size.max_nodes
+  spot_enabled     = local.size.spot_max_nodes > 0
+  spot_max_nodes   = local.size.spot_max_nodes
+  private_endpoint = local.size.private_endpoint
   admin_principals = var.cluster_admins
 }
 
@@ -324,10 +329,10 @@ module "gcp_postgres" {
   providers             = { google = google.this[each.key] }
   context               = local.context
   network               = module.gcp_network["gcp"].network
-  size                  = local.sizing.db_size
-  high_availability     = local.sizing.ha
-  storage_gb            = local.sizing.db_storage_gb
-  backup_retention_days = local.sizing.backup_days
+  size                  = local.size.db_size
+  high_availability     = local.size.ha
+  storage_gb            = local.size.db_storage_gb
+  backup_retention_days = local.size.backup_days
   databases             = local.databases
   secret_store          = module.gcp_secrets["gcp"].store
 }
@@ -338,8 +343,8 @@ module "gcp_cache" {
   providers         = { google = google.this[each.key] }
   context           = local.context
   network           = module.gcp_network["gcp"].network
-  size              = local.sizing.cache_size
-  high_availability = local.sizing.ha
+  size              = local.size.cache_size
+  high_availability = local.size.ha
 }
 
 module "gcp_bucket" {
@@ -365,7 +370,7 @@ module "gcp_budget" {
   for_each            = local.on.gcp
   providers           = { google = google.this[each.key] }
   context             = local.context
-  monthly_limit       = local.sizing.monthly_budget
+  monthly_limit       = local.size.monthly_budget
   notification_emails = var.budget_notification_emails
   shared_account      = var.budget_shared_account
   billing_account     = var.gcp_billing_account
@@ -431,8 +436,8 @@ module "azure_network" {
   providers  = { azurerm = azurerm.this[each.key] }
   context    = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
   cidr_block = var.cidr_block
-  zone_count = local.sizing.zone_count
-  egress     = local.sizing.egress
+  zone_count = local.size.zone_count
+  egress     = local.size.egress
 }
 
 module "azure_cluster" {
@@ -441,12 +446,12 @@ module "azure_cluster" {
   providers        = { azurerm = azurerm.this[each.key] }
   context          = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
   network          = module.azure_network["azure"].network
-  node_size        = local.sizing.node_size
-  min_nodes        = local.sizing.min_nodes
-  max_nodes        = local.sizing.max_nodes
-  spot_enabled     = local.sizing.spot_max_nodes > 0
-  spot_max_nodes   = local.sizing.spot_max_nodes
-  private_endpoint = local.sizing.private_endpoint
+  node_size        = local.size.node_size
+  min_nodes        = local.size.min_nodes
+  max_nodes        = local.size.max_nodes
+  spot_enabled     = local.size.spot_max_nodes > 0
+  spot_max_nodes   = local.size.spot_max_nodes
+  private_endpoint = local.size.private_endpoint
   admin_principals = var.cluster_admins
 }
 
@@ -465,10 +470,10 @@ module "azure_postgres" {
   providers             = { azurerm = azurerm.this[each.key] }
   context               = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
   network               = module.azure_network["azure"].network
-  size                  = local.sizing.db_size
-  high_availability     = local.sizing.ha
-  storage_gb            = local.sizing.db_storage_gb
-  backup_retention_days = local.sizing.backup_days
+  size                  = local.size.db_size
+  high_availability     = local.size.ha
+  storage_gb            = local.size.db_storage_gb
+  backup_retention_days = local.size.backup_days
   databases             = local.databases
   secret_store          = module.azure_secrets["azure"].store
 }
@@ -479,8 +484,8 @@ module "azure_cache" {
   providers         = { azurerm = azurerm.this[each.key] }
   context           = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
   network           = module.azure_network["azure"].network
-  size              = local.sizing.cache_size
-  high_availability = local.sizing.ha
+  size              = local.size.cache_size
+  high_availability = local.size.ha
 }
 
 module "azure_bucket" {
@@ -506,7 +511,7 @@ module "azure_budget" {
   for_each            = local.on.azure
   providers           = { azurerm = azurerm.this[each.key] }
   context             = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
-  monthly_limit       = local.sizing.monthly_budget
+  monthly_limit       = local.size.monthly_budget
   notification_emails = var.budget_notification_emails
   shared_account      = var.budget_shared_account
 }
@@ -557,7 +562,7 @@ module "elastic" {
   providers     = { ec = ec.this[each.key] }
   context       = local.context
   cloud         = var.cloud
-  profile       = local.sizing.saas_profile
+  profile       = local.size.saas_profile
   allowed_cidrs = [for ip in local.egress_ips : "${ip}/32"]
 }
 
@@ -567,7 +572,7 @@ module "confluent" {
   providers = { confluent = confluent.this[each.key] }
   context   = local.context
   cloud     = var.cloud
-  profile   = local.sizing.saas_profile
+  profile   = local.size.saas_profile
   topics    = local.topics
   services  = local.service_names
 }
@@ -580,7 +585,7 @@ module "temporal" {
   context            = local.context
   cloud              = var.cloud
   temporal_region    = var.temporal_region
-  profile            = local.sizing.saas_profile
+  profile            = local.size.saas_profile
   accepted_client_ca = var.temporal_accepted_client_ca
 }
 
