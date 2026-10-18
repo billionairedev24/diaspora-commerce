@@ -115,7 +115,7 @@ describe('Fees & commissions screens', () => {
     const user = userEvent.setup();
     asRoles('platform.finance');
     await renderScreen(<NegotiatedRatesPanel />);
-    const table = await screen.findByRole('table', { name: 'Negotiated rates' });
+    const table = await screen.findByRole('table', { name: 'Custom rates' });
     expect(await within(table).findByText(/Wholesale partner/)).toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Type', { selector: 'select' }), 'CONNECTION_FEE');
     await waitFor(() => expect(within(table).queryByText(/Wholesale partner/)).not.toBeInTheDocument());
@@ -132,20 +132,20 @@ describe('Fees & commissions screens', () => {
     const user = userEvent.setup();
     asRoles('platform.finance');
     await renderScreen(<NegotiatedRatesPanel org={{ orgId: 'org-lagos', name: 'Lagos Threads' }} />);
-    await user.click(await screen.findByRole('button', { name: 'Negotiate a rate' }));
+    await user.click(await screen.findByRole('button', { name: 'Set a custom rate' }));
     await user.type(screen.getByLabelText('Rate (%)'), '7');
-    await user.click(screen.getByRole('button', { name: 'Negotiate' }));
+    await user.click(screen.getByRole('button', { name: 'Save custom rate' }));
     expect(await screen.findByText(/Say why/)).toBeInTheDocument();
     await user.type(screen.getByLabelText('Reason (kept in the audit trail)'), 'Matching a competitor offer');
-    await user.click(screen.getByRole('button', { name: 'Negotiate' }));
-    expect(await screen.findByText('7.00% negotiated with Lagos Threads')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save custom rate' }));
+    expect(await screen.findByText('Custom rate of 7.00% set for Lagos Threads')).toBeInTheDocument();
   });
 
   it('explains the effective rate in the calculator', async () => {
     const user = userEvent.setup();
     await renderScreen(<RateCalculator />);
-    await user.type(await screen.findByRole('searchbox'), 'kente');
-    await user.click(await screen.findByRole('button', { name: /Kente Naturals/ }));
+    await user.type(await screen.findByRole('combobox', { name: 'Seller or provider' }), 'kente');
+    await user.click(await screen.findByRole('option', { name: /Kente Naturals/ }));
     await user.type(screen.getByLabelText('Category'), 'groceries');
     await user.click(screen.getByRole('button', { name: 'Calculate' }));
     const quote = await screen.findByTestId('rate-quote');

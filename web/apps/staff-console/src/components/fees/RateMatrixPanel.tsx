@@ -110,7 +110,7 @@ function Matrix({ overview, kind, t }: { overview: FeesOverview; kind: FeeKind; 
           <div className="flex flex-col gap-3">
             <div className="flex flex-wrap items-end gap-2">
               <TextField id={`rates-${kind}-new`} label={t('st.rates.addCategory')} value={newCategory} onChange={(e) => setNewCategory(e.currentTarget.value)} />
-              <Button variant="neutral" onClick={() => { setMatrix((m) => addRow(m, newCategory)); setNewCategory(''); }}>{t('st.rates.add')}</Button>
+              <Button variant="neutral" className="mb-[calc(var(--at-space-1)+14px)]" onClick={() => { setMatrix((m) => addRow(m, newCategory)); setNewCategory(''); }}>{t('st.rates.add')}</Button>
             </div>
             <Checkbox id={`rates-${kind}-now`} label={t('st.rates.immediate')} checked={immediate} disabled={!overview.immediateAllowed} onChange={(e) => setImmediate(e.currentTarget.checked)} />
             {!immediate ? (

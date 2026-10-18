@@ -54,7 +54,6 @@ export function NegotiateRateDialog({ open, onClose, org, t }: { open: boolean; 
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
   const [reason, setReason] = useState('');
-  const [negotiatedBy, setNegotiatedBy] = useState('');
   const [reference, setReference] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const save = useMutation({
@@ -73,7 +72,7 @@ export function NegotiateRateDialog({ open, onClose, org, t }: { open: boolean; 
       const body: NegotiatedRateDraft = {
         orgId: picked?.orgId ?? '', type, category: isFba ? null : category.trim() || null, rateBps: bps ?? 0, amountMinor: isFba ? minor : null,
         startsAt: startsAt ? new Date(startsAt).toISOString() : null, endsAt: endsAt ? new Date(endsAt).toISOString() : null,
-        reason: reason.trim(), negotiatedBy: negotiatedBy.trim() || null, reference: reference.trim() || null
+        reason: reason.trim(), negotiatedBy: null, reference: reference.trim() || null
       };
       return feeRatesApi().createNegotiatedRate(body);
     },
@@ -114,10 +113,7 @@ export function NegotiateRateDialog({ open, onClose, org, t }: { open: boolean; 
           <TextField id="nr-end" type="datetime-local" label={t('st.rates.endsAt')} value={endsAt} error={errors.endsAt} onChange={(e) => setEndsAt(e.currentTarget.value)} />
         </div>
         <TextField id="nr-reason" label={t('st.rates.reason')} value={reason} error={errors.reason} onChange={(e) => setReason(e.currentTarget.value)} />
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-2">
-          <TextField id="nr-by" label={t('st.rates.negotiatedBy')} value={negotiatedBy} error={errors.negotiatedBy} onChange={(e) => setNegotiatedBy(e.currentTarget.value)} />
-          <TextField id="nr-ref" label={t('st.rates.reference')} value={reference} error={errors.reference} onChange={(e) => setReference(e.currentTarget.value)} />
-        </div>
+        <TextField id="nr-ref" label={t('st.rates.reference')} value={reference} error={errors.reference} onChange={(e) => setReference(e.currentTarget.value)} />
         {errors._ ? <p role="alert" className="m-0 text-sm text-danger">{errors._}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="neutral" onClick={onClose}>{t('st.rates.cancel')}</Button>
