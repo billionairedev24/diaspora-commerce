@@ -24,7 +24,7 @@ locals {
     saas_profile        = "medium"
     kyc_retention_days  = 30
     monthly_budget      = 1500 # USD, cloud spend only (modules/<cloud>/budget); alerts at 50/80/100% actual, 100% forecast
-    managed_data        = true  # Terraform creates Postgres + Valkey; false = external (Layerbase), see prod
+    managed_data        = true # Terraform creates Postgres + Valkey; false = external (Layerbase), see prod
     deletion_protection = true
   }
 }

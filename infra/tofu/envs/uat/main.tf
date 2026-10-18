@@ -621,7 +621,7 @@ locals {
         KAFKA_API_KEY       = local.kafka_credentials[k].key
         KAFKA_API_SECRET    = local.kafka_credentials[k].secret
         SCHEMA_REGISTRY_URL = module.confluent["confluent"].schema_registry_url
-      } : {
+        } : {
         # Lean profile: single-node Kafka in the cluster (infra/k8s/platform/lean/kafka), plaintext inside the namespace network.
         KAFKA_BOOTSTRAP = "kafka.kafka.svc.cluster.local:9092"
       },

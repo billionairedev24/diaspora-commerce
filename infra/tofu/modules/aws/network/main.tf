@@ -14,11 +14,11 @@ data "aws_availability_zones" "this" {
 
 locals {
   # EKS wants subnets in at least two zones even when the workload runs in one (zone_count = 1): the second is empty and free.
-  azs  = slice(data.aws_availability_zones.this.names, 0, max(var.zone_count, 2))
+  azs = slice(data.aws_availability_zones.this.names, 0, max(var.zone_count, 2))
   # egress "none": no NAT gateway (USD 33/month) and no interface endpoints (~USD 7/month each): nodes get public
   # addresses and reach the internet through the gateway; inbound stays closed (default-deny groups, Cloudflare Tunnel).
   public_nodes = var.egress == "none"
-  tags = merge(var.context.tags, { service = "platform", module = "network" })
+  tags         = merge(var.context.tags, { service = "platform", module = "network" })
   # /16 -> cluster /19 x3 (8k IPs each for pods with prefix delegation), data /22 x3, public /24 x3
   cluster_cidrs = [for i, _ in local.azs : cidrsubnet(var.cidr_block, 3, i)]
   data_cidrs    = [for i, _ in local.azs : cidrsubnet(var.cidr_block, 6, 32 + i)]
@@ -42,10 +42,10 @@ resource "aws_default_security_group" "this" {
 }
 
 resource "aws_subnet" "cluster" {
-  count             = length(local.azs)
-  vpc_id            = aws_vpc.this.id
-  availability_zone = local.azs[count.index]
-  cidr_block        = local.cluster_cidrs[count.index]
+  count                   = length(local.azs)
+  vpc_id                  = aws_vpc.this.id
+  availability_zone       = local.azs[count.index]
+  cidr_block              = local.cluster_cidrs[count.index]
   map_public_ip_on_launch = local.public_nodes
   tags = merge(local.tags, {
     Name                              = "${var.context.name}-cluster-${local.azs[count.index]}"

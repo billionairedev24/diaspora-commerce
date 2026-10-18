@@ -29,11 +29,11 @@ locals {
     large  = "c4a-standard-8"
     lean   = "e2-standard-4" # 4 vCPU / 16 GB x86, the whole platform on one node
   }
-  lean     = var.node_size == "lean"
-  zonal    = length(local.zones) == 1
+  lean  = var.node_size == "lean"
+  zonal = length(local.zones) == 1
   # No Cloud NAT (egress = "none") means nodes need their own public address to pull images and call SaaS APIs;
   # inbound stays closed (default-deny VPC firewall, Cloudflare Tunnel for traffic in).
-  nat      = try(var.network.egress, "single") != "none"
+  nat   = try(var.network.egress, "single") != "none"
   zones = slice(data.google_compute_zones.this.names, 0, min(var.network.zone_count, length(data.google_compute_zones.this.names)))
 }
 

@@ -11,7 +11,8 @@ Checks every service against the environment rules in docs/engineering/environme
                (literal or the ${TRACE_SAMPLING:<default>} default), Go telemetry.sampleRatio, Helm telemetry.sampling
                (injected as TRACE_SAMPLING, so it wins over the profile default).
   sizing       (S182) dev: 1 replica, no HPA, tolerates the spot pool; uat: tolerates the spot pool; prod: no spot
-               toleration, at least 2 replicas or an HPA with min >= 2; every env sets CPU/memory requests and a
+               toleration, at least 2 replicas or an HPA with min >= 2 (1 when prod's sizing is the lean single-node
+               profile, infra/tofu/envs/prod/sizing.tf node_size = "lean", docs/engineering/cloud-cost.md); every env sets CPU/memory requests and a
                memory limit.
   image        no `latest` tag in any values file.
   stripe       (S282) Stripe keys come only from the environment / secret store: gateway-bff's stripe.publishableKey is
@@ -172,6 +173,16 @@ def check_go(svc_dir: pathlib.Path, rep: Report) -> None:
 
 
 # ------------------------------------------------------------------------------------------------ Helm
+def prod_min_replicas() -> int:
+    """2 for the HA profile; 1 when prod runs the lean single-node profile (one node cannot spread two replicas)."""
+    sizing = pathlib.Path(__file__).resolve().parents[2] / "infra" / "tofu" / "envs" / "prod" / "sizing.tf"
+    try:
+        lean = re.search(r'^\s*node_size\s*=\s*"lean"', sizing.read_text(), re.M) is not None
+    except OSError:
+        lean = False
+    return 1 if lean else 2
+
+
 def tolerates_spot(values: dict) -> bool:
     return any(isinstance(t, dict) and t.get("key") == SPOT_KEY for t in values.get("tolerations") or [])
 
@@ -218,8 +229,9 @@ def check_helm(chart: pathlib.Path, rep: Report) -> None:
             if tolerates_spot(v):
                 rep.error(f, f"prod must not tolerate the spot pool ({SPOT_KEY}); spot capacity is for dev/uat")
             floor = int(hpa.get("min") or 0) if hpa.get("enabled") else replicas
-            if floor < 2:
-                rep.error(f, f"prod needs at least 2 replicas (HPA min or replicas; found {floor})")
+            need = prod_min_replicas()
+            if floor < need:
+                rep.error(f, f"prod needs at least {need} replicas (HPA min or replicas; found {floor})")
 
 
 # ------------------------------------------------------------------------------------------------ Stripe (S282)
