@@ -100,11 +100,6 @@ upstreams:
     timeout: 3s
     retries: 1
     breaker: {failures: 5, cooldown: 15s}
-  storefront:
-    url: http://localhost:8206
-    timeout: 2s
-    retries: 1
-    breaker: {failures: 5, cooldown: 15s}
   media:
     url: http://localhost:8207
     timeout: 3s

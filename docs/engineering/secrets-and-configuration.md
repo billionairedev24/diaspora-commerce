@@ -265,7 +265,7 @@ EAS), never at runtime. Free developer plan.
 - **Amazon SES / End User Messaging SMS** (email and SMS failover): no keys; the notifications pod's workload identity
   (IRSA) needs `ses:SendEmail` / `sms-voice:SendTextMessage`. Settings `SES_REGION`, `AWS_SMS_REGION`,
   `AWS_SMS_ORIGINATION_IDENTITY` in `config/<env>.yaml`.
-- **Cloudflare** (storefront service cache purge, Workers deploys): `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`.
+- **Cloudflare** (Workers deploys): `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ZONE_ID`.
 
 ### Tunnels for webhooks
 

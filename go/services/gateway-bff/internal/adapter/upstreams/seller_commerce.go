@@ -511,4 +511,3 @@ func (f *feesImpl) EffectiveKind(ctx context.Context, kind, category, orgID stri
 	return out, err
 }
 
-// ---------------------------------------------------------------- storefront (contracts/openapi/storefront.yaml)

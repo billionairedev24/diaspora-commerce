@@ -43,7 +43,6 @@ type Upstreams struct {
 	Seller     Upstream `yaml:"seller"`
 	Offers     Upstream `yaml:"offers"`
 	Bookings   Upstream `yaml:"bookings"`
-	Storefront Upstream `yaml:"storefront"`
 	Media      Upstream `yaml:"media"`
 	Carrier    Upstream `yaml:"carrier"`
 	// Storefront account, returns and Lola upstreams (TAX_RETURNS_URL, AI_GATEWAY_URL).
@@ -63,7 +62,7 @@ func (u *Upstreams) Named() map[string]*Upstream {
 		"search": &u.Search, "catalog": &u.Catalog, "inventory": &u.Inventory, "cart": &u.Cart, "geo": &u.Geo,
 		"identity": &u.Identity, "content": &u.Content, "payments": &u.Payments, "promise": &u.Promise,
 		"orders": &u.Orders, "notifications": &u.Notifications, "seller": &u.Seller, "offers": &u.Offers, "bookings": &u.Bookings,
-		"storefront": &u.Storefront, "media": &u.Media, "carrier": &u.Carrier,
+		"media": &u.Media, "carrier": &u.Carrier,
 		"tax_returns": &u.TaxReturns, "ai_gateway": &u.AIGateway,
 		"trust_ops": &u.TrustOps, "retail": &u.Retail, "fulfilment": &u.Fulfilment, "delivery_runs": &u.DeliveryRuns,
 	}

@@ -79,7 +79,6 @@ locals {
     cart            = { db = "cart", buckets = [] }
     promise         = { db = null, buckets = [] }
     geo             = { db = "geo", buckets = [] }
-    storefront      = { db = "storefront", buckets = ["media"] }
     media           = { db = "media", buckets = ["media"] }
     notifications   = { db = "notifications", buckets = [] }
     carrier-gateway = { db = "carriers", buckets = ["labels"] }
@@ -111,7 +110,7 @@ locals {
     "at.order.events"        = { producers = ["orders"], consumers = ["payments", "fulfilment", "inventory", "notifications", "tax-returns", "seller"] }
     "at.payment.events"      = { producers = ["payments"], consumers = ["orders", "seller", "notifications"] }
     "at.shipment.events"     = { producers = ["fulfilment", "carrier-gateway"], consumers = ["orders", "notifications", "promise"] }
-    "at.seller.events"       = { producers = ["seller"], consumers = ["identity", "catalog", "indexer", "notifications", "storefront"] }
+    "at.seller.events"       = { producers = ["seller"], consumers = ["identity", "catalog", "indexer", "notifications"] }
     "at.booking.events"      = { producers = ["bookings"], consumers = ["notifications", "payments", "indexer"] }
     "at.retail.events"       = { producers = ["retail"], consumers = ["inventory", "catalog"] }
     "at.trust.events"        = { producers = ["trust-ops"], consumers = ["catalog", "seller", "notifications"] }

@@ -492,7 +492,6 @@ INTERNAL: Dict[str, str] = {
     "MINIO_SECRET_KEY": "local MinIO (minioadmin)",
     "EDI_AS2_KEYSTORE_PATH": "retail: AS2 keystore file for supplier EDI",
     "EDI_SFTP_PRIVATE_KEY_PATH": "retail: SFTP private key file for supplier EDI",
-    "CLOUDFLARE_API_TOKEN": "storefront service: Cloudflare cache purge (also a GitHub Actions secret)",
     "SEED_TOKEN": "tools/seed: a ready bearer token instead of client credentials (optional)",
     "SEED_TEST_USERS_PASSWORD": "tools/seed: the test users' password when it is not the local one (dev)",
 }

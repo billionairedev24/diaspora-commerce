@@ -33,7 +33,7 @@ begin
     raise exception 'PostGIS is not installed on this server (Homebrew: brew install postgis), needed by geo and fulfilment.';
   end if;
   foreach r in array array['identity', 'catalog', 'offers', 'inventory', 'orders', 'payments', 'seller', 'retail',
-    'fulfilment', 'bookings', 'trustops', 'taxreturns', 'content', 'ai', 'cart', 'geo', 'storefront', 'media',
+    'fulfilment', 'bookings', 'trustops', 'taxreturns', 'content', 'ai', 'cart', 'geo', 'media',
     'notifications', 'carriers', 'deliveryruns', 'temporal', 'openfga'] loop
     if not exists (select from pg_roles where rolname = r) then
       execute format('create role %I login password %L', r, r);
@@ -76,7 +76,7 @@ $f$;
 do $$
 declare
   services text[] := array['identity', 'catalog', 'offers', 'inventory', 'orders', 'payments', 'seller', 'retail',
-    'fulfilment', 'bookings', 'trustops', 'taxreturns', 'content', 'ai', 'cart', 'geo', 'storefront', 'media',
+    'fulfilment', 'bookings', 'trustops', 'taxreturns', 'content', 'ai', 'cart', 'geo', 'media',
     'notifications', 'carriers', 'deliveryruns', 'temporal', 'openfga'];
   db text;
   owner text;
@@ -103,6 +103,6 @@ $$;
 select d.datname as database, pg_get_userbyid(d.datdba) as owner
 from pg_database d
 where d.datname in ('identity', 'catalog', 'offers', 'inventory', 'orders', 'payments', 'seller', 'retail',
-  'fulfilment', 'bookings', 'trustops', 'taxreturns', 'content', 'ai', 'cart', 'geo', 'storefront', 'media',
+  'fulfilment', 'bookings', 'trustops', 'taxreturns', 'content', 'ai', 'cart', 'geo', 'media',
   'notifications', 'carriers', 'deliveryruns', 'temporal', 'openfga', 'temporal_visibility')
 order by 1;

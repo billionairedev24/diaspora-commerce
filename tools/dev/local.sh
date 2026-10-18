@@ -69,11 +69,11 @@ OBS_BASE="otel-collector prometheus alertmanager loki tempo grafana host-log-shi
 # returns, the staff console and every AI chat (ai-gateway: Lola, the listing writer; needs OPENROUTER_API_KEY in
 # .local/secrets.env) use. Identity first.
 DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops tax-returns seller
-  bookings retail fulfilment mcp-server ai-gateway geo media cart notifications search indexer promise storefront gateway-bff
+  bookings retail fulfilment mcp-server ai-gateway geo media cart notifications search indexer promise gateway-bff
   carrier-gateway"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns
-  content ai-gateway mcp-server delivery-runs gateway-bff search indexer cart promise geo storefront media
+  content ai-gateway mcp-server delivery-runs gateway-bff search indexer cart promise geo media
   notifications carrier-gateway authz-sync"
 
 # Web apps (Next.js dev servers) against the local BFF, no mocks. WEB=0 skips them.
@@ -148,7 +148,7 @@ port_of() {
     trust-ops) echo 8110 ;; tax-returns) echo 8111 ;; content) echo 8112 ;; ai-gateway) echo 8113 ;;
     mcp-server) echo 8114 ;; delivery-runs) echo 8115 ;;
     gateway-bff) echo 8200 ;; search) echo 8201 ;; indexer) echo 8202 ;; cart) echo 8203 ;; promise) echo 8204 ;;
-    geo) echo 8205 ;; storefront) echo 8206 ;; media) echo 8207 ;; notifications) echo 8208 ;;
+    geo) echo 8205 ;; media) echo 8207 ;; notifications) echo 8208 ;;
     carrier-gateway) echo 8209 ;; authz-sync) echo 8210 ;;
     *) echo "unknown service: $1 (see infra/local/PORTS.md)" >&2; exit 2 ;;
   esac

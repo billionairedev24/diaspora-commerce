@@ -24,7 +24,6 @@
 | cart | Go | 8203 | carts, save-for-later, merge on login | Redis + Postgres `cart` |
 | promise | Go | 8204 | delivery promises per ZIP | Redis |
 | geo | Go | 8205 | address autocomplete (Google Places / OSM Nominatim), validation | Postgres/PostGIS `geo` |
-| storefront | Go | 8206 | seller/provider storefront themes & layouts | Postgres `storefront` |
 | media | Go | 8207 | upload signing (UploadThing / S3-compatible), image metadata | Postgres `media` |
 | notifications | Go | 8208 | email (Resend, SendGrid, SES), SMS (Twilio, Vonage), push, WhatsApp | Postgres `notifications` |
 | carrier-gateway | Go | 8209 | USPS, UPS, FedEx, DHL rates/labels/tracking | Postgres `carriers` |
