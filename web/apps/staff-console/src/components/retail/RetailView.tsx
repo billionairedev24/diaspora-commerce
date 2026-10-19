@@ -60,7 +60,7 @@ function ItemSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
           </figure>
           {retailEdit ? (
             <form
-              className="flex flex-wrap items-end gap-2"
+              className="flex flex-wrap at-align gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!/^AT[0-9A-Z]{8}$/.test(atin.trim().toUpperCase())) return setError('A variant ATIN: AT + 8 letters or digits');

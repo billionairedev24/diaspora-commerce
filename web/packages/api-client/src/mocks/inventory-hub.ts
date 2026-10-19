@@ -131,7 +131,8 @@ function seed(now: Date): HubDb {
     etd: iso(addDays(now, -10)), eta: iso(addDays(now, 9)), stage: 'DEPARTED', stageLabel: 'Departed origin', asnLocked: true,
     lines: [{ lineNo: 1, poLineNo: 1, itemId: must(db.items[0]).id, sku: 'AT-JOL-200061', qty: 240, lotNo: 'JOL-2610', mfgDate: iso(addDays(now, -20)), expDate: iso(addDays(now, 540)) }],
     cartons: [], documents: [{ name: 'Commercial invoice', status: 'OK', reference: 'CI-0322' }, { name: 'Bill of lading', status: 'OK', reference: 'MSCU4829137' }, { name: 'FDA prior notice', status: 'MISSING', reference: null }],
-    milestones: [{ stage: 'BOOKED', at: addDays(now, -15).toISOString(), by: 'Kemi Adebayo' }, { stage: 'DEPARTED', at: addDays(now, -10).toISOString(), by: 'Kemi Adebayo' }], version: 3
+    milestones: [{ stage: 'BOOKED', at: addDays(now, -15).toISOString(), by: 'Kemi Adebayo' }, { stage: 'DEPARTED', at: addDays(now, -10).toISOString(), by: 'Kemi Adebayo' }],
+    charges: [{ type: 'FREIGHT', amountMinor: 184000, currency: 'USD', basis: null, reference: 'MSC freight invoice 4412' }], version: 3
   }];
   db.movements = db.lots.map((l, i) => ({ id: i + 1, occurredAt: l.receivedAt ?? now.toISOString(), type: 'RECEIVE', sku: l.sku, nodeId: l.nodeId, ownerOrg: l.ownerOrg, lotId: l.id, lotNo: l.lotNo, qty: l.qtyOnHand, reference: 'GRN-SEED', actor: 'Ama Owusu', reason: null }));
   return db;
@@ -915,7 +916,7 @@ function retailRoutes(W: string, gate: HubGate) {
           const pl = must(po.lines.find((x) => x.lineNo === Number(l.poLineNo)) ?? po.lines[0]);
           return { lineNo: i + 1, poLineNo: pl.lineNo, itemId: pl.itemId, sku: pl.sku, qty: Number(l.qty), lotNo: (l.lotNo as string | undefined) ?? null, mfgDate: (l.mfgDate as string | undefined) ?? null, expDate: (l.expDate as string | undefined) ?? null };
         }),
-        cartons: [], documents: [{ name: 'Commercial invoice', status: 'MISSING', reference: null }, { name: 'Packing list', status: 'PENDING', reference: null }], milestones: [{ stage: 'BOOKED', at: ctx.now.toISOString(), by: ctx.actor }], version: 0
+        cartons: [], charges: [], documents: [{ name: 'Commercial invoice', status: 'MISSING', reference: null }, { name: 'Packing list', status: 'PENDING', reference: null }], milestones: [{ stage: 'BOOKED', at: ctx.now.toISOString(), by: ctx.actor }], version: 0
       };
       po.shipmentBooked = true;
       ctx.db.shipments.unshift(s);
@@ -929,6 +930,14 @@ function retailRoutes(W: string, gate: HubGate) {
       recompute(must(ctx.db.inbound[0]));
       return s;
     }, 201)),
+    http.put(`${W}/shipments/:id/charges`, h('EDIT', async (ctx, p) => {
+      const s = ctx.db.shipments.find((x) => x.id === p.id);
+      if (!s) throw notFound('shipment');
+      const body = (await bodyOf(ctx.request)) as { charges?: { type: string; amountMinor: number; currency: string; basis?: string; reference?: string }[] };
+      s.charges = (body.charges ?? []).map((c) => ({ type: c.type, amountMinor: c.amountMinor, currency: c.currency, basis: c.basis ?? null, reference: c.reference ?? null }));
+      s.version += 1;
+      return s;
+    })),
     http.post(`${W}/shipments/:id/advance`, h('EDIT', (ctx, p) => {
       const s = ctx.db.shipments.find((x) => x.id === p.id);
       if (!s) throw notFound('shipment');

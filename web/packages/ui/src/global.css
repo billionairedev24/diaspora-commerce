@@ -53,3 +53,9 @@
 .at-sheet-table-scroll.at-sheet-table-form .at-table td {
   white-space: normal;
 }
+
+/* Forms: a row of fields and actions (a button, a checkbox) whose actions line up with the field CONTROLS, not with the
+   hint line every Field reserves under its input. Use class "at-align" on a flex/grid row instead of items-end. */
+.at-align { align-items: flex-end; }
+.at-align > :not([data-at-field], :has(> [data-at-field])) { margin-bottom: calc(var(--at-space-1) + 14px); }
+.at-align > .at-row-box { min-height: var(--at-size-control); display: inline-flex; align-items: center; }

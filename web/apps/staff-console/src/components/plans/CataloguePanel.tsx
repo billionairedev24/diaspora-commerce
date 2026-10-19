@@ -147,10 +147,10 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
         <fieldset className="m-0 flex flex-col gap-3 rounded-md border border-border p-3">
           <legend className="px-1 text-sm font-semibold">{t('st.plans.includes')}</legend>
           <p className="m-0 text-xs text-muted">{t('st.plans.includesHelp')}</p>
-          <div className="grid grid-cols-1 items-end gap-x-3 md:grid-cols-2">
+          <div className="grid grid-cols-1 at-align gap-x-3 md:grid-cols-2">
             <TextField id="plan-listings" label={t('st.plans.listings')} inputMode="numeric" value={f.unlimited ? '' : f.listings} disabled={f.unlimited} error={errors['limits.listings']}
               onChange={set('listings')} />
-            <label className="mb-[calc(var(--at-space-1)+14px+0.75rem)] inline-flex items-center gap-2 text-sm">
+            <label className="at-row-box gap-2 text-sm">
               <input type="checkbox" checked={f.unlimited} onChange={(e) => setF((x) => ({ ...x, unlimited: e.target.checked }))} />
               {t('st.plans.listingsUnlimited')}
             </label>
@@ -188,13 +188,13 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
               <Select id="plan-charge-match" label={t('st.plans.charges.match')} value={f.chargeMatch} onChange={set('chargeMatch')}
                 options={(['ALL', 'ANY'] as const).map((v) => ({ value: v, label: t(`st.plans.charges.match.${v}`) }))} />
               {f.conditions.map((c, i) => (
-                <div key={c.rowId} className="grid grid-cols-[1fr_8rem_auto] items-end gap-x-2">
+                <div key={c.rowId} className="grid grid-cols-[1fr_8rem_auto] at-align gap-x-2">
                   <Select id={`plan-cond-metric-${i}`} label={t('st.plans.charges.metric')} value={c.metric}
                     onChange={(e) => { const v = e.currentTarget.value as ChargeMetric; setF((x) => ({ ...x, conditions: x.conditions.map((r) => (r.rowId === c.rowId ? { ...r, metric: v } : r)) })); }}
                     options={CHARGE_METRICS.map((v) => ({ value: v, label: t(`st.plans.charges.metric.${v}`) }))} />
                   <TextField id={`plan-cond-amount-${i}`} label={t('st.plans.charges.amount')} inputMode="decimal" value={c.amount}
                     onChange={(e) => { const v = e.currentTarget.value; setF((x) => ({ ...x, conditions: x.conditions.map((r) => (r.rowId === c.rowId ? { ...r, amount: v } : r)) })); }} />
-                  <Button variant="neutral" size="sm" className="mb-[calc(var(--at-space-1)+14px)]" onClick={() => setF((x) => ({ ...x, conditions: x.conditions.filter((r) => r.rowId !== c.rowId) }))}>{t('st.plans.charges.remove')}</Button>
+                  <Button variant="neutral" size="sm" onClick={() => setF((x) => ({ ...x, conditions: x.conditions.filter((r) => r.rowId !== c.rowId) }))}>{t('st.plans.charges.remove')}</Button>
                 </div>
               ))}
               {errors['chargePolicy.clauses'] ? <p role="alert" className="m-0 text-xs text-danger">{errors['chargePolicy.clauses']}</p> : null}

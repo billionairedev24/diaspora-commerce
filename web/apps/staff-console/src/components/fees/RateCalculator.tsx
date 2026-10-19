@@ -32,14 +32,14 @@ export function RateCalculator() {
       ) : fees.data ? (
         <OrgSearch overview={fees.data} label={t('st.rates.findOrg')} taken={() => false} onPick={(h) => setOrg({ orgId: h.orgId, name: h.name })} />
       ) : null}
-      <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => { e.preventDefault(); setAsked(category.trim()); }}>
+      <form className="flex flex-wrap at-align gap-2" onSubmit={(e) => { e.preventDefault(); setAsked(category.trim()); }}>
         <Select id="calc-kind" label={t('st.rates.kind')} value={kind} onChange={(e) => { setKind(e.currentTarget.value as FeeKind); setAsked(''); }}
           options={[{ value: 'PRODUCT', label: t('st.rates.kind.PRODUCT') }, { value: 'SERVICE', label: t('st.rates.kind.SERVICE') }]} />
         <TextField id="calc-category" label={t('st.rates.category')} list="calc-categories" value={category} onChange={(e) => setCategory(e.currentTarget.value)} />
         <datalist id="calc-categories">
           {categories.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
         </datalist>
-        <Button type="submit" className="mb-[calc(var(--at-space-1)+14px)]" disabled={!org || !category.trim()}>{t('st.rates.calculate')}</Button>
+        <Button type="submit" disabled={!org || !category.trim()}>{t('st.rates.calculate')}</Button>
       </form>
       {quote.isFetching && !quote.data ? <Spinner /> : null}
       {quote.isError ? <ErrorState error={quote.error} onRetry={() => void quote.refetch()} /> : null}

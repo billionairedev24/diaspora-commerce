@@ -173,7 +173,7 @@ function StartCount({ onStarted }: { onStarted: (c: CycleCount) => void }) {
   const start = useHubMutation(() => api.startCount({ nodeId, sku: sku.trim() || undefined, binPrefix: bin.trim() || undefined, blind }), (c) => `${c.number} started: ${c.lineCount} lots to count.`, onStarted);
   return (
     <form
-      className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface p-3"
+      className="flex flex-wrap at-align gap-2 rounded-md border border-border bg-surface p-3"
       aria-label="Start a cycle count"
       onSubmit={(e) => {
         e.preventDefault();
@@ -183,7 +183,7 @@ function StartCount({ onStarted }: { onStarted: (c: CycleCount) => void }) {
       <Select label="Fulfilment centre" value={nodeId} onChange={(e) => setNodeId(e.target.value)} options={(nodes.data ?? []).map((n) => ({ value: n.id, label: n.name }))} />
       <TextField label="SKU (optional)" value={sku} onChange={(e) => setSku(e.target.value)} />
       <TextField label="Bins starting with (optional)" value={bin} onChange={(e) => setBin(e.target.value)} placeholder="A-01" />
-      <Checkbox label="Blind count" checked={blind} onChange={(e) => setBlind(e.target.checked)} />
+      <Checkbox className="at-row-box" label="Blind count" checked={blind} onChange={(e) => setBlind(e.target.checked)} />
       <Button type="submit" icon={<ClipboardText size={16} aria-hidden />} loading={start.isPending}>
         Start count
       </Button>

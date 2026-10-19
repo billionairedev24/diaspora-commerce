@@ -175,7 +175,7 @@ describe('Pre-orders back office (S274)', () => {
     expect(within(dialog).getByRole('button', { name: 'Add $20.98 order' })).toBeEnabled(); // $12.99 + $7.99 door
     await user.selectOptions(within(dialog).getByRole('combobox', { name: /^Deliver to/ }), 'new');
     expect(submit()).toBeDisabled(); // a new address must be verified first
-    await user.type(within(dialog).getByRole('textbox', { name: /^Street/ }), '12 Elm St');
+    await user.type(within(dialog).getByRole('combobox', { name: /^Street/ }), '12 Elm St');
     await user.type(within(dialog).getByRole('textbox', { name: /^Postal code/ }), '79101');
     await user.click(within(dialog).getByRole('button', { name: 'Verify address' }));
     expect(await within(dialog).findByRole('button', { name: 'Verified ✓' })).toBeInTheDocument();

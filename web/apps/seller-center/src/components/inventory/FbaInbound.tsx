@@ -263,7 +263,7 @@ function PlanSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
 
               {deliveryMethod === 'carrier' ? (
                 <form
-                  className="flex flex-wrap items-end gap-2 pt-2"
+                  className="flex flex-wrap at-align gap-2 pt-2"
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (carrier.trim() && tracking.trim()) track.mutate(undefined);

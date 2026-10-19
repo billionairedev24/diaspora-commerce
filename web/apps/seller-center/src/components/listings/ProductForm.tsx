@@ -382,7 +382,7 @@ export function ProductForm({ productId }: { productId?: string }) {
                   <TextField id={fieldId.price} label={t('sc.pf.field.priceUsd')} inputMode="decimal" value={s.single.price} error={err(fieldId.price)} onChange={(e) => patch({ single: { ...s.single, price: e.target.value } })} />
                   <TextField id={fieldId.compareAt} label={t('sc.pf.field.compareAt')} help={t('sc.pf.compareAtHelp')} inputMode="decimal" value={s.single.compareAt} error={err(fieldId.compareAt)} onChange={(e) => patch({ single: { ...s.single, compareAt: e.target.value } })} />
                   <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} help={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.qtyFba') : undefined} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
-                  <div className="flex items-end gap-2 sm:col-span-1">
+                  <div className="flex at-align gap-2 sm:col-span-1">
                     <TextField id={fieldId.sku} className="flex-1" label={t('sc.pf.field.sku')} value={s.single.sku} error={err(fieldId.sku)} readOnly={live} onChange={(e) => patch({ single: { ...s.single, sku: e.target.value } })} />
                   </div>
                   {s.noGtin ? null : (

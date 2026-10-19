@@ -56,7 +56,7 @@ function StockRow({ offer }: { offer: SellerOffer }) {
         <strong className="font-mono">{offer.sellerSku}</strong>
         <span className="text-xs text-muted">{t('sc.stock.reserved', { count: Math.max(0, offer.quantity - offer.availableQty) })}</span>
       </p>
-      <div className="flex items-end gap-2">
+      <div className="flex at-align gap-2">
         <div className="min-w-0 flex-1">
           <TextField
             label={t('sc.stock.quantityOf', { sku: offer.sellerSku })}

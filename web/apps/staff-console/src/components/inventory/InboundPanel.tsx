@@ -293,7 +293,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
           ) : null}
           {inventoryEdit && s.source === 'FBA' && (s.status === 'WORKING' || s.status === 'SHIPPED') ? (
             <form
-              className="flex flex-wrap items-end gap-2"
+              className="flex flex-wrap at-align gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (carrier.trim() && tracking.trim()) track.mutate(undefined);

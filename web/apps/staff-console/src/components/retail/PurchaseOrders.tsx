@@ -1,6 +1,6 @@
 'use client';
 
-import { inventoryHubQueries, type PoInput, type PurchaseOrder, type ShipmentDocumentStatus } from '@afrotransact/api-client';
+import { inventoryHubQueries, type PoInput, type PurchaseOrder, type RetailShipment, type ShipmentChargeInput, type ShipmentDocumentStatus } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, cx, Select, Sheet, SheetTableScroll, TextField } from '@afrotransact/ui';
 import { ArrowRight, Plus, Trash } from '@phosphor-icons/react/ssr';
@@ -23,6 +23,56 @@ interface DraftLine {
   itemId: string;
   qty: string;
   cost: string;
+}
+
+const COST_TYPES: ShipmentChargeInput['type'][] = ['FREIGHT', 'INSURANCE', 'DUTY', 'BROKERAGE', 'DRAYAGE', 'FEES', 'RECEIVING'];
+const COST_BASIS_HINT = 'Spread over the received units: duty, insurance, fees and brokerage by value; freight and drayage by weight; receiving by units.';
+
+/** The shipment's associated costs (freight, insurance, duty ...): they become part of each unit's landed cost when the goods are received. */
+function ShipmentCosts({ s, editable }: { s: RetailShipment; editable: boolean }) {
+  const api = useHub();
+  const [open, setOpen] = useState(false);
+  const fresh = () => s.charges.map((c) => ({ key: idempotencyKey(), type: c.type, amount: (c.amountMinor / 100).toFixed(2), currency: c.currency, reference: c.reference ?? '' }));
+  const [rows, setRows] = useState(fresh);
+  const invalid = rows.some((r) => r.amount.trim() && (Number.isNaN(Number(r.amount)) || Number(r.amount) < 0 || !/^[A-Za-z]{3}$/.test(r.currency)));
+  const save = useHubMutation(
+    () =>
+      api.retail.setShipmentCharges(
+        s.id,
+        rows.filter((r) => r.amount.trim()).map((r): ShipmentChargeInput => ({ type: r.type as ShipmentChargeInput['type'], amountMinor: Math.round(Number(r.amount) * 100), currency: r.currency.toUpperCase(), ...(r.reference.trim() ? { reference: r.reference.trim() } : {}) })),
+        s.version
+      ),
+    () => 'Costs saved. They are added to the landed cost of the units when they are received.',
+    () => setOpen(false)
+  );
+  return (
+    <div className="flex flex-col gap-1 text-xs" data-testid="po-shipment-costs">
+      <span className="flex flex-wrap items-center gap-2 text-muted">
+        Associated costs:
+        {s.charges.length ? s.charges.map((c, i) => <span key={i}>{humanize(c.type)} {money(c.amountMinor, c.currency)}{c.reference ? ` (${c.reference})` : ''}</span>) : <span>none entered yet</span>}
+        {editable && !open ? <button type="button" className={smallButton} onClick={() => { setRows(fresh()); setOpen(true); }}>Edit costs</button> : null}
+      </span>
+      {open ? (
+        <form className="flex flex-col gap-2 rounded-sm bg-surface-muted p-2" noValidate onSubmit={(e) => { e.preventDefault(); if (!invalid) save.mutate(undefined); }}>
+          <span className="text-muted">{COST_BASIS_HINT}</span>
+          {rows.map((r, i) => (
+            <div key={r.key} className="flex flex-wrap at-align gap-2">
+              <Select label="Cost" value={r.type} onChange={(e) => setRows((x) => x.map((y, k) => (k === i ? { ...y, type: e.target.value as ShipmentChargeInput['type'] } : y)))} options={COST_TYPES.map((t) => ({ value: t, label: humanize(t) }))} />
+              <TextField label="Amount" inputMode="decimal" value={r.amount} onChange={(e) => setRows((x) => x.map((y, k) => (k === i ? { ...y, amount: e.target.value } : y)))} className="w-28" />
+              <TextField label="Currency" value={r.currency} maxLength={3} onChange={(e) => setRows((x) => x.map((y, k) => (k === i ? { ...y, currency: e.target.value } : y)))} className="w-20" />
+              <TextField label="Invoice / reference" value={r.reference} onChange={(e) => setRows((x) => x.map((y, k) => (k === i ? { ...y, reference: e.target.value } : y)))} className="min-w-[160px] flex-1" />
+              <button type="button" className={smallButton} onClick={() => setRows((x) => x.filter((_, k) => k !== i))}><Trash size={14} aria-hidden /> Remove</button>
+            </div>
+          ))}
+          <span className="flex flex-wrap gap-2">
+            <button type="button" className={smallButton} onClick={() => setRows((x) => [...x, { key: idempotencyKey(), type: 'FREIGHT', amount: '', currency: 'USD', reference: '' }])}><Plus size={14} aria-hidden /> Add a cost</button>
+            <Button type="submit" size="sm" loading={save.isPending} disabled={invalid}>Save costs</Button>
+            <Button type="button" size="sm" variant="neutral" onClick={() => setOpen(false)}>Cancel</Button>
+          </span>
+        </form>
+      ) : null}
+    </div>
+  );
 }
 
 /** New PO: supplier, destination FC, Incoterm, expected date and lines of retail items in whole cases. */
@@ -82,6 +132,11 @@ function PoForm({ onDone }: { onDone: (po: PurchaseOrder) => void }) {
         <TextField label="Incoterm" value={incoterm} onChange={(e) => setIncoterm(e.target.value)} placeholder="FOB Tema" />
         <TextField label="Expected at the FC" type="date" min={todayIso()} value={expected} onChange={(e) => setExpected(e.target.value)} />
       </div>
+      {supplier ? (
+        <p className="m-0 text-xs text-muted" data-testid="po-supplier-summary">
+          {supplier.name} · pays in {supplier.currency} · payment terms {supplier.paymentTerms ?? '—'} · lead time {supplier.leadTimeDays} days. Line costs are in {supplier.currency}; freight, duty and other costs are added to the shipment once it is booked.
+        </p>
+      ) : null}
       {lines.map((l, i) => {
         const it = supplied.find((x) => x.id === l.itemId);
         const si = it?.supplierItems.find((x) => x.supplierId === supplierId) ?? it?.supplierItems[0];
@@ -273,6 +328,7 @@ export function PoSheet({ id, onClose }: { id: string | null; onClose: () => voi
                     {humanize(s.mode)} · {s.carrier ?? '—'} {s.trackingRef ?? ''} · ETA {shortDate(s.eta)}
                   </span>
                 </span>
+                <ShipmentCosts s={s} editable={retailEdit && s.stage !== 'RECEIVED'} />
                 <span className="text-xs text-muted">
                   ASN: {s.lines.map((l) => `${l.qty} × ${l.sku} lot ${l.lotNo ?? '—'} exp ${l.expDate ?? '—'}`).join(' · ')}
                 </span>
@@ -339,7 +395,7 @@ export function PoSheet({ id, onClose }: { id: string | null; onClose: () => voi
             ))}
             {retailEdit && po.lines.some((l) => l.qtyReceived > 0) ? (
               <form
-                className="flex flex-wrap items-end gap-2"
+                className="flex flex-wrap at-align gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
                   if (inv.number.trim()) register.mutate(undefined);

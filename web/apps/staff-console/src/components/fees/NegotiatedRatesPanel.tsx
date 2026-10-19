@@ -202,7 +202,7 @@ export function NegotiatedRatesPanel({ org }: { org?: { orgId: string; name: str
         error={rates.isError ? <ErrorState error={rates.error} onRetry={() => void rates.refetch()} /> : undefined}
         searchPlaceholder={t('st.rates.search')} empty={t('st.rates.none')}
         toolbar={
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-wrap at-align gap-2">
             <Select id={`${org ? 'o' : ''}nr-filter-type`} label={t('st.rates.col.type')} value={type} onChange={(e) => { setType(e.currentTarget.value as '' | NegotiatedRateType); state.resetPaging(); }}
               options={[{ value: '', label: t('st.rates.all') }, ...TYPES.map((x) => ({ value: x, label: t(`st.rates.type.${x}`) }))]} />
             <Select id={`${org ? 'o' : ''}nr-filter-status`} label={t('st.rates.col.status')} value={status} onChange={(e) => { setStatus(e.currentTarget.value as '' | NegotiatedRateStatus); state.resetPaging(); }}

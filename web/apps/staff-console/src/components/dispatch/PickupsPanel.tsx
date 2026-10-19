@@ -252,7 +252,7 @@ export function PickupsPanel() {
           exportsHref="/exports"
         />
         <form
-          className="flex flex-wrap items-end gap-2"
+          className="flex flex-wrap at-align gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             if (lookup.trim()) setSelected(lookup.trim());

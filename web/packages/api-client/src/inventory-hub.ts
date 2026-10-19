@@ -366,9 +366,19 @@ export const RetailShipmentSchema = z.object({
   cartons: z.array(z.object({ sscc: z.string(), asnLineNo: int, qty: int }).loose()).default([]),
   documents: z.array(z.object({ name: z.string(), status: z.string(), reference: str }).loose()).default([]),
   milestones: z.array(z.object({ stage: z.string(), at: z.string(), by: str })).default([]),
+  /** Associated costs of the shipment (freight, duty ...), spread over the received units as landed cost. */
+  charges: z.array(z.object({ type: z.string(), amountMinor: int, currency: z.string(), basis: str, reference: str })).default([]),
   version: z.number().int().default(0)
 });
 export type RetailShipment = z.infer<typeof RetailShipmentSchema>;
+/** A landed-cost charge on an inbound shipment; the basis (value, weight, quantity) defaults by type. */
+export interface ShipmentChargeInput {
+  type: 'FREIGHT' | 'INSURANCE' | 'DUTY' | 'BROKERAGE' | 'DRAYAGE' | 'FEES' | 'RECEIVING';
+  amountMinor: number;
+  currency: string;
+  basis?: 'VALUE' | 'WEIGHT' | 'QUANTITY';
+  reference?: string;
+}
 export const RetailShipmentPageSchema = pageOf(RetailShipmentSchema);
 
 export const ReceiptLineSchema = z.object({
@@ -759,6 +769,8 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
       shipments: (poId: string, signal?: AbortSignal) => request(`${R}/shipments`, RetailShipmentPageSchema, { query: qs({ poId, size: 200 }), signal }),
       bookShipment: (body: { poId: string; mode: string; carrier?: string; trackingRef?: string; etd?: string; eta?: string; lines?: { poLineNo: number; qty: number; lotNo?: string; mfgDate?: string; expDate?: string }[] }) =>
         request(`${R}/shipments`, RetailShipmentSchema, { method: 'POST', body }),
+      setShipmentCharges: (id: string, charges: ShipmentChargeInput[], version?: number) =>
+        request(`${R}/shipments/${enc(id)}/charges`, RetailShipmentSchema, { method: 'PUT', body: { charges }, headers: ifMatch(version) }),
       advanceShipment: (id: string, version?: number) => request(`${R}/shipments/${enc(id)}/advance`, RetailShipmentSchema, { method: 'POST', headers: ifMatch(version) }),
       setDocument: (id: string, name: string, status: ShipmentDocumentStatus, reference?: string) =>
         request(`${R}/shipments/${enc(id)}/documents`, RetailShipmentSchema, { method: 'POST', body: { name, status, ...(reference ? { reference } : {}) } }),
