@@ -610,10 +610,37 @@ type ShipFromClient interface {
 	SetPickup(ctx context.Context, bearer, orgID, id string, in PickupRequest) (ShipFromAddress, error)
 }
 
+// UpBusinessPageSettings is seller's BusinessPageSettings: how an organisation's public page looks.
+type UpBusinessPageSettings struct {
+	OrgID        string `json:"orgId"`
+	Slug         string `json:"slug"`
+	Kind         string `json:"kind"`
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	BrandColor   string `json:"brandColor"`
+	LogoURL      string `json:"logoUrl"`
+	ContactEmail string `json:"contactEmail"`
+	Approved     bool   `json:"approved"`
+}
+
+// BusinessPageSettingsInput is the PUT body (blank values clear them).
+type BusinessPageSettingsInput struct {
+	Description string `json:"description"`
+	BrandColor  string `json:"brandColor"`
+	LogoURL     string `json:"logoUrl"`
+}
+
+// BusinessPageSettingsClient reads and changes an organisation's public page (seller /v1/orgs/{orgId}/business-page).
+type BusinessPageSettingsClient interface {
+	BusinessPageSettings(ctx context.Context, bearer, orgID string) (UpBusinessPageSettings, error)
+	UpdateBusinessPageSettings(ctx context.Context, bearer, orgID string, in BusinessPageSettingsInput) (UpBusinessPageSettings, error)
+}
+
 // SellerServiceClient calls the seller service (organisations, onboarding, compliance, plans & billing, ship-from
 // addresses).
 type SellerServiceClient interface {
 	ShipFromClient
+	BusinessPageSettingsClient
 	SellerBillingClient
 	Org(ctx context.Context, bearer, orgID string) (SellerOrg, error)
 	Application(ctx context.Context, bearer string) (SellerApplication, error)

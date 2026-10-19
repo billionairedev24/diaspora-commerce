@@ -375,6 +375,15 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/lookup", map[string]any{"token": ""}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenExpired}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenValid}), 200)
+	// Business page settings: the logo, colour and description of the public page.
+	if r := b.do("GET", "/v1/seller/business-page", nil); r.status != 200 || r.json(t)["name"] != "Ade's Kitchen" || r.json(t)["canEdit"] != true {
+		t.Fatalf("business page = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/business-page", map[string]any{"brandColor": "green"}), 422)
+	if r := b.do("PUT", "/v1/seller/business-page", map[string]any{"description": " Jollof and more ", "brandColor": "#1a7f4b",
+		"logoUrl": "https://img.afrotransact.dev/a1.webp"}); r.status != 200 || r.json(t)["logoUrl"] != "https://img.afrotransact.dev/a1.webp" {
+		t.Fatalf("business page save = %d %s", r.status, r.body)
+	}
 	// Ship-from addresses live in the seller service (no more browser storage).
 	if r := b.do("GET", "/v1/seller/ship-from-addresses", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 0 {
 		t.Fatalf("ship-from list = %d %s", r.status, r.body)

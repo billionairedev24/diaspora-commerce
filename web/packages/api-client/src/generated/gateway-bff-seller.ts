@@ -502,6 +502,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/business-page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * How the organisation's public page looks (description, logo, brand colour)
+         * @description seller `GET /v1/orgs/{orgId}/business-page` for the active organisation (Team view). `canEdit` is false for members who may only look.
+         */
+        get: operations["getBusinessPage"];
+        /**
+         * Change the description, logo and brand colour (any time, also after approval)
+         * @description seller `PUT /v1/orgs/{orgId}/business-page` (Team edit; the seller service limits it to the owner and admins). Blank values clear them. 422 with `fieldErrors` for `description`, `brandColor` and `logoUrl`.
+         */
+        put: operations["updateBusinessPage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/ship-from-addresses": {
         parameters: {
             query?: never;
@@ -2767,6 +2791,25 @@ export interface components {
             sort: string[];
             /** @description The search or sort covered the first 5,000 shipments only */
             partial: boolean;
+        };
+        BusinessPageSettings: {
+            name: string;
+            /** @description The address of the page (/b/{slug}); null until the page is first made */
+            slug: string | null;
+            description: string | null;
+            /** @description #rrggbb */
+            brandColor: string | null;
+            /** @description https URL of the uploaded logo */
+            logoUrl: string | null;
+            contactEmail: string | null;
+            canEdit: boolean;
+        };
+        BusinessPageSettingsInput: {
+            description?: string;
+            /** @description #rrggbb or empty */
+            brandColor?: string;
+            /** @description https URL from POST /v1/seller/uploads (purpose storefront), or empty */
+            logoUrl?: string;
         };
         ShipFromAddress: {
             id: string;
@@ -5466,6 +5509,57 @@ export interface operations {
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBusinessPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessPageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateBusinessPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BusinessPageSettingsInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessPageSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

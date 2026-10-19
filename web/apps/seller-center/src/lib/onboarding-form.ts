@@ -147,7 +147,7 @@ export function validateBusiness(v: BusinessValues, kind: OrgKind): Errors {
   if (!EMAIL.test(v.contactEmail.trim())) e.contactEmail = 'Enter a valid email address';
   if (digitsOf(v.phone).length !== 10) e.phone = 'Enter a 10-digit US mobile number';
   if (v.description.length > 500) e.description = 'At most 500 characters';
-  if (v.brandColor.trim() && !/^#[0-9a-fA-F]{6}$/.test(v.brandColor.trim())) e.brandColor = 'Use a colour like #1a7f4b';
+  if (v.brandColor.trim() && !/^#[0-9a-fA-F]{6}$/.test(v.brandColor.trim())) e.brandColor = 'Use a colour like #rrggbb';
   return e;
 }
 

@@ -704,6 +704,25 @@ export interface OfferFulfilmentRequest {
   fulfilment: FulfilmentKind;
   shipFromLocationId?: string | null;
 }
+/** GET/PUT /v1/seller/business-page: how the organisation's plain public page (/b/{slug}) looks. */
+export const BusinessPageSettingsSchema = z.object({
+  name: z.string(),
+  /** The page's address; null until the page is first made. */
+  slug: nullableString,
+  description: nullableString,
+  /** #rrggbb */
+  brandColor: nullableString,
+  logoUrl: nullableString,
+  contactEmail: nullableString,
+  /** False for members who may only look (the owner and admins change the page). */
+  canEdit: z.boolean()
+});
+export type BusinessPageSettings = z.infer<typeof BusinessPageSettingsSchema>;
+export interface BusinessPageSettingsInput {
+  description: string;
+  brandColor: string;
+  logoUrl: string;
+}
 export const ShipFromListSchema = z.object({ items: z.array(ShipFromAddressSchema) });
 export type ShipFromInput = ShipFromForm & { label?: string; company?: string; country?: string; makeDefault?: boolean; version?: number | null };
 

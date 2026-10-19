@@ -294,3 +294,17 @@ func (s *sellerServiceImpl) SetPickup(ctx context.Context, bearer, orgID, id str
 		Bearer: bearer, JSON: in}, &out)
 	return out, err
 }
+
+// ---------------------------------------------------------------- seller: business page settings
+
+func (s *sellerServiceImpl) BusinessPageSettings(ctx context.Context, bearer, orgID string) (port.UpBusinessPageSettings, error) {
+	var out port.UpBusinessPageSettings
+	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) UpdateBusinessPageSettings(ctx context.Context, bearer, orgID string, in port.BusinessPageSettingsInput) (port.UpBusinessPageSettings, error) {
+	var out port.UpBusinessPageSettings
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/orgs/" + url.PathEscape(orgID) + "/business-page", Bearer: bearer, JSON: in}, &out)
+	return out, err
+}

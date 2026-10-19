@@ -44,6 +44,8 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates", h.shippingRates)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels", h.buyLabel)
 	route("GET /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label", h.downloadLabel)
+	route("GET /v1/seller/business-page", h.businessPageGet)
+	route("PUT /v1/seller/business-page", h.businessPageUpdate)
 	route("GET /v1/seller/ship-from-addresses", h.shipFromList)
 	route("POST /v1/seller/ship-from-addresses", h.shipFromCreate)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}", h.shipFromUpdate)
@@ -852,5 +854,22 @@ func (h *handlersImpl) sellerAssistantChat(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	v, err := h.s.SellerAssistant.Chat(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- business page settings
+
+func (h *handlersImpl) businessPageGet(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerBusinessPage.Get(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) businessPageUpdate(w http.ResponseWriter, r *http.Request) {
+	var b domain.BusinessPageSettingsInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerBusinessPage.Update(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }

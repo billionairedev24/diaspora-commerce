@@ -130,7 +130,7 @@ export function BusinessStep({ status, ref }: StepProps) {
                 <Optional />
               </>
             }
-            placeholder="#1a7f4b"
+            placeholder="#rrggbb"
             value={v.brandColor}
             onChange={(e) => f.patch({ brandColor: e.target.value }, ['brandColor'])}
             error={f.errors.brandColor}

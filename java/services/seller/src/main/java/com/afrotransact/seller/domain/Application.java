@@ -47,6 +47,17 @@ public record Application(String id, String reference, String orgId, String appl
                 submissionCount, submittedAt, createdAt, now, version);
     }
 
+    /** The business changes how its public page looks; allowed in any status (it is not part of the review). */
+    public Application withBranding(BusinessSection.Branding branding, Instant now) {
+        BusinessSection b = data.business();
+        BusinessSection next = b == null ? new BusinessSection(null, null, null, null, null, null, null, branding)
+                : new BusinessSection(b.offering(), b.entityType(), b.country(), b.storeName(), b.contactEmail(),
+                        b.phone(), b.website(), branding);
+        return new Application(id, reference, orgId, applicantUserId, kind, status, currentStep,
+                data.withBusiness(next), prefilledFields, reviewerId, reviewedAt, finalApproverId, decidedAt,
+                failedChecks, requestedItems, reasonCode, submissionCount, submittedAt, createdAt, now, version);
+    }
+
     /** Stripe verification results are refreshed by the system at any time before approval. */
     public Application withStripe(StripeVerification stripe, Instant now) {
         return new Application(id, reference, orgId, applicantUserId, kind, status, currentStep,

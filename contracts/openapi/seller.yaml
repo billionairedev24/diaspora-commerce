@@ -1866,6 +1866,51 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrgEnforcement'
+  /v1/orgs/{orgId}/business-page:
+    get:
+      tags:
+      - Business page settings
+      summary: The page settings as they are now
+      operationId: get
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BusinessPageSettings'
+    put:
+      tags:
+      - Business page settings
+      summary: Change how the page looks
+      description: Blank values clear them. 422 seller.invalid-branding with fieldErrors
+        (description, brandColor, logoUrl).
+      operationId: update
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessPageSettingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BusinessPageSettings'
   /v1/orgs/{orgId}/ship-from-addresses:
     get:
       tags:
@@ -2333,6 +2378,42 @@ components:
       - closes
       - day
       - opens
+    BusinessPageSettings:
+      type: object
+      properties:
+        orgId:
+          type: string
+        slug:
+          type: string
+          description: null until the page is first made
+        kind:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        brandColor:
+          type: string
+        logoUrl:
+          type: string
+        contactEmail:
+          type: string
+        approved:
+          type: boolean
+    BusinessPageSettingsRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 2000
+        brandColor:
+          type: string
+          description: '#rrggbb; blank clears it'
+          maxLength: 7
+        logoUrl:
+          type: string
+          description: https URL of an uploaded logo; blank removes it
+          maxLength: 2048
     ShipFromAddress:
       type: object
       properties:

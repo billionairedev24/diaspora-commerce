@@ -34,6 +34,9 @@ import {
   BookingCardSchema,
   type BrandList,
   BrandListSchema,
+  type BusinessPageSettings,
+  type BusinessPageSettingsInput,
+  BusinessPageSettingsSchema,
   type Cadence,
   type CalendarView,
   CalendarViewSchema,
@@ -270,6 +273,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request(`${shipment(orderNumber, shipmentId)}/labels`, LabelPurchaseSchema, { method: 'POST', body, headers: idem(key) }),
 
     /* Ship-from addresses (seller service) */
+    getBusinessPage: (signal?: AbortSignal): Promise<BusinessPageSettings> => request('/v1/seller/business-page', BusinessPageSettingsSchema, { signal }),
+    updateBusinessPage: (input: BusinessPageSettingsInput): Promise<BusinessPageSettings> =>
+      request('/v1/seller/business-page', BusinessPageSettingsSchema, { method: 'PUT', body: input }),
     listShipFrom: async (signal?: AbortSignal): Promise<ShipFromAddress[]> => (await request('/v1/seller/ship-from-addresses', ShipFromListSchema, { signal })).items,
     createShipFrom: (input: ShipFromInput): Promise<ShipFromAddress> =>
       request('/v1/seller/ship-from-addresses', ShipFromAddressSchema, { method: 'POST', body: input }),

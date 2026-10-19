@@ -2,10 +2,11 @@
 
 import { type OnboardingStripeSession } from '@afrotransact/api-client';
 import { Button } from '@afrotransact/ui';
-import { CircleNotch, Flask, WarningCircle } from '@phosphor-icons/react/ssr';
+import { Flask, WarningCircle } from '@phosphor-icons/react/ssr';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import { type ConnectComponent, hasStripeKey, initConnect } from '@/lib/stripe';
+
 import { Spinner } from '../ui/States';
 
 /* Stripe's embedded Connect components, mounted straight in the page (no Stripe-hosted page, no Stripe login, no

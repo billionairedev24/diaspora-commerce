@@ -79,6 +79,8 @@ export interface MockSellerDb {
   onboarding: Record<string, MockApplication>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
   shipFrom: Record<string, ShipFromAddress[]>;
+  /** How each organisation's public page looks (seller service /v1/orgs/{orgId}/business-page). */
+  businessPage: Record<string, { description: string; brandColor: string; logoUrl: string }>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
   offers: SellerOffer[];
   /** Seller-funded coupons (offers-service). */
@@ -557,6 +559,7 @@ function freshDb(now: Date): MockSellerDb {
     services: PROVIDER_SERVICES.map((s) => ({ ...s, currency: 'USD', active: true, takeHome: takeHome(s.priceMinor) })),
     policy: { kind: 'MODERATE', freeHours: 48, partialRefund: true, partialFromHours: 24, partialPercent: 50, noShow: 'DEPOSIT', rescheduleHours: 48, maxReschedules: 2 },
     earnings: [],
+    businessPage: {},
     shipFrom: {
       [SELLER_ORG]: [
         { id: 'sfa-store', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',

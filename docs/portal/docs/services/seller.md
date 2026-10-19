@@ -88,6 +88,15 @@ warms its seller names from it on start), `GET /v1/orgs/{id}/public` (no auth: d
 cart, storefront), `GET /v1/orgs/{id}`
 (members and reviewers), `PATCH /v1/orgs/{id} {displayName}` (owner, approved orgs) → `seller.org.updated`.
 
+## Business page settings
+
+`GET/PUT /v1/orgs/{orgId}/business-page`: the description, logo and brand colour of the organisation's plain public page
+(`/b/{slug}`). Members read; the owner and admins (or staff `seller:business-page`) change it, at any time, also after
+approval. Blank values clear them; `422 seller.invalid-branding` carries `fieldErrors` for `description` (500 characters),
+`brandColor` (`#rrggbb`) and `logoUrl` (https). The values live in the application's business section, so the page and
+the onboarding answers never disagree. Seller Center: Team & roles › Business page (`/team/business-page`); the logo is
+uploaded with purpose `storefront` and the returned public URL is saved.
+
 ## Ship-from addresses and AfroTransact pickup (S231, S255)
 
 `GET/POST /v1/orgs/{orgId}/ship-from-addresses`, `PUT/DELETE …/{id}`, `POST …/{id}/default` (members read; owner,

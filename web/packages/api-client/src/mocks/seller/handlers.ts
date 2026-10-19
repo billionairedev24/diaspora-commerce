@@ -15,6 +15,7 @@ import {
   BookingActionSchema,
   type BookingCard,
   type BookingStatus,
+  type BusinessPageSettings,
   CadenceSchema,
   CancellationPolicyInputSchema,
   CarrierSchema,
@@ -631,6 +632,15 @@ const teamProblem = (status: number, code: string) => new SellerProblem(status, 
 const W = '*/v1/seller';
 const query = (ctx: Ctx) => new URL(ctx.request.url).searchParams;
 const nextId = (db: MockSellerDb, prefix: string) => `${prefix}-${++db.seq}`;
+
+const BusinessPageBody = z.object({ description: z.string().max(2000).default(''), brandColor: z.string().max(7).default(''), logoUrl: z.string().max(2048).default('') });
+
+function businessPage(ctx: Ctx): BusinessPageSettings {
+  const p = ctx.db.businessPage[ctx.org.id];
+  const slug = ctx.org.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return { name: ctx.org.name, slug: slug || null, description: p?.description || null, brandColor: p?.brandColor || null, logoUrl: p?.logoUrl || null,
+    contactEmail: ctx.db.user.email, canEdit: allows(ctx.org.kind, ctx.role, 'team', 'EDIT') };
+}
 
 function shipFromList(ctx: Ctx): ShipFromAddress[] {
   return (ctx.db.shipFrom[ctx.org.id] ??= []);
@@ -1969,6 +1979,28 @@ export const sellerHandlers = [
         currency: 'USD', commissionPercent: 8, payoutDay: 'Tuesday', totals, rows, connectionFee: mockConnectionFees(),
         providerFees: { available: true, outstandingMinor: outstandingFees(ctx.db), collectedMinor: items.filter((f) => f.status === 'COLLECTED').reduce((a, f) => a + f.amountMinor, 0), items }
       };
+    })
+  ),
+  /* ── Business page settings ── */
+  http.get(
+    `${W}/business-page`,
+    route((ctx) => {
+      require(ctx, 'team', 'VIEW');
+      return businessPage(ctx);
+    })
+  ),
+  http.put(
+    `${W}/business-page`,
+    route(async (ctx) => {
+      require(ctx, 'team', 'EDIT');
+      const b = await body(ctx.request, BusinessPageBody);
+      const errors: Record<string, string> = {};
+      if (b.description.trim().length > 500) errors.description = 'At most 500 characters';
+      if (b.brandColor.trim() && !/^#[0-9a-fA-F]{6}$/.test(b.brandColor.trim())) errors.brandColor = 'Use a colour like #1a7f4b';
+      if (b.logoUrl.trim() && !/^https:\/\/\S+$/.test(b.logoUrl.trim())) errors.logoUrl = 'Upload your logo again';
+      if (Object.keys(errors).length) throw invalid(errors);
+      ctx.db.businessPage[ctx.org.id] = { description: b.description.trim(), brandColor: b.brandColor.trim().toLowerCase(), logoUrl: b.logoUrl.trim() };
+      return businessPage(ctx);
     })
   ),
   /* ── Ship-from addresses ── */

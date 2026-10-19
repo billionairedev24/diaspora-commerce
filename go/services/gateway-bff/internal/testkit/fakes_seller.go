@@ -716,6 +716,30 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, status, out)
 	}
+	// Business page settings: the plain public page's description, logo and brand colour (owner/admin change them).
+	page := map[string]any{"orgId": SellerOrgID, "slug": "ades-kitchen", "kind": "SELLER", "name": "Ade's Kitchen",
+		"description": "", "brandColor": "", "logoUrl": "", "contactEmail": "ade@example.com", "approved": true}
+	mux.HandleFunc("GET /v1/orgs/{id}/business-page", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if r.PathValue("id") != SellerOrgID {
+			problem(w, 403, "seller.org-role-required", "not your organisation", nil)
+			return
+		}
+		writeJSON(w, 200, page)
+	})
+	mux.HandleFunc("PUT /v1/orgs/{id}/business-page", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if c := b["brandColor"]; c != "" && (len(c) != 7 || c[0] != '#') {
+			problem(w, 422, "seller.invalid-branding", "The page details are not valid", map[string]any{"brandColor": "Use a colour like #1a7f4b"})
+			return
+		}
+		page["description"], page["brandColor"], page["logoUrl"] = b["description"], b["brandColor"], b["logoUrl"]
+		writeJSON(w, 200, page)
+	})
 	mux.HandleFunc("GET /v1/orgs/{id}/ship-from-addresses", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()

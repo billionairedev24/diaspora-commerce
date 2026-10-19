@@ -40,6 +40,8 @@ type Services struct {
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
 	SellerShipFrom  app.SellerShipFromService
+	// SellerBusinessPage is the page settings (description, logo, brand colour).
+	SellerBusinessPage app.SellerBusinessPageService
 
 	// SellerListing is the one-step product form (S307) and SellerImports the bulk upload (S308); registered when set.
 	SellerListing app.SellerListingService
