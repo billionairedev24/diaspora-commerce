@@ -74,7 +74,7 @@ class PurchasingFlowIT extends RetailIntegrationTest {
         RetailItem shito = item(supplier, "Shito Black Pepper Sauce, Hot, 12 oz", null, 3470);
         assertThat(jollof.atin()).isEqualTo(atin);
         assertThat(jollof.sku()).startsWith("AT-JOL-");
-        assertThat(jollof.gtin()).startsWith("86001").hasSize(12);
+        assertThat(jollof.gtin()).startsWith("04000").hasSize(12);
         assertThat(jollof.listingStatus()).isEqualTo(ListingStatus.DRAFT);
         DOWNSTREAM.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/public/variants/" + atin)));
         as(TestActors.BUYER);

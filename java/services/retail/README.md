@@ -11,7 +11,7 @@ product → PO → approval → shipment/ASN → transit & customs → receiving
 ## What it owns
 
 - **Product master (S068).** 1P items with a SKU (`AT-JOL-200061`) and a GTIN-12 issued from the AfroTransact GS1
-  prefix (`86001…`, check digit), a link to the catalog variant **ATIN** (checked against catalog's public API; it must
+  prefix (`04000…`, check digit: a GS1 internal-use number, see below), a link to the catalog variant **ATIN** (checked against catalog's public API; it must
   be a live `PLATFORM` listing and is linked to one item only), HTS code and duty rate, shelf life, storage, reorder
   point, pack size, inner pack and case pack, unit weight, standard cost and price, and one supplier SKU per supplier
   (case pack, MOQ and agreed cost in the supplier's currency). Listing readiness starts as `DRAFT`; `LIVE` needs an
@@ -174,7 +174,7 @@ Inventory 4xx answers reopen the receipt with the problem's field errors; 5xx, t
 | `WAREHOUSE_ZONE_CACHE_TTL`, `WAREHOUSE_DEFAULT_ZONE` | warehouse calendar for receipt dates (1h, UTC); zones per node under `at.retail.receiving.warehouse-zones` |
 | `PO_FINANCE_THRESHOLD_MINOR` | Finance approval threshold in base-currency minor units (default 1000000 = USD 10,000.00) |
 | `MATCH_PRICE_TOLERANCE_PERCENT` | three-way match tolerance (default 1.0) |
-| `GS1_COMPANY_PREFIX` | UPC company prefix for issued GTINs (default 86001) |
+| `GS1_COMPANY_PREFIX` | UPC prefix for GTINs issued to 1P items that have no manufacturer barcode. Default `04000`: UPC-A numbers starting `04` are GS1's internal-use range (restricted distribution), valid and collision-free inside AfroTransact but meaningless to other retailers. Set a licensed GS1 company prefix only if these items will be sold through other channels. |
 | `RETAIL_CONSUMERS_ENABLED` | COGS consumer on/off |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING` | tracing |
 
