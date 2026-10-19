@@ -155,6 +155,7 @@ var opsRoutes = []opsRoute{
 	route(areaRetail, opGet, "/suppliers", "/v1/suppliers", lvView, withPage("q", "status")...),
 	route(areaRetail, opPost, "/suppliers", "/v1/suppliers", lvEdit),
 	route(areaRetail, opGet, "/suppliers/{id}", "/v1/suppliers/{id}", lvView),
+	route(areaRetail, opPut, "/suppliers/{id}", "/v1/suppliers/{id}", lvEdit),
 	route(areaRetail, opPost, "/suppliers/{id}/status", "/v1/suppliers/{id}/status", lvAppr),
 	route(areaRetail, opGet, "/purchase-orders", "/v1/purchase-orders", lvView, withPage("status", "supplierId")...),
 	route(areaRetail, opPost, "/purchase-orders", "/v1/purchase-orders", lvEdit),

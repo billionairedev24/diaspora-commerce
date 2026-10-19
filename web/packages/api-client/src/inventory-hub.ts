@@ -262,6 +262,8 @@ export const SupplierSchema = z.object({
   paymentTerms: str,
   leadTimeDays: int.default(0),
   status: z.string(),
+  statusReason: str,
+  contacts: z.array(z.object({ name: z.string(), role: str, email: str, phone: str })).default([]),
   canReceivePurchaseOrders: z.boolean().default(true),
   scorecard: z.object({ receipts: int, onTimePercent: z.number().nullish(), defectPercent: z.number().nullish() }).loose().nullish(),
   version: z.number().int().default(0)
@@ -526,6 +528,7 @@ export interface SupplierInput {
   currency: string;
   paymentTerms?: string;
   leadTimeDays: number;
+  contacts?: { name: string; role?: string; email?: string; phone?: string }[];
 }
 export interface ReceiptCountLineInput {
   lineNo: number;
@@ -756,6 +759,8 @@ export function createInventoryHubApi(request: Requester, options: ApiClientOpti
         request(`${R}/items/${enc(id)}/listing`, RetailItemSchema, { method: 'POST', body: { status }, headers: ifMatch(version) }),
       createItem: (body: RetailItemInput, key?: string): Promise<RetailItem> => request(`${R}/items`, RetailItemSchema, { method: 'POST', body, headers: idem(key) }),
       createSupplier: (body: SupplierInput): Promise<Supplier> => request(`${R}/suppliers`, SupplierSchema, { method: 'POST', body }),
+      updateSupplier: (id: string, body: SupplierInput, version?: number): Promise<Supplier> =>
+        request(`${R}/suppliers/${enc(id)}`, SupplierSchema, { method: 'PUT', body, headers: ifMatch(version) }),
       setSupplierStatus: (id: string, status: 'APPROVED' | 'ON_WATCH' | 'INACTIVE', reason?: string): Promise<Supplier> =>
         request(`${R}/suppliers/${enc(id)}/status`, SupplierSchema, { method: 'POST', body: { status, reason } }),
       purchaseOrders: (q: { status?: string; page: number; size: number }, signal?: AbortSignal) => request(`${R}/purchase-orders`, PurchaseOrderPageSchema, { query: qs(q), signal }),

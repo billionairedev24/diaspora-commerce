@@ -257,6 +257,7 @@ function SuppliersPanel() {
   const qc = useQueryClient();
   const { retailEdit, retailApprove } = useHubAccess();
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Supplier | null>(null);
   const approve = useHubMutation((ids: string[]) => Promise.all(ids.map((i) => api.retail.setSupplierStatus(i, 'APPROVED', 'Vetted'))), (r) => `${r.length} suppliers approved.`);
   const state = useTableState({ searchParams: useSearchParams(), prefix: 'sup' });
   const query = useQuery(inventoryHubQueries.suppliers(api));
@@ -282,6 +283,7 @@ function SuppliersPanel() {
       data={query.data?.items ?? []}
       getRowId={(s) => s.id}
       rowLabel={(s) => s.name}
+      onRowClick={(s) => setEditing(s)}
       state={state}
       mode="client"
       loading={query.isPending}
@@ -293,8 +295,11 @@ function SuppliersPanel() {
       onExport={(req) => exportDataset(qc, req)}
       exportsHref="/exports"
     />
-    <Sheet open={creating} onOpenChange={setCreating} title="New supplier" width={560}>
+    <Sheet open={creating} onOpenChange={setCreating} title="New supplier" width={520}>
       <SupplierForm onDone={() => setCreating(false)} />
+    </Sheet>
+    <Sheet open={editing !== null} onOpenChange={(o) => !o && setEditing(null)} title={editing?.name ?? 'Supplier'} width={520}>
+      {editing ? <SupplierForm key={`${editing.id}-${editing.version}`} supplier={editing} canApprove={retailApprove} onDone={(s) => setEditing(s)} /> : null}
     </Sheet>
     </>
   );

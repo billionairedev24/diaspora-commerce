@@ -134,6 +134,35 @@ describe('retail purchase order: costs of the inbound shipment', () => {
   });
 });
 
+describe('suppliers: edit, stop doing business', () => {
+  beforeEach(() => {
+    resetHubDb(new Date());
+  });
+
+  it('edits a supplier with country and currency lists, then stops and resumes business with a reason', async () => {
+    nav.set('/retail?tab=suppliers');
+    await renderScreen(<RetailView />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('Accra Spice Co.'));
+    const sheet = await screen.findByRole('dialog', { name: /Accra Spice Co\./ });
+    expect(within(sheet).getByLabelText('Country')).toBeDisabled();
+    const currency = within(sheet).getByLabelText('Currency we pay in');
+    expect(within(currency).getAllByRole('option').some((o) => o.textContent?.startsWith('GHS'))).toBe(true);
+    const name = within(sheet).getByLabelText('Supplier name');
+    await user.clear(name);
+    await user.type(name, 'Accra Spice Company');
+    await user.click(within(sheet).getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByRole('dialog', { name: /Accra Spice Company/ })).toBeInTheDocument();
+    const dialog = screen.getByRole('dialog', { name: /Accra Spice Company/ });
+    await user.click(within(dialog).getByRole('button', { name: 'Stop doing business' }));
+    expect(within(dialog).getByRole('button', { name: 'Stop doing business' })).toBeDisabled();
+    await user.type(within(dialog).getByLabelText(/Why\?/), 'Quality problems');
+    await user.click(within(dialog).getByRole('button', { name: 'Stop doing business' }));
+    expect(await within(screen.getByRole('dialog')).findByRole('button', { name: 'Resume business' })).toBeInTheDocument();
+    expect(within(screen.getByRole('dialog')).getByText('Quality problems')).toBeInTheDocument();
+  });
+});
+
 describe('retail goods receipt rows (S281)', () => {
   const grn = GoodsReceiptSchema.parse({
     id: 'g1', number: 'GRN-1', poId: 'p1', shipmentId: 's1', nodeId: 'HOU-FC', status: 'OPEN',

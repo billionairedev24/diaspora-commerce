@@ -63,8 +63,8 @@ function seed(now: Date): HubDb {
     { id: 'LAX-FC', name: 'Los Angeles FC', kind: 'FULFILMENT_CENTRE', country: 'US', active: true }
   ];
   db.suppliers = [
-    { id: uuid(1, 'aaaa0001'), code: 'SUP-ACC', name: 'Accra Spice Co.', country: 'GH', city: 'Tema', currency: 'GHS', paymentTerms: 'Net 30', leadTimeDays: 35, status: 'APPROVED', canReceivePurchaseOrders: true, scorecard: { receipts: 6, onTimePercent: 92, defectPercent: 0.8 }, version: 0 },
-    { id: uuid(2, 'aaaa0001'), code: 'SUP-LAG', name: 'Lagos Pepper Works', country: 'NG', city: 'Lagos', currency: 'NGN', paymentTerms: 'Net 45 · 30% deposit', leadTimeDays: 42, status: 'APPROVED', canReceivePurchaseOrders: true, scorecard: { receipts: 3, onTimePercent: 88, defectPercent: 1.4 }, version: 0 }
+    { id: uuid(1, 'aaaa0001'), code: 'SUP-ACC', name: 'Accra Spice Co.', country: 'GH', city: 'Tema', currency: 'GHS', paymentTerms: 'Net 30', leadTimeDays: 35, status: 'APPROVED', contacts: [], canReceivePurchaseOrders: true, scorecard: { receipts: 6, onTimePercent: 92, defectPercent: 0.8 }, version: 0 },
+    { id: uuid(2, 'aaaa0001'), code: 'SUP-LAG', name: 'Lagos Pepper Works', country: 'NG', city: 'Lagos', currency: 'NGN', paymentTerms: 'Net 45 · 30% deposit', leadTimeDays: 42, status: 'APPROVED', contacts: [], canReceivePurchaseOrders: true, scorecard: { receipts: 3, onTimePercent: 88, defectPercent: 1.4 }, version: 0 }
   ];
   const item = (n: number, sku: string, gtin: string, name: string, atin: string | null, storage: string, shelf: number, priceMinor: number, listing: RetailItem['listingStatus'], casePack: number, sup: number): RetailItem => ({
     id: uuid(n, 'bbbb0001'), sku, gtin, gtin14: gtin.padStart(14, '0'), name, category: 'Groceries', atin, primarySupplierId: must(db.suppliers[sup]).id,
@@ -791,14 +791,30 @@ function retailRoutes(W: string, gate: HubGate) {
       if (!/^SUP-[A-Z0-9]{2,12}$/.test(code)) throw invalid('Invalid supplier', { code: 'SUP- and 2 to 12 letters or digits' });
       if (ctx.db.suppliers.some((x) => x.code === code)) throw conflict(`${code} already exists.`);
       const n = ++ctx.db.seq;
-      const sup: Supplier = { id: uuid(n, 'aaaa0001'), code, name: String(b.name ?? ''), country: String(b.country ?? ''), city: (b.city as string | undefined) ?? null, currency: String(b.currency ?? 'USD'), paymentTerms: (b.paymentTerms as string | undefined) ?? null, leadTimeDays: Number(b.leadTimeDays ?? 0), status: 'ONBOARDING', canReceivePurchaseOrders: false, scorecard: { receipts: 0, onTimePercent: null, defectPercent: null }, version: 0 };
+      const sup: Supplier = { id: uuid(n, 'aaaa0001'), code, contacts: ((b.contacts as { name: string; role?: string; email?: string; phone?: string }[] | undefined) ?? []).map((c) => ({ name: c.name, role: c.role ?? null, email: c.email ?? null, phone: c.phone ?? null })), name: String(b.name ?? ''), country: String(b.country ?? ''), city: (b.city as string | undefined) ?? null, currency: String(b.currency ?? 'USD'), paymentTerms: (b.paymentTerms as string | undefined) ?? null, leadTimeDays: Number(b.leadTimeDays ?? 0), status: 'ONBOARDING', canReceivePurchaseOrders: false, scorecard: { receipts: 0, onTimePercent: null, defectPercent: null }, version: 0 };
       ctx.db.suppliers.push(sup);
       return sup;
     }, 201)),
+    http.put(`${W}/suppliers/:id`, h('EDIT', async (ctx, p) => {
+      const sup = ctx.db.suppliers.find((x) => x.id === p.id);
+      if (!sup) throw notFound('supplier');
+      const b = await bodyOf(ctx.request);
+      if (!String(b.name ?? '').trim()) throw invalid('Invalid supplier', { name: 'Required' });
+      sup.name = String(b.name);
+      sup.city = (b.city as string | undefined) ?? null;
+      sup.currency = String(b.currency ?? sup.currency);
+      sup.paymentTerms = (b.paymentTerms as string | undefined) ?? null;
+      sup.leadTimeDays = Number(b.leadTimeDays ?? sup.leadTimeDays);
+      sup.contacts = ((b.contacts as { name: string; role?: string; email?: string; phone?: string }[] | undefined) ?? []).map((c) => ({ name: c.name, role: c.role ?? null, email: c.email ?? null, phone: c.phone ?? null }));
+      sup.version += 1;
+      return sup;
+    })),
     http.post(`${W}/suppliers/:id/status`, h('APPROVE', async (ctx, p) => {
       const sup = ctx.db.suppliers.find((x) => x.id === p.id);
       if (!sup) throw notFound('supplier');
-      sup.status = String((await bodyOf(ctx.request)).status ?? sup.status);
+      const body = await bodyOf(ctx.request);
+      sup.statusReason = (body.reason as string | undefined) ?? null;
+      sup.status = String(body.status ?? sup.status);
       sup.canReceivePurchaseOrders = sup.status === 'APPROVED' || sup.status === 'ON_WATCH';
       sup.version += 1;
       return sup;
