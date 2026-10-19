@@ -111,6 +111,8 @@ export interface BusinessValues {
   description: string;
   /** #rrggbb, or empty for the default. */
   brandColor: string;
+  /** https URL of the uploaded logo, or empty. */
+  logoUrl: string;
 }
 
 /** National display of a US number (+17132490142 → (713) 249-0142); other numbers are shown as stored. */
@@ -128,7 +130,8 @@ export function businessValues(form: OnboardingForm, kind: OrgKind): BusinessVal
     contactEmail: text(b.contactEmail),
     phone: displayPhone(b.phone),
     description: text(b.description),
-    brandColor: text(b.brandColor)
+    brandColor: text(b.brandColor),
+    logoUrl: text(b.logoUrl)
   };
 }
 
@@ -157,7 +160,8 @@ export function toBusinessInput(v: BusinessValues): OnboardingBusinessInput {
     contactEmail: opt(v.contactEmail),
     phone: opt(v.phone),
     description: opt(v.description),
-    brandColor: opt(v.brandColor)
+    brandColor: opt(v.brandColor),
+    logoUrl: opt(v.logoUrl)
   };
 }
 

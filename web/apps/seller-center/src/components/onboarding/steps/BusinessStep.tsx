@@ -8,6 +8,7 @@ import { sellerApi } from '@/lib/api';
 import { businessValues, ENTITY_TYPES, fieldId, isPrefilled, OFFERINGS, toBusinessInput, validateBusiness } from '@/lib/onboarding-form';
 
 import { Cell, ChoiceCards, FieldGrid, FromAccount, Optional, StepErrors, type StepProps, useStepForm } from '../WizardKit';
+import { LogoField } from './LogoField';
 
 /** Step 1 "Your business": what you offer, how you're organised, and how shoppers and our team reach you. */
 export function BusinessStep({ status, ref }: StepProps) {
@@ -135,6 +136,9 @@ export function BusinessStep({ status, ref }: StepProps) {
             error={f.errors.brandColor}
             disabled={disabled}
           />
+        </Cell>
+        <Cell span={12}>
+          <LogoField value={v.logoUrl} onChange={(logoUrl) => f.patch({ logoUrl }, ['logoUrl'])} disabled={disabled} />
         </Cell>
       </FieldGrid>
       {f.failure ? (

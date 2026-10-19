@@ -20,6 +20,7 @@ import {
   ownerValues,
   payoutAccountLabel,
   prefillNote,
+  toBusinessInput,
   toComplianceInput,
   toDetailsInput,
   validateAddress,
@@ -131,7 +132,8 @@ describe('Your business', () => {
       contactEmail: 'nope',
       phone: '713',
       description: '',
-      brandColor: 'green'
+      brandColor: 'green',
+      logoUrl: ''
     };
     expect(Object.keys(validateBusiness(v, 'SELLER')).sort()).toEqual(['brandColor', 'contactEmail', 'entityType', 'offering', 'phone', 'storeName']);
     expect(
@@ -150,6 +152,12 @@ describe('Your business', () => {
     ).toEqual({
       offering: 'Seller accounts sell products (choose products or both)'
     });
+  });
+
+  it('sends the uploaded logo URL and leaves it out when there is none', () => {
+    const v: BusinessValues = { ...businessValues(form(), 'SELLER'), logoUrl: 'https://img.afrotransact.dev/a1.webp' };
+    expect(toBusinessInput(v).logoUrl).toBe('https://img.afrotransact.dev/a1.webp');
+    expect(toBusinessInput({ ...v, logoUrl: '' }).logoUrl).toBeUndefined();
   });
 });
 
