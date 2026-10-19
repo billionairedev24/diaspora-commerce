@@ -51,6 +51,9 @@ export function TraceCard() {
   const t = query.data;
   return (
     <Card title="Trace a product to the storefront">
+      <p className="m-0 text-sm text-muted">
+        Follows one AfroTransact-fulfilled product step by step (retail item, inbound shipment, lots, available stock, offer, search index, product page) and shows the first step that is broken or missing, with a link to fix it.
+      </p>
       <form
         className="flex flex-wrap items-end gap-2"
         onSubmit={(e) => {
@@ -59,7 +62,7 @@ export function TraceCard() {
         }}
       >
         <TextField label="Variant ATIN or inventory SKU" value={input} onChange={(e) => setInput(e.target.value)} placeholder="ATJOLLOF01 or AT-JOL-200061" className="min-w-[240px] flex-1" />
-        <Button type="submit">Trace</Button>
+        <Button type="submit" className="mb-[calc(var(--at-space-1)+14px)]">Trace</Button>
       </form>
       {target && query.isPending ? <Spinner /> : null}
       {query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
