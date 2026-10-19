@@ -299,6 +299,15 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/applications/"):
 		writeJ(w, 200, map[string]any{"id": "app-1", "reference": "APP-1", "kind": "SELLER", "status": "AWAITING_FINAL_APPROVAL", "reviewerId": "stf-1",
 			"business": map[string]any{"storeName": "Kente Naturals", "entityType": "SINGLE_MEMBER_LLC"}, "steps": []string{"business", "bank"}})
+	// seller: the organisation directory mirror and Stripe Connect compliance
+	case p == "/v1/orgs/mirror":
+		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"orgId": "org-1", "displayName": "Kente Naturals", "legalName": "Kente Naturals LLC", "kind": "SELLER", "offering": "PRODUCTS", "country": "US", "status": "APPROVED"}}, "total": 1})
+	case strings.HasPrefix(p, "/v1/orgs/") && strings.HasSuffix(p, "/mirror"):
+		writeJ(w, 200, map[string]any{"orgId": "org-1", "displayName": "Kente Naturals", "legalName": "Kente Naturals LLC", "kind": "SELLER", "offering": "PRODUCTS", "country": "US", "status": "APPROVED"})
+	case p == "/v1/compliance/accounts":
+		writeJ(w, 200, []any{map[string]any{"orgId": "org-1", "orgName": "Kente Naturals", "accountId": "acct_1Kente", "status": "VERIFIED", "payoutsPaused": false, "listingsHidden": false}})
+	case strings.HasPrefix(p, "/v1/compliance/accounts/"):
+		writeJ(w, 200, map[string]any{"orgId": "org-1", "orgName": "Kente Naturals", "accountId": "acct_1Kente", "status": "VERIFIED", "payoutsPaused": false, "listingsHidden": false})
 	// offers: platform coupons
 	case p == "/v1/coupons":
 		writeJ(w, 200, []any{map[string]any{"id": "cp-1", "code": "WELCOME5", "description": "$5 off a first order", "type": "FIXED", "value": 500, "currency": "USD",

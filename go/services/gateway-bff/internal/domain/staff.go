@@ -273,7 +273,7 @@ func RefundLimitProblem(limit int64) *Problem {
 // ---------------------------------------------------------------- tables and sheets
 
 // ResourceKeys are the tables of the console (contract ResourceKey).
-var ResourceKeys = []string{"users", "roles", "applications", "orders", "products", "moderation", "claims", "returns", "payouts",
+var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "moderation", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons"}
 
