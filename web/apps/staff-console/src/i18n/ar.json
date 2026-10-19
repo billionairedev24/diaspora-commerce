@@ -328,7 +328,7 @@
   "st.plans.tabs": "أقسام الخطط والفوترة",
   "st.plans.tab.plans": "الخطط",
   "st.plans.charges": "ما يتقاضاه",
-  "st.plans.charges.help": "حدد متى يبدأ الرسم الشهري. الخطة بلا رسم شهري عمولة فقط.",
+  "st.plans.charges.help": "حدد متى يبدأ الرسم الشهري. الخطة بلا رسم شهري عمولة فقط؛ وإذا كان للخطة الاثنان فيُؤخذ الرسم أدناه والعمولة على كل عملية بيع.",
   "st.plans.charges.free": "أشهر مجانية في البداية",
   "st.plans.charges.then": "بعد ذلك",
   "st.plans.charges.then.CHARGE": "تحصيل كل فترة",
@@ -777,5 +777,18 @@
   "st.plans.cap.imageLibrary": "Image library",
   "st.plans.cap.coupons": "Coupons",
   "st.plans.lola.NONE": "Lola not included",
-  "st.plans.membersSee": "Sellers on this plan see"
+  "st.plans.membersSee": "Sellers on this plan see",
+  "st.plans.commission.title": "العمولة ورسوم FBA",
+  "st.plans.commission.default": "افتراضي",
+  "st.plans.commission.value": "عمولة المنتجات {range}؛ رسوم FBA لكل وحدة {fba}. تُؤخذ من كل عملية بيع مهما حدث للرسم الشهري.",
+  "st.plans.commission.change": "التغيير من الرسوم › العمولة",
+  "st.plans.commission.createFirst": "احفظ الخطة أولاً ثم حدد عمولتها ورسوم FBA من الرسوم › العمولة.",
+  "st.plans.order.title": "بأي ترتيب يُحدَّد الرسم الشهري؟",
+  "st.plans.order.trial": "أولاً الفترة التجريبية: لا يُحاسَب شيء قبل انتهائها.",
+  "st.plans.order.free": "الخطة بلا رسم شهري ليس فيها ما يُحاسَب (عمولة فقط).",
+  "st.plans.order.override": "قاعدة يضعها الموظفون لبائع واحد تحل محل كل ما يلي، بما في ذلك الأشهر المجانية.",
+  "st.plans.order.rule": "وإلا فهذه الخطة: أشهرها المجانية، ثم الحساب في كل فترة، أو البدء عند تحقق الشرط، أو الإعفاء ما دام متحققاً.",
+  "st.plans.order.coupons": "إذا استُحق رسم فإن قسائم النسبة تُخصم منه.",
+  "st.plans.order.collect": "يُسدَّد الباقي من الرصيد ثم الأرباح (إن سمح البائع) ثم البطاقة.",
+  "st.plans.order.commission": "العمولة منفصلة: يأخذها جدول الرسوم من كل عملية بيع لا من هذه الفاتورة."
 }

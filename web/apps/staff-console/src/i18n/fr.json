@@ -328,7 +328,7 @@
   "st.plans.tabs": "Sections Forfaits et facturation",
   "st.plans.tab.plans": "Forfaits",
   "st.plans.charges": "Ce qu'il facture",
-  "st.plans.charges.help": "Définit quand les frais mensuels commencent. Sans frais mensuels, le forfait est à commission seule.",
+  "st.plans.charges.help": "Définit quand les frais mensuels commencent. Sans frais mensuels, le forfait est à commission seule ; avec les deux, les frais ci-dessous s'ajoutent à la commission sur chaque vente.",
   "st.plans.charges.free": "Mois gratuits au début",
   "st.plans.charges.then": "Ensuite",
   "st.plans.charges.then.CHARGE": "Facturer chaque période",
@@ -777,5 +777,18 @@
   "st.plans.cap.imageLibrary": "Image library",
   "st.plans.cap.coupons": "Coupons",
   "st.plans.lola.NONE": "Lola not included",
-  "st.plans.membersSee": "Sellers on this plan see"
+  "st.plans.membersSee": "Sellers on this plan see",
+  "st.plans.commission.title": "Commission et frais FBA",
+  "st.plans.commission.default": "par défaut",
+  "st.plans.commission.value": "Commission produit {range} ; frais FBA par unité {fba}. Prélevés sur chaque vente, quoi qu'il arrive aux frais mensuels.",
+  "st.plans.commission.change": "Modifier sous Frais › Commission",
+  "st.plans.commission.createFirst": "Enregistrez d'abord le forfait, puis réglez sa commission et ses frais FBA sous Frais › Commission.",
+  "st.plans.order.title": "Dans quel ordre les frais mensuels sont-ils décidés ?",
+  "st.plans.order.trial": "D'abord l'essai : rien n'est facturé avant sa fin.",
+  "st.plans.order.free": "Un forfait sans frais mensuels n'a rien à facturer (commission seule).",
+  "st.plans.order.override": "Une règle fixée par le personnel pour un vendeur remplace tout ce qui suit, y compris les mois offerts.",
+  "st.plans.order.rule": "Sinon, ce forfait : ses mois offerts, puis facturer chaque période, commencer quand la condition est remplie, ou exonérer tant qu'elle l'est.",
+  "st.plans.order.coupons": "Si des frais sont dus, les coupons en pourcentage les réduisent.",
+  "st.plans.order.collect": "Le reste est payé par les crédits, puis les gains (si le vendeur l'autorise), puis la carte.",
+  "st.plans.order.commission": "La commission est à part : elle est prélevée sur chaque vente par la grille de frais, pas sur cette facture."
 }

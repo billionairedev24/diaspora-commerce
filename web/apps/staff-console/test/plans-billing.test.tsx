@@ -56,6 +56,19 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(within(dialog).getByText('v1')).toBeInTheDocument();
   });
 
+  it('shows what a plan takes per sale and the order the monthly fee is decided in, while editing', async () => {
+    const user = userEvent.setup();
+    await renderScreen(<CataloguePanel />);
+    const table = await screen.findByRole('table', { name: 'Plans' });
+    await user.click(within(await within(table).findByRole('row', { name: /Seller Growth/ })).getByRole('button', { name: 'More actions for Seller Growth' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }));
+    const sheet = await screen.findByRole('dialog', { name: /Edit Seller Growth/ });
+    expect(await within(sheet).findByText(/Product commission .*FBA fee per unit/)).toBeInTheDocument();
+    expect(within(sheet).getByRole('link', { name: 'Change under Fees › Commission' })).toHaveAttribute('href', '/fees?tab=commission');
+    await user.click(within(sheet).getByText('In what order is the monthly fee decided?'));
+    expect(within(sheet).getByText(/replaces everything below, including the free months/)).toBeInTheDocument();
+  });
+
   it('edits what a plan includes: the listing cap, bulk upload, the AI writer and the Lola tier', async () => {
     const user = userEvent.setup();
     await renderScreen(<CataloguePanel />);

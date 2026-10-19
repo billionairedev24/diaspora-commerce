@@ -325,7 +325,7 @@
   "st.plans.tabs": "Plans & billing sections",
   "st.plans.tab.plans": "Plans",
   "st.plans.charges": "What it charges",
-  "st.plans.charges.help": "Set when the monthly fee starts. A plan with no monthly fee is commission only.",
+  "st.plans.charges.help": "Set when the monthly fee starts. A plan with no monthly fee is commission only; a plan with both takes the fee below and the commission on each sale.",
   "st.plans.charges.free": "Free months at the start",
   "st.plans.charges.then": "After that",
   "st.plans.charges.then.CHARGE": "Charge every period",
@@ -770,5 +770,18 @@
   "st.plans.cap.imageLibrary": "Image library",
   "st.plans.cap.coupons": "Coupons",
   "st.plans.lola.NONE": "Lola not included",
-  "st.plans.membersSee": "Sellers on this plan see"
+  "st.plans.membersSee": "Sellers on this plan see",
+  "st.plans.commission.title": "Commission and FBA fee",
+  "st.plans.commission.default": "default",
+  "st.plans.commission.value": "Product commission {range}; FBA fee per unit {fba}. Taken from each sale, whatever happens to the monthly fee.",
+  "st.plans.commission.change": "Change under Fees › Commission",
+  "st.plans.commission.createFirst": "Save the plan first, then set its commission and FBA fee under Fees › Commission.",
+  "st.plans.order.title": "In what order is the monthly fee decided?",
+  "st.plans.order.trial": "Trial days first: nothing is invoiced until the trial ends.",
+  "st.plans.order.free": "A plan with no monthly fee has nothing to charge (commission only).",
+  "st.plans.order.override": "A rule set by staff for one seller replaces everything below, including the free months.",
+  "st.plans.order.rule": "Otherwise this plan: its free months, then charge every period, start charging when the condition is met, or waive while it holds.",
+  "st.plans.order.coupons": "If a fee is due, percentage coupons come off it.",
+  "st.plans.order.collect": "What is left is paid from credits, then earnings (if the seller allowed it), then the card.",
+  "st.plans.order.commission": "Commission is separate: it is taken from each sale by the fee schedule, not from this invoice."
 }

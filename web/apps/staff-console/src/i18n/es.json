@@ -328,7 +328,7 @@
   "st.plans.tabs": "Secciones de planes y facturación",
   "st.plans.tab.plans": "Planes",
   "st.plans.charges": "Qué cobra",
-  "st.plans.charges.help": "Define cuándo empieza la cuota mensual. Un plan sin cuota mensual es solo comisión.",
+  "st.plans.charges.help": "Define cuándo empieza la cuota mensual. Un plan sin cuota mensual es solo comisión; con ambas, se cobra la cuota de abajo y la comisión de cada venta.",
   "st.plans.charges.free": "Meses gratis al inicio",
   "st.plans.charges.then": "Después",
   "st.plans.charges.then.CHARGE": "Cobrar cada periodo",
@@ -777,5 +777,18 @@
   "st.plans.cap.imageLibrary": "Image library",
   "st.plans.cap.coupons": "Coupons",
   "st.plans.lola.NONE": "Lola not included",
-  "st.plans.membersSee": "Sellers on this plan see"
+  "st.plans.membersSee": "Sellers on this plan see",
+  "st.plans.commission.title": "Comisión y tarifa FBA",
+  "st.plans.commission.default": "predeterminada",
+  "st.plans.commission.value": "Comisión de producto {range}; tarifa FBA por unidad {fba}. Se toma de cada venta, pase lo que pase con la cuota mensual.",
+  "st.plans.commission.change": "Cambiar en Tarifas › Comisión",
+  "st.plans.commission.createFirst": "Guarda primero el plan y luego define su comisión y tarifa FBA en Tarifas › Comisión.",
+  "st.plans.order.title": "¿En qué orden se decide la cuota mensual?",
+  "st.plans.order.trial": "Primero la prueba: no se factura nada hasta que termine.",
+  "st.plans.order.free": "Un plan sin cuota mensual no tiene nada que cobrar (solo comisión).",
+  "st.plans.order.override": "Una regla del personal para un vendedor sustituye todo lo siguiente, incluidos los meses gratis.",
+  "st.plans.order.rule": "Si no, este plan: sus meses gratis y luego cobrar cada periodo, empezar a cobrar al cumplirse la condición, o eximir mientras se cumpla.",
+  "st.plans.order.coupons": "Si hay cuota, los cupones de porcentaje la reducen.",
+  "st.plans.order.collect": "Lo restante se paga con crédito, luego con ganancias (si el vendedor lo permite) y por último con la tarjeta.",
+  "st.plans.order.commission": "La comisión va aparte: la toma de cada venta la tabla de tarifas, no esta factura."
 }

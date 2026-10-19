@@ -1,16 +1,18 @@
 'use client';
 
-import { CHARGE_KEYS, CHARGE_METRICS, type ChargeMetric, type ChargePolicy, chargePolicyLimits, chargePolicyOf, chargeTermsOf, planFeatureList, type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
+import { CHARGE_KEYS, CHARGE_METRICS, formatBps, type ChargeMetric, type ChargePolicy, chargePolicyLimits, chargePolicyOf, chargeTermsOf, planFeatureList, type PlanVisibility, type StaffPlan, type StaffPlanEntitlements, staffPlanKeys, staffPlanQueries, staffQueries } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, DotsThreeVertical, Menu, MenuItem, MenuSeparator, Select, Sheet, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { type FormEvent, useMemo, useState } from 'react';
 
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
+import { staffApi } from '@/lib/api';
 import { dateTime, humanize, money } from '@/lib/format';
 
 import { centsOf, dollarsOf, errorsOf, intOf, plansApi, STATUS_TONE, type T, usePlanRights } from './kit';
@@ -40,6 +42,39 @@ function chargePolicyFrom(f: { freeMonths: string; chargeThen: ChargePolicy['the
   const window = f.chargeWindow.trim() ? Number.parseInt(f.chargeWindow, 10) : null;
   if (window !== null && !(window >= 1 && window <= 24)) return null;
   return { freeMonths: free, then: f.chargeThen, match: f.chargeMatch, clauses: f.chargeThen === 'CHARGE' ? [] : clauses, windowMonths: f.chargeThen === 'CHARGE' ? null : window };
+}
+
+/** What the plan takes from each sale, read from the current fee schedule (it is edited under Fees, per plan). */
+function PlanCommissionSummary({ code, t }: { code: string | null; t: T }) {
+  const fees = useQuery(staffQueries.fees(staffApi()));
+  const cur = fees.data?.current;
+  let text = t('st.plans.commission.createFirst');
+  if (code && cur) {
+    const own = cur.planRates.filter((r) => r.planCode === code).map((r) => r.bps);
+    const range = own.length ? (Math.min(...own) === Math.max(...own) ? formatBps(own[0]!) : `${formatBps(Math.min(...own))} – ${formatBps(Math.max(...own))}`) : `${formatBps(cur.defaultCommissionBps)} (${t('st.plans.commission.default')})`;
+    const fbaOwn = cur.planFba.find((f) => f.planCode === code);
+    text = t('st.plans.commission.value', { range, fba: money(fbaOwn ? fbaOwn.feeMinor : cur.fbaPerUnitMinor) + (fbaOwn ? '' : ` (${t('st.plans.commission.default')})`) });
+  } else if (code && fees.isPending) text = t('st.plans.loading');
+  return (
+    <div className="rounded-sm bg-surface-muted p-2 text-sm">
+      <strong className="block text-xs uppercase text-muted">{t('st.plans.commission.title')}</strong>
+      <span>{text}</span>
+      {code ? <> <Link href="/fees?tab=commission" className="font-semibold underline">{t('st.plans.commission.change')}</Link></> : null}
+    </div>
+  );
+}
+
+/** The order a period's plan fee is decided in (InvoiceIssuingService), so staff can predict an invoice. */
+function ChargeOrder({ t }: { t: T }) {
+  return (
+    <details className="rounded-sm border border-border p-2 text-sm">
+      <summary className="cursor-pointer font-semibold">{t('st.plans.order.title')}</summary>
+      <ol className="m-0 mt-2 flex list-decimal flex-col gap-1 pl-5">
+        {(['trial', 'free', 'override', 'rule', 'coupons', 'collect'] as const).map((k) => <li key={k}>{t(`st.plans.order.${k}`)}</li>)}
+      </ol>
+      <p className="m-0 mt-2 text-xs text-muted">{t('st.plans.order.commission')}</p>
+    </details>
+  );
 }
 
 /** Create a plan, or edit its name, tagline, features, visibility and order (prices and trial are versioned: see PricesDialog). */
@@ -115,7 +150,7 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
           <div className="grid grid-cols-1 items-end gap-x-3 md:grid-cols-2">
             <TextField id="plan-listings" label={t('st.plans.listings')} inputMode="numeric" value={f.unlimited ? '' : f.listings} disabled={f.unlimited} error={errors['limits.listings']}
               onChange={set('listings')} />
-            <label className="mb-2 inline-flex items-center gap-2 text-sm">
+            <label className="mb-[calc(var(--at-space-1)+14px+0.75rem)] inline-flex items-center gap-2 text-sm">
               <input type="checkbox" checked={f.unlimited} onChange={(e) => setF((x) => ({ ...x, unlimited: e.target.checked }))} />
               {t('st.plans.listingsUnlimited')}
             </label>
@@ -141,6 +176,8 @@ function PlanDialog({ editing, onClose, t }: { editing: Editing; onClose: () => 
         <fieldset className="m-0 flex flex-col gap-3 rounded-md border border-border p-3">
           <legend className="px-1 text-sm font-semibold">{t('st.plans.charges')}</legend>
           <p className="m-0 text-xs text-muted">{t('st.plans.charges.help')}</p>
+          <PlanCommissionSummary code={plan?.code ?? null} t={t} />
+          <ChargeOrder t={t} />
           <div className="grid grid-cols-1 gap-x-3 md:grid-cols-2">
             <TextField id="plan-free-months" label={t('st.plans.charges.free')} inputMode="numeric" value={f.freeMonths} error={errors['chargePolicy.freeMonths']} onChange={set('freeMonths')} />
             <Select id="plan-charge-then" label={t('st.plans.charges.then')} value={f.chargeThen} onChange={set('chargeThen')}
@@ -303,6 +340,7 @@ function PlanViewSheet({ plan, onClose, onEdit, canEdit, t }: { plan: StaffPlan 
             {row(t('st.plans.trialDays'), String(plan.trialDays))}
             {row(t('st.plans.allows'), allowsOf(plan.entitlements, t))}
             {row(t('st.plans.charges.preview'), chargeTermsOf(plan.limits, plan.monthlyCents))}
+            <PlanCommissionSummary code={plan.code} t={t} />
             {row(t('st.plans.col.subscribers'), String(plan.subscribers))}
           </dl>
           {plan.features.length > 0 ? (

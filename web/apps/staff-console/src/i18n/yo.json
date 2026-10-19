@@ -328,7 +328,7 @@
   "st.plans.tabs": "Àwọn apá Ètò àti ìsanwó",
   "st.plans.tab.plans": "Àwọn ètò",
   "st.plans.charges": "Ohun tí ó ń gbà",
-  "st.plans.charges.help": "Ṣètò ìgbà tí owó oṣooṣù bẹ̀rẹ̀. Ètò láìsí owó oṣooṣù jẹ́ kọmíṣọ̀n nìkan.",
+  "st.plans.charges.help": "Ṣètò ìgbà tí owó oṣooṣù bẹ̀rẹ̀. Ètò láìsí owó oṣooṣù jẹ́ kọmíṣọ̀n nìkan; tí ó bá ní méjèèjì, a máa gba owó ní isalẹ̀ àti kọmíṣọ̀n lórí títà kọ̀ọ̀kan.",
   "st.plans.charges.free": "Oṣù ọ̀fẹ́ ní ìbẹ̀rẹ̀",
   "st.plans.charges.then": "Lẹ́yìn náà",
   "st.plans.charges.then.CHARGE": "Gba ní gbogbo àkókò",
@@ -777,5 +777,18 @@
   "st.plans.cap.imageLibrary": "Image library",
   "st.plans.cap.coupons": "Coupons",
   "st.plans.lola.NONE": "Lola not included",
-  "st.plans.membersSee": "Sellers on this plan see"
+  "st.plans.membersSee": "Sellers on this plan see",
+  "st.plans.commission.title": "Kọmíṣọ̀n àti owó FBA",
+  "st.plans.commission.default": "àtìbẹ̀rẹ̀",
+  "st.plans.commission.value": "Kọmíṣọ̀n ọjà {range}; owó FBA fún ẹyọ kan {fba}. A gbà á lórí títà kọ̀ọ̀kan, bí ó ti wù kí owó oṣooṣù rí.",
+  "st.plans.commission.change": "Yípadà lábẹ́ Owó › Kọmíṣọ̀n",
+  "st.plans.commission.createFirst": "Fi ètò pamọ́ ná, lẹ́yìn náà ṣètò kọmíṣọ̀n àti owó FBA rẹ̀ lábẹ́ Owó › Kọmíṣọ̀n.",
+  "st.plans.order.title": "Ní ọ̀nà wo ni a fi pinnu owó oṣooṣù?",
+  "st.plans.order.trial": "Ìdánwò kọ́kọ́: a kò ní ṣe ìwé owó títí ìdánwò fi parí.",
+  "st.plans.order.free": "Ètò láìsí owó oṣooṣù kò ní nǹkan láti gbà (kọmíṣọ̀n nìkan).",
+  "st.plans.order.override": "Òfin tí àwọn òṣìṣẹ́ ṣe fún olùtajà kan rọ́pò gbogbo ohun tó tẹ̀lé e, pẹ̀lú àwọn oṣù ọ̀fẹ́.",
+  "st.plans.order.rule": "Bí kò bá rí bẹ́ẹ̀, ètò yìí: àwọn oṣù ọ̀fẹ́ rẹ̀, lẹ́yìn náà gbà ní gbogbo àkókò, bẹ̀rẹ̀ nígbà tí àmì bá pé, tàbí dárí jì nígbà tó bá wà.",
+  "st.plans.order.coupons": "Tí owó bá tọ́, àwọn kúpọ̀ìnù ìdá-ọgọ́rùn-ún á dín in kù.",
+  "st.plans.order.collect": "Ìyókù ni a ó san láti inú kírẹ́dítì, lẹ́yìn náà owó tí ó jèrè (tí olùtajà bá gbà), lẹ́yìn náà káàdì.",
+  "st.plans.order.commission": "Kọmíṣọ̀n yàtọ̀: tábìlì owó ni ó ń gbà á lórí títà kọ̀ọ̀kan, kì í ṣe láti inú ìwé owó yìí."
 }
