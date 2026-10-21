@@ -27,6 +27,8 @@ class LolaAccountToolsTest {
     private AccountReader.Result<AccountReader.CartSummary> cart = AccountReader.Result.unavailable();
     private AccountReader.Result<List<AccountReader.BookingSummary>> bookings = AccountReader.Result.of(List.of());
 
+    private AccountReader.Result<List<AccountReader.ReturnSummary>> returns = AccountReader.Result.of(List.of());
+
     private final LolaToolkit toolkit = new LolaToolkitImpl(mock(ProductSearch.class), mock(CatalogReader.class),
             mock(OfferReader.class), mock(DeliveryPromises.class), mock(OrderTracker.class), mock(ServiceDirectory.class),
             new AccountReader() {
@@ -43,6 +45,11 @@ class LolaAccountToolsTest {
                 @Override
                 public Result<List<BookingSummary>> bookings(String bearerToken) {
                     return bookings;
+                }
+
+                @Override
+                public Result<List<ReturnSummary>> returns(String bearerToken, String orderNumber) {
+                    return returns;
                 }
             }, new InjectionFilter() {
                 @Override
@@ -65,7 +72,8 @@ class LolaAccountToolsTest {
 
     @Test
     void everyAccountToolIsOffered() {
-        assertThat(toolkit.specs()).extracting(s -> s.name()).contains("my_orders", "view_cart", "my_bookings");
+        assertThat(toolkit.specs()).extracting(s -> s.name()).contains("my_orders", "view_cart", "my_bookings", "return_status",
+                "refund_status");
     }
 
     @Test
@@ -98,5 +106,27 @@ class LolaAccountToolsTest {
                 "Confirmed", "2026-10-25T14:00:00Z", 15000, 3000)));
         assertThat(run("my_bookings", "{}").modelContent()).contains("BK-77", "Knotless braids", "Confirmed", "$150.00",
                 "$30.00");
+    }
+
+    @Test
+    void returnStatusShowsItemsProgressAndRefund() {
+        assertThat(run("return_status", "{}").modelContent()).contains("No returns found");
+        returns = AccountReader.Result.of(List.of(new AccountReader.ReturnSummary("RMA-1A2B3C4D", "AT-2026-000123",
+                "received", "DROP_OFF", "pending", 2599, "USD", "2026-10-30", "2026-10-20", List.of(
+                new AccountReader.ReturnLine("Garri 2kg", 2, "DAMAGED", "")))));
+        String content = run("return_status", "{\"orderId\":\"AT-2026-000123\"}").modelContent();
+        assertThat(content).contains("RMA-1A2B3C4D", "received", "Garri 2kg", "DAMAGED", "2026-10-30", "pending",
+                "$25.99");
+    }
+
+    @Test
+    void refundStatusIsRefundFocusedAndSaysWhenNothingIsIssued() {
+        returns = AccountReader.Result.of(List.of(new AccountReader.ReturnSummary("RMA-9", "AT-2026-000124",
+                "label_issued", "DROP_OFF", "", 1200, "USD", "", "2026-10-21", List.of())));
+        ToolOutcome o = run("refund_status", "{}");
+        assertThat(o.modelContent()).contains("RMA-9", "not issued yet", "$12.00", "label_issued");
+        assertThat(o.modelContent()).doesNotContain("dropOffBy");
+        returns = AccountReader.Result.unavailable();
+        assertThat(run("refund_status", "{}").success()).isFalse();
     }
 }

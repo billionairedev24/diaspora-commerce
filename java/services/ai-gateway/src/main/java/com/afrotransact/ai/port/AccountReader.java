@@ -15,6 +15,9 @@ public interface AccountReader {
 
     Result<List<BookingSummary>> bookings(String bearerToken);
 
+    /** The shopper's returns (RMAs) and their refunds, newest first; {@code orderNumber} narrows to one order. */
+    Result<List<ReturnSummary>> returns(String bearerToken, String orderNumber);
+
     /**
      * Outcome of a read.
      *
@@ -49,6 +52,33 @@ public interface AccountReader {
         public CartSummary {
             lines = lines == null ? List.of() : List.copyOf(lines);
         }
+    }
+
+    /**
+     * One return and the refund that follows it.
+     *
+     * @param number        return number (RMA-XXXXXXXX)
+     * @param orderNumber   the order it belongs to
+     * @param status        return status (requested, label issued, received, refunded ...)
+     * @param method        drop-off, driver pickup or no return needed
+     * @param refundState   state of the refund (pending, issued, failed ...), blank before one exists
+     * @param refundMinor   the refund amount or estimate
+     * @param currency      ISO currency of the refund
+     * @param dropOffBy     deadline to hand the parcel over, if any
+     * @param createdAt     when the return was started
+     * @param lines         the items being returned
+     */
+    record ReturnSummary(String number, String orderNumber, String status, String method, String refundState,
+                         long refundMinor, String currency, String dropOffBy, String createdAt,
+                         List<ReturnLine> lines) {
+
+        public ReturnSummary {
+            lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+    }
+
+    /** One item in a return. */
+    record ReturnLine(String title, int quantity, String reason, String outcome) {
     }
 
     /** One service booking. */

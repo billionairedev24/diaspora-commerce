@@ -19,7 +19,9 @@ Search, compare offers, delivery promise, add to cart, recipe-to-cart, track one
 service, checkout, hand-off to support, and (new) **`my_orders`** (recent orders with number, status, date and total, to find an
 order number), **`view_cart`** (items, prices, unavailable or price-changed lines, subtotal) and **`my_bookings`** (reference,
 service, status, start, price, deposit). They read orders, cart and bookings with the shopper's relayed token, so a shopper can
-only ever see their own. Seller-written text (product titles, service names) is cleaned and quoted as untrusted data.
+only ever see their own. **`return_status`** (return number, items, reasons, progress, drop-off deadline, refund) and
+**`refund_status`** (refund amount and state per return, "not issued yet" until one exists) read tax-returns the same way, optionally
+for one order; Lola never states a refund date they do not return. Seller-written text (product titles, service names) is cleaned and quoted as untrusted data.
 
 ## Staff ("admin Lola")
 

@@ -84,6 +84,8 @@ class LolaToolkitImpl implements LolaToolkit {
             case LolaToolSpecs.MY_ORDERS -> "Looking at your recent orders";
             case LolaToolSpecs.VIEW_CART -> "Looking at your cart";
             case LolaToolSpecs.MY_BOOKINGS -> "Looking at your bookings";
+            case LolaToolSpecs.RETURN_STATUS -> "Checking your returns";
+            case LolaToolSpecs.REFUND_STATUS -> "Checking your refunds";
             case LolaToolSpecs.START_RETURN -> "Preparing a return for order " + text(a, "orderId");
             case LolaToolSpecs.FIND_SERVICE -> "Finding " + text(a, "query");
             case LolaToolSpecs.BOOK_SERVICE -> "Preparing your booking";
@@ -111,6 +113,8 @@ class LolaToolkitImpl implements LolaToolkit {
                 case LolaToolSpecs.MY_ORDERS -> myOrders(a, ctx);
                 case LolaToolSpecs.VIEW_CART -> viewCart(ctx);
                 case LolaToolSpecs.MY_BOOKINGS -> myBookings(ctx);
+                case LolaToolSpecs.RETURN_STATUS -> returnStatus(a, ctx, false);
+                case LolaToolSpecs.REFUND_STATUS -> returnStatus(a, ctx, true);
                 case LolaToolSpecs.START_RETURN -> startReturn(a);
                 case LolaToolSpecs.FIND_SERVICE -> findService(a, ctx);
                 case LolaToolSpecs.BOOK_SERVICE -> bookService(a);
@@ -405,6 +409,55 @@ class LolaToolkitImpl implements LolaToolkit {
             }
         }
         return new ToolOutcome(r.available(), "bookings", data, quote(LolaToolSpecs.MY_BOOKINGS, data), null, null);
+    }
+
+    private ToolOutcome returnStatus(JsonNode a, ToolContext ctx, boolean refundsOnly) {
+        String tool = refundsOnly ? LolaToolSpecs.REFUND_STATUS : LolaToolSpecs.RETURN_STATUS;
+        AccountReader.Result<List<AccountReader.ReturnSummary>> r = account.returns(ctx.caller().bearerToken(),
+                text(a, "orderId"));
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (!r.available()) {
+            data.put("note", "Returns and refunds are not available right now; offer a hand-off to support.");
+        } else {
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (AccountReader.ReturnSummary s : r.value()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("return", s.number());
+                m.put("order", s.orderNumber());
+                if (!refundsOnly) {
+                    m.put("status", s.status());
+                    m.put("method", s.method());
+                    m.put("started", s.createdAt());
+                    if (!s.dropOffBy().isBlank()) {
+                        m.put("dropOffBy", s.dropOffBy());
+                    }
+                    List<Map<String, Object>> lines = new ArrayList<>();
+                    for (AccountReader.ReturnLine l : s.lines()) {
+                        Map<String, Object> lm = new LinkedHashMap<>();
+                        lm.put("item", clean(l.title()));
+                        lm.put("quantity", l.quantity());
+                        lm.put("reason", l.reason());
+                        if (!l.outcome().isBlank()) {
+                            lm.put("outcome", l.outcome());
+                        }
+                        lines.add(lm);
+                    }
+                    m.put("items", lines);
+                } else {
+                    m.put("returnStatus", s.status());
+                }
+                m.put("refundState", s.refundState().isBlank() ? "not issued yet" : s.refundState());
+                m.put("refund", money(s.refundMinor(), s.currency()));
+                ctx.facts().addAmount(s.refundMinor());
+                rows.add(m);
+            }
+            data.put(refundsOnly ? "refunds" : "returns", rows);
+            if (rows.isEmpty()) {
+                data.put("note", "No returns found" + (text(a, "orderId").isEmpty() ? "" : " for that order")
+                        + ". Do not invent one; offer start_return if the item is eligible.");
+            }
+        }
+        return new ToolOutcome(r.available(), refundsOnly ? "refunds" : "returns", data, quote(tool, data), null, null);
     }
 
     private ToolOutcome startReturn(JsonNode a) {

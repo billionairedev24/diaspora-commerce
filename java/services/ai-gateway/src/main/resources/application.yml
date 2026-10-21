@@ -206,3 +206,4 @@ at:
       orders-url: ${ORDERS_URL:http://localhost:8104}
       cart-url: ${CART_URL:http://localhost:8203}
       bookings-url: ${BOOKINGS_URL:http://localhost:8109}
+      returns-url: ${RETURNS_URL:http://localhost:8111}
