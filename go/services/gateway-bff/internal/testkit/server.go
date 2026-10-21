@@ -181,7 +181,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		services.SellerExportFiles = files
 	}
 	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", base)), Counter: NewMemStore(),
-		Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Dashboard: services.SellerDashboard,
+		Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Shell: services.SellerShell, Dashboard: services.SellerDashboard,
 		Now: clock.Now})
 	services.Shopper = shopperServices(u, client, identity, services, clock, log)
 	mux := http.NewServeMux()

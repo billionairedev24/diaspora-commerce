@@ -5,8 +5,8 @@ sidebar_position: 5
 description: The assistant in Seller Center, the level each plan gets, what she can see and do, and how it is built and billed.
 ---
 
-Lola in Seller Center answers a seller's questions about their own shop: orders to pack, listings, stock and, on higher plans,
-fees, payouts and sales. She can also prepare a change (set a stock level, move an order on) that the seller confirms with a tap.
+Lola in Seller Center answers a seller's questions about their own shop: orders to pack, listings, stock, payouts (when the money arrives) and account health and, on higher plans,
+fees and sales. She can also prepare a change (set a stock level, move an order on) that the seller confirms with a tap.
 She is the same Lola the shoppers meet, with a different job and different tools.
 
 ## Levels
@@ -17,7 +17,8 @@ The level comes from the organisation's plan.
 |---|---|---|---|
 | Messages a day (UTC) | 15 | 100 | 400 |
 | Orders, order detail, listings, stock | Yes | Yes | Yes |
-| Fees and plan, payouts | No | Yes | Yes |
+| Payouts (balance, held orders with release dates, pauses), account health | Yes | Yes | Yes |
+| Fees and plan | No | Yes | Yes |
 | Sales summary (7, 30, 90 days) | No | No | Yes |
 | Prepares changes for the seller to confirm | No | Yes | Yes |
 | Earlier messages she remembers | 6 | 10 | 16 |

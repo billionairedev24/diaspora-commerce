@@ -40,6 +40,7 @@ const (
 	ToolFeesAndPlan   = "fees_and_plan"
 	ToolPayouts       = "payouts"
 	ToolSalesSummary  = "sales_summary"
+	ToolAccountHealth = "account_health"
 	ToolProposeStock  = "propose_set_stock"
 	ToolProposeNext   = "propose_next_step"
 	assistantMaxInput = 1500
@@ -48,18 +49,20 @@ const (
 // AssistantMaxInput is the longest message accepted.
 const AssistantMaxInput = assistantMaxInput
 
-var essentialsTools = []string{ToolMyOrders, ToolOrderDetail, ToolMyListings, ToolStockLevels}
+// Payouts and account health are the seller's own money and what Stripe needs from them: every level can ask when they get
+// paid and why a payout is held, so that never needs a support chat.
+var essentialsTools = []string{ToolMyOrders, ToolOrderDetail, ToolMyListings, ToolStockLevels, ToolPayouts, ToolAccountHealth}
 
-// AssistantLimitsOf is what each tier allows. Essentials looks at orders, listings and stock; Growth adds fees and payouts
+// AssistantLimitsOf is what each tier allows. Essentials looks at orders, listings, stock, payouts and account health; Growth adds fees
 // and can prepare changes; Pro adds sales summaries and the most messages.
 func AssistantLimitsOf(t AssistantTier) AssistantLimits {
 	switch t {
 	case AssistantPro:
 		return AssistantLimits{Label: "Lola Pro", DailyMessages: 400, MaxToolRounds: 6, History: 16, CanPropose: true,
-			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolPayouts, ToolSalesSummary, ToolProposeStock, ToolProposeNext)}
+			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolSalesSummary, ToolProposeStock, ToolProposeNext)}
 	case AssistantGrowth:
 		return AssistantLimits{Label: "Lola Growth", DailyMessages: 100, MaxToolRounds: 4, History: 10, CanPropose: true,
-			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolPayouts, ToolProposeStock, ToolProposeNext)}
+			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolProposeStock, ToolProposeNext)}
 	default:
 		return AssistantLimits{Label: "Lola Essentials", DailyMessages: 15, MaxToolRounds: 3, History: 6,
 			Tools: append([]string{}, essentialsTools...)}

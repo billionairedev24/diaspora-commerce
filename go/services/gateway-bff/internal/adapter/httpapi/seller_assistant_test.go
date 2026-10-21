@@ -82,20 +82,38 @@ func TestSellerAssistantEssentialsHasFewerToolsAndADailyLimit(t *testing.T) {
 	if j := b.do("GET", "/v1/seller/assistant", nil).json(t); j["tier"] != "ESSENTIALS" || num(j["limits"].(map[string]any), "dailyMessages") != 15 || j["upgrade"].(map[string]any)["planCode"] != "seller_growth" {
 		t.Fatalf("status = %v", j)
 	}
-	// Payouts are not on Essentials: the tool is not even offered, and a call for it is refused in words.
-	r := b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "What are my payouts?"})
+	// Fees are not on Essentials: the tool is not even offered, and a call for it is refused in words. Payouts and account
+	// health are on every level: "when do I get paid" must never need an upgrade.
+	r := b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "What are my fees?"})
 	if r.status != 200 {
 		t.Fatalf("chat = %d %s", r.status, r.body)
 	}
 	tools := bff.Upstreams.AssistantCalls[0].Tools
-	if slices.Contains(tools, "payouts") || slices.Contains(tools, "propose_set_stock") || !slices.Contains(tools, "my_orders") {
+	if slices.Contains(tools, "fees_and_plan") || slices.Contains(tools, "propose_set_stock") || !slices.Contains(tools, "my_orders") ||
+		!slices.Contains(tools, "payouts") || !slices.Contains(tools, "account_health") {
 		t.Fatalf("essentials tools = %v", tools)
 	}
 	if !strings.Contains(fmt.Sprint(lastModelCall(bff).Messages[len(lastModelCall(bff).Messages)-1]["content"]), "not available on this plan") {
 		t.Fatalf("a call for a tool outside the plan must be refused: %v", lastModelCall(bff).Messages)
 	}
+	// "When will I be paid" works on Essentials: the answer carries the held orders with their release dates and the pause.
+	r = b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "When will I be paid?"})
+	if r.status != 200 {
+		t.Fatalf("payouts chat = %d %s", r.status, r.body)
+	}
+	paid := fmt.Sprint(lastModelCall(bff).Messages[len(lastModelCall(bff).Messages)-1]["content"])
+	for _, want := range []string{"heldOrders", "AT-2026-000123", "payoutsPaused", "Stripe needs overdue information", "7 days after delivery", "2026-10-24", "daysLeft", "Not released yet"} {
+		if !strings.Contains(paid, want) {
+			t.Fatalf("payouts answer is missing %q: %s", want, paid)
+		}
+	}
+	r = b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "Why are my payouts paused?"})
+	mustStatus(t, r, 200)
+	if h := fmt.Sprint(lastModelCall(bff).Messages[len(lastModelCall(bff).Messages)-1]["content"]); !strings.Contains(h, "payoutsPaused") || !strings.Contains(h, "Account health") {
+		t.Fatalf("account health answer = %s", h)
+	}
 	// 15 messages a day; the 16th is refused with the upgrade, and does not count.
-	for i := 1; i < 15; i++ {
+	for i := 3; i < 15; i++ {
 		mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "hello"}), 200)
 	}
 	over := b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "hello"})

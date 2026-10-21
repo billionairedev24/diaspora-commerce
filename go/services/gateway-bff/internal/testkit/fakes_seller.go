@@ -1040,7 +1040,7 @@ func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/payouts/balance", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "currency": "USD", "availableMinor": 128455, "onHoldMinor": 52725, "requestedOrInTransitMinor": 0,
 			"paidMinor": 932210, "providerFeesMinor": 1500, "planFeesMinor": 0, "minimumPayoutMinor": 2500, "canRequestToday": true,
-			"payoutsPaused": true, "payoutsPausedReason": "AUTO_PAST_DUE", "onHold": []map[string]any{{"orderId": "AT-2026-000123", "amountMinor": 52725}}})
+			"payoutsPaused": true, "payoutsPausedReason": "AUTO_PAST_DUE", "onHold": []map[string]any{{"orderId": "AT-2026-000123", "amountMinor": 52725, "releaseAt": "2026-10-24T10:00:00Z"}, {"orderId": "AT-2026-000130", "amountMinor": 8000}}})
 	})
 	// S298: plan invoices paid from sales (a DECLINED one took nothing and is not shown).
 	mux.HandleFunc("GET /v1/orgs/{id}/plan-fee-withholdings", func(w http.ResponseWriter, _ *http.Request) {

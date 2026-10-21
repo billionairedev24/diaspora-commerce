@@ -27,11 +27,13 @@ type AssistantDeps struct {
 	// Model is ai-gateway's seller-assistant completion; nil answers 503.
 	Model port.AssistantModelClient
 	// Counter counts a day's messages per organisation.
-	Counter   port.DailyCounter
-	Orders    SellerOrdersService
-	Catalog   SellerCatalogService
-	Fees      SellerFeesService
-	Money     SellerMoneyService
+	Counter port.DailyCounter
+	Orders  SellerOrdersService
+	Catalog SellerCatalogService
+	Fees    SellerFeesService
+	Money   SellerMoneyService
+	// Shell gives the account health (what Stripe needs, why payouts are paused).
+	Shell     SellerShellService
 	Dashboard SellerDashboardService
 	Now       func() time.Time
 }
@@ -220,7 +222,7 @@ func trimHistory(in []domain.AssistantTurn, n int) []domain.AssistantTurn {
 // answers "that comes with Seller Growth" instead of guessing.
 func assistantPrompt(now time.Time, org string, tier domain.AssistantTier, l domain.AssistantLimits, upgrade *domain.AssistantUpgradeOffer, language string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, `You are Lola, the AfroTransact assistant for sellers in Seller Center. You help the team of %q run their shop: orders to pack and ship, listings, stock, fees and payouts.
+	fmt.Fprintf(&b, `You are Lola, the AfroTransact assistant for sellers in Seller Center. You help the team of %q run their shop: orders to pack and ship, listings, stock, fees and payouts. When asked when money will arrive, use the payouts tool: say how much is available now, which orders are still held and the date each is released, and anything that pauses payouts.
 
 Rules you always follow:
 1. Only state orders, numbers, stock, fees and dates that a tool returned in this conversation. Never invent them. If a tool found nothing, say so.
@@ -238,7 +240,7 @@ Rules you always follow:
 	}
 	var missing []string
 	if !allowed[domain.ToolFeesAndPlan] {
-		missing = append(missing, "fees and payouts")
+		missing = append(missing, "fees and plan details")
 	}
 	if !allowed[domain.ToolSalesSummary] {
 		missing = append(missing, "sales summaries")

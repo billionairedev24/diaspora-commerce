@@ -72,7 +72,7 @@ function Tier({ status }: { status: AssistantStatus }) {
   );
 }
 
-/** Lola for sellers: ask about orders, listings, stock and (on higher plans) fees and payouts; she prepares changes for you to confirm. */
+/** Lola for sellers: ask about orders, listings, stock and payouts and, on higher plans, fees; she prepares changes for you to confirm. */
 export function LolaSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT();
   const qc = useQueryClient();

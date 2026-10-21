@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -70,10 +72,16 @@ var assistantTools = []assistantToolDef{
 		run:    toolFeesAndPlan,
 	},
 	{
-		name: domain.ToolPayouts, description: "The payout balance (available, on hold, paid) and the latest payouts.",
+		name: domain.ToolPayouts, description: "When the seller gets paid: the payout balance (available now, on hold, in transit, paid), every held order with the date its money is released, why payouts might be paused, fees owed and the latest payouts. Use it for any question about money, payouts or release dates.",
 		schema: noArgsSchema,
 		label:  func(map[string]any) string { return "Checking your payouts" },
 		run:    toolPayouts,
+	},
+	{
+		name: domain.ToolAccountHealth, description: "What Stripe and AfroTransact still need from the seller (verification items, deadlines), whether charges and payouts are on, and whether payouts or listings are paused. Use it when a payout is late or paused.",
+		schema: noArgsSchema,
+		label:  func(map[string]any) string { return "Checking your account health" },
+		run:    toolAccountHealth,
 	},
 	{
 		name: domain.ToolSalesSummary, description: "Sales summary for the last 7, 30 or 90 days: headline numbers and what needs attention.",
@@ -286,9 +294,93 @@ func toolPayouts(ctx context.Context, r *assistantRun, _ map[string]any) (any, e
 		recent = append(recent, map[string]any{"amount": moneyLabel(p.AmountMinor), "status": p.Status, "requested": p.RequestedAt})
 	}
 	b := v.Balance
-	return map[string]any{"available": moneyLabel(b.AvailableMinor), "onHold": moneyLabel(b.OnHoldMinor), "inTransit": moneyLabel(b.RequestedOrInTransitMinor),
-		"paid": moneyLabel(b.PaidMinor), "minimumPayout": moneyLabel(b.MinimumPayoutMinor), "recentPayouts": recent,
-		"note": "Money is held for 7 days after delivery, then becomes available."}, nil
+	now := r.s.a.Now().UTC()
+	// Held orders, soonest release first: this is the answer to "when will I get my money".
+	holds := append([]domain.PayoutHold{}, b.Holds...)
+	sort.SliceStable(holds, func(i, j int) bool { return holdRelease(holds[i]) < holdRelease(holds[j]) })
+	held := []map[string]any{}
+	for i, h := range holds {
+		if i >= maxRows {
+			break
+		}
+		row := map[string]any{"order": h.OrderID, "amount": moneyLabel(h.AmountMinor)}
+		if t, ok := parseRelease(h); ok {
+			row["releasedOn"] = t.Format("2006-01-02")
+			if days := int(t.Sub(now).Hours()/24 + 0.999); days > 0 {
+				row["daysLeft"] = days
+			} else {
+				row["daysLeft"] = 0
+				row["note"] = "The hold has ended; the money moves to available within minutes (a few hours at most)."
+			}
+		} else {
+			row["note"] = "Not released yet: the 7 days start when the order is delivered (or the service completed)."
+		}
+		held = append(held, row)
+	}
+	out := map[string]any{"available": moneyLabel(b.AvailableMinor), "onHold": moneyLabel(b.OnHoldMinor), "inTransit": moneyLabel(b.RequestedOrInTransitMinor),
+		"paid": moneyLabel(b.PaidMinor), "minimumPayout": moneyLabel(b.MinimumPayoutMinor), "canRequestPayoutToday": b.CanRequestToday,
+		"heldOrders": held, "heldOrdersTotal": len(b.Holds), "recentPayouts": recent,
+		"rules": "Money is held for 7 days after delivery, then becomes available. The seller then requests a payout (minimum " + moneyLabel(b.MinimumPayoutMinor) + ", a limited number per day); the bank usually receives it in a few business days."}
+	if b.PayoutsPaused {
+		msg := ""
+		if b.PayoutsPausedMessage != nil {
+			msg = *b.PayoutsPausedMessage
+		}
+		out["payoutsPaused"] = msg
+	}
+	if b.ProviderFeesMinor > 0 {
+		out["serviceFeesOwed"] = moneyLabel(b.ProviderFeesMinor)
+	}
+	if b.PlanFeesMinor > 0 {
+		out["planFeesOwed"] = moneyLabel(b.PlanFeesMinor)
+	}
+	if b.AvailableMinor > 0 && b.AvailableMinor < b.MinimumPayoutMinor {
+		out["belowMinimum"] = true
+	}
+	return out, nil
+}
+
+func parseRelease(h domain.PayoutHold) (time.Time, bool) {
+	if h.ReleaseAt == nil || *h.ReleaseAt == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, *h.ReleaseAt)
+	return t.UTC(), err == nil
+}
+
+// holdRelease sorts holds by release time; holds with no date yet (not delivered) go last.
+func holdRelease(h domain.PayoutHold) string {
+	if t, ok := parseRelease(h); ok {
+		return t.Format(time.RFC3339)
+	}
+	return "9999"
+}
+
+func toolAccountHealth(ctx context.Context, r *assistantRun, _ map[string]any) (any, error) {
+	h, err := r.s.a.Shell.Compliance(ctx, r.c)
+	if err != nil {
+		return nil, err
+	}
+	items := []map[string]any{}
+	for i, it := range h.Items {
+		if i >= maxRows {
+			break
+		}
+		items = append(items, map[string]any{"needed": it.Label, "urgency": it.Bucket})
+	}
+	out := map[string]any{"status": h.Status, "openItems": h.OpenItems, "needs": items, "chargesEnabled": h.ChargesEnabled,
+		"payoutsEnabled": h.PayoutsEnabled, "payoutsPaused": h.PayoutsPaused, "listingsHidden": h.ListingsHidden}
+	if h.Deadline != nil {
+		out["deadline"] = h.Deadline.UTC().Format("2006-01-02")
+	}
+	if h.ShowBanner {
+		out["summary"] = h.Title + ": " + h.Message
+	}
+	if h.PayoutBank != nil && h.PayoutBank.Last4 != nil {
+		out["bankAccountEndingIn"] = *h.PayoutBank.Last4
+	}
+	out["whereToFix"] = "Seller Center > Account health"
+	return out, nil
 }
 
 func toolSalesSummary(ctx context.Context, r *assistantRun, a map[string]any) (any, error) {
