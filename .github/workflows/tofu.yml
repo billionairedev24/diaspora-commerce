@@ -1,8 +1,8 @@
-# Infrastructure as code: infra/tofu (aws | gcp | azure), infra/cloudflare, infra/policy.
+# Infrastructure as code: infra/tofu (aws | gcp | azure | ovh), infra/cloudflare, infra/policy.
 #   static : fmt, interface-drift check, validate (every module, every env x every cloud, Cloudflare),
 #            tflint, conftest policy unit tests - no credentials needed
-#   plan   : per environment on its chosen cloud (TF_TARGETS), OIDC read-only identity, conftest on the
-#            plan JSON, plan posted to the PR
+#   plan   : per environment on its chosen cloud (TF_TARGETS), OIDC read-only identity (ovh: the OVH_PLAN_* secrets,
+#            OVHcloud cannot trust GitHub OIDC), conftest on the plan JSON, plan posted to the PR
 #   apply  : main -> dev automatically (GitHub environment dev-infra); uat/prod only via workflow_dispatch
 #            in uat-infra / prod-infra (prod-infra has required reviewers)
 name: tofu
@@ -65,7 +65,8 @@ jobs:
       - name: Validate modules and bootstrap roots
         run: |
           set -euo pipefail
-          for dir in infra/tofu/modules/{aws,gcp,azure,shared}/*/ infra/tofu/bootstrap/*/ infra/cloudflare/; do
+          shopt -s nullglob   # modules/ovh may not exist yet on a branch; a missing cloud is skipped, not an error
+          for dir in infra/tofu/modules/{aws,gcp,azure,ovh,shared}/*/ infra/tofu/bootstrap/*/ infra/cloudflare/; do
             echo "::group::$dir"
             (cd "$dir" && tofu init -backend=false -input=false >/dev/null && tofu validate)
             echo "::endgroup::"
@@ -74,8 +75,10 @@ jobs:
         run: |
           set -euo pipefail
           export TF_VAR_cidr_block=10.0.0.0/16 TF_VAR_web_domain=ci.example.com
+          clouds="aws gcp azure"
+          [[ -d infra/tofu/modules/ovh ]] && clouds="$clouds ovh"
           for env in dev uat prod; do
-            for cloud in aws gcp azure; do
+            for cloud in $clouds; do
               echo "::group::$env / $cloud"
               (cd "infra/tofu/envs/$env" && rm -rf .terraform \
                 && TF_VAR_cloud=$cloud TF_VAR_region=ci tofu init -backend=false -input=false >/dev/null \
@@ -91,7 +94,8 @@ jobs:
           set -euo pipefail
           cfg="$PWD/infra/tofu/.tflint.hcl"
           tflint --init --config "$cfg"
-          for dir in infra/tofu/modules/{aws,gcp,azure,shared}/*/ infra/tofu/bootstrap/*/ infra/cloudflare/; do
+          shopt -s nullglob
+          for dir in infra/tofu/modules/{aws,gcp,azure,ovh,shared}/*/ infra/tofu/bootstrap/*/ infra/cloudflare/; do
             tflint --chdir "$dir" --config "$cfg" --format compact
           done
       - name: Install conftest
@@ -172,6 +176,15 @@ jobs:
           azure-client-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-client-id'] }}
           azure-tenant-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-tenant-id'] }}
           azure-subscription-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-subscription-id'] }}
+          # ovh: no OIDC trust, so least-privilege API keys per mode (OVH_PLAN_* read-only on PRs, OVH_APPLY_* in the
+          # <env>-infra environment). Non-secret parts (endpoint, project id) live in TF_TARGETS.
+          ovh-endpoint: ${{ fromJSON(env.TARGET)[env.MODE]['ovh-endpoint'] || 'ovh-eu' }}
+          ovh-service-name: ${{ fromJSON(env.TARGET)[env.MODE]['ovh-service-name'] }}
+          ovh-application-key: ${{ secrets[format('OVH_{0}_APPLICATION_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-application-secret: ${{ secrets[format('OVH_{0}_APPLICATION_SECRET', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-consumer-key: ${{ secrets[format('OVH_{0}_CONSUMER_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-s3-access-key: ${{ secrets[format('OVH_{0}_S3_ACCESS_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-s3-secret-key: ${{ secrets[format('OVH_{0}_S3_SECRET_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
       - uses: ./.github/actions/tofu-init
         with:
           working-directory: infra/tofu/envs/${{ matrix.env }}
@@ -246,6 +259,15 @@ jobs:
           azure-client-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-client-id'] }}
           azure-tenant-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-tenant-id'] }}
           azure-subscription-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-subscription-id'] }}
+          # ovh: no OIDC trust, so least-privilege API keys per mode (OVH_PLAN_* read-only on PRs, OVH_APPLY_* in the
+          # <env>-infra environment). Non-secret parts (endpoint, project id) live in TF_TARGETS.
+          ovh-endpoint: ${{ fromJSON(env.TARGET)[env.MODE]['ovh-endpoint'] || 'ovh-eu' }}
+          ovh-service-name: ${{ fromJSON(env.TARGET)[env.MODE]['ovh-service-name'] }}
+          ovh-application-key: ${{ secrets[format('OVH_{0}_APPLICATION_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-application-secret: ${{ secrets[format('OVH_{0}_APPLICATION_SECRET', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-consumer-key: ${{ secrets[format('OVH_{0}_CONSUMER_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-s3-access-key: ${{ secrets[format('OVH_{0}_S3_ACCESS_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
+          ovh-s3-secret-key: ${{ secrets[format('OVH_{0}_S3_SECRET_KEY', env.MODE == 'apply' && 'APPLY' || 'PLAN')] }}
       - uses: ./.github/actions/tofu-init
         with:
           working-directory: infra/cloudflare

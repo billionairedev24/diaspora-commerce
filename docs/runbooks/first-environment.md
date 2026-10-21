@@ -69,7 +69,7 @@ Create the environments (Settings -> Environments): `ENV` (prod: required review
 `ENV-infra` (prod-infra: required reviewers). Then set the variables with `gh`:
 
 ```bash
-gh variable set CLOUD        --env ENV --body aws           # aws | gcp | azure
+gh variable set CLOUD        --env ENV --body aws           # aws | gcp | azure | ovh
 gh variable set REGISTRY_URL --env ENV --body "$(tofu output -raw registry_url)"
 # aws
 gh variable set AWS_DEPLOY_ROLE_ARN --env ENV --body "$(tofu output -json github_oidc | jq -r '.deploy["aws-role-arn"]')"

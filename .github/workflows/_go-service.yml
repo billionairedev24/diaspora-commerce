@@ -4,7 +4,7 @@
 #              coverage gate (tools/quality/coverage_report.sh, thresholds in coverage-thresholds.conf)
 #   contract : api/openapi.yaml == contracts/openapi/<svc>.yaml, breaking-change diff vs base (oasdiff)
 #   security : gitleaks, Trivy filesystem scan (HIGH/CRITICAL), govulncheck, Semgrep, optional CodeQL
-#   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure) + kubeconform
+#   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure/ovh) + kubeconform
 #   image    : multi-arch build (context go/) -> GHCR, Trivy image scan, Syft SBOM, cosign keyless (main only)
 name: _go-service
 

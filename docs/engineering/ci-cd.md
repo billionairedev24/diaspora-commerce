@@ -1,7 +1,7 @@
 # CI/CD: build once, sign, deploy each service on its own to any cloud
 
 Every Java and Go service is built, tested, signed and deployed **independently**; the target cloud
-(`aws | gcp | azure`) is configuration of a GitHub environment, never code.
+(`aws | gcp | azure | ovh`) is configuration of a GitHub environment, never code.
 
 ```
 PR / push touching go/services/search/**          (path filter: only go-search.yml runs)
@@ -9,7 +9,7 @@ PR / push touching go/services/search/**          (path filter: only go-search.y
                      ├ verify    golangci-lint, go vet, go test -race (unit + Testcontainers ITs), coverage gate
                      ├ contract  api/openapi.yaml == contracts/openapi/search.yaml, oasdiff breaking vs base
                      ├ security  gitleaks, Trivy fs (HIGH/CRITICAL), govulncheck, Semgrep, [CodeQL]
-                     ├ helm      lint + template dev/uat/prod x none/aws/gcp/azure | kubeconform
+                     ├ helm      lint + template dev/uat/prod x none/aws/gcp/azure/ovh | kubeconform
                      └ image     buildx linux/amd64+arm64, reproducible (SOURCE_DATE_EPOCH = commit time,
                                  rewrite-timestamp) -> ghcr.io/<repo>/search:<sha>
                                  image policy: non-root USER, EXPOSE 8080, APP_ENV=prod / SPRING_PROFILES_ACTIVE=prod,
@@ -132,11 +132,12 @@ requests included) before anything is pushed; see change request 5 for the remai
 
 | Variable | Example |
 |---|---|
-| `CLOUD` | `aws` \| `gcp` \| `azure` |
+| `CLOUD` | `aws` \| `gcp` \| `azure` \| `ovh` |
 | `REGISTRY_URL` | `123456789012.dkr.ecr.us-east-1.amazonaws.com/afrotransact` \| `us-east4-docker.pkg.dev/<project>/afrotransact` \| `<acr>.azurecr.io/afrotransact` |
 | `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION` | aws: `github_oidc.deploy.role_arn`, region |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_REGISTRY_HOST` | gcp: `github_oidc.deploy.*`, `us-east4-docker.pkg.dev` |
 | `AZURE_DEPLOY_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | azure: `github_oidc.deploy.*` |
+| `OVH_REGISTRY_USERNAME` (+ secret `OVH_REGISTRY_PASSWORD`) | ovh: Harbor robot account, e.g. `robot$afrotransact-deploy` |
 
 **Repository variables**: `TF_TARGETS` (below), `GITOPS_BRANCH` (default `main`), `VERCEL_FALLBACK`
 (`true` to always deploy web to Vercel too), `DEV_BASE_DOMAIN` (ZAP and carrier smoke target), `DOCS_PAGES_PROJECT`.
@@ -171,6 +172,44 @@ dedicated `gitops` branch that Argo CD tracks).
             "apply": { "azure-client-id": "…", "azure-tenant-id": "…", "azure-subscription-id": "…" } }
 }
 ```
+
+## OVHcloud
+
+OVHcloud is a fourth target next to AWS, GCP and Azure. The pipelines treat it like the others (`CLOUD=ovh`, GitOps bump,
+Argo CD sync) with three honest differences:
+
+1. **No OIDC federation.** OVHcloud cannot trust GitHub's OIDC token, so there are no keyless identities. CI uses scoped
+   credentials held as GitHub secrets, one set per privilege, and the `cloud-login` action masks them and exports them to the job only:
+   - `deploy` (service pipelines): a **Harbor robot account** limited to the registry project, push and pull only.
+     `OVH_REGISTRY_USERNAME` is an environment variable, `OVH_REGISTRY_PASSWORD` an environment secret of `dev`/`uat`/`prod`.
+     The deploy job gets no OVH API access at all.
+   - `plan` (pull requests): repository secrets `OVH_PLAN_APPLICATION_KEY`, `OVH_PLAN_APPLICATION_SECRET`,
+     `OVH_PLAN_CONSUMER_KEY` (create the consumer key with read-only access rules: `GET` on `/cloud/project/*` and `/me`),
+     plus `OVH_PLAN_S3_ACCESS_KEY` / `OVH_PLAN_S3_SECRET_KEY` (an Object Storage user that can read the state bucket).
+   - `apply`: the same five secrets named `OVH_APPLY_*`, stored as secrets of the `<env>-infra` environment so only
+     jobs that pass its protection rules (required reviewers on `prod-infra`) can read them. The consumer key carries
+     write rules on `/cloud/project/{serviceName}/*` only.
+   Rotate all of them on the schedule in the runbook; a leaked key is the main risk of this target, which is why the
+   plan and apply sets are never shared.
+2. **State** lives in an OVH Object Storage bucket through OpenTofu's `s3` backend (custom endpoint, path-style, no AWS
+   probes). OVH offers no state lock, so `tofu.yml`'s concurrency group is the lock: never run `tofu` against that state
+   by hand while a workflow runs. `TF_TARGETS.<env>.state` is `{"bucket": "...", "region": "gra"}`; add `"endpoint"` only
+   for a non-default endpoint (default `https://s3.<region>.io.cloud.ovh.net`).
+3. **Registry** is OVHcloud Managed Private Registry (Harbor). `REGISTRY_URL` is `<id>.<region>.container-registry.ovh.net/<project>`.
+   `cosign copy` carries signatures and the SBOM attestation, so Kyverno verification works unchanged. Make tags
+   immutable with a Harbor tag-immutability rule on the project (the Azure step that locks tags does not apply).
+
+`TF_TARGETS` entry (only non-secret values; keys are the `cloud-login` inputs):
+
+```json
+"prod": { "cloud": "ovh", "region": "gra",
+          "state": { "bucket": "afrotransact-tfstate", "region": "gra" },
+          "plan":  { "ovh-endpoint": "ovh-eu", "ovh-service-name": "<public cloud project id>" },
+          "apply": { "ovh-endpoint": "ovh-eu", "ovh-service-name": "<public cloud project id>" } }
+```
+
+`tofu.yml` validates `modules/ovh/*` and the env roots for `cloud=ovh` as soon as `infra/tofu/modules/ovh` exists; until
+then OVH plan and apply are not available (the pipelines, registry mirror and GitOps deploys are).
 
 ## Web apps (Cloudflare Workers, Vercel fallback)
 
