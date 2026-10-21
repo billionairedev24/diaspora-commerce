@@ -208,8 +208,8 @@ Argo CD sync) with three honest differences:
           "apply": { "ovh-endpoint": "ovh-eu", "ovh-service-name": "<public cloud project id>" } }
 ```
 
-`tofu.yml` validates `modules/ovh/*` and the env roots for `cloud=ovh` as soon as `infra/tofu/modules/ovh` exists; until
-then OVH plan and apply are not available (the pipelines, registry mirror and GitOps deploys are).
+`tofu.yml` validates `modules/ovh/*`, runs their mocked-provider tests (`tofu test`: cost guards) and validates the env roots for
+`cloud=ovh`. State for OVH is created once by `infra/tofu/bootstrap/ovh`, which also prints the `state` value for `TF_TARGETS`.
 
 ## Web apps (Cloudflare Workers, Vercel fallback)
 

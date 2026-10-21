@@ -1,8 +1,8 @@
 # Provider configuration. IDENTICAL in every env.
 # Every provider uses for_each (OpenTofu >= 1.9) over local.on.<cloud>: the selected cloud gets exactly one
-# instance ("aws" | "gcp" | "azure"), the others get none and are never configured - so `tofu plan` for
-# one cloud never needs credentials for the other two. Credentials come from the environment (OIDC in CI:
-# the login actions export AWS_* / GOOGLE_* / ARM_*; EC_API_KEY; CONFLUENT_CLOUD_API_KEY/_SECRET; TEMPORAL_CLOUD_API_KEY).
+# instance ("aws" | "gcp" | "azure" | "ovh"), the others get none and are never configured - so `tofu plan` for
+# one cloud never needs credentials for the others. Credentials come from the environment (OIDC in CI:
+# the login actions export AWS_* / GOOGLE_* / ARM_* / OVH_* (OVHcloud has no OIDC: scoped API keys); EC_API_KEY; CONFLUENT_CLOUD_API_KEY/_SECRET; TEMPORAL_CLOUD_API_KEY).
 # Switching an existing environment to another cloud = destroy, flip `cloud`, apply (data migration runbook).
 
 provider "aws" {
@@ -40,6 +40,13 @@ provider "azurerm" {
   tenant_id                       = var.azure_tenant_id
   storage_use_azuread             = true
   resource_provider_registrations = "core"
+}
+
+provider "ovh" {
+  alias    = "this"
+  for_each = local.on.ovh
+  endpoint = var.ovh_endpoint
+  # application_key / application_secret / consumer_key come from OVH_APPLICATION_KEY / _SECRET / OVH_CONSUMER_KEY
 }
 
 provider "ec" {

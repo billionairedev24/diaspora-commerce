@@ -1,16 +1,16 @@
 # Inputs. IDENTICAL in every env; environment-specific sizing is in sizing.tf.
 
 variable "cloud" {
-  description = "Target cloud for this environment: aws | gcp | azure. The ONLY switch needed to move clouds."
+  description = "Target cloud for this environment: aws | gcp | azure | ovh. The ONLY switch needed to move clouds."
   type        = string
   validation {
-    condition     = contains(["aws", "gcp", "azure"], var.cloud)
-    error_message = "cloud must be aws, gcp or azure."
+    condition     = contains(["aws", "gcp", "azure", "ovh"], var.cloud)
+    error_message = "cloud must be aws, gcp, azure or ovh."
   }
 }
 
 variable "region" {
-  description = "Region in the chosen cloud (us-east-1 | us-east4 | eastus ...)."
+  description = "Region in the chosen cloud (us-east-1 | us-east4 | eastus | GRA11 on OVHcloud ...)."
   type        = string
 }
 
@@ -152,8 +152,40 @@ variable "azure_tenant_id" {
   default     = ""
 }
 
+variable "ovh_service_name" {
+  description = "OVHcloud Public Cloud project id (cloud = ovh). One project can hold several environments; give each its own cidr_block."
+  type        = string
+  default     = ""
+}
+
+variable "ovh_endpoint" {
+  description = "OVHcloud API endpoint (cloud = ovh): ovh-eu | ovh-ca | ovh-us. Credentials come from OVH_APPLICATION_KEY / OVH_APPLICATION_SECRET / OVH_CONSUMER_KEY."
+  type        = string
+  default     = "ovh-eu"
+  validation {
+    condition     = contains(["ovh-eu", "ovh-ca", "ovh-us"], var.ovh_endpoint)
+    error_message = "ovh_endpoint must be ovh-eu, ovh-ca or ovh-us."
+  }
+}
+
+variable "saas_cloud" {
+  description = "Cloud that Elastic Cloud, Confluent Cloud and Temporal Cloud run on when cloud = ovh (they are not offered on OVHcloud): aws | gcp | azure. Ignored on the other clouds."
+  type        = string
+  default     = "gcp"
+  validation {
+    condition     = contains(["aws", "gcp", "azure"], var.saas_cloud)
+    error_message = "saas_cloud must be aws, gcp or azure."
+  }
+}
+
+variable "saas_region" {
+  description = "Region of saas_cloud closest to the OVHcloud region (cloud = ovh), e.g. europe-west1 (gcp), eu-west-1 (aws), westeurope (azure). Ignored on the other clouds."
+  type        = string
+  default     = "europe-west1"
+}
+
 variable "layerbase_region" {
-  description = "Where the external Layerbase server runs (sizing.managed_data = false): virginia | oregon. The cluster's region must be in the same place (plan check), so database traffic stays in one metro: virginia = aws us-east-1, gcp us-east4, azure eastus; oregon = aws us-west-2, gcp us-west1 (Azure has no Oregon region next to Layerbase: use virginia)."
+  description = "Where the external Layerbase server runs (sizing.managed_data = false): virginia | oregon. The cluster's region must be in the same place (plan check), so database traffic stays in one metro: virginia = aws us-east-1, gcp us-east4, azure eastus, ovh BHS5; oregon = aws us-west-2, gcp us-west1 (Azure has no Oregon region next to Layerbase: use virginia)."
   type        = string
   default     = "virginia"
   validation {

@@ -1,6 +1,6 @@
-# Module contract: one interface, three clouds
+# Module contract: one interface, four clouds
 
-`modules/aws`, `modules/gcp` and `modules/azure` each contain the same ten modules. For every module the
+`modules/aws`, `modules/gcp`, `modules/azure` and `modules/ovh` each contain the same ten modules. For every module the
 **inputs are byte-identical** (`variables.tf` and `context.tf` are copied from `_interface/<module>/` and
 `context.tf.tmpl`) and the **output names are identical** (values are cloud specific).
 `scripts/sync-interface.sh --check` enforces both in CI (`tofu.yml`), so an environment can switch
@@ -10,7 +10,7 @@ cloud by changing the module `source` (done for you in `envs/*/main.tf` via `var
 modules/
   context.tf.tmpl          shared `context` input (copied into every cloud module)
   _interface/<module>/     canonical variables.tf per module type
-  aws|gcp|azure/<module>/  main.tf + outputs.tf per cloud (variables.tf/context.tf are copies)
+  aws|gcp|azure|ovh/<module>/  main.tf + outputs.tf per cloud (variables.tf/context.tf are copies)
   shared/elastic           Elasticsearch 9 on Elastic Cloud (elastic/ec) - same on every cloud
   shared/confluent         Kafka on Confluent Cloud (confluentinc/confluent) - same on every cloud
   shared/temporal          Temporal Cloud namespace per environment (temporalio/temporalcloud)
@@ -23,7 +23,7 @@ modules/
 | `name` | resource prefix, e.g. `afrotransact-dev` |
 | `environment` | `dev` \| `uat` \| `prod` |
 | `region` | cloud region (`us-east-1`, `us-east4`, `eastus` ...) |
-| `scope` | GCP project id \| Azure resource group \| unused on AWS |
+| `scope` | GCP project id \| Azure resource group \| OVHcloud Public Cloud project id \| unused on AWS |
 | `tags` | must contain `env`, `owner`, `cost-center` (validated here and by `infra/policy`) |
 | `admin_cidrs` | CIDRs allowed to reach management endpoints (Kubernetes API, Key Vault) |
 | `deletion_protection` | protect stateful resources (prod) |
@@ -66,6 +66,16 @@ on Aurora (auto-grows) or `secret_store` on AWS postgres (RDS manages the admin 
 
 Encryption at rest is on for every data store on every cloud; deletion protection follows
 `context.deletion_protection` (Aurora/Cloud SQL/Memorystore/EKS/GKE flags, Azure `CanNotDelete` locks).
+
+## OVHcloud (`modules/ovh`)
+
+Built on the `ovh/ovh` provider (v2): network = vRack private network (+ one gateway only when `egress != none`), cluster = Managed
+Kubernetes (free plan, B3 nodes, monthly-billed in prod), postgres/cache = Public Cloud Databases (PostgreSQL / Valkey),
+bucket = Object Storage (`ovh_cloud_project_storage` + lifecycle), secrets = Secret Manager (OKMS), registry = Managed Private Registry
+(Harbor), identity = one S3 user per service with buckets, budget = consumption alerts, github-oidc = nothing (OVH cannot federate
+GitHub's OIDC token; see docs/engineering/ci-cd.md#ovhcloud). Every module ships `tests/*.tftest.hcl` (mocked provider) that pin the
+cost choices: `cd infra/tofu/modules/ovh/<module> && tofu init -backend=false && tofu test` (run in CI by `tofu.yml`).
+Cost rationale and the differences from the other clouds: docs/engineering/cloud-cost.md#ovhcloud.
 
 ## Secrets and External Secrets Operator (S183, cloud side)
 

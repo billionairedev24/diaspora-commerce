@@ -155,3 +155,12 @@ test_deletes_ignored if {
 	r := object.union(rc("aws_rds_cluster", {"storage_encrypted": false}), {"change": {"actions": ["delete"], "after": null, "after_unknown": {}}})
 	count(deny) == 0 with input as plan([r])
 }
+
+test_ovh_storage_without_encryption_denied if {
+	some msg in deny with input as plan([rc("ovh_cloud_project_storage", {"tags": good_tags})])
+	contains(msg, "sse_algorithm")
+}
+
+test_ovh_storage_with_encryption_allowed if {
+	count(deny) == 0 with input as plan([rc("ovh_cloud_project_storage", {"tags": good_tags, "encryption": {"sse_algorithm": "AES256"}})])
+}

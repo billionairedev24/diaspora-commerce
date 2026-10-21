@@ -110,3 +110,20 @@ deny contains msg if {
 	object.get(after(rc), "public_network_access_enabled", false) == true
 	msg := sprintf("%s: PostgreSQL must not be publicly reachable", [rc.address])
 }
+
+# ---------------------------------------------------------------- OVHcloud
+deny contains msg if {
+	some rc in changes
+	rc.type == "ovh_cloud_project_storage"
+	object.get(object.get(after(rc), "encryption", {}), "sse_algorithm", "") == ""
+	msg := sprintf("%s: Object Storage container must set encryption.sse_algorithm", [rc.address])
+}
+
+deny contains msg if {
+	some rc in changes
+	rc.type == "ovh_cloud_project_database"
+	object.get(after(rc), "deletion_protection", false) != true
+	object.get(after(rc), "description", "") != ""
+	contains(object.get(after(rc), "description", ""), "-prod-")
+	msg := sprintf("%s: production databases must have deletion_protection", [rc.address])
+}

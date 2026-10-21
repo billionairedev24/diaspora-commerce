@@ -5,8 +5,8 @@ variable "context" {
     Naming, placement and tagging shared by every module.
       name        - resource name prefix, e.g. "afrotransact-dev" (lowercase, dashes)
       environment - dev | uat | prod
-      region      - cloud region (us-east-1 | us-east4 | eastus ...)
-      scope       - GCP project id | Azure resource group name | unused on AWS
+      region      - cloud region (us-east-1 | us-east4 | eastus | GRA11 ...)
+      scope       - GCP project id | Azure resource group name | OVHcloud Public Cloud project id | unused on AWS
       tags        - must contain env, owner and cost-center (enforced by infra/policy)
       admin_cidrs - CIDRs allowed to reach management endpoints (cluster API, Key Vault)
       deletion_protection - protect stateful resources from destroy (always true in prod)

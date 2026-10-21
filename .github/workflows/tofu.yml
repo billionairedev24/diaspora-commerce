@@ -86,6 +86,16 @@ jobs:
               echo "::endgroup::"
             done
           done
+      - name: Module unit tests (mocked providers; cost guards such as lean = one node, no gateway without egress)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for dir in infra/tofu/modules/*/*/; do
+            [[ -d "$dir/tests" ]] || continue
+            echo "::group::$dir"
+            (cd "$dir" && tofu init -backend=false -input=false >/dev/null && tofu test)
+            echo "::endgroup::"
+          done
       - uses: terraform-linters/setup-tflint@v6
         with:
           tflint_version: ${{ env.TFLINT_VERSION }}

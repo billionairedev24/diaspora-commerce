@@ -1,18 +1,18 @@
-# Infrastructure (OpenTofu) - AWS, Google Cloud or Azure
+# Infrastructure (OpenTofu) - AWS, Google Cloud, Azure or OVHcloud
 
-AfroTransact runs on Kubernetes on **one** of three clouds per environment, chosen with a single variable.
+AfroTransact runs on Kubernetes on **one** of four clouds per environment, chosen with a single variable.
 Cloudflare sits in front of every option (`infra/cloudflare`), and Elasticsearch (Elastic Cloud) and
-Kafka (Confluent Cloud) are the same on all three, so moving clouds changes the origin and the data
+Kafka (Confluent Cloud) are the same on all four, so moving clouds changes the origin and the data
 stores - not the applications, pipelines or edge.
 
 ```
 infra/tofu/
-  modules/{aws,gcp,azure}/{network,cluster,postgres,cache,bucket,secrets,registry,identity,github-oidc,budget}
+  modules/{aws,gcp,azure,ovh}/{network,cluster,postgres,cache,bucket,secrets,registry,identity,github-oidc,budget}
   modules/shared/{elastic,confluent,temporal}  same on every cloud (Elastic Cloud, Confluent Cloud, Temporal Cloud)
   modules/README.md                        the shared module contract (read this next)
   envs/{dev,uat,prod}/                     main.tf (identical) + sizing.tf (per env) + tfvars/backends
-  bootstrap/{aws,gcp,azure}/               one-time remote-state bucket per account/project/subscription
-  scripts/sync-interface.sh                keeps the three module sets on one interface (CI: --check)
+  bootstrap/{aws,gcp,azure,ovh}/              one-time remote-state bucket per account/project/subscription
+  scripts/sync-interface.sh                keeps the four module sets on one interface (CI: --check)
   scripts/postgres-bootstrap.sh            per-service databases + roles (all clouds)
   scripts/elastic-ilm.sh                   ILM hot-warm-frozen policies + scoped ES API keys
 infra/policy/tofu/                    OPA/Conftest rules run against every plan
@@ -24,7 +24,7 @@ Requires **OpenTofu >= 1.9** (provider `for_each`). OpenTofu is not supported fo
 
 ```hcl
 # envs/<env>/terraform.tfvars
-cloud  = "gcp"        # aws | gcp | azure  <- the only switch
+cloud  = "gcp"        # aws | gcp | azure | ovh  <- the only switch
 region = "us-east4"
 ```
 
@@ -50,6 +50,7 @@ environment variables (step 4). Pipelines, charts and images do not change.
 cd infra/tofu/bootstrap/aws   && tofu init && tofu apply -var region=us-east-1
 cd infra/tofu/bootstrap/gcp   && tofu init && tofu apply -var project_id=afrotransact-prod -var region=us-east4
 cd infra/tofu/bootstrap/azure && tofu init && tofu apply -var subscription_id=<id> -var location=eastus
+cd infra/tofu/bootstrap/ovh   && tofu init && tofu apply -var service_name=<project id> -var region=GRA   # state bucket + state-only S3 user
 ```
 
 Each creates a versioned, encrypted, private state bucket (S3 native lockfile / GCS / Azure blob lease
@@ -91,7 +92,7 @@ Order of environments: `dev` creates the account-wide GitHub OIDC provider/pool
 
 ## 4. Environments and cost levers
 
-`main.tf`, `providers.tf`, `variables.tf` and `outputs.tf` are identical in all three directories; only
+`main.tf`, `providers.tf`, `variables.tf` and `outputs.tf` are identical in all environment directories; only
 `sizing.tf` differs:
 
 | | dev | uat | prod |

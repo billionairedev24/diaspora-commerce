@@ -94,6 +94,40 @@ Notes:
 - **Client certificates (mTLS).** Layerbase lists mTLS for Postgres. If it is *required* rather than optional, every service needs the
   client certificate mounted and `sslmode=verify-full` in its JDBC/pgx URL: ask whether password-over-TLS is allowed.
 
+## OVHcloud (cloud = ovh), designed for cost
+
+The same lean profile runs on OVHcloud Public Cloud with `cloud = "ovh"`, `region = "GRA11"` (or `BHS5`, the closest site to a
+US-East Layerbase). The modules (`infra/tofu/modules/ovh`) make these choices, each pinned by a `tofu test` in `tests/`:
+
+| Lever | What the module does | Why it saves money |
+|---|---|---|
+| Control plane | `free` plan unless `zone_count > 1` | the free Managed Kubernetes plan has no control-plane charge (the 3-AZ `standard` plan does) |
+| Nodes | one `b3-16` (4 vCPU / 16 GB) for `lean`; `b3-8` / `b3-16` / `b3-32` otherwise | B3 is the cheapest general-purpose line; OVH has no arm64 |
+| Billing | stable pool **monthly-billed** when `deletion_protection` (prod), hourly otherwise | monthly billing is roughly half the hourly price for always-on nodes; it cannot be switched back, so trials stay hourly |
+| "Spot" | tainted, hourly, autoscaling-from-zero pool | OVH has no spot market: scale-to-zero is the only saving, there is no discount |
+| Network | private network always (free), **gateway only if `egress != none`** (smallest model, one per region) | lean uses public node IPs and no gateway; OVH does not charge for public IPv4 on instances or for egress traffic |
+| Databases | `discovery` = one node; `production` (2 nodes) only with `high_availability`; flavors `db1-4/7/15` | one small server holding the 24 service databases; with Layerbase (`managed_data = false`) none at all |
+| Object Storage | Standard class, versioning, abort stale uploads after 3 days, noncurrent versions out after 30, `archive_after_days` -> Standard-IA | requests and storage stay small; no per-bucket fixed fee |
+| Registry | Managed Private Registry **SMALL** | cheapest tier; raise it only when storage says so |
+| Budget | Public Cloud consumption alerts at 50/80/100% of `monthly_budget` (no forecast alerts on OVH) | the same early warning as the other clouds |
+
+Expect OVH to be the cheapest of the four for the lean node (no EKS-style control-plane fee, no NAT, no egress bill), but the
+per-hour prices change: check the OVHcloud Public Cloud price list for `b3-16` before you commit, and use monthly billing only for
+the production node.
+
+What differs from the other clouds (all documented in the module headers):
+
+- **No workload identity.** Pods reach Object Storage with a per-service S3 user (policy limited to its buckets) whose keys are in the
+  Secret Manager (`<prefix>/<env>/<service>-storage`); the Helm chart must expose that secret to the service (value `storageSecret`).
+- **Secrets** live in OVHcloud Secret Manager (OKMS). External Secrets Operator has no OVH provider; the store uses its Vault provider
+  with a client certificate. **Verify this against your OKMS endpoint on first use**: it is the one integration here that was not
+  checked against a live account.
+- **CORS** for browser uploads cannot be set with the OVH provider: set it once with the S3 API or keep uploads server-side.
+- **Elastic, Confluent and Temporal Cloud** are not offered on OVHcloud; with `enable_*` on they run in `saas_cloud` / `saas_region`
+  (default GCP europe-west1). The lean profile does not use them.
+- **Registry** pulls need an image pull secret (robot account) and the project is Harbor's `library`; tag immutability and retention
+  are Harbor project rules.
+
 ## Will it fit on one node?
 
 Memory (requests) against ~13 GB allocatable on a 16 GB node:

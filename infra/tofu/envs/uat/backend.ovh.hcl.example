@@ -1,0 +1,15 @@
+# cloud = ovh  ->  OVH Object Storage through the s3 backend (CI writes this itself, .github/actions/tofu-init).
+#   printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf ; tofu init -backend-config=backend.hcl
+# State bucket + state-only S3 user come from infra/tofu/bootstrap/ovh. Export AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+# with that user's S3 keys. No native lock: do not run two applies against one state.
+# bucket                      = "afrotransact-tfstate-<project>"
+# key                         = "envs/dev/terraform.tfstate"
+# region                      = "gra"
+# endpoints                   = { s3 = "https://s3.gra.io.cloud.ovh.net" }
+# use_path_style              = true
+# skip_credentials_validation = true
+# skip_region_validation      = true
+# skip_requesting_account_id  = true
+# skip_metadata_api_check     = true
+# skip_s3_checksum            = true
+# use_lockfile                = false

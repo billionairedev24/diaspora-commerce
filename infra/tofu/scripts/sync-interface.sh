@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Keep the three cloud module sets on one interface.
+# Keep the four cloud module sets on one interface.
 #   - modules/context.tf.tmpl              -> modules/<cloud>/<module>/context.tf
 #   - modules/_interface/<module>/variables.tf -> modules/<cloud>/<module>/variables.tf
 #   - output NAMES must be identical across clouds (values are cloud specific)
@@ -10,7 +10,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 mode="${1:-copy}"
 status=0
-clouds=(aws gcp azure)
+clouds=(aws gcp azure ovh)
 
 sync() { # src dst
   if [[ "$mode" == "--check" ]]; then
