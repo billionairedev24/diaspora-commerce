@@ -7,6 +7,9 @@ public interface OrdersApi {
     /** {@code GET /v1/orders/{number or id}}: the caller sees what their token may see (a seller only its own shipments). */
     Downstream order(String orderId, String bearerToken);
 
+    /** {@code GET /v1/orders}: the signed-in customer's own orders, newest first, paged by cursor. */
+    Downstream myOrders(String cursor, int limit, String bearerToken);
+
     /** {@code GET /v1/seller/shipments}: the shipments of the token's organisation, newest first, paged by cursor. */
     Downstream sellerShipments(String status, String cursor, int limit, String bearerToken);
 

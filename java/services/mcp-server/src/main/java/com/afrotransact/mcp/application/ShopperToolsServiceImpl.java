@@ -116,6 +116,12 @@ class ShopperToolsServiceImpl implements ShopperToolsService {
     }
 
     @Override
+    public ToolResult myOrderHistory(McpCaller caller, String cursor) {
+        guard.require(caller.profile(), ToolCatalog.MY_ORDER_HISTORY);
+        return Results.from(orders.myOrders(cursor, 20, caller.bearerToken()), "order history");
+    }
+
+    @Override
     public ToolResult trackOrder(McpCaller caller, String orderId) {
         guard.require(caller.profile(), ToolCatalog.TRACK_ORDER);
         if (orderId == null || orderId.isBlank()) {

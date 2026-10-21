@@ -27,6 +27,17 @@ class HttpOrdersApi implements OrdersApi {
     }
 
     @Override
+    public Downstream myOrders(String cursor, int limit, String bearerToken) {
+        return http.call(bearerToken, c -> c.get().uri(u -> {
+            u.path("/v1/orders").queryParam("limit", limit);
+            if (cursor != null && !cursor.isBlank()) {
+                u.queryParam("cursor", cursor);
+            }
+            return u.build();
+        }));
+    }
+
+    @Override
     public Downstream sellerShipments(String status, String cursor, int limit, String bearerToken) {
         return http.call(bearerToken, c -> c.get().uri(u -> {
             u.path("/v1/seller/shipments").queryParam("limit", limit);

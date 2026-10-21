@@ -210,6 +210,11 @@ class SellerToolsServiceTest {
         }
 
         @Override
+        public Downstream myOrders(String cursor, int limit, String bearerToken) {
+            return next;
+        }
+
+        @Override
         public Downstream sellerShipments(String status, String cursor, int limit, String bearerToken) {
             calls.add("sellerShipments " + status + " " + cursor + " " + limit);
             return next;

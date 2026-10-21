@@ -62,14 +62,22 @@ layer.
 | | `track_order` | — | orders `GET /v1/orders/{id}`: status, shipments, tracking, whether Cancel is still offered (`cancellable`, `cancellableUntil`: before packing and inside the cancellation window), and a delivered shipment's proof (how it was handed over; the photo and signature are media asset ids, not links) |
 | | `start_return_proposal` | — | returns a **PROPOSED** return request |
 | | `find_service` | — | bookings `GET /v1/services/search` |
+| | `my_order_history` | — | orders `GET /v1/orders` — the signed-in customer's own orders, newest first; page with `cursor` |
 | seller (`mcp:seller` + org) | `list_my_products`, `product_status` | `catalog:write` | catalog `GET /v1/products?orgId=…` |
 | | `list_my_orders` | `orders:read` | orders `GET /v1/seller/shipments` — the organisation's shipments, newest first; page with `cursor` (the previous `nextCursor`) |
 | | `update_shipment_status` | `orders:update-status` | seller-fulfilled, one step forward: CONFIRMED → PACKED → READY → SHIPPED (carrier shipments; needs a carrier and tracking number, recorded with `POST /v1/shipments/{id}/tracking`, unless a label is already bought) or DELIVERED (pickup orders only; needs the buyer's 4-digit `handoverCode`); the step is `POST /v1/shipments/{id}/transitions` |
 | | `check_inventory` | `inventory:read` | inventory `GET /v1/positions?ownerOrg=…` |
 | | `request_category` | `catalog:write` | catalog `POST /v1/category-requests` |
+| | `get_my_order` | `orders:read` | orders `GET /v1/orders/{id}` — only the organisation's own shipments, whitelisted fields, no buyer details |
+| | `payout_balance` | — (payments decides per member role) | payments `GET /v1/payouts/balance?orgId=` — available now, held orders with the date each is released (7 days after delivery), in transit, paid, minimum, pauses; the answer to "when will I get my payout" |
+| | `list_payouts` | — | payments `GET /v1/payouts/requests?orgId=` |
+| | `account_health` | — | seller `GET /v1/orgs/{orgId}/account-health` — what Stripe still needs, whether payouts or charges are off |
 | staff (`mcp:staff` + staff) | `applications_queue`, `application_detail` | `applications:review` | seller `GET /v1/applications…` — PII masked |
 | | `moderation_queue` | `catalog:moderate` | catalog `GET /v1/products?status=IN_REVIEW` |
 | | `order_payment_split` | `ledger:read` | payments `GET /v1/orders/{id}/payment-split` |
+| | `order_lookup` | `orders:read` | orders `GET /v1/orders/{id}` — PII masked |
+| | `seller_payout_status` | `ledger:read` | payments `GET /v1/payouts/balance?orgId=` — why a seller has not been paid |
+| | `seller_account_health` | `applications:review` | seller `GET /v1/orgs/{orgId}/account-health` — PII masked |
 
 > **Changed:** `update_shipment_status` and `list_my_orders` now call orders-service's real routes (they called ones
 > that do not exist). `list_my_orders` takes `cursor` instead of `page`; `update_shipment_status` takes `handoverCode`

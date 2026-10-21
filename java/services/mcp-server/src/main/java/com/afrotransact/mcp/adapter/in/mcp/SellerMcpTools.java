@@ -1,5 +1,6 @@
 package com.afrotransact.mcp.adapter.in.mcp;
 
+import com.afrotransact.mcp.application.SellerAccountToolsService;
 import com.afrotransact.mcp.application.SellerToolsService;
 import com.afrotransact.mcp.application.ToolCatalog;
 import com.afrotransact.mcp.application.ToolResult;
@@ -13,9 +14,11 @@ import org.springframework.stereotype.Component;
 class SellerMcpTools {
 
     private final SellerToolsService seller;
+    private final SellerAccountToolsService account;
 
-    SellerMcpTools(SellerToolsService seller) {
+    SellerMcpTools(SellerToolsService seller, SellerAccountToolsService account) {
         this.seller = seller;
+        this.account = account;
     }
 
     @McpTool(name = ToolCatalog.LIST_MY_PRODUCTS, title = "List my products",
@@ -47,6 +50,39 @@ class SellerMcpTools {
                             @McpToolParam(description = "nextCursor of the previous page", required = false)
                             String cursor) {
         return seller.listMyOrders(McpCallerExtractor.caller(context), status, cursor);
+    }
+
+    @McpTool(name = ToolCatalog.GET_MY_ORDER, title = "Get one of my orders",
+            description = "One order's shipments of the caller's organisation: status, lines, tracking, next steps "
+                    + "(orders:read). No buyer details.",
+            annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
+    ToolResult getMyOrder(McpTransportContext context,
+                          @McpToolParam(description = "Order number or id") String orderId) {
+        return account.getMyOrder(McpCallerExtractor.caller(context), orderId);
+    }
+
+    @McpTool(name = ToolCatalog.PAYOUT_BALANCE, title = "Payout balance",
+            description = "When the seller gets paid: money available now, held orders with the date each is "
+                    + "released (7 days after delivery), in transit, paid, the minimum payout and whether payouts are "
+                    + "paused and why. Answer 'when will I get my payout' from this.",
+            annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
+    ToolResult payoutBalance(McpTransportContext context) {
+        return account.payoutBalance(McpCallerExtractor.caller(context));
+    }
+
+    @McpTool(name = ToolCatalog.LIST_PAYOUTS, title = "List payouts",
+            description = "The organisation's recent payout requests with amount, status and dates.",
+            annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
+    ToolResult listPayouts(McpTransportContext context) {
+        return account.listPayouts(McpCallerExtractor.caller(context));
+    }
+
+    @McpTool(name = ToolCatalog.ACCOUNT_HEALTH, title = "Account health",
+            description = "What Stripe and AfroTransact still need from the seller (verification items, deadlines) and "
+                    + "whether charges, payouts or listings are switched off. Use it when a payout is late or paused.",
+            annotations = @McpTool.McpAnnotations(readOnlyHint = true, destructiveHint = false, idempotentHint = true))
+    ToolResult accountHealth(McpTransportContext context) {
+        return account.accountHealth(McpCallerExtractor.caller(context));
     }
 
     @McpTool(name = ToolCatalog.UPDATE_SHIPMENT_STATUS, title = "Update shipment status",

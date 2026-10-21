@@ -96,15 +96,15 @@ class McpServerIT {
         TestActors.as(TestActors.shopper(unique("shopper")));
         assertThat(toolNames(client("agent-a"))).containsExactlyInAnyOrder("search_products", "get_product",
                 "check_delivery", "get_cart", "propose_add_to_cart", "track_order", "start_return_proposal",
-                "find_service");
+                "find_service", "my_order_history");
 
         TestActors.as(TestActors.seller(unique("seller"), "org_kente"));
-        assertThat(toolNames(client("agent-b"))).hasSize(14).contains("list_my_products", "update_shipment_status",
-                "check_inventory", "request_category").doesNotContain("order_payment_split");
+        assertThat(toolNames(client("agent-b"))).hasSize(19).contains("list_my_products", "update_shipment_status",
+                "check_inventory", "request_category", "payout_balance", "account_health", "get_my_order").doesNotContain("order_payment_split");
 
         TestActors.as(TestActors.reviewer(unique("reviewer")));
         assertThat(toolNames(client("agent-c"))).containsExactlyInAnyOrder("applications_queue",
-                "application_detail");
+                "application_detail", "seller_account_health");
     }
 
     @Test
@@ -215,7 +215,7 @@ class McpServerIT {
                 HttpResponse.BodyHandlers.ofString());
         assertThat(response.statusCode()).isEqualTo(200);
         JsonNode tools = json.readTree(response.body());
-        assertThat(tools.size()).isEqualTo(18);
+        assertThat(tools.size()).isEqualTo(26);
         JsonNode update = tools.valueStream().filter(t -> t.path("name").asString().equals("update_shipment_status"))
                 .findFirst().orElseThrow();
         assertThat(update.path("requiredScope").asString()).isEqualTo("mcp:seller");
