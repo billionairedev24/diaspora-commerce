@@ -23,6 +23,16 @@ only ever see their own. **`return_status`** (return number, items, reasons, pro
 **`refund_status`** (refund amount and state per return, "not issued yet" until one exists) read tax-returns the same way, optionally
 for one order; Lola never states a refund date they do not return. Seller-written text (product titles, service names) is cleaned and quoted as untrusted data.
 
+## Seller Lola tools by plan
+
+| Tier | Tools |
+|---|---|
+| Essentials | `my_orders`, `order_detail`, `my_listings`, `stock_levels`, `payouts`, `account_health` |
+| Growth | Essentials plus `fees_and_plan`, **`plan_billing`** (plan, next charge, credit, charging condition, unpaid or declined invoices, rewards), **`my_coupons`**, and prepared changes (`propose_set_stock`, `propose_next_step`) |
+| Pro | Growth plus `sales_summary` |
+
+All are read-only except the two `propose_*` tools, which only show a button the seller must tap.
+
 ## Staff ("admin Lola")
 
 `GET /v1/staff/assistant` (today's messages) and `POST /v1/staff/assistant/chat`. Tools:
@@ -34,6 +44,7 @@ for one order; Lola never states a refund date they do not return. Seller-writte
 | `get_record` | a record as its sheet shows it: fields, nested tables, recent activity, actions that exist | the table's module |
 | `seller_payouts` | a seller's balance: available, held orders with release dates, pauses | Payouts module (view) |
 | `seller_account_health` | the seller's Stripe Connect account (what is still needed) | Stripe Connect table |
+| `seller_billing` | a seller's plan, credit, charging condition and invoices (paid, unpaid, declined and why) | Plans & billing module (view) |
 | `open_record` | a button that opens the record in the console | none (a link) |
 
 Every lookup goes through the same use cases as the console tables, so module access, permissions and the BFF's own

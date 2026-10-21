@@ -41,6 +41,8 @@ const (
 	ToolPayouts       = "payouts"
 	ToolSalesSummary  = "sales_summary"
 	ToolAccountHealth = "account_health"
+	ToolPlanBilling   = "plan_billing"
+	ToolMyCoupons     = "my_coupons"
 	ToolProposeStock  = "propose_set_stock"
 	ToolProposeNext   = "propose_next_step"
 	assistantMaxInput = 1500
@@ -53,16 +55,16 @@ const AssistantMaxInput = assistantMaxInput
 // paid and why a payout is held, so that never needs a support chat.
 var essentialsTools = []string{ToolMyOrders, ToolOrderDetail, ToolMyListings, ToolStockLevels, ToolPayouts, ToolAccountHealth}
 
-// AssistantLimitsOf is what each tier allows. Essentials looks at orders, listings, stock, payouts and account health; Growth adds fees
+// AssistantLimitsOf is what each tier allows. Essentials looks at orders, listings, stock, payouts and account health; Growth adds fees, plan billing, coupons
 // and can prepare changes; Pro adds sales summaries and the most messages.
 func AssistantLimitsOf(t AssistantTier) AssistantLimits {
 	switch t {
 	case AssistantPro:
 		return AssistantLimits{Label: "Lola Pro", DailyMessages: 400, MaxToolRounds: 6, History: 16, CanPropose: true,
-			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolSalesSummary, ToolProposeStock, ToolProposeNext)}
+			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolPlanBilling, ToolMyCoupons, ToolSalesSummary, ToolProposeStock, ToolProposeNext)}
 	case AssistantGrowth:
 		return AssistantLimits{Label: "Lola Growth", DailyMessages: 100, MaxToolRounds: 4, History: 10, CanPropose: true,
-			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolProposeStock, ToolProposeNext)}
+			Tools: append(append([]string{}, essentialsTools...), ToolFeesAndPlan, ToolPlanBilling, ToolMyCoupons, ToolProposeStock, ToolProposeNext)}
 	default:
 		return AssistantLimits{Label: "Lola Essentials", DailyMessages: 15, MaxToolRounds: 3, History: 6,
 			Tools: append([]string{}, essentialsTools...)}

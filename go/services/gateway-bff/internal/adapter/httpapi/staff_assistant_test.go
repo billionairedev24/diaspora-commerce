@@ -28,6 +28,10 @@ func staffLola(t *testing.T) (func(token, method, path string, body any, headers
 	f.override = func(w http.ResponseWriter, r *http.Request, body map[string]any) bool {
 		switch r.URL.Path {
 		case "/v1/me":
+			if strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") == "billing" {
+				writeJ(w, 200, map[string]any{"id": "stf-8", "firstName": "Bisi", "lastName": "Ade", "principalType": "STAFF", "roles": []string{"platform.finance"}, "permissions": []string{"seller:billing"}})
+				return true
+			}
 			if strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") != "marketing" {
 				return false
 			}
@@ -35,6 +39,10 @@ func staffLola(t *testing.T) (func(token, method, path string, body any, headers
 			return true
 		case "/v1/ai/staff-assistant/complete":
 			model.answer(w, body)
+			return true
+		case "/v1/orgs/org-9/billing/panel":
+			writeJ(w, 200, map[string]any{"planName": "Seller Growth", "status": "PAST_DUE", "creditBalanceMinor": 2500,
+				"invoices": []any{map[string]any{"number": "INV-100", "status": "OPEN", "lastError": "card_declined", "ownerEmail": "ada@example.com"}}})
 			return true
 		case "/v1/payouts/balance":
 			writeJ(w, 200, map[string]any{"currency": "USD", "availableMinor": 1000, "onHoldMinor": 78000, "paidMinor": 0, "minimumPayoutMinor": 2500,
@@ -96,6 +104,8 @@ func (m *fakeModel) answer(w http.ResponseWriter, body map[string]any) {
 	case last["role"] == "tool":
 		m.seen = append(m.seen, fmt.Sprint(last["content"]))
 		writeJ(w, 200, map[string]any{"text": "Here is what I found: " + fmt.Sprint(last["content"]), "toolCalls": []any{}, "model": "fake/lola"})
+	case strings.Contains(text, "charged"):
+		call("seller_billing", `{"orgId":"org-9"}`)
 	case strings.Contains(text, "paid"):
 		call("seller_payouts", `{"orgId":"org-9"}`)
 	case strings.Contains(text, "open"):
@@ -147,6 +157,16 @@ func TestStaffLolaLooksThingsUpForTheSignedInMemberOnly(t *testing.T) {
 	}
 	if got := model.seen[len(model.seen)-1]; strings.Contains(got, "AT-2026-000777") || !strings.Contains(got, "error") {
 		t.Fatalf("marketing must not see payouts: %s", got)
+	}
+
+	// "Why was this seller charged": the billing panel, only for a role that can see Plans & billing.
+	do("billing", "POST", "/v1/staff/assistant/chat", map[string]any{"message": "Why was org-9 charged?"})
+	if got := model.seen[len(model.seen)-1]; !strings.Contains(got, "INV-100") || !strings.Contains(got, "card_declined") || strings.Contains(got, "ada@example.com") {
+		t.Fatalf("seller billing = %s", got)
+	}
+	do("marketing", "POST", "/v1/staff/assistant/chat", map[string]any{"message": "Why was org-9 charged?"})
+	if got := model.seen[len(model.seen)-1]; strings.Contains(got, "INV-100") || !strings.Contains(got, "error") {
+		t.Fatalf("marketing must not see billing: %s", got)
 	}
 
 	// Search goes through the console's own table use case (an orders table row has an id and columns).

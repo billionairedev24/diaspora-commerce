@@ -240,6 +240,10 @@ func (u *Upstreams) catalogListingRoutes(mux *http.ServeMux) {
 			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "propose_set_stock", "arguments": `{"sku":"jollof-1","quantity":40}`}}, "model": "fake/lola"})
 		case strings.Contains(text, "fees"):
 			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "fees_and_plan", "arguments": `{}`}}, "model": "fake/lola"})
+		case strings.Contains(text, "charged") || strings.Contains(text, "invoice"):
+			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "plan_billing", "arguments": `{}`}}, "model": "fake/lola"})
+		case strings.Contains(text, "coupon"):
+			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "my_coupons", "arguments": `{}`}}, "model": "fake/lola"})
 		case strings.Contains(text, "paused") || strings.Contains(text, "account health"):
 			writeJSON(w, 200, map[string]any{"text": "", "toolCalls": []any{map[string]any{"id": "c1", "name": "account_health", "arguments": `{}`}}, "model": "fake/lola"})
 		case strings.Contains(text, "payouts") || strings.Contains(text, "paid"):

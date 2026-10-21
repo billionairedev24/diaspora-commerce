@@ -152,7 +152,8 @@ Rules you always follow:
 5. Personal details are partly hidden from you (emails, phone numbers). Do not ask for or guess the hidden parts. Never repeat a full tax id, bank or card number.
 6. If a tool says the member is not allowed to see something, say that their role cannot see it. Do not work around it.
 7. For "why has this seller not been paid": use seller_payouts (held orders with release dates, pauses) and seller_account_health (what Stripe still needs), then explain in order.
-8. Be brief and practical: the answer first, then the evidence. Offer open_record for the record you talked about.
+8. For "why was this seller charged" or a failing plan fee: seller_billing.
+9. Be brief and practical: the answer first, then the evidence. Offer open_record for the record you talked about.
 `, firstNonEmpty(strings.TrimSpace(me.FirstName), "the signed-in staff member"))
 	fmt.Fprintf(&b, "\nContext: today is %s (UTC).", now.UTC().Format("2006-01-02"))
 	if strings.TrimSpace(language) != "" {
@@ -211,6 +212,12 @@ var staffTools = []staffToolDef{
 		schema: `{"type":"object","properties":{"orgId":{"type":"string"}},"required":["orgId"],"additionalProperties":false}`,
 		label:  func(a map[string]any) string { return "Checking account health of " + argStr(a, "orgId") },
 		run:    staffToolAccountHealth,
+	},
+	{
+		name: domain.StaffToolSellerBilling, description: "A seller's or provider's plan billing as staff see it: plan, trial or free months, platform credit, charging condition, invoices (paid, unpaid, declined and why) and recent adjustments. Needs the organisation id. Use it for 'why was this seller charged' or 'is their plan fee failing'.",
+		schema: `{"type":"object","properties":{"orgId":{"type":"string"}},"required":["orgId"],"additionalProperties":false}`,
+		label:  func(a map[string]any) string { return "Checking plan billing of " + argStr(a, "orgId") },
+		run:    staffToolSellerBilling,
 	},
 	{
 		name: domain.StaffToolOpenRecord, description: "Offer the member a button that opens a record in the console. Use it for the record you talked about. Nothing is changed.",
@@ -452,6 +459,32 @@ func staffToolAccountHealth(ctx context.Context, r *staffRun, a map[string]any) 
 		out["status"] = *d.Status
 	}
 	return out, nil
+}
+
+// staffToolSellerBilling reads the same per-seller billing panel as Plans & billing; the console module's View level gates it.
+func staffToolSellerBilling(ctx context.Context, r *staffRun, a map[string]any) (any, error) {
+	org := argStr(a, "orgId")
+	if org == "" {
+		return nil, domain.ValidationProblem(map[string]string{"orgId": "Which organisation?"})
+	}
+	if !r.sc.access.Allows("plans", domain.LevelView) {
+		return nil, staffModuleDenied("plans", domain.LevelView)
+	}
+	var panel map[string]any
+	if err := r.sc.get(ctx, r.sc.up.Seller, "/v1/orgs/"+url.PathEscape(org)+"/billing/panel", nil, &panel); err != nil {
+		return nil, mapErr("seller", err)
+	}
+	return trimBilling(panel), nil
+}
+
+// trimBilling keeps the panel small for the model: lists are cut to their first rows.
+func trimBilling(panel map[string]any) map[string]any {
+	for k, v := range panel {
+		if list, ok := v.([]any); ok && len(list) > 8 {
+			panel[k] = list[:8]
+		}
+	}
+	return panel
 }
 
 func staffToolOpen(_ context.Context, r *staffRun, a map[string]any) (any, error) {

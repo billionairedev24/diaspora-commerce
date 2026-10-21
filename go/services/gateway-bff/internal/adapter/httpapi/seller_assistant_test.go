@@ -76,6 +76,29 @@ func TestSellerAssistantTiersLimitsAndProposals(t *testing.T) {
 	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "   "}), 422)
 }
 
+func TestSellerAssistantBillingAndCouponsAreGrowthTools(t *testing.T) {
+	bff, b := sellerSetup(t, testkit.Options{})
+	bff.Upstreams.SetSellerPlan("seller_growth")
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "Why was I charged?"}), 200)
+	got := fmt.Sprint(lastModelCall(bff).Messages[len(lastModelCall(bff).Messages)-1]["content"])
+	for _, want := range []string{"Seller Growth", "$111.15 on Jan 10, 2027", "platformCredit", "$25.00", "chargingCondition", "Charging starts after $1,000", "recentInvoices", "whereToFix"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("plan_billing is missing %q: %s", want, got)
+		}
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "Show my coupon codes"}), 200)
+	if got := fmt.Sprint(lastModelCall(bff).Messages[len(lastModelCall(bff).Messages)-1]["content"]); !strings.Contains(got, "coupons") {
+		t.Fatalf("my_coupons = %s", got)
+	}
+
+	// Essentials does not get them.
+	bff.Upstreams.SetSellerPlan("seller_essentials")
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "hello"}), 200)
+	if tools := lastModelCall(bff).Tools; slices.Contains(tools, "plan_billing") || slices.Contains(tools, "my_coupons") {
+		t.Fatalf("essentials tools = %v", tools)
+	}
+}
+
 func TestSellerAssistantEssentialsHasFewerToolsAndADailyLimit(t *testing.T) {
 	bff, b := sellerSetup(t, testkit.Options{})
 	bff.Upstreams.SetSellerPlan("seller_essentials")

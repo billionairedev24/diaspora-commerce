@@ -84,6 +84,18 @@ var assistantTools = []assistantToolDef{
 		run:    toolAccountHealth,
 	},
 	{
+		name: domain.ToolPlanBilling, description: "The seller's plan subscription and invoices: plan, price, next charge and date, trial or free months, platform credit, any condition on charging, how the plan is paid (from sales first or card), unpaid or declined invoices with the reason, and rewards earned or in progress. Use it for 'why was I charged', 'what do I owe' or 'when is my next bill'.",
+		schema: noArgsSchema,
+		label:  func(map[string]any) string { return "Checking your plan and invoices" },
+		run:    toolPlanBilling,
+	},
+	{
+		name: domain.ToolMyCoupons, description: "The seller's own coupons: code, discount, minimum spend, scope and whether each is active or paused.",
+		schema: noArgsSchema,
+		label:  func(map[string]any) string { return "Checking your coupons" },
+		run:    toolMyCoupons,
+	},
+	{
 		name: domain.ToolSalesSummary, description: "Sales summary for the last 7, 30 or 90 days: headline numbers and what needs attention.",
 		schema: `{"type":"object","properties":{"days":{"type":"integer","enum":[7,30,90]}},"additionalProperties":false}`,
 		label:  func(a map[string]any) string { return "Summarising your sales" },
@@ -414,6 +426,107 @@ func toolSalesSummary(ctx context.Context, r *assistantRun, a map[string]any) (a
 		todo = append(todo, t.Label)
 	}
 	return map[string]any{"days": d.RangeDays, "headline": kpis, "needsAttention": todo}, nil
+}
+
+func dateLabel(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format("2006-01-02")
+}
+
+func toolPlanBilling(ctx context.Context, r *assistantRun, _ map[string]any) (any, error) {
+	b, err := r.s.a.Money.Billing(ctx, r.c)
+	if err != nil {
+		return nil, err
+	}
+	sub := b.Subscription
+	out := map[string]any{"plan": sub.PlanName, "cadence": sub.Cadence, "status": sub.Status, "price": sub.PriceLabel, "billed": sub.BilledLabel,
+		"platformCredit": moneyLabel(sub.CreditBalanceMinor), "cancelsAtPeriodEnd": sub.CancelAtPeriodEnd}
+	if sub.NextChargeLabel != "" {
+		out["nextCharge"] = sub.NextChargeLabel
+	}
+	if d := dateLabel(sub.NextChargeAt); d != "" {
+		out["nextChargeOn"] = d
+	}
+	if d := dateLabel(sub.TrialEndsAt); d != "" {
+		out["trialEndsOn"] = d
+	}
+	if sub.Dunning != nil {
+		out["paymentProblem"] = *sub.Dunning
+	}
+	if g := sub.ChargeGate; g != nil && g.Label != "" {
+		out["chargingCondition"] = g.Label
+	}
+	if f := b.PlanFeeCollection; f != nil && f.Available {
+		out["planPaidFrom"] = f.Effective
+	}
+	invoices := []map[string]any{}
+	for i, inv := range b.Invoices {
+		if i >= 5 {
+			break
+		}
+		row := map[string]any{"number": inv.Number, "status": inv.Status, "due": moneyLabel(inv.AmountDueMinor), "paid": moneyLabel(inv.AmountPaidMinor),
+			"created": inv.CreatedAt.UTC().Format("2006-01-02")}
+		if inv.DiscountMinor > 0 {
+			row["discount"] = moneyLabel(inv.DiscountMinor)
+		}
+		if d := dateLabel(inv.NextAttemptAt); d != "" {
+			row["nextAttempt"] = d
+		}
+		if inv.LastError != nil {
+			row["failure"] = *inv.LastError
+		}
+		invoices = append(invoices, row)
+	}
+	out["recentInvoices"] = invoices
+	if rw, err := r.s.a.Money.Rewards(ctx, r.c); err == nil {
+		progress := []string{}
+		for i, a := range rw.Available {
+			if i >= 3 {
+				break
+			}
+			progress = append(progress, a.Label+": "+a.RewardLabel)
+		}
+		earned := []string{}
+		for i, e := range rw.Earned {
+			if i >= 3 {
+				break
+			}
+			earned = append(earned, e.Summary)
+		}
+		out["rewardsInProgress"] = progress
+		out["rewardsEarned"] = earned
+	}
+	out["whereToFix"] = "Seller Center > Plan & billing"
+	return out, nil
+}
+
+func toolMyCoupons(ctx context.Context, r *assistantRun, _ map[string]any) (any, error) {
+	list, err := r.s.a.Coupons.List(ctx, r.c)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]map[string]any, 0, maxRows)
+	for i, c := range list {
+		if i >= maxRows {
+			break
+		}
+		off := moneyLabel(c.Value) + " off"
+		if strings.Contains(strings.ToUpper(c.Type), "PERCENT") {
+			off = fmt.Sprintf("%d%% off", c.Value)
+		}
+		row := map[string]any{"code": c.Code, "discount": off, "scope": c.Scope, "status": c.Status, "funding": c.Funding}
+		if c.MinSpendMinor > 0 {
+			row["minimumSpend"] = moneyLabel(c.MinSpendMinor)
+		}
+		rows = append(rows, row)
+	}
+	out := map[string]any{"coupons": rows, "total": len(list)}
+	if len(list) == 0 {
+		out["note"] = "The seller has no coupons."
+	}
+	return out, nil
 }
 
 func bpsLabel(bps int) string { return fmt.Sprintf("%.1f%%", float64(bps)/100) }
