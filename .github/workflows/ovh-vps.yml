@@ -23,7 +23,7 @@ on:
         description: What to do
         type: choice
         default: plan
-        options: [plan, apply, deploy, provision-and-deploy, services, edge, status, down, up, destroy]
+        options: [plan, apply, deploy, provision-and-deploy, services, edge, observability, backup, status, down, up, destroy]
       image-tag:
         description: "Full git sha of the images in GHCR (empty = this run's commit; every service must have been built at it)"
         type: string
@@ -94,6 +94,7 @@ jobs:
           tools/ovh/tf-state.sh keys
           tools/ovh/tf-state.sh ensure
           tools/ovh/tf-state.sh init
+          tools/ovh/tf-state.sh backup-bucket
 
       - name: Plan
         if: inputs.action == 'plan'
@@ -182,6 +183,7 @@ jobs:
           EXTERNAL_PG_SSLMODE: ${{ vars.EXTERNAL_PG_SSLMODE }}
           ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
           ADMIN_PHONE: ${{ vars.ADMIN_PHONE }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
@@ -201,7 +203,7 @@ jobs:
           FEDEX_CLIENT_SECRET: ${{ secrets.FEDEX_CLIENT_SECRET }}
         run: |
           mkdir -p /tmp/cfg && tools/ovh/render-config.sh /tmp/cfg
-          tar czf /tmp/kit.tgz infra/ovh-vps/*.sh infra/ovh-vps/*.conf infra/ovh-vps/*.yaml infra/helm infra/k8s/platform/lean \
+          tar czf /tmp/kit.tgz infra/ovh-vps/*.sh infra/ovh-vps/*.conf infra/ovh-vps/*.yaml infra/ovh-vps/overrides infra/helm infra/k8s/platform/lean \
             infra/k8s/platform/openfga $(ls -d java/services/*/deploy/helm go/services/*/deploy/helm)
           ssh server 'sudo install -d -m 755 -o ubuntu -g ubuntu /opt/afrotransact && cd /opt/afrotransact && rm -rf infra java go'
           scp -q /tmp/kit.tgz server:/tmp/kit.tgz
@@ -219,7 +221,7 @@ jobs:
         run: ssh server 'sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh all'
 
       - name: Run ${{ inputs.action }}
-        if: inputs.action == 'services' || inputs.action == 'edge' || inputs.action == 'status' || inputs.action == 'down' || inputs.action == 'up'
+        if: inputs.action == 'services' || inputs.action == 'edge' || inputs.action == 'observability' || inputs.action == 'backup' || inputs.action == 'status' || inputs.action == 'down' || inputs.action == 'up'
         run: ssh server "sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh $ACTION"
 
       - name: Summary

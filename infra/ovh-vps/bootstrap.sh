@@ -7,7 +7,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 echo "==> packages"
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates jq ufw openssl postgresql-client python3 >/dev/null
+apt-get install -y -qq curl ca-certificates jq ufw openssl postgresql-client python3 rclone >/dev/null
 
 echo "==> firewall: SSH, HTTP, HTTPS only"
 ufw --force reset >/dev/null

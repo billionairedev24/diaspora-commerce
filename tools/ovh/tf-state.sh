@@ -9,6 +9,7 @@
 #                                    pipeline they go masked into $GITHUB_ENV; on a laptop as export lines for eval "$(...)"
 #   tools/ovh/tf-state.sh ensure     create the state bucket once (idempotent; versioning on) - needs the aws CLI
 #   tools/ovh/tf-state.sh init       tofu init of infra/ovh-vps/terraform on that bucket
+#   tools/ovh/tf-state.sh backup-bucket  the bucket for backups (kept after destroy; objects expire after 30 days)
 #   tools/ovh/tf-state.sh teardown   after destroy: the state (every version), the bucket, then the state user - last
 #
 # Environment: TF_STATE_BUCKET, TF_STATE_ACCESS_KEY / TF_STATE_SECRET_KEY (or AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY),
@@ -93,6 +94,29 @@ ensure() {
     || echo "warning: could not turn versioning on for $TF_STATE_BUCKET (turn it on in the console)" >&2
 }
 
+# backup_bucket: the bucket for the server's backups (database dumps, the generated secrets), next to the state bucket, kept
+# after `destroy` so a new server can be restored from it. Objects expire after 30 days. Exports BACKUP_* into the job.
+backup_bucket() {
+  need aws
+  need_keys
+  local b="${BACKUP_BUCKET:-${TF_STATE_BUCKET/tfstate/backups}}"
+  [ "$b" != "$TF_STATE_BUCKET" ] || b="${TF_STATE_BUCKET}-backups"
+  if s3 s3api head-bucket --bucket "$b" >/dev/null 2>&1; then
+    echo "backup bucket $b exists"
+  else
+    s3 s3api create-bucket --bucket "$b" --create-bucket-configuration "LocationConstraint=$TF_STATE_REGION" >/dev/null \
+      || die "could not create $b (name taken? set BACKUP_BUCKET)"
+    echo "backup bucket $b created"
+  fi
+  s3 s3api put-bucket-lifecycle-configuration --bucket "$b" --lifecycle-configuration \
+    '{"Rules":[{"ID":"expire-30d","Status":"Enabled","Filter":{"Prefix":""},"Expiration":{"Days":30}}]}' >/dev/null \
+    || echo "warning: could not set the 30-day expiry on $b (set it in the console); the backup script also deletes old objects" >&2
+  if [ -n "${GITHUB_ENV:-}" ]; then
+    printf 'BACKUP_BUCKET=%s\nBACKUP_S3_ENDPOINT=%s\nBACKUP_S3_REGION=%s\nBACKUP_S3_ACCESS_KEY=%s\nBACKUP_S3_SECRET_KEY=%s\n' \
+      "$b" "$TF_STATE_ENDPOINT" "$TF_STATE_REGION" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" >>"$GITHUB_ENV"
+  fi
+}
+
 init() {
   local TF override flags
   TF=$(tf_bin)
@@ -157,6 +181,7 @@ case "$cmd" in
   keys) keys ;;
   ensure) ensure ;;
   init) init ;;
+  backup-bucket) backup_bucket ;;
   teardown) teardown ;;
-  *) die "usage: $0 keys | ensure | init | teardown" ;;
+  *) die "usage: $0 keys | ensure | init | backup-bucket | teardown" ;;
 esac

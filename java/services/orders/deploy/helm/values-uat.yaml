@@ -19,6 +19,7 @@ tolerations:
 # (TEMPORAL_TLS_CERT / TEMPORAL_TLS_KEY). Override TEMPORAL_TARGET / TEMPORAL_NAMESPACE with the account suffix in
 # infra/argocd/envs/uat/platform-values.yaml if it differs.
 extraEnv:
+  SPRING_PROFILES_ACTIVE: "uat,temporal-cloud"
   RETAIL_ORG_ID: org_afrotransact_retail
   ORDERS_ZONE: America/Chicago
   TEMPORAL_NAMESPACE: afrotransact-uat

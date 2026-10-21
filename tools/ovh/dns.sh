@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Optional: creates or updates the A records api./auth./mcp.<domain> at Cloudflare (DNS only, not proxied, so Let's Encrypt's
+# Optional: creates or updates the A records api./auth./mcp./grafana.<domain> at Cloudflare (DNS only, not proxied, so Let's Encrypt's
 # HTTP-01 check reaches the server). Needs CLOUDFLARE_API_TOKEN (Zone: DNS edit on the zone) and CLOUDFLARE_ZONE (the zone's
 # apex, e.g. afrotransact.com). Without them it prints the records to create by hand and exits 0.
 #   tools/ovh/dns.sh <domain> <ipv4>
 set -euo pipefail
 domain=${1:?domain}; ip=${2:?ipv4}
-hosts="api auth mcp"
+hosts="api auth mcp grafana"
 if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ZONE:-}" ]; then
   echo "No Cloudflare token or zone set: create these DNS records yourself (type A, DNS only / grey cloud):"
   for h in $hosts; do echo "   $h.$domain  ->  $ip"; done

@@ -51,17 +51,21 @@ signing key. **Back them up**: without them the Secrets cannot be rebuilt and ev
 Re-running changes nothing. Third-party keys come from `OVH_VPS_SECRETS`; a service whose key is empty starts without that
 integration, except **gateway-bff, which refuses to start without `STRIPE_PUBLISHABLE_KEY`**.
 
-## Known gaps (found while writing it, not fixed)
+## Resolved gaps
 
-- **OpenFGA**: the stack is deployed with the pre-shared key, but I did not wire a store id or authorization model into the
-  services; whether `authz-sync` creates them on start needs checking on the first run.
-- **Temporal**: orders reads `TEMPORAL_TLS_CERT/KEY` (empty here) while the lean manifest runs Temporal without mTLS.
-- **No metrics, logs or traces**: no Prometheus, Loki or OTLP collector (telemetry sampling is 0). Use `kubectl logs`.
-- **Image names**: the charts' `image.repository` defaults (`tax-returns-service`) differ from what CI publishes
-  (`tax-returns`); `deploy.sh` overrides it to the service name.
-- **No automatic backups** of Valkey, Kafka or (cluster mode) Postgres.
-- Traefik and cert-manager chart versions are not pinned.
-- Search uses Meilisearch (`SEARCH_PROVIDER=meilisearch`), which starts with an empty index: run the indexer backfill.
+- **OpenFGA**: already wired (store created by `authz-sync` on start); checked, no change needed.
+- **Temporal for orders**: dev/uat config no longer forces mTLS (the `temporal-cloud` profile adds it); `overrides/orders.yaml`
+  points orders at the in-cluster Temporal, namespace `afrotransact`.
+- **Observability**: `deploy.sh observability` (Prometheus, Grafana, Loki, Alloy; `grafana.<domain>`).
+- **Backups**: `backup.sh` (encrypted Postgres + secrets to Object Storage), `restore` included.
+- **Chart versions** are pinned on first install (`chart-versions.env`).
+
+## Known gaps
+
+- Valkey, Kafka and Temporal data are not backed up.
+- Search uses Meilisearch and starts with an empty index: run the indexer backfill.
+- Image names: charts default to `tax-returns-service`, CI publishes `tax-returns`; `deploy.sh` overrides it.
+- Nothing has been run against a real OVHcloud/GitHub account; Helm templates were not rendered here.
 
 ## Tear down
 

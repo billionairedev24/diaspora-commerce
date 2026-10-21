@@ -1,4 +1,5 @@
-# UAT / staging: production-like, anonymised data, API reference pages on for testers. Temporal Cloud with mTLS.
+# UAT / staging: production-like, anonymised data, API reference pages on for testers. Temporal Cloud with mTLS: the
+# chart sets SPRING_PROFILES_ACTIVE=uat,temporal-cloud for orders (deploy/helm/values-uat.yaml).
 spring:
   datasource:
     hikari:
@@ -6,9 +7,6 @@ spring:
   temporal:
     connection:
       target: ${TEMPORAL_TARGET}
-      mtls:
-        cert-chain: ${TEMPORAL_TLS_CERT}
-        key: ${TEMPORAL_TLS_KEY}
     namespace: ${TEMPORAL_NAMESPACE:afrotransact-uat}
 at:
   security:

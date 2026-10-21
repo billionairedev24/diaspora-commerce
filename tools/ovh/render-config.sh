@@ -25,6 +25,12 @@ kv() { printf '%s=%q\n' "$1" "${2-}"; }
   kv ADMIN_EMAIL "${ADMIN_EMAIL:-}"
   kv ADMIN_PASSWORD "${ADMIN_PASSWORD:-}"
   kv ADMIN_PHONE "${ADMIN_PHONE:-}"
+  kv BACKUP_PASSPHRASE "${BACKUP_PASSPHRASE:-}"
+  kv BACKUP_BUCKET "${BACKUP_BUCKET:-}"
+  kv BACKUP_S3_ENDPOINT "${BACKUP_S3_ENDPOINT:-}"
+  kv BACKUP_S3_REGION "${BACKUP_S3_REGION:-}"
+  kv BACKUP_S3_ACCESS_KEY "${BACKUP_S3_ACCESS_KEY:-}"
+  kv BACKUP_S3_SECRET_KEY "${BACKUP_S3_SECRET_KEY:-}"
 } > "$out/config.env"
 
 : > "$out/secrets.local.env"

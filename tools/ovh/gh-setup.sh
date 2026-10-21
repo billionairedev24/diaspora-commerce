@@ -39,6 +39,7 @@ EXTERNAL_PG_SSLMODE|var|ext|require|managed Postgres sslmode
 ADMIN_EMAIL|var|req||email of the first staff admin (identity BOOTSTRAP_ADMIN_EMAIL)
 ADMIN_PHONE|var|req|+15555550100|phone of the first staff admin
 ADMIN_PASSWORD|secret|gen||password of the first staff admin (generated and shown once if you leave it empty)
+BACKUP_PASSPHRASE|secret|gen2||passphrase that encrypts the backups (generated and shown once: without it a backup cannot be restored)
 REGISTRY_PULL_USERNAME|var|opt||GitHub login that owns the pull token (empty = the person who runs the workflow)
 REGISTRY_PULL_TOKEN|secret|opt||classic GitHub token with read:packages only: the server pulls the images from ghcr.io with it (empty = the run token, which stops working after the run: pods that restart later cannot pull)
 CLOUDFLARE_API_TOKEN|secret|opt||Cloudflare API token with Zone: DNS edit: the pipeline then creates the A records api./auth./mcp. itself (empty = you create them)
@@ -136,7 +137,7 @@ pid=$(env_get OVH_SERVICE_NAME)
 db_mode=cluster
 [ -z "$(env_get DB_MODE)" ] || db_mode=$(env_get DB_MODE)
 if [ -z "$(env_get DB_MODE)" ] && is_set DB_MODE; then db_mode=$(gh variable get DB_MODE --env "$T" --repo "$REPO" 2>/dev/null || echo cluster); fi
-generated_admin=''
+generated_admin=''; generated_backup=''
 while IFS='|' read -r name kind req default help <&3; do
   case "$req" in
     (ext) [ "$db_mode" = external ] || continue ;;
@@ -144,10 +145,11 @@ while IFS='|' read -r name kind req default help <&3; do
   v=$(env_get "$name")
   if [ -z "$v" ]; then
     case "$req" in
-      (gen)
+      (gen | gen2)
         is_set "$name" && continue
         need openssl
-        v=$(openssl rand -hex 10); generated_admin=$v
+        v=$(openssl rand -hex 16)
+        if [ "$req" = gen ]; then generated_admin=$v; else generated_backup=$v; fi
         put "$kind" "$name" "$v"; continue ;;
       (opt) if is_set "$name" || [ "${ASK_OPTIONAL:-1}" = 0 ]; then continue; fi ;;
       (req|ext) if is_set "$name"; then echo "   keep $name"; [ "$name" != DB_MODE ] || db_mode=$(gh variable get DB_MODE --env "$T" --repo "$REPO" 2>/dev/null || echo cluster); continue; fi ;;
@@ -172,6 +174,7 @@ done 3<<EOF
 $CATALOGUE
 EOF
 [ -z "$generated_admin" ] || echo "   the staff admin password is $generated_admin (shown once: keep it; sign in as the ADMIN_EMAIL above)"
+[ -z "$generated_backup" ] || echo "   the backup passphrase is $generated_backup (shown once: keep it somewhere safe; backups cannot be restored without it)"
 
 # ---- 4a. the Terraform state's S3 user and key, through the API (no console) ---------------------------------------------
 echo "== Terraform state user ($OVH_STATE_USER)"

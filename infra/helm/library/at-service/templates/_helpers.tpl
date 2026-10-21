@@ -70,8 +70,11 @@ azure.workload.identity/client-id: {{ required "workloadIdentity.azure.clientId 
 - name: APP_ENV
   value: {{ .Values.env | quote }}
 {{- if eq .Values.service.runtime "java" }}
+{{- /* A service's extraEnv.SPRING_PROFILES_ACTIVE (e.g. "uat,temporal-cloud") replaces the environment profile. */}}
+{{- if not (hasKey (.Values.extraEnv | default dict) "SPRING_PROFILES_ACTIVE") }}
 - name: SPRING_PROFILES_ACTIVE
   value: {{ .Values.env | quote }}
+{{- end }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT
   value: {{ printf "http://%s" .Values.telemetry.otlpEndpoint | quote }}
 {{- else }}

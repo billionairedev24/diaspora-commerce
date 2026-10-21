@@ -113,7 +113,7 @@ billing**), `destroy`.
 ### 6. DNS and certificates
 
 Three A records, **DNS only** (grey cloud at Cloudflare, so Let's Encrypt's HTTP-01 check reaches port 80), all pointing at the
-server's IPv4 from the summary: `api.<domain>`, `auth.<domain>`, `mcp.<domain>`. The pipeline makes them if you gave it a Cloudflare
+server's IPv4 from the summary: `api.<domain>`, `auth.<domain>`, `mcp.<domain>`, `grafana.<domain>`. The pipeline makes them if you gave it a Cloudflare
 token and zone. Remove any `CAA` record that does not allow `letsencrypt.org`. cert-manager retries by itself; once DNS resolves the
 certificates become Ready in a few minutes (`status` action shows them). Then:
 
@@ -157,11 +157,22 @@ the only thing that bills.
 | `ImagePullBackOff` | private packages and no `REGISTRY_PULL_TOKEN` (the run token expired); set the token and run `services` |
 | A service is `CrashLoopBackOff` | `kubectl -n afrotransact-dev logs deploy/<service>`: usually a missing third-party key (gateway-bff needs `STRIPE_PUBLISHABLE_KEY`) or a dependency not ready yet |
 | Certificate stays `False` | DNS not pointing at the server yet, grey cloud off, or a `CAA` record; `kubectl describe certificate -n afrotransact-dev` |
-| Orders cannot start a workflow | Temporal TLS: orders reads `TEMPORAL_TLS_CERT/KEY` (empty here) while this Temporal runs without mTLS |
-| Authorization errors | OpenFGA store id / model are not wired into the services in this kit; see the known gaps |
+| Orders cannot start a workflow | orders must use the in-cluster Temporal (`infra/ovh-vps/overrides/orders.yaml`, no mTLS); check `kubectl -n afrotransact-dev logs deploy/orders` for the target it connects to |
+| Authorization errors | `kubectl -n afrotransact-dev logs deploy/authz-sync` and the openfga pod; the store is created on first start |
+
+## Monitoring and backups
+
+- **Grafana** at `https://grafana.<domain>` (user `admin`, password in `/var/lib/afrotransact/` on the server; metrics from
+  kube-prometheus-stack, logs from Loki via Alloy). Run `observability` to (re)install it.
+- **Backups**: `backup` installs a nightly 03:15 job: every database (`pg_dump -Fc`), and the generated secrets, encrypted with
+  `BACKUP_PASSPHRASE` and sent to the `*-backups` bucket on OVH Object Storage; objects expire after 30 days (server-side) and
+  14 days (job). `sudo bash infra/ovh-vps/backup.sh list|run|restore <db> <object>`. Keep `BACKUP_PASSPHRASE` somewhere
+  outside this server: without it the backups cannot be read. **Do a restore drill into a scratch database before relying on them.**
+- Chart versions of Traefik, cert-manager and the observability stack are recorded on first install in
+  `/var/lib/afrotransact/chart-versions.env` and reused afterwards.
 
 ## Known gaps
 
-OpenFGA store/model wiring, Temporal TLS for orders, no metrics/logs/traces (telemetry off), no automatic backups of Valkey, Kafka
-or an in-cluster Postgres, Traefik and cert-manager chart versions not pinned, search index empty at start. A fuller list is in
-`infra/ovh-vps/README.md`.
+Valkey, Kafka and Temporal data are not backed up (Postgres and the secrets are); one server is a single point of failure; the
+search index starts empty (run the indexer backfill); nothing here has been run against a real OVHcloud account yet, so expect
+fixes on the first run. A fuller list is in `infra/ovh-vps/README.md`.
