@@ -42,6 +42,8 @@ const (
 	ToolSalesSummary  = "sales_summary"
 	ToolAccountHealth = "account_health"
 	ToolPlanBilling   = "plan_billing"
+	ToolMyReturns     = "my_returns"
+	ToolMyDisputes    = "my_disputes"
 	ToolMyCoupons     = "my_coupons"
 	ToolProposeStock  = "propose_set_stock"
 	ToolProposeNext   = "propose_next_step"
@@ -51,9 +53,9 @@ const (
 // AssistantMaxInput is the longest message accepted.
 const AssistantMaxInput = assistantMaxInput
 
-// Payouts and account health are the seller's own money and what Stripe needs from them: every level can ask when they get
+// Returns and disputes have deadlines, so every level can ask about them. Payouts and account health are the seller's own money and what Stripe needs from them: every level can ask when they get
 // paid and why a payout is held, so that never needs a support chat.
-var essentialsTools = []string{ToolMyOrders, ToolOrderDetail, ToolMyListings, ToolStockLevels, ToolPayouts, ToolAccountHealth}
+var essentialsTools = []string{ToolMyOrders, ToolOrderDetail, ToolMyListings, ToolStockLevels, ToolPayouts, ToolAccountHealth, ToolMyReturns, ToolMyDisputes}
 
 // AssistantLimitsOf is what each tier allows. Essentials looks at orders, listings, stock, payouts and account health; Growth adds fees, plan billing, coupons
 // and can prepare changes; Pro adds sales summaries and the most messages.

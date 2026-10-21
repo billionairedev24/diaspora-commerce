@@ -409,6 +409,16 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 				"label": "Charging starts after $1,000 in sales — you're at $420"},
 			"entitlements": entitlementsOfPlan(u.seller.plan)}
 	}
+	mux.HandleFunc("GET /v1/returns", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"id": "rma-1", "number": "RMA-5E11E5", "orderNumber": "AT-2026-000123", "status": "RECEIVED",
+			"method": "DROP_OFF", "refundState": "PENDING", "estimateMinor": 2599, "createdAt": "2026-10-20T09:00:00Z",
+			"lines": []map[string]any{{"title": "Garri 2kg", "quantity": 2, "reason": "DAMAGED"}}}}})
+	})
+	mux.HandleFunc("GET /v1/claims/seller/{orgId}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"reference": "CLM-1001", "type": "NOT_AS_DESCRIBED", "status": "AWAITING_SELLER",
+			"orderNumber": "AT-2026-000123", "amountMinor": 4599, "description": "The jollof was stale", "customerId": "cust-secret", "escalated": false,
+			"sla": map[string]any{"dueAt": "2026-10-28T10:00:00Z", "state": "AT_RISK"}, "openedAt": "2026-10-25T09:00:00Z"}}, "total": 1})
+	})
 	mux.HandleFunc("GET /v1/orgs/{id}/billing", func(w http.ResponseWriter, _ *http.Request) {
 		u.mu.Lock()
 		defer u.mu.Unlock()

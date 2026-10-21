@@ -84,6 +84,18 @@ var assistantTools = []assistantToolDef{
 		run:    toolAccountHealth,
 	},
 	{
+		name: domain.ToolMyReturns, description: "Returns customers started on the seller's orders: return number, order, items and reasons, where each stands (requested, label issued, in transit, received, refunded, rejected) and the refund. Optionally one status. Use it for 'any returns waiting' or 'did the return arrive'.",
+		schema: `{"type":"object","properties":{"status":{"type":"string","enum":["REQUESTED","APPROVED","LABEL_ISSUED","IN_TRANSIT","RECEIVED","INSPECTED","REFUNDED","REJECTED","CANCELLED"]}},"additionalProperties":false}`,
+		label:  func(a map[string]any) string { return withStatus("Checking your returns", argStr(a, "status")) },
+		run:    toolMyReturns,
+	},
+	{
+		name: domain.ToolMyDisputes, description: "Disputes and A-to-z claims against the seller: reference, type, order, amount, status, the deadline to respond and whether it is at risk, and the outcome. Optionally one status. Use it for 'do I have disputes' or 'when must I respond'.",
+		schema: `{"type":"object","properties":{"status":{"type":"string","enum":["AWAITING_SELLER","UNDER_REVIEW","ESCALATED","RESOLVED_REFUND","RESOLVED_DENIED","WITHDRAWN"]}},"additionalProperties":false}`,
+		label:  func(a map[string]any) string { return withStatus("Checking your disputes", argStr(a, "status")) },
+		run:    toolMyDisputes,
+	},
+	{
 		name: domain.ToolPlanBilling, description: "The seller's plan subscription and invoices: plan, price, next charge and date, trial or free months, platform credit, any condition on charging, how the plan is paid (from sales first or card), unpaid or declined invoices with the reason, and rewards earned or in progress. Use it for 'why was I charged', 'what do I owe' or 'when is my next bill'.",
 		schema: noArgsSchema,
 		label:  func(map[string]any) string { return "Checking your plan and invoices" },
@@ -426,6 +438,78 @@ func toolSalesSummary(ctx context.Context, r *assistantRun, a map[string]any) (a
 		todo = append(todo, t.Label)
 	}
 	return map[string]any{"days": d.RangeDays, "headline": kpis, "needsAttention": todo}, nil
+}
+
+func toolMyReturns(ctx context.Context, r *assistantRun, a map[string]any) (any, error) {
+	if r.s.a.Cases == nil {
+		return map[string]any{"note": "Returns are not available right now."}, nil
+	}
+	list, err := r.s.a.Cases.Returns(ctx, r.c.BearerToken, strings.ToUpper(argStr(a, "status")))
+	if err != nil {
+		return nil, mapErr("tax-returns", err)
+	}
+	rows := make([]map[string]any, 0, maxRows)
+	for i, x := range list {
+		if i >= maxRows {
+			break
+		}
+		lines := []map[string]any{}
+		for _, l := range x.Lines {
+			lines = append(lines, map[string]any{"item": l.Title, "quantity": l.Quantity, "reason": l.Reason})
+		}
+		rows = append(rows, map[string]any{"return": x.Number, "order": x.OrderNumber, "status": strings.ToLower(x.Status), "method": x.Method,
+			"items": lines, "refund": moneyLabel(x.EstimateMinor), "refundState": x.RefundState, "started": datePart(x.CreatedAt)})
+	}
+	out := map[string]any{"returns": rows, "showing": len(rows), "of": len(list), "whereToFix": "Seller Center > Orders"}
+	if len(list) == 0 {
+		out["note"] = "No returns found."
+	}
+	return out, nil
+}
+
+func toolMyDisputes(ctx context.Context, r *assistantRun, a map[string]any) (any, error) {
+	if r.s.a.Cases == nil {
+		return map[string]any{"note": "Disputes are not available right now."}, nil
+	}
+	list, err := r.s.a.Cases.Claims(ctx, r.c.BearerToken, r.sc.org.ID, strings.ToUpper(argStr(a, "status")))
+	if err != nil {
+		return nil, mapErr("trust-ops", err)
+	}
+	rows := make([]map[string]any, 0, maxRows)
+	for i, x := range list {
+		if i >= maxRows {
+			break
+		}
+		row := map[string]any{"reference": x.Reference, "type": x.Type, "order": x.OrderNumber, "amount": moneyLabel(x.AmountMinor),
+			"status": x.Status, "escalated": x.Escalated, "opened": datePart(x.OpenedAt), "youResponded": x.SellerResponse != ""}
+		if x.SLA != nil && x.Status == "AWAITING_SELLER" {
+			row["respondBy"] = datePart(x.SLA.DueAt)
+			row["deadlineState"] = x.SLA.State
+		}
+		if x.Description != "" {
+			row["customerSays"] = x.Description
+		}
+		if x.Outcome != "" {
+			row["outcome"] = x.Outcome
+			if x.RefundMinor > 0 {
+				row["refunded"] = moneyLabel(x.RefundMinor)
+			}
+		}
+		rows = append(rows, row)
+	}
+	out := map[string]any{"disputes": rows, "showing": len(rows), "of": len(list)}
+	if len(list) == 0 {
+		out["note"] = "No disputes found."
+	}
+	return out, nil
+}
+
+// datePart is the date of an RFC 3339 timestamp ("" when absent).
+func datePart(ts string) string {
+	if len(ts) >= 10 {
+		return ts[:10]
+	}
+	return ts
 }
 
 func dateLabel(t *time.Time) string {

@@ -99,6 +99,29 @@ func TestSellerAssistantBillingAndCouponsAreGrowthTools(t *testing.T) {
 	}
 }
 
+func TestSellerAssistantReturnsAndDisputesOnEveryTier(t *testing.T) {
+	bff, b := sellerSetup(t, testkit.Options{})
+	bff.Upstreams.SetSellerPlan("seller_essentials")
+	last := func() string {
+		c := lastModelCall(bff)
+		return fmt.Sprint(c.Messages[len(c.Messages)-1]["content"])
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "Do I have any disputes?"}), 200)
+	got := last()
+	for _, want := range []string{"CLM-1001", "NOT_AS_DESCRIBED", "AT-2026-000123", "$45.99", "respondBy", "2026-10-28", "AT_RISK", "The jollof was stale", "<untrusted>"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("my_disputes is missing %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, "cust-secret") {
+		t.Fatalf("the buyer's id must not reach the model: %s", got)
+	}
+	mustStatus(t, b.do("POST", "/v1/seller/assistant/chat", map[string]any{"message": "Any returns waiting?"}), 200)
+	if got := last(); !strings.Contains(got, "RMA-5E11E5") || !strings.Contains(got, "Garri 2kg") || !strings.Contains(got, "$25.99") {
+		t.Fatalf("my_returns = %s", got)
+	}
+}
+
 func TestSellerAssistantEssentialsHasFewerToolsAndADailyLimit(t *testing.T) {
 	bff, b := sellerSetup(t, testkit.Options{})
 	bff.Upstreams.SetSellerPlan("seller_essentials")

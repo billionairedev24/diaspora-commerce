@@ -27,7 +27,7 @@ for one order; Lola never states a refund date they do not return. Seller-writte
 
 | Tier | Tools |
 |---|---|
-| Essentials | `my_orders`, `order_detail`, `my_listings`, `stock_levels`, `payouts`, `account_health` |
+| Essentials | `my_orders`, `order_detail`, `my_listings`, `stock_levels`, `payouts`, `account_health`, **`my_returns`** (tax-returns, the organisation's returns and refunds), **`my_disputes`** (trust-ops claims against the seller with the respond-by deadline; buyer ids are never shown) |
 | Growth | Essentials plus `fees_and_plan`, **`plan_billing`** (plan, next charge, credit, charging condition, unpaid or declined invoices, rewards), **`my_coupons`**, and prepared changes (`propose_set_stock`, `propose_next_step`) |
 | Pro | Growth plus `sales_summary` |
 

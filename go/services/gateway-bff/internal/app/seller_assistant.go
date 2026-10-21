@@ -32,6 +32,8 @@ type AssistantDeps struct {
 	Catalog SellerCatalogService
 	Fees    SellerFeesService
 	Money   SellerMoneyService
+	// Cases reads the organisation's returns and disputes; nil answers that they are not available.
+	Cases port.SellerCasesClient
 	// Coupons lists the seller-funded coupons.
 	Coupons SellerCouponsService
 	// Shell gives the account health (what Stripe needs, why payouts are paused).
