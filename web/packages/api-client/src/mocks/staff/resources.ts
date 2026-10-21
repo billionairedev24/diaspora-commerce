@@ -636,7 +636,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'tax-codes': {
     title: 'Tax codes',
-    columns: [col('code', 'Code', 'mono', 18), col('label', 'What it is', 'strong', 30), col('category', 'Rate column', 'text', 16), col('providerCode', 'Provider code', 'mono', 22), col('state', 'State', 'status', 12)],
+    columns: [col('code', 'Code', 'mono', 18), col('label', 'What it is', 'strong', 30), col('category', 'Rate column', 'text', 16), col('providerCode', 'Provider code', 'mono', 18), col('taxableLabel', 'Taxable', 'text', 12), col('exemptStates', 'Exempt in', 'mono', 14), col('state', 'State', 'status', 10)],
     statusKey: 'state',
     facets: facets('ACTIVE', 'INACTIVE'),
     exportable: true,

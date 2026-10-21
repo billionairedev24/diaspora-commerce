@@ -29,6 +29,11 @@ The tax a customer pays depends on *what the item is* (a tax code) and *where it
 
 **Seller statement:** each month, tax collected on the seller's behalf per jurisdiction (the endpoint exists; a Seller Center screen is needed).
 
+**Known non-taxable items.** A tax code can be marked *never taxable* (gift cards, donations) or *exempt in named states*
+(`exempt_states`). Staff set these with the CPA. Such lines are charged no tax and are never sent to the tax provider, so we neither
+over-charge customers nor pay per-call fees for them; an order of only such lines makes no provider call. Unknown is not exempt:
+the default stays general taxable.
+
 ## Seller responsibility (to be added to the seller terms)
 
 Sellers must make sure the information they give about their products is accurate and complete, including category, product type and every tax-relevant answer (such as whether an item is hot or prepared, a soft drink, a supplement or an over-the-counter product). AfroTransact derives the tax treatment from that information. Sellers are responsible for it being correct, must correct it promptly when it is not, and agree that AfroTransact may reclassify listings, recalculate tax and recover from the seller any tax, interest or penalties caused by inaccurate listing information, as the seller terms allow. This wording needs legal review.

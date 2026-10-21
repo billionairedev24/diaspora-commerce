@@ -391,8 +391,9 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/refunds":
 		writeJ(w, 201, map[string]any{"id": "ref-1", "status": "PENDING"})
 	case p == "/v1/tax/codes":
-		writeJ(w, 200, []any{map[string]any{"code": "GENERAL_GOODS", "label": "General taxable goods", "category": "GENERAL", "providerCode": "txcd_99999999", "active": true},
-			map[string]any{"code": "CLOTHING", "label": "Clothing and accessories", "category": "GENERAL", "providerCode": nil, "active": true}})
+		writeJ(w, 200, []any{map[string]any{"code": "GENERAL_GOODS", "label": "General taxable goods", "category": "GENERAL", "providerCode": "txcd_99999999", "active": true, "taxable": true, "exemptStates": ""},
+			map[string]any{"code": "NON_TAXABLE", "label": "Not taxable", "category": "GENERAL", "providerCode": nil, "active": true, "taxable": false, "exemptStates": ""},
+			map[string]any{"code": "FRESH_PRODUCE", "label": "Fresh produce", "category": "GROCERY", "providerCode": nil, "active": true, "taxable": true, "exemptStates": "NJ,TX"}})
 	case p == "/v1/tax/classification-rules":
 		writeJ(w, 200, []any{map[string]any{"id": 1, "productType": "dress", "attrKey": nil, "attrValue": nil, "taxCode": "CLOTHING", "note": "Clothing"},
 			map[string]any{"id": 2, "productType": "grocery", "attrKey": "tax_class", "attrValue": "Hot or ready-to-eat", "taxCode": "PREPARED_FOOD", "note": "Prepared food"}})

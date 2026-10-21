@@ -4,6 +4,7 @@ import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 import com.afrotransact.taxreturns.application.TaxClassificationService;
 import com.afrotransact.taxreturns.domain.tax.ClassificationRule;
@@ -41,15 +42,20 @@ class TaxClassificationController {
 
     @Schema(name = "TaxCode")
     record CodeDto(@NotBlank @Size(max = 40) String code, @NotBlank @Size(max = 120) String label,
-                   @NotBlank String category, @Size(max = 60) String providerCode, Boolean active) {
+                   @NotBlank String category, @Size(max = 60) String providerCode, Boolean active,
+                   @Schema(description = "false = never taxed: no tax and no provider call") Boolean taxable,
+                   @Schema(description = "Comma-separated states where the code is known exempt, e.g. TX,NJ")
+                   @Size(max = 200) String exemptStates) {
 
         static CodeDto of(TaxCode c) {
-            return new CodeDto(c.code(), c.label(), c.category().name(), c.providerCode(), c.active());
+            return new CodeDto(c.code(), c.label(), c.category().name(), c.providerCode(), c.active(), c.taxable(),
+                    String.join(",", new TreeSet<>(c.exemptStates())));
         }
 
         TaxCode toDomain() {
             return new TaxCode(code, label, TaxCategory.parse(category), providerCode == null || providerCode.isBlank()
-                    ? null : providerCode.trim(), active == null || active);
+                    ? null : providerCode.trim(), active == null || active, taxable == null || taxable,
+                    TaxCode.parseStates(exemptStates));
         }
     }
 
@@ -114,7 +120,7 @@ class TaxClassificationController {
     @PutMapping("/v1/tax/codes/{code}")
     CodeDto saveCode(@PathVariable String code, @Valid @RequestBody CodeDto body) {
         return CodeDto.of(classification.saveCode(new CodeDto(code, body.label(), body.category(),
-                body.providerCode(), body.active()).toDomain()));
+                body.providerCode(), body.active(), body.taxable(), body.exemptStates()).toDomain()));
     }
 
     @Operation(summary = "Classification rules: product type (and a seller's answer) to tax code (tax:read)")

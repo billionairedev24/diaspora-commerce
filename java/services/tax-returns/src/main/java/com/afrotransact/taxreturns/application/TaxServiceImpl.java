@@ -1,23 +1,28 @@
 package com.afrotransact.taxreturns.application;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
+import com.afrotransact.taxreturns.domain.tax.CollectedBy;
 import com.afrotransact.taxreturns.domain.tax.LocalTaxRate;
 import com.afrotransact.taxreturns.domain.tax.StateTaxRule;
+import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxCategory;
 import com.afrotransact.taxreturns.domain.tax.TaxClassification;
 import com.afrotransact.taxreturns.domain.tax.TaxClassifier;
 import com.afrotransact.taxreturns.domain.tax.TaxLineInput;
+import com.afrotransact.taxreturns.domain.tax.TaxLineResult;
 import com.afrotransact.taxreturns.domain.tax.TaxQuote;
 import com.afrotransact.taxreturns.port.ProductFacts;
 import com.afrotransact.taxreturns.port.TaxCalculator;
 import com.afrotransact.taxreturns.port.TaxRateRepository;
-import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,6 +61,7 @@ class TaxServiceImpl implements TaxService {
             errors.put("lines", "Between 1 and " + MAX_LINES + " lines");
         }
         List<TaxLineInput> inputs = new ArrayList<>();
+        List<Boolean> exempt = new ArrayList<>();
         Map<String, ProductFacts.Facts> facts = needsFacts(c) ? productFacts.lookup(atinsOf(c)) : Map.of();
         TaxClassifier rules = classifier.current();
         for (int i = 0; i < c.lines().size(); i++) {
@@ -64,6 +70,7 @@ class TaxServiceImpl implements TaxService {
             TaxCategory category;
             String taxCode = null;
             String providerCode = null;
+            boolean known = false;
             if (explicit) {
                 category = TaxCategory.parse(l.taxCategory());
             } else {
@@ -74,11 +81,13 @@ class TaxServiceImpl implements TaxService {
                 category = classification.category();
                 taxCode = classification.taxCode();
                 providerCode = classification.providerCode();
+                known = c.shipTo() != null && classification.exemptIn(c.shipTo().state());
             }
             try {
                 inputs.add(new TaxLineInput(l.lineId() == null ? String.valueOf(i + 1) : l.lineId(), l.atin(),
                         l.sellerOrgId(), category, l.quantity(), l.unitPriceMinor(), l.discountMinor(),
                         l.shippingMinor(), taxCode, providerCode));
+                exempt.add(known);
             } catch (IllegalArgumentException ex) {
                 errors.put("lines[" + i + "]", ex.getMessage());
             }
@@ -86,7 +95,38 @@ class TaxServiceImpl implements TaxService {
         if (!errors.isEmpty()) {
             throw new ReturnRuleViolation("tax-returns.invalid-quote", "The tax quote request is invalid", errors);
         }
-        return calculator.quote(c.shipTo(), c.currency().toUpperCase(Locale.ROOT), inputs);
+        return quoteSkippingExempt(c.shipTo(), c.currency().toUpperCase(Locale.ROOT), inputs, exempt);
+    }
+
+    /**
+     * Lines known to be non-taxable (or exempt in the ship-to state) are priced at zero here and never reach the
+     * calculator, so a provider is not billed for them and the customer is not charged; an order of only such lines
+     * makes no provider call at all.
+     */
+    private TaxQuote quoteSkippingExempt(TaxAddress shipTo, String currency, List<TaxLineInput> inputs,
+                                         List<Boolean> exempt) {
+        List<TaxLineInput> taxable = new ArrayList<>();
+        for (int i = 0; i < inputs.size(); i++) {
+            if (!exempt.get(i)) {
+                taxable.add(inputs.get(i));
+            }
+        }
+        if (taxable.size() == inputs.size()) {
+            return calculator.quote(shipTo, currency, inputs);
+        }
+        TaxQuote quoted = taxable.isEmpty() ? null : calculator.quote(shipTo, currency, taxable);
+        Iterator<TaxLineResult> results = quoted == null ? null : quoted.lines().iterator();
+        List<TaxLineResult> lines = new ArrayList<>(inputs.size());
+        for (int i = 0; i < inputs.size(); i++) {
+            TaxLineInput in = inputs.get(i);
+            lines.add(exempt.get(i)
+                    ? new TaxLineResult(in.lineId(), in.sellerOrgId(), in.category(), 0L, BigDecimal.ZERO, 0L,
+                            shipTo.stateJurisdiction(), null, CollectedBy.NOT_COLLECTED, 0L, in.taxCode())
+                    : results.next());
+        }
+        return quoted == null
+                ? new TaxQuote(currency, shipTo.stateJurisdiction(), CollectedBy.NOT_COLLECTED, lines, "EXEMPT")
+                : new TaxQuote(currency, quoted.jurisdiction(), quoted.collectedBy(), lines, quoted.provider());
     }
 
     private static boolean needsFacts(TaxQuoteCommand c) {

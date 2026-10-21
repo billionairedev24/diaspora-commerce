@@ -446,10 +446,11 @@ function seed(now: Date): MockStaffDb {
   ];
 
   const taxCodes = [
-    rec('GENERAL_GOODS', { code: 'GENERAL_GOODS', label: 'General taxable goods', category: 'GENERAL', providerCode: 'txcd_99999999', state: 'ACTIVE' }),
-    rec('CLOTHING', { code: 'CLOTHING', label: 'Clothing and accessories', category: 'GENERAL', providerCode: null, state: 'ACTIVE' }),
-    rec('PACKAGED_FOOD', { code: 'PACKAGED_FOOD', label: 'Packaged food (shelf-stable)', category: 'GROCERY', providerCode: null, state: 'ACTIVE' }),
-    rec('PREPARED_FOOD', { code: 'PREPARED_FOOD', label: 'Hot or ready-to-eat food', category: 'PREPARED_FOOD', providerCode: null, state: 'ACTIVE' })
+    rec('GENERAL_GOODS', { code: 'GENERAL_GOODS', label: 'General taxable goods', category: 'GENERAL', providerCode: 'txcd_99999999', taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' }),
+    rec('CLOTHING', { code: 'CLOTHING', label: 'Clothing and accessories', category: 'GENERAL', providerCode: null, taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' }),
+    rec('NON_TAXABLE', { code: 'NON_TAXABLE', label: 'Not taxable (gift cards, donations, exempt items)', category: 'GENERAL', providerCode: null, taxableLabel: 'Never', exemptStates: '', state: 'ACTIVE' }),
+    rec('PACKAGED_FOOD', { code: 'PACKAGED_FOOD', label: 'Packaged food (shelf-stable)', category: 'GROCERY', providerCode: null, taxableLabel: 'Yes', exemptStates: 'NJ,TX', state: 'ACTIVE' }),
+    rec('PREPARED_FOOD', { code: 'PREPARED_FOOD', label: 'Hot or ready-to-eat food', category: 'PREPARED_FOOD', providerCode: null, taxableLabel: 'Yes', exemptStates: '', state: 'ACTIVE' })
   ];
   const taxRules = [
     rec('dress||', { rowId: 'dress||', productType: 'dress', attrKey: null, attrValue: null, taxCode: 'CLOTHING', kind: 'TYPE', note: 'Clothing' }),

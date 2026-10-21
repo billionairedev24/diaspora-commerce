@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.TreeSet;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -35,20 +36,23 @@ class JdbcTaxClassificationRepository implements TaxClassificationRepository {
         return jdbc.sql("select * from tax_code order by code")
                 .query((rs, n) -> new TaxCode(rs.getString("code"), rs.getString("label"),
                         TaxCategory.parse(rs.getString("category")), rs.getString("provider_code"),
-                        rs.getBoolean("active")))
+                        rs.getBoolean("active"), rs.getBoolean("taxable"),
+                        TaxCode.parseStates(rs.getString("exempt_states"))))
                 .list();
     }
 
     @Override
     public TaxCode upsertCode(TaxCode c) {
         jdbc.sql("""
-                insert into tax_code (code, label, category, provider_code, active, updated_at)
-                values (:code, :label, :category, :provider, :active, now())
+                insert into tax_code (code, label, category, provider_code, active, taxable, exempt_states, updated_at)
+                values (:code, :label, :category, :provider, :active, :taxable, :exempt, now())
                 on conflict (code) do update set label = excluded.label, category = excluded.category,
-                    provider_code = excluded.provider_code, active = excluded.active, updated_at = now()
+                    provider_code = excluded.provider_code, active = excluded.active, taxable = excluded.taxable,
+                    exempt_states = excluded.exempt_states, updated_at = now()
                 """)
                 .param("code", c.code()).param("label", c.label()).param("category", c.category().name())
-                .param("provider", c.providerCode()).param("active", c.active()).update();
+                .param("provider", c.providerCode()).param("active", c.active()).param("taxable", c.taxable())
+                .param("exempt", String.join(",", new TreeSet<>(c.exemptStates()))).update();
         return c;
     }
 

@@ -35,13 +35,15 @@ public final class TaxClassifier {
             for (ClassificationRule r : rules) {
                 if (r.matches(type, attrs)) {
                     TaxCode c = codes.get(r.taxCode());
-                    return new TaxClassification(c.code(), c.category(), c.providerCode(),
-                            r.attrKey() == null ? TaxClassification.Basis.TYPE : TaxClassification.Basis.ANSWER);
+                    return of(c, r.attrKey() == null ? TaxClassification.Basis.TYPE : TaxClassification.Basis.ANSWER);
                 }
             }
         }
-        return new TaxClassification(fallback.code(), fallback.category(), fallback.providerCode(),
-                TaxClassification.Basis.DEFAULT);
+        return of(fallback, TaxClassification.Basis.DEFAULT);
+    }
+
+    private static TaxClassification of(TaxCode c, TaxClassification.Basis basis) {
+        return new TaxClassification(c.code(), c.category(), c.providerCode(), basis, c.taxable(), c.exemptStates());
     }
 
     public List<TaxCode> codes() {

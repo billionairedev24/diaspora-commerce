@@ -255,3 +255,11 @@ Design: [`docs/engineering/tax-classification-design.md`](../../../docs/engineer
   (`provider` = `RULES-FALLBACK`) when Stripe is unreachable, the ship-to is not US, or a line's tax code has no provider code yet.
   It only calculates: creating Stripe tax transactions for captured payments and refunds, and registrations, are not built.
   The provider codes in `tax_code` are empty except general goods: copy them from Stripe's list, with the CPA, before switching.
+
+### Items known not to be taxable
+
+`tax_code.taxable = false` (seeded: `NON_TAXABLE`, for gift cards, donations and other items staff mark exempt everywhere) and
+`tax_code.exempt_states` (e.g. `TX,NJ`, for an item known exempt in those states) are staff decisions made with the CPA. A quote
+prices such lines at zero (`collectedBy = NOT_COLLECTED`) **without sending them to the calculator**: the customer is not charged and a
+paid provider is not called for them. An order made only of such lines makes no provider call at all (`provider = EXEMPT`). The built-in
+rate table's zero rates are not used for this, because they are not a statement that an item is exempt.

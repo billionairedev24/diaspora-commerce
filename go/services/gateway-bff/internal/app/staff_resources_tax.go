@@ -34,6 +34,10 @@ func taxCodesResource() *staffResource {
 			if !boolean(r, "active") {
 				r["state"] = "INACTIVE"
 			}
+			r["taxableLabel"] = "Yes"
+			if !boolean(r, "taxable") {
+				r["taxableLabel"] = "Never"
+			}
 		}
 		return filterState(rows, q.Status), nil
 	}
@@ -41,7 +45,8 @@ func taxCodesResource() *staffResource {
 	return &staffResource{
 		key: "tax-codes", module: "fees", title: "Tax codes", statusKey: "state", exportable: true,
 		columns: []domain.Column{col("code", "Code", "mono", 18), col("label", "What it is", "strong", 30), col("category", "Rate column", "text", 16),
-			col("providerCode", "Provider code", "mono", 22), col("state", "State", "status", 12)},
+			col("providerCode", "Provider code", "mono", 18), col("taxableLabel", "Taxable", "text", 12),
+			col("exemptStates", "Exempt in", "mono", 14), col("state", "State", "status", 10)},
 		facets: domain.StaffFacets("ACTIVE", "INACTIVE"),
 		idOf:   func(o jobj) string { return jstr(o, "code") },
 		list:   list, get: findIn(list, "code"),
@@ -50,17 +55,21 @@ func taxCodesResource() *staffResource {
 		edit: &staffEdit{permission: "tax:configure",
 			form: func(o jobj) domain.Form {
 				return domain.Form{Title: "Edit the tax code", SubmitLabel: "Save code",
-					Intro: "The provider code is the matching code in Stripe Tax's list (txcd_...). Without it a quote for this code is calculated by the built-in rules instead.",
+					Intro: "The provider code is the matching code in Stripe Tax's list (txcd_...). Without it a quote for this code is calculated by the built-in rules instead. Turn Taxable off, or list exempt states, only for items you know are not taxed there: they are charged no tax and never sent to the tax provider.",
 					Fields: []domain.FormField{
 						withValue(withMax(ff("label", "What it is", "text", true), 120), jstr(o, "label")),
 						withValue(withOptions(ff("category", "Rate column", "select", true), taxCategories), jstr(o, "category")),
 						withValue(withMax(ff("providerCode", "Provider code", "text", false), 60), jstr(o, "providerCode")),
+						withValue(ff("taxable", "Taxable", "toggle", false), boolean(o, "taxable")),
+						withValue(withPattern(ff("exemptStates", "Known exempt in these states", "text", false), `^([A-Za-z]{2}([, ]+[A-Za-z]{2})*)?$`,
+							"Two-letter codes, e.g. TX, NJ. No tax is charged there and the provider is not called."), jstr(o, "exemptStates")),
 						withValue(ff("active", "Active", "toggle", false), boolean(o, "active")),
 					}}
 			},
 			save: func(ctx context.Context, sc staffCtx, o jobj, v jobj, _ string) error {
 				return sc.call(ctx, sc.up.TaxReturns, port.StaffCall{Method: http.MethodPut, Path: "/v1/tax/codes/" + url.PathEscape(jstr(o, "code")),
-					Body: jobj{"label": vs(v, "label"), "category": vs(v, "category"), "providerCode": vs(v, "providerCode"), "active": vb(v, "active")}}, nil)
+					Body: jobj{"label": vs(v, "label"), "category": vs(v, "category"), "providerCode": vs(v, "providerCode"), "active": vb(v, "active"),
+						"taxable": vb(v, "taxable"), "exemptStates": vs(v, "exemptStates")}}, nil)
 			}},
 		create: &staffCreate{permission: "tax:configure",
 			form: func(context.Context, staffCtx) domain.Form {
@@ -68,12 +77,15 @@ func taxCodesResource() *staffResource {
 					withPattern(ff("code", "Code", "text", true), `^[A-Z0-9_]{2,40}$`, "Capital letters, digits and underscores, e.g. BABY_CLOTHING"),
 					withMax(ff("label", "What it is", "text", true), 120),
 					withValue(withOptions(ff("category", "Rate column", "select", true), taxCategories), "GENERAL"),
-					withMax(ff("providerCode", "Provider code", "text", false), 60)}}
+					withMax(ff("providerCode", "Provider code", "text", false), 60),
+					withValue(ff("taxable", "Taxable", "toggle", false), true),
+					withPattern(ff("exemptStates", "Known exempt in these states", "text", false), `^([A-Za-z]{2}([, ]+[A-Za-z]{2})*)?$`, "Two-letter codes, e.g. TX, NJ")}}
 			},
 			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {
 				code := strings.ToUpper(vs(v, "code"))
 				err := sc.call(ctx, sc.up.TaxReturns, port.StaffCall{Method: http.MethodPut, Path: "/v1/tax/codes/" + url.PathEscape(code),
-					Body: jobj{"label": vs(v, "label"), "category": vs(v, "category"), "providerCode": vs(v, "providerCode"), "active": true}}, nil)
+					Body: jobj{"label": vs(v, "label"), "category": vs(v, "category"), "providerCode": vs(v, "providerCode"), "active": true,
+						"taxable": vb(v, "taxable"), "exemptStates": vs(v, "exemptStates")}}, nil)
 				return code, err
 			}},
 	}
