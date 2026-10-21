@@ -77,6 +77,10 @@ azure.workload.identity/client-id: {{ required "workloadIdentity.azure.clientId 
 {{- else }}
 - name: OTEL_EXPORTER_OTLP_ENDPOINT_HOST
   value: {{ .Values.telemetry.otlpEndpoint | quote }}
+{{- if and (include "at-service.goMemLimit" .) (not (hasKey (.Values.extraEnv | default dict) "GOMEMLIMIT")) }}
+- name: GOMEMLIMIT
+  value: {{ include "at-service.goMemLimit" . | quote }}
+{{- end }}
 {{- end }}
 - name: PORT
   value: {{ .Values.service.port | quote }}
@@ -130,5 +134,19 @@ services fall back to their config/<env>.yaml / application-<env>.yml values.
 - name: {{ $k }}
   value: {{ get $vars $k | quote }}
 {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Go soft memory limit: 90% of the container's memory limit (Mi or Gi), so the garbage collector works harder before the
+kernel OOM-kills the pod. Empty when the limit is not a whole number of Mi/Gi (then GOMEMLIMIT is simply not set).
+*/}}
+{{- define "at-service.goMemLimit" -}}
+{{- $limits := (.Values.resources | default dict).limits | default dict -}}
+{{- $m := toString ($limits.memory | default "") -}}
+{{- if regexMatch "^[0-9]+(Mi|Gi)$" $m -}}
+{{- $n := int64 (regexFind "^[0-9]+" $m) -}}
+{{- if hasSuffix "Gi" $m }}{{ $n = mul $n 1024 }}{{ end -}}
+{{- printf "%dMiB" (div (mul $n 90) 100) -}}
 {{- end -}}
 {{- end -}}

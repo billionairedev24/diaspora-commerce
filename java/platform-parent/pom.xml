@@ -151,8 +151,13 @@
                         <container>
                             <user>1000:1000</user>
                             <jvmFlags>
-                                <jvmFlag>-XX:MaxRAMPercentage=75</jvmFlag>
-                                <jvmFlag>-XX:+UseZGC</jvmFlag>
+                                <jvmFlag>-XX:MaxRAMPercentage=70</jvmFlag>
+                                <jvmFlag>-XX:+UseSerialGC</jvmFlag>
+                                <jvmFlag>-XX:TieredStopAtLevel=1</jvmFlag>
+                                <jvmFlag>-Xss512k</jvmFlag>
+                                <jvmFlag>-XX:-UsePerfData</jvmFlag>
+                                <jvmFlag>-XX:ReservedCodeCacheSize=64m</jvmFlag>
+                                <jvmFlag>-XX:+ExitOnOutOfMemoryError</jvmFlag>
                             </jvmFlags>
                         </container>
                     </configuration>

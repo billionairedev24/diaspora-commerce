@@ -26,7 +26,7 @@ on:
       image-max-mb:
         description: Image size budget in MB (uncompressed linux/amd64); per-service overrides live in tools/ci/gen_workflows.py.
         type: string
-        default: "450"
+        default: "220"
     outputs:
       image:
         description: Image repository (ghcr.io/<owner>/<repo>/<service>).

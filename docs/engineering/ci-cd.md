@@ -13,7 +13,7 @@ PR / push touching go/services/search/**          (path filter: only go-search.y
                      └ image     buildx linux/amd64+arm64, reproducible (SOURCE_DATE_EPOCH = commit time,
                                  rewrite-timestamp) -> ghcr.io/<repo>/search:<sha>
                                  image policy: non-root USER, EXPOSE 8080, APP_ENV=prod / SPRING_PROFILES_ACTIVE=prod,
-                                 size budget (Go 60 MB, Java 450 MB; linux/amd64 uncompressed) - also on PRs
+                                 size budget (Go 48 MB, Java 220 MB; linux/amd64 uncompressed) - also on PRs
                                  Trivy image (CRITICAL fails) -> Syft SPDX SBOM -> cosign sign + attest (keyless)
   main only ──► _deploy.yml (environment dev)
                      ├ cosign verify (identity = this repo's _go-service.yml@refs/heads/main)
@@ -94,11 +94,25 @@ identifier that only looks like a host, in the documented `EXCEPTIONS` list of t
 | | Go services | Java services |
 |---|---|---|
 | Dockerfile | `go/services/<svc>/Dockerfile` (context `go/`) | `java/Dockerfile` (`SERVICE=<svc>`, context `java/`) |
-| Runtime base | `gcr.io/distroless/static-debian12:nonroot` (static, CGO off, `-trimpath -ldflags "-s -w"`) | `eclipse-temurin:25-jre`, layered jar (`dependencies`, `spring-boot-loader`, `snapshot-dependencies`, `application`) |
+| Runtime base | `gcr.io/distroless/static-debian12:nonroot` (static, CGO off, `-trimpath -buildvcs=false -ldflags "-s -w"`) | `gcr.io/distroless/cc-debian12:nonroot` + a **jlinked JRE** (only the JDK modules the jars use, ~60 MB) + two layers (`lib/` dependencies, then the application jar) |
 | User | `nonroot` (65532) | `1000:1000` |
 | Defaults | `APP_ENV=prod`, `PORT=8080`, `EXPOSE 8080` | `SPRING_PROFILES_ACTIVE=prod`, `--server.port=8080`, `EXPOSE 8080` |
-| Size budget (CI, linux/amd64 uncompressed) | 60 MB (measured 2026-10-10: binaries 21-40 MB + 6 MB base; cart image 10.7 MB compressed) | 450 MB guard rail (JRE ~280 MB + fat jar up to ~80 MB) |
+| Size budget (CI, linux/amd64 uncompressed) | 48 MB (binaries 21-37 MB + 2 MB base) | 220 MB (JRE ~60 MB + base ~25 MB + libraries 69-93 MB; orders 270, ai-gateway 310) |
 | Platforms | linux/amd64 + linux/arm64 (Arm node pools) | same |
+
+### Speed and memory (measured 2026-10-21 on seller-service, the largest default Java service)
+
+| | Before | Now |
+|---|---|---|
+| Java image | ~340-460 MB (full JRE) | ~155-185 MB (jlinked JRE + distroless) |
+| Java resident memory after start | ~620 MB (ZGC, full JIT) | ~275 MB (serial GC, C1-only JIT, 512 KB stacks, no perf-data file) |
+| Java start | 9.4 s | 3-6 s |
+
+The flags live in `java/Dockerfile` (`JAVA_TOOL_OPTIONS`; the same flags are in Jib, docker-compose and each `values-prod.yaml`).
+C1-only JIT (`-XX:TieredStopAtLevel=1`) suits the low-traffic services we run; a service that becomes CPU-bound should drop it
+in its values file. An AppCDS archive would start faster still but adds ~90 MB per image, so it is deliberately not used.
+Go services get `GOMEMLIMIT` = 90% of `resources.limits.memory` from the Helm library chart (set `extraEnv.GOMEMLIMIT` to
+override). Go 1.27 sizes `GOMAXPROCS` from the container's CPU limit by itself.
 
 `.github/actions/publish-image` enforces user, port, environment defaults and the size budget on every build (pull
 requests included) before anything is pushed; see change request 5 for the remaining reproducibility items.

@@ -60,7 +60,7 @@ x-java-env: &java-env
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
   AUTH_ISSUER_URL: http://identity:8080
   TRACE_SAMPLING: "1.0"
-  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+UseZGC
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=70 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k -XX:-UsePerfData
 
 x-go-service: &go-service
   profiles: [apps]

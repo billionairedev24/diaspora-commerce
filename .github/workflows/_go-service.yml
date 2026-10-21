@@ -232,5 +232,5 @@ jobs:
           dockerfile: go/services/${{ inputs.service }}/Dockerfile
           push: ${{ inputs.publish }}
           # S010: distroless/static:nonroot, under 60 MB, prod defaults on port 8080.
-          max-size-mb: "60"
+          max-size-mb: "48"
           required-env: APP_ENV=prod PORT=8080

@@ -16,7 +16,7 @@ tolerations: []
 # Temporal runs in the cluster (infra/k8s/platform/lean/temporal), same namespace name as local. Temporal Cloud instead:
 # set TEMPORAL_TARGET/TEMPORAL_NAMESPACE to the account values, add the `temporal-cloud` profile and the mTLS secrets.
 extraEnv:
-  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k"
+  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k -XX:-UsePerfData -XX:ReservedCodeCacheSize=64m -XX:+ExitOnOutOfMemoryError"
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
   SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
   RETAIL_ORG_ID: org_afrotransact_retail

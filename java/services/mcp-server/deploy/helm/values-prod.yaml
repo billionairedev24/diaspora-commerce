@@ -14,7 +14,7 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k"
+  JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1 -XX:MaxRAMPercentage=70 -Xss512k -XX:-UsePerfData -XX:ReservedCodeCacheSize=64m -XX:+ExitOnOutOfMemoryError"
   SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "4"
   SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
   # External URL MCP clients use (resource indicator in the OAuth protected-resource metadata).
