@@ -58,3 +58,4 @@ mobile/apps/*/assets/hero/
 *.whl
 infra/ovh-vps/config.env
 infra/ovh-vps/secrets.local.env
+.ovh/

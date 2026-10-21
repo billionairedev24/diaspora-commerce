@@ -1,8 +1,7 @@
 # AfroTransact on one OVHcloud server (k3s)
 
 A **test environment** on a single OVHcloud Public Cloud instance: k3s, every backend service, Kafka, Temporal, OpenFGA,
-Valkey, Meilisearch and (optionally) Postgres on one machine, deployed by one manual GitHub workflow. Nothing here is
-created or billed by code: you create the server by hand and delete it by hand.
+Valkey, Meilisearch and (optionally) Postgres on one machine, created and deployed by one manual GitHub workflow.
 
 > **Status: written, never run.** Everything here was checked offline only (`bash -n`, a stubbed run of `secrets.sh`, YAML
 > parsing). The first run will need fixes; each failure names its service (`kubectl -n afrotransact-dev logs deploy/<service>`).
@@ -38,36 +37,12 @@ close to Virginia, so put the server there to keep query latency to a few millis
 same location is the other option: one vendor and a private network, at its own price. Check the provider's backup and
 point-in-time-recovery terms before you rely on either. The scripts only need a host, an admin user and `sslmode=require`.
 
-## What you do by hand
+## How to run it
 
-1. **Create the instance** (OVHcloud Control Panel > Public Cloud > Instances): Ubuntu 24.04, flavor with **8 vCPU / 32 GB**
-   (`b3-32`; 16 GB is too small for 26 services plus the data stores), hourly billing, your SSH public key, location
-   `us-east-va` for a Virginia database. Note the IPv4.
-   **Cost: an hourly instance keeps billing while powered off or scaled down. Delete the instance when the test is over.**
-2. **DNS** (Cloudflare, grey cloud / DNS only): `api.<domain>`, `auth.<domain>`, `mcp.<domain>` as A records to the IPv4.
-   Remove any `CAA` record that does not allow Let's Encrypt (`letsencrypt.org`).
-3. **GitHub Environment `ovh-vps`** (require yourself as reviewer): secret `OVH_VPS_SSH_KEY` (private key), secret
-   `OVH_VPS_CONFIG` (content of `config.env.example`, filled), secret `OVH_VPS_SECRETS` (content of
-   `secrets.local.env.example`: Stripe test keys, Resend ...), variable `OVH_VPS_HOST` (the IPv4).
-4. **Images.** CI publishes `ghcr.io/billionairedev24/diaspora-commerce/<service>:<git sha>` for a service when its code
-   changes on `main`. The commit that introduced this folder changed `infra/helm/library`, which every service pipeline
-   watches, so **all 26 images are built at that commit's sha**: use that sha as `image-tag`. If the packages are private,
-   put a GitHub token with `read:packages` in `GHCR_USER` / `GHCR_TOKEN` (config).
-
-## Run it (Actions > ovh-vps > Run workflow)
-
-| Action | Does |
-|---|---|
-| `bootstrap` | firewall (22, 80, 443), k3s without Traefik, helm. Once. |
-| `deploy` | secrets, Postgres (cluster mode), Valkey, Meilisearch, Kafka, Temporal, OpenFGA, cert-manager, Traefik, certificates, routes, all services in three waves. |
-| `services` | only the service charts (new `image-tag`, changed secrets). |
-| `edge` | Traefik, cert-manager, certificates and routes. |
-| `status` | pods that are not Running, certificates, URLs. |
-| `down` / `up` | scale every service to 0 / 1. **Does not stop billing.** |
-
-Then: `https://api.<domain>/bff`, `https://auth.<domain>` (the OIDC issuer), `https://mcp.<domain>`.
-The web apps (storefront, Seller Center, staff console) are Cloudflare Workers apps, not part of this server: point their
-`API_BASE_URL` at `https://api.<domain>`.
+Step by step, with the pipeline that creates the server for you: [`docs/runbooks/ovh-vps.md`](../../docs/runbooks/ovh-vps.md).
+In short: `make ovh-gh-setup` (asks for your values, stores them as GitHub Environment secrets), then Actions > ovh-vps >
+`provision-and-deploy`. The pipeline creates the Public Cloud instance (`terraform/`), installs k3s (`bootstrap.sh`), and deploys
+(`secrets.sh`, `deploy.sh`). **The instance is billed by the hour until you run `destroy`.**
 
 ## What is generated, where
 
@@ -90,4 +65,4 @@ integration, except **gateway-bff, which refuses to start without `STRIPE_PUBLIS
 
 ## Tear down
 
-Delete the instance in the OVHcloud console (and the DNS records). Revoke the SSH key and the GitHub environment secrets.
+Actions > ovh-vps > `destroy`, `confirm-destroy` = `ovh-vps`: deletes the instance and its disk, the state and the state bucket and user.
