@@ -21,7 +21,7 @@ func staffResources() map[string]*staffResource {
 		supportCasesResource(), auditResource(),
 		ordersResource(), productsResource(), moderationResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
 		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(), pickupLocationsResource(),
-		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(),
+		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(), taxCodesResource(), taxRulesResource(), taxReviewResource(),
 		marketsResource(), siteSettingsResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"), couponsResource(),
 		identityProvidersResource(),
 	)

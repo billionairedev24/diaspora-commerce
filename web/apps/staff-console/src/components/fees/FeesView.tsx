@@ -44,6 +44,29 @@ export function FeesView() {
                 <ResourceTable resource="tax-rates" urlPrefix="tax-rates" />
               </div>
             )
+          },
+          {
+            value: 'tax-classification',
+            label: 'Tax classification',
+            content: (
+              <div className="flex flex-col gap-8">
+                <section className="flex flex-col gap-2">
+                  <h3 className="m-0 text-md">Review queue</h3>
+                  <p className="m-0 text-sm text-muted">
+                    Items taxed as general goods because no rule matched (an unanswered question, a custom category or a new product type). Add a rule below, or mark the item reviewed.
+                  </p>
+                  <ResourceTable resource="tax-review" urlPrefix="tax-review" />
+                </section>
+                <section className="flex flex-col gap-2">
+                  <h3 className="m-0 text-md">Rules</h3>
+                  <ResourceTable resource="tax-rules" urlPrefix="tax-rules" />
+                </section>
+                <section className="flex flex-col gap-2">
+                  <h3 className="m-0 text-md">Tax codes</h3>
+                  <ResourceTable resource="tax-codes" urlPrefix="tax-codes" />
+                </section>
+              </div>
+            )
           }
         ]}
       />

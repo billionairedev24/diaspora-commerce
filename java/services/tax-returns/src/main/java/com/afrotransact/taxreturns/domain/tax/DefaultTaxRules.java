@@ -32,7 +32,7 @@ public final class DefaultTaxRules implements TaxRules {
         for (TaxLineInput line : lines) {
             if (!collects) {
                 out.add(new TaxLineResult(line.lineId(), line.sellerOrgId(), line.category(), 0L, BigDecimal.ZERO,
-                        0L, jurisdiction, null, by));
+                        0L, jurisdiction, null, by, 0L, line.taxCode()));
                 continue;
             }
             StateTaxRule rule = state.orElseThrow();
@@ -46,7 +46,7 @@ public final class DefaultTaxRules implements TaxRules {
             long tax = rate.signum() == 0 ? 0L : taxOf(taxable, rate);
             long shippingTax = shippingTaxed ? Math.min(tax, taxOf(line.shippingMinor(), rate)) : 0L;
             out.add(new TaxLineResult(line.lineId(), line.sellerOrgId(), line.category(), rate.signum() == 0 ? 0L
-                    : taxable, rate.stripTrailingZeros(), tax, jurisdiction, localJurisdiction, by, shippingTax));
+                    : taxable, rate.stripTrailingZeros(), tax, jurisdiction, localJurisdiction, by, shippingTax, line.taxCode()));
         }
         return new TaxQuote(currency, jurisdiction, by, out, PROVIDER);
     }

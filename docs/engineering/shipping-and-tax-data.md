@@ -17,7 +17,7 @@ Checkout **estimates** are described in [checkout-tax-estimate.md](./checkout-ta
 | **tax-returns-service** (Java, port 8111) | Owns quotes, rate tables, ledger, returns/refunds tax reversal |
 | **`DefaultTaxRules`** | Rules engine: table × category × address → tax per line |
 | **`tax_state_rule` / `tax_local_rate`** (PostgreSQL) | Rates staff maintain via `PUT /v1/tax/rates/**` |
-| **Config** `at.taxreturns.tax.provider` | Default **`RULES`** (no external API). `STRIPE_TAX`, `TAXJAR`, `AVALARA` are reserved for a future `TaxCalculator` adapter — not wired in production paths today |
+| **Config** `at.taxreturns.tax.provider` | Default **`RULES`** (no external API). **`STRIPE_TAX`** is available (calculation only, rules fallback; see the tax-returns README). `TAXJAR`, `AVALARA` are reserved for a future adapter |
 
 **Who calls quotes**
 
@@ -55,7 +55,8 @@ flowchart TD
 |------------|--------|----------|
 | **Ship-to country, state, postal code, city** | Customer address book (checkout / order) | US-only; state must exist in `tax_state_rule` |
 | **`facilitator` on state rule** | `tax_state_rule` (seed + staff API) | Marketplace facilitator: AfroTransact collects only where `facilitator=true` |
-| **`taxCategory` on quote line** (optional) | Caller (`GENERAL`, `GROCERY`, `PREPARED_FOOD`) | Overrides product-type mapping when set |
+| **Tax code** | `tax_classification_rule` from the product type and the seller's `tax_class` answer ([tax-classification-design.md](./tax-classification-design.md)); default general taxable | Decides the category; callers normally send only `atin` and `productType` |
+| **`taxCategory` on quote line** (optional) | Caller (`GENERAL`, `GROCERY`, `PREPARED_FOOD`) | Overrides the classification when set |
 | **`productType` on quote line** | **Catalog** on the variant/product (cart/checkout line; orders enriches from catalog if missing on events) | Mapped to category when `taxCategory` absent |
 | **Category → rate** | State + local tables | **`GROCERY`** may be **reduced or 0%** (exempt) in a state; **`PREPARED_FOOD`** often general rate; unknown types → **`GENERAL`** |
 | **Line money** | Cart/order | `unitPriceMinor`, `quantity`, `discountMinor` — zero base ⇒ zero tax even if rate > 0 |

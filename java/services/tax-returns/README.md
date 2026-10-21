@@ -98,7 +98,7 @@ adapters of the same port (startup fails if one is selected without its adapter)
 - **Facilitator**: only states with `facilitator=true` are collected (`collectedBy=MARKETPLACE`); other states,
   unknown states and non-US addresses get no tax (`NOT_COLLECTED`).
 - **Category**: from the request (`taxCategory`), else catalog product type via
-  `at.taxreturns.tax.category-by-product-type`, else `GENERAL`.
+  the classification rules below (`tax_classification_rule`), else `GENERAL`.
 - **Seed** (`V2__seed_tax_rates.sql`): TX, NY, NJ, GA, MD, CA, IL, MN (facilitator) and DE (no sales tax) with a few
   city ZIP prefixes. The seeded rates are illustrative: finance must confirm them before production and keep them
   current through `PUT /v1/tax/rates/**`.
@@ -234,3 +234,24 @@ pickup with seller decision and failed inspection, seller SLA auto-approval, par
 `TaxLedgerIT`: quotes from the seeded table, rate edits, sale / refund ledger, liability and seller statements).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.
+
+## Tax classification (what an item is for tax)
+
+Design: [`docs/engineering/tax-classification-design.md`](../../../docs/engineering/tax-classification-design.md).
+
+- `tax_code` (our codes, each with a rates column `GENERAL | GROCERY | PREPARED_FOOD` and an optional provider code such as Stripe's
+  `txcd_...`) and `tax_classification_rule` (catalog **product type**, optionally narrowed by one attribute answer, to a tax code) are
+  staff-maintained: `GET/PUT /v1/tax/codes`, `GET/PUT/DELETE /v1/tax/classification-rules`, `POST /v1/tax/classification-test`.
+- A quote line is classified from the product's type and the seller's answers read from catalog (`GET /v1/public/variants/{atin}`,
+  cached five minutes). An answer rule beats a type rule. **Anything not positively classified is `GENERAL_GOODS` (general taxable).**
+  A caller's explicit `taxCategory` still wins (no tax code is recorded then).
+- Catalog asks the seller one plain question (`tax_class`) for grocery, perishable and beauty types (catalog V9). The option texts must
+  match the rule rows (tax-returns V5). The question is not required yet; unanswered items are taxed as general goods.
+- Placed orders are stamped with the code each line was taxed under (`order_line_snapshot.tax_code`), and lines classified by default
+  are counted in `tax_classification_seen`: the staff review queue (`GET /v1/tax/review-queue`, `POST /v1/tax/review-queue/reviewed`).
+  `GET /v1/tax/liability/by-code?month=YYYY-MM` is tax by code and jurisdiction (sales minus refunds).
+- Staff screens: Fees & commissions › Tax classification (review queue, rules, codes).
+- Provider `STRIPE_TAX` (`TAX_PROVIDER=STRIPE_TAX` + `STRIPE_SECRET_KEY`): `POST /v1/tax/calculations` per quote; the rules engine answers
+  (`provider` = `RULES-FALLBACK`) when Stripe is unreachable, the ship-to is not US, or a line's tax code has no provider code yet.
+  It only calculates: creating Stripe tax transactions for captured payments and refunds, and registrations, are not built.
+  The provider codes in `tax_code` are empty except general goods: copy them from Stripe's list, with the CPA, before switching.

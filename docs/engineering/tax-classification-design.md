@@ -1,6 +1,6 @@
 # Sales tax classification — design spec (draft for CPA review)
 
-**Status:** proposal, nothing built yet. **Owner:** finance + tax-returns. **Not legal or tax advice:** a CPA must approve the code map, the state list and the seller wording before launch.
+**Status:** implemented in tax-returns (V5), catalog (V9) and the staff console (Fees & commissions › Tax classification); see the tax-returns README. Open: Stripe tax transactions and refunds, nexus tracker, remittance record, seller statement screen, making the listing question required. **Owner:** finance + tax-returns. **Not legal or tax advice:** a CPA must approve the code map, the state list and the seller wording before launch.
 
 ## Problem
 

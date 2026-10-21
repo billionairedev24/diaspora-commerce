@@ -82,12 +82,14 @@ class TaxLedgerIT {
     void quotesFromTheSeededRateTable() {
         actors.service("tax:quote");
         TaxQuote houston = tax.quote(new TaxQuoteCommand("usd", new TaxAddress("US", "TX", "77019", "Houston"),
-                List.of(line("1", null, "dresses", 6_499), line("2", null, "pantry", 1_850),
+                List.of(line("1", null, "dress", 6_499), line("2", null, "grocery", 1_850),
                         line("3", "PREPARED_FOOD", null, 1_200))));
         assertThat(houston.currency()).isEqualTo("USD");
         assertThat(houston.collectedBy()).isEqualTo(CollectedBy.MARKETPLACE);
         assertThat(houston.lines()).extracting(TaxLineResult::taxMinor).containsExactly(536L, 0L, 99L);
         assertThat(houston.lines().get(1).category().name()).isEqualTo("GROCERY");
+        assertThat(houston.lines()).extracting(TaxLineResult::taxCode).containsExactly("CLOTHING", "PACKAGED_FOOD",
+                null);
         assertThat(houston.lines().getFirst().localJurisdiction()).isEqualTo("US-TX-770");
 
         TaxQuote nyc = tax.quote(new TaxQuoteCommand("USD", new TaxAddress("US", "NY", "10001", null),

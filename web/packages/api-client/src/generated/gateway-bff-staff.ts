@@ -4534,7 +4534,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;

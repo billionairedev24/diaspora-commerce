@@ -445,6 +445,21 @@ function seed(now: Date): MockStaffDb {
     rec('local:TX:770', { kind: 'LOCAL', country: 'US', state: 'TX', zipPrefix: '770', name: 'Houston', generalRate: 0.02, groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null })
   ];
 
+  const taxCodes = [
+    rec('GENERAL_GOODS', { code: 'GENERAL_GOODS', label: 'General taxable goods', category: 'GENERAL', providerCode: 'txcd_99999999', state: 'ACTIVE' }),
+    rec('CLOTHING', { code: 'CLOTHING', label: 'Clothing and accessories', category: 'GENERAL', providerCode: null, state: 'ACTIVE' }),
+    rec('PACKAGED_FOOD', { code: 'PACKAGED_FOOD', label: 'Packaged food (shelf-stable)', category: 'GROCERY', providerCode: null, state: 'ACTIVE' }),
+    rec('PREPARED_FOOD', { code: 'PREPARED_FOOD', label: 'Hot or ready-to-eat food', category: 'PREPARED_FOOD', providerCode: null, state: 'ACTIVE' })
+  ];
+  const taxRules = [
+    rec('dress||', { rowId: 'dress||', productType: 'dress', attrKey: null, attrValue: null, taxCode: 'CLOTHING', kind: 'TYPE', note: 'Clothing' }),
+    rec('grocery|tax_class|Packaged, shelf-stable', { rowId: 'grocery|tax_class|Packaged, shelf-stable', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Packaged, shelf-stable', taxCode: 'PACKAGED_FOOD', kind: 'ANSWER', note: 'Food for home consumption' }),
+    rec('grocery|tax_class|Hot or ready-to-eat', { rowId: 'grocery|tax_class|Hot or ready-to-eat', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Hot or ready-to-eat', taxCode: 'PREPARED_FOOD', kind: 'ANSWER', note: 'Prepared food' })
+  ];
+  const taxReview = [
+    rec('grocery|abc123', { rowId: 'grocery|abc123', productType: 'grocery', attrHash: 'abc123', answer: null, taxCode: 'GENERAL_GOODS', count: 4, sampleAtin: 'AT10000001', lastSeen: ago(0, 3), state: 'OPEN', reviewedBy: null, reviewNote: null })
+  ];
+
   const notifications: MockNotification[] = customers.flatMap((c, i) => [
     { id: `ntf-${i}-1`, recipientId: c.id, channel: 'email', templateKey: 'order.shipped', subject: 'Your order is on its way', status: 'DELIVERED', address: c.email, createdAt: ago(i, 2) },
     { id: `ntf-${i}-2`, recipientId: c.id, channel: 'sms', templateKey: 'delivery.otp', subject: null, status: i % 3 === 0 ? 'FAILED' : 'SENT', address: '+1832555010' + String(i), createdAt: ago(i, 1) }
@@ -467,7 +482,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, coupons,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations
     },

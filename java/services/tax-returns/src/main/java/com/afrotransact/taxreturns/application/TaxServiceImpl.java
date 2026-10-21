@@ -10,8 +10,11 @@ import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.domain.tax.LocalTaxRate;
 import com.afrotransact.taxreturns.domain.tax.StateTaxRule;
 import com.afrotransact.taxreturns.domain.tax.TaxCategory;
+import com.afrotransact.taxreturns.domain.tax.TaxClassification;
+import com.afrotransact.taxreturns.domain.tax.TaxClassifier;
 import com.afrotransact.taxreturns.domain.tax.TaxLineInput;
 import com.afrotransact.taxreturns.domain.tax.TaxQuote;
+import com.afrotransact.taxreturns.port.ProductFacts;
 import com.afrotransact.taxreturns.port.TaxCalculator;
 import com.afrotransact.taxreturns.port.TaxRateRepository;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -25,13 +28,16 @@ class TaxServiceImpl implements TaxService {
 
     private final TaxCalculator calculator;
     private final TaxRateRepository rates;
-    private final TaxSettings settings;
+    private final TaxClassifierProvider classifier;
+    private final ProductFacts productFacts;
     private final Access access;
 
-    TaxServiceImpl(TaxCalculator calculator, TaxRateRepository rates, TaxSettings settings, Access access) {
+    TaxServiceImpl(TaxCalculator calculator, TaxRateRepository rates,
+                   TaxClassifierProvider classifier, ProductFacts productFacts, Access access) {
         this.calculator = calculator;
         this.rates = rates;
-        this.settings = settings;
+        this.classifier = classifier;
+        this.productFacts = productFacts;
         this.access = access;
     }
 
@@ -50,14 +56,29 @@ class TaxServiceImpl implements TaxService {
             errors.put("lines", "Between 1 and " + MAX_LINES + " lines");
         }
         List<TaxLineInput> inputs = new ArrayList<>();
+        Map<String, ProductFacts.Facts> facts = needsFacts(c) ? productFacts.lookup(atinsOf(c)) : Map.of();
+        TaxClassifier rules = classifier.current();
         for (int i = 0; i < c.lines().size(); i++) {
             TaxQuoteCommand.Line l = c.lines().get(i);
-            TaxCategory category = l.taxCategory() != null && !l.taxCategory().isBlank()
-                    ? TaxCategory.parse(l.taxCategory()) : settings.categoryFor(l.productType());
+            boolean explicit = l.taxCategory() != null && !l.taxCategory().isBlank();
+            TaxCategory category;
+            String taxCode = null;
+            String providerCode = null;
+            if (explicit) {
+                category = TaxCategory.parse(l.taxCategory());
+            } else {
+                ProductFacts.Facts f = l.atin() == null ? null : facts.get(l.atin());
+                String type = l.productType() != null && !l.productType().isBlank() ? l.productType()
+                        : f == null ? null : f.productType();
+                TaxClassification classification = rules.classify(type, f == null ? Map.of() : f.attributes());
+                category = classification.category();
+                taxCode = classification.taxCode();
+                providerCode = classification.providerCode();
+            }
             try {
                 inputs.add(new TaxLineInput(l.lineId() == null ? String.valueOf(i + 1) : l.lineId(), l.atin(),
                         l.sellerOrgId(), category, l.quantity(), l.unitPriceMinor(), l.discountMinor(),
-                        l.shippingMinor()));
+                        l.shippingMinor(), taxCode, providerCode));
             } catch (IllegalArgumentException ex) {
                 errors.put("lines[" + i + "]", ex.getMessage());
             }
@@ -66,6 +87,16 @@ class TaxServiceImpl implements TaxService {
             throw new ReturnRuleViolation("tax-returns.invalid-quote", "The tax quote request is invalid", errors);
         }
         return calculator.quote(c.shipTo(), c.currency().toUpperCase(Locale.ROOT), inputs);
+    }
+
+    private static boolean needsFacts(TaxQuoteCommand c) {
+        return c.lines().stream().anyMatch(l -> l.atin() != null
+                && (l.taxCategory() == null || l.taxCategory().isBlank()));
+    }
+
+    private static List<String> atinsOf(TaxQuoteCommand c) {
+        return c.lines().stream().filter(l -> l.atin() != null && (l.taxCategory() == null || l.taxCategory().isBlank()))
+                .map(TaxQuoteCommand.Line::atin).distinct().toList();
     }
 
     @Override

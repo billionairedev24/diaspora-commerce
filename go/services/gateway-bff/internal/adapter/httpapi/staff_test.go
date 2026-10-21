@@ -390,6 +390,15 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	case p == "/v1/refunds":
 		writeJ(w, 201, map[string]any{"id": "ref-1", "status": "PENDING"})
+	case p == "/v1/tax/codes":
+		writeJ(w, 200, []any{map[string]any{"code": "GENERAL_GOODS", "label": "General taxable goods", "category": "GENERAL", "providerCode": "txcd_99999999", "active": true},
+			map[string]any{"code": "CLOTHING", "label": "Clothing and accessories", "category": "GENERAL", "providerCode": nil, "active": true}})
+	case p == "/v1/tax/classification-rules":
+		writeJ(w, 200, []any{map[string]any{"id": 1, "productType": "dress", "attrKey": nil, "attrValue": nil, "taxCode": "CLOTHING", "note": "Clothing"},
+			map[string]any{"id": 2, "productType": "grocery", "attrKey": "tax_class", "attrValue": "Hot or ready-to-eat", "taxCode": "PREPARED_FOOD", "note": "Prepared food"}})
+	case p == "/v1/tax/review-queue":
+		writeJ(w, 200, []any{map[string]any{"productType": "grocery", "attributes": map[string]any{}, "attrHash": "abc123", "taxCode": "GENERAL_GOODS", "basis": "DEFAULT",
+			"sampleAtin": "AT1", "count": 4, "firstSeen": "2026-10-20T10:00:00Z", "lastSeen": "2026-10-21T10:00:00Z", "reviewedAt": nil, "reviewedBy": nil, "reviewNote": nil}})
 	case p == "/v1/tax/rates":
 		writeJ(w, 200, map[string]any{"states": []any{map[string]any{"country": "US", "state": "TX", "name": "Texas", "generalRate": 0.0625, "groceryRate": 0, "preparedFoodRate": 0.0625, "version": 3}},
 			"locals": []any{map[string]any{"state": "TX", "zipPrefix": "770", "name": "Houston", "rate": 0.02}}})

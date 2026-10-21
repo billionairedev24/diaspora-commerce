@@ -634,6 +634,36 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       }
     }
   },
+  'tax-codes': {
+    title: 'Tax codes',
+    columns: [col('code', 'Code', 'mono', 18), col('label', 'What it is', 'strong', 30), col('category', 'Rate column', 'text', 16), col('providerCode', 'Provider code', 'mono', 22), col('state', 'State', 'status', 12)],
+    statusKey: 'state',
+    facets: facets('ACTIVE', 'INACTIVE'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.label),
+    subtitleOf: (r) => str(r.fields.code),
+    actions: []
+  },
+  'tax-rules': {
+    title: 'Tax classification rules',
+    columns: [col('productType', 'Product type', 'mono', 16), col('attrKey', 'Question', 'mono', 14), col('attrValue', "Seller's answer", 'text', 28), col('taxCode', 'Tax code', 'strong', 18), col('kind', 'Rule', 'status', 10), col('note', 'Why', 'text', 24)],
+    statusKey: 'kind',
+    facets: facets('TYPE', 'ANSWER'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.productType)} ${str(r.fields.attrValue)}`.trim(),
+    subtitleOf: (r) => `→ ${str(r.fields.taxCode)}`,
+    actions: []
+  },
+  'tax-review': {
+    title: 'Tax review queue',
+    columns: [col('productType', 'Product type', 'mono', 16), col('answer', "Seller's answer", 'text', 28), col('taxCode', 'Taxed as', 'strong', 18), col('count', 'Order lines', 'number', 10), col('lastSeen', 'Last seen', 'datetime', 16), col('state', 'State', 'status', 12)],
+    statusKey: 'state',
+    facets: facets('OPEN', 'REVIEWED'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.productType)} ${str(r.fields.answer)}`.trim(),
+    subtitleOf: () => 'Taxed as general goods because no rule matched. Add a rule, or mark it reviewed if general goods is right.',
+    actions: []
+  },
   'tax-rates': {
     title: 'Tax rates',
     columns: [col('kind', 'Rule', 'status', 10), col('country', 'Country', 'mono', 8), col('state', 'State', 'mono', 8), col('zipPrefix', 'ZIP prefix', 'mono', 10), col('name', 'Name', 'strong', 20), col('generalRate', 'General', 'percent', 10), col('groceryRate', 'Grocery', 'percent', 10), col('preparedFoodRate', 'Prepared food', 'percent', 12), col('version', 'Version', 'number', 8)],
