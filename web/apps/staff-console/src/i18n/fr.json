@@ -790,5 +790,18 @@
   "st.plans.order.rule": "Sinon, ce forfait : ses mois offerts, puis facturer chaque période, commencer quand la condition est remplie, ou exonérer tant qu'elle l'est.",
   "st.plans.order.coupons": "Si des frais sont dus, les coupons en pourcentage les réduisent.",
   "st.plans.order.collect": "Le reste est payé par les crédits, puis les gains (si le vendeur l'autorise), puis la carte.",
-  "st.plans.order.commission": "La commission est à part : elle est prélevée sur chaque vente par la grille de frais, pas sur cette facture."
+  "st.plans.order.commission": "La commission est à part : elle est prélevée sur chaque vente par la grille de frais, pas sur cette facture.",
+  "st.lola.launch": "Demander à Lola",
+  "st.lola.title": "Lola",
+  "st.lola.description": "Recherchez dans la console. Lecture seule : elle ne modifie jamais rien.",
+  "st.lola.greeting": "Bonjour ! Je peux consulter les candidatures, commandes, paiements et vendeurs. Je ne vois que ce que votre rôle peut voir.",
+  "st.lola.chip.queue": "Qu'y a-t-il à examiner aujourd'hui ?",
+  "st.lola.chip.payouts": "Quels versements sont suspendus ?",
+  "st.lola.chip.orders": "Afficher les dernières commandes",
+  "st.lola.placeholder": "Interrogez Lola sur la plateforme…",
+  "st.lola.send": "Envoyer",
+  "st.lola.thinking": "Lola cherche…",
+  "st.lola.remaining": "{n} messages sur {total} restants aujourd'hui",
+  "st.lola.readOnly": "Lecture seule",
+  "st.lola.spent": "Vous avez utilisé les messages du jour. Lola reprend à minuit UTC."
 }

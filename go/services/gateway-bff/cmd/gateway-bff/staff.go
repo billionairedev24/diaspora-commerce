@@ -31,7 +31,7 @@ type staffClients struct {
 // It also returns Seller Center's export stores (same job store, renderer and file directory; seller links are served by
 // /v1/seller/export-files/{id}).
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
-	cache port.Cache, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
+	cache port.Cache, counter port.DailyCounter, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
 	up := cfg.Upstreams
 	media := client("media", up.Media)
 	d := app.StaffDeps{
@@ -80,6 +80,9 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Inventory = app.NewStaffInventoryService(d)
 	out.Markets = app.NewStaffMarketsService(d)
 	out.Plans = app.NewStaffPlansService(d)
+	// Lola for staff: read-only lookups through the console's own use cases, one model turn at ai-gateway per round.
+	out.Assistant = app.NewStaffAssistantService(d, app.StaffAssistantDeps{Model: upstreams.NewStaffAssistantModel(client("ai-gateway", up.AIGateway)),
+		Counter: counter, Records: out.Records, Dashboard: out.Dashboard})
 	return out, seller, sellerFiles, nil
 }
 

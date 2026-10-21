@@ -40,6 +40,19 @@ class SellerAssistantServiceImpl implements SellerAssistantService {
         if (!MEMBERS.contains(caller.principalType()) || caller.orgId() == null || caller.orgId().isBlank()) {
             throw new ForbiddenActionException("ai.seller-only", "The seller assistant is for seller and provider members");
         }
+        return turn(caller, request, AiFeature.SELLER_ASSISTANT);
+    }
+
+    @Override
+    public Reply completeForStaff(Caller caller, Request request) {
+        caller.require(AiPermissions.USE);
+        if (!"STAFF".equals(caller.principalType())) {
+            throw new ForbiddenActionException("ai.staff-only", "The staff assistant is for AfroTransact staff");
+        }
+        return turn(caller, request, AiFeature.STAFF_ASSISTANT);
+    }
+
+    private Reply turn(Caller caller, Request request, AiFeature feature) {
         List<Message> in = request.messages() == null ? List.of() : request.messages();
         if (in.isEmpty() || in.size() > MAX_MESSAGES) {
             throw new AiRuleViolation("ai.invalid-conversation", "Send between 1 and " + MAX_MESSAGES + " messages");
@@ -62,7 +75,7 @@ class SellerAssistantServiceImpl implements SellerAssistantService {
         int maxTokens = request.maxTokens() == null ? DEFAULT_TOKENS : Math.max(100, Math.min(MAX_TOKENS,
                 request.maxTokens()));
         boolean fresh = messages.get(messages.size() - 1).role() == ChatMessage.Role.USER;
-        ModelReply reply = models.chat(caller, AiFeature.SELLER_ASSISTANT, new ModelRequest(
+        ModelReply reply = models.chat(caller, feature, new ModelRequest(
                 fresh ? TaskType.PLANNING : TaskType.CHAT, messages, tools, false, maxTokens, 0.3));
         List<ToolCall> calls = reply.toolCalls().stream()
                 .map(c -> new ToolCall(c.id(), c.name(), c.arguments())).toList();

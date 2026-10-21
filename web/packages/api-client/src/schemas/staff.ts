@@ -50,6 +50,28 @@ export type StaffSession = z.infer<typeof StaffSessionSchema>;
 
 /* ── Dashboard ─────────────────────────────────────────── */
 
+/** Lola in the staff console: read-only, one level for every staff member. */
+export const StaffAssistantStatusSchema = z.object({
+  dailyMessages: z.number().int(),
+  used: z.number().int(),
+  remaining: z.number().int(),
+  tools: z.array(z.string())
+});
+export type StaffAssistantStatus = z.infer<typeof StaffAssistantStatusSchema>;
+export const StaffAssistantReplySchema = z.object({
+  answer: z.string(),
+  steps: z.array(z.object({ tool: z.string(), label: z.string() })),
+  /** Records she points at; the console opens one when the member taps its button. */
+  links: z.array(z.object({ label: z.string(), resource: z.string(), id: z.string() })),
+  status: StaffAssistantStatusSchema
+});
+export type StaffAssistantReply = z.infer<typeof StaffAssistantReplySchema>;
+export interface StaffAssistantChatRequest {
+  message: string;
+  history?: { role: 'user' | 'assistant'; content: string }[];
+  language?: string;
+}
+
 export const StaffDashboardSchema = z.object({
   rangeDays: z.number().int(),
   generatedAt: z.string(),

@@ -584,6 +584,13 @@ func (staffSessions) Resolve(_ context.Context, in app.ResolveInput) (*domain.Ca
 
 func staffBFF(t *testing.T, f *fakePlatform) func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
 	t.Helper()
+	return staffBFFWith(t, f)
+}
+
+// staffBFFWith builds the staff BFF against the fake platform; options add services (for example Lola) that need the
+// deps the shell, tables and dashboard use.
+func staffBFFWith(t *testing.T, f *fakePlatform, opts ...func(d app.StaffDeps, staff *httpapi.StaffServices)) func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
+	t.Helper()
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	metrics := httpclient.NewMetrics(prometheus.NewRegistry())
@@ -603,6 +610,9 @@ func staffBFF(t *testing.T, f *fakePlatform) func(token, method, path string, bo
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
 		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Fees: app.NewStaffFeesService(d), Files: files,
 		Dispatch: app.NewStaffDispatchService(d), Notifications: app.NewStaffNotificationsService(d)}
+	for _, o := range opts {
+		o(d, &staff)
+	}
 	mux := http.NewServeMux()
 	httpapi.New(httpapi.Services{Sessions: staffSessions{}, Staff: staff}, nil, httpapi.SecurityOptions{AllowedOrigins: []string{"http://localhost:3002"}}, log).Register(mux)
 	do := func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {

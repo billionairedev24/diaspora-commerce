@@ -34,6 +34,8 @@ export interface MockNotification {
 
 export interface MockStaffDb {
   now: Date;
+  /** Messages sent to Lola today. */
+  lolaUsed: number;
   user: { id: string; firstName: string; lastName: string; email: string };
   records: Record<ResourceKey, MockRecord[]>;
   notifications: MockNotification[];
@@ -460,6 +462,7 @@ function seed(now: Date): MockStaffDb {
 
   return {
     now,
+    lolaUsed: 0,
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,

@@ -135,6 +135,26 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AssistantReply'
+  /v1/ai/staff-assistant/complete:
+    post:
+      tags:
+      - AI utilities
+      summary: One model turn for Lola in the staff console (ai:use, staff accounts)
+      description: Called by the gateway-bff, which runs the conversation and the tools with the staff member's own session and permissions. Same shape as the seller assistant turn. Nothing is executed here; counted against the `staff-assistant` budget (429 `ai.budget-exceeded` when it is spent).
+      operationId: staffAssistant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssistantRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AssistantReply'
   /v1/ai/triage:
     post:
       tags:

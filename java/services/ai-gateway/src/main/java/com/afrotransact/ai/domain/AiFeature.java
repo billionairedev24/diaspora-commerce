@@ -13,6 +13,8 @@ public enum AiFeature {
     HANDOFF_SUMMARY,
     /** Lola for sellers in Seller Center: tool-calling turns run by the gateway-bff, billed as the organisation's AI credits. */
     SELLER_ASSISTANT,
+    /** Lola for staff in the staff console: tool-calling turns run by the gateway-bff; no organisation to bill. */
+    STAFF_ASSISTANT,
     IMAGE_MODERATION;
 
     /** Configuration and ledger key, for example {@code listing-writer}. */

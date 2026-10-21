@@ -80,4 +80,18 @@ class SellerAssistantServiceTest {
                 List.of(new SellerAssistantService.Tool("Bad Name", "x", "{}")), null);
         assertThatThrownBy(() -> service.complete(seller, badTool)).isInstanceOf(AiRuleViolation.class);
     }
+
+    @Test
+    void staffUseTheirOwnBudgetAndSellersAreRefused() {
+        when(models.chat(any(), eq(AiFeature.STAFF_ASSISTANT), any())).thenReturn(new ModelReply("Two queued.",
+                List.of(), new TokenUsage(10, 5), "model-x", 1, List.of()));
+        Caller staff = new Caller("staff-1", "STAFF", null, Set.of(AiPermissions.USE), null);
+        assertThat(service.completeForStaff(staff, ask("user")).text()).isEqualTo("Two queued.");
+        verify(models).chat(eq(staff), eq(AiFeature.STAFF_ASSISTANT), any());
+        assertThatThrownBy(() -> service.completeForStaff(seller, ask("user"))).isInstanceOf(ForbiddenActionException.class);
+        Caller noPermission = new Caller("staff-2", "STAFF", null, Set.of(), null);
+        assertThatThrownBy(() -> service.completeForStaff(noPermission, ask("user"))).isInstanceOf(ForbiddenActionException.class);
+        assertThatThrownBy(() -> service.complete(staff, ask("user"))).as("staff are not seller members")
+                .isInstanceOf(ForbiddenActionException.class);
+    }
 }

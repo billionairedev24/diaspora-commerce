@@ -33,6 +33,7 @@ import {
   ResourceKeySchema,
   type ResourcePage,
   type ShipFromLocation,
+  type StaffAssistantStatus,
   type StaffDashboard,
   type StaffSession,
   type SupportActionResult
@@ -279,6 +280,12 @@ function page(ctx: Ctx, resource: ResourceKey): ResourcePage {
 
 function audit(ctx: Ctx, action: string, entityId: string, summary: string) {
   ctx.db.audit.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, action, summary, entityId });
+}
+
+/* ── Lola ── */
+
+function assistantStatus(ctx: Ctx, used = ctx.db.lolaUsed): StaffAssistantStatus {
+  return { dailyMessages: 200, used, remaining: Math.max(0, 200 - used), tools: ['staff_overview', 'search_records', 'get_record', 'seller_payouts', 'seller_account_health', 'open_record'] };
 }
 
 /* ── dashboard ── */
@@ -658,6 +665,29 @@ export const staffHandlers = [
       const range = Number(query(ctx).get('rangeDays') ?? 30);
       if (![7, 30, 90].includes(range)) throw invalid({ rangeDays: 'Choose 7, 30 or 90 days' });
       return dashboard(ctx, range);
+    })
+  ),
+  /* ── Lola (read-only) ── */
+  http.get(
+    `${W}/assistant`,
+    route((ctx) => assistantStatus(ctx))
+  ),
+  http.post(
+    `${W}/assistant/chat`,
+    route(async (ctx) => {
+      const b = await json(ctx.request, z.object({ message: z.string().trim().min(1, 'Type a question for Lola').max(1500) }).passthrough());
+      const text = b.message.toLowerCase();
+      const used = ++ctx.db.lolaUsed;
+      const status = assistantStatus(ctx, used);
+      if (text.includes('paid') || text.includes('payout')) {
+        return {
+          answer: 'Org-9 has $780.00 on hold. AT-2026-000777 ($700.00) is released on 2030-01-05; AT-2026-000778 ($80.00) is not delivered yet. Payouts are paused: Stripe needs overdue information.',
+          steps: [{ tool: 'seller_payouts', label: 'Checking payouts of org-9' }, { tool: 'seller_account_health', label: 'Checking account health of org-9' }],
+          links: [{ label: 'Open org-9 Stripe account', resource: 'connect-accounts', id: 'org-9' }],
+          status
+        };
+      }
+      return { answer: 'Ask me about queues, orders, applications and payouts.', steps: [], links: [], status };
     })
   ),
   /* ── resources ── */

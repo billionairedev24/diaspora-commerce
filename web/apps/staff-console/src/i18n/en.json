@@ -783,5 +783,18 @@
   "st.plans.order.rule": "Otherwise this plan: its free months, then charge every period, start charging when the condition is met, or waive while it holds.",
   "st.plans.order.coupons": "If a fee is due, percentage coupons come off it.",
   "st.plans.order.collect": "What is left is paid from credits, then earnings (if the seller allowed it), then the card.",
-  "st.plans.order.commission": "Commission is separate: it is taken from each sale by the fee schedule, not from this invoice."
+  "st.plans.order.commission": "Commission is separate: it is taken from each sale by the fee schedule, not from this invoice.",
+  "st.lola.launch": "Ask Lola",
+  "st.lola.title": "Lola",
+  "st.lola.description": "Look things up across the console. Read-only: she never changes anything.",
+  "st.lola.greeting": "Hi! I can look up applications, orders, payouts and sellers. I only see what your role can see.",
+  "st.lola.chip.queue": "What needs review today?",
+  "st.lola.chip.payouts": "Which payouts are on hold?",
+  "st.lola.chip.orders": "Show the latest orders",
+  "st.lola.placeholder": "Ask Lola about the platform…",
+  "st.lola.send": "Send",
+  "st.lola.thinking": "Lola is looking…",
+  "st.lola.remaining": "{n} of {total} messages left today",
+  "st.lola.readOnly": "Read-only",
+  "st.lola.spent": "You've used today's messages. Lola starts again at midnight UTC."
 }

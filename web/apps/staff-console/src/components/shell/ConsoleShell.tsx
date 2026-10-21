@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 
+import { StaffLolaLauncher } from '@/components/assistant/StaffLolaLauncher';
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
@@ -320,6 +321,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           )}
         </main>
       </BackofficeFrame>
+      <StaffLolaLauncher />
     </StaffSessionProvider>
   );
 }

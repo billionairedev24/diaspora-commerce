@@ -790,5 +790,18 @@
   "st.plans.order.rule": "Si no, este plan: sus meses gratis y luego cobrar cada periodo, empezar a cobrar al cumplirse la condición, o eximir mientras se cumpla.",
   "st.plans.order.coupons": "Si hay cuota, los cupones de porcentaje la reducen.",
   "st.plans.order.collect": "Lo restante se paga con crédito, luego con ganancias (si el vendedor lo permite) y por último con la tarjeta.",
-  "st.plans.order.commission": "La comisión va aparte: la toma de cada venta la tabla de tarifas, no esta factura."
+  "st.plans.order.commission": "La comisión va aparte: la toma de cada venta la tabla de tarifas, no esta factura.",
+  "st.lola.launch": "Preguntar a Lola",
+  "st.lola.title": "Lola",
+  "st.lola.description": "Consulta datos en la consola. Solo lectura: nunca cambia nada.",
+  "st.lola.greeting": "¡Hola! Puedo consultar solicitudes, pedidos, pagos y vendedores. Solo veo lo que tu rol puede ver.",
+  "st.lola.chip.queue": "¿Qué hay que revisar hoy?",
+  "st.lola.chip.payouts": "¿Qué pagos están retenidos?",
+  "st.lola.chip.orders": "Mostrar los últimos pedidos",
+  "st.lola.placeholder": "Pregunta a Lola sobre la plataforma…",
+  "st.lola.send": "Enviar",
+  "st.lola.thinking": "Lola está mirando…",
+  "st.lola.remaining": "Quedan {n} de {total} mensajes hoy",
+  "st.lola.readOnly": "Solo lectura",
+  "st.lola.spent": "Has usado los mensajes de hoy. Lola vuelve a medianoche UTC."
 }

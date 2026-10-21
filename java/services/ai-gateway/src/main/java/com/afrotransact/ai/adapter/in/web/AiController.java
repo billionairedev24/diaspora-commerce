@@ -123,6 +123,26 @@ class AiController {
                 r.completionTokens(), r.model());
     }
 
+    @Operation(summary = "One model turn for Lola in the staff console (ai:use, staff accounts)", description = """
+            Called by the gateway-bff, which runs the conversation and the tools with the staff member's own session \
+            and permissions. Same shape as the seller assistant turn. Nothing is executed here; counted against the \
+            `staff-assistant` budget (429 `ai.budget-exceeded` when it is spent).""")
+    @PostMapping("/v1/ai/staff-assistant/complete")
+    AssistantReply staffAssistant(@Valid @RequestBody AssistantRequest body, HttpServletRequest request) {
+        SellerAssistantService.Reply r = assistant.completeForStaff(callers.current(request),
+                new SellerAssistantService.Request(
+                        body.messages().stream().map(m -> new SellerAssistantService.Message(m.role(), m.content(),
+                                m.toolCalls() == null ? List.of() : m.toolCalls().stream()
+                                        .map(c -> new SellerAssistantService.ToolCall(c.id(), c.name(), c.arguments()))
+                                        .toList(), m.toolCallId(), m.toolName())).toList(),
+                        body.tools() == null ? List.of() : body.tools().stream().map(t -> new SellerAssistantService.Tool(
+                                t.name(), t.description(), t.inputSchema())).toList(),
+                        body.maxTokens()));
+        return new AssistantReply(r.text(), r.toolCalls().stream()
+                .map(c -> new AssistantToolCall(c.id(), c.name(), c.arguments())).toList(), r.promptTokens(),
+                r.completionTokens(), r.model());
+    }
+
     @Operation(summary = "Trust-team triage summary with cited fields (ai:triage)",
             description = "Advisory only: decision is always HUMAN_REVIEW_REQUIRED; flags without real citations are "
                     + "dropped.")

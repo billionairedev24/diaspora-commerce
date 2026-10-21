@@ -194,7 +194,7 @@ func run() error {
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,
 		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient,
-		proofLinks: proofLinks}, rdb, cache, log); err != nil {
+		proofLinks: proofLinks}, rdb, cache, store, log); err != nil {
 		return err
 	}
 	// Seller Center exports share the staff console's job store, renderer and file directory.

@@ -49,6 +49,11 @@ import {
   ResourcePageSchema,
   type ShipFromLocation,
   ShipFromLocationSchema,
+  type StaffAssistantChatRequest,
+  type StaffAssistantReply,
+  StaffAssistantReplySchema,
+  type StaffAssistantStatus,
+  StaffAssistantStatusSchema,
   type StaffDashboard,
   StaffDashboardSchema,
   type StaffSession,
@@ -91,6 +96,11 @@ export function createStaffApiClient(options: ApiClientOptions) {
     getSession: (signal?: AbortSignal): Promise<StaffSession> => request('/v1/staff/session', StaffSessionSchema, { signal }),
     getDashboard: (rangeDays: number, signal?: AbortSignal): Promise<StaffDashboard> =>
       request('/v1/staff/dashboard', StaffDashboardSchema, { query: { rangeDays: String(rangeDays) }, signal }),
+
+    /* Lola (read-only) */
+    getAssistantStatus: (signal?: AbortSignal): Promise<StaffAssistantStatus> => request('/v1/staff/assistant', StaffAssistantStatusSchema, { signal }),
+    askAssistant: (body: StaffAssistantChatRequest): Promise<StaffAssistantReply> =>
+      request('/v1/staff/assistant/chat', StaffAssistantReplySchema, { method: 'POST', body }),
 
     /* Resources */
     listResource: (resource: ResourceKey, q: ResourceQuery, signal?: AbortSignal): Promise<ResourcePage> =>

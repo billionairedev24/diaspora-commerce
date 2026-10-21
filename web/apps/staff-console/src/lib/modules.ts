@@ -41,6 +41,21 @@ export const MODULE_PATHS: Record<StaffModuleKey, string> = {
 
 export const hrefOf = (key: StaffModuleKey): string => MODULE_PATHS[key];
 
+/**
+ * Where a record opens in the console: the module page that shows its table (on the right tab when the module has several)
+ * with the record's sheet open (?open=<id>). Null for a table no module shows.
+ */
+export function recordHref(resource: string, id: string): string | null {
+  for (const [module, tables] of Object.entries(MODULE_TABLES) as [StaffModuleKey, { resource: ResourceKey }[]][]) {
+    if (!tables.some((t) => t.resource === resource)) continue;
+    const params = new URLSearchParams();
+    if (tables.length > 1) params.set('tab', resource);
+    params.set('open', id);
+    return `${hrefOf(module)}?${params.toString()}`;
+  }
+  return null;
+}
+
 /** Module that owns a pathname (null for unknown paths). */
 export function moduleOf(pathname: string): StaffModuleKey | null {
   const seg = `/${pathname.split('/').filter(Boolean)[0] ?? ''}`;

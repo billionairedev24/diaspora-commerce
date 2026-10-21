@@ -790,5 +790,18 @@
   "st.plans.order.rule": "Bí kò bá rí bẹ́ẹ̀, ètò yìí: àwọn oṣù ọ̀fẹ́ rẹ̀, lẹ́yìn náà gbà ní gbogbo àkókò, bẹ̀rẹ̀ nígbà tí àmì bá pé, tàbí dárí jì nígbà tó bá wà.",
   "st.plans.order.coupons": "Tí owó bá tọ́, àwọn kúpọ̀ìnù ìdá-ọgọ́rùn-ún á dín in kù.",
   "st.plans.order.collect": "Ìyókù ni a ó san láti inú kírẹ́dítì, lẹ́yìn náà owó tí ó jèrè (tí olùtajà bá gbà), lẹ́yìn náà káàdì.",
-  "st.plans.order.commission": "Kọmíṣọ̀n yàtọ̀: tábìlì owó ni ó ń gbà á lórí títà kọ̀ọ̀kan, kì í ṣe láti inú ìwé owó yìí."
+  "st.plans.order.commission": "Kọmíṣọ̀n yàtọ̀: tábìlì owó ni ó ń gbà á lórí títà kọ̀ọ̀kan, kì í ṣe láti inú ìwé owó yìí.",
+  "st.lola.launch": "Beere lọwọ Lola",
+  "st.lola.title": "Lola",
+  "st.lola.description": "Wo nǹkan jákèjádò console. Kíkà nìkan: kì í yí ohunkóhun padà.",
+  "st.lola.greeting": "Báwo! Mo lè wo àwọn ohun èlò, àṣẹ, owó tí a máa san àti àwọn olùtajà. Ohun tí ipa rẹ bá fààyè gbà nìkan ni mo lè rí.",
+  "st.lola.chip.queue": "Kí ni ó nílò àyẹ̀wò lónìí?",
+  "st.lola.chip.payouts": "Àwọn owó wo ni a dá dúró?",
+  "st.lola.chip.orders": "Fi àwọn àṣẹ tuntun hàn",
+  "st.lola.placeholder": "Beere lọwọ Lola nípa pẹpẹ…",
+  "st.lola.send": "Fi ránṣẹ́",
+  "st.lola.thinking": "Lola ń wò…",
+  "st.lola.remaining": "{n} nínú {total} ìfiránṣẹ́ ló kù lónìí",
+  "st.lola.readOnly": "Kíkà nìkan",
+  "st.lola.spent": "O ti lo àwọn ìfiránṣẹ́ òní. Lola yóò padà ní ọ̀gànjọ́ UTC."
 }

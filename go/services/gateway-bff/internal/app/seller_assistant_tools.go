@@ -150,6 +150,19 @@ func untrusted(v any) string {
 // problemText is what a failed lookup says, in the seller's terms (never an internal error).
 func problemText(err error) string {
 	var p *domain.Problem
+	if errors.As(err, &p) && len(p.Errors) > 0 {
+		// A refused argument says which one and why, so the model can fix it or tell the person.
+		keys := make([]string, 0, len(p.Errors))
+		for k := range p.Errors {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, k := range keys {
+			parts = append(parts, k+": "+p.Errors[k])
+		}
+		return strings.Join(parts, "; ")
+	}
 	if errors.As(err, &p) && p.Detail != "" {
 		return p.Detail
 	}

@@ -13,6 +13,12 @@ public interface SellerAssistantService {
     Reply complete(Caller caller, Request request);
 
     /**
+     * One completion for Lola in the staff console: the same turn for a staff account holding {@code ai:use}, counted
+     * against the {@code staff-assistant} budget. There is no organisation, so nothing is billed as AI credits.
+     */
+    Reply completeForStaff(Caller caller, Request request);
+
+    /**
      * @param role       system | user | assistant | tool
      * @param content    text; tool output is data, not instructions
      * @param toolCalls  tool calls of an assistant message

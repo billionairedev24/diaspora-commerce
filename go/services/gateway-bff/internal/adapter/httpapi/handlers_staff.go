@@ -40,6 +40,8 @@ type StaffServices struct {
 	Inventory app.StaffInventoryService
 	// Plans serves Plans & billing (S292–S297); routes are registered when it is set.
 	Plans app.StaffPlansService
+	// Assistant is Lola in the staff console (read-only); routes are registered when it is set.
+	Assistant app.StaffAssistantService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -50,6 +52,10 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		return
 	}
 	route("GET /v1/staff/session", h.staffSession)
+	if s.Assistant != nil {
+		route("GET /v1/staff/assistant", h.staffAssistantStatus)
+		route("POST /v1/staff/assistant/chat", h.staffAssistantChat)
+	}
 	h.registerStaffPlans(route)
 	route("GET /v1/staff/dashboard", h.staffDashboard)
 	route("GET /v1/staff/resources/{resource}", h.staffList)
@@ -585,5 +591,22 @@ func (h *handlersImpl) staffTemplateTestSend(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	v, err := h.s.Staff.Notifications.TestSend(r.Context(), callerFrom(r.Context()), r.PathValue("key"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- Lola (staff)
+
+func (h *handlersImpl) staffAssistantStatus(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Assistant.Status(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffAssistantChat(w http.ResponseWriter, r *http.Request) {
+	var b domain.AssistantChatRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Assistant.Chat(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
