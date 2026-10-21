@@ -1,11 +1,13 @@
 import { type ModuleKey } from '@afrotransact/api-client';
 import { type Icon } from '@phosphor-icons/react';
 import {
+  ArrowUUpLeft,
   Bank,
   CalendarBlank,
   Clock,
   CreditCard,
   CurrencyDollar,
+  Gavel,
   House,
   ListChecks,
   Percent,
@@ -23,7 +25,7 @@ import {
 import { type MessageKey, type Translator } from '@/i18n/t';
 
 export const MODULE_ICONS: Record<ModuleKey, Icon> = {
-  onboarding: ListChecks, home: House, orders: Receipt, listings: Tag, inventory: Warehouse, coupons: Ticket, calendar: CalendarBlank,
+  onboarding: ListChecks, home: House, orders: Receipt, returns: ArrowUUpLeft, disputes: Gavel, listings: Tag, inventory: Warehouse, coupons: Ticket, calendar: CalendarBlank,
   requests: Tray, hours: Clock, services: Scissors, policy: ShieldCheck, earnings: CurrencyDollar, payouts: Bank, fees: Percent,
   billing: CreditCard, 'account-health': ShieldWarning, team: UsersThree
 };

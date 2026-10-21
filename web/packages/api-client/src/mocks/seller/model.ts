@@ -36,6 +36,8 @@ const m = (identity: string, key: ModuleKey, label: string, group: string, detai
 export const SELLER_MODULES: ModuleDef[] = [
   m('sHome', 'home', 'Home', 'overview', 'the store overview'),
   m('sOrders', 'orders', 'Orders', 'commerce', 'orders, shipping labels and refunds'),
+  m('sOrders', 'returns', 'Returns', 'commerce', 'customer returns and their refunds'),
+  m('sOrders', 'disputes', 'Disputes', 'commerce', 'disputes and A-to-z claims against you'),
   m('sListings', 'listings', 'Listings', 'commerce', 'product listings'),
   m('sInventory', 'inventory', 'Inventory & FBA', 'commerce', 'stock levels'),
   m('sAds', 'coupons', 'Coupons', 'growth', 'promotional codes for your listings'),

@@ -22,9 +22,11 @@ import {
   type PlanFeeDeduction,
   type ProductTypeSchema,
   type SellerCoupon,
+  type SellerDispute,
   type SellerOffer,
   type SellerOrderDetail,
   type SellerProductDetail,
+  type SellerReturn,
   type SellerRewardsView,
   type ServiceOffer,
   type ShipFromAddress,
@@ -85,6 +87,10 @@ export interface MockSellerDb {
   offers: SellerOffer[];
   /** Seller-funded coupons (offers-service). */
   coupons: SellerCoupon[];
+  /** Returns customers started on the organisation's orders (tax-returns). */
+  returns: SellerReturn[];
+  /** Disputes and A-to-z claims against the organisation (trust-ops). */
+  disputes: SellerDispute[];
   /** Export jobs (the file body is CSV text in the mock). */
   exports: (ExportJob & { owner: string; orgId: string; body: string })[];
   /** What the one-step form stored per product (S307); seeded listings derive theirs from the row. */
@@ -577,6 +583,22 @@ function freshDb(now: Date): MockSellerDb {
     },
     offers: [],
     coupons: [],
+    returns: [
+      { number: 'RMA-5E11E5A1', orderNumber: 'AT-2026-000123', title: 'Garri 2kg', status: 'RECEIVED', statusLabel: 'Received', method: 'DROP_OFF', refundMinor: 1798,
+        currency: 'USD', refundState: 'PENDING', items: [{ title: 'Garri 2kg', quantity: 2, reason: 'DAMAGED' }], carrier: 'UPS', trackingNumber: '1Z999AA10123456784',
+        dropOffBy: null, createdAt: iso(new Date(now.getTime() - 3 * DAY)) },
+      { number: 'RMA-7B20C9D4', orderNumber: 'AT-2026-000118', title: 'Egusi and 1 more item', status: 'REQUESTED', statusLabel: 'Waiting for approval', method: 'DRIVER_PICKUP', refundMinor: 2450,
+        currency: 'USD', refundState: '', items: [{ title: 'Egusi 500g', quantity: 1, reason: 'NOT_AS_DESCRIBED' }, { title: 'Palm oil 1L', quantity: 1, reason: 'DEFECTIVE' }],
+        carrier: null, trackingNumber: null, dropOffBy: null, createdAt: iso(new Date(now.getTime() - 1 * DAY)) }
+    ],
+    disputes: [
+      { reference: 'CLM-1001', type: 'NOT_AS_DESCRIBED', typeLabel: 'Not as described', status: 'AWAITING_SELLER', statusLabel: 'Waiting for your response', orderNumber: 'AT-2026-000118',
+        amountMinor: 2450, currency: 'USD', description: 'The jollof seasoning was a different brand.', responded: false, sellerResponse: null,
+        respondBy: iso(new Date(now.getTime() + 2 * DAY)), deadlineState: 'AT_RISK', escalated: false, outcome: null, refundMinor: 0, openedAt: iso(new Date(now.getTime() - 2 * DAY)) },
+      { reference: 'CLM-0987', type: 'ITEM_NOT_RECEIVED', typeLabel: 'Item not received', status: 'RESOLVED_DENIED', statusLabel: 'Resolved: denied', orderNumber: 'AT-2026-000101',
+        amountMinor: 3200, currency: 'USD', description: 'My parcel never came.', responded: true, sellerResponse: 'Delivered with a signature on 2 Oct.', respondBy: null, deadlineState: null,
+        escalated: false, outcome: 'DENY', refundMinor: 0, openedAt: iso(new Date(now.getTime() - 12 * DAY)) }
+    ],
     seq: 1
   };
   db.offers = seedOffers(db.listings);

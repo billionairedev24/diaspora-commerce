@@ -138,6 +138,8 @@ var navGroupOrder = []string{"overview", "commerce", "bookings", "setup", "growt
 var SellerModules = []ModuleDef{
 	{"sHome", "home", "Home", "overview", "the business overview"},
 	{"sOrders", "orders", "Orders", "commerce", "orders, shipping labels and refunds"},
+	{"sOrders", "returns", "Returns", "commerce", "customer returns and their refunds"},
+	{"sOrders", "disputes", "Disputes", "commerce", "disputes and A-to-z claims against you"},
 	{"sListings", "listings", "Listings", "commerce", "product listings"},
 	{"sInventory", "inventory", "Inventory & FBA", "commerce", "stock levels"},
 	{"sAds", "coupons", "Coupons", "growth", "promotional codes for your listings"},

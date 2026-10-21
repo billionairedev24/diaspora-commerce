@@ -57,6 +57,8 @@ tags:
       variants per product. Mirrors catalog-service `/v1/imports` with the member's token.
   - name: Image library
     description: The organisation's product image library (files, folders, ZIPs) matched to listings by SKU file names (S310)
+  - name: Returns & disputes
+    description: Customer returns and their refunds (tax-returns) and disputes or A-to-z claims against the organisation (trust-ops), read only
   - name: Money
     description: Payouts, plan and billing
   - name: Team
@@ -776,6 +778,32 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── coupons (offers-service, seller-funded)
+  /v1/seller/returns:
+    get:
+      tags: [Returns & disputes]
+      operationId: listSellerReturns
+      security: [{sessionCookie: []}]
+      summary: Returns customers started on the organisation's orders
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string, enum: [REQUESTED, APPROVED, AUTO_APPROVED, LABEL_ISSUED, IN_TRANSIT, RECEIVED, INSPECTED, REFUNDED, REJECTED, CANCELLED]}}
+      responses:
+        '200': {description: Returns, content: {application/json: {schema: {$ref: '#/components/schemas/SellerReturnList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/disputes:
+    get:
+      tags: [Returns & disputes]
+      operationId: listSellerDisputes
+      security: [{sessionCookie: []}]
+      summary: Disputes and A-to-z claims against the organisation (the buyer is never identified)
+      parameters:
+        - {name: status, in: query, required: false, schema: {type: string, enum: [AWAITING_SELLER, UNDER_REVIEW, ESCALATED, RESOLVED_REFUND, RESOLVED_DENIED, WITHDRAWN]}}
+      responses:
+        '200': {description: Disputes, content: {application/json: {schema: {$ref: '#/components/schemas/SellerDisputeList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/coupons:
     get:
       tags: [Growth]
@@ -2397,7 +2425,7 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     ModuleKey:
       type: string
-      enum: [onboarding, home, orders, listings, inventory, coupons, calendar, requests, hours, services, policy, earnings, payouts, fees, billing, account-health, team]
+      enum: [onboarding, home, orders, returns, disputes, listings, inventory, coupons, calendar, requests, hours, services, policy, earnings, payouts, fees, billing, account-health, team]
     SellerUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -3164,6 +3192,65 @@ components:
         funding: {type: string, enum: [PLATFORM, SELLER]}
         editable: {type: boolean}
         version: {type: integer, format: int64}
+    SellerReturnLine:
+      type: object
+      required: [title, quantity, reason]
+      properties:
+        title: {type: string}
+        quantity: {type: integer}
+        reason: {type: string}
+        outcome: {type: string}
+    SellerReturn:
+      type: object
+      required: [number, orderNumber, title, status, statusLabel, method, refundMinor, currency, refundState, items]
+      properties:
+        number: {type: string, example: RMA-5E11E5}
+        orderNumber: {type: string}
+        title: {type: string, description: 'First item, with "and N more items"'}
+        status: {type: string, enum: [REQUESTED, APPROVED, AUTO_APPROVED, LABEL_ISSUED, IN_TRANSIT, RECEIVED, INSPECTED, REFUNDED, REJECTED, CANCELLED]}
+        statusLabel: {type: string}
+        method: {type: string, description: 'DROP_OFF, DRIVER_PICKUP or NO_RETURN'}
+        refundMinor: {type: integer, format: int64}
+        currency: {type: string}
+        refundState: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/SellerReturnLine'}}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        dropOffBy: {type: [string, 'null']}
+        createdAt: {type: [string, 'null']}
+    SellerReturnList:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SellerReturn'}}
+        total: {type: integer}
+    SellerDispute:
+      type: object
+      required: [reference, type, typeLabel, status, statusLabel, orderNumber, amountMinor, currency, description, responded, escalated, refundMinor]
+      properties:
+        reference: {type: string}
+        type: {type: string}
+        typeLabel: {type: string}
+        status: {type: string, enum: [AWAITING_SELLER, UNDER_REVIEW, ESCALATED, RESOLVED_REFUND, RESOLVED_DENIED, WITHDRAWN]}
+        statusLabel: {type: string}
+        orderNumber: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        description: {type: string, description: 'What the customer wrote (untrusted text)'}
+        responded: {type: boolean}
+        sellerResponse: {type: [string, 'null']}
+        respondBy: {type: [string, 'null'], description: 'Deadline to respond (only while waiting for the seller)'}
+        deadlineState: {type: [string, 'null'], enum: [ON_TRACK, AT_RISK, BREACHED, null]}
+        escalated: {type: boolean}
+        outcome: {type: [string, 'null']}
+        refundMinor: {type: integer, format: int64}
+        openedAt: {type: [string, 'null']}
+    SellerDisputeList:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SellerDispute'}}
+        total: {type: integer}
     SellerCouponList:
       type: object
       required: [items]

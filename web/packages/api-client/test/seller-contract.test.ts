@@ -128,8 +128,14 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const api = client();
     const session = await api.getSession();
     expect(session.portal).toBe('SELLER_CENTER');
-    expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'coupons', 'payouts', 'fees', 'billing', 'account-health', 'team']);
+    expect(keysOf(session)).toEqual(['home', 'orders', 'returns', 'disputes', 'listings', 'inventory', 'coupons', 'payouts', 'fees', 'billing', 'account-health', 'team']);
     expect(session.navGroups.map((g) => g.label)).toEqual(['Overview', 'Commerce', 'Growth', 'Finance', 'Trust & compliance', 'Settings']);
+    // Returns and disputes: read only, filterable by status; the buyer is never in the payload.
+    await expect(api.listReturns()).resolves.toHaveLength(2);
+    await expect(api.listReturns('REQUESTED')).resolves.toMatchObject([{ number: 'RMA-7B20C9D4', status: 'REQUESTED' }]);
+    const disputes = await api.listDisputes('AWAITING_SELLER');
+    expect(disputes).toMatchObject([{ reference: 'CLM-1001', deadlineState: 'AT_RISK', responded: false }]);
+    expect(JSON.stringify(disputes)).not.toContain('customerId');
     await expect(api.getCompliance()).resolves.toMatchObject({ showBanner: true, tone: 'warning', openItems: 2 });
     // Account health: each item names the Stripe embedded component that collects it; the payout bank is changed in
     // account management. The Account Session is the labelled local stand-in in the mock.

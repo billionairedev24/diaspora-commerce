@@ -16,6 +16,8 @@ import (
 
 // SellerDeps are the upstreams of the Seller Center & Provider Hub routes.
 type SellerDeps struct {
+	// Cases reads the organisation's returns (tax-returns) and disputes (trust-ops); nil answers 503.
+	Cases port.SellerCasesClient
 	Orgs    port.OrgAccessClient
 	Sellers port.SellerServiceClient
 	// Addresses is the identity address book: its default address prefills the business address (S286). Optional.

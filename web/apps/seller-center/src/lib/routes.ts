@@ -9,7 +9,7 @@ export function hrefOf(key: ModuleKey): string {
 export function moduleOf(pathname: string): ModuleKey | null {
   const seg = pathname.split('/').filter(Boolean)[0];
   if (!seg) return 'home';
-  const known: ModuleKey[] = ['onboarding', 'orders', 'listings', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
+  const known: ModuleKey[] = ['onboarding', 'orders', 'returns', 'disputes', 'listings', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
     'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'];
   return known.find((k) => k === seg) ?? null;
 }

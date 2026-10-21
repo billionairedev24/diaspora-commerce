@@ -53,7 +53,9 @@ export const sellerKeys = {
   services: (orgId: string) => [...sellerKeys.org(orgId), 'services'] as const,
   policy: (orgId: string) => [...sellerKeys.org(orgId), 'policy'] as const,
   earnings: (orgId: string, from?: string, to?: string) => [...sellerKeys.org(orgId), 'earnings', from ?? '', to ?? ''] as const,
-  coupons: (orgId: string) => [...sellerKeys.org(orgId), 'coupons'] as const
+  coupons: (orgId: string) => [...sellerKeys.org(orgId), 'coupons'] as const,
+  returns: (orgId: string, status?: string) => [...sellerKeys.org(orgId), 'returns', status ?? ''] as const,
+  disputes: (orgId: string, status?: string) => [...sellerKeys.org(orgId), 'disputes', status ?? ''] as const
 };
 
 const MINUTE = 60_000;
@@ -147,5 +149,9 @@ export const sellerQueries = {
   earnings: (api: SellerApiClient, orgId: string, from?: string, to?: string) =>
     queryOptions({ queryKey: sellerKeys.earnings(orgId, from, to), queryFn: ({ signal }) => api.getEarnings(from, to, signal), staleTime: MINUTE }),
   coupons: (api: SellerApiClient, orgId: string) =>
-    queryOptions({ queryKey: sellerKeys.coupons(orgId), queryFn: ({ signal }) => api.listCoupons(signal), staleTime: MINUTE })
+    queryOptions({ queryKey: sellerKeys.coupons(orgId), queryFn: ({ signal }) => api.listCoupons(signal), staleTime: MINUTE }),
+  returns: (api: SellerApiClient, orgId: string, status?: string) =>
+    queryOptions({ queryKey: sellerKeys.returns(orgId, status), queryFn: ({ signal }) => api.listReturns(status, signal), staleTime: MINUTE }),
+  disputes: (api: SellerApiClient, orgId: string, status?: string) =>
+    queryOptions({ queryKey: sellerKeys.disputes(orgId, status), queryFn: ({ signal }) => api.listDisputes(status, signal), staleTime: MINUTE })
 };

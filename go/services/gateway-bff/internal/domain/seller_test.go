@@ -22,11 +22,11 @@ func keys(groups []domain.NavGroup) []string {
 func TestNavigationFollowsTheSeededMatrix(t *testing.T) {
 	owner := domain.Access{Kind: domain.OrgKindSeller, Role: "seller.owner", Matrix: domain.DefaultSellerMatrix}
 	// Fees share the payouts level (identity key sPayouts): a read-only page next to Payouts. Coupons share sAds.
-	if got := keys(domain.Navigation(owner, true, nil)); len(got) != 10 || got[0] != "home" || !slices.Contains(got, "fees") || !slices.Contains(got, "coupons") {
+	if got := keys(domain.Navigation(owner, true, nil)); len(got) != 12 || got[0] != "home" || !slices.Contains(got, "fees") || !slices.Contains(got, "coupons") {
 		t.Fatalf("owner nav = %v", got)
 	}
 	support := domain.Access{Kind: domain.OrgKindSeller, Role: "seller.support", Matrix: domain.DefaultSellerMatrix}
-	if got := keys(domain.Navigation(support, true, nil)); !slices.Equal(got, []string{"home", "orders", "listings"}) {
+	if got := keys(domain.Navigation(support, true, nil)); !slices.Equal(got, []string{"home", "orders", "returns", "disputes", "listings"}) {
 		t.Fatalf("support nav = %v", got)
 	}
 	practitioner := domain.Access{Kind: domain.OrgKindProvider, Role: "provider.practitioner", Matrix: domain.DefaultProviderMatrix}

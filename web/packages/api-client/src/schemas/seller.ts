@@ -19,7 +19,7 @@ export type Portal = z.infer<typeof PortalSchema>;
 export const AccessLevelSchema = z.enum(['VIEW', 'EDIT', 'APPROVE', 'FULL']);
 export type AccessLevel = z.infer<typeof AccessLevelSchema>;
 export const ModuleKeySchema = z.enum([
-  'onboarding', 'home', 'orders', 'listings', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
+  'onboarding', 'home', 'orders', 'returns', 'disputes', 'listings', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
   'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
 ]);
 export type ModuleKey = z.infer<typeof ModuleKeySchema>;
@@ -687,6 +687,52 @@ export const SellerCouponSchema = z.object({
 export type SellerCoupon = z.infer<typeof SellerCouponSchema>;
 export const SellerCouponListSchema = z.object({ items: z.array(SellerCouponSchema) });
 export type SellerCouponList = z.infer<typeof SellerCouponListSchema>;
+
+export const ReturnStatusSchema = z.enum(['REQUESTED', 'APPROVED', 'AUTO_APPROVED', 'LABEL_ISSUED', 'IN_TRANSIT', 'RECEIVED', 'INSPECTED', 'REFUNDED', 'REJECTED', 'CANCELLED']);
+export type ReturnStatus = z.infer<typeof ReturnStatusSchema>;
+export const SellerReturnLineSchema = z.object({ title: z.string(), quantity: z.number().int(), reason: z.string(), outcome: z.string().optional() });
+export const SellerReturnSchema = z.object({
+  number: z.string(),
+  orderNumber: z.string(),
+  title: z.string(),
+  status: ReturnStatusSchema,
+  statusLabel: z.string(),
+  method: z.string(),
+  refundMinor: z.number().int(),
+  currency: z.string(),
+  refundState: z.string(),
+  items: z.array(SellerReturnLineSchema),
+  carrier: z.string().nullish(),
+  trackingNumber: z.string().nullish(),
+  dropOffBy: z.string().nullish(),
+  createdAt: z.string().nullish()
+});
+export type SellerReturn = z.infer<typeof SellerReturnSchema>;
+export const SellerReturnListSchema = z.object({ items: z.array(SellerReturnSchema), total: z.number().int() });
+
+export const DisputeStatusSchema = z.enum(['AWAITING_SELLER', 'UNDER_REVIEW', 'ESCALATED', 'RESOLVED_REFUND', 'RESOLVED_DENIED', 'WITHDRAWN']);
+export type DisputeStatus = z.infer<typeof DisputeStatusSchema>;
+export const SellerDisputeSchema = z.object({
+  reference: z.string(),
+  type: z.string(),
+  typeLabel: z.string(),
+  status: DisputeStatusSchema,
+  statusLabel: z.string(),
+  orderNumber: z.string(),
+  amountMinor: z.number().int(),
+  currency: z.string(),
+  description: z.string(),
+  responded: z.boolean(),
+  sellerResponse: z.string().nullish(),
+  respondBy: z.string().nullish(),
+  deadlineState: z.enum(['ON_TRACK', 'AT_RISK', 'BREACHED']).nullish(),
+  escalated: z.boolean(),
+  outcome: z.string().nullish(),
+  refundMinor: z.number().int(),
+  openedAt: z.string().nullish()
+});
+export type SellerDispute = z.infer<typeof SellerDisputeSchema>;
+export const SellerDisputeListSchema = z.object({ items: z.array(SellerDisputeSchema), total: z.number().int() });
 export const CreateSellerCouponSchema = z.object({
   code: z.string(),
   description: z.string().optional(),

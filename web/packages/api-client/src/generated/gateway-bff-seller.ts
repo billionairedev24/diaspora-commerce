@@ -727,6 +727,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Returns customers started on the organisation's orders */
+        get: operations["listSellerReturns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/disputes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Disputes and A-to-z claims against the organisation (the buyer is never identified) */
+        get: operations["listSellerDisputes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/coupons": {
         parameters: {
             query?: never;
@@ -2275,7 +2309,7 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /** @enum {string} */
-        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "coupons" | "calendar" | "requests" | "hours" | "services" | "policy" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
+        ModuleKey: "onboarding" | "home" | "orders" | "returns" | "disputes" | "listings" | "inventory" | "coupons" | "calendar" | "requests" | "hours" | "services" | "policy" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
         SellerUser: {
             id: string;
             firstName: string;
@@ -2993,6 +3027,66 @@ export interface components {
             editable: boolean;
             /** Format: int64 */
             version: number;
+        };
+        SellerReturnLine: {
+            title: string;
+            quantity: number;
+            reason: string;
+            outcome?: string;
+        };
+        SellerReturn: {
+            /** @example RMA-5E11E5 */
+            number: string;
+            orderNumber: string;
+            /** @description First item, with "and N more items" */
+            title: string;
+            /** @enum {string} */
+            status: "REQUESTED" | "APPROVED" | "AUTO_APPROVED" | "LABEL_ISSUED" | "IN_TRANSIT" | "RECEIVED" | "INSPECTED" | "REFUNDED" | "REJECTED" | "CANCELLED";
+            statusLabel: string;
+            /** @description DROP_OFF, DRIVER_PICKUP or NO_RETURN */
+            method: string;
+            /** Format: int64 */
+            refundMinor: number;
+            currency: string;
+            refundState: string;
+            items: components["schemas"]["SellerReturnLine"][];
+            carrier?: string | null;
+            trackingNumber?: string | null;
+            dropOffBy?: string | null;
+            createdAt?: string | null;
+        };
+        SellerReturnList: {
+            items: components["schemas"]["SellerReturn"][];
+            total: number;
+        };
+        SellerDispute: {
+            reference: string;
+            type: string;
+            typeLabel: string;
+            /** @enum {string} */
+            status: "AWAITING_SELLER" | "UNDER_REVIEW" | "ESCALATED" | "RESOLVED_REFUND" | "RESOLVED_DENIED" | "WITHDRAWN";
+            statusLabel: string;
+            orderNumber: string;
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** @description What the customer wrote (untrusted text) */
+            description: string;
+            responded: boolean;
+            sellerResponse?: string | null;
+            /** @description Deadline to respond (only while waiting for the seller) */
+            respondBy?: string | null;
+            /** @enum {string|null} */
+            deadlineState?: "ON_TRACK" | "AT_RISK" | "BREACHED" | null;
+            escalated: boolean;
+            outcome?: string | null;
+            /** Format: int64 */
+            refundMinor: number;
+            openedAt?: string | null;
+        };
+        SellerDisputeList: {
+            items: components["schemas"]["SellerDispute"][];
+            total: number;
         };
         SellerCouponList: {
             items: components["schemas"]["SellerCoupon"][];
@@ -5872,6 +5966,56 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerReturns: {
+        parameters: {
+            query?: {
+                status?: "REQUESTED" | "APPROVED" | "AUTO_APPROVED" | "LABEL_ISSUED" | "IN_TRANSIT" | "RECEIVED" | "INSPECTED" | "REFUNDED" | "REJECTED" | "CANCELLED";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Returns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReturnList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerDisputes: {
+        parameters: {
+            query?: {
+                status?: "AWAITING_SELLER" | "UNDER_REVIEW" | "ESCALATED" | "RESOLVED_REFUND" | "RESOLVED_DENIED" | "WITHDRAWN";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disputes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerDisputeList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

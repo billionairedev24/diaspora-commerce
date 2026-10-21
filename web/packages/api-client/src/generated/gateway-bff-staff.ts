@@ -49,6 +49,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Lola in the staff console - today's messages and the tools she has
+         * @description Any staff member. One level for everyone (200 messages a day, UTC); she is read-only and works with the member's own module access and permissions.
+         */
+        get: operations["getStaffAssistant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/assistant/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Lola one question (the console keeps the conversation and sends the earlier turns)
+         * @description Lola looks things up through the console's own use cases (dashboard, tables, sheets) and ai-gateway
+         *     `POST /v1/ai/staff-assistant/complete`; payouts and Connect account health are read for one organisation. Emails and
+         *     phone numbers are partly hidden from the model. She cannot change anything: `links` are buttons that open a record.
+         *     429 `ASSISTANT_LIMIT` after the day's messages.
+         */
+        post: operations["staffAssistantChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/resources/{resource}": {
         parameters: {
             query?: never;
@@ -4462,6 +4505,27 @@ export interface components {
             /** @enum {string} */
             tone: "positive" | "attention" | "neutral";
         };
+        StaffAssistantStatus: {
+            dailyMessages: number;
+            used: number;
+            remaining: number;
+            tools: string[];
+        };
+        StaffAssistantReply: {
+            answer: string;
+            /** @description What she looked up ("Checking the dashboard") */
+            steps: {
+                tool: string;
+                label: string;
+            }[];
+            /** @description Records she points at; the console opens one when the member taps its button */
+            links: {
+                label: string;
+                resource: string;
+                id: string;
+            }[];
+            status: components["schemas"]["StaffAssistantStatus"];
+        };
         StaffDashboard: {
             rangeDays: number;
             /** Format: date-time */
@@ -6258,6 +6322,66 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+        };
+    };
+    getStaffAssistant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAssistantStatus"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    staffAssistantChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    message: string;
+                    history?: {
+                        /** @enum {string} */
+                        role: "user" | "assistant";
+                        content: string;
+                    }[];
+                    language?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Answer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAssistantReply"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     listStaffResource: {

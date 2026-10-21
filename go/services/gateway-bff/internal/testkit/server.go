@@ -115,7 +115,8 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	identityClient := client("identity", base)
 	clientCreds := upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now}
 	media := upstreams.NewMedia(client("media", base))
-	sellerDeps := app.SellerDeps{Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
+	sellerCases := upstreams.NewSellerCases(client("tax-returns", base), client("trust-ops", base))
+	sellerDeps := app.SellerDeps{Cases: sellerCases, Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)), Addresses: identity,
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
 		Listing: upstreams.NewSellerListing(client("catalog", base)), Writer: upstreams.NewListingWriter(client("ai-gateway", base)),
 		Offers: upstreams.NewOffers(offersClient), Media: media,
@@ -171,6 +172,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerBusinessPage: app.NewSellerBusinessPageService(sellerDeps),
 		SellerOffers:       app.NewSellerOffersService(sellerDeps),
 		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
+		SellerCases:        app.NewSellerCasesService(sellerDeps),
 		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
 	// Seller Center exports: the BFF's own file store (signed links served by /v1/seller/export-files/{id}).
@@ -181,7 +183,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		services.SellerExportFiles = files
 	}
 	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", base)), Counter: NewMemStore(),
-		Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: upstreams.NewSellerCases(client("tax-returns", base), client("trust-ops", base)), Shell: services.SellerShell, Dashboard: services.SellerDashboard,
+		Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: sellerCases, Shell: services.SellerShell, Dashboard: services.SellerDashboard,
 		Now: clock.Now})
 	services.Shopper = shopperServices(u, client, identity, services, clock, log)
 	mux := http.NewServeMux()

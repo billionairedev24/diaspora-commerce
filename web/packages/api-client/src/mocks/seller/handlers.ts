@@ -2133,6 +2133,18 @@ export const sellerHandlers = [
       return o;
     })
   ),
+  http.get(`${W}/returns`, route((ctx) => {
+    require(ctx, 'returns', 'VIEW', 'SELLER');
+    const status = new URL(ctx.request.url).searchParams.get('status');
+    const items = ctx.db.returns.filter((r) => !status || r.status === status);
+    return { items, total: items.length };
+  })),
+  http.get(`${W}/disputes`, route((ctx) => {
+    require(ctx, 'disputes', 'VIEW', 'SELLER');
+    const status = new URL(ctx.request.url).searchParams.get('status');
+    const items = ctx.db.disputes.filter((d) => !status || d.status === status);
+    return { items, total: items.length };
+  })),
   http.get(`${W}/coupons`, route((ctx) => {
     require(ctx, 'coupons', 'VIEW', 'SELLER');
     return { items: ctx.db.coupons.filter((c) => c.funding === 'SELLER') };

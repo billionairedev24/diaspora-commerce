@@ -3,6 +3,8 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { DisputesView } from '@/components/cases/DisputesView';
+import { ReturnsView } from '@/components/cases/ReturnsView';
 import { CouponsView } from '@/components/growth/CouponsView';
 import { PayoutsView } from '@/components/money/PayoutsView';
 import { OrdersView } from '@/components/orders/OrdersView';
@@ -24,6 +26,25 @@ describe('Seller Center screens (against the seller mocks)', () => {
     const table = await screen.findByRole('table');
     await waitFor(() => expect(within(table).getAllByRole('row').length).toBeGreaterThan(5));
     expect(table.closest('[class*="overflow-x-auto"]')).toBeNull();
+  });
+
+  it('lists returns and opens one with its items, refund and reason', async () => {
+    await renderScreen(<ReturnsView />);
+    await userEvent.click(await screen.findByRole('button', { name: 'RMA-5E11E5A1' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText(/2 × Garri 2kg/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/damaged/i)).toBeInTheDocument();
+    expect(within(sheet).getByText(/\$17\.98/)).toBeInTheDocument();
+  });
+
+  it('lists disputes with the response deadline and never names the buyer', async () => {
+    await renderScreen(<DisputesView />);
+    expect(await screen.findByText('Waiting for your response', { selector: 'span' })).toBeInTheDocument();
+    expect(await screen.findByText('At risk')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'CLM-1001' }));
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByText(/different brand/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/customerId/);
   });
 
   it('shows every seller role as a capability card and highlights the member’s own role', async () => {

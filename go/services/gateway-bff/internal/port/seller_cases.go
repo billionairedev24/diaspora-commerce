@@ -15,6 +15,7 @@ type UpClaim struct {
 	Status         string      `json:"status"`
 	OrderNumber    string      `json:"orderNumber"`
 	AmountMinor    int64       `json:"amountMinor"`
+	Currency       string      `json:"currency"`
 	Description    string      `json:"description"`
 	SellerResponse string      `json:"sellerResponse"`
 	SLA            *UpClaimSLA `json:"sla"`

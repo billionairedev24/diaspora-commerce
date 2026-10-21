@@ -52,6 +52,8 @@ type Services struct {
 	SellerAssistant app.SellerAssistantService
 	// SellerCoupons manages seller-funded promotional codes (offers-service).
 	SellerCoupons app.SellerCouponsService
+	// SellerCases lists the organisation's returns and disputes.
+	SellerCases app.SellerCasesService
 	// SellerFba is Seller Center's Send to AfroTransact (S281); its routes are registered when set.
 	SellerFba app.SellerFbaService
 	// SellerExports exports Seller Center tables; SellerExportFiles serves the files the BFF keeps itself (nil when

@@ -109,7 +109,9 @@ func run() error {
 	promise := upstreams.NewPromise(client("promise", up.Promise))
 	orders := upstreams.NewOrders(ordersClient)
 	notifications := upstreams.NewNotifications(client("notifications", up.Notifications))
+	sellerCases := upstreams.NewSellerCases(client("tax-returns", up.TaxReturns), client("trust-ops", up.TrustOps))
 	sellerDeps := app.SellerDeps{
+		Cases: sellerCases,
 		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)), Addresses: identity,
 		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
@@ -181,11 +183,12 @@ func run() error {
 		SellerBusinessPage: app.NewSellerBusinessPageService(sellerDeps),
 		SellerOffers:       app.NewSellerOffersService(sellerDeps),
 		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
+		SellerCases:        app.NewSellerCasesService(sellerDeps),
 		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
 	// Lola in Seller Center: looks things up through the seller services above, as the signed-in seller.
 	services.SellerAssistant = app.NewSellerAssistantService(sellerDeps, app.AssistantDeps{Model: upstreams.NewAssistantModel(client("ai-gateway", up.AIGateway)),
-		Counter: store, Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: upstreams.NewSellerCases(client("tax-returns", up.TaxReturns), client("trust-ops", up.TrustOps)),
+		Counter: store, Orders: services.SellerOrders, Catalog: services.SellerCatalog, Fees: services.SellerFees, Money: services.SellerMoney, Coupons: services.SellerCoupons, Cases: sellerCases,
 		Shell: services.SellerShell, Dashboard: services.SellerDashboard})
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,

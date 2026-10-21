@@ -61,6 +61,10 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
 	}
+	if h.s.SellerCases != nil {
+		route("GET /v1/seller/returns", h.sellerReturns)
+		route("GET /v1/seller/disputes", h.sellerDisputes)
+	}
 	if h.s.SellerCoupons != nil {
 		route("GET /v1/seller/coupons", h.sellerCoupons)
 		route("POST /v1/seller/coupons", h.sellerCreateCoupon)
@@ -765,6 +769,16 @@ func (h *handlersImpl) offerFulfilment(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.SellerOffers.SetFulfilment(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerReturns(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerCases.Returns(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("status"))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v, "total": len(v)}, err)
+}
+
+func (h *handlersImpl) sellerDisputes(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerCases.Disputes(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("status"))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v, "total": len(v)}, err)
 }
 
 func (h *handlersImpl) sellerCoupons(w http.ResponseWriter, r *http.Request) {

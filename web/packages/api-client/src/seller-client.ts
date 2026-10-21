@@ -129,6 +129,8 @@ import {
   type SellerCoupon,
   SellerCouponListSchema,
   SellerCouponSchema,
+  type SellerDispute,
+  SellerDisputeListSchema,
   type SellerFeesView,
   SellerFeesViewSchema,
   type SellerOffer,
@@ -141,6 +143,8 @@ import {
   SellerOrderPageSchema,
   type SellerProductDetail,
   SellerProductDetailSchema,
+  type SellerReturn,
+  SellerReturnListSchema,
   type SellerRewardsView,
   SellerRewardsViewSchema,
   type SellerSession,
@@ -295,6 +299,10 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/offers', SellerOfferListSchema, { query: { productId }, signal }),
     setOfferFulfilment: (offerId: string, body: OfferFulfilmentRequest): Promise<SellerOffer> =>
       request(`/v1/seller/offers/${enc(offerId)}/fulfilment`, SellerOfferSchema, { method: 'PUT', body }),
+    listReturns: async (status?: string, signal?: AbortSignal): Promise<SellerReturn[]> =>
+      (await request(`/v1/seller/returns${status ? `?status=${enc(status)}` : ''}`, SellerReturnListSchema, { signal })).items,
+    listDisputes: async (status?: string, signal?: AbortSignal): Promise<SellerDispute[]> =>
+      (await request(`/v1/seller/disputes${status ? `?status=${enc(status)}` : ''}`, SellerDisputeListSchema, { signal })).items,
     listCoupons: async (signal?: AbortSignal) => (await request('/v1/seller/coupons', SellerCouponListSchema, { signal })).items,
     createCoupon: (body: CreateSellerCoupon): Promise<SellerCoupon> =>
       request('/v1/seller/coupons', SellerCouponSchema, { method: 'POST', body }),
