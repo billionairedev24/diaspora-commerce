@@ -202,4 +202,5 @@ at:
       offers-url: ${OFFERS_URL:http://localhost:8102}
       promise-url: ${PROMISE_URL:http://localhost:8204}
       orders-url: ${ORDERS_URL:http://localhost:8104}
+      cart-url: ${CART_URL:http://localhost:8203}
       bookings-url: ${BOOKINGS_URL:http://localhost:8109}

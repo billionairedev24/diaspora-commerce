@@ -18,6 +18,9 @@ final class LolaToolSpecs {
     static final String BOOK_SERVICE = "book_service";
     static final String PROCEED_TO_CHECKOUT = "proceed_to_checkout";
     static final String HANDOFF_TO_SUPPORT = "handoff_to_support";
+    static final String MY_ORDERS = "my_orders";
+    static final String VIEW_CART = "view_cart";
+    static final String MY_BOOKINGS = "my_bookings";
 
     static final List<ToolSpec> ALL = List.of(
             new ToolSpec(SEARCH_PRODUCTS, """
@@ -66,6 +69,21 @@ final class LolaToolSpecs {
                     {"type":"object","properties":{
                       "orderId":{"type":"string","description":"Order number or id"}
                     },"required":["orderId"],"additionalProperties":false}"""),
+            new ToolSpec(MY_ORDERS, """
+                    The shopper's recent orders, newest first, with order number, status, date and total. Use it for \
+                    'what did I order', 'where are my orders' or to find an order number; then track_order for details.""",
+                    """
+                    {"type":"object","properties":{
+                      "limit":{"type":"integer","minimum":1,"maximum":10,"default":5}
+                    },"additionalProperties":false}"""),
+            new ToolSpec(VIEW_CART, """
+                    What is in the shopper's cart now: items, quantities, prices, anything unavailable or with a \
+                    changed price, and the subtotal.""", """
+                    {"type":"object","properties":{},"additionalProperties":false}"""),
+            new ToolSpec(MY_BOOKINGS, """
+                    The shopper's service bookings (braiders, caterers, tailors ...): reference, service, status, \
+                    start time, price and deposit.""", """
+                    {"type":"object","properties":{},"additionalProperties":false}"""),
             new ToolSpec(START_RETURN, """
                     Prepare a 'Start a return' button for an order. The return is only created when the shopper taps \
                     it.""", """
