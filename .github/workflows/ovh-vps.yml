@@ -1,0 +1,99 @@
+# Deploy the whole stack to ONE OVHcloud server running k3s (infra/ovh-vps/README.md). MANUAL ONLY: Actions > ovh-vps > Run
+# workflow. The server is created by hand in the OVHcloud console (nothing here can create or bill anything); this workflow
+# only reaches it over SSH. Never add push/pull_request/schedule triggers.
+#
+# GitHub Environment `ovh-vps` (protect it with required reviewers) holds:
+#   secret OVH_VPS_SSH_KEY       private key whose public half is on the server (ubuntu user)
+#   secret OVH_VPS_CONFIG        the content of infra/ovh-vps/config.env (DOMAIN, IMAGE_REGISTRY, DB_MODE ...)
+#   secret OVH_VPS_SECRETS       the content of infra/ovh-vps/secrets.local.env (Stripe test keys ...); may be empty
+#   variable OVH_VPS_HOST        the server's IPv4 or host name
+#   variable OVH_VPS_USER        ubuntu (default)
+name: ovh-vps
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do
+        type: choice
+        default: deploy
+        options: [bootstrap, deploy, services, edge, status, down, up]
+      image-tag:
+        description: "Full git sha of the images in GHCR (default: this run's commit). deploy and services only."
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ovh-vps
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: ${{ inputs.action }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: ovh-vps
+    env:
+      ACTION: ${{ inputs.action }}
+      HOST: ${{ vars.OVH_VPS_HOST }}
+      SSH_USER: ${{ vars.OVH_VPS_USER || 'ubuntu' }}
+      TAG: ${{ inputs.image-tag || github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: SSH setup
+        env:
+          SSH_KEY: ${{ secrets.OVH_VPS_SSH_KEY }}
+        run: |
+          [[ -n "$HOST" ]] || { echo "::error::set the OVH_VPS_HOST variable of the ovh-vps environment"; exit 1; }
+          [[ -n "$SSH_KEY" ]] || { echo "::error::set the OVH_VPS_SSH_KEY secret of the ovh-vps environment"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -T 15 -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<CFG
+          Host server
+            HostName $HOST
+            User $SSH_USER
+            IdentityFile ~/.ssh/id_deploy
+            ServerAliveInterval 30
+          CFG
+
+      - name: Copy the deployment files
+        run: |
+          tar czf /tmp/kit.tgz infra/ovh-vps infra/helm infra/k8s/platform/lean infra/k8s/platform/openfga \
+            $(ls -d java/services/*/deploy/helm go/services/*/deploy/helm)
+          ssh server 'sudo install -d -m 755 -o "$USER" /opt/afrotransact'
+          ssh server 'cd /opt/afrotransact && rm -rf infra java go' 
+          scp -q /tmp/kit.tgz server:/tmp/kit.tgz
+          ssh server 'cd /opt/afrotransact && tar xzf /tmp/kit.tgz && rm /tmp/kit.tgz'
+
+      - name: Write the configuration (never logged)
+        env:
+          CONFIG: ${{ secrets.OVH_VPS_CONFIG }}
+          LOCAL: ${{ secrets.OVH_VPS_SECRETS }}
+        run: |
+          if [[ "$ACTION" =~ ^(deploy|services|edge|down|up|status)$ ]]; then
+            [[ -n "$CONFIG" ]] || { echo "::error::set the OVH_VPS_CONFIG secret (infra/ovh-vps/config.env.example)"; exit 1; }
+            { printf '%s\n' "$CONFIG" | grep -v '^IMAGE_TAG='; echo "IMAGE_TAG=$TAG"; } | ssh server 'cat > /opt/afrotransact/infra/ovh-vps/config.env && chmod 600 /opt/afrotransact/infra/ovh-vps/config.env'
+            printf '%s\n' "$LOCAL" | ssh server 'cat > /opt/afrotransact/infra/ovh-vps/secrets.local.env && chmod 600 /opt/afrotransact/infra/ovh-vps/secrets.local.env'
+          fi
+
+      - name: Run ${{ inputs.action }}
+        run: |
+          case "$ACTION" in
+            bootstrap) ssh server 'sudo bash /opt/afrotransact/infra/ovh-vps/bootstrap.sh' ;;
+            deploy)    ssh server 'sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh all' ;;
+            *)         ssh server "sudo bash /opt/afrotransact/infra/ovh-vps/deploy.sh $ACTION" ;;
+          esac
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### ovh-vps: $ACTION"
+            echo "Server: \`$HOST\` · images: \`$TAG\`"
+            echo "Billing: OVHcloud bills the instance by the hour even when apps are scaled down. Delete it in the console when the test is over."
+          } >> "$GITHUB_STEP_SUMMARY"

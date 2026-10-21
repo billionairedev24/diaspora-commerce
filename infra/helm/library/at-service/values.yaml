@@ -14,3 +14,8 @@
 #                  (templates/_helpers.tpl "at-service.platformEnvVars"; docs/engineering/environments.md).
 #   global.urls    optional {ENV_NAME: value} overrides of a derived URL for the whole environment.
 # A service's extraEnv entry of the same name wins over both. Unset global.domain renders PLATFORM_ENV only.
+#
+# secrets.plain: true   the pod still reads envFrom Secret <service>-secrets, but no ExternalSecret is rendered: the Secret is
+#                       created by hand (single-node k3s without External Secrets: infra/ovh-vps/secrets.sh). Default false.
+#
+# imagePullSecrets: [{name: ghcr}]   private registry credentials (kubectl create secret docker-registry); default none.

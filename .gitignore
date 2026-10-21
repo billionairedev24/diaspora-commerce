@@ -56,3 +56,5 @@ web/apps/*/next-env.d.ts
 mobile/apps/*/assets/hero/
 .junie/
 *.whl
+infra/ovh-vps/config.env
+infra/ovh-vps/secrets.local.env
