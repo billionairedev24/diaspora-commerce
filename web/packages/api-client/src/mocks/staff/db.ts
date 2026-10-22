@@ -457,6 +457,23 @@ function seed(now: Date): MockStaffDb {
     rec('grocery|tax_class|Packaged, shelf-stable', { rowId: 'grocery|tax_class|Packaged, shelf-stable', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Packaged, shelf-stable', taxCode: 'PACKAGED_FOOD', kind: 'ANSWER', note: 'Food for home consumption' }),
     rec('grocery|tax_class|Hot or ready-to-eat', { rowId: 'grocery|tax_class|Hot or ready-to-eat', productType: 'grocery', attrKey: 'tax_class', attrValue: 'Hot or ready-to-eat', taxCode: 'PREPARED_FOOD', kind: 'ANSWER', note: 'Prepared food' })
   ];
+  const reconciliation = [
+    rec('rec-1', { stripeRef: 'ch_3Q8xK2', windowStart: ago(1, 0), ledgerMinor: 10_000, stripeMinor: 9_750, differenceMinor: 250, status: 'OPEN', note: null, resolvedByName: null, resolvedAt: null,
+      meaning: 'The ledger shows $2.50 more than Stripe reports for this object.' }),
+    rec('rec-2', { stripeRef: 're_3Q8yL4', windowStart: ago(1, 0), ledgerMinor: -4_200, stripeMinor: -4_200 - 120, differenceMinor: 120, status: 'EXPLAINED', note: 'Stripe settles this fee the next day (timing)', resolvedByName: 'Platform Admin', resolvedAt: ago(0, 5),
+      meaning: 'The ledger shows $1.20 more than Stripe reports for this object.' }),
+    rec('rec-3', { stripeRef: 'tr_1Q9aB7', windowStart: ago(2, 0), ledgerMinor: 55_000, stripeMinor: 55_000, differenceMinor: 0, status: 'ADJUSTED', note: null, resolvedByName: 'Finance Lead', resolvedAt: ago(1, 2),
+      meaning: 'The ledger and Stripe agree.' })
+  ];
+  const reconciliationRuns = [
+    rec('run-1', { windowStart: ago(1, 0), ledgerNetMinor: 5_830_000, stripeNetMinor: 5_829_630, driftMinor: 370, differences: 2, state: 'DIFFERENCES', createdAt: ago(0, 8) }),
+    rec('run-2', { windowStart: ago(2, 0), ledgerNetMinor: 4_411_000, stripeNetMinor: 4_411_000, driftMinor: 0, differences: 0, state: 'RECONCILED', createdAt: ago(1, 8) })
+  ];
+  const ledgerAdjustments = [
+    rec('adj-1', { reason: 'Stripe fee booked twice for the charge', amountMinor: 250, stripeRef: 'ch_3Q8xK2', proposedByName: 'Finance Lead', decidedByName: null, status: 'PROPOSED', proposedAt: ago(0, 4), decidedAt: null, decisionNote: null, journalId: null }),
+    rec('adj-2', { reason: 'Reclass a mis-booked chargeback fee to chargeback losses', amountMinor: 1_500, stripeRef: 'dp_1Q7cD9', proposedByName: 'Finance Lead', decidedByName: 'Platform Admin', status: 'POSTED', proposedAt: ago(3, 0), decidedAt: ago(2, 6), decisionNote: 'Checked against the Stripe dispute', journalId: 'a1b2c3d4' })
+  ];
+  const stripeLookup: MockRecord[] = [];
   const taxReview = [
     rec('grocery|abc123', { rowId: 'grocery|abc123', productType: 'grocery', attrHash: 'abc123', answer: null, taxCode: 'GENERAL_GOODS', count: 4, sampleAtin: 'AT10000001', lastSeen: ago(0, 3), state: 'OPEN', reviewedBy: null, reviewNote: null })
   ];
@@ -483,7 +500,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations
     },

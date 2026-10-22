@@ -69,7 +69,7 @@ const MARKET_ORDER: Record<string, number> = { LIVE: 0, COMING_SOON: 1, PAUSED: 
 const col = (key: string, label: string, kind: ColumnKind, width: number): ResourceColumn => ({ key, label, kind, width });
 const facets = (...values: string[]): ResourceFacet[] => values.map((v) => ({ value: v, label: humanize(v) }));
 const field = (key: string, label: string, type: FormField['type'], required: boolean, extra: Partial<FormField> = {}): FormField => ({ key, label, type, required, ...extra });
-const form = (title: string, submitLabel: string, fields: FormField[]): StaffForm => ({ title, submitLabel, fields });
+const form = (title: string, submitLabel: string, fields: FormField[], intro?: string): StaffForm => ({ title, submitLabel, fields, ...(intro ? { intro } : {}) });
 const options = (...values: string[]) => values.map((v) => ({ value: v, label: humanize(v) }));
 const str = (v: FieldValue | Scalar | undefined): string => (v === null || v === undefined ? '' : String(v));
 const num = (v: FieldValue | Scalar | undefined): number => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -643,6 +643,106 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     titleOf: (r) => str(r.fields.label),
     subtitleOf: (r) => str(r.fields.code),
     actions: []
+  },
+  reconciliation: {
+    title: 'Differences',
+    columns: [col('stripeRef', 'Stripe object', 'mono', 20), col('windowStart', 'Day', 'date', 11), col('ledgerMinor', 'Ledger', 'money', 12), col('stripeMinor', 'Stripe', 'money', 12), col('differenceMinor', 'Difference', 'money', 12), col('note', 'Why', 'text', 21), col('status', 'Status', 'status', 12)],
+    statusKey: 'status',
+    facets: facets('OPEN', 'EXPLAINED', 'ADJUSTED', 'SUPERSEDED'),
+    exportable: true,
+    titleOf: (r) => `Difference on ${str(r.fields.stripeRef)}`,
+    subtitleOf: (r) => str(r.fields.status),
+    sections: [
+      ['The difference', ['stripeRef', 'windowStart', 'ledgerMinor', 'stripeMinor', 'differenceMinor', 'meaning']],
+      ['Review', ['status', 'note', 'resolvedByName', 'resolvedAt']]
+    ],
+    actions: [
+      {
+        key: 'explain', label: 'Mark as explained', tone: 'neutral', permission: 'ledger:adjust', when: (r) => stateReason(r, 'OPEN'),
+        form: () => form('Why is this not an error?', 'Mark explained', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })], 'Use this when the difference is expected (a fee that settles the next day, a timing gap). Nothing is posted to the ledger.'),
+        apply: (r, v, ctx) => { r.fields.status = 'EXPLAINED'; r.fields.note = str(v.note); r.fields.resolvedByName = ctx.actor; r.fields.resolvedAt = ctx.now.toISOString(); log(r, ctx, `Explained — ${str(v.note)}`); }
+      },
+      {
+        key: 'propose-correction', label: 'Propose a correction', tone: 'primary', permission: 'ledger:adjust', when: (r) => stateReason(r, 'OPEN', 'EXPLAINED'),
+        form: () => form('Propose a correction', 'Propose', [
+          field('account', 'Book the other side against', 'select', true, { options: [{ value: '5000', label: '5000 · Stripe processing fees' }, { value: '2000', label: '2000 · Seller payable (needs the organisation id)' }, { value: '4000', label: '4000 · Commission revenue' }], value: '5000' }),
+          field('key', 'Organisation id or jurisdiction (only for 2000 and 2100)', 'text', false, { maxLength: 80 }),
+          field('reason', 'Why the ledger is wrong (at least 15 characters)', 'textarea', true, { maxLength: 1000 })
+        ], 'Nothing reaches the ledger until a different person approves it under Ledger adjustments.'),
+        apply: (r, _v, ctx) => { log(r, ctx, 'Correction proposed — waiting for approval'); }
+      }
+    ]
+  },
+  'reconciliation-runs': {
+    title: 'Daily runs',
+    columns: [col('windowStart', 'Day', 'date', 14), col('ledgerNetMinor', 'Ledger net', 'money', 16), col('stripeNetMinor', 'Stripe net', 'money', 16), col('driftMinor', 'Total difference', 'money', 16), col('differences', 'Objects that differ', 'number', 16), col('state', 'Result', 'status', 14), col('createdAt', 'Run at', 'datetime', 8)],
+    statusKey: 'state',
+    facets: facets('RECONCILED', 'DIFFERENCES'),
+    exportable: true,
+    titleOf: (r) => `Reconciliation of ${str(r.fields.windowStart).slice(0, 10)}`,
+    subtitleOf: (r) => str(r.fields.state),
+    sections: [['Result', ['windowStart', 'ledgerNetMinor', 'stripeNetMinor', 'driftMinor', 'createdAt']]],
+    actions: [],
+    create: {
+      permission: 'payments:configure',
+      form: form('Reconcile a day', 'Run', [field('date', 'Day', 'date', true, {})], 'Compares what the ledger booked on 1000 Stripe clearing with Stripe\'s balance transactions for that day.'),
+      build: (v, id, ctx) => ({ id, fields: { windowStart: str(v.date), ledgerNetMinor: 0, stripeNetMinor: 0, driftMinor: 0, differences: 0, state: 'RECONCILED', createdAt: ctx.now.toISOString() }, activity: [] })
+    }
+  },
+  'ledger-adjustments': {
+    title: 'Ledger adjustments',
+    columns: [col('reason', 'Why', 'text', 34), col('amountMinor', 'Amount', 'money', 12), col('stripeRef', 'Stripe object', 'mono', 16), col('proposedByName', 'Proposed by', 'text', 14), col('decidedByName', 'Decided by', 'text', 14), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('PROPOSED', 'POSTED', 'REJECTED'),
+    exportable: true,
+    titleOf: (r) => `Adjustment of $${(num(r.fields.amountMinor) / 100).toFixed(2)}`,
+    subtitleOf: (r) => str(r.fields.reason),
+    sections: [
+      ['The correction', ['reason', 'amountMinor', 'stripeRef', 'status', 'journalId']],
+      ['Who decided', ['proposedByName', 'proposedAt', 'decidedByName', 'decidedAt', 'decisionNote']]
+    ],
+    actions: [
+      {
+        key: 'approve', label: 'Approve and post', tone: 'primary', permission: 'ledger:approve', confirm: 'Post this correction to the ledger now? It cannot be edited afterwards.',
+        when: (r, ctx) => stateReason(r, 'PROPOSED') ?? (str(r.fields.proposedByName) === ctx.actor ? 'You proposed this, so a different person must approve it.' : null),
+        apply: (r, _v, ctx) => { r.fields.status = 'POSTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.journalId = 'jrnl-' + r.id; log(r, ctx, 'Approved and posted'); }
+      },
+      {
+        key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:approve', when: (r) => stateReason(r, 'PROPOSED'),
+        form: () => form('Why is it rejected?', 'Reject', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })]),
+        apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.decisionNote = str(v.note); log(r, ctx, `Rejected — ${str(v.note)}`); }
+      }
+    ],
+    create: {
+      permission: 'ledger:adjust',
+      form: form('Propose an adjustment', 'Propose', [
+        field('debitAccount', 'Debit', 'select', true, { options: [{ value: '5000', label: '5000 · Stripe processing fees' }, { value: '1000', label: '1000 · Stripe clearing' }] }),
+        field('creditAccount', 'Credit', 'select', true, { options: [{ value: '5000', label: '5000 · Stripe processing fees' }, { value: '1000', label: '1000 · Stripe clearing' }] }),
+        field('amount', 'Amount in dollars', 'number', true, { min: 0, max: 10_000_000 }),
+        field('stripeRef', 'Stripe object it corrects (needed when 1000 is used)', 'text', false, { maxLength: 120 }),
+        field('reason', 'Why the ledger is wrong (at least 15 characters)', 'textarea', true, { maxLength: 1000 })
+      ], 'Nothing reaches the ledger until a different person approves it.'),
+      build: (v, id, ctx) => ({ id, fields: { reason: str(v.reason), amountMinor: Math.round(num(v.amount) * 100), stripeRef: str(v.stripeRef) || null, proposedByName: ctx.actor, decidedByName: null, status: 'PROPOSED', proposedAt: ctx.now.toISOString(), decidedAt: null, decisionNote: null, journalId: null }, activity: [] })
+    }
+  },
+  'stripe-lookup': {
+    title: 'Stripe lookup',
+    columns: [col('ref', 'Stripe id', 'mono', 30), col('kind', 'What it is', 'text', 20), col('stripeStatus', 'Status at Stripe', 'status', 20), col('amountMinor', 'Amount', 'money', 14), col('created', 'Created', 'datetime', 16)],
+    statusKey: 'stripeStatus',
+    facets: [],
+    exportable: false,
+    titleOf: (r) => `Stripe ${str(r.fields.ref)}`,
+    subtitleOf: (r) => str(r.fields.kind),
+    sections: [['What Stripe says', ['ref', 'kind', 'stripeStatus', 'amountMinor', 'created']]],
+    actions: [],
+    create: {
+      permission: 'payments:read',
+      form: form('Look up in Stripe', 'Look up', [
+        field('ref', 'Stripe id', 'text', true, { maxLength: 120, pattern: '^[a-z]{2,6}_[A-Za-z0-9_]{6,100}$', help: 'For example po_…, tr_…, pi_…, ch_…, re_…, txn_…, dp_…, acct_…' }),
+        field('orgId', "Seller's organisation id (for a payout)", 'text', false, { maxLength: 80 })
+      ], 'Reads the object from Stripe and shows what the ledger booked for it.'),
+      build: (v, _id, ctx) => ({ id: `${str(v.ref)} ${str(v.orgId)}`.trim(), fields: { ref: str(v.ref), kind: 'Payout', stripeStatus: 'in_transit', amountMinor: 50_000, created: ctx.now.toISOString() }, activity: [] })
+    }
   },
   'tax-rules': {
     title: 'Tax classification rules',

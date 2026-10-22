@@ -275,7 +275,8 @@ func RefundLimitProblem(limit int64) *Problem {
 // ResourceKeys are the tables of the console (contract ResourceKey).
 var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "moderation", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
-	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons"}
+	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
+	"reconciliation", "reconciliation-runs", "ledger-adjustments", "stripe-lookup"}
 
 // Column is one table column; Width is its share of the table in percent.
 type Column struct {

@@ -74,6 +74,12 @@ func enrichPayout(ctx context.Context, sc staffCtx, o jobj) {
 			}
 		}
 	}
+	if id := jstr(o, "stripePayoutId"); id != "" {
+		var l jobj
+		if sc.get(ctx, sc.up.Payments, "/v1/stripe/lookup", url.Values{"ref": {id}, "orgId": {org}}, &l) == nil {
+			o["stripe"] = l
+		}
+	}
 	var bal jobj
 	if sc.get(ctx, sc.up.Payments, "/v1/payouts/balance", url.Values{"orgId": {org}}, &bal) == nil {
 		o["balance"] = bal
@@ -146,6 +152,18 @@ func payoutSections(o jobj) []domain.DetailSection {
 		fieldOf("Requester email", jstr(o, "requestedByEmail"), "text"),
 	}})
 	secs = append(secs, domain.DetailSection{Title: "Before you approve", Fields: payoutChecks(o)})
+	if st, ok := o["stripe"].(map[string]any); ok {
+		sec := stripeSection("Live from Stripe", jobj(st))
+		if note := stripeMismatch(o, jobj(st)); note != "" {
+			sec.Fields = append([]domain.DetailField{fieldOf("Needs attention", note, "text")}, sec.Fields...)
+		}
+		if b, ok := st["balance"].(map[string]any); ok {
+			sec.Fields = append(sec.Fields,
+				fieldOf("Seller's Stripe balance, available", jstr(b, "availableMinor"), "money"),
+				fieldOf("Seller's Stripe balance, pending", jstr(b, "pendingMinor"), "money"))
+		}
+		secs = append(secs, sec)
+	}
 	if b, ok := o["balance"].(map[string]any); ok {
 		secs = append(secs, domain.DetailSection{Title: "Seller's balance now", Fields: []domain.DetailField{
 			fieldOf("Available to request", jstr(b, "availableMinor"), "money"),
@@ -174,4 +192,23 @@ func payoutTables(o jobj) []domain.DetailTable {
 		}
 	}
 	return tables
+}
+
+// stripeMismatch says when Stripe and our record of the payout disagree and what to do about it.
+func stripeMismatch(o, lookup jobj) string {
+	obj, ok := lookup["object"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	at := strings.ToLower(jstr(obj, "status"))
+	ours := strings.ToUpper(jstr(o, "status"))
+	switch {
+	case ours == "IN_TRANSIT" && at == "paid":
+		return "Stripe says this payout was paid, but it still shows on the way here. Use Check with Stripe to close it."
+	case ours == "IN_TRANSIT" && (at == "failed" || at == "canceled"):
+		return "Stripe says this payout " + at + ", but it still shows on the way here. Use Check with Stripe to record the failure and give the seller the money back."
+	case ours == "PAID" && at != "" && at != "paid":
+		return "We show this payout as paid, but Stripe says " + at + ". Check the payout in the Stripe dashboard."
+	}
+	return ""
 }

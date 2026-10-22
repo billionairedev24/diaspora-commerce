@@ -55,7 +55,7 @@ var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispa
 
 var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "content:legal.edit",
 	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "delivery:dispatch", "disputes:manage",
-	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "payments:configure", "payouts:approve", "payouts:read",
+	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
 
 type fakePlatform struct {
@@ -415,6 +415,27 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.mu.Unlock()
 		}
 		writeJ(w, 200, map[string]any{"id": "pay-1", "orgId": "org-1", "amountMinor": 50000, "status": f.payoutSt, "requestedAt": now})
+	case p == "/v1/reconciliation/items":
+		writeJ(w, 200, []any{map[string]any{"id": "rec-1", "runId": "run-1", "windowStart": now, "stripeRef": "ch_123456", "currency": "USD", "ledgerMinor": 10000, "stripeMinor": 9750,
+			"differenceMinor": 250, "status": "OPEN", "createdAt": now}})
+	case strings.HasPrefix(p, "/v1/reconciliation/items/"):
+		writeJ(w, 200, map[string]any{"item": map[string]any{"id": "rec-1", "runId": "run-1", "windowStart": now, "stripeRef": "ch_123456", "currency": "USD", "ledgerMinor": 10000,
+			"stripeMinor": 9750, "differenceMinor": 250, "status": "OPEN", "createdAt": now},
+			"stripe":      map[string]any{"ref": "ch_123456", "object": map[string]any{"id": "ch_123456", "kind": "Charge", "status": "succeeded", "amountMinor": 10000, "links": map[string]any{"paymentIntent": "pi_123456"}}, "journals": []any{}},
+			"journals":    []any{map[string]any{"id": "j-1", "type": "CAPTURE", "description": "Capture of order 1", "occurredAt": now, "lines": []any{map[string]any{"account": "1000", "side": "DEBIT", "amountMinor": 10000}}}},
+			"adjustments": []any{}})
+	case p == "/v1/reconciliation/runs":
+		writeJ(w, 200, []any{map[string]any{"id": "run-1", "windowStart": now, "windowEnd": now, "currency": "USD", "ledgerNetMinor": 10000, "stripeNetMinor": 9750, "driftMinor": 250,
+			"drifts": []any{map[string]any{"stripeRef": "ch_123456", "ledgerMinor": 10000, "stripeMinor": 9750}}, "createdAt": now}})
+	case p == "/v1/ledger/adjustments":
+		writeJ(w, 200, []any{map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
+			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}}})
+	case strings.HasPrefix(p, "/v1/ledger/adjustments/"):
+		writeJ(w, 200, map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
+			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}})
+	case p == "/v1/stripe/lookup":
+		writeJ(w, 200, map[string]any{"ref": r.URL.Query().Get("ref"), "object": map[string]any{"id": r.URL.Query().Get("ref"), "kind": "Payout", "status": "in_transit", "amountMinor": 50000, "links": map[string]any{}},
+			"journals": []any{}, "connectedAccount": "acct_1", "balance": map[string]any{"account": "acct_1", "currency": "USD", "availableMinor": 1000, "pendingMinor": 2000}})
 	case p == "/v1/fee-schedules" || strings.HasPrefix(p, "/v1/fee-schedules/"):
 		f.feeSchedules(w, r, p, body)
 	// catalog taxonomy and seller's organisation directory (fee editor)
@@ -740,6 +761,9 @@ func TestStaffContractConformance(t *testing.T) {
 
 	// Every table and its first sheet.
 	for _, res := range domain.ResourceKeys {
+		if res == "stripe-lookup" {
+			continue // a lookup shows nothing until an id is searched for; checked below
+		}
 		pg := do("admin", "GET", "/v1/staff/resources/"+res+"?size=10", nil, 200)
 		rows := pg["rows"].([]any)
 		if len(rows) == 0 {
@@ -747,6 +771,10 @@ func TestStaffContractConformance(t *testing.T) {
 		}
 		id := rows[0].(map[string]any)["id"].(string)
 		do("admin", "GET", "/v1/staff/resources/"+res+"/"+id, nil, 200)
+	}
+	made := do("admin", "POST", "/v1/staff/resources/stripe-lookup", map[string]any{"values": map[string]any{"ref": "po_123456", "orgId": "org-1"}}, 201)
+	if made["id"] != "po_123456 org-1" {
+		t.Fatalf("stripe lookup id = %v", made["id"])
 	}
 	do("admin", "GET", "/v1/staff/resources/nope", nil, 404)
 	do("admin", "GET", "/v1/staff/resources/claims?status=NOPE", nil, 422)

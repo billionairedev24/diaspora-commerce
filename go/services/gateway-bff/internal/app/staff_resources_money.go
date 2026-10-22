@@ -165,6 +165,8 @@ func payoutsResource() *staffResource {
 		},
 		actions: []staffAction{
 			{key: "approve", label: "Approve & pay", tone: "primary", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Create the Stripe payout now?", when: inState("REQUESTED"), run: act("/approve", func(jobj) jobj { return nil })},
+			{key: "sync-stripe", label: "Check with Stripe", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, when: inState("IN_TRANSIT"),
+				confirm: "Ask Stripe where this payout stands? If Stripe says it was paid or failed, the request is closed to match.", run: act("/sync", func(jobj) jobj { return nil })},
 			{key: "hold", label: "Hold", tone: "danger", permission: "payouts:approve", level: domain.LevelApprove, form: reasonForm("Put the payout on hold", "Hold"), when: inState("REQUESTED"),
 				run: act("/hold", func(v jobj) jobj { return jobj{"reason": vs(v, "reason")} })},
 			{key: "release", label: "Release", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Release the hold?", when: inState("ON_HOLD", "HELD"), run: act("/release", func(jobj) jobj { return nil })},

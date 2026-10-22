@@ -3888,6 +3888,8 @@ export interface components {
             payoutsPausedReason: ("AUTO_PAST_DUE" | "MANUAL" | "DEAUTHORIZED" | "CHARGES_DISABLED") | null;
             /** @description What the hold means for the member and how it lifts */
             payoutsPausedMessage: string | null;
+            /** @description Payments has no Stripe Connect account for the organisation: earnings stay on hold until it is registered (connect Stripe in Account health, or staff re-sync) */
+            payoutAccountMissing: boolean;
             minimumPayoutMinor: number;
             canRequestToday: boolean;
             holds: {
