@@ -3,6 +3,7 @@ package com.afrotransact.seller.adapter.in.scheduling;
 import com.afrotransact.seller.application.BillingAdjustmentService;
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.ComplianceService;
+import com.afrotransact.seller.application.ConnectedAccountSyncService;
 import com.afrotransact.seller.application.ChargeGateEvaluator;
 import com.afrotransact.seller.application.EarningsCollectionService;
 import com.afrotransact.seller.application.InvoiceCollectionService;
@@ -32,10 +33,12 @@ class SellerJobs {
     private final EarningsCollectionService earnings;
     private final InvoiceCollectionService collection;
     private final ChargeGateEvaluator gates;
+    private final ConnectedAccountSyncService accountSync;
 
     SellerJobs(ComplianceService compliance, BillingService billing, UsageMeteringService metering,
                RewardService rewards, BillingAdjustmentService adjustments, EarningsCollectionService earnings,
-               InvoiceCollectionService collection, ChargeGateEvaluator gates) {
+               InvoiceCollectionService collection, ChargeGateEvaluator gates,
+               ConnectedAccountSyncService accountSync) {
         this.compliance = compliance;
         this.billing = billing;
         this.metering = metering;
@@ -44,6 +47,7 @@ class SellerJobs {
         this.earnings = earnings;
         this.collection = collection;
         this.gates = gates;
+        this.accountSync = accountSync;
     }
 
     /**
@@ -125,6 +129,14 @@ class SellerJobs {
             initialDelayString = "${at.seller.jobs.activation-retry-interval:10m}")
     void retryActivations() {
         run("subscription-activation", billing::retryPendingActivations);
+    }
+
+    /** Tells payments about every connected account: without it a seller's earnings stay on hold. Upsert, so repeatable. */
+    @Scheduled(fixedDelayString = "${at.seller.jobs.account-sync-interval:10m}",
+            initialDelayString = "${at.seller.jobs.account-sync-initial-delay:30s}")
+    void connectedAccountSync() {
+        run("connected-account-sync", () -> LOG.debug("Registered {} Connect account(s) with payments",
+                accountSync.registerAll()));
     }
 
     private static void run(String job, Runnable body) {

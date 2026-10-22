@@ -117,6 +117,16 @@ class JdbcConnectAccountRepository implements ConnectAccountRepository {
     }
 
     @Override
+    public List<ConnectAccount> connectedAfter(String afterAccountId, int limit) {
+        return jdbc.sql("""
+                select * from connect_account
+                where org_id is not null and not deauthorized and account_id > :after
+                order by account_id limit :limit
+                """)
+                .param("after", afterAccountId).param("limit", limit).query(this::map).list();
+    }
+
+    @Override
     public List<ConnectAccount> withDeadlineBefore(Instant before, int limit) {
         return jdbc.sql("""
                 select * from connect_account
