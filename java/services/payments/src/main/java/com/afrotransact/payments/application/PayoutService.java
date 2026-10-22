@@ -28,4 +28,11 @@ public interface PayoutService {
     PayoutRequest hold(UUID id, String reason);
 
     PayoutRequest release(UUID id);
+
+    /**
+     * Asks Stripe where an in-transit payout stands and closes the request when Stripe says it was paid or failed:
+     * the manual twin of the payout.paid / payout.failed webhooks, for when one was missed. Nothing changes while
+     * Stripe still says pending or in transit.
+     */
+    PayoutRequest syncWithStripe(UUID id);
 }

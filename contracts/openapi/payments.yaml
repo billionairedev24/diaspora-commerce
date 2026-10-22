@@ -1645,6 +1645,240 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SupplierPayment'
+  /v1/stripe/lookup:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'Stripe lookup: one Stripe object next to what the ledger booked for it (payments:read)'
+      description: 'ref is a Stripe id (po_, tr_, pi_, ch_, re_, txn_, dp_, acct_). A payout lives on the seller connected account, so pass orgId. When Stripe has no such object, or cannot be asked, object is null and problem says why; the ledger journals are still returned.'
+      operationId: lookup
+      parameters:
+      - name: ref
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StripeLookup'
+  /v1/reconciliation/items:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'Reconciliation differences, newest first (payments:read)'
+      operationId: items
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [OPEN, EXPLAINED, ADJUSTED, SUPERSEDED]
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReconciliationItem'
+  /v1/reconciliation/items/{id}:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'One difference with Stripe view, ledger journals and its adjustments (payments:read)'
+      operationId: item
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReconciliationItemDetail'
+  /v1/reconciliation/items/{id}/explain:
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Mark an open difference explained, posting nothing (ledger:adjust)'
+      operationId: explain
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReconciliationItem'
+  /v1/ledger/adjustments:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'Ledger adjustments, newest first (payments:read)'
+      operationId: adjustments
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [PROPOSED, POSTED, REJECTED]
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LedgerAdjustment'
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Propose a correcting journal (ledger:adjust)'
+      description: 'Nothing is posted until a different person with ledger:approve approves it. Lines must balance. 422 payments.adjustment-pending while another proposal for the same difference waits.'
+      operationId: propose
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProposeRequest'
+        required: true
+      responses:
+        '201':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/ledger/adjustments/{id}:
+    get:
+      tags:
+      - Reconciliation
+      summary: 'One ledger adjustment (payments:read)'
+      operationId: adjustment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/ledger/adjustments/{id}/approve:
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Approve and post a proposed adjustment (ledger:approve, not the proposer)'
+      description: '403 payments.adjustment-four-eyes when the approver proposed it.'
+      operationId: approve
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/ledger/adjustments/{id}/reject:
+    post:
+      tags:
+      - Reconciliation
+      summary: 'Reject a proposed adjustment with the reason (ledger:approve; the proposer may withdraw)'
+      operationId: reject
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LedgerAdjustment'
+  /v1/payouts/requests/{id}/sync:
+    post:
+      tags:
+      - Settlement & payouts
+      summary: 'Ask Stripe where an in-transit payout stands and close the request (payouts:approve)'
+      description: 'The manual twin of the payout.paid and payout.failed webhooks. Changes nothing while Stripe still says pending or in transit.'
+      operationId: sync
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
   /v1/webhooks/stripe:
     post:
       tags:
@@ -1675,6 +1909,129 @@ paths:
       security: []
 components:
   schemas:
+    ReconciliationItem:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        runId: {type: string, format: uuid}
+        windowStart: {type: string, format: date-time}
+        stripeRef: {type: string}
+        currency: {type: string}
+        ledgerMinor: {type: integer, format: int64}
+        stripeMinor: {type: integer, format: int64}
+        differenceMinor: {type: integer, format: int64, description: 'Ledger minus Stripe; positive: the ledger holds more than Stripe'}
+        status: {type: string, enum: [OPEN, EXPLAINED, ADJUSTED, SUPERSEDED]}
+        note: {type: string}
+        resolvedBy: {type: string}
+        resolvedAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+    AdjustmentLine:
+      type: object
+      properties:
+        account: {type: string}
+        title: {type: string}
+        side: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        orgId: {type: string}
+    LedgerAdjustment:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        itemId: {type: string, format: uuid}
+        stripeRef: {type: string}
+        currency: {type: string}
+        reason: {type: string}
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdjustmentLine'
+        status: {type: string, enum: [PROPOSED, POSTED, REJECTED]}
+        proposedBy: {type: string}
+        proposedAt: {type: string, format: date-time}
+        decidedBy: {type: string}
+        decidedAt: {type: string, format: date-time}
+        decisionNote: {type: string}
+        journalId: {type: string, format: uuid}
+    StripeObject:
+      type: object
+      properties:
+        id: {type: string}
+        kind: {type: string}
+        status: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        created: {type: string, format: date-time}
+        description: {type: string}
+        failure: {type: string}
+        links:
+          type: object
+          additionalProperties: {type: string}
+    StripeConnectedBalance:
+      type: object
+      properties:
+        account: {type: string}
+        currency: {type: string}
+        availableMinor: {type: integer, format: int64}
+        pendingMinor: {type: integer, format: int64}
+    StripeLookup:
+      type: object
+      properties:
+        ref: {type: string}
+        object:
+          $ref: '#/components/schemas/StripeObject'
+        problem: {type: string}
+        journals:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalResponse'
+        connectedAccount: {type: string}
+        balance:
+          $ref: '#/components/schemas/StripeConnectedBalance'
+    ReconciliationItemDetail:
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/ReconciliationItem'
+        stripe:
+          $ref: '#/components/schemas/StripeLookup'
+        journals:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalResponse'
+        adjustments:
+          type: array
+          items:
+            $ref: '#/components/schemas/LedgerAdjustment'
+    ExplainRequest:
+      type: object
+      required: [note]
+      properties:
+        note: {type: string}
+    DecisionRequest:
+      type: object
+      properties:
+        note: {type: string}
+    AdjustmentLineRequest:
+      type: object
+      required: [account, side, amountMinor]
+      properties:
+        account: {type: string, description: 'Chart account code, e.g. 1000, 2000, 5000'}
+        key: {type: string, description: 'Sub-account key for scoped accounts: the organisation id for 2000, the jurisdiction for 2100'}
+        side: {type: string, enum: [DEBIT, CREDIT]}
+        amountMinor: {type: integer, format: int64, minimum: 1}
+        orgId: {type: string, description: Seller the line is attributed to}
+    ProposeRequest:
+      type: object
+      required: [reason, lines]
+      properties:
+        itemId: {type: string, format: uuid, description: The reconciliation difference this corrects}
+        stripeRef: {type: string, description: 'Stripe object the journal is booked against; required when a line is on 1000 and there is no itemId'}
+        reason: {type: string}
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdjustmentLineRequest'
     ConnectedAccountRequest:
       type: object
       properties:

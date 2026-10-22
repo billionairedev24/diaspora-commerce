@@ -26,6 +26,11 @@ public final class PaymentsPermissions {
     /** Finance staff: approve, hold and release payout requests. */
     public static final String PAYOUTS_APPROVE = "payouts:approve";
 
+    /** Finance staff: propose a correcting ledger adjustment and mark reconciliation differences explained. */
+    public static final String LEDGER_ADJUST = "ledger:adjust";
+    /** Finance staff: approve or reject a proposed ledger adjustment (never their own). */
+    public static final String LEDGER_APPROVE = "ledger:approve";
+
     private PaymentsPermissions() {
     }
 }

@@ -4,7 +4,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.afrotransact.payments.domain.Money;
@@ -14,9 +16,12 @@ import com.stripe.StripeClient;
 import com.stripe.exception.CardException;
 import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
+import com.stripe.model.Account;
+import com.stripe.model.Balance;
 import com.stripe.model.BalanceTransaction;
 import com.stripe.model.Charge;
 import com.stripe.model.Customer;
+import com.stripe.model.Dispute;
 import com.stripe.model.EphemeralKey;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
@@ -307,6 +312,134 @@ public class StripeJavaGateway implements StripeGateway {
                         .setLt(to.getEpochSecond()).build())
                 .setLimit(100L).build();
         return call(() -> list(client.v1().balanceTransactions().list(params).autoPagingIterable()));
+    }
+
+    @Override
+    public Optional<ObjectSnapshot> lookup(String ref, String connectedAccount) {
+        String prefix = ref.contains("_") ? ref.substring(0, ref.indexOf('_')) : ref;
+        RequestOptions onAccount = connectedAccount == null ? RequestOptions.builder().build()
+                : RequestOptions.builder().setStripeAccount(connectedAccount).build();
+        try {
+            return Optional.ofNullable(switch (prefix) {
+                case "po" -> payoutObject(client.v1().payouts().retrieve(ref, onAccount));
+                case "tr" -> transferObject(client.v1().transfers().retrieve(ref));
+                case "pi" -> intentObject(client.v1().paymentIntents().retrieve(ref));
+                case "ch", "py" -> chargeObject(client.v1().charges().retrieve(ref));
+                case "re", "pyr" -> refundObject(client.v1().refunds().retrieve(ref));
+                case "txn" -> balanceTransactionObject(client.v1().balanceTransactions().retrieve(ref));
+                case "dp" -> disputeObject(client.v1().disputes().retrieve(ref));
+                case "acct" -> accountObject(client.v1().accounts().retrieve(ref));
+                default -> null;
+            });
+        } catch (StripeException e) {
+            if (e.getStatusCode() != null && e.getStatusCode() == 404) {
+                return Optional.empty();
+            }
+            throw gatewayError(e);
+        }
+    }
+
+    @Override
+    public ConnectedBalanceSnapshot connectedBalance(String connectedAccount) {
+        RequestOptions onAccount = RequestOptions.builder().setStripeAccount(connectedAccount).build();
+        return call(() -> {
+            Balance b = client.v1().balance().retrieve(onAccount);
+            String currency = b.getAvailable() == null || b.getAvailable().isEmpty() ? "usd"
+                    : b.getAvailable().get(0).getCurrency();
+            long available = b.getAvailable() == null ? 0 : b.getAvailable().stream()
+                    .filter(a -> currency.equalsIgnoreCase(a.getCurrency())).mapToLong(a -> nz(a.getAmount())).sum();
+            long pending = b.getPending() == null ? 0 : b.getPending().stream()
+                    .filter(a -> currency.equalsIgnoreCase(a.getCurrency())).mapToLong(a -> nz(a.getAmount())).sum();
+            return new ConnectedBalanceSnapshot(connectedAccount, currency.toUpperCase(Locale.ROOT), available, pending);
+        });
+    }
+
+    private static Instant at(Long epochSeconds) {
+        return epochSeconds == null ? null : Instant.ofEpochSecond(epochSeconds);
+    }
+
+    private static void link(Map<String, String> links, String key, Object value) {
+        if (value != null && !value.toString().isBlank()) {
+            links.put(key, value.toString());
+        }
+    }
+
+    private static ObjectSnapshot payoutObject(Payout p) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "arrivalDate", at(p.getArrivalDate()));
+        link(links, "method", p.getMethod());
+        link(links, "balanceTransaction", p.getBalanceTransaction());
+        link(links, "failureCode", p.getFailureCode());
+        return new ObjectSnapshot(p.getId(), "Payout", p.getStatus(), nz(p.getAmount()), p.getCurrency(),
+                at(p.getCreated()), p.getDescription(), p.getFailureMessage(), links);
+    }
+
+    private static ObjectSnapshot transferObject(Transfer t) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "destination", t.getDestination());
+        link(links, "transferGroup", t.getTransferGroup());
+        link(links, "reversed", t.getReversed());
+        link(links, "amountReversedMinor", t.getAmountReversed());
+        link(links, "balanceTransaction", t.getBalanceTransaction());
+        return new ObjectSnapshot(t.getId(), "Transfer", Boolean.TRUE.equals(t.getReversed()) ? "reversed" : "paid",
+                nz(t.getAmount()), t.getCurrency(), at(t.getCreated()), t.getDescription(), null, links);
+    }
+
+    private static ObjectSnapshot intentObject(PaymentIntent pi) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "charge", pi.getLatestCharge());
+        link(links, "amountReceivedMinor", pi.getAmountReceived());
+        link(links, "transferGroup", pi.getTransferGroup());
+        return new ObjectSnapshot(pi.getId(), "Payment intent", pi.getStatus(), nz(pi.getAmount()), pi.getCurrency(),
+                at(pi.getCreated()), pi.getDescription(), null, links);
+    }
+
+    private static ObjectSnapshot chargeObject(Charge c) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "paymentIntent", c.getPaymentIntent());
+        link(links, "amountRefundedMinor", c.getAmountRefunded());
+        link(links, "disputed", c.getDisputed());
+        link(links, "balanceTransaction", c.getBalanceTransaction());
+        return new ObjectSnapshot(c.getId(), "Charge", c.getStatus(), nz(c.getAmount()), c.getCurrency(),
+                at(c.getCreated()), c.getDescription(), c.getFailureMessage(), links);
+    }
+
+    private static ObjectSnapshot refundObject(Refund r) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "charge", r.getCharge());
+        link(links, "paymentIntent", r.getPaymentIntent());
+        link(links, "balanceTransaction", r.getBalanceTransaction());
+        return new ObjectSnapshot(r.getId(), "Refund", r.getStatus(), nz(r.getAmount()), r.getCurrency(),
+                at(r.getCreated()), r.getReason(), r.getFailureReason(), links);
+    }
+
+    private static ObjectSnapshot balanceTransactionObject(BalanceTransaction t) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "type", t.getType());
+        link(links, "source", t.getSource());
+        link(links, "feeMinor", t.getFee());
+        link(links, "netMinor", t.getNet());
+        link(links, "availableOn", at(t.getAvailableOn()));
+        return new ObjectSnapshot(t.getId(), "Balance transaction", t.getStatus(), nz(t.getAmount()), t.getCurrency(),
+                at(t.getCreated()), t.getDescription(), null, links);
+    }
+
+    private static ObjectSnapshot disputeObject(Dispute d) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "charge", d.getCharge());
+        link(links, "reason", d.getReason());
+        return new ObjectSnapshot(d.getId(), "Dispute", d.getStatus(), nz(d.getAmount()), d.getCurrency(),
+                at(d.getCreated()), null, null, links);
+    }
+
+    private static ObjectSnapshot accountObject(Account a) {
+        Map<String, String> links = new LinkedHashMap<>();
+        link(links, "chargesEnabled", a.getChargesEnabled());
+        link(links, "payoutsEnabled", a.getPayoutsEnabled());
+        link(links, "detailsSubmitted", a.getDetailsSubmitted());
+        link(links, "country", a.getCountry());
+        return new ObjectSnapshot(a.getId(), "Connected account", Boolean.TRUE.equals(a.getPayoutsEnabled())
+                ? "payouts enabled" : "payouts not enabled", 0, null, at(a.getCreated()), a.getEmail(), null, links);
     }
 
     @Override

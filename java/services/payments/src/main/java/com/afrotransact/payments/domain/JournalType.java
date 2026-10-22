@@ -24,5 +24,7 @@ public enum JournalType {
     /** AfroTransact Retail supplier invoices released for payment (retail.payment.released, S226). */
     SUPPLIER_PAYABLE,
     /** A released supplier payment paid from the operating bank account. */
-    SUPPLIER_PAYMENT
+    SUPPLIER_PAYMENT,
+    /** A correcting journal proposed and approved by Finance staff (ledger adjustment). */
+    ADJUSTMENT
 }

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -184,6 +185,32 @@ public class LocalTestStripeGateway implements StripeGateway {
     @Override
     public List<BalanceTxn> balanceTransactions(Instant from, Instant to) {
         return List.of();
+    }
+
+    @Override
+    public Optional<ObjectSnapshot> lookup(String ref, String connectedAccount) {
+        String prefix = ref.contains("_") ? ref.substring(0, ref.indexOf('_')) : ref;
+        String kind = switch (prefix) {
+            case "po" -> "Payout";
+            case "tr" -> "Transfer";
+            case "pi" -> "Payment intent";
+            case "ch", "py" -> "Charge";
+            case "re", "pyr" -> "Refund";
+            case "txn" -> "Balance transaction";
+            case "dp" -> "Dispute";
+            case "acct" -> "Connected account";
+            default -> null;
+        };
+        if (kind == null || !ref.contains("_localtest_")) {
+            return Optional.empty();
+        }
+        return Optional.of(new ObjectSnapshot(ref, kind, "local test (not Stripe)", 0, "USD", null,
+                "Local stand-in: nothing here exists at Stripe", null, Map.of()));
+    }
+
+    @Override
+    public ConnectedBalanceSnapshot connectedBalance(String connectedAccount) {
+        return new ConnectedBalanceSnapshot(connectedAccount, "USD", 0, 0);
     }
 
     @Override

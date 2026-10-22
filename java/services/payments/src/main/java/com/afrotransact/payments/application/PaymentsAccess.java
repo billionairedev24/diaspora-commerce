@@ -99,6 +99,24 @@ class PaymentsAccess {
         return actor;
     }
 
+    /** Finance staff who may propose ledger adjustments and explain reconciliation differences. */
+    Actor adjuster() {
+        Actor actor = permissions.require(PaymentsPermissions.LEDGER_ADJUST);
+        if (!isStaff(actor)) {
+            throw new ForbiddenActionException("payments.staff-only", "Ledger adjustments are a Finance staff action");
+        }
+        return actor;
+    }
+
+    /** Finance staff who may approve or reject ledger adjustments. */
+    Actor adjustmentApprover() {
+        Actor actor = permissions.require(PaymentsPermissions.LEDGER_APPROVE);
+        if (!isStaff(actor)) {
+            throw new ForbiddenActionException("payments.staff-only", "Ledger adjustments are a Finance staff action");
+        }
+        return actor;
+    }
+
     /** Plan fees from earnings (S298): only the seller service (SERVICE principal with payments:plan-fees). */
     Actor planFeeCollector() {
         Actor actor = actors.current();

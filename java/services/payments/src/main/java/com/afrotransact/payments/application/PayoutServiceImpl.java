@@ -244,6 +244,37 @@ class PayoutServiceImpl implements PayoutService {
         });
     }
 
+    @Override
+    public PayoutRequest syncWithStripe(UUID id) {
+        access.approver();
+        return tx.serializable(() -> {
+            PayoutRequest r = payouts.lock(id).orElseThrow(() -> notFound(id));
+            access.payoutApprover(r.id(), r.orgId());
+            if (r.status() != PayoutStatus.IN_TRANSIT || r.stripePayoutId() == null) {
+                return r;
+            }
+            Optional<StripeGateway.ObjectSnapshot> found = stripe.lookup(r.stripePayoutId(),
+                    accounts.find(r.orgId()).orElse(null));
+            if (found.isEmpty()) {
+                return r;
+            }
+            String status = found.get().status() == null ? "" : found.get().status();
+            PayoutRequest after = switch (status) {
+                case "paid" -> r.paid();
+                case "failed", "canceled" -> r.failed(Optional.ofNullable(found.get().failure()).orElse(status));
+                default -> r;
+            };
+            if (after.status() == r.status()) {
+                return r;
+            }
+            PayoutRequest stored = payouts.update(after);
+            events.publish(after.status() == PayoutStatus.PAID ? PaymentsEvents.PAYOUT_PAID
+                            : PaymentsEvents.PAYOUT_FAILED, PaymentsEvents.AGGREGATE_PAYOUT, stored.orgId(),
+                    PaymentsEventPayloads.PayoutPayload.of(stored));
+            return stored;
+        });
+    }
+
     private boolean isRetail(String org) {
         return settings.retailOrgId().equals(org);
     }

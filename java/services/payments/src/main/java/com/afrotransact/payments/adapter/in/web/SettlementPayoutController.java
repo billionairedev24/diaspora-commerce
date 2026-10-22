@@ -179,6 +179,14 @@ class SettlementPayoutController {
         return PayoutResponse.of(payouts.approve(id));
     }
 
+    @Operation(summary = "Ask Stripe where an in-transit payout stands and close the request (payouts:approve)",
+            description = "The manual twin of the payout.paid / payout.failed webhooks. Changes nothing while Stripe "
+                    + "still says pending or in transit.")
+    @PostMapping("/v1/payouts/requests/{id}/sync")
+    PayoutResponse sync(@PathVariable UUID id) {
+        return PayoutResponse.of(payouts.syncWithStripe(id));
+    }
+
     @Operation(summary = "Put a request on hold with a reason (payouts:approve)")
     @PostMapping("/v1/payouts/requests/{id}/hold")
     PayoutResponse hold(@PathVariable UUID id, @Valid @RequestBody HoldRequest body) {

@@ -76,6 +76,11 @@ class JdbcLedgerRepository implements LedgerRepository {
         return journals("where e.order_id = :v", orderId);
     }
 
+    @Override
+    public List<Journal> journalsByStripeRef(String stripeRef) {
+        return journals("where e.stripe_ref = :v", stripeRef);
+    }
+
     private List<Journal> journals(String where, Object value) {
         List<Row> rows = jdbc.sql("""
                 select e.id, e.journal_key, e.type, e.order_id, e.payment_id, e.stripe_ref, e.description,
