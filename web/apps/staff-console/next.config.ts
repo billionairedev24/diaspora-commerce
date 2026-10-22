@@ -19,6 +19,13 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: (process.env.NEXT_ALLOWED_DEV_ORIGINS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
   experimental: { optimizePackageImports: ['@phosphor-icons/react', 'recharts'] },
   images: { unoptimized: true },
+  // Links made before the module path was /organisations (…/orgs?resource=connect-accounts) still work.
+  async redirects() {
+    return [
+      { source: '/orgs', has: [{ type: 'query', key: 'resource', value: 'connect-accounts' }], destination: '/organisations?tab=connect-accounts', permanent: false },
+      { source: '/orgs', destination: '/organisations', permanent: false }
+    ];
+  },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   }
