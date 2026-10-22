@@ -9,6 +9,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 |---|---|
 | [First environment](first-environment.md) | bootstrapping dev / uat / prod on AWS, Google Cloud or Azure (state, OIDC, secrets, apply, Argo CD, Temporal, Pages, smoke) |
 | [Test environment on one OVHcloud server](ovh-vps.md) | creating and deploying the whole stack on one OVHcloud instance from a pipeline (`make ovh-gh-setup`, then Actions > ovh-vps); not production |
+| [Finance: payouts, reconciliation and ledger adjustments](finance-reconciliation.md) | approving a payout, the daily Stripe reconciliation, four-eyes ledger corrections, Stripe lookups |
 | [Cost](cost.md) | a budget alert fired; the monthly cost review |
 | [Carrier sandboxes](carrier-sandboxes.md) | proving USPS / UPS / FedEx / DHL against their sandboxes; carrier credentials |
 

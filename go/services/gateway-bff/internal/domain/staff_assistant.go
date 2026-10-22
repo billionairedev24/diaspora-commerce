@@ -19,12 +19,13 @@ const (
 	StaffToolSellerPayouts = "seller_payouts"
 	StaffToolAccountHealth = "seller_account_health"
 	StaffToolSellerBilling = "seller_billing"
+	StaffToolStripeLookup  = "stripe_lookup"
 	StaffToolOpenRecord    = "open_record"
 )
 
 // StaffAssistantTools are the tools she can use, in the order they are offered.
 var StaffAssistantTools = []string{StaffToolOverview, StaffToolSearchRecords, StaffToolGetRecord, StaffToolSellerPayouts,
-	StaffToolAccountHealth, StaffToolSellerBilling, StaffToolOpenRecord}
+	StaffToolAccountHealth, StaffToolSellerBilling, StaffToolStripeLookup, StaffToolOpenRecord}
 
 // StaffAssistantStatus is GET /v1/staff/assistant.
 type StaffAssistantStatus struct {

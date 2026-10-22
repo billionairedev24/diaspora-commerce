@@ -629,21 +629,21 @@ type PayoutHold struct {
 
 // PayoutBalance is the balance card.
 type PayoutBalance struct {
-	Currency                  string       `json:"currency"`
-	AvailableMinor            int64        `json:"availableMinor"`
-	OnHoldMinor               int64        `json:"onHoldMinor"`
-	RequestedOrInTransitMinor int64        `json:"requestedOrInTransitMinor"`
-	PaidMinor                 int64        `json:"paidMinor"`
-	ProviderFeesMinor         int64        `json:"providerFeesMinor"`
-	PlanFeesMinor             int64        `json:"planFeesMinor"`
-	MinimumPayoutMinor        int64        `json:"minimumPayoutMinor"`
-	CanRequestToday           bool         `json:"canRequestToday"`
-	PayoutsPaused             bool         `json:"payoutsPaused"`
-	PayoutsPausedReason       *string      `json:"payoutsPausedReason"`
-	PayoutsPausedMessage      *string      `json:"payoutsPausedMessage"`
+	Currency                  string  `json:"currency"`
+	AvailableMinor            int64   `json:"availableMinor"`
+	OnHoldMinor               int64   `json:"onHoldMinor"`
+	RequestedOrInTransitMinor int64   `json:"requestedOrInTransitMinor"`
+	PaidMinor                 int64   `json:"paidMinor"`
+	ProviderFeesMinor         int64   `json:"providerFeesMinor"`
+	PlanFeesMinor             int64   `json:"planFeesMinor"`
+	MinimumPayoutMinor        int64   `json:"minimumPayoutMinor"`
+	CanRequestToday           bool    `json:"canRequestToday"`
+	PayoutsPaused             bool    `json:"payoutsPaused"`
+	PayoutsPausedReason       *string `json:"payoutsPausedReason"`
+	PayoutsPausedMessage      *string `json:"payoutsPausedMessage"`
 	// PayoutAccountMissing: payments has no Stripe Connect account for the organisation, so earnings stay on hold.
-	PayoutAccountMissing bool `json:"payoutAccountMissing"`
-	Holds                     []PayoutHold `json:"holds"`
+	PayoutAccountMissing bool         `json:"payoutAccountMissing"`
+	Holds                []PayoutHold `json:"holds"`
 }
 
 var pausedMessages = map[string]string{

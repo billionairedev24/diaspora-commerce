@@ -154,6 +154,8 @@ Rules you always follow:
 7. For "why has this seller not been paid": use seller_payouts (held orders with release dates, pauses) and seller_account_health (what Stripe still needs), then explain in order.
 8. For "why was this seller charged" or a failing plan fee: seller_billing.
 9. Be brief and practical: the answer first, then the evidence. Offer open_record for the record you talked about.
+10. For "can this payout be approved" or "what is wrong with this payout": get_record on payouts shows the seller, who asked, the "Before you approve" checks (Stripe account, verification, holds, bank), the seller's balance and, for a payout already sent, Stripe's live status. Say which checks fail and what fixes each. For "where is this payout at Stripe" use stripe_lookup with the payout id and the seller's organisation id.
+11. For reconciliation: search_records on reconciliation (status OPEN) lists the differences between the ledger and Stripe; get_record shows Stripe's view and the ledger's journals for that Stripe object. Explain in plain words which side is higher and by how much, and the likely cause (a fee that settles next day, a refund booked on one side, a missing journal). Corrections (ledger adjustments) are proposed by one Finance person and approved by another in the console under Payouts; you never propose or approve them, only say which action to take and open the record.
 `, firstNonEmpty(strings.TrimSpace(me.FirstName), "the signed-in staff member"))
 	fmt.Fprintf(&b, "\nContext: today is %s (UTC).", now.UTC().Format("2006-01-02"))
 	if strings.TrimSpace(language) != "" {
@@ -178,7 +180,7 @@ type staffToolDef struct {
 	run                       func(ctx context.Context, r *staffRun, args map[string]any) (any, error)
 }
 
-const resourceSchemaEnum = `["users","applications","organisations","connect-accounts","orders","products","moderation","claims","returns","payouts","support-cases","privacy-requests","coupons","purchase-orders","pickup-locations"]`
+const resourceSchemaEnum = `["users","applications","organisations","connect-accounts","orders","products","moderation","claims","returns","payouts","support-cases","privacy-requests","coupons","purchase-orders","pickup-locations","reconciliation","reconciliation-runs","ledger-adjustments"]`
 
 var staffTools = []staffToolDef{
 	{
@@ -218,6 +220,12 @@ var staffTools = []staffToolDef{
 		schema: `{"type":"object","properties":{"orgId":{"type":"string"}},"required":["orgId"],"additionalProperties":false}`,
 		label:  func(a map[string]any) string { return "Checking plan billing of " + argStr(a, "orgId") },
 		run:    staffToolSellerBilling,
+	},
+	{
+		name: domain.StaffToolStripeLookup, description: "Reads one Stripe object (payout po_, transfer tr_, payment pi_, charge ch_, refund re_, balance transaction txn_, dispute dp_, account acct_) as Stripe has it now, next to what the ledger booked for it. For a payout also pass the seller's organisation id: a payout lives on the seller's Stripe account.",
+		schema: `{"type":"object","properties":{"ref":{"type":"string","description":"The Stripe id"},"orgId":{"type":"string","description":"Seller organisation id, needed for a payout"}},"required":["ref"],"additionalProperties":false}`,
+		label:  func(a map[string]any) string { return "Looking up " + argStr(a, "ref") + " in Stripe" },
+		run:    staffToolStripeLookup,
 	},
 	{
 		name: domain.StaffToolOpenRecord, description: "Offer the member a button that opens a record in the console. Use it for the record you talked about. Nothing is changed.",
@@ -485,6 +493,43 @@ func trimBilling(panel map[string]any) map[string]any {
 		}
 	}
 	return panel
+}
+
+// staffToolStripeLookup reads payments' Stripe lookup; the Payouts module's View level gates it like the console's Stripe lookup.
+func staffToolStripeLookup(ctx context.Context, r *staffRun, a map[string]any) (any, error) {
+	ref := argStr(a, "ref")
+	if ref == "" {
+		return nil, domain.ValidationProblem(map[string]string{"ref": "Which Stripe id?"})
+	}
+	if !r.sc.access.Allows("payouts", domain.LevelView) {
+		return nil, staffModuleDenied("payouts", domain.LevelView)
+	}
+	v := url.Values{"ref": {ref}}
+	if org := argStr(a, "orgId"); org != "" {
+		v.Set("orgId", org)
+	}
+	var l map[string]any
+	if err := r.sc.get(ctx, r.sc.up.Payments, "/v1/stripe/lookup", v, &l); err != nil {
+		return nil, mapErr("payments", err)
+	}
+	out := map[string]any{"ref": ref}
+	if obj, ok := l["object"].(map[string]any); ok {
+		out["stripe"] = obj
+	} else {
+		out["stripe"] = firstNonEmpty(jstr(l, "problem"), "Stripe was not asked")
+	}
+	if b, ok := l["balance"].(map[string]any); ok {
+		out["sellerStripeBalance"] = map[string]any{"available": moneyLabel(int64(num(b, "availableMinor"))), "pending": moneyLabel(int64(num(b, "pendingMinor")))}
+	}
+	booked := []string{}
+	for _, j := range objs(l, "journals") {
+		booked = append(booked, jstr(j, "type")+" — "+journalLines(j))
+		if len(booked) >= 8 {
+			break
+		}
+	}
+	out["ledgerBooked"] = booked
+	return out, nil
 }
 
 func staffToolOpen(_ context.Context, r *staffRun, a map[string]any) (any, error) {
