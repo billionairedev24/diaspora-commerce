@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -170,6 +171,8 @@ func payoutsResource() *staffResource {
 		actions: []staffAction{
 			{key: "approve", label: "Approve & pay", tone: "primary", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Create the Stripe payout now?", when: inState("REQUESTED"), run: act("/approve", func(jobj) jobj { return nil })},
 			{key: "sync-stripe", label: "Check with Stripe", tone: "neutral", permission: "payouts:approve", level: domain.LevelApprove, when: inState("IN_TRANSIT"),
+				// A webhook may have closed it since the sheet was opened: the check then just reports where it stands.
+				settled: func(o jobj) bool { return slices.Contains([]string{"PAID", "FAILED"}, strings.ToUpper(jstr(o, "status"))) },
 				confirm: "Ask Stripe where this payout stands? If Stripe says it was paid or failed, the request is closed to match.", run: act("/sync", func(jobj) jobj { return nil })},
 			{key: "hold", label: "Hold", tone: "danger", permission: "payouts:approve", level: domain.LevelApprove, form: reasonForm("Put the payout on hold", "Hold"), when: inState("REQUESTED"),
 				run: act("/hold", func(v jobj) jobj { return jobj{"reason": vs(v, "reason")} })},
