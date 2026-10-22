@@ -16,6 +16,9 @@ at:
     # locally; COLLECT_PLAN_FEES_FROM_EARNINGS=false hides the choice and charges every plan invoice to the card.
     billing:
       collect-from-earnings: ${COLLECT_PLAN_FEES_FROM_EARNINGS:true}
+    jobs:
+      # Connect accounts are re-registered with payments every minute locally (nightly elsewhere).
+      account-sync-cron: ${ACCOUNT_SYNC_CRON:0 * * * * *}
     crypto:
       keys:
         k1: ${FIELD_ENCRYPTION_KEY:ZGV2LW9ubHktZmllbGQta2V5LTMyLWJ5dGVzLWxvbiE=}

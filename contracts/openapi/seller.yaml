@@ -1019,6 +1019,20 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AccountHealth'
+  /v1/compliance/payments-sync:
+    post:
+      tags:
+      - Stripe compliance
+      summary: 'Staff: register every Connect account with payments now — compliance:remind'
+      description: The scheduled job's run on demand (every minute locally, nightly elsewhere). Payments transfers a seller's net only to an account it knows. Idempotent.
+      operationId: syncNow
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentsSyncResult'
   /v1/launch-list:
     post:
       tags:
@@ -2248,6 +2262,13 @@ paths:
                 $ref: '#/components/schemas/WebhookResult'
 components:
   schemas:
+    PaymentsSyncResult:
+      type: object
+      properties:
+        registered:
+          type: integer
+          format: int32
+          description: Connect accounts payments accepted
     ShipFromAddressRequest:
       type: object
       description: A ship-from address; US addresses need a state code and ZIP

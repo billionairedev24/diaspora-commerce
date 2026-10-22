@@ -21,7 +21,8 @@ class ConnectedAccountSyncServiceImplTest {
 
     private final ConnectAccountRepository accounts = mock(ConnectAccountRepository.class);
     private final ConnectedAccountRegistry registry = mock(ConnectedAccountRegistry.class);
-    private final ConnectedAccountSyncService service = new ConnectedAccountSyncServiceImpl(accounts, registry);
+    private final AccessGuard access = mock(AccessGuard.class);
+    private final ConnectedAccountSyncService service = new ConnectedAccountSyncServiceImpl(accounts, registry, access);
 
     private static ConnectAccount account(String accountId, String orgId) {
         ConnectAccount a = mock(ConnectAccount.class);
@@ -50,5 +51,14 @@ class ConnectedAccountSyncServiceImplTest {
         when(accounts.connectedAfter(anyString(), anyInt())).thenReturn(List.of());
 
         assertThat(service.registerAll()).isZero();
+    }
+
+    @Test
+    void staffRunChecksThePermissionFirst() {
+        when(accounts.connectedAfter(anyString(), anyInt())).thenReturn(List.of());
+
+        service.syncNow();
+
+        verify(access).staff("compliance:remind");
     }
 }

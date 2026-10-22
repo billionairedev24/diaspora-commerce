@@ -18,10 +18,19 @@ class ConnectedAccountSyncServiceImpl implements ConnectedAccountSyncService {
 
     private final ConnectAccountRepository accounts;
     private final ConnectedAccountRegistry registry;
+    private final AccessGuard access;
 
-    ConnectedAccountSyncServiceImpl(ConnectAccountRepository accounts, ConnectedAccountRegistry registry) {
+    ConnectedAccountSyncServiceImpl(ConnectAccountRepository accounts, ConnectedAccountRegistry registry,
+                                    AccessGuard access) {
         this.accounts = accounts;
         this.registry = registry;
+        this.access = access;
+    }
+
+    @Override
+    public int syncNow() {
+        access.staff(SellerPermissions.COMPLIANCE_REMIND);
+        return registerAll();
     }
 
     @Override

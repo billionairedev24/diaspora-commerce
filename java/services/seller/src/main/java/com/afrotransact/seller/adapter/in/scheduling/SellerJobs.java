@@ -131,9 +131,11 @@ class SellerJobs {
         run("subscription-activation", billing::retryPendingActivations);
     }
 
-    /** Tells payments about every connected account: without it a seller's earnings stay on hold. Upsert, so repeatable. */
-    @Scheduled(fixedDelayString = "${at.seller.jobs.account-sync-interval:10m}",
-            initialDelayString = "${at.seller.jobs.account-sync-initial-delay:30s}")
+    /**
+     * Tells payments about every connected account: without it a seller's earnings stay on hold. Upsert, so repeatable.
+     * Nightly by default; the local profile runs it every minute, and staff can start it from the console.
+     */
+    @Scheduled(cron = "${at.seller.jobs.account-sync-cron:0 30 2 * * *}", zone = "UTC")
     void connectedAccountSync() {
         run("connected-account-sync", () -> LOG.debug("Registered {} Connect account(s) with payments",
                 accountSync.registerAll()));

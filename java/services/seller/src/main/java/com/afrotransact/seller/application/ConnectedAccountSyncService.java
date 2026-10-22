@@ -9,4 +9,7 @@ public interface ConnectedAccountSyncService {
 
     /** Registers every connected account with payments; returns how many were accepted. */
     int registerAll();
+
+    /** The same run started by staff holding {@code compliance:remind} (Ops, Finance); returns how many were accepted. */
+    int syncNow();
 }

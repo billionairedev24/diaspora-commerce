@@ -150,6 +150,11 @@ func connectAccountsResource() *staffResource {
 				run: func(ctx context.Context, sc staffCtx, o jobj, _ jobj) error {
 					return sc.post(ctx, sc.up.Seller, "/v1/compliance/accounts/"+url.PathEscape(jstr(o, "accountId"))+"/reminders", jobj{}, nil)
 				}},
+			{key: "sync-payments", label: "Sync all accounts with payments", tone: "neutral", permission: "compliance:remind",
+				confirm: "Register every Stripe Connect account with payments now? This is the scheduled job (every minute locally, nightly elsewhere), run on demand; payments transfers a seller's earnings only to accounts it knows.",
+				run: func(ctx context.Context, sc staffCtx, _ jobj, _ jobj) error {
+					return sc.post(ctx, sc.up.Seller, "/v1/compliance/payments-sync", jobj{}, nil)
+				}},
 			{key: "pause-payouts", label: "Pause payouts", tone: "danger", permission: "compliance:hold",
 				form: noteForm("Pause payouts on this connected account", "Pause", false),
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {

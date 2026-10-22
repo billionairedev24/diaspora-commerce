@@ -145,6 +145,8 @@ at:
       enabled: ${SELLER_JOBS_ENABLED:true}
       # Hourly: reminders 7/3/1 days before current_deadline (idempotent per threshold).
       reminder-cron: ${REMINDER_CRON:0 15 * * * *}
+      # Nightly (UTC): registers every Connect account with payments, which transfers only to accounts it knows.
+      account-sync-cron: ${ACCOUNT_SYNC_CRON:0 30 2 * * *}
       plan-change-cron: ${PLAN_CHANGE_CRON:0 5 * * * *}
       activation-retry-interval: ${ACTIVATION_RETRY_INTERVAL:10m}
       # Daily: meters the two previous UTC days (late usage is picked up; re-runs only send differences).
