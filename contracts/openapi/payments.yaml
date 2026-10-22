@@ -3384,6 +3384,9 @@ components:
           - MANUAL
           - DEAUTHORIZED
           - CHARGES_DISABLED
+        connectedAccount:
+          type: boolean
+          description: Payments has a Stripe Connect account for the organisation; false means settlement transfers wait (earnings stay on hold) until the account is registered
     AppliedRate:
       type: object
       description: A commission or connection-fee rate and where it comes from

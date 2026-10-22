@@ -912,5 +912,8 @@
   "sc.disputes.statusName.ESCALATED": "Escalada",
   "sc.disputes.statusName.RESOLVED_REFUND": "Resuelta: reembolsada",
   "sc.disputes.statusName.RESOLVED_DENIED": "Resuelta: denegada",
-  "sc.disputes.statusName.WITHDRAWN": "Retirada"
+  "sc.disputes.statusName.WITHDRAWN": "Retirada",
+  "sc.payouts.accountMissing.title": "Tu cuenta de Stripe aún no está vinculada a los pagos.",
+  "sc.payouts.accountMissing.body": "Tus ganancias quedan retenidas hasta que tu cuenta de Stripe esté conectada a AfroTransact. Revisa el Estado de la cuenta; si ya aparece verificada, contacta con soporte y la vincularemos.",
+  "sc.payouts.accountMissing.action": "Abrir Estado de la cuenta"
 }

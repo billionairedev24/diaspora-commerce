@@ -912,5 +912,8 @@
   "sc.disputes.statusName.ESCALATED": "تم التصعيد",
   "sc.disputes.statusName.RESOLVED_REFUND": "تم الحل: استرداد",
   "sc.disputes.statusName.RESOLVED_DENIED": "تم الحل: رفض",
-  "sc.disputes.statusName.WITHDRAWN": "تم السحب"
+  "sc.disputes.statusName.WITHDRAWN": "تم السحب",
+  "sc.payouts.accountMissing.title": "حساب Stripe الخاص بك غير مرتبط بالمدفوعات بعد.",
+  "sc.payouts.accountMissing.body": "تظل أرباحك محتجزة حتى يتم ربط حساب Stripe بـ AfroTransact. تحقق من حالة الحساب؛ وإن ظهر أنه موثّق بالفعل فتواصل مع الدعم لنربطه.",
+  "sc.payouts.accountMissing.action": "افتح حالة الحساب"
 }

@@ -1152,6 +1152,8 @@ type PayoutBalanceResponse struct {
 	CanRequestToday           bool   `json:"canRequestToday"`
 	PayoutsPaused             bool   `json:"payoutsPaused"`
 	PayoutsPausedReason       string `json:"payoutsPausedReason"`
+	// ConnectedAccount is nil from a payments older than the field: treated as connected.
+	ConnectedAccount *bool `json:"connectedAccount"`
 	OnHold                    []struct {
 		OrderID     string `json:"orderId"`
 		AmountMinor int64  `json:"amountMinor"`

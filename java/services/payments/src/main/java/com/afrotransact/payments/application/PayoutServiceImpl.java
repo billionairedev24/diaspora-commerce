@@ -109,7 +109,7 @@ class PayoutServiceImpl implements PayoutService {
             // AfroTransact Retail is the merchant of record: its sales are AfroTransact revenue (4400), nothing is
             // held, transferred or paid out, and compliance holds do not apply.
             return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero, zero, zero,
-                    policy.minimum(currency), false, false, null);
+                    policy.minimum(currency), false, false, null, true);
         }
         Money transferred = settlements.transferredTo(org, currency);
         Map<PayoutStatus, Long> totals = payouts.totals(org, currency);
@@ -149,7 +149,8 @@ class PayoutServiceImpl implements PayoutService {
         return new PayoutBalance(org, currency, available, held, heldTotal, Money.of(inFlight, currency),
                 Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, labelCharges, planFeesOwed,
                 Money.of(ledger.deliveryFeesPaid(org, currency), currency), policy.minimum(currency),
-                policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null));
+                policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null),
+                accounts.find(org).isPresent());
     }
 
     @Override

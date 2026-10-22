@@ -5,6 +5,7 @@ import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
@@ -143,6 +144,15 @@ export function PayoutsView() {
           </div>
         ) : null}
       </div>
+
+      {b.payoutAccountMissing ? (
+        <Notice tone="warning" title={t('sc.payouts.accountMissing.title')}>
+          {t('sc.payouts.accountMissing.body')}{' '}
+          <Link href="/account-health" className="font-semibold">
+            {t('sc.payouts.accountMissing.action')}
+          </Link>
+        </Notice>
+      ) : null}
 
       {b.availableMinor < 0 ? (
         <Notice tone="warning" title="Account balance is negative.">

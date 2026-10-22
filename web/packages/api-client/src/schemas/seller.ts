@@ -1202,6 +1202,8 @@ export const PayoutBalanceSchema = z.object({
   payoutsPaused: z.boolean(),
   payoutsPausedReason: z.enum(['AUTO_PAST_DUE', 'MANUAL', 'DEAUTHORIZED', 'CHARGES_DISABLED']).nullable(),
   payoutsPausedMessage: nullableString,
+  /** Payments has no Stripe Connect account for the organisation: earnings stay on hold until it is registered. */
+  payoutAccountMissing: z.boolean().default(false),
   holds: z.array(z.object({ orderId: z.string(), amountMinor: z.number().int(), releaseAt: nullableString }))
 });
 export type PayoutBalance = z.infer<typeof PayoutBalanceSchema>;

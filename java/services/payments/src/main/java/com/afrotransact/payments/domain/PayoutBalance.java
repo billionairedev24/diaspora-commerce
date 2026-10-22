@@ -24,11 +24,14 @@ import java.util.List;
  * @param canRequestToday     false once today's request was made
  * @param payoutsPaused       a compliance hold from seller-service blocks requests and approvals (S214)
  * @param payoutsPausedReason AUTO_PAST_DUE, MANUAL, DEAUTHORIZED or CHARGES_DISABLED while paused, else null
+ * @param connectedAccount     payments knows a Stripe Connect account for the organisation; without one nothing is
+ *                            transferred and the earnings stay on hold
  */
 public record PayoutBalance(String orgId, String currency, Money available, List<HeldOrder> onHold,
                             Money onHoldTotal, Money inFlight, Money paid, Money providerFees, Money labelCharges,
                             Money planFees, Money deliveryFees, Money minimum,
-                            boolean canRequestToday, boolean payoutsPaused, String payoutsPausedReason) {
+                            boolean canRequestToday, boolean payoutsPaused, String payoutsPausedReason,
+                            boolean connectedAccount) {
 
     public PayoutBalance {
         onHold = List.copyOf(onHold);

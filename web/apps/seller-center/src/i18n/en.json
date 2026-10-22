@@ -905,5 +905,8 @@
   "sc.disputes.statusName.ESCALATED": "Escalated",
   "sc.disputes.statusName.RESOLVED_REFUND": "Resolved: refunded",
   "sc.disputes.statusName.RESOLVED_DENIED": "Resolved: denied",
-  "sc.disputes.statusName.WITHDRAWN": "Withdrawn"
+  "sc.disputes.statusName.WITHDRAWN": "Withdrawn",
+  "sc.payouts.accountMissing.title": "Your Stripe account isn’t linked to payouts yet.",
+  "sc.payouts.accountMissing.body": "Your earnings are held until your Stripe account is connected to AfroTransact. Check Account health; if it already shows verified, contact support and we’ll link it.",
+  "sc.payouts.accountMissing.action": "Open Account health"
 }

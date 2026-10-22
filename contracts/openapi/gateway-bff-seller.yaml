@@ -4048,7 +4048,7 @@ components:
     # ── money
     PayoutBalance:
       type: object
-      required: [currency, availableMinor, onHoldMinor, requestedOrInTransitMinor, paidMinor, providerFeesMinor, planFeesMinor, minimumPayoutMinor, canRequestToday, payoutsPaused, payoutsPausedReason, payoutsPausedMessage, holds]
+      required: [currency, availableMinor, onHoldMinor, requestedOrInTransitMinor, paidMinor, providerFeesMinor, planFeesMinor, minimumPayoutMinor, canRequestToday, payoutsPaused, payoutsPausedReason, payoutsPausedMessage, payoutAccountMissing, holds]
       properties:
         currency: {type: string}
         availableMinor: {type: integer}
@@ -4063,6 +4063,7 @@ components:
             - {type: string, enum: [AUTO_PAST_DUE, MANUAL, DEAUTHORIZED, CHARGES_DISABLED]}
             - {type: 'null'}
         payoutsPausedMessage: {type: [string, 'null'], description: What the hold means for the member and how it lifts}
+        payoutAccountMissing: {type: boolean, description: 'Payments has no Stripe Connect account for the organisation: earnings stay on hold until it is registered (connect Stripe in Account health, or staff re-sync)'}
         minimumPayoutMinor: {type: integer}
         canRequestToday: {type: boolean}
         holds:

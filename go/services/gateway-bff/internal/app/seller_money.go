@@ -76,6 +76,7 @@ func (s *sellerMoneyImpl) Payouts(ctx context.Context, c *domain.Caller) (domain
 		ProviderFeesMinor: bal.ProviderFeesMinor, PlanFeesMinor: bal.PlanFeesMinor, MinimumPayoutMinor: bal.MinimumPayoutMinor,
 		CanRequestToday: bal.CanRequestToday && !bal.PayoutsPaused, PayoutsPaused: bal.PayoutsPaused, Holds: []domain.PayoutHold{}},
 		Payouts: []domain.Payout{}, HistoryAvailable: histErr == nil, PlanFeeDeductions: planFeeDeductionsOf(planFees)}
+	out.Balance.PayoutAccountMissing = bal.ConnectedAccount != nil && !*bal.ConnectedAccount
 	if bal.PayoutsPaused {
 		reason := strings.ToUpper(bal.PayoutsPausedReason)
 		if domain.IsPausedReason(reason) {

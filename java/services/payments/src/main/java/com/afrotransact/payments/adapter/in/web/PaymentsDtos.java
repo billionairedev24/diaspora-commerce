@@ -736,7 +736,10 @@ final class PaymentsDtos {
                                  @Schema(description = "Why payouts are paused (null when not paused)",
                                          allowableValues = {"AUTO_PAST_DUE", "MANUAL", "DEAUTHORIZED",
                                              "CHARGES_DISABLED"})
-                                 String payoutsPausedReason) {
+                                 String payoutsPausedReason,
+                                 @Schema(description = "Payments has a Stripe Connect account for the organisation; "
+                                         + "false means settlement transfers wait (earnings stay on hold) until the "
+                                         + "account is registered") boolean connectedAccount) {
 
         static PayoutBalanceResponse of(PayoutBalance b) {
             return new PayoutBalanceResponse(b.orgId(), b.currency(), b.available().minor(), b.onHoldTotal().minor(),
@@ -746,7 +749,7 @@ final class PaymentsDtos {
                     b.deliveryFees().minor(),
                     b.minimum().minor(), b.canRequestToday(),
                     b.payoutsPaused(),
-                    b.payoutsPausedReason());
+                    b.payoutsPausedReason(), b.connectedAccount());
         }
     }
 

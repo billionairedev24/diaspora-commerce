@@ -641,6 +641,8 @@ type PayoutBalance struct {
 	PayoutsPaused             bool         `json:"payoutsPaused"`
 	PayoutsPausedReason       *string      `json:"payoutsPausedReason"`
 	PayoutsPausedMessage      *string      `json:"payoutsPausedMessage"`
+	// PayoutAccountMissing: payments has no Stripe Connect account for the organisation, so earnings stay on hold.
+	PayoutAccountMissing bool `json:"payoutAccountMissing"`
 	Holds                     []PayoutHold `json:"holds"`
 }
 

@@ -912,5 +912,8 @@
   "sc.disputes.statusName.ESCALATED": "A ti gbé e ga",
   "sc.disputes.statusName.RESOLVED_REFUND": "A yanjú: a dá owó padà",
   "sc.disputes.statusName.RESOLVED_DENIED": "A yanjú: a kọ̀",
-  "sc.disputes.statusName.WITHDRAWN": "A yọ ọ́ kúrò"
+  "sc.disputes.statusName.WITHDRAWN": "A yọ ọ́ kúrò",
+  "sc.payouts.accountMissing.title": "A kò tíì so àkọọ́lẹ̀ Stripe rẹ mọ́ owó ìsanwó.",
+  "sc.payouts.accountMissing.body": "A ó di owó tí o jẹ mú títí a ó fi so àkọọ́lẹ̀ Stripe rẹ mọ́ AfroTransact. Ṣàyẹ̀wò Ìlera Àkọọ́lẹ̀; tí ó bá ti hàn pé a ti jẹ́rìí rẹ̀, kàn sí ìrànlọ́wọ́ a ó sì so ó.",
+  "sc.payouts.accountMissing.action": "Ṣí Ìlera Àkọọ́lẹ̀"
 }
