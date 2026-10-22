@@ -1,0 +1,58 @@
+package app
+
+import (
+	"strings"
+	"testing"
+)
+
+func checkValue(o jobj, label string) string {
+	for _, f := range payoutChecks(o) {
+		if f.Label == label {
+			return f.Value
+		}
+	}
+	return ""
+}
+
+func TestPayoutChecksSayWhyAPayoutCannotBePaid(t *testing.T) {
+	noAccount := jobj{"orgId": "org_a"}
+	if got := checkValue(noAccount, "Stripe account on file"); !strings.HasPrefix(got, "No") {
+		t.Errorf("no connected account: got %q", got)
+	}
+
+	unverified := jobj{"stripeAccountId": "acct_1", "complianceKnown": true, "stripeStatus": "ACTION_NEEDED", "payoutsEnabled": false, "payoutsPaused": true}
+	if got := checkValue(unverified, "Stripe verified"); !strings.Contains(got, "Action needed") {
+		t.Errorf("unverified: got %q", got)
+	}
+	if got := checkValue(unverified, "No compliance hold"); !strings.HasPrefix(got, "No") {
+		t.Errorf("paused: got %q", got)
+	}
+
+	ready := jobj{"stripeAccountId": "acct_1", "complianceKnown": true, "stripeStatus": "VERIFIED", "payoutsEnabled": true,
+		"bankName": "Chase", "bankLast4": "9921", "bankStatus": "VERIFIED"}
+	if got := checkValue(ready, "Stripe can pay out"); got != "Yes" {
+		t.Errorf("ready: got %q", got)
+	}
+	if got := checkValue(ready, "Bank account"); !strings.Contains(got, "9921") {
+		t.Errorf("bank: got %q", got)
+	}
+	if got := checkValue(jobj{"stripeAccountId": "acct_1"}, "Stripe verification"); !strings.HasPrefix(got, "Not confirmed") {
+		t.Errorf("unreadable account: got %q", got)
+	}
+}
+
+func TestPayoutSectionsNameTheSeller(t *testing.T) {
+	secs := payoutSections(jobj{"orgId": "org_a", "sellerName": "Malo Branding", "requestedByName": "Emalo D.", "amountMinor": 50413})
+	var seller []string
+	for _, s := range secs {
+		if s.Title == "Seller" {
+			for _, f := range s.Fields {
+				seller = append(seller, f.Label+"="+f.Value)
+			}
+		}
+	}
+	joined := strings.Join(seller, "|")
+	if !strings.Contains(joined, "Business=Malo Branding") || !strings.Contains(joined, "Requested by=Emalo D.") {
+		t.Errorf("seller section: %s", joined)
+	}
+}

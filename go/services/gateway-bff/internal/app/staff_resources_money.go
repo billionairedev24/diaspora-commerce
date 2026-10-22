@@ -125,15 +125,44 @@ func payoutsResource() *staffResource {
 			return sc.post(ctx, sc.up.Payments, "/v1/payouts/requests/"+url.PathEscape(jstr(o, "id"))+path, body(v), nil)
 		}
 	}
+	list := listLimited("/v1/payouts/requests", upPayments)
 	return &staffResource{
 		key: "payouts", module: "payouts", title: "Payout requests", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("id", "Request", "mono", 14), col("orgId", "Organisation", "strong", 22), col("amountMinor", "Amount", "money", 14),
+		columns: []domain.Column{col("id", "Request", "mono", 14), col("sellerName", "Seller", "strong", 24), col("amountMinor", "Amount", "money", 14),
 			col("requestedAt", "Requested", "date", 14), col("holdReason", "Hold reason", "text", 22), col("status", "Status", "status", 14)},
-		facets:     domain.StaffFacets("REQUESTED", "ON_HOLD", "APPROVED", "IN_TRANSIT", "PAID", "FAILED"),
-		list:       listLimited("/v1/payouts/requests", upPayments),
-		get:        getByPath("/v1/payouts/requests/", upPayments),
-		titleOf:    func(o jobj) string { return "Payout to " + jstr(o, "orgId") },
+		facets: domain.StaffFacets("REQUESTED", "ON_HOLD", "APPROVED", "IN_TRANSIT", "PAID", "FAILED"),
+		list: func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error) {
+			page, err := list(ctx, sc, q)
+			if err == nil {
+				addSellerNames(ctx, sc, page.items)
+			}
+			return page, err
+		},
+		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
+			o, err := getByPath("/v1/payouts/requests/", upPayments)(ctx, sc, id)
+			if err != nil {
+				return nil, err
+			}
+			enrichPayout(ctx, sc, o)
+			return o, nil
+		},
+		cells: func(o jobj) map[string]any {
+			return map[string]any{"sellerName": cellValue(firstNonEmpty(jstr(o, "sellerName"), jstr(o, "orgId")))}
+		},
+		titleOf:    func(o jobj) string { return "Payout to " + firstNonEmpty(jstr(o, "sellerName"), jstr(o, "orgId")) },
 		subtitleOf: func(o jobj) string { return jstr(o, "id") },
+		sections:   payoutSections,
+		tables:     payoutTables,
+		links: func(o jobj) []domain.RecordLink {
+			org := jstr(o, "orgId")
+			if org == "" {
+				return nil
+			}
+			return []domain.RecordLink{
+				{Label: "Seller organisation", Href: "/orgs?resource=organisations&q=" + url.QueryEscape(org)},
+				{Label: "Stripe compliance", Href: "/orgs?resource=connect-accounts&q=" + url.QueryEscape(org)},
+			}
+		},
 		actions: []staffAction{
 			{key: "approve", label: "Approve & pay", tone: "primary", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Create the Stripe payout now?", when: inState("REQUESTED"), run: act("/approve", func(jobj) jobj { return nil })},
 			{key: "hold", label: "Hold", tone: "danger", permission: "payouts:approve", level: domain.LevelApprove, form: reasonForm("Put the payout on hold", "Hold"), when: inState("REQUESTED"),
