@@ -114,6 +114,10 @@ class SettlementPayoutIT extends PaymentsIntegrationTest {
         String requestId = request.path("id").asString();
         problem(send("POST", "/v1/payouts/requests/" + requestId + "/approve", null, null), 403,
                 "auth.missing-permission");
+        // The seller's own history: members list their organisation's requests (not the Finance queue).
+        JsonNode mine = ok(send("GET", "/v1/payouts/requests?orgId=" + org, null, null));
+        assertThat(mine.toString()).contains(requestId);
+        problem(send("GET", "/v1/payouts/requests?orgId=org_someone_else", null, null), 403, "auth.wrong-org");
 
         TestSupport.as(TestSupport.FINANCE);
         JsonNode queue = ok(send("GET", "/v1/payouts/requests?status=REQUESTED&orgId=" + org, null, null));

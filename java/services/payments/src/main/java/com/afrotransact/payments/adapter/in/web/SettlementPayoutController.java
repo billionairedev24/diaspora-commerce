@@ -159,7 +159,7 @@ class SettlementPayoutController {
                 body.currency()), idempotencyKey));
     }
 
-    @Operation(summary = "Finance queue of payout requests (payouts:approve)")
+    @Operation(summary = "Payout requests: Finance queue (payouts:approve); members may list their own organisation (orgId)")
     @GetMapping("/v1/payouts/requests")
     List<PayoutResponse> queue(@RequestParam(required = false) PayoutStatus status,
                                @RequestParam(required = false) String orgId,

@@ -144,8 +144,14 @@ class PaymentsAccess {
                 FgaObject.PLATFORM);
     }
 
-    /** The payout queue: one organisation's (its market's Finance staff) or every organisation's (platform-wide). */
+    /**
+     * The payout queue: one organisation's (its market's Finance staff, or its own members, who see only their
+     * organisation's requests) or every organisation's (platform-wide, Finance staff).
+     */
     Actor queueReader(String orgId) {
+        if (orgId != null && !orgId.isBlank() && !isStaff(actors.current())) {
+            return balanceViewer(orgId.trim());
+        }
         approver();
         if (orgId == null || orgId.isBlank()) {
             return relationships.require(PaymentsPermissions.PAYOUTS_APPROVE, PaymentsRelations.PLATFORM_VIEW_ALL,
