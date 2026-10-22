@@ -90,7 +90,7 @@ func organisationsResource() *staffResource {
 				return nil
 			}
 			return []domain.RecordLink{
-				{Label: "Stripe compliance", Href: "/orgs?resource=connect-accounts&q=" + url.QueryEscape(id)},
+				{Label: "Stripe compliance", Href: "/organisations?tab=connect-accounts"},
 			}
 		},
 	}

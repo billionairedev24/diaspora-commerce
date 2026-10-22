@@ -116,7 +116,7 @@ func payoutChecks(o jobj) []domain.DetailField {
 	if !boolean(o, "complianceKnown") {
 		return append(out, fieldOf("Stripe verification", "Not confirmed — could not read the account's status", "text"))
 	}
-	verified := strings.EqualFold(jstr(o, "stripeStatus"), "VERIFIED")
+	verified := strings.EqualFold(jstr(o, "stripeStatus"), "COMPLIANT") || strings.EqualFold(jstr(o, "stripeStatus"), "VERIFIED")
 	out = append(out, fieldOf("Stripe verified", map[bool]string{true: "Yes", false: "No — status " + domain.Humanize(jstr(o, "stripeStatus"))}[verified], "text"))
 	out = append(out, fieldOf("Stripe can pay out", map[bool]string{true: "Yes", false: "No — payouts are not enabled on the account"}[boolean(o, "payoutsEnabled")], "text"))
 	out = append(out, fieldOf("No compliance hold", map[bool]string{true: "Yes", false: "No — payouts are paused on this seller"}[!boolean(o, "payoutsPaused")], "text"))

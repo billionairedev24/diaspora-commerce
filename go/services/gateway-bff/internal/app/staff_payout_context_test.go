@@ -28,6 +28,11 @@ func TestPayoutChecksSayWhyAPayoutCannotBePaid(t *testing.T) {
 		t.Errorf("paused: got %q", got)
 	}
 
+	compliant := jobj{"stripeAccountId": "acct_1", "complianceKnown": true, "stripeStatus": "COMPLIANT", "payoutsEnabled": true}
+	if got := checkValue(compliant, "Stripe verified"); got != "Yes" {
+		t.Errorf("a compliant account is verified: got %q", got)
+	}
+
 	ready := jobj{"stripeAccountId": "acct_1", "complianceKnown": true, "stripeStatus": "VERIFIED", "payoutsEnabled": true,
 		"bankName": "Chase", "bankLast4": "9921", "bankStatus": "VERIFIED"}
 	if got := checkValue(ready, "Stripe can pay out"); got != "Yes" {

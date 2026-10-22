@@ -158,9 +158,13 @@ func payoutsResource() *staffResource {
 			if org == "" {
 				return nil
 			}
+			connect := "/organisations?tab=connect-accounts"
+			if acct := jstr(o, "stripeAccountId"); acct != "" {
+				connect += "&open=" + url.QueryEscape(acct)
+			}
 			return []domain.RecordLink{
-				{Label: "Seller organisation", Href: "/orgs?resource=organisations&q=" + url.QueryEscape(org)},
-				{Label: "Stripe compliance", Href: "/orgs?resource=connect-accounts&q=" + url.QueryEscape(org)},
+				{Label: "Seller organisation", Href: "/organisations?open=" + url.QueryEscape(org)},
+				{Label: "Stripe compliance", Href: connect},
 			}
 		},
 		actions: []staffAction{
