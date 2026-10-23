@@ -17,8 +17,6 @@ import com.afrotransact.taxreturns.domain.tax.TaxQuote;
 import com.afrotransact.taxreturns.port.TaxCalculator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -35,8 +33,6 @@ import tools.jackson.databind.JsonNode;
  * <p>This adapter only calculates. Recording the sale with Stripe (tax transactions) and refunds is a separate step.
  */
 @Component
-@Primary
-@ConditionalOnProperty(name = "at.taxreturns.tax.provider", havingValue = "STRIPE_TAX")
 class StripeTaxCalculator implements TaxCalculator {
 
     static final String PROVIDER = "STRIPE_TAX";
@@ -47,16 +43,23 @@ class StripeTaxCalculator implements TaxCalculator {
     private final RestClient stripe;
     private final String shippingTaxCode;
     private final RulesTaxCalculator fallback;
+    private final boolean configured;
 
     StripeTaxCalculator(RestClient.Builder builder, TaxReturnsProperties props, RulesTaxCalculator fallback) {
         TaxReturnsProperties.StripeTax cfg = props.tax().stripe();
-        if (cfg.secretKey() == null || cfg.secretKey().isBlank()) {
-            throw new IllegalStateException("at.taxreturns.tax.provider=STRIPE_TAX needs STRIPE_SECRET_KEY");
-        }
-        this.stripe = builder.clone().baseUrl(cfg.baseUrl()).defaultHeaders(h -> h.setBearerAuth(cfg.secretKey()))
-                .build();
+        this.configured = cfg.secretKey() != null && !cfg.secretKey().isBlank();
+        this.stripe = builder.clone().baseUrl(cfg.baseUrl()).defaultHeaders(h -> {
+            if (configured) {
+                h.setBearerAuth(cfg.secretKey());
+            }
+        }).build();
         this.shippingTaxCode = cfg.shippingTaxCode();
         this.fallback = fallback;
+    }
+
+    /** Whether Stripe Tax can be asked at all (its key is set). */
+    boolean configured() {
+        return configured;
     }
 
     @Override

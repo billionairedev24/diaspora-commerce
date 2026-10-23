@@ -672,6 +672,38 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/StateTaxRule'
+  /v1/tax/settings:
+    get:
+      tags:
+      - Tax settings
+      summary: The tax method in force and its history (tax:read)
+      operationId: taxSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxSettings'
+    put:
+      tags:
+      - Tax settings
+      summary: Switch who calculates sales tax (tax:configure)
+      description: RULES is our own rules over the rate tables and tax codes; STRIPE_TAX needs Stripe Tax set up (422 tax.stripe-not-set-up otherwise). A reason is required and the change is recorded. It applies to new quotes; placed orders keep the tax they were charged.
+      operationId: changeTaxMethod
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxMethodChangeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxSettings'
   /v1/tax/reversals:
     post:
       tags:
@@ -743,6 +775,32 @@ paths:
                 type: string
 components:
   schemas:
+    TaxMethodChange:
+      type: object
+      properties:
+        from: {type: string, enum: [RULES, STRIPE_TAX]}
+        to: {type: string, enum: [RULES, STRIPE_TAX]}
+        reason: {type: string}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+    TaxSettings:
+      type: object
+      properties:
+        method: {type: string, enum: [RULES, STRIPE_TAX]}
+        configuredDefault: {type: string, enum: [RULES, STRIPE_TAX], description: What applies until staff choose (TAX_PROVIDER)}
+        stripeAvailable: {type: boolean, description: Stripe Tax can be chosen (its key is set)}
+        changedBy: {type: string}
+        changedAt: {type: string, format: date-time}
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxMethodChange'
+    TaxMethodChangeRequest:
+      type: object
+      required: [method, reason]
+      properties:
+        method: {type: string, enum: [RULES, STRIPE_TAX]}
+        reason: {type: string}
     StateTaxRule:
       type: object
       description: State rates are fractions (0.0625 = 6.25 %)
