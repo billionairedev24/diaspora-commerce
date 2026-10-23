@@ -154,7 +154,7 @@ class ReviewServiceImpl implements ReviewService {
         }
         Instant now = Instant.now(clock);
         Application next = apps.update(named(app, actor, () -> app.decide(cmd.action(), actor.subject(),
-                reason.code(), now)));
+                reason.code(), cmd.requestedItems(), now)));
         TimelineEntry entry = timeline(app, next, cmd, actor, reason, now);
         Organisation org = syncOrg(next, now);
         switch (cmd.action()) {
@@ -167,6 +167,7 @@ class ReviewServiceImpl implements ReviewService {
                 events.publish(SellerEvents.ORG_UPDATED, SellerEvents.AGGREGATE_ORG, org.id(), payload);
             }
             case REJECT -> publish(SellerEvents.APPLICATION_REJECTED, next, entry);
+            case REQUEST_INFO -> publish(SellerEvents.APPLICATION_INFO_REQUESTED, next, entry);
             default -> {
             }
         }

@@ -225,10 +225,14 @@ func applicationsResource() *staffResource {
 		return opts
 	}
 	decision := func(path, action, title, submit, intro string, noteRequired bool, extra ...domain.FormField) (func(context.Context, staffCtx, jobj) *domain.Form, func(context.Context, staffCtx, jobj, jobj) error) {
+		noteLabel := "Note (internal: the applicant does not see it)"
+		if action == "REQUEST_INFO" || action == "REJECT" {
+			noteLabel = "Message to the applicant"
+		}
 		form := func(ctx context.Context, sc staffCtx, _ jobj) *domain.Form {
 			fields := []domain.FormField{withOptions(ff("reasonCode", "Reason", "select", true), reasonOptions(ctx, sc))}
 			fields = append(fields, extra...)
-			fields = append(fields, withMax(ff("note", "Note", "textarea", noteRequired), 2000))
+			fields = append(fields, withMax(ff("note", noteLabel, "textarea", noteRequired), 2000))
 			return &domain.Form{Title: title, SubmitLabel: submit, Intro: intro, Fields: fields}
 		}
 		// The console's Idempotency-Key is relayed: seller replays a retried decision instead of refusing it. Slow: a
@@ -249,14 +253,17 @@ func applicationsResource() *staffResource {
 	}
 	approveForm, approveRun := decision("/review", "APPROVE", "Approve for final review (step 1)", "Approve",
 		"The documents and details check out. The application goes to a different approver for the final decision; the applicant is not told yet.", false)
-	flagForm, flagRun := decision("/review", "FLAG", "Flag the application", "Flag",
-		"Something does not check out. The application moves to the final approver with the failed checks and your note, who then approves it, sends it back to you or rejects it. The applicant is not told, and cannot change anything, until a decision is made.", false,
+	flagForm, flagRun := decision("/review", "FLAG", "Flag for senior review", "Flag",
+		"Something does not check out and needs a senior decision. The application moves to the final approver with the failed checks and your note. The applicant is not told, and cannot change anything. To ask the applicant to fix or add something, use Return to applicant instead.", false,
 		withOptions(ff("failedChecks", "Failed checks", "multiselect", true), domain.StaffOptions("TIN_MISMATCH", "IDENTITY_UNVERIFIED", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "ADDRESS_UNVERIFIED")))
-	infoForm, infoRun := decision("/review", "REQUEST_INFO", "Ask the applicant for more", "Send request",
-		"The applicant is emailed what is missing and can edit and resubmit; the review pauses until they do.", false,
+	infoForm, infoRun := decision("/review", "REQUEST_INFO", "Return to the applicant", "Return to applicant",
+		"The applicant is emailed what is missing, with your message, and can edit and resubmit. The review pauses until they do; then it starts again at step 1.", true,
 		domain.FormField{Key: "requestedItems", Label: "What is missing (one per line)", Type: "textarea", Required: true})
 	finalForm, finalRun := decision("/decision", "FINAL_APPROVE", "Give final approval (step 2)", "Approve",
 		"Approves the seller or provider: their account opens and their plan starts. This cannot be undone here.", false)
+	finalInfoForm, finalInfoRun := decision("/decision", "REQUEST_INFO", "Return to the applicant", "Return to applicant",
+		"Use this when a flagged or reviewed application needs the applicant to fix or add something. They are emailed what is missing, with your message, and can edit and resubmit; it then starts again at step 1.", true,
+		domain.FormField{Key: "requestedItems", Label: "What is missing (one per line)", Type: "textarea", Required: true})
 	backForm, backRun := decision("/decision", "SEND_BACK", "Send back to step 1", "Send back",
 		"Returns the application to the reviewer to check again; your note tells them what to look at.", true)
 	rejectForm, rejectRun := decision("/decision", "REJECT", "Reject the application", "Reject",
@@ -321,9 +328,10 @@ func applicationsResource() *staffResource {
 		},
 		actions: []staffAction{
 			{key: "review-approve", label: "Approve (step 1)", tone: "primary", permission: "applications:review", level: domain.LevelApprove, form: approveForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: approveRun},
-			{key: "review-flag", label: "Flag", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: flagRun},
-			{key: "review-request-info", label: "Request info", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: infoRun},
+			{key: "review-flag", label: "Flag for senior review", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: flagRun},
+			{key: "review-request-info", label: "Return to applicant", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: infoRun},
 			{key: "final-approve", label: "Final approval", tone: "primary", permission: "applications:approve", level: domain.LevelApprove, form: finalForm, when: finalStep, settled: decided, run: finalRun},
+			{key: "final-request-info", label: "Return to applicant", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: finalInfoForm, when: finalStep, settled: past("INFO_REQUESTED", "APPROVED", "REJECTED"), run: finalInfoRun},
 			{key: "send-back", label: "Send back", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: backForm, when: finalStep, settled: decided, run: backRun},
 			{key: "reject", label: "Reject", tone: "danger", permission: "applications:approve", level: domain.LevelApprove, form: rejectForm, when: finalStep, settled: decided, run: rejectRun},
 		},

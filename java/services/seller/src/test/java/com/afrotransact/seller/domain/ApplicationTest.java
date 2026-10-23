@@ -206,4 +206,35 @@ class ApplicationTest {
                 ApplicationStatus.DRAFT, ApplicationStatus.PENDING_REVIEW, "approver")))
                 .as("only the latest entry counts").isFalse();
     }
+
+    @Test
+    void aFlaggedApplicationCanBeReturnedToTheApplicantToFixAndThenResubmitted() {
+        Application flagged = draft().submit(NOW).review(ReviewAction.FLAG, "reviewer", "ID_UNVERIFIED",
+                List.of("Identity"), null, NOW);
+
+        assertThatThrownBy(() -> flagged.decide(ReviewAction.REQUEST_INFO, "approver", "ID_UNVERIFIED", List.of(), NOW))
+                .isInstanceOfSatisfying(SellerRuleViolation.class,
+                        e -> assertThat(e.code()).isEqualTo("seller.requested-items-required"));
+        assertThatThrownBy(() -> flagged.decide(ReviewAction.REQUEST_INFO, "reviewer", "ID_UNVERIFIED",
+                List.of("A clearer photo of your ID"), NOW)).isInstanceOf(SellerForbidden.class);
+
+        Application returned = flagged.decide(ReviewAction.REQUEST_INFO, "approver", "ID_UNVERIFIED",
+                List.of("A clearer photo of your ID"), NOW);
+        assertThat(returned.status()).isEqualTo(ApplicationStatus.INFO_REQUESTED);
+        assertThat(returned.requestedItems()).containsExactly("A clearer photo of your ID");
+        assertThat(returned.status().editableByApplicant()).isTrue();
+
+        Application resubmitted = returned.submit(NOW);
+        assertThat(resubmitted.status()).isEqualTo(ApplicationStatus.PENDING_REVIEW);
+        assertThat(resubmitted.requestedItems()).isEmpty();
+        assertThat(resubmitted.failedChecks()).isEmpty();
+    }
+
+    @Test
+    void anApplicationAwaitingFinalApprovalCanAlsoBeReturnedToTheApplicant() {
+        Application waiting = draft().submit(NOW).review(ReviewAction.APPROVE, "reviewer", "OK", null, null, NOW);
+        Application returned = waiting.decide(ReviewAction.REQUEST_INFO, "approver", "MORE", List.of("Proof of address"),
+                NOW);
+        assertThat(returned.status()).isEqualTo(ApplicationStatus.INFO_REQUESTED);
+    }
 }

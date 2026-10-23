@@ -12,7 +12,7 @@ import java.util.Set;
  * DRAFT ──submit──▶ PENDING_REVIEW ──approve──▶ AWAITING_FINAL_APPROVAL ──final approve──▶ APPROVED
  *   ▲                 │  │                         │   ▲ (FLAGGED too)       └──reject──▶ REJECTED
  *   │                 │  └──flag──▶ FLAGGED ───────┘   └──send back──▶ PENDING_REVIEW
- *   └─ resubmit ◀─ INFO_REQUESTED ◀──request info──┘
+ *   └─ resubmit ◀─ INFO_REQUESTED ◀──request info (step 1, or step 2 from FLAGGED / AWAITING_FINAL_APPROVAL)
  * </pre>
  * The final approver must be a different person than the reviewer, and nobody reviews their own application.
  */
@@ -110,8 +110,16 @@ public record Application(String id, String reference, String orgId, String appl
         };
     }
 
-    /** Step 2: a different person gives final approval, sends it back to review, or rejects it. */
+    /** Step 2 without a request for information. */
     public Application decide(ReviewAction action, String approver, String reason, Instant now) {
+        return decide(action, approver, reason, List.of(), now);
+    }
+
+    /**
+     * Step 2: a different person gives final approval, sends it back to review, rejects it, or returns it to the
+     * applicant to fix (REQUEST_INFO with what is missing), which is how a flagged application reaches the applicant.
+     */
+    public Application decide(ReviewAction action, String approver, String reason, List<String> items, Instant now) {
         if (!action.isFinalAction()) {
             throw new SellerRuleViolation("seller.invalid-action", action + " is not a final-approver action");
         }
@@ -126,6 +134,13 @@ public record Application(String id, String reference, String orgId, String appl
         return switch (action) {
             case FINAL_APPROVE -> decided(ApplicationStatus.APPROVED, approver, reason, now);
             case REJECT -> decided(ApplicationStatus.REJECTED, approver, reason, now);
+            case REQUEST_INFO -> {
+                if (items == null || items.isEmpty()) {
+                    throw new SellerRuleViolation("seller.requested-items-required",
+                            "Tick which documents or fields the applicant must provide");
+                }
+                yield moved(ApplicationStatus.INFO_REQUESTED, approver, now, List.of(), items, reason);
+            }
             default -> new Application(id, reference, orgId, applicantUserId, kind, ApplicationStatus.PENDING_REVIEW,
                     currentStep, data, prefilledFields, null, null, null, null, List.of(), List.of(), reason,
                     submissionCount, submittedAt, createdAt, now, version);

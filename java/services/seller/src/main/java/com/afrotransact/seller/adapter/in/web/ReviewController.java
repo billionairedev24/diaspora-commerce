@@ -86,7 +86,7 @@ class ReviewController {
         return ApplicationResponse.of(reviews.review(id, body.toCommand(key)));
     }
 
-    @Operation(summary = "Step 2 — final decision: FINAL_APPROVE, SEND_BACK or REJECT (not by the reviewer)",
+    @Operation(summary = "Step 2 — final decision: FINAL_APPROVE, SEND_BACK, REJECT or REQUEST_INFO (requestedItems; returns it to the applicant), not by the reviewer",
             description = REPLAY)
     @PostMapping("/v1/applications/{id}/decision")
     ApplicationResponse finalDecision(@PathVariable String id, @Valid @RequestBody DecisionRequest body,

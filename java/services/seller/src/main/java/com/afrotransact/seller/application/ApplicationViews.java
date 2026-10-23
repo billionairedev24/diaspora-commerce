@@ -25,6 +25,7 @@ import com.afrotransact.seller.domain.PlanVisibility;
 import com.afrotransact.seller.domain.RuleContext;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.TaxIds;
+import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.TimelineEntry;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.PlanRepository;
@@ -90,8 +91,26 @@ class ApplicationViews {
         return app.submittedAt() == null ? Instant.now(clock) : app.submittedAt();
     }
 
+    /**
+     * What the applicant may see of the review history: their own steps, what was asked of them and the final decision.
+     * Internal steps (a reviewer's approval, a flag, a send-back) and every staff member's identity and note stay
+     * inside; the note of a request for information and of a rejection is addressed to the applicant.
+     */
+    static List<TimelineEntry> forApplicant(List<TimelineEntry> timeline) {
+        return timeline.stream()
+                .filter(t -> switch (t.action()) {
+                    case STARTED, SUBMITTED, RESUBMITTED, REQUEST_INFO, FINAL_APPROVE, REJECT -> true;
+                    default -> false;
+                })
+                .map(t -> new TimelineEntry(t.id(), t.applicationId(), t.action(), t.fromStatus(), t.toStatus(), null,
+                        t.reasonCode(), t.action() == ReviewAction.REQUEST_INFO || t.action() == ReviewAction.REJECT
+                        ? t.note() : null, t.items(), t.occurredAt(), null, null))
+                .toList();
+    }
+
     ApplicationView view(Application app, PiiLevel pii, List<TimelineEntry> timeline, List<DocumentAccess> log) {
         ApplicationData data = app.data();
+        List<TimelineEntry> shown = pii == PiiLevel.APPLICANT ? forApplicant(timeline) : timeline;
         Optional<Plan> plan = plan(data);
         BusinessDetailsSection d = data.businessDetails();
         String masked = d == null ? null : TaxIds.masked(d.taxIdType(), d.taxIdLast4());
@@ -102,7 +121,7 @@ class ApplicationViews {
                 trials.decide(plan.get(), app.kind(), signupAt(app), data.plan().promoCode(), null).days()) : null;
         return new ApplicationView(app, pii, masked, full, steps(data.entityType()),
                 rules.completedSteps(data, plan, context(app)), first, plan.map(Plan::name).orElse(null),
-                documents(data), timeline, log, planFees.options());
+                documents(data), shown, log, planFees.options());
     }
 
     /** The wizard's steps for the entity type (owners are not shown for sole proprietors). */

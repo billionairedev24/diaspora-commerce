@@ -68,6 +68,12 @@ function useOnboarding() {
   return useQuery(sellerQueries.onboarding(sellerApi(), orgId));
 }
 
+/** The message the reviewer left when they returned the application (the latest request for information). */
+export function returnedMessage(status: OnboardingStatus): string | null {
+  const last = [...status.timeline].reverse().find((t) => t.action === 'REQUEST_INFO');
+  return last?.note?.trim() ? last.note.trim() : null;
+}
+
 function ApplicationHeading({ status }: { status: OnboardingStatus }) {
   const provider = status.kind === 'PROVIDER';
   return (
@@ -201,9 +207,11 @@ export function OnboardingWizard({ slug }: { slug: string }) {
   return (
     <div className="flex flex-col gap-6">
       <ApplicationHeading status={status} />
-      {status.status === 'INFO_REQUESTED' && status.requestedItems.length ? (
-        <Notice tone="warning" title="We need a little more information:" role="alert">
-          {status.requestedItems.join('; ')}. Update the highlighted steps and submit again.
+      {status.status === 'INFO_REQUESTED' ? (
+        <Notice tone="warning" title="We need a little more information from you." role="alert">
+          {returnedMessage(status) ? <span className="block">{returnedMessage(status)}</span> : null}
+          {status.requestedItems.length ? <span className="mt-1 block">Please provide: {status.requestedItems.join('; ')}.</span> : null}
+          <span className="mt-1 block">Update the highlighted steps, then use “Resubmit for review”.</span>
         </Notice>
       ) : null}
       <Stepper status={status} current={slug} />
