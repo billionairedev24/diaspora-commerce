@@ -1,6 +1,6 @@
 'use client';
 
-import { cartKeys, isApiError, type OrderConfirmation, orderKeys } from '@afrotransact/api-client';
+import { type Cart,cartKeys, isApiError, type OrderConfirmation, orderKeys } from '@afrotransact/api-client';
 import { buttonClassName, CircleNotch } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -45,7 +45,7 @@ export function CheckoutComplete({ pollMs = 1000, polls = 10 }: { pollMs?: numbe
         }
         if (cancelled) return;
         if (status.status !== 'placed') return setState({ kind: 'pending' });
-        qc.setQueryData(cartKeys.current(), (old: any) =>
+        qc.setQueryData(cartKeys.current(), (old: Cart | undefined) =>
           old
             ? {
                 ...old,

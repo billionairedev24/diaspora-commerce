@@ -18,7 +18,7 @@
 # key's secret back: POST …/s3Credentials/{access}/secret), so no user or key piles up — on a Mac, a runner or both.
 
 OVH_STATE_USER=${OVH_STATE_USER:-terraform-state}
-OVH_API_BASE='' OVH_API_DELTA=0 OVH_API_TOKEN=''
+OVH_API_BASE='' OVH_API_DELTA=0 OVH_API_TOKEN='' # gitleaks:allow (empty defaults)
 
 cfg_q() { printf '%s' "$1" | sed 's/[\\"]/\\&/g'; }   # a value inside a curl config line's quotes
 

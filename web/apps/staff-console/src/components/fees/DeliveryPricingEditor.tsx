@@ -1,6 +1,6 @@
 'use client';
 
-import { type FeesOverview, staffQueries } from '@afrotransact/api-client';
+import { type DeliveryTariffMode, type FeesOverview, staffQueries } from '@afrotransact/api-client';
 import { Button, Checkbox, Select, TextField } from '@afrotransact/ui';
 import { Plus, Trash } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
@@ -43,7 +43,7 @@ function TariffEditor({ name, prefix, value, onChange, errors }: { name: string;
           { value: 'PER_WEIGHT', label: 'By weight (base + per lb)' },
           { value: 'DISTANCE', label: t('st.delivery.mode.distance') }
         ]}
-        onChange={(e) => set('mode', e.currentTarget.value as any)}
+        onChange={(e) => set('mode', e.currentTarget.value as DeliveryTariffMode)}
       />
       {value.mode === 'FLAT' ? (
         <TextField

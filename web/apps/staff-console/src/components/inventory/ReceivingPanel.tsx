@@ -2,7 +2,6 @@
 
 import { type InboundReceiptResult, type InboundShipment, inventoryHubQueries, receiptVariance, type ReceiveLineInput } from '@afrotransact/api-client';
 import { Button, Checkbox, cx, parseGs1, TextField } from '@afrotransact/ui';
-import { Barcode as BarcodeIcon } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 

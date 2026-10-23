@@ -2,15 +2,14 @@
 
 import {
   type Address,
-  cartKeys,
+type Cart,  cartKeys,
   checkoutKeys,
   type CheckoutPackage,
   definitiveFailure,
   type DeliverySelection,
   isApiError,
   type OrderConfirmation,
-  orderKeys, randomUuid
-} from '@afrotransact/api-client';
+  orderKeys, randomUuid } from '@afrotransact/api-client';
 import { Button, buttonClassName, LockSimple, Plus, Skeleton, useToast } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -207,7 +206,7 @@ export function CheckoutView() {
 
   const placed = async (status: OrderConfirmation) => {
     setPlacing(3);
-    qc.setQueryData(cartKeys.current(), (old: any) =>
+    qc.setQueryData(cartKeys.current(), (old: Cart | undefined) =>
       old
         ? {
             ...old,
@@ -398,7 +397,6 @@ export function CheckoutView() {
                   <input
                     type="radio"
                     name="shipaddr"
-                    role="radio"
                     checked={a.id === addressId}
                     onChange={() => setAddressId(a.id)}
                     aria-label={`${a.name} ${addressLine(a)}`}

@@ -198,7 +198,7 @@ class SettlementPayoutController {
             description = "The manual twin of the payout.paid / payout.failed webhooks. Changes nothing while Stripe "
                     + "still says pending or in transit.")
     @PostMapping("/v1/payouts/requests/{id}/sync")
-    PayoutResponse sync(@PathVariable UUID id) {
+    PayoutResponse syncPayout(@PathVariable UUID id) {
         return PayoutResponse.of(payouts.syncWithStripe(id));
     }
 

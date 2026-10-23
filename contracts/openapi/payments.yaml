@@ -1826,7 +1826,7 @@ paths:
       - Reconciliation
       summary: 'Propose a correcting journal (ledger:adjust)'
       description: 'Nothing is posted until a different person with ledger:approve approves it. Lines must balance. 422 payments.adjustment-pending while another proposal for the same difference waits.'
-      operationId: propose
+      operationId: proposeAdjustment
       requestBody:
         content:
           application/json:
@@ -1866,7 +1866,7 @@ paths:
       - Reconciliation
       summary: 'Approve and post a proposed adjustment (ledger:approve, not the proposer)'
       description: '403 payments.adjustment-four-eyes when the approver proposed it.'
-      operationId: approve
+      operationId: approveAdjustment
       parameters:
       - name: id
         in: path
@@ -1886,7 +1886,7 @@ paths:
       tags:
       - Reconciliation
       summary: 'Reject a proposed adjustment with the reason (ledger:approve; the proposer may withdraw)'
-      operationId: reject
+      operationId: rejectAdjustment
       parameters:
       - name: id
         in: path
@@ -1913,7 +1913,7 @@ paths:
       - Settlement & payouts
       summary: 'Ask Stripe where an in-transit payout stands and close the request (payouts:approve)'
       description: 'The manual twin of the payout.paid and payout.failed webhooks. Changes nothing while Stripe still says pending or in transit.'
-      operationId: sync
+      operationId: syncPayout
       parameters:
       - name: id
         in: path

@@ -71,7 +71,7 @@ export function tariffForm(t: DeliveryTariff | null): TariffForm {
     flat: amount(t.flatPerPackageMinor),
     base: amount(t.baseMinor),
     perMile: amount(t.perMileMinor),
-    perLb: amount((t as any).perLbMinor ?? null),
+    perLb: amount(t.perLbMinor ?? null),
     min: amount(t.minMinor),
     max: amount(t.maxMinor),
     bands: t.bands.map((b) => ({ rowId: rowId(), from: milesText(b.fromMiles), to: milesText(b.toMiles), fee: dollarsText(b.feeMinor) }))
@@ -112,7 +112,7 @@ function toTariff(f: TariffForm, key: string, errors: Record<string, string>, t:
       bands: [],
       minMinor: money('minMinor', f.min, true),
       maxMinor: money('maxMinor', f.max, true)
-    } as any;
+    };
   }
   const bands = f.bands.map((b, i) => {
     const from = parseMiles(b.from);

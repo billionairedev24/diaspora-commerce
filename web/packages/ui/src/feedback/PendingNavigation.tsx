@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
-import { Spinner } from './Spinner';
 import styles from './PendingNavigation.module.css';
+import { Spinner } from './Spinner';
 
 export interface PendingNavigationProps {
   /** Status text shown under the spinner (already translated), e.g. "Taking you to sign in…". */

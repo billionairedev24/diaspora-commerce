@@ -1,11 +1,11 @@
 'use client';
 
-import { isApiError, type ProviderPage } from '@afrotransact/api-client';
+import { isApiError } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { buttonClassName, CaretRight, SealCheck, ShieldCheck, Skeleton } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { type CSSProperties, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';

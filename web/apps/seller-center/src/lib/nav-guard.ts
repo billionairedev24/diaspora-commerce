@@ -1,6 +1,6 @@
 'use client';
 
-import { createNavGuard, destinationKey } from '@afrotransact/ui';
+import { createNavGuard } from '@afrotransact/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback } from 'react';
 

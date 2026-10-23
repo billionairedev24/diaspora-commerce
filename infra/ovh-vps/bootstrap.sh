@@ -20,7 +20,7 @@ ufw --force enable >/dev/null
 
 if ! command -v k3s >/dev/null; then
   echo "==> k3s"
-  curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --disable traefik --disable servicelb --write-kubeconfig-mode 600 --kube-apiserver-arg=default-not-ready-toleration-seconds=30 --kube-apiserver-arg=default-unreachable-toleration-seconds=30" sh -
+  curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server --disable traefik --disable servicelb --write-kubeconfig-mode 600 --kube-apiserver-arg=default-not-ready-toleration-seconds=30 --kube-apiserver-arg=default-unreachable-toleration-seconds=30" sh - # gitleaks:allow (installer flags, no secret)
 fi
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 for _ in $(seq 1 60); do kubectl get node 2>/dev/null | grep -q ' Ready' && break; sleep 3; done

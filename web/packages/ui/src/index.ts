@@ -9,8 +9,8 @@ export { type Bar, BarcodeError, caseLabelData, code128, code128Values, ean13, e
 export { AppleLogo, FacebookLogo, GoogleG } from './brand/BrandIcons';
 export { Logo, logoClassName, LogoMark, type LogoProps, wordmarkClassName } from './brand/Logo';
 export { SocialButton, type SocialButtonProps, type SocialProvider } from './brand/SocialButton';
-export { WhatsAppChatButton, type WhatsAppChatButtonProps, whatsAppHref } from './brand/WhatsAppChatButton';
 export { SocialIconLink, type SocialIconLinkProps, type SocialNetwork } from './brand/SocialIcon';
+export { WhatsAppChatButton, type WhatsAppChatButtonProps, whatsAppHref } from './brand/WhatsAppChatButton';
 export { Button, buttonClassName, type ButtonProps, type ButtonSize, type ButtonVariant, IconButton, type IconButtonProps } from './button/Button';
 export { Badge, type BadgeProps, type BadgeTone, FulfilmentBadge, type FulfilmentBadgeProps } from './commerce/Badge';
 export { ImagePlaceholder, type ImagePlaceholderProps, Skeleton } from './commerce/ImagePlaceholder';

@@ -237,7 +237,7 @@ function PlanSheet({ id, onClose }: { id: string | null; onClose: () => void }) 
           </div>
           {edit && s.status === 'WORKING' ? (
             <div className="flex flex-col gap-3 rounded-md border border-border p-3">
-              <label className="text-xs font-semibold text-muted">Delivery arrangement to AfroTransact FC</label>
+              <span className="text-xs font-semibold text-muted">Delivery arrangement to AfroTransact FC</span>
               <div className="flex flex-wrap gap-4 text-sm">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input

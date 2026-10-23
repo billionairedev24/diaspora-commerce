@@ -220,7 +220,7 @@ class ReconciliationWorkflowController {
                     + "for the same difference waits.")
     @PostMapping("/v1/ledger/adjustments")
     @ResponseStatus(HttpStatus.CREATED)
-    AdjustmentResponse propose(@Valid @RequestBody ProposeRequest body) {
+    AdjustmentResponse proposeAdjustment(@Valid @RequestBody ProposeRequest body) {
         List<Line> lines = body.lines().stream()
                 .map(l -> new Line(l.account(), l.key(), l.side(), l.amountMinor(), l.orgId())).toList();
         return AdjustmentResponse.of(adjustments.propose(
@@ -230,13 +230,13 @@ class ReconciliationWorkflowController {
     @Operation(summary = "Approve and post a proposed adjustment (ledger:approve, not the proposer)",
             description = "403 payments.adjustment-four-eyes when the approver proposed it.")
     @PostMapping("/v1/ledger/adjustments/{id}/approve")
-    AdjustmentResponse approve(@PathVariable UUID id, @RequestBody(required = false) DecisionRequest body) {
+    AdjustmentResponse approveAdjustment(@PathVariable UUID id, @RequestBody(required = false) DecisionRequest body) {
         return AdjustmentResponse.of(adjustments.approve(id, body == null ? null : body.note()));
     }
 
     @Operation(summary = "Reject a proposed adjustment with the reason (ledger:approve; the proposer may withdraw)")
     @PostMapping("/v1/ledger/adjustments/{id}/reject")
-    AdjustmentResponse reject(@PathVariable UUID id, @RequestBody DecisionRequest body) {
+    AdjustmentResponse rejectAdjustment(@PathVariable UUID id, @RequestBody DecisionRequest body) {
         return AdjustmentResponse.of(adjustments.reject(id, body == null ? null : body.note()));
     }
 }

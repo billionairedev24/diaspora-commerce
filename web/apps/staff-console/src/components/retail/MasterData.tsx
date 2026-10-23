@@ -7,8 +7,8 @@ import { useMemo, useState } from 'react';
 
 import { toneOf, useHub, useHubMutation } from '@/components/inventory/shared';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { countryOptions, currencyOptions } from '@/lib/iso';
 import { humanize, idempotencyKey, toMinor } from '@/lib/format';
+import { countryOptions, currencyOptions } from '@/lib/iso';
 
 type Storage = 'AMBIENT' | 'CHILLED' | 'FROZEN' | 'HAZMAT';
 

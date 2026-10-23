@@ -323,7 +323,6 @@ export function ImageLibraryView() {
             onChange={(e) => setNewName(e.target.value)}
             placeholder="e.g. SKU-123.MAIN.jpg"
             required
-            autoFocus
           />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="neutral" onClick={() => setRenaming(null)}>

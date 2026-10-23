@@ -176,8 +176,8 @@ export function PackageCard({
         {canPickup && (
           <div className={styles.toggle} role="radiogroup" aria-label={t('co.fulfilAria', { seller: pkg.seller.name })}>
             <button
-              type="button"
               role="radio"
+              type="button"
               aria-checked={!pickup}
               className={!pickup ? styles.toggleOn : styles.toggleOff}
               onClick={() => setMode('delivery')}
@@ -187,8 +187,8 @@ export function PackageCard({
               <span>{t('co.fulfil.delivery')}</span>
             </button>
             <button
-              type="button"
               role="radio"
+              type="button"
               aria-checked={pickup}
               className={pickup ? styles.toggleOn : styles.toggleOff}
               onClick={() => setMode('pickup')}
@@ -219,7 +219,6 @@ export function PackageCard({
                   >
                     <input
                       type="radio"
-                      role="radio"
                       name={`opt-${pkg.packageId}`}
                       checked={isSelected}
                       onChange={() => onChoice({ ...choice, option: o.key })}
@@ -275,7 +274,6 @@ export function PackageCard({
                     >
                       <input
                         type="radio"
-                        role="radio"
                         name={`pt-${pkg.packageId}`}
                         checked={isPtSelected}
                         onChange={() => onChoice({ ...choice, option: 'pickup', pickupPointId: pt.id })}

@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
 import { navGuard } from '@/lib/nav-guard';
+
 import { mockApi, mockSettingsApi } from './mock-api';
 
 afterEach(() => {
@@ -11,7 +12,9 @@ afterEach(() => {
   navGuard.reset();
   try {
     window.sessionStorage.clear();
-  } catch {}
+  } catch {
+    // storage may be unavailable in the test environment
+  }
 });
 
 export const nav = { pathname: '/', push: vi.fn(), replace: vi.fn() };
