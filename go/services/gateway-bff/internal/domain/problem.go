@@ -43,6 +43,8 @@ const (
 	CodePreviousCheckoutPaid = "PREVIOUS_CHECKOUT_PAID"
 	CodeStockChanged         = "STOCK_CHANGED"
 	CodeConflict             = "CONFLICT"
+	// CodeMaintenance is the 503 sent to customers and sellers while the platform is in maintenance.
+	CodeMaintenance = "MAINTENANCE"
 	// CodeAlreadyDone (409): what the action would do already happened (e.g. an application already approved); the
 	// detail says by whom and when. Clients show it as information and refresh the record.
 	CodeAlreadyDone = "ALREADY_DONE"

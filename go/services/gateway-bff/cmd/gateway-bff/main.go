@@ -112,7 +112,7 @@ func run() error {
 	sellerCases := upstreams.NewSellerCases(client("tax-returns", up.TaxReturns), client("trust-ops", up.TrustOps))
 	sellerDeps := app.SellerDeps{
 		Cases: sellerCases,
-		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)), Addresses: identity,
+		Orgs:  upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)), Addresses: identity,
 		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
 		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient),
@@ -148,8 +148,9 @@ func run() error {
 		Log:     log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
 		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market})
+	maintenance := app.NewMaintenanceService(valkey.NewMaintenance(rdb), nil, log)
 	services := httpapi.Services{
-		Sessions: sessions,
+		Sessions: sessions, Maintenance: maintenance,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: cfg.OIDC.PublicURL, ClientID: cfg.OIDC.ClientID, RedirectURI: cfg.OIDC.RedirectURI,
 			RedirectURIs: cfg.RedirectURIs(), AppOrigins: cfg.AppOrigins(), BFFPath: cfg.Web.BFFPath,
@@ -197,7 +198,7 @@ func run() error {
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,
 		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient,
-		proofLinks: proofLinks}, rdb, cache, store, log); err != nil {
+		proofLinks: proofLinks}, rdb, cache, store, maintenance, log); err != nil {
 		return err
 	}
 	// Seller Center exports share the staff console's job store, renderer and file directory.

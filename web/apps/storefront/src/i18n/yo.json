@@ -7,6 +7,9 @@
     "note": "Placeholder machine translation (S193). Every string needs review by a native-speaking translator before launch; move reviewed keys to reviewedKeys."
   },
   "a11y.skip": "Fò sí àkóónú pàtàkì",
+  "maintenance.check": "Ṣàyẹ̀wò lẹ́ẹ̀kan sí i",
+  "maintenance.expected": "A retí láti padà ní nǹkan bí {time}.",
+  "maintenance.working": "À ń ṣiṣẹ́ lé e lọ́wọ́. Ojú-ìwé yìí yóò ṣe ìmúdójúìwọ̀n fúnra rẹ̀.",
   "chat.whatsapp": "Bá wa sọ̀rọ̀ lórí WhatsApp",
   "chat.whatsappMessage": "Pẹ̀lẹ́ o AfroTransact, mo nílò ìrànlọ́wọ́.",
   "chat.whatsappOrderMessage": "Pẹ̀lẹ́ o AfroTransact, mo nílò ìrànlọ́wọ́ lórí àṣẹ {order}.",

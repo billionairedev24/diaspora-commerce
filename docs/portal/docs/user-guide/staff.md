@@ -48,6 +48,12 @@ All configuration lives in one place: **Settings** (sidebar). Sections include G
 center articles), Fees, Markets, Notifications, Developers and Tax. See the [settings runbook](../runbooks/settings.md).
 The **Tax** section switches between our own rules and Stripe Tax.
 
+## Maintenance mode
+
+Before planned work, turn on **Settings → General → Maintenance mode**. Customers (and sellers, if you pick that)
+see a page with your message and the time you expect to be back; staff keep working. Remember to turn it off. See the
+[maintenance runbook](../runbooks/maintenance-mode.md).
+
 ## Lola (assistant)
 
 Lola can look up applications, payouts, orders and settlements for you, read-only. Ask in plain language, for

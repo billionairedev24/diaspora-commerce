@@ -24,7 +24,9 @@ type StaffDeps struct {
 	Cache     port.Cache
 	MatrixTTL time.Duration
 	Jobs      port.ExportJobStore
-	Blobs     port.ExportBlobStore
+	// Maintenance is the platform maintenance switch (Settings → General).
+	Maintenance MaintenanceService
+	Blobs       port.ExportBlobStore
 	// Renderer writes export files (CSV, XLSX with native charts, PDF).
 	Renderer port.ExportRenderer
 	// ExportBasePath prefixes download links handed to the console (its same-origin BFF proxy, e.g. /api/bff).
@@ -70,6 +72,7 @@ type staffCtx struct {
 	bearer string
 	up     port.StaffUpstreams
 	now    time.Time
+	maint  MaintenanceService
 	// idem is the request's Idempotency-Key (relayed to upstreams that accept one).
 	idem string
 }
@@ -139,7 +142,7 @@ func (r *staffResolver) resolve(ctx context.Context, c *domain.Caller) (staffCtx
 	if err := requireCustomer(c); err != nil {
 		return staffCtx{}, err
 	}
-	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock()}
+	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock(), maint: r.d.Maintenance}
 	if err := sc.get(ctx, r.d.Up.Identity, "/v1/me", nil, &sc.me); err != nil {
 		return staffCtx{}, err
 	}

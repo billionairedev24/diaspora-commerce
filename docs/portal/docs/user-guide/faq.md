@@ -15,6 +15,10 @@ sidebar_position: 5
 
 **Can I change my delivery address after paying?** Only before the seller ships. Contact the seller from the order, or support.
 
+## Shoppers and sellers
+
+**The site says "We'll be right back".** We are doing planned work. Your cart, orders and payments are safe. The page checks by itself and reloads when we are back.
+
 ## Sellers
 
 **Why does my application still say "In review"?** It can pass through more than one reviewer. If something is needed, the status changes to *Needs your attention* with a message and you get an email.

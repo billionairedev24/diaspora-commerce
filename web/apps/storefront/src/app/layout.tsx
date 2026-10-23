@@ -11,11 +11,14 @@ import { type Metadata, type Viewport } from 'next';
 import { cookies, headers } from 'next/headers';
 import { type ReactNode } from 'react';
 
+import { maintenanceProps } from '@/components/shell/maintenanceProps';
+import { MaintenanceScreen } from '@/components/shell/MaintenanceScreen';
 import { SignInPending } from '@/components/shell/SignInPending';
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
 import { CONSENT_COOKIE, headerGpc, parseConsent } from '@/lib/consent/consent';
 import { ConsentGate } from '@/lib/consent/ConsentProvider';
+import { maintenanceNow } from '@/lib/maintenance';
 import { Providers } from '@/lib/query/Providers';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -36,6 +39,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const locale = await getLocale();
   const t = await getT();
   const [jar, h] = await Promise.all([cookies(), headers()]);
+  const maintenance = await maintenanceNow();
   const consent = parseConsent(jar.get(CONSENT_COOKIE)?.value);
   return (
     // suppressHydrationWarning: browser extensions stamp classes / attributes onto <html> before React hydrates
@@ -53,7 +57,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <ConsentGate category="analytics">
               <WebVitalsReporter />
             </ConsentGate>
-            {children}
+            {maintenance ? <MaintenanceScreen {...maintenanceProps(maintenance, locale, t)} /> : children}
           </Providers>
         </I18nProvider>
       </body>

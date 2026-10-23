@@ -755,6 +755,35 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     sections: [['This setting', ['label', 'value', 'help', 'source']]],
     actions: []
   },
+  maintenance: {
+    title: 'Maintenance mode',
+    columns: [col('setting', 'Setting', 'strong', 24), col('stateLabel', 'Now', 'status', 40), col('updatedByName', 'Changed by', 'text', 16), col('updatedAt', 'Changed', 'datetime', 12)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Maintenance mode',
+    subtitleOf: (r) => str(r.fields.stateLabel),
+    sections: [['Now', ['stateLabel', 'title', 'message', 'expectedBackAt', 'updatedByName', 'updatedAt']]],
+    actions: [],
+    edit: {
+      permission: 'content:site.edit',
+      form: (r) => form('Maintenance mode', 'Save', [
+        field('enabled', 'Maintenance mode on', 'toggle', false, { value: str(r.fields.state) === 'ON' }),
+        field('scope', 'Who is paused', 'select', true, { options: [{ value: 'SHOPPERS', label: 'Shoppers only (sellers can keep working)' }, { value: 'ALL', label: 'Shoppers and sellers' }], value: str(r.fields.scope) || 'SHOPPERS' }),
+        field('title', 'Heading', 'text', false, { maxLength: 80, value: str(r.fields.title) }),
+        field('message', 'What customers are told (required when turning on)', 'textarea', false, { maxLength: 600, value: str(r.fields.message) }),
+        field('backIn', 'When we expect to be back', 'select', false, { options: [{ value: '0', label: 'Not sure yet' }, { value: '15', label: 'About 15 minutes' }, { value: '30', label: 'About 30 minutes' }, { value: '60', label: 'About 1 hour' }], value: '0' })
+      ], 'While it is on, shoppers see the maintenance page instead of the site. Staff can still sign in.'),
+      apply: (r, v) => {
+        const on = v.enabled === true;
+        if (on && str(v.message).trim().length < 10) throw new Error('Tell customers what is happening, in at least 10 characters.');
+        r.fields.state = on ? 'ON' : 'OFF';
+        r.fields.stateLabel = on ? 'On: Shoppers only see the maintenance page' : 'Off: the platform is open';
+        r.fields.scope = str(v.scope);
+        r.fields.title = str(v.title) || 'We’ll be right back';
+        r.fields.message = str(v.message);
+      }
+    }
+  },
   'tax-settings': {
     title: 'Sales tax method',
     columns: [col('setting', 'Setting', 'strong', 30), col('methodLabel', 'In force', 'text', 24), col('stripeLabel', 'Stripe Tax', 'text', 18), col('changedByName', 'Changed by', 'text', 16), col('changedAt', 'Changed', 'datetime', 12)],

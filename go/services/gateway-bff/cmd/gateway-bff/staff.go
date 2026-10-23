@@ -31,7 +31,7 @@ type staffClients struct {
 // It also returns Seller Center's export stores (same job store, renderer and file directory; seller links are served by
 // /v1/seller/export-files/{id}).
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
-	cache port.Cache, counter port.DailyCounter, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
+	cache port.Cache, counter port.DailyCounter, maintenance app.MaintenanceService, log *slog.Logger) (httpapi.StaffServices, app.ExportDeps, port.LocalExportFiles, error) {
 	up := cfg.Upstreams
 	media := client("media", up.Media)
 	d := app.StaffDeps{
@@ -49,7 +49,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Proof:   sc.proofLinks,
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
-		Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
+		Maintenance: maintenance, Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
 	}
 	out := httpapi.StaffServices{}
 	seller := app.ExportDeps{Jobs: d.Jobs, Renderer: d.Renderer, BasePath: cfg.Web.BFFPath}

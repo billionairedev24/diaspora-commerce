@@ -3,6 +3,26 @@
 /* eslint-disable */
 
 export interface paths {
+    "/v1/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the platform is in maintenance, and what to tell customers
+         * @description Always answered, even in maintenance. Web and mobile apps read it to show the maintenance page. While `active`, every other customer route (and Seller Center's when `scope` is ALL) answers 503 `MAINTENANCE` with `Retry-After`; sign-in and staff routes keep working. Switched in the staff console under Settings → General → Maintenance mode.
+         */
+        get: operations["getMaintenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/site-config": {
         parameters: {
             query?: never;
@@ -2529,6 +2549,22 @@ export interface components {
             /** @description Autocomplete session of this address entry (Google Places billing) */
             sessionToken: string;
         };
+        MaintenanceStatus: {
+            active: boolean;
+            /**
+             * @description SHOPPERS pauses the storefront and apps; ALL also pauses Seller Center.
+             * @enum {string}
+             */
+            scope?: "SHOPPERS" | "ALL";
+            title?: string;
+            /** @description What customers are told. */
+            message?: string;
+            /**
+             * Format: date-time
+             * @description Omitted when unknown or already past.
+             */
+            expectedBackAt?: string;
+        };
         SiteConfig: {
             revision: number;
             /** @description Enabled social profiles only, in display order. */
@@ -3989,6 +4025,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getMaintenance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Maintenance status */
+            200: {
+                headers: {
+                    /** @example no-store */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceStatus"];
+                };
+            };
+        };
+    };
     getSiteConfig: {
         parameters: {
             query?: never;

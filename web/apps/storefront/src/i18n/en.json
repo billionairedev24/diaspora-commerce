@@ -1,5 +1,8 @@
 {
   "a11y.skip": "Skip to main content",
+  "maintenance.check": "Check again",
+  "maintenance.expected": "We expect to be back around {time}.",
+  "maintenance.working": "We’re still working on it. This page updates by itself.",
   "chat.whatsapp": "Chat with us on WhatsApp",
   "chat.whatsappMessage": "Hi AfroTransact, I need some help.",
   "chat.whatsappOrderMessage": "Hi AfroTransact, I need help with order {order}.",

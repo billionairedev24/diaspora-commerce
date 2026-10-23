@@ -7,6 +7,9 @@
     "note": "Placeholder machine translation (S193). Every string needs review by a native-speaking translator before launch; move reviewed keys to reviewedKeys."
   },
   "a11y.skip": "تخطَّ إلى المحتوى الرئيسي",
+  "maintenance.check": "تحقق مرة أخرى",
+  "maintenance.expected": "نتوقع العودة حوالي {time}.",
+  "maintenance.working": "ما زلنا نعمل على ذلك. تتحدث هذه الصفحة تلقائيًا.",
   "chat.whatsapp": "تحدّث معنا عبر واتساب",
   "chat.whatsappMessage": "مرحبًا AfroTransact، أحتاج إلى مساعدة.",
   "chat.whatsappOrderMessage": "مرحبًا AfroTransact، أحتاج إلى مساعدة بشأن الطلب {order}.",

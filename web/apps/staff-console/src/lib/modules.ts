@@ -106,6 +106,7 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
   audit: [{ resource: 'audit', label: 'Audit log' }],
   markets: [{ resource: 'markets', label: 'Countries' }],
   siteCfg: [
+    { resource: 'maintenance', label: 'Maintenance mode' },
     { resource: 'site-settings', label: 'Contacts & social links' },
     { resource: 'legal-documents', label: 'Legal documents' },
     { resource: 'help-articles', label: 'Help center' },

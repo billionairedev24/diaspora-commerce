@@ -28,6 +28,8 @@ type Services struct {
 	Account  app.AccountService
 	Checkout app.CheckoutService
 	Careers  app.CareersService
+	// Maintenance is the maintenance switch: the gate refuses customer and seller calls while it is on (nil = never).
+	Maintenance app.MaintenanceService
 	// Preorders serves the storefront's pre-order routes (S270–S275); registered when set.
 	Preorders app.PreorderService
 	// Seller Center & Provider Hub (contracts/openapi/gateway-bff-seller.yaml); routes are registered when set.
@@ -92,6 +94,7 @@ func New(s Services, rl port.RateLimiter, o SecurityOptions, log *slog.Logger) H
 }
 
 func (h *handlersImpl) chain(next http.Handler) http.Handler {
+	next = maintenanceGate(h.s.Maintenance, h.log)(next)
 	next = identify(h.s.Sessions, h.o, h.log)(next)
 	next = actingContext(next)
 	next = csrf(h.o, h.log)(next)
@@ -107,6 +110,8 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 
 	mux.Handle("OPTIONS /v1/", cors(h.o)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })))
 
+	// Maintenance status (always answered, even in maintenance: it is how the apps know to show the page)
+	route("GET /v1/maintenance", h.maintenance)
 	// Site & content
 	route("GET /v1/site-config", h.siteConfig)
 	route("GET /v1/home", h.home)

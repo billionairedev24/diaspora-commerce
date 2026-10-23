@@ -91,6 +91,24 @@ security:
   - sessionCookie: []
   - bearer: []
 paths:
+  /v1/maintenance:
+    get:
+      tags: [Site]
+      operationId: getMaintenance
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Whether the platform is in maintenance, and what to tell customers
+      description: >-
+        Always answered, even in maintenance. Web and mobile apps read it to show the maintenance page. While `active`,
+        every other customer route (and Seller Center's when `scope` is ALL) answers 503 `MAINTENANCE` with `Retry-After`;
+        sign-in and staff routes keep working. Switched in the staff console under Settings → General → Maintenance mode.
+      responses:
+        '200':
+          description: Maintenance status
+          headers:
+            Cache-Control: {schema: {type: string}, example: no-store}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MaintenanceStatus'}
   /v1/site-config:
     get:
       tags: [Site]
@@ -3081,6 +3099,15 @@ components:
               resolved: {type: boolean, description: 'false: `address` holds the street line only; resolve the suggestion when picked'}
         attribution: {type: string, description: Required attribution text (e.g. © OpenStreetMap contributors)}
         sessionToken: {type: string, description: Autocomplete session of this address entry (Google Places billing)}
+    MaintenanceStatus:
+      type: object
+      required: [active]
+      properties:
+        active: {type: boolean}
+        scope: {type: string, enum: [SHOPPERS, ALL], description: SHOPPERS pauses the storefront and apps; ALL also pauses Seller Center.}
+        title: {type: string}
+        message: {type: string, description: What customers are told.}
+        expectedBackAt: {type: string, format: date-time, description: Omitted when unknown or already past.}
     SiteConfig:
       type: object
       required: [revision, socials, contacts, legal, identityProviders, locales, market, appLinks, paymentMethods, smsProgramName]

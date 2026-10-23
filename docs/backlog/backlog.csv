@@ -1132,3 +1132,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - The link opens the transfer in Stripe test or live mode; the local stand-in has no link
 - Members see only their organisation's transfers
 - Verified: unit and gateway tests. Remaining: check against a real Stripe test transfer","E14","","Medium","3","payments stripe payouts staff-console","payments","In Progress"
+"S317","Story","Maintenance mode with a public maintenance page","Staff turn maintenance on before planned work; customers (and optionally sellers) see a page saying what is happening and when we expect to be back.","- Staff switch it in Settings → General → Maintenance mode with a message, who is paused and an expected time; every change is recorded
+- While on, customer routes answer 503 MAINTENANCE with Retry-After; staff, sign-in and GET /v1/maintenance keep working
+- Storefront and Seller Center show the maintenance page and reload by themselves when it ends
+- Verified: gateway unit and contract tests, web tests. Remaining: real Valkey integration test, browser check of the page, mobile apps do not yet render the message","E14","","Medium","3","maintenance staff-console gateway-bff storefront seller-center","gateway-bff","In Progress"

@@ -24,7 +24,7 @@ func staffResources() map[string]*staffResource {
 		ordersResource(), productsResource(), moderationResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
 		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(), pickupLocationsResource(),
 		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(), taxCodesResource(), taxRulesResource(), taxReviewResource(),
-		marketsResource(), siteSettingsResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"), couponsResource(),
+		marketsResource(), siteSettingsResource(), maintenanceResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"), couponsResource(),
 		identityProvidersResource(),
 	)
 	out := make(map[string]*staffResource, len(all))
