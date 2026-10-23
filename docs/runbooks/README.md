@@ -11,6 +11,7 @@ One page per alert (below), plus operational procedures. Every alert's `runbook_
 | [Test environment on one OVHcloud server](ovh-vps.md) | creating and deploying the whole stack on one OVHcloud instance from a pipeline (`make ovh-gh-setup`, then Actions > ovh-vps); not production |
 | [Finance: payouts, reconciliation and ledger adjustments](finance-reconciliation.md) | approving a payout, the daily Stripe reconciliation, four-eyes ledger corrections, Stripe lookups |
 | [Settings in the staff console](settings.md) | where every platform setting lives, who calculates sales tax (our rules or Stripe Tax), finding a transfer in Stripe |
+| [Production readiness review](production-readiness.md) | what was checked, what could not be, and what blocks go-live |
 | [Cost](cost.md) | a budget alert fired; the monthly cost review |
 | [Carrier sandboxes](carrier-sandboxes.md) | proving USPS / UPS / FedEx / DHL against their sandboxes; carrier credentials |
 
