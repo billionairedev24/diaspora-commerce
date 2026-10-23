@@ -11,6 +11,7 @@ import com.afrotransact.payments.application.LedgerAdjustmentService.Line;
 import com.afrotransact.payments.application.LedgerAdjustmentService.ProposeAdjustment;
 import com.afrotransact.payments.application.ReconciliationWorkflowService;
 import com.afrotransact.payments.application.ReconciliationWorkflowService.ItemDetail;
+import com.afrotransact.payments.application.StripeDashboard;
 import com.afrotransact.payments.application.StripeLookupService;
 import com.afrotransact.payments.application.StripeLookupService.StripeLookup;
 import com.afrotransact.payments.domain.AdjustmentStatus;
@@ -46,9 +47,11 @@ class ReconciliationWorkflowController {
     private final ReconciliationWorkflowService workflow;
     private final LedgerAdjustmentService adjustments;
     private final StripeLookupService lookup;
+    private final StripeDashboard dashboard;
 
     ReconciliationWorkflowController(ReconciliationWorkflowService workflow, LedgerAdjustmentService adjustments,
-                                     StripeLookupService lookup) {
+                                     StripeLookupService lookup, StripeDashboard dashboard) {
+        this.dashboard = dashboard;
         this.workflow = workflow;
         this.adjustments = adjustments;
         this.lookup = lookup;
@@ -119,12 +122,14 @@ class ReconciliationWorkflowController {
                           @Schema(description = "Stripe's view; null when Stripe has no such object or could not "
                                   + "be asked (see problem)") StripeObjectResponse object,
                           String problem, List<JournalResponse> journals, String connectedAccount,
-                          ConnectedBalanceResponse balance) {
+                          ConnectedBalanceResponse balance,
+                          @Schema(description = "Open the object in the Stripe dashboard; null for the local stand-in")
+                          String dashboardUrl) {
 
-        static LookupResponse of(StripeLookup l) {
+        static LookupResponse of(StripeLookup l, StripeDashboard dashboard) {
             return new LookupResponse(l.ref(), StripeObjectResponse.of(l.object()), l.problem(),
                     l.journals().stream().map(JournalResponse::of).toList(), l.connectedAccount(),
-                    ConnectedBalanceResponse.of(l.balance()));
+                    ConnectedBalanceResponse.of(l.balance()), dashboard.url(l.ref()));
         }
     }
 
@@ -132,8 +137,8 @@ class ReconciliationWorkflowController {
     record ItemDetailResponse(ItemResponse item, LookupResponse stripe, List<JournalResponse> journals,
                               List<AdjustmentResponse> adjustments) {
 
-        static ItemDetailResponse of(ItemDetail d) {
-            return new ItemDetailResponse(ItemResponse.of(d.item()), LookupResponse.of(d.stripe()),
+        static ItemDetailResponse of(ItemDetail d, StripeDashboard dashboard) {
+            return new ItemDetailResponse(ItemResponse.of(d.item()), LookupResponse.of(d.stripe(), dashboard),
                     d.journals().stream().map(JournalResponse::of).toList(),
                     d.adjustments().stream().map(AdjustmentResponse::of).toList());
         }
@@ -171,7 +176,7 @@ class ReconciliationWorkflowController {
                     + "asked, object is null and problem says why; the ledger's journals are still returned.")
     @GetMapping("/v1/stripe/lookup")
     LookupResponse lookup(@RequestParam String ref, @RequestParam(required = false) String orgId) {
-        return LookupResponse.of(lookup.lookup(ref, orgId));
+        return LookupResponse.of(lookup.lookup(ref, orgId), dashboard);
     }
 
     @Operation(summary = "Reconciliation differences, newest first (payments:read)")
@@ -185,7 +190,7 @@ class ReconciliationWorkflowController {
             + "(payments:read)")
     @GetMapping("/v1/reconciliation/items/{id}")
     ItemDetailResponse item(@PathVariable UUID id) {
-        return ItemDetailResponse.of(workflow.item(id));
+        return ItemDetailResponse.of(workflow.item(id), dashboard);
     }
 
     @Operation(summary = "Mark an open difference explained, posting nothing (ledger:adjust)",

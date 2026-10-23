@@ -163,10 +163,10 @@ func payoutsResource() *staffResource {
 			if acct := jstr(o, "stripeAccountId"); acct != "" {
 				connect += "&open=" + url.QueryEscape(acct)
 			}
-			return []domain.RecordLink{
+			return append([]domain.RecordLink{
 				{Label: "Seller organisation", Href: "/organisations?open=" + url.QueryEscape(org)},
 				{Label: "Stripe compliance", Href: connect},
-			}
+			}, stripeLinks(o)...)
 		},
 		actions: []staffAction{
 			{key: "approve", label: "Approve & pay", tone: "primary", permission: "payouts:approve", level: domain.LevelApprove, confirm: "Create the Stripe payout now?", when: inState("REQUESTED"), run: act("/approve", func(jobj) jobj { return nil })},

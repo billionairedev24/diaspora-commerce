@@ -14,6 +14,7 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutRequestBody;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ProviderFeeResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SettlementResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.TransferResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ShipmentSettlementResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.StatementLineResponse;
 import com.afrotransact.payments.application.LabelChargeService;
@@ -22,6 +23,7 @@ import com.afrotransact.payments.application.PayoutService;
 import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.application.SellerStatementService;
 import com.afrotransact.payments.application.SettlementService;
+import com.afrotransact.payments.application.StripeDashboard;
 import com.afrotransact.payments.domain.JournalType;
 import com.afrotransact.payments.domain.LabelChargeStatus;
 import com.afrotransact.payments.domain.PayoutStatus;
@@ -49,15 +51,17 @@ class SettlementPayoutController {
     private final ProviderFeeService providerFees;
     private final LabelChargeService labelCharges;
     private final SellerStatementService statements;
+    private final StripeDashboard dashboard;
 
     SettlementPayoutController(SettlementService settlements, PayoutService payouts,
                                ProviderFeeService providerFees, LabelChargeService labelCharges,
-                               SellerStatementService statements) {
+                               SellerStatementService statements, StripeDashboard dashboard) {
         this.settlements = settlements;
         this.payouts = payouts;
         this.providerFees = providerFees;
         this.labelCharges = labelCharges;
         this.statements = statements;
+        this.dashboard = dashboard;
     }
 
     @Operation(summary = "Order delivered / service completed: start the settlement hold (payments:service)",
@@ -89,6 +93,17 @@ class SettlementPayoutController {
     @GetMapping("/v1/settlements/{orderId}/shipments")
     List<ShipmentSettlementResponse> shipmentSettlements(@PathVariable String orderId) {
         return settlements.shipments(orderId).stream().map(ShipmentSettlementResponse::of).toList();
+    }
+
+    @Operation(summary = "Stripe Connect transfers: an organisation's (orgId) or one order's (orderId)",
+            description = "The tr_… ids to find in the Stripe dashboard (dashboardUrl opens them). Members see their "
+                    + "organisation's; staff with payments:read see any, or an order's by orderId alone.")
+    @GetMapping("/v1/settlement/transfers")
+    List<TransferResponse> transfers(@RequestParam(required = false) String orgId,
+                                     @RequestParam(required = false) String orderId,
+                                     @RequestParam(defaultValue = "50") int limit) {
+        return settlements.transfers(orgId, orderId, limit).stream()
+                .map(t -> TransferResponse.of(t, dashboard)).toList();
     }
 
     @Operation(summary = "Settlement hold of an order")

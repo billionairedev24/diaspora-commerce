@@ -215,7 +215,11 @@ func reconciliationResource() *staffResource {
 			return tables
 		},
 		links: func(o jobj) []domain.RecordLink {
-			return []domain.RecordLink{{Label: "Look up in Stripe", Href: "/payouts?tab=stripe-lookup&open=" + url.QueryEscape(jstr(o, "stripeRef"))}}
+			links := []domain.RecordLink{{Label: "Look up in Stripe", Href: "/payouts?tab=stripe-lookup&open=" + url.QueryEscape(jstr(o, "stripeRef"))}}
+			if st, ok := o["stripe"].(map[string]any); ok && jstr(st, "dashboardUrl") != "" {
+				links = append(links, domain.RecordLink{Label: "Open in the Stripe dashboard", Href: jstr(st, "dashboardUrl")})
+			}
+			return links
 		},
 		actions: []staffAction{
 			{key: "explain", label: "Mark as explained", tone: "neutral", permission: "ledger:adjust", when: inState("OPEN"),
@@ -547,6 +551,12 @@ func stripeLookupResource() *staffResource {
 		},
 		tables: func(o jobj) []domain.DetailTable {
 			return []domain.DetailTable{tableOf("What the ledger booked for this Stripe object", journalRows(objs(o, "journals")), journalColumns, "id")}
+		},
+		links: func(o jobj) []domain.RecordLink {
+			if u := jstr(o, "dashboardUrl"); u != "" {
+				return []domain.RecordLink{{Label: "Open in the Stripe dashboard", Href: u}}
+			}
+			return nil
 		},
 		create: &staffCreate{permission: "payments:read",
 			form: func(context.Context, staffCtx) domain.Form {

@@ -1409,6 +1409,39 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ReconciliationResponse'
+  /v1/settlement/transfers:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: 'Stripe Connect transfers: an organisation''s (orgId) or one order''s (orderId)'
+      description: 'The tr_ ids to find in the Stripe dashboard (dashboardUrl opens them). Members see their organisation''s; staff with payments:read see any, or an order''s by orderId alone.'
+      operationId: transfers
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: orderId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SettlementTransfer'
   /v1/settlements/{orderId}:
     get:
       tags:
@@ -1909,6 +1942,19 @@ paths:
       security: []
 components:
   schemas:
+    SettlementTransfer:
+      type: object
+      description: A Stripe Connect transfer of a seller's net for one order
+      properties:
+        id: {type: string, format: uuid}
+        orderId: {type: string}
+        orgId: {type: string}
+        stripeTransferId: {type: string, description: 'Stripe transfer id (tr_): search for it in the Stripe dashboard'}
+        amountMinor: {type: integer, format: int64}
+        reversedMinor: {type: integer, format: int64}
+        currency: {type: string}
+        createdAt: {type: string, format: date-time}
+        dashboardUrl: {type: string, description: Open it in the Stripe dashboard; null for the local stand-in}
     ReconciliationItem:
       type: object
       properties:
@@ -1988,6 +2034,7 @@ components:
         connectedAccount: {type: string}
         balance:
           $ref: '#/components/schemas/StripeConnectedBalance'
+        dashboardUrl: {type: string, description: Open the object in the Stripe dashboard; null for the local stand-in}
     ReconciliationItemDetail:
       type: object
       properties:

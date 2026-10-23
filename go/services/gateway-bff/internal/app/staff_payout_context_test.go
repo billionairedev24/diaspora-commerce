@@ -61,3 +61,23 @@ func TestPayoutSectionsNameTheSeller(t *testing.T) {
 		t.Errorf("seller section: %s", joined)
 	}
 }
+
+func TestAPayoutSheetShowsTheTransfersAndOpensThemInStripe(t *testing.T) {
+	o := jobj{"transfers": []any{map[string]any{"id": "t-1", "orderId": "ord-1", "stripeTransferId": "tr_1ABC123", "amountMinor": 50000,
+		"dashboardUrl": "https://dashboard.stripe.com/test/connect/transfers/tr_1ABC123"}},
+		"stripe": map[string]any{"dashboardUrl": "https://dashboard.stripe.com/test/search?query=po_1"}}
+
+	found := false
+	for _, tb := range payoutTables(o) {
+		if strings.Contains(tb.Title, "transfers") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the transfers table is missing")
+	}
+	links := stripeLinks(o)
+	if len(links) != 2 || !strings.Contains(links[1].Href, "connect/transfers/tr_1ABC123") {
+		t.Errorf("links = %v", links)
+	}
+}

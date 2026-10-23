@@ -51,7 +51,9 @@ import com.afrotransact.payments.domain.ReconciliationReport;
 import com.afrotransact.payments.domain.RecipientShare;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.RefundFault;
+import com.afrotransact.payments.application.StripeDashboard;
 import com.afrotransact.payments.domain.Settlement;
+import com.afrotransact.payments.domain.SettlementTransfer;
 import com.afrotransact.payments.domain.ShipmentSettlement;
 import com.afrotransact.payments.domain.StatementLine;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -690,6 +692,21 @@ final class PaymentsDtos {
                             Instant deliveredAt,
                             @Schema(description = "PRODUCT (delivery) or SERVICE (booking completed)")
                             String kind) {
+    }
+
+    @Schema(name = "SettlementTransfer", description = "A Stripe Connect transfer of a seller's net for one order")
+    record TransferResponse(UUID id, String orderId, String orgId,
+                            @Schema(description = "Stripe transfer id (tr_…): search for it in the Stripe dashboard")
+                            String stripeTransferId, long amountMinor, long reversedMinor, String currency,
+                            Instant createdAt,
+                            @Schema(description = "Open it in the Stripe dashboard; null for the local stand-in")
+                            String dashboardUrl) {
+
+        static TransferResponse of(SettlementTransfer t, StripeDashboard dashboard) {
+            return new TransferResponse(t.id(), t.orderId(), t.orgId(), t.stripeTransferId(), t.amount().minor(),
+                    t.reversed().minor(), t.amount().currency(), t.createdAt(),
+                    dashboard.url(t.stripeTransferId()));
+        }
     }
 
     record SettlementResponse(String orderId, String kind, Instant deliveredAt, Instant releaseAt, String status) {

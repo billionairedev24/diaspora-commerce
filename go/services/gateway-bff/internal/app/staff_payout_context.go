@@ -84,6 +84,10 @@ func enrichPayout(ctx context.Context, sc staffCtx, o jobj) {
 	if sc.get(ctx, sc.up.Payments, "/v1/payouts/balance", url.Values{"orgId": {org}}, &bal) == nil {
 		o["balance"] = bal
 	}
+	var transfers any
+	if sc.get(ctx, sc.up.Payments, "/v1/settlement/transfers", url.Values{"orgId": {org}, "limit": {"20"}}, &transfers) == nil {
+		o["transfers"] = anySlice(jpage(transfers).items)
+	}
 	var raw any
 	if sc.get(ctx, sc.up.Payments, "/v1/payouts/requests", url.Values{"orgId": {org}, "limit": {"10"}}, &raw) == nil {
 		o["sellerPayouts"] = anySlice(jpage(raw).items)
@@ -184,6 +188,11 @@ func payoutTables(o jobj) []domain.DetailTable {
 			col("requestedAt", "Requested", "date", 22), col("amountMinor", "Amount", "money", 22), col("status", "Status", "status", 22), col("stripePayoutId", "Stripe payout", "mono", 34),
 		}, "id"))
 	}
+	if rows := objs(o, "transfers"); len(rows) > 0 {
+		tables = append(tables, tableOf("Money sent to this seller's Stripe account (transfers)", rows, []domain.Column{
+			col("orderId", "Order", "mono", 30), col("stripeTransferId", "Stripe transfer id", "mono", 30), col("amountMinor", "Amount", "money", 14), col("reversedMinor", "Reversed", "money", 12), col("createdAt", "Sent", "date", 14),
+		}, "id"))
+	}
 	if b, ok := o["balance"].(map[string]any); ok {
 		if held := objs(b, "onHold"); len(held) > 0 {
 			tables = append(tables, tableOf("Orders still on hold", held, []domain.Column{
@@ -211,4 +220,20 @@ func stripeMismatch(o, lookup jobj) string {
 		return "We show this payout as paid, but Stripe says " + at + ". Check the payout in the Stripe dashboard."
 	}
 	return ""
+}
+
+// stripeLinks are the "open in Stripe" links of a payout: its own payout and the latest transfer that funded the seller.
+func stripeLinks(o jobj) []domain.RecordLink {
+	links := []domain.RecordLink{}
+	if st, ok := o["stripe"].(map[string]any); ok {
+		if u := jstr(st, "dashboardUrl"); u != "" {
+			links = append(links, domain.RecordLink{Label: "This payout in Stripe", Href: u})
+		}
+	}
+	if rows := objs(o, "transfers"); len(rows) > 0 {
+		if u := jstr(rows[0], "dashboardUrl"); u != "" {
+			links = append(links, domain.RecordLink{Label: "Latest transfer in Stripe", Href: u})
+		}
+	}
+	return links
 }

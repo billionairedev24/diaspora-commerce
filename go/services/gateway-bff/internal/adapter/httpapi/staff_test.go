@@ -433,6 +433,9 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/ledger/adjustments/"):
 		writeJ(w, 200, map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
 			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}})
+	case p == "/v1/settlement/transfers":
+		writeJ(w, 200, []any{map[string]any{"id": "t-1", "orderId": "ord-1", "orgId": "org-1", "stripeTransferId": "tr_1ABC123", "amountMinor": 50000, "reversedMinor": 0, "currency": "USD", "createdAt": now,
+			"dashboardUrl": "https://dashboard.stripe.com/test/connect/transfers/tr_1ABC123"}})
 	case p == "/v1/stripe/lookup":
 		writeJ(w, 200, map[string]any{"ref": r.URL.Query().Get("ref"), "object": map[string]any{"id": r.URL.Query().Get("ref"), "kind": "Payout", "status": "in_transit", "amountMinor": 50000, "links": map[string]any{}},
 			"journals": []any{}, "connectedAccount": "acct_1", "balance": map[string]any{"account": "acct_1", "currency": "USD", "availableMinor": 1000, "pendingMinor": 2000}})

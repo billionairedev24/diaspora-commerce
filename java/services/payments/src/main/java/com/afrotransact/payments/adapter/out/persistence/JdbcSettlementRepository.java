@@ -161,6 +161,18 @@ class JdbcSettlementRepository implements SettlementRepository {
     }
 
     @Override
+    public List<SettlementTransfer> transfersOf(String orgId, int limit) {
+        return jdbc.sql("select * from settlement_transfer where org_id = :org order by created_at desc, id limit :n")
+                .param("org", orgId).param("n", limit).query(JdbcSettlementRepository::transfer).list();
+    }
+
+    @Override
+    public List<SettlementTransfer> transfersOfOrder(String orderId) {
+        return jdbc.sql("select * from settlement_transfer where order_id = :o order by created_at, id")
+                .param("o", orderId).query(JdbcSettlementRepository::transfer).list();
+    }
+
+    @Override
     public List<SettlementTransfer> lockTransfers(String orderId, String orgId) {
         return jdbc.sql("select * from settlement_transfer where order_id = :o and org_id = :org "
                         + "order by created_at desc, id for update")

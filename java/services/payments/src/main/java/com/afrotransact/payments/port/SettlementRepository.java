@@ -47,6 +47,12 @@ public interface SettlementRepository {
 
     List<SettlementTransfer> transfers(String orderId, String orgId);
 
+    /** Transfers to one organisation, newest first. */
+    List<SettlementTransfer> transfersOf(String orgId, int limit);
+
+    /** Transfers of one order (every seller), oldest first. */
+    List<SettlementTransfer> transfersOfOrder(String orderId);
+
     List<SettlementTransfer> lockTransfers(String orderId, String orgId);
 
     Optional<SettlementTransfer> lockTransferByStripeId(String stripeTransferId);

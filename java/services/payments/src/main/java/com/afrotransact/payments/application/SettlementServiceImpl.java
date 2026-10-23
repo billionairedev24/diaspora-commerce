@@ -151,6 +151,19 @@ class SettlementServiceImpl implements SettlementService {
         return transfers;
     }
 
+    @Override
+    public List<SettlementTransfer> transfers(String orgId, String orderId, int limit) {
+        int n = Math.max(1, Math.min(limit, 200));
+        if (orgId != null && !orgId.isBlank()) {
+            String org = access.orgOf(orgId);
+            access.balanceViewer(org);
+            return orderId == null || orderId.isBlank() ? settlements.transfersOf(org, n)
+                    : settlements.transfers(orderId.trim(), org);
+        }
+        access.reader();
+        return settlements.transfersOfOrder(orderId == null ? "" : orderId.trim());
+    }
+
     /**
      * Transfers every positive seller payable of the order; leaves it OPEN for a later check if one is blocked.
      * AfroTransact Retail is never transferred to (its sales are 4400 revenue, not a 2000 payable).
