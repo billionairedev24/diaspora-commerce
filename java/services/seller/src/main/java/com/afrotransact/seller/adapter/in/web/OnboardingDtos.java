@@ -12,6 +12,7 @@ import com.afrotransact.seller.application.PiiLevel;
 import com.afrotransact.seller.domain.Address;
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.ApplicationData;
+import com.afrotransact.seller.domain.ApplicationStatus;
 import com.afrotransact.seller.domain.BusinessDetailsInput;
 import com.afrotransact.seller.domain.BusinessDetailsSection;
 import com.afrotransact.seller.domain.BusinessSection;
@@ -240,16 +241,25 @@ final class OnboardingDtos {
                     p.paymentMethodKind() == null ? null : p.paymentMethodKind().name(), p.cardBrand(), p.cardLast4(),
                     p.cardExpMonth(), p.cardExpYear(), v.firstCharge(), p.promoCode(),
                     p.planFeeCollection() == null ? null : p.planFeeCollection().name());
-            return new ApplicationResponse(a.id(), a.reference(), a.orgId(), a.kind().name(), a.status().name(),
+            // The applicant sees what was asked of them and the final decision, never the internal review: a flagged
+            // application looks like any other in review, and who reviewed it and which checks failed stay inside.
+            boolean applicant = v.pii() == PiiLevel.APPLICANT;
+            ApplicationStatus status = applicant && a.status() == ApplicationStatus.FLAGGED
+                    ? ApplicationStatus.PENDING_REVIEW : a.status();
+            boolean addressedToApplicant = a.status() == ApplicationStatus.INFO_REQUESTED
+                    || a.status() == ApplicationStatus.REJECTED;
+            return new ApplicationResponse(a.id(), a.reference(), a.orgId(), a.kind().name(), status.name(),
                     a.currentStep().key(), v.steps().stream().map(OnboardingStep::key).toList(),
                     v.completedSteps().stream().map(OnboardingStep::key).toList(),
                     a.prefilledFields().stream().sorted().toList(), d.business(), details, owners, d.stripe(),
-                    d.payouts(), plan, d.compliance(), v.documents(), a.requestedItems(), a.failedChecks(),
-                    a.reviewerId(), a.finalApproverId(), a.reasonCode(), a.submissionCount(), a.submittedAt(),
+                    d.payouts(), plan, d.compliance(), v.documents(), a.requestedItems(),
+                    applicant ? List.of() : a.failedChecks(), applicant ? null : a.reviewerId(),
+                    applicant ? null : a.finalApproverId(),
+                    applicant && !addressedToApplicant ? null : a.reasonCode(), a.submissionCount(), a.submittedAt(),
                     v.timeline().stream().map(t -> TimelineView.of(t, v.pii() != PiiLevel.APPLICANT)).toList(),
-                    v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(), a.updatedAt(),
-                    v.planFeeOptions() == null ? null : PlanFeeDtos.OptionView.of(v.planFeeOptions()),
-                    a.reviewedAt(), a.decidedAt());
+                    applicant ? List.of() : v.accessLog().stream().map(AccessView::of).toList(), a.createdAt(),
+                    a.updatedAt(), v.planFeeOptions() == null ? null : PlanFeeDtos.OptionView.of(v.planFeeOptions()),
+                    applicant ? null : a.reviewedAt(), a.decidedAt());
         }
 
         private static String dob(LocalDate d, boolean mask) {

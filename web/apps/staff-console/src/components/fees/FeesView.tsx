@@ -42,6 +42,18 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
             )
           },
           {
+            value: 'tax-filings',
+            label: 'Tax filings',
+            content: (
+              <div className="flex flex-col gap-3">
+                <p className="m-0 max-w-[80ch] text-sm text-muted">
+                  For each month and state: the tax the ledger says is due, and what was filed and paid. After you file with the state, open the row and record it. If a refund or a late sale changes the month afterwards, the status shows the difference.
+                </p>
+                <ResourceTable resource="tax-filings" urlPrefix="tax-filings" />
+              </div>
+            )
+          },
+          {
             value: 'tax-rates',
             label: 'Tax rates',
             content: (
@@ -75,7 +87,7 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
             )
           }
   ];
-  const taxTabs = ['tax-method', 'tax-rates', 'tax-classification'];
+  const taxTabs = ['tax-method', 'tax-filings', 'tax-rates', 'tax-classification'];
   const items = all.filter((it) => (scope === 'all' ? it.value !== 'tax-method' : scope === 'tax' ? taxTabs.includes(it.value) : !taxTabs.includes(it.value)));
   return (
     <ModulePage module="fees">

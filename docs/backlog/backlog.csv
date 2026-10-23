@@ -1136,3 +1136,8 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - While on, customer routes answer 503 MAINTENANCE with Retry-After; staff, sign-in and GET /v1/maintenance keep working
 - Storefront and Seller Center show the maintenance page and reload by themselves when it ends
 - Verified: gateway unit and contract tests, web tests. Remaining: real Valkey integration test, browser check of the page, mobile apps do not yet render the message","E14","","Medium","3","maintenance staff-console gateway-bff storefront seller-center","gateway-bff","In Progress"
+"S318","Story","Tax remittance record: what was filed and paid to each state","Staff record, month by month and state by state, the sales tax AfroTransact filed and paid as marketplace facilitator, next to what the ledger says is due.","- GET /v1/tax/remittances lists the last months with due now, remitted, outstanding and a status (not filed, settled, owes more, overpaid, nothing due)
+- Staff record a filing and payment (amount, dates, state confirmation); the amount due at that time is stored with it
+- A mistake is voided with a reason and recorded again; one active record per state and month
+- Settings → Sales tax → Tax filings shows the table, the sheet and the actions
+- Verified: unit tests, integration tests against PostgreSQL 16 (not Testcontainers), BFF contract tests. Remaining: screen not viewed in a browser; no filing is sent to any state; nexus tracker and seller tax statement screen are not built","E14","","Medium","5","tax staff-console gateway-bff tax-returns","tax-returns","In Progress"

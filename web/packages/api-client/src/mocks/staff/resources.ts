@@ -755,6 +755,48 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     sections: [['This setting', ['label', 'value', 'help', 'source']]],
     actions: []
   },
+  'tax-filings': {
+    title: 'Tax filings',
+    columns: [col('month', 'Month', 'mono', 10), col('jurisdiction', 'State', 'mono', 10), col('dueMinor', 'Due now', 'money', 12), col('paidMinor', 'Paid', 'money', 12), col('outstandingMinor', 'Outstanding', 'money', 12), col('filedOn', 'Filed', 'date', 12), col('confirmationRef', 'State confirmation', 'mono', 18), col('state', 'Status', 'status', 12)],
+    statusKey: 'state',
+    facets: facets('NOT_FILED', 'OWES_MORE', 'OVERPAID', 'SETTLED', 'NOTHING_DUE'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.jurisdiction)} · ${str(r.fields.month)}`,
+    subtitleOf: (r) => str(r.fields.statusLabel),
+    sections: [['What the ledger says', ['month', 'jurisdiction', 'dueMinor', 'state', 'outstandingMinor']], ['What was filed and paid', ['paidMinor', 'filedOn', 'confirmationRef']]],
+    actions: [
+      {
+        key: 'record', label: 'Record filing and payment', tone: 'primary', permission: 'tax:configure',
+        when: (r) => (r.fields.remittanceId ? 'A remittance is already recorded; void it first if it was a mistake.' : null),
+        form: (r) => form('Record what was filed and paid', 'Record', [
+          field('paid', 'Amount paid to the state (dollars)', 'number', true, { value: Math.max(num(r.fields.dueMinor), 0) / 100 }),
+          field('filedOn', 'Return filed on', 'date', true),
+          field('paidOn', 'Payment made on', 'date', true),
+          field('confirmationRef', 'State confirmation number', 'text', false, { maxLength: 80 }),
+          field('note', 'Note', 'textarea', false, { maxLength: 1000 })
+        ], 'Do this after you have filed the return and paid it. A mistake is voided, not edited.'),
+        apply: (r, v) => {
+          const paid = Math.round(num(v.paid) * 100);
+          r.fields.paidMinor = paid;
+          r.fields.filedOn = str(v.filedOn);
+          r.fields.confirmationRef = str(v.confirmationRef) || null;
+          r.fields.remittanceId = `rem-${Date.now()}`;
+          r.fields.outstandingMinor = num(r.fields.dueMinor) - paid;
+          r.fields.state = r.fields.outstandingMinor === 0 ? 'SETTLED' : r.fields.outstandingMinor > 0 ? 'OWES_MORE' : 'OVERPAID';
+          r.fields.statusLabel = str(r.fields.state);
+        }
+      },
+      {
+        key: 'void', label: 'Void this record', tone: 'danger', permission: 'tax:configure',
+        when: (r) => (r.fields.remittanceId ? null : 'Nothing is recorded for this month and state.'),
+        form: () => form('Why is it voided?', 'Void', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })]),
+        apply: (r) => {
+          r.fields.paidMinor = null; r.fields.filedOn = null; r.fields.confirmationRef = null; r.fields.remittanceId = null;
+          r.fields.outstandingMinor = num(r.fields.dueMinor); r.fields.state = 'NOT_FILED'; r.fields.statusLabel = 'Not filed';
+        }
+      }
+    ]
+  },
   maintenance: {
     title: 'Maintenance mode',
     columns: [col('setting', 'Setting', 'strong', 24), col('stateLabel', 'Now', 'status', 40), col('updatedByName', 'Changed by', 'text', 16), col('updatedAt', 'Changed', 'datetime', 12)],

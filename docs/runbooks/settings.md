@@ -31,6 +31,32 @@ to new quotes within seconds; placed orders keep the tax they were charged. Need
 
 `TAX_PROVIDER` (`RULES` by default) is only the starting value before anyone chooses.
 
+## Tax filings: what we filed and paid to each state
+
+AfroTransact collects sales tax as marketplace facilitator, so it files and pays it to the states. **Settings → Sales tax →
+Tax filings** lists the last 12 months, one row per month and state, with:
+
+| Column | Meaning |
+|---|---|
+| Due now | the ledger's net liability (collected − refunded) for that month and state, as it stands today |
+| Paid / Filed / State confirmation | what staff recorded after filing and paying |
+| Outstanding | due now − paid (negative: overpaid) |
+| Status | **Not filed**, **Settled**, **Owes more**, **Overpaid**, **Nothing due** |
+
+**Do this each month** (after month end, by the state's due date): file the return and pay the state outside the console, then
+open the row → **Record filing and payment** → amount paid, the dates, the state's confirmation number and the payment reference.
+The amount due at that moment is saved with the record. Needs `tax:configure`; reading needs `tax:read`.
+
+- A refund is booked in the month it happens, so refunds after a month was filed lower *next* month's liability, not the filed one.
+  A sale or refund that reaches the ledger late with a date inside a filed month changes that month: its status turns **Owes more**
+  or **Overpaid** and the row shows how much it moved since filing. File an amended return or offset it, and note it.
+- A wrong amount or date is **voided** (reason required, 10+ characters), never edited; the record stays visible as voided with
+  who and why, then record the right one. Only one active record exists per month, state and currency.
+- This is a record, not a filing: nothing is sent to a state. Filing, nexus registrations, exemption certificates and the
+  seller tax statement screen are still manual or not built.
+- Only states where AfroTransact is the facilitator and has collected tax appear. The seller's monthly statement of tax
+  collected on their behalf is `GET /v1/tax/sellers/{orgId}/statement` (no screen yet).
+
 ## Where a transfer is in Stripe
 
 A transfer is the money AfroTransact sends to a seller's Stripe account after the hold (`tr_…`). On a payout request

@@ -482,6 +482,11 @@ function seed(now: Date): MockStaffDb {
   ];
   const taxSettings = [rec('method', { setting: 'Who calculates sales tax', method: 'RULES', methodLabel: 'Our own rules', stripeLabel: 'Not set up yet', changedByName: 'Platform Admin', changedAt: ago(3, 0), configuredDefault: 'RULES' })];
   const maintenance = [rec('mode', { setting: 'Maintenance mode', state: 'OFF', stateLabel: 'Off: the platform is open', scope: 'SHOPPERS', title: '', message: '', updatedByName: 'Platform Admin', updatedAt: ago(9, 0) })];
+  const taxFilings = [
+    rec('2026-09|US-TX|USD', { month: '2026-09', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 133_600, paidMinor: null, outstandingMinor: 133_600, filedOn: null, confirmationRef: null, state: 'NOT_FILED', statusLabel: 'Not filed', remittanceId: null }),
+    rec('2026-08|US-TX|USD', { month: '2026-08', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 100_000, paidMinor: 100_000, outstandingMinor: 0, filedOn: '2026-09-15', confirmationRef: 'TX-CONF-1', state: 'SETTLED', statusLabel: 'Settled', remittanceId: 'rem-1' }),
+    rec('2026-07|US-TX|USD', { month: '2026-07', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 80_000, paidMinor: 85_000, outstandingMinor: -5_000, filedOn: '2026-08-14', confirmationRef: 'TX-CONF-0', state: 'OVERPAID', statusLabel: 'Overpaid', remittanceId: 'rem-0' })
+  ];
   const taxReview = [
     rec('grocery|abc123', { rowId: 'grocery|abc123', productType: 'grocery', attrHash: 'abc123', answer: null, taxCode: 'GENERAL_GOODS', count: 4, sampleAtin: 'AT10000001', lastSeen: ago(0, 3), state: 'OPEN', reviewedBy: null, reviewNote: null })
   ];
@@ -508,7 +513,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations
     },

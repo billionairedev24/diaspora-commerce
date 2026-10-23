@@ -704,6 +704,104 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/TaxSettings'
+  /v1/tax/remittances:
+    get:
+      tags:
+      - Tax remittance
+      summary: Month by month and state by state, tax due, remitted and outstanding (tax:read)
+      description: The last `months` months (default 6) up to `through` (default this month), newest first. Due is the ledger's net liability now, so a refund or late sale after filing shows as changedSinceFilingMinor and moves the status to OWES_MORE or OVERPAID.
+      operationId: taxObligations
+      parameters:
+      - name: through
+        in: query
+        required: false
+        schema: {type: string, example: 2026-09}
+      - name: months
+        in: query
+        required: false
+        schema: {type: integer, format: int32, default: 6}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ObligationsResponse'
+    post:
+      tags:
+      - Tax remittance
+      summary: Record a filing and payment to a state (tax:configure)
+      description: 409 tax.remittance-exists when the month and state already have an active record (void it first); 422 for a future month or date. The amount due at the time is stored with it.
+      operationId: recordTaxRemittance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordRemittanceRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxRemittance'
+  /v1/tax/remittances/{month}/{jurisdiction}:
+    get:
+      tags:
+      - Tax remittance
+      summary: One month and state (tax:read)
+      operationId: taxObligation
+      parameters:
+      - {name: month, in: path, required: true, schema: {type: string}}
+      - {name: jurisdiction, in: path, required: true, schema: {type: string}}
+      - {name: currency, in: query, required: false, schema: {type: string, default: USD}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxFilingObligation'
+  /v1/tax/remittances/{month}/history:
+    get:
+      tags:
+      - Tax remittance
+      summary: Every record of a month, voided ones included (tax:read)
+      operationId: taxRemittanceHistory
+      parameters:
+      - {name: month, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaxRemittance'
+  /v1/tax/remittances/{id}/void:
+    post:
+      tags:
+      - Tax remittance
+      summary: Withdraw a mistaken record (tax:configure)
+      description: The record stays visible as voided, with who and why. Record the correct one afterwards.
+      operationId: voidTaxRemittance
+      parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoidRemittanceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxRemittance'
   /v1/tax/reversals:
     post:
       tags:
@@ -775,6 +873,63 @@ paths:
                 type: string
 components:
   schemas:
+    TaxRemittance:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        jurisdiction: {type: string, example: US-TX}
+        month: {type: string, example: 2026-09}
+        currency: {type: string}
+        dueMinor: {type: integer, format: int64, description: Net liability when it was recorded}
+        paidMinor: {type: integer, format: int64}
+        filedOn: {type: string, format: date}
+        paidOn: {type: string, format: date}
+        confirmationRef: {type: string}
+        paymentRef: {type: string}
+        note: {type: string}
+        recordedBy: {type: string}
+        recordedAt: {type: string, format: date-time}
+        voidedAt: {type: string, format: date-time}
+        voidedBy: {type: string}
+        voidReason: {type: string}
+        active: {type: boolean}
+    TaxFilingObligation:
+      type: object
+      properties:
+        month: {type: string}
+        jurisdiction: {type: string}
+        currency: {type: string}
+        dueMinor: {type: integer, format: int64, description: 'Net liability now: collected - refunded'}
+        status: {type: string, enum: [NOTHING_DUE, NOT_FILED, SETTLED, OWES_MORE, OVERPAID]}
+        outstandingMinor: {type: integer, format: int64, description: Due now - paid; negative when overpaid}
+        changedSinceFilingMinor: {type: integer, format: int64, description: Due now - due when it was recorded}
+        remittance:
+          $ref: '#/components/schemas/TaxRemittance'
+    ObligationsResponse:
+      type: object
+      properties:
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxFilingObligation'
+    RecordRemittanceRequest:
+      type: object
+      required: [month, jurisdiction, paidMinor, filedOn, paidOn]
+      properties:
+        month: {type: string, example: 2026-09}
+        jurisdiction: {type: string, example: US-TX}
+        currency: {type: string, example: USD}
+        paidMinor: {type: integer, format: int64, minimum: 0}
+        filedOn: {type: string, format: date}
+        paidOn: {type: string, format: date}
+        confirmationRef: {type: string}
+        paymentRef: {type: string}
+        note: {type: string}
+    VoidRemittanceRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 10}
     TaxMethodChange:
       type: object
       properties:

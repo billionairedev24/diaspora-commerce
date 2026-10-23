@@ -114,7 +114,7 @@ class OnboardingFlowIT extends SellerIntegrationTest {
                 "controller[stripe_dashboard][type]=none", "settings[payouts][schedule][interval]=manual",
                 "capabilities[card_payments][requested]=true", "capabilities[transfers][requested]=true",
                 "business_type=individual", "country=US");
-        assertThat(create.getHeader("Idempotency-Key")).isEqualTo("connect-account-v2-" + orgId);
+        assertThat(create.getHeader("Idempotency-Key")).isEqualTo("connect-account-v3-" + orgId);
         assertThat(create.getHeader("Authorization")).isEqualTo("Bearer sk_test_seller_it");
         // Stripe-collected account: every component keeps Stripe's defaults, so Stripe collects the payout bank
         // account and the components agree on external_account_collection (Stripe refuses a mismatch, and refuses

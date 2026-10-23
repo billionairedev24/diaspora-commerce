@@ -437,6 +437,28 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/settings/summary":
 		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
 			map[string]any{"key": "payout.minimum", "label": "Smallest payout a seller can request", "value": "$25.00", "help": "Requests below it are refused.", "source": "PAYOUT_MINIMUM_MINOR"}})
+	case p == "/v1/tax/remittances" && r.Method == http.MethodGet:
+		writeJ(w, 200, map[string]any{"obligations": []any{
+			map[string]any{"month": "2026-09", "jurisdiction": "US-TX", "currency": "USD", "dueMinor": 133600, "status": "NOT_FILED", "outstandingMinor": 133600, "changedSinceFilingMinor": 0},
+			map[string]any{"month": "2026-08", "jurisdiction": "US-TX", "currency": "USD", "dueMinor": 100000, "status": "SETTLED", "outstandingMinor": 0, "changedSinceFilingMinor": 0,
+				"remittance": map[string]any{"id": "rem-1", "jurisdiction": "US-TX", "month": "2026-08", "currency": "USD", "dueMinor": 100000, "paidMinor": 100000, "filedOn": "2026-09-15", "paidOn": "2026-09-15",
+					"confirmationRef": "TX-CONF-1", "recordedBy": "u-1", "recordedAt": now, "active": true}}}})
+	case p == "/v1/tax/remittances" && r.Method == http.MethodPost:
+		writeJ(w, 201, body)
+	case strings.HasPrefix(p, "/v1/tax/remittances/") && strings.HasSuffix(p, "/history"):
+		writeJ(w, 200, []any{map[string]any{"id": "rem-1", "jurisdiction": "US-TX", "month": "2026-08", "currency": "USD", "dueMinor": 100000, "paidMinor": 100000, "filedOn": "2026-09-15",
+			"paidOn": "2026-09-15", "recordedBy": "u-1", "recordedAt": now, "active": true}})
+	case strings.HasSuffix(p, "/void") && strings.HasPrefix(p, "/v1/tax/remittances/"):
+		writeJ(w, 200, map[string]any{"id": "rem-1", "active": false})
+	case strings.HasPrefix(p, "/v1/tax/remittances/"):
+		parts := strings.Split(strings.TrimPrefix(p, "/v1/tax/remittances/"), "/")
+		if parts[0] == "2026-08" {
+			writeJ(w, 200, map[string]any{"month": "2026-08", "jurisdiction": parts[1], "currency": "USD", "dueMinor": 100000, "status": "SETTLED", "outstandingMinor": 0, "changedSinceFilingMinor": 0,
+				"remittance": map[string]any{"id": "rem-1", "jurisdiction": parts[1], "month": "2026-08", "currency": "USD", "dueMinor": 100000, "paidMinor": 100000, "filedOn": "2026-09-15",
+					"paidOn": "2026-09-15", "recordedBy": "u-1", "recordedAt": now, "active": true}})
+		} else {
+			writeJ(w, 200, map[string]any{"month": parts[0], "jurisdiction": parts[1], "currency": "USD", "dueMinor": 133600, "status": "NOT_FILED", "outstandingMinor": 133600, "changedSinceFilingMinor": 0})
+		}
 	case p == "/v1/tax/settings":
 		if r.Method == http.MethodPut {
 			writeJ(w, 200, body)
