@@ -17,7 +17,7 @@ const nextConfig: NextConfig = {
   // Local LAN mode (make up MOBILE_HOST=lan): the dev server is opened as http://<LAN IP>:<port> from a phone; Next.js
   // only serves its dev assets and HMR to hosts listed here (comma-separated, set by tools/dev/local.sh).
   allowedDevOrigins: (process.env.NEXT_ALLOWED_DEV_ORIGINS ?? '').split(',').map((h) => h.trim()).filter(Boolean),
-  experimental: { optimizePackageImports: ['@phosphor-icons/react', 'recharts'] },
+  experimental: { optimizePackageImports: ['@phosphor-icons/react', 'recharts'], agentUpgrade: 'security' },
   images: { unoptimized: true },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
