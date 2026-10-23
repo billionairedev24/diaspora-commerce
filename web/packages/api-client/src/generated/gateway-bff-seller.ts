@@ -1473,6 +1473,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/tax/statement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sales tax collected on the organisation's behalf in a month, by state
+         * @description tax-returns `GET /v1/tax/sellers/{orgId}/statement` (same access as Payouts). AfroTransact collects and remits this tax as marketplace facilitator; the statement is for the seller's books, not tax advice. `month` defaults to the current month.
+         */
+        get: operations["getTaxStatement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/tax/statement/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The same statement as CSV */
+        get: operations["exportTaxStatement"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/payouts": {
         parameters: {
             query?: never;
@@ -3907,6 +3944,57 @@ export interface components {
             requestedAt: string;
             holdReason: string | null;
             failureMessage: string | null;
+        };
+        SellerTaxStatement: {
+            /** @example 2026-09 */
+            month: string;
+            /** @example USD */
+            currency: string;
+            rows: components["schemas"]["SellerTaxStateRow"][];
+            totals: components["schemas"]["SellerTaxStateTotals"];
+            /** @description The months the picker offers, newest first. */
+            months: string[];
+        };
+        SellerTaxStateRow: {
+            /** @example US-TX */
+            jurisdiction: string;
+            /** @example TX */
+            state: string;
+            /** Format: int64 */
+            orders: number;
+            /**
+             * Format: int64
+             * @description All sales shipped to the state, net of refunds
+             */
+            grossSalesMinor: number;
+            /** Format: int64 */
+            taxableSalesMinor: number;
+            /** Format: int64 */
+            taxCollectedMinor: number;
+            /**
+             * Format: int64
+             * @description Tax given back by refunds
+             */
+            taxRefundedMinor: number;
+            /**
+             * Format: int64
+             * @description Collected minus refunded
+             */
+            netTaxMinor: number;
+        };
+        SellerTaxStateTotals: {
+            /** Format: int64 */
+            orders: number;
+            /** Format: int64 */
+            grossSalesMinor: number;
+            /** Format: int64 */
+            taxableSalesMinor: number;
+            /** Format: int64 */
+            taxCollectedMinor: number;
+            /** Format: int64 */
+            taxRefundedMinor: number;
+            /** Format: int64 */
+            netTaxMinor: number;
         };
         PayoutsView: {
             balance: components["schemas"]["PayoutBalance"];
@@ -7232,6 +7320,59 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             410: components["responses"]["Problem"];
+        };
+    };
+    getTaxStatement: {
+        parameters: {
+            query?: {
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Statement */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerTaxStatement"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    exportTaxStatement: {
+        parameters: {
+            query?: {
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     getPayouts: {

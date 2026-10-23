@@ -27,4 +27,11 @@ public interface TaxTransactionRepository {
 
     /** Per jurisdiction and currency for the month; {@code sellerOrgId} null for the whole marketplace. */
     List<LiabilityRow> liability(YearMonth month, String sellerOrgId);
+
+    /** Gross sales (net of refunds) and orders per jurisdiction over the {@code months} months ending {@code through}. */
+    List<SalesInto> salesInto(YearMonth through, int months, String currency);
+
+    /** @param grossMinor sales shipped to the jurisdiction, net of refunds */
+    record SalesInto(String jurisdiction, long grossMinor, long orders) {
+    }
 }

@@ -17,7 +17,7 @@ import (
 // SellerDeps are the upstreams of the Seller Center & Provider Hub routes.
 type SellerDeps struct {
 	// Cases reads the organisation's returns (tax-returns) and disputes (trust-ops); nil answers 503.
-	Cases port.SellerCasesClient
+	Cases   port.SellerCasesClient
 	Orgs    port.OrgAccessClient
 	Sellers port.SellerServiceClient
 	// Addresses is the identity address book: its default address prefills the business address (S286). Optional.
@@ -31,6 +31,8 @@ type SellerDeps struct {
 	// ProofLinks signs the links to a delivery's proof photo and signature (media-service; optional: no pictures without it).
 	ProofLinks port.ProofLinks
 	Payouts    port.PayoutsClient
+	// TaxStatements reads the tax collected on the seller's behalf (tax-returns); nil answers 503.
+	TaxStatements port.TaxStatementClient
 
 	// Listing edits products, keeps form drafts and runs bulk uploads at catalog (S307/S308); nil answers 503.
 	Listing port.SellerListingClient

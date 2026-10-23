@@ -65,6 +65,10 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/returns", h.sellerReturns)
 		route("GET /v1/seller/disputes", h.sellerDisputes)
 	}
+	if h.s.SellerTax != nil {
+		route("GET /v1/seller/tax/statement", h.sellerTaxStatement)
+		route("GET /v1/seller/tax/statement/export", h.sellerTaxStatementExport)
+	}
 	if h.s.SellerCoupons != nil {
 		route("GET /v1/seller/coupons", h.sellerCoupons)
 		route("POST /v1/seller/coupons", h.sellerCreateCoupon)
@@ -886,4 +890,18 @@ func (h *handlersImpl) businessPageUpdate(w http.ResponseWriter, r *http.Request
 	}
 	v, err := h.s.SellerBusinessPage.Update(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerTaxStatement(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerTax.Statement(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("month"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerTaxStatementExport(w http.ResponseWriter, r *http.Request) {
+	f, err := h.s.SellerTax.Export(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("month"))
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	sendFile(w, f)
 }

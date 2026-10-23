@@ -1598,6 +1598,24 @@ export const sellerHandlers = [
     })
   ),
   http.get(
+    `${W}/tax/statement`,
+    route((ctx) => {
+      require(ctx, 'payouts', 'VIEW');
+      const months = Array.from({ length: 24 }, (_, i) => new Date(Date.UTC(ctx.now.getUTCFullYear(), ctx.now.getUTCMonth() - i, 1)).toISOString().slice(0, 7));
+      const month = query(ctx).get('month') || months[0] || '';
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new SellerProblem(422, 'VALIDATION_FAILED', 'Invalid month', 'Use the form 2026-09');
+      const quiet = month !== months[0] && month !== months[1];
+      const rows = quiet
+        ? []
+        : [
+            { jurisdiction: 'US-TX', state: 'TX', orders: 3, grossSalesMinor: 30_000, taxableSalesMinor: 25_000, taxCollectedMinor: 2_063, taxRefundedMinor: 536, netTaxMinor: 1_527 },
+            { jurisdiction: 'US-NY', state: 'NY', orders: 1, grossSalesMinor: 10_000, taxableSalesMinor: 10_000, taxCollectedMinor: 888, taxRefundedMinor: 0, netTaxMinor: 888 }
+          ];
+      const sum = (k: 'orders' | 'grossSalesMinor' | 'taxableSalesMinor' | 'taxCollectedMinor' | 'taxRefundedMinor' | 'netTaxMinor') => rows.reduce((a, r) => a + r[k], 0);
+      return { month, currency: 'USD', rows, months, totals: { orders: sum('orders'), grossSalesMinor: sum('grossSalesMinor'), taxableSalesMinor: sum('taxableSalesMinor'), taxCollectedMinor: sum('taxCollectedMinor'), taxRefundedMinor: sum('taxRefundedMinor'), netTaxMinor: sum('netTaxMinor') } };
+    })
+  ),
+  http.get(
     `${W}/payouts`,
     route((ctx) => {
       require(ctx, 'payouts', 'VIEW');

@@ -38,6 +38,7 @@ the fee schedule. Fees are deducted from each order before payout, never charged
 - You provide your **tax ID** (EIN/SSN or equivalent) in your application. It is stored encrypted and only the
   last four digits are shown.
 - Resale / exemption certificates: upload them under your application documents if you buy wholesale.
+- **Sales tax statement**: *Payouts → Sales tax statement* shows, for each month, the tax collected on your orders by state, what refunds took back and the net, with a CSV to download for your books.
 - **Tax documents** (such as year-end forms) are issued from the information in your account, so keep your legal
   name, address and tax ID current.
 

@@ -487,6 +487,12 @@ function seed(now: Date): MockStaffDb {
     rec('2026-08|US-TX|USD', { month: '2026-08', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 100_000, paidMinor: 100_000, outstandingMinor: 0, filedOn: '2026-09-15', confirmationRef: 'TX-CONF-1', state: 'SETTLED', statusLabel: 'Settled', remittanceId: 'rem-1' }),
     rec('2026-07|US-TX|USD', { month: '2026-07', jurisdiction: 'US-TX', currency: 'USD', dueMinor: 80_000, paidMinor: 85_000, outstandingMinor: -5_000, filedOn: '2026-08-14', confirmationRef: 'TX-CONF-0', state: 'OVERPAID', statusLabel: 'Overpaid', remittanceId: 'rem-0' })
   ];
+  const taxNexus = [
+    rec('US-TX', { jurisdiction: 'US-TX', name: 'Texas', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 12_000_000, salesThresholdMinor: 10_000_000, orders: 340, percent: 120, percentLabel: '120%', status: 'EXCEEDED', registered: false, registrationNumber: null }),
+    rec('US-NY', { jurisdiction: 'US-NY', name: 'New York', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 8_500_000, salesThresholdMinor: 10_000_000, orders: 210, percent: 85, percentLabel: '85%', status: 'APPROACHING', registered: false, registrationNumber: null }),
+    rec('US-GA', { jurisdiction: 'US-GA', name: 'Georgia', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 11_000_000, salesThresholdMinor: 10_000_000, orders: 300, percent: 110, percentLabel: '110%', status: 'REGISTERED', registered: true, registrationNumber: 'GA-4411-22' }),
+    rec('US-NJ', { jurisdiction: 'US-NJ', name: 'New Jersey', facilitator: true, facilitatorLabel: 'Yes', salesMinor: 900_000, salesThresholdMinor: 10_000_000, orders: 30, percent: 9, percentLabel: '9%', status: 'BELOW', registered: false, registrationNumber: null })
+  ];
   const taxReview = [
     rec('grocery|abc123', { rowId: 'grocery|abc123', productType: 'grocery', attrHash: 'abc123', answer: null, taxCode: 'GENERAL_GOODS', count: 4, sampleAtin: 'AT10000001', lastSeen: ago(0, 3), state: 'OPEN', reviewedBy: null, reviewNote: null })
   ];
@@ -513,7 +519,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations
     },

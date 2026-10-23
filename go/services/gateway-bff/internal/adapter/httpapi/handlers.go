@@ -56,6 +56,8 @@ type Services struct {
 	SellerCoupons app.SellerCouponsService
 	// SellerCases lists the organisation's returns and disputes.
 	SellerCases app.SellerCasesService
+	// SellerTax is the monthly statement of the sales tax collected on the seller's behalf; its routes are registered when set.
+	SellerTax app.SellerTaxService
 	// SellerFba is Seller Center's Send to AfroTransact (S281); its routes are registered when set.
 	SellerFba app.SellerFbaService
 	// SellerExports exports Seller Center tables; SellerExportFiles serves the files the BFF keeps itself (nil when

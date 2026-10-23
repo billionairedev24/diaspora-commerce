@@ -1546,6 +1546,36 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '410': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── money
+  /v1/seller/tax/statement:
+    get:
+      tags: [Money]
+      operationId: getTaxStatement
+      security: [{sessionCookie: []}]
+      summary: Sales tax collected on the organisation's behalf in a month, by state
+      description: tax-returns `GET /v1/tax/sellers/{orgId}/statement` (same access as Payouts). AfroTransact collects and remits this tax as marketplace facilitator; the statement is for the seller's books, not tax advice. `month` defaults to the current month.
+      parameters:
+      - {name: month, in: query, required: false, schema: {type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$', example: '2026-09'}}
+      responses:
+        '200': {description: Statement, content: {application/json: {schema: {$ref: '#/components/schemas/SellerTaxStatement'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/tax/statement/export:
+    get:
+      tags: [Money]
+      operationId: exportTaxStatement
+      security: [{sessionCookie: []}]
+      summary: The same statement as CSV
+      parameters:
+      - {name: month, in: query, required: false, schema: {type: string, example: '2026-09'}}
+      responses:
+        '200': {description: CSV file, content: {text/csv: {schema: {type: string}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/payouts:
     get:
       tags: [Money]
@@ -4086,6 +4116,39 @@ components:
         requestedAt: {type: string}
         holdReason: {type: [string, 'null']}
         failureMessage: {type: [string, 'null']}
+    SellerTaxStatement:
+      type: object
+      required: [month, currency, rows, totals, months]
+      properties:
+        month: {type: string, example: '2026-09'}
+        currency: {type: string, example: USD}
+        rows:
+          type: array
+          items: {$ref: '#/components/schemas/SellerTaxStateRow'}
+        totals: {$ref: '#/components/schemas/SellerTaxStateTotals'}
+        months: {type: array, items: {type: string}, description: "The months the picker offers, newest first."}
+    SellerTaxStateRow:
+      type: object
+      required: [jurisdiction, state, orders, grossSalesMinor, taxableSalesMinor, taxCollectedMinor, taxRefundedMinor, netTaxMinor]
+      properties:
+        jurisdiction: {type: string, example: US-TX}
+        state: {type: string, example: TX}
+        orders: {type: integer, format: int64}
+        grossSalesMinor: {type: integer, format: int64, description: "All sales shipped to the state, net of refunds"}
+        taxableSalesMinor: {type: integer, format: int64}
+        taxCollectedMinor: {type: integer, format: int64}
+        taxRefundedMinor: {type: integer, format: int64, description: Tax given back by refunds}
+        netTaxMinor: {type: integer, format: int64, description: Collected minus refunded}
+    SellerTaxStateTotals:
+      type: object
+      required: [orders, grossSalesMinor, taxableSalesMinor, taxCollectedMinor, taxRefundedMinor, netTaxMinor]
+      properties:
+        orders: {type: integer, format: int64}
+        grossSalesMinor: {type: integer, format: int64}
+        taxableSalesMinor: {type: integer, format: int64}
+        taxCollectedMinor: {type: integer, format: int64}
+        taxRefundedMinor: {type: integer, format: int64}
+        netTaxMinor: {type: integer, format: int64}
     PayoutsView:
       type: object
       required: [balance, payouts, historyAvailable, planFeeDeductions]

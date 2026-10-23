@@ -117,7 +117,7 @@ func run() error {
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
 		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient),
 		Media:        media, ProofLinks: proofLinks, Orders: upstreams.NewSellerOrders(ordersClient),
-		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
+		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient), TaxStatements: upstreams.NewTaxStatements(client("tax-returns", up.TaxReturns)),
 		Fees:     upstreams.NewFees(paymentsClient, serviceTokens),
 		Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
 		Cache:    cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
@@ -185,6 +185,7 @@ func run() error {
 		SellerOffers:       app.NewSellerOffersService(sellerDeps),
 		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
 		SellerCases:        app.NewSellerCasesService(sellerDeps),
+		SellerTax:          app.NewSellerTaxService(sellerDeps),
 		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
 	// Lola in Seller Center: looks things up through the seller services above, as the signed-in seller.

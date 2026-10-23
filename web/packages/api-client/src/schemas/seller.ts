@@ -1239,6 +1239,35 @@ export const PayoutsViewSchema = z.object({
 });
 export type PayoutsView = z.infer<typeof PayoutsViewSchema>;
 
+/* ── Sales tax statement (tax collected on the seller's behalf, by state and month) ── */
+
+export const SellerTaxStateRowSchema = z.object({
+  jurisdiction: z.string(),
+  state: z.string(),
+  orders: z.number().int(),
+  grossSalesMinor: z.number().int(),
+  taxableSalesMinor: z.number().int(),
+  taxCollectedMinor: z.number().int(),
+  taxRefundedMinor: z.number().int(),
+  netTaxMinor: z.number().int()
+});
+export type SellerTaxStateRow = z.infer<typeof SellerTaxStateRowSchema>;
+export const SellerTaxStatementSchema = z.object({
+  month: z.string(),
+  currency: z.string(),
+  rows: z.array(SellerTaxStateRowSchema),
+  totals: z.object({
+    orders: z.number().int(),
+    grossSalesMinor: z.number().int(),
+    taxableSalesMinor: z.number().int(),
+    taxCollectedMinor: z.number().int(),
+    taxRefundedMinor: z.number().int(),
+    netTaxMinor: z.number().int()
+  }),
+  months: z.array(z.string())
+});
+export type SellerTaxStatement = z.infer<typeof SellerTaxStatementSchema>;
+
 /* ── Fees (read-only; rates in basis points, 1250 = 12.50 %) ── */
 
 export const SellerFeeCategorySchema = z.object({

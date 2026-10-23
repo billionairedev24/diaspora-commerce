@@ -54,6 +54,18 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
             )
           },
           {
+            value: 'tax-nexus',
+            label: 'Nexus tracker',
+            content: (
+              <div className="flex flex-col gap-3">
+                <p className="m-0 max-w-[80ch] text-sm text-muted">
+                  Sales shipped into each state over the last 12 months against its threshold. A state past its threshold with no registration comes first. Open a row to set that state&apos;s thresholds or record its registration. This tracks and warns; registering is done with the state, and the default threshold is a common figure to confirm with your tax advisor.
+                </p>
+                <ResourceTable resource="tax-nexus" urlPrefix="tax-nexus" />
+              </div>
+            )
+          },
+          {
             value: 'tax-rates',
             label: 'Tax rates',
             content: (
@@ -87,7 +99,7 @@ export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } =
             )
           }
   ];
-  const taxTabs = ['tax-method', 'tax-filings', 'tax-rates', 'tax-classification'];
+  const taxTabs = ['tax-method', 'tax-filings', 'tax-nexus', 'tax-rates', 'tax-classification'];
   const items = all.filter((it) => (scope === 'all' ? it.value !== 'tax-method' : scope === 'tax' ? taxTabs.includes(it.value) : !taxTabs.includes(it.value)));
   return (
     <ModulePage module="fees">

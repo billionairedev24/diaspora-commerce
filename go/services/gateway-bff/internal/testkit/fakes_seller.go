@@ -414,6 +414,15 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			"method": "DROP_OFF", "refundState": "PENDING", "estimateMinor": 2599, "createdAt": "2026-10-20T09:00:00Z",
 			"lines": []map[string]any{{"title": "Garri 2kg", "quantity": 2, "reason": "DAMAGED"}}}}})
 	})
+	mux.HandleFunc("GET /v1/tax/sellers/{orgId}/statement", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, 200, map[string]any{"month": r.URL.Query().Get("month"), "sellerOrgId": r.PathValue("orgId"), "rows": []map[string]any{
+			{"jurisdiction": "US-TX", "currency": "USD", "orders": 3, "grossSalesMinor": 30000, "taxableSalesMinor": 25000, "taxCollectedMinor": 2063, "taxRefundedMinor": 536, "netTaxMinor": 1527},
+			{"jurisdiction": "US-NY", "currency": "USD", "orders": 1, "grossSalesMinor": 10000, "taxableSalesMinor": 10000, "taxCollectedMinor": 888, "taxRefundedMinor": 0, "netTaxMinor": 888}}})
+	})
+	mux.HandleFunc("GET /v1/tax/sellers/{orgId}/statement/export", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/csv")
+		_, _ = w.Write([]byte("jurisdiction,orders,tax_collected\nUS-TX,3,20.63\n"))
+	})
 	mux.HandleFunc("GET /v1/claims/seller/{orgId}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"reference": "CLM-1001", "type": "NOT_AS_DESCRIBED", "status": "AWAITING_SELLER",
 			"orderNumber": "AT-2026-000123", "amountMinor": 4599, "description": "The jollof was stale", "customerId": "cust-secret", "escalated": false,

@@ -177,6 +177,10 @@ export function PayoutsView() {
         </Card>
       ) : null}
       {q.data.planFeeDeductions.length ? <PlanFeeDeductions items={q.data.planFeeDeductions} currency={b.currency} t={t} /> : null}
+      <Card title={t('sc.tax.link')}>
+        <p className="m-0 text-sm text-muted">{t('sc.tax.linkHelp')}</p>
+        <Link href="/payouts/tax" className="text-sm font-semibold">{t('sc.tax.link')}</Link>
+      </Card>
       <h2 className="m-0 text-lg font-semibold">History</h2>
       {q.data.historyAvailable ? (
         <DataTable<Payout> id="seller.payouts" label="Payouts" columns={columns} data={q.data.payouts} getRowId={(p) => p.id} rowLabel={(p) => p.id}

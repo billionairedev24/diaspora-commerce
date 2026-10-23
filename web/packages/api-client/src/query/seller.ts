@@ -41,6 +41,7 @@ export const sellerKeys = {
   categoryRequests: (orgId: string) => [...sellerKeys.org(orgId), 'category-requests'] as const,
   inventory: (orgId: string, lowStock: boolean) => [...sellerKeys.org(orgId), 'inventory', lowStock] as const,
   payouts: (orgId: string) => [...sellerKeys.org(orgId), 'payouts'] as const,
+  taxStatement: (orgId: string, month: string) => [...sellerKeys.org(orgId), 'tax-statement', month] as const,
   fees: (orgId: string) => [...sellerKeys.org(orgId), 'fees'] as const,
   billing: (orgId: string) => [...sellerKeys.org(orgId), 'billing'] as const,
   billingRewards: (orgId: string) => [...sellerKeys.billing(orgId), 'rewards'] as const,
@@ -126,6 +127,8 @@ export const sellerQueries = {
   inventory: (api: SellerApiClient, orgId: string, lowStock: boolean) =>
     queryOptions({ queryKey: sellerKeys.inventory(orgId, lowStock), queryFn: ({ signal }) => api.getInventory(lowStock, signal), staleTime: 30_000 }),
   payouts: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.payouts(orgId), queryFn: ({ signal }) => api.getPayouts(signal), staleTime: MINUTE }),
+  taxStatement: (api: SellerApiClient, orgId: string, month: string) =>
+    queryOptions({ queryKey: sellerKeys.taxStatement(orgId, month), queryFn: ({ signal }) => api.getTaxStatement(month, signal), staleTime: MINUTE }),
   fees: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.fees(orgId), queryFn: ({ signal }) => api.getFees(signal), staleTime: 5 * MINUTE }),
   billing: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.billing(orgId), queryFn: ({ signal }) => api.getBilling(signal), staleTime: MINUTE }),
   billingRewards: (api: SellerApiClient, orgId: string) =>

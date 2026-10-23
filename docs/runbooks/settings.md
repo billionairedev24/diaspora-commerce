@@ -52,10 +52,35 @@ The amount due at that moment is saved with the record. Needs `tax:configure`; r
   or **Overpaid** and the row shows how much it moved since filing. File an amended return or offset it, and note it.
 - A wrong amount or date is **voided** (reason required, 10+ characters), never edited; the record stays visible as voided with
   who and why, then record the right one. Only one active record exists per month, state and currency.
-- This is a record, not a filing: nothing is sent to a state. Filing, nexus registrations, exemption certificates and the
-  seller tax statement screen are still manual or not built.
-- Only states where AfroTransact is the facilitator and has collected tax appear. The seller's monthly statement of tax
-  collected on their behalf is `GET /v1/tax/sellers/{orgId}/statement` (no screen yet).
+- This is a record, not a filing: nothing is sent to a state. Filing, registering with a state and exemption certificates are
+  still manual.
+- Only states where AfroTransact has collected tax appear.
+
+## Nexus tracker: where sales are close to a state's threshold
+
+**Settings → Sales tax → Nexus tracker** lists every state with sales (or a recorded setting): the gross sales shipped there over
+the **last 12 months** (net of refunds) and the number of orders, against that state's threshold, most urgent first:
+
+| Status | Meaning |
+|---|---|
+| **Past the threshold, not registered** | sales (or orders, if the state has an order-count test) are at or over the threshold and no registration is recorded: decide with your tax advisor whether to register |
+| **Close to the threshold** | 80 % or more of the nearest threshold |
+| **Registered** | a registration number and effective date are recorded |
+| **Below the threshold** | everything else |
+
+- Open a state to set its **sales threshold**, an **order-count threshold** (leave empty if it has none) and to **record the
+  registration** (number and effective date). Needs `tax:configure`; each change records who and when.
+- The default threshold is **$100,000** for every state. That is a common figure, **not a statement of each state's law**:
+  thresholds, how they are measured (calendar year or rolling) and whether an order-count test applies differ by state and
+  change. Set each state from your tax advisor's advice before relying on the status.
+- The tracker measures what AfroTransact itself sells into each state. It does not register anyone and sends nothing to a state.
+
+## Sellers' sales tax statement
+
+Sellers see **Seller Center → Payouts → Sales tax statement**: for a month (last 24 offered), the tax collected on their
+orders by state, the refunds, the net, with totals and a CSV download (`GET /v1/seller/tax/statement`, `…/export`). It shows
+that AfroTransact collects and remits it as marketplace facilitator, and is for the seller's books, not tax advice. It needs the
+same access as Payouts; the underlying numbers are `GET /v1/tax/sellers/{orgId}/statement` in tax-returns.
 
 ## Where a transfer is in Stripe
 

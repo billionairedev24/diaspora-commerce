@@ -104,7 +104,9 @@ import {
   type Payout,
   PayoutSchema,
   type PayoutsView,
+  type SellerTaxStatement,
   PayoutsViewSchema,
+  SellerTaxStatementSchema,
   type PlanFeeCollectionMode,
   type PlanFeeCollectionView,
   PlanFeeCollectionViewSchema,
@@ -401,6 +403,8 @@ export function createSellerApiClient(options: ApiClientOptions) {
 
     /* Money */
     getPayouts: (signal?: AbortSignal): Promise<PayoutsView> => request('/v1/seller/payouts', PayoutsViewSchema, { signal }),
+    getTaxStatement: (month: string, signal?: AbortSignal): Promise<SellerTaxStatement> =>
+      request(`/v1/seller/tax/statement?month=${encodeURIComponent(month)}`, SellerTaxStatementSchema, { signal }),
     getFees: (signal?: AbortSignal): Promise<SellerFeesView> => request('/v1/seller/fees', SellerFeesViewSchema, { signal }),
     requestPayout: (body: { amountMinor?: number; all?: boolean }, key?: string): Promise<Payout> =>
       request('/v1/seller/payouts', PayoutSchema, { method: 'POST', body, headers: idem(key) }),

@@ -121,7 +121,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Listing: upstreams.NewSellerListing(client("catalog", base)), Writer: upstreams.NewListingWriter(client("ai-gateway", base)),
 		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
-		Payouts: upstreams.NewPayouts(client("payments", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
+		Payouts: upstreams.NewPayouts(client("payments", base)), TaxStatements: upstreams.NewTaxStatements(client("tax-returns", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
 		InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)),
 		Bookings:     upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
 		ListingCache: app.NewListingCache(clock.Now),
@@ -173,6 +173,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerOffers:       app.NewSellerOffersService(sellerDeps),
 		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
 		SellerCases:        app.NewSellerCasesService(sellerDeps),
+		SellerTax:          app.NewSellerTaxService(sellerDeps),
 		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}
 	// Seller Center exports: the BFF's own file store (signed links served by /v1/seller/export-files/{id}).

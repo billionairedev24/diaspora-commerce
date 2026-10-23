@@ -437,6 +437,15 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/settings/summary":
 		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
 			map[string]any{"key": "payout.minimum", "label": "Smallest payout a seller can request", "value": "$25.00", "help": "Requests below it are refused.", "source": "PAYOUT_MINIMUM_MINOR"}})
+	case p == "/v1/tax/nexus":
+		writeJ(w, 200, map[string]any{"through": "2026-10", "windowMonths": 12, "defaultSalesThresholdMinor": 10000000, "states": []any{
+			map[string]any{"jurisdiction": "US-TX", "name": "Texas", "facilitator": true, "salesMinor": 12000000, "orders": 340, "salesThresholdMinor": 10000000, "percent": 120, "status": "EXCEEDED", "registered": false, "customised": false},
+			map[string]any{"jurisdiction": "US-GA", "name": "Georgia", "facilitator": true, "salesMinor": 2000000, "orders": 40, "salesThresholdMinor": 10000000, "transactionsThreshold": 200, "percent": 20, "status": "BELOW", "registered": false, "customised": true, "updatedBy": "u-1", "updatedAt": now}}})
+	case strings.HasPrefix(p, "/v1/tax/nexus/") && r.Method == http.MethodPut:
+		writeJ(w, 200, body)
+	case strings.HasPrefix(p, "/v1/tax/nexus/"):
+		writeJ(w, 200, map[string]any{"jurisdiction": strings.TrimPrefix(p, "/v1/tax/nexus/"), "name": "Texas", "facilitator": true, "salesMinor": 12000000, "orders": 340, "salesThresholdMinor": 10000000, "percent": 120,
+			"status": "EXCEEDED", "registered": false, "customised": false})
 	case p == "/v1/tax/remittances" && r.Method == http.MethodGet:
 		writeJ(w, 200, map[string]any{"obligations": []any{
 			map[string]any{"month": "2026-09", "jurisdiction": "US-TX", "currency": "USD", "dueMinor": 133600, "status": "NOT_FILED", "outstandingMinor": 133600, "changedSinceFilingMinor": 0},

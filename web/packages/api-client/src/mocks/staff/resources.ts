@@ -755,6 +755,37 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     sections: [['This setting', ['label', 'value', 'help', 'source']]],
     actions: []
   },
+  'tax-nexus': {
+    title: 'Nexus tracker',
+    columns: [col('jurisdiction', 'State', 'mono', 9), col('name', 'Name', 'strong', 16), col('salesMinor', 'Sales, last 12 months', 'money', 16), col('salesThresholdMinor', 'Sales threshold', 'money', 14), col('orders', 'Orders', 'text', 9), col('percentLabel', 'Of threshold', 'text', 11), col('registrationNumber', 'Registration', 'mono', 16), col('status', 'Status', 'status', 16)],
+    statusKey: 'status',
+    facets: facets('EXCEEDED', 'APPROACHING', 'REGISTERED', 'BELOW'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.name)} (${str(r.fields.jurisdiction)})`,
+    subtitleOf: (r) => str(r.fields.status),
+    sections: [['Where sales stand', ['status', 'salesMinor', 'orders', 'salesThresholdMinor', 'percentLabel', 'facilitatorLabel']], ['Registration', ['registrationNumber']]],
+    actions: [],
+    edit: {
+      permission: 'tax:configure',
+      form: (r) => form(`Thresholds and registration for ${str(r.fields.name)}`, 'Save', [
+        field('salesThreshold', 'Sales threshold (dollars)', 'number', true, { value: num(r.fields.salesThresholdMinor) / 100 }),
+        field('registered', 'Registered in this state', 'toggle', false, { value: r.fields.registered === true }),
+        field('registrationNumber', 'Registration or permit number', 'text', false, { maxLength: 80, value: str(r.fields.registrationNumber) }),
+        field('registeredOn', 'Registration effective on', 'date', false)
+      ], 'The defaults are a common state figure, not legal advice: confirm each state with your tax advisor.'),
+      apply: (r, v) => {
+        const registered = v.registered === true;
+        if (registered && !str(v.registrationNumber).trim()) throw new Error("Give the state's registration or permit number");
+        r.fields.salesThresholdMinor = Math.round(num(v.salesThreshold) * 100);
+        r.fields.registered = registered;
+        r.fields.registrationNumber = registered ? str(v.registrationNumber) : null;
+        const percent = Math.round((num(r.fields.salesMinor) * 100) / Math.max(num(r.fields.salesThresholdMinor), 1));
+        r.fields.percent = percent;
+        r.fields.percentLabel = `${percent}%`;
+        r.fields.status = registered ? 'REGISTERED' : percent >= 100 ? 'EXCEEDED' : percent >= 80 ? 'APPROACHING' : 'BELOW';
+      }
+    }
+  },
   'tax-filings': {
     title: 'Tax filings',
     columns: [col('month', 'Month', 'mono', 10), col('jurisdiction', 'State', 'mono', 10), col('dueMinor', 'Due now', 'money', 12), col('paidMinor', 'Paid', 'money', 12), col('outstandingMinor', 'Outstanding', 'money', 12), col('filedOn', 'Filed', 'date', 12), col('confirmationRef', 'State confirmation', 'mono', 18), col('state', 'Status', 'status', 12)],

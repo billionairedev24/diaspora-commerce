@@ -1154,7 +1154,7 @@ type PayoutBalanceResponse struct {
 	PayoutsPausedReason       string `json:"payoutsPausedReason"`
 	// ConnectedAccount is nil from a payments older than the field: treated as connected.
 	ConnectedAccount *bool `json:"connectedAccount"`
-	OnHold                    []struct {
+	OnHold           []struct {
 		OrderID     string `json:"orderId"`
 		AmountMinor int64  `json:"amountMinor"`
 		ReleaseAt   string `json:"releaseAt"`
@@ -1379,4 +1379,26 @@ type BookingsClient interface {
 	SavePolicy(ctx context.Context, bearer string, p ProviderRef, in domain.PolicyInput) (domain.PolicyInput, error)
 	Earnings(ctx context.Context, bearer string, p ProviderRef, from, to time.Time) (BookingsEarnings, error)
 	Analytics(ctx context.Context, bearer string, p ProviderRef, from, to time.Time) (BookingsAnalytics, error)
+}
+
+// TaxStatementClient reads the tax collected on a seller's behalf (tax-returns GET /v1/tax/sellers/{orgId}/statement).
+type TaxStatementClient interface {
+	Statement(ctx context.Context, bearer, orgID, month string) (TaxStatementResponse, error)
+	// StatementCSV is the same statement as the CSV tax-returns builds.
+	StatementCSV(ctx context.Context, bearer, orgID, month string) ([]byte, error)
+}
+
+// TaxStatementResponse is tax-returns' LiabilityReport for one seller.
+type TaxStatementResponse struct {
+	Month string `json:"month"`
+	Rows  []struct {
+		Jurisdiction      string `json:"jurisdiction"`
+		Currency          string `json:"currency"`
+		Orders            int64  `json:"orders"`
+		GrossSalesMinor   int64  `json:"grossSalesMinor"`
+		TaxableSalesMinor int64  `json:"taxableSalesMinor"`
+		TaxCollectedMinor int64  `json:"taxCollectedMinor"`
+		TaxRefundedMinor  int64  `json:"taxRefundedMinor"`
+		NetTaxMinor       int64  `json:"netTaxMinor"`
+	} `json:"rows"`
 }

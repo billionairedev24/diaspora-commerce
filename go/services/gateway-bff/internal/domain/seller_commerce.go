@@ -1275,3 +1275,34 @@ func (in ShipFromInput) Validate() map[string]string {
 	}
 	return errs
 }
+
+// SellerTaxStatement is Seller Center's monthly statement of the sales tax AfroTransact collected on the seller's behalf.
+type SellerTaxStatement struct {
+	Month    string               `json:"month"`
+	Currency string               `json:"currency"`
+	Rows     []SellerTaxStateRow  `json:"rows"`
+	Totals   SellerTaxStateTotals `json:"totals"`
+	Months   []string             `json:"months"`
+}
+
+// SellerTaxStateRow is one state's line of the statement.
+type SellerTaxStateRow struct {
+	Jurisdiction      string `json:"jurisdiction"`
+	State             string `json:"state"`
+	Orders            int64  `json:"orders"`
+	GrossSalesMinor   int64  `json:"grossSalesMinor"`
+	TaxableSalesMinor int64  `json:"taxableSalesMinor"`
+	TaxCollectedMinor int64  `json:"taxCollectedMinor"`
+	TaxRefundedMinor  int64  `json:"taxRefundedMinor"`
+	NetTaxMinor       int64  `json:"netTaxMinor"`
+}
+
+// SellerTaxStateTotals sums the rows.
+type SellerTaxStateTotals struct {
+	Orders            int64 `json:"orders"`
+	GrossSalesMinor   int64 `json:"grossSalesMinor"`
+	TaxableSalesMinor int64 `json:"taxableSalesMinor"`
+	TaxCollectedMinor int64 `json:"taxCollectedMinor"`
+	TaxRefundedMinor  int64 `json:"taxRefundedMinor"`
+	NetTaxMinor       int64 `json:"netTaxMinor"`
+}

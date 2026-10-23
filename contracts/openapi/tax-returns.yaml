@@ -802,6 +802,59 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/TaxRemittance'
+  /v1/tax/nexus:
+    get:
+      tags:
+      - Tax nexus
+      summary: Nexus tracker, sales into each state over the last 12 months against its thresholds (tax:read)
+      description: 'Most urgent first: EXCEEDED (past a threshold and not registered), APPROACHING (80 % or more), REGISTERED, BELOW. Thresholds are the defaults until staff set a state''s own; confirm them with a tax advisor. This tracks and warns; it registers nobody.'
+      operationId: taxNexusTracker
+      parameters:
+      - {name: through, in: query, required: false, schema: {type: string, example: 2026-09}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NexusResponse'
+  /v1/tax/nexus/{jurisdiction}:
+    get:
+      tags:
+      - Tax nexus
+      summary: One state (tax:read)
+      operationId: taxNexusState
+      parameters:
+      - {name: jurisdiction, in: path, required: true, schema: {type: string, example: US-TX}}
+      - {name: through, in: query, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxNexusState'
+    put:
+      tags:
+      - Tax nexus
+      summary: Record a state's thresholds and registration (tax:configure)
+      description: A registration needs its number and the date it took effect. 422 tax.invalid-nexus otherwise.
+      operationId: updateTaxNexus
+      parameters:
+      - {name: jurisdiction, in: path, required: true, schema: {type: string, example: US-TX}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNexusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxNexusState'
   /v1/tax/reversals:
     post:
       tags:
@@ -873,6 +926,45 @@ paths:
                 type: string
 components:
   schemas:
+    TaxNexusState:
+      type: object
+      properties:
+        jurisdiction: {type: string, example: US-TX}
+        name: {type: string}
+        facilitator: {type: boolean}
+        salesMinor: {type: integer, format: int64, description: Gross sales shipped there over the trailing 12 months, net of refunds}
+        orders: {type: integer, format: int64}
+        salesThresholdMinor: {type: integer, format: int64}
+        transactionsThreshold: {type: integer, format: int32}
+        percent: {type: integer, format: int32, description: The higher of the sales and transaction percentages of their thresholds}
+        status: {type: string, enum: [REGISTERED, EXCEEDED, APPROACHING, BELOW]}
+        registered: {type: boolean}
+        registrationNumber: {type: string}
+        registeredOn: {type: string, format: date}
+        note: {type: string}
+        customised: {type: boolean}
+        updatedBy: {type: string}
+        updatedAt: {type: string, format: date-time}
+    NexusResponse:
+      type: object
+      properties:
+        through: {type: string}
+        windowMonths: {type: integer, format: int32}
+        defaultSalesThresholdMinor: {type: integer, format: int64}
+        states:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxNexusState'
+    UpdateNexusRequest:
+      type: object
+      required: [salesThresholdMinor, registered]
+      properties:
+        salesThresholdMinor: {type: integer, format: int64, minimum: 0}
+        transactionsThreshold: {type: integer, format: int32, minimum: 0}
+        registered: {type: boolean}
+        registrationNumber: {type: string}
+        registeredOn: {type: string, format: date}
+        note: {type: string}
     TaxRemittance:
       type: object
       properties:

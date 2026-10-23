@@ -164,6 +164,15 @@ func TestSellerContractConformance(t *testing.T) {
 	if r := b.do("GET", "/v1/seller/returns?status=RECEIVED", nil); r.status != 200 || !strings.Contains(string(r.body), "RMA-5E11E5") || !strings.Contains(string(r.body), "Garri 2kg") {
 		t.Fatalf("returns = %d %s", r.status, r.body)
 	}
+	// The tax statement: what was collected on the seller's behalf, by state, with totals and a CSV.
+	if r := b.do("GET", "/v1/seller/tax/statement?month=2026-09", nil); r.status != 200 || !strings.Contains(string(r.body), `"month":"2026-09"`) || !strings.Contains(string(r.body), `"netTaxMinor":2415`) ||
+		!strings.Contains(string(r.body), `"state":"TX"`) || !strings.Contains(string(r.body), `"months":["`) {
+		t.Fatalf("tax statement = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/tax/statement?month=September", nil), 422)
+	if r := b.do("GET", "/v1/seller/tax/statement/export?month=2026-09", nil); r.status != 200 || !strings.Contains(string(r.body), "US-TX,3,20.63") {
+		t.Fatalf("tax statement csv = %d %s", r.status, r.body)
+	}
 	if r := b.do("GET", "/v1/seller/disputes", nil); r.status != 200 || !strings.Contains(string(r.body), "CLM-1001") || strings.Contains(string(r.body), "cust-secret") ||
 		!strings.Contains(string(r.body), "Waiting for your response") || !strings.Contains(string(r.body), "2026-10-28T10:00:00Z") {
 		t.Fatalf("disputes = %d %s", r.status, r.body)
