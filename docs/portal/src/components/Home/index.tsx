@@ -18,6 +18,7 @@ const stories = (backlog as { stories: { status: string }[] }).stories;
 const done = stories.filter((s) => s.status === 'Done').length;
 
 const CARDS: Card[] = [
+  { to: '/user-guide', title: 'User guide', body: 'How to shop, sell and run the marketplace, with answers to common questions.' },
   { to: '/getting-started', title: 'Getting started', body: 'Run the local stack, find every port and make target.' },
   { to: '/architecture', title: 'Architecture', body: 'Services, data stores, the event bus and the BFF.' },
   { to: '/engineering', title: 'Engineering standards', body: 'Code rules enforced in CI, new-service checklist, CI/CD, clients.' },
