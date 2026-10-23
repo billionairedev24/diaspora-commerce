@@ -58,6 +58,7 @@ export const Spinner = forwardRef<HTMLDivElement, SpinnerProps>(function Spinner
         styles.container,
         (block || center) && styles.block,
         center && styles.center,
+        variant === 'white' && styles.onDark,
         className
       )}
       {...rest}

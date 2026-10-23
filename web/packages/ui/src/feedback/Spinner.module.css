@@ -55,6 +55,11 @@
   color: #ffffff;
 }
 
+/* The white variant sits on a dark ground, so its label is light too (contrast). */
+.onDark .label {
+  color: #ffffff;
+}
+
 /* Reduced motion preference: pulse gently instead of fast rotation */
 @media (prefers-reduced-motion: reduce) {
   .spinner {

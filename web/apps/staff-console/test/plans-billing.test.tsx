@@ -1,7 +1,7 @@
 import { getStaffDb, resetStaffDb } from '@afrotransact/api-client/mocks/staff';
 import { configure, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CataloguePanel } from '@/components/plans/CataloguePanel';
 import { FeatureMatrixPanel } from '@/components/plans/FeatureMatrixPanel';
@@ -17,8 +17,14 @@ configure({ asyncUtilTimeout: 5000 });
 
 describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
   beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T15:30:00Z'));
     resetStaffDb(new Date('2026-10-10T15:00:00Z'));
     asRoles('platform.finance');
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('lists the catalogue with what each plan allows, and versions a plan: new prices are a draft until published', async () => {

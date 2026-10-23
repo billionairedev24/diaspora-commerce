@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import {
   createStaffApiClient,
@@ -117,7 +117,14 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
 
 describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
   beforeEach(() => {
+    // The seed is dated; the handlers read the clock, so the clock is pinned next to it (windows are relative to "now").
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T15:30:00Z'));
     resetStaffDb(new Date('2026-10-10T15:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('filters the sidebar by role and lands on the dashboard', async () => {

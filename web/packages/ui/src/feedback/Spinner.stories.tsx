@@ -38,10 +38,13 @@ export const Sizes: Story = {
 
 export const Variants: Story = {
   render: () => (
-    <div style={{ display: 'flex', gap: 24, alignItems: 'center', background: 'var(--at-ink-800)', padding: 24, borderRadius: 8 }}>
+    <div style={{ display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap' }}>
       <Spinner variant="primary" label="Primary (Brand Gold)" />
-      <Spinner variant="white" label="White (On Dark)" />
       <Spinner variant="muted" label="Muted" />
+      {/* The white variant is for dark grounds only: it sits on its own dark panel. */}
+      <div style={{ background: 'var(--at-ink-800)', padding: 24, borderRadius: 8 }}>
+        <Spinner variant="white" label="White (On Dark)" />
+      </div>
     </div>
   )
 };
