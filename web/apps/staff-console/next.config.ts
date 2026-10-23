@@ -23,7 +23,13 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: '/orgs', has: [{ type: 'query', key: 'resource', value: 'connect-accounts' }], destination: '/organisations?tab=connect-accounts', permanent: false },
-      { source: '/orgs', destination: '/organisations', permanent: false }
+      { source: '/orgs', destination: '/organisations', permanent: false },
+      // Modules that moved into Settings: their old addresses open the matching section (the query string is kept).
+      { source: '/markets', destination: '/settings?section=markets', permanent: false },
+      { source: '/site-content', destination: '/settings?section=general', permanent: false },
+      { source: '/developers', destination: '/settings?section=signin', permanent: false },
+      { source: '/notifications', destination: '/settings?section=notifications', permanent: false },
+      { source: '/fees', destination: '/settings?section=fees', permanent: false }
     ];
   },
   async headers() {

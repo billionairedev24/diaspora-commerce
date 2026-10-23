@@ -18,6 +18,7 @@ import { hrefOf, moduleOf } from '@/lib/modules';
 import { navGuard } from '@/lib/nav-guard';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { StaffSessionProvider } from '@/lib/session';
+import { isSettingsPath, visibleSections } from '@/lib/settings-sections';
 
 import { Header } from './Header';
 import { Sidebar, SidebarRail } from './Sidebar';
@@ -249,6 +250,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   });
   const session = q.data;
   const active = moduleOf(pathname);
+  const settingsActive = isSettingsPath(pathname);
   const loop = useNavLoop(navGuard);
   // Signed in: a later 401 (an expired session) may go to sign-in again straight away; the next loader starts afresh.
   useEffect(() => {
@@ -294,13 +296,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     );
   }
   // My account (/account/…) is every staff member's own, whatever their roles open.
-  const canOpen = accountSectionOf(pathname) !== null || allowed(session, active);
+  const canOpen = accountSectionOf(pathname) !== null || (settingsActive ? visibleSections(session).length > 0 : allowed(session, active));
   return (
     <StaffSessionProvider session={session}>
       <BackofficeFrame
         header={(menuButton) => <Header session={session} menuButton={menuButton} />}
-        nav={<Sidebar session={session} active={active} />}
-        rail={<SidebarRail session={session} active={active} />}
+        nav={<Sidebar session={session} active={active} settingsActive={settingsActive} />}
+        rail={<SidebarRail session={session} active={active} settingsActive={settingsActive} />}
         routeKey={pathname}
         menuLabel={t('st.consoleShell.menu')}
         expandLabel={t('st.consoleShell.expandMenu')}

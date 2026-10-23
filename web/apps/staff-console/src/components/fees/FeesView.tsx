@@ -17,24 +17,30 @@ import { TaxRatesImportPanel } from './TaxRatesImportPanel';
  * Platform configuration → Fees & commissions: product commission and service connection fees (category × plan),
  * negotiated rates, the rate calculator, the fee-schedule versions and marketplace-facilitator tax rates.
  */
-export function FeesView() {
+export function FeesView({ scope = 'all' }: { scope?: 'all' | 'fees' | 'tax' } = {}) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const tab = params.get('tab') ?? 'fee-schedules';
-  return (
-    <ModulePage module="fees">
-      <Tabs
-        label="Fees, commissions & tax"
-        value={tab}
-        onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
-        items={[
+  const tab = params.get('tab') ?? (scope === 'tax' ? 'tax-method' : 'fee-schedules');
+  const all = [
           { value: 'fee-schedules', label: 'Fee schedules', content: <FeeSchedulesPanel /> },
           { value: 'commission', label: t('st.rates.tab.commission'), content: <RateMatrixPanel kind="PRODUCT" /> },
           { value: 'connection-fees', label: t('st.rates.tab.connection'), content: <RateMatrixPanel kind="SERVICE" /> },
           { value: 'negotiated', label: t('st.rates.tab.negotiated'), content: <NegotiatedRatesPanel /> },
           { value: 'calculator', label: t('st.rates.tab.calculator'), content: <RateCalculator /> },
+          {
+            value: 'tax-method',
+            label: 'Who calculates tax',
+            content: (
+              <div className="flex flex-col gap-3">
+                <p className="m-0 max-w-[80ch] text-sm text-muted">
+                  Until Stripe Tax is set up, AfroTransact works out the tax itself from the rates and tax codes in the next tabs. Open the row to change the method.
+                </p>
+                <ResourceTable resource="tax-settings" urlPrefix="tax-settings" />
+              </div>
+            )
+          },
           {
             value: 'tax-rates',
             label: 'Tax rates',
@@ -68,7 +74,16 @@ export function FeesView() {
               </div>
             )
           }
-        ]}
+  ];
+  const taxTabs = ['tax-method', 'tax-rates', 'tax-classification'];
+  const items = all.filter((it) => (scope === 'all' ? it.value !== 'tax-method' : scope === 'tax' ? taxTabs.includes(it.value) : !taxTabs.includes(it.value)));
+  return (
+    <ModulePage module="fees">
+      <Tabs
+        label={scope === 'tax' ? 'Sales tax' : scope === 'fees' ? 'Fees & commissions' : 'Fees, commissions & tax'}
+        value={items.some((it) => it.value === tab) ? tab : (items[0]?.value ?? tab)}
+        onValueChange={(v) => router.replace(`${pathname}?${new URLSearchParams([...params.entries()].filter(([k]) => k !== 'open' && k !== 'tab').concat([['tab', v]])).toString()}`, { scroll: false })}
+        items={items}
       />
     </ModulePage>
   );

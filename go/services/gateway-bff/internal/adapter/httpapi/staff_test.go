@@ -433,6 +433,16 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/ledger/adjustments/"):
 		writeJ(w, 200, map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
 			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}})
+	case p == "/v1/settings/summary":
+		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
+			map[string]any{"key": "payout.minimum", "label": "Smallest payout a seller can request", "value": "$25.00", "help": "Requests below it are refused.", "source": "PAYOUT_MINIMUM_MINOR"}})
+	case p == "/v1/tax/settings":
+		if r.Method == http.MethodPut {
+			writeJ(w, 200, body)
+		} else {
+			writeJ(w, 200, map[string]any{"method": "RULES", "configuredDefault": "RULES", "stripeAvailable": false, "changedBy": "u-1", "changedAt": now,
+				"history": []any{map[string]any{"from": nil, "to": "RULES", "reason": "Our own rules until Stripe Tax is set up", "changedBy": "u-1", "changedAt": now}}})
+		}
 	case p == "/v1/settlement/transfers":
 		writeJ(w, 200, []any{map[string]any{"id": "t-1", "orderId": "ord-1", "orgId": "org-1", "stripeTransferId": "tr_1ABC123", "amountMinor": 50000, "reversedMinor": 0, "currency": "USD", "createdAt": now,
 			"dashboardUrl": "https://dashboard.stripe.com/test/connect/transfers/tr_1ABC123"}})

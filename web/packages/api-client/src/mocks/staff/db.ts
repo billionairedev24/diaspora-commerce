@@ -474,6 +474,13 @@ function seed(now: Date): MockStaffDb {
     rec('adj-2', { reason: 'Reclass a mis-booked chargeback fee to chargeback losses', amountMinor: 1_500, stripeRef: 'dp_1Q7cD9', proposedByName: 'Finance Lead', decidedByName: 'Platform Admin', status: 'POSTED', proposedAt: ago(3, 0), decidedAt: ago(2, 6), decisionNote: 'Checked against the Stripe dispute', journalId: 'a1b2c3d4' })
   ];
   const stripeLookup: MockRecord[] = [];
+  const paymentSettings = [
+    rec('stripe.mode', { label: 'Stripe', value: 'Test (Stripe test mode)', source: 'STRIPE_SECRET_KEY', help: 'Which Stripe account money moves through. Test mode never moves real money.' }),
+    rec('settlement.hold', { label: 'Hold before a seller can be paid', value: '7 days after delivery', source: 'SETTLEMENT_HOLD', help: "A seller's net for an order is held until this long after it is delivered, then transferred to their Stripe account." }),
+    rec('payout.minimum', { label: 'Smallest payout a seller can request', value: '$25.00', source: 'PAYOUT_MINIMUM_MINOR', help: 'Requests below this are refused.' }),
+    rec('payout.daily', { label: 'Payout requests', value: 'One per seller per day (America/Chicago time), then approved by Finance', source: 'built in', help: 'Each request is approved, held or released by Finance staff.' })
+  ];
+  const taxSettings = [rec('method', { setting: 'Who calculates sales tax', method: 'RULES', methodLabel: 'Our own rules', stripeLabel: 'Not set up yet', changedByName: 'Platform Admin', changedAt: ago(3, 0), configuredDefault: 'RULES' })];
   const taxReview = [
     rec('grocery|abc123', { rowId: 'grocery|abc123', productType: 'grocery', attrHash: 'abc123', answer: null, taxCode: 'GENERAL_GOODS', count: 4, sampleAtin: 'AT10000001', lastSeen: ago(0, 3), state: 'OPEN', reviewedBy: null, reviewNote: null })
   ];
@@ -500,7 +507,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations
     },

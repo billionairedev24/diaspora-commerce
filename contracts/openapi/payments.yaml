@@ -1409,6 +1409,22 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ReconciliationResponse'
+  /v1/settings/summary:
+    get:
+      tags:
+      - Settings
+      summary: 'What governs holds, payouts and Stripe, in words (payments:read)'
+      description: 'Read-only: the values come from the deployment configuration.'
+      operationId: settingsSummary
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentsSetting'
   /v1/settlement/transfers:
     get:
       tags:
@@ -1942,6 +1958,14 @@ paths:
       security: []
 components:
   schemas:
+    PaymentsSetting:
+      type: object
+      properties:
+        key: {type: string}
+        label: {type: string}
+        value: {type: string}
+        help: {type: string}
+        source: {type: string, description: 'Where it is set: the environment setting that changes it'}
     SettlementTransfer:
       type: object
       description: A Stripe Connect transfer of a seller's net for one order

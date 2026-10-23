@@ -744,6 +744,38 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       build: (v, _id, ctx) => ({ id: `${str(v.ref)} ${str(v.orgId)}`.trim(), fields: { ref: str(v.ref), kind: 'Payout', stripeStatus: 'in_transit', amountMinor: 50_000, created: ctx.now.toISOString() }, activity: [] })
     }
   },
+  'payment-settings': {
+    title: 'Payments & payouts',
+    columns: [col('label', 'Setting', 'strong', 30), col('value', 'In force', 'text', 40), col('source', 'Set in', 'mono', 22)],
+    facets: [],
+    exportable: false,
+    titleOf: (r) => str(r.fields.label),
+    subtitleOf: (r) => str(r.fields.value),
+    sections: [['This setting', ['label', 'value', 'help', 'source']]],
+    actions: []
+  },
+  'tax-settings': {
+    title: 'Sales tax method',
+    columns: [col('setting', 'Setting', 'strong', 30), col('methodLabel', 'In force', 'text', 24), col('stripeLabel', 'Stripe Tax', 'text', 18), col('changedByName', 'Changed by', 'text', 16), col('changedAt', 'Changed', 'datetime', 12)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Who calculates sales tax',
+    subtitleOf: (r) => `${str(r.fields.methodLabel)} is in force`,
+    sections: [['In force', ['methodLabel', 'stripeLabel', 'configuredDefault', 'changedByName', 'changedAt']]],
+    actions: [],
+    edit: {
+      permission: 'tax:configure',
+      form: (r) => form('Change who calculates sales tax', 'Change method', [
+        field('method', 'Method', 'select', true, { options: [{ value: 'RULES', label: 'Our own rules (rate tables and tax codes)' }, { value: 'STRIPE_TAX', label: 'Stripe Tax (needs to be set up)' }], value: str(r.fields.method) }),
+        field('reason', 'Why (at least 10 characters)', 'textarea', true, { maxLength: 500 })
+      ], 'Our own rules are always available. Stripe Tax can only be chosen once it is set up. The change applies to new quotes; orders already placed keep their tax.'),
+      apply: (r, v) => {
+        if (str(v.method) === 'STRIPE_TAX') throw new Error('Stripe Tax is not set up yet');
+        r.fields.method = str(v.method);
+        r.fields.methodLabel = 'Our own rules';
+      }
+    }
+  },
   'tax-rules': {
     title: 'Tax classification rules',
     columns: [col('productType', 'Product type', 'mono', 16), col('attrKey', 'Question', 'mono', 14), col('attrValue', "Seller's answer", 'text', 28), col('taxCode', 'Tax code', 'strong', 18), col('kind', 'Rule', 'status', 10), col('note', 'Why', 'text', 24)],

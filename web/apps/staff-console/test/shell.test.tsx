@@ -32,11 +32,25 @@ describe('staff console shell', () => {
     );
     const hrefs = await navHrefs();
     expect(hrefs[0]).toBe('/');
-    expect(hrefs).toEqual(expect.arrayContaining(['/users', '/fees', '/support', '/site-content', '/developers']));
+    expect(hrefs).toEqual(expect.arrayContaining(['/users', '/support', '/payouts', '/settings']));
+    // Fees, markets, site content, developers and notifications live in Settings now, not in the sidebar.
+    for (const moved of ['/fees', '/markets', '/site-content', '/developers', '/notifications']) expect(hrefs).not.toContain(moved);
     const groups = screen.getAllByRole('button', { expanded: false }).map((b) => b.textContent);
     expect(groups.join(' ')).toMatch(/Commerce/);
     expect(screen.getByRole('button', { name: /overview/i })).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('dashboard body')).toBeInTheDocument();
+  });
+
+  it('shows Settings to a role that can open a section (read only) and never the moved modules', async () => {
+    asRoles('platform.customer_support');
+    renderWithProviders(
+      <ConsoleShell>
+        <p>dashboard body</p>
+      </ConsoleShell>
+    );
+    const hrefs = await navHrefs();
+    expect(hrefs).toContain('/settings');
+    for (const moved of ['/fees', '/markets', '/site-content', '/developers', '/notifications']) expect(hrefs).not.toContain(moved);
   });
 
   it('hides menu items the role has no access to and blocks direct visits', async () => {

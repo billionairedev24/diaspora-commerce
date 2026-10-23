@@ -1119,3 +1119,16 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - The balance reports connectedAccount; the Payouts page shows a notice linking to Account health when it is false (an older payments is treated as connected)
 - Locally a blocked settlement transfer is rechecked after a minute
 - Verified: unit tests, BFF conformance. Remaining: seller integration test with a real payments service","E14","","High","5","payments seller seller-center payouts","seller","In Progress"
+"S314","Story","Staff console: one Settings area for every platform setting","Settings were scattered over Fees, Markets, Site content, Developers, Notifications and the Plans & billing Settings tab. Settings (/settings) is one screen with a rail of sections (Platform: General, Markets & locations, Notifications, Sign-in & integrations; Money: Payments & payouts, Fees & commissions, Sales tax, Plans & billing). Each section hosts the existing module, whose access level still decides who may see or change it.","- One Settings link in the sidebar replaces the moved modules; old addresses redirect to the section
+- Sections a role cannot open are hidden; a view-only role sees a read-only notice
+- Payments & payouts shows hold, minimum payout, retry and Stripe mode in words, read-only, with the environment setting that changes each
+- Phone width: the rail becomes a row of chips
+- Verified: console tests (rail, current section, tax and payments sections), gateway conformance. Remaining: look at it in the browser; i18n of the new labels","E14","","High","8","staff-console settings ux","staff-console","In Progress"
+"S315","Story","Tax: who calculates sales tax is a switch (our own rules by default, Stripe Tax when set up)","tax-returns keeps the method in tax_setting (changed through GET/PUT /v1/tax/settings with a reason and a history); the calculator follows it within seconds. Our own rules are always available; Stripe Tax is refused until its key is set. TAX_PROVIDER is only the starting value.","- Default RULES: no external call; placed orders keep their tax
+- Choosing Stripe Tax without a key is refused (422 tax.stripe-not-set-up); a reason of 10+ characters is required
+- Every change is recorded (who, when, from, to, why)
+- Verified: service and calculator unit tests. Remaining: integration test, a real Stripe Tax account","E14","","High","5","tax settings stripe","tax-returns","In Progress"
+"S316","Story","Payouts: show Stripe transfer ids and link to the Stripe dashboard","GET /v1/settlement/transfers lists the Connect transfers (tr_…) of an organisation or an order with a dashboard link (test or live mode by the key). The staff payout sheet shows them and the Stripe lookup opens any id in the dashboard.","- A seller's transfers are listed with order, Stripe transfer id, amount, reversed and date
+- The link opens the transfer in Stripe test or live mode; the local stand-in has no link
+- Members see only their organisation's transfers
+- Verified: unit and gateway tests. Remaining: check against a real Stripe test transfer","E14","","Medium","3","payments stripe payouts staff-console","payments","In Progress"

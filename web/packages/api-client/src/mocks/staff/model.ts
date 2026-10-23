@@ -60,7 +60,8 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'help-articles': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
   'fee-schedules': 'fees', 'tax-rates': 'fees', 'tax-codes': 'fees', 'tax-rules': 'fees', 'tax-review': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',
   coupons: 'marketing', organisations: 'orgs', 'connect-accounts': 'orgs',
-  reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', 'stripe-lookup': 'payouts'
+  reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', 'stripe-lookup': 'payouts',
+  'payment-settings': 'payouts', 'tax-settings': 'fees'
 };
 
 /** Refund ceiling per platform role in minor units (null = no limit). Roles not listed may not refund. */
