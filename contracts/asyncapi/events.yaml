@@ -1807,7 +1807,8 @@ components:
         $ref: '#/components/schemas/InventoryReservationEvent'
     inventoryReservationCommitted:
       name: inventory.reservation.committed
-      title: Order shipped; cogs carries the landed cost of the shipped lots
+      title: Order shipped; cogsUsdMinor carries the landed cost of the shipped lots in US cents (cogs holds the amounts per
+        currency paid)
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -6369,8 +6370,18 @@ components:
         unitLandedCostMinor:
           type: integer
           format: int64
+          description: Unit landed cost in minor units of `currency` (the currency the lot was paid in)
         currency:
           type: string
+          description: ISO 4217 code of the currency paid
+        unitCostUsdMinor:
+          type: integer
+          format: int64
+          description: Unit landed cost in US cents
+          fixed at receiving; finance books this: null
+        fxRateToUsd:
+          type: number
+          description: US dollars per 1 unit of `currency` used for the USD value
         reason:
           type:
           - string
@@ -6417,8 +6428,13 @@ components:
             type: string
         cogs:
           type: array
+          description: COGS per currency the lots were paid in
           items:
             $ref: '#/components/schemas/InventoryMoney'
+        cogsUsdMinor:
+          type: integer
+          format: int64
+          description: COGS in US cents (what margin and the GL use)
         lines:
           type: array
           items:
@@ -6470,6 +6486,10 @@ components:
                       format: int64
                     currency:
                       type: string
+                    unitCostUsdMinor:
+                      type: integer
+                      format: int64
+                      description: Unit landed cost of the lot in US cents
     InventoryMoney:
       type: object
       properties:

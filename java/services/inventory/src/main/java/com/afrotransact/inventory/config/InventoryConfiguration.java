@@ -52,7 +52,7 @@ class InventoryConfiguration {
     @Bean
     InventorySettings inventorySettings(InventoryProperties props) {
         return new InventorySettings(props.retailOrgId(), props.reservationTtl(), props.fefoMinRemainingDays(),
-                props.jobs().reservationSweepBatch(), props.storage().defaultUnitCubicFeet());
+                props.jobs().reservationSweepBatch(), props.storage().defaultUnitCubicFeet(), props.costCurrencies());
     }
 
     @Bean

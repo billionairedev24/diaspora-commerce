@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.afrotransact.inventory.domain.CostComponents;
 import com.afrotransact.inventory.domain.PostalAddress;
 
 /** Inputs of the inbound shipment use cases (S257). */
@@ -96,9 +97,31 @@ public final class InboundCommands {
      *
      * @param lotNo      default: one lot per receipt
      * @param holdReason receive the good units into quarantine (QC hold)
+     * @param cost       what the units cost, for AfroTransact-owned stock (an ASN of AfroTransact Retail); null = no
+     *                   cost recorded. Seller (FBA) units carry none: a cost on them is refused.
      */
     public record ReceiveLine(String sku, String unitLabel, String atin, int qtyGood, int qtyDamaged, String lotNo,
-                              LocalDate mfgDate, LocalDate expDate, String bin, String holdReason) {
+                              LocalDate mfgDate, LocalDate expDate, String bin, String holdReason,
+                              ReceiveCost cost) {
+
+        /** A line without cost. */
+        public ReceiveLine(String sku, String unitLabel, String atin, int qtyGood, int qtyDamaged, String lotNo,
+                           LocalDate mfgDate, LocalDate expDate, String bin, String holdReason) {
+            this(sku, unitLabel, atin, qtyGood, qtyDamaged, lotNo, mfgDate, expDate, bin, holdReason, null);
+        }
+    }
+
+    /**
+     * The unit cost of received stock in the currency actually paid.
+     *
+     * @param unitMinor  unit landed cost in minor units of {@code currency}
+     * @param fxRateToUsd US dollars per 1 unit of {@code currency}; null = the staff-managed table's latest rate on or
+     *                   before the receiving date
+     * @param fxRateDate the day the rate is for; null = the receiving date
+     * @param components goods, freight, duty and other per unit (add up to {@code unitMinor}); null = all goods
+     */
+    public record ReceiveCost(long unitMinor, String currency, BigDecimal fxRateToUsd, LocalDate fxRateDate,
+                              CostComponents components) {
     }
 
     /**

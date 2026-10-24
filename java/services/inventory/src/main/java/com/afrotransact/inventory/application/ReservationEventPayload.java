@@ -10,7 +10,8 @@ import com.afrotransact.inventory.domain.Reservation;
 import com.afrotransact.inventory.domain.ReservationLine;
 
 /**
- * Payload of {@code inventory.reservation.*} events. COGS is set on {@code committed} / {@code group_committed}.
+ * Payload of {@code inventory.reservation.*} events. COGS is set on {@code committed} / {@code group_committed}:
+ * in US cents ({@code cogsUsdMinor}, what finance posts) and per currency the lots were paid in.
  *
  * @param status the reservation's status after the change (HELD while other groups are still held)
  * @param groups the groups a {@code group_committed} / {@code group_released} event is about; null for whole-order
@@ -18,8 +19,8 @@ import com.afrotransact.inventory.domain.ReservationLine;
  * @param lines  every line for whole-order events, the lines of {@code groups} for group events
  */
 public record ReservationEventPayload(UUID reservationId, String orderId, String status, Instant expiresAt,
-                                      List<Line> lines, List<CommitResult.Money> cogs, String reason,
-                                      List<String> groups) {
+                                      List<Line> lines, List<CommitResult.Money> cogs, long cogsUsdMinor,
+                                      String reason, List<String> groups) {
 
     /**
      * A reserved line and its lot allocations.
@@ -35,14 +36,15 @@ public record ReservationEventPayload(UUID reservationId, String orderId, String
         }
     }
 
-    static ReservationEventPayload of(Reservation r, List<CommitResult.Money> cogs, String reason) {
+    static ReservationEventPayload of(Reservation r, List<CommitResult.Money> cogs, long cogsUsdMinor,
+                                      String reason) {
         return new ReservationEventPayload(r.id(), r.orderId(), r.status().name(), r.expiresAt(),
-                r.lines().stream().map(Line::of).toList(), cogs, reason, null);
+                r.lines().stream().map(Line::of).toList(), cogs, cogsUsdMinor, reason, null);
     }
 
     static ReservationEventPayload ofGroups(Reservation r, List<ReservationLine> lines, Set<String> groups,
-                                            List<CommitResult.Money> cogs, String reason) {
+                                            List<CommitResult.Money> cogs, long cogsUsdMinor, String reason) {
         return new ReservationEventPayload(r.id(), r.orderId(), r.status().name(), r.expiresAt(),
-                lines.stream().map(Line::of).toList(), cogs, reason, List.copyOf(groups));
+                lines.stream().map(Line::of).toList(), cogs, cogsUsdMinor, reason, List.copyOf(groups));
     }
 }
