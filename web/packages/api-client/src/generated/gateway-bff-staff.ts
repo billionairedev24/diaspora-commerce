@@ -957,6 +957,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/billing/orgs/{orgId}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move the organisation to a plan, including an invite-only (negotiated) one, with a reason (billing:adjust; S306)
+         * @description Needs EDIT on Plans & billing and `billing:adjust`. seller `POST /v1/orgs/{orgId}/billing/staff-plan`: upgrades prorate
+         *     now; downgrades and cadence changes apply at renewal. Recorded with the reason and shown in the seller billing panel.
+         */
+        post: operations["assignStaffPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/billing/orgs/{orgId}/plan-fee-collection": {
         parameters: {
             query?: never;
@@ -4282,6 +4303,36 @@ export interface components {
             earningsCollectionEnabled: boolean;
             /** @description How the plan is paid (S298); null before the organisation has a subscription */
             planFeeCollection?: components["schemas"]["StaffPlanFeeCollection"] | null;
+            /** @description Plans staff assigned to the organisation, newest first (S306) */
+            planAssignments?: components["schemas"]["StaffPlanAssignment"][];
+        };
+        StaffPlanAssignment: {
+            /** Format: uuid */
+            id: string;
+            fromPlan?: string | null;
+            toPlan: string;
+            /** @enum {string} */
+            cadence: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            /** @enum {string} */
+            applied: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
+            reason: string;
+            assignedBy: string;
+            /** Format: date-time */
+            assignedAt: string;
+        };
+        StaffAssignPlanRequest: {
+            planCode: string;
+            /** @enum {string} */
+            cadence?: "MONTHLY" | "QUARTERLY" | "ANNUAL";
+            reason: string;
+        };
+        StaffPlanChange: {
+            /** @enum {string} */
+            applied: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
+            /** @description The organisation billing overview after the change */
+            billing?: {
+                [key: string]: unknown;
+            };
         };
         StaffCreditRequest: {
             /** Format: int64 */
@@ -5242,6 +5293,8 @@ export interface components {
             annualCents?: number | null;
             reason: string;
             reference?: string | null;
+            /** @description Also move the organisation to the plan now (billing:adjust; S306). Default: it chooses the plan itself. */
+            assign?: boolean;
         };
         NegotiatedPlan: {
             planCode: string;
@@ -5257,6 +5310,13 @@ export interface components {
             quarterlyCents: number;
             /** Format: int64 */
             annualCents: number;
+            /** @description The organisation was moved to the plan in the same step (S306) */
+            assigned?: boolean;
+            /**
+             * @description What the assignment did, when assigned
+             * @enum {string}
+             */
+            assignedAs?: "IMMEDIATE_UPGRADE" | "AT_RENEWAL" | "NO_CHANGE";
             note: string;
         };
         FeeDraftRate: {
@@ -7844,6 +7904,38 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    assignStaffPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["BillingOrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAssignPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPlanChange"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];

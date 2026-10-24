@@ -803,5 +803,10 @@
   "st.lola.thinking": "Lola está mirando…",
   "st.lola.remaining": "Quedan {n} de {total} mensajes hoy",
   "st.lola.readOnly": "Solo lectura",
-  "st.lola.spent": "Has usado los mensajes de hoy. Lola vuelve a medianoche UTC."
+  "st.lola.spent": "Has usado los mensajes de hoy. Lola vuelve a medianoche UTC.",
+  "st.rates.assignNow": "Mover también a esta organización a este plan ahora",
+  "st.plans.assignments": "Planes asignados por el personal",
+  "st.plans.assignments.IMMEDIATE_UPGRADE": "Mejora inmediata",
+  "st.plans.assignments.AT_RENEWAL": "Se aplica en la renovación",
+  "st.plans.assignments.NO_CHANGE": "Sin cambios"
 }

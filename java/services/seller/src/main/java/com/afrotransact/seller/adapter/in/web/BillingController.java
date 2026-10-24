@@ -4,10 +4,12 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.seller.adapter.in.web.BillingDtos.AddPaymentMethodRequest;
+import com.afrotransact.seller.adapter.in.web.BillingDtos.AssignPlanRequest;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.BillingResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.ChangePlanRequest;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.ChangePlanResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.InvoiceResponse;
+import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanAssignmentResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.OrgEntitlementsResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PaymentMethodResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanChangePreviewResponse;
@@ -85,6 +87,22 @@ class BillingController {
         PlanChangeResult r = billing.changePlan(orgId, body.planCode(),
                 body.cadence() == null ? null : Inputs.cadence(body.cadence()));
         return new ChangePlanResponse(r.applied().name(), BillingResponse.of(r.billing()));
+    }
+
+    @Operation(summary = "Staff assign a plan, including an invite-only (negotiated) one, with the reason (billing:adjust)",
+            description = "Upgrades prorate now; downgrades and cadence changes apply at renewal, as for the owner. 422 "
+                    + "seller.reason-required without a reason of 10+ characters. Recorded in the plan assignments.")
+    @PostMapping("/v1/orgs/{orgId}/billing/staff-plan")
+    ChangePlanResponse assignPlan(@PathVariable String orgId, @Valid @RequestBody AssignPlanRequest body) {
+        PlanChangeResult r = billing.assignPlan(orgId, body.planCode(),
+                body.cadence() == null ? null : Inputs.cadence(body.cadence()), body.reason());
+        return new ChangePlanResponse(r.applied().name(), BillingResponse.of(r.billing()));
+    }
+
+    @Operation(summary = "Plans staff assigned to the organisation, newest first (staff)")
+    @GetMapping("/v1/orgs/{orgId}/billing/plan-assignments")
+    List<PlanAssignmentResponse> planAssignments(@PathVariable String orgId) {
+        return billing.assignments(orgId).stream().map(PlanAssignmentResponse::of).toList();
     }
 
     @Operation(summary = "Cancel at period end (owner)")

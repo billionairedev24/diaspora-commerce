@@ -6,6 +6,7 @@ import java.util.UUID;
 import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.Invoice;
 import com.afrotransact.seller.domain.PaymentMethod;
+import com.afrotransact.seller.domain.PlanAssignment;
 
 /**
  * Plans &amp; billing for an organisation (locally scheduled via rrule; Stripe Payments collects the charge).
@@ -17,6 +18,16 @@ public interface BillingService {
 
     /** Upgrades prorate now; downgrades and cadence changes are recorded and apply at renewal. */
     PlanChangeResult changePlan(String orgId, String planCode, Cadence cadence);
+
+    /**
+     * Staff move an organisation to a plan, including an invite-only (negotiated) plan it was not invited to, with the
+     * reason; recorded (S306). Upgrades prorate now and downgrades apply at renewal, exactly as for the owner (staff
+     * with billing:adjust).
+     */
+    PlanChangeResult assignPlan(String orgId, String planCode, Cadence cadence, String reason);
+
+    /** The plans staff assigned to the organisation, newest first (staff with a billing permission). */
+    List<PlanAssignment> assignments(String orgId);
 
     BillingOverview cancelAtPeriodEnd(String orgId);
 

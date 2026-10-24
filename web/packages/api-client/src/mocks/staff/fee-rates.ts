@@ -126,7 +126,8 @@ const PlanBody = z.object({
   quarterlyCents: z.number().int().nullish(),
   annualCents: z.number().int().nullish(),
   reason: z.string(),
-  reference: z.string().nullish()
+  reference: z.string().nullish(),
+  assign: z.boolean().nullish()
 });
 
 export function feeRateHandlers(W: string, deps: PreorderHandlerDeps, activeSchedule: (ctx: PreorderCtx) => MockFeeSchedule | null) {
@@ -276,6 +277,19 @@ export function feeRateHandlers(W: string, deps: PreorderHandlerDeps, activeSche
         ctx.db.plans.plans.push({ ...structuredClone(base), code, name, tagline: `Negotiated for ${orgName(orgId) ?? orgId}`, visibility: 'INVITE_ONLY', status: 'ACTIVE',
           monthlyCents: monthly, quarterlyCents: quarterly, annualCents: annual, subscribers: 0, invites: [orgId], currentVersion: 1, versions: [], rowVersion: 0 });
         const n = orgName(orgId) ?? orgId;
+        const billingOrg = b.assign ? ctx.db.plans.orgs.find((x) => x.orgId === orgId) : undefined;
+        if (b.assign && !ctx.permissions.includes('billing:adjust')) throw problem(403, 'FORBIDDEN', 'Forbidden', 'This needs the billing:adjust permission.');
+        if (billingOrg) {
+          const upgrade = monthly >= (ctx.db.plans.plans.find((x) => x.code === billingOrg.planCode)?.monthlyCents ?? 0);
+          billingOrg.planAssignments = [{ id: crypto.randomUUID(), fromPlan: billingOrg.planCode, toPlan: code, cadence: billingOrg.cadence as 'MONTHLY' | 'QUARTERLY' | 'ANNUAL',
+            applied: upgrade ? 'IMMEDIATE_UPGRADE' : 'AT_RENEWAL', reason: b.reason.trim(), assignedBy: 'stf-mock', assignedAt: new Date().toISOString() },
+          ...(billingOrg.planAssignments ?? [])];
+          if (upgrade) billingOrg.planCode = code;
+          const first = billingOrg.planAssignments[0];
+          return { planCode: code, planName: name, basePlanCode: base.code, orgId, visibility: 'INVITE_ONLY', published: true, monthlyCents: monthly, quarterlyCents: quarterly,
+            annualCents: annual, assigned: true, assignedAs: first?.applied,
+            note: first?.applied === 'AT_RENEWAL' ? `${n} moves to ${name} at their next renewal.` : `${n} is on ${name}.` };
+        }
         return { planCode: code, planName: name, basePlanCode: base.code, orgId, visibility: 'INVITE_ONLY', published: true, monthlyCents: monthly, quarterlyCents: quarterly,
           annualCents: annual, note: `${n} can now choose ${name} in Plan & billing; it stays on its current plan until it does.` };
       }, 201)

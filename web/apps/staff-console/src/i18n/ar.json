@@ -803,5 +803,10 @@
   "st.lola.thinking": "لولا تبحث…",
   "st.lola.remaining": "تبقّى {n} من {total} رسالة اليوم",
   "st.lola.readOnly": "للقراءة فقط",
-  "st.lola.spent": "استخدمت رسائل اليوم. تعود لولا عند منتصف الليل بتوقيت UTC."
+  "st.lola.spent": "استخدمت رسائل اليوم. تعود لولا عند منتصف الليل بتوقيت UTC.",
+  "st.rates.assignNow": "انقل هذه المنظمة إلى الخطة الآن أيضًا",
+  "st.plans.assignments": "الخطط التي عيّنها الموظفون",
+  "st.plans.assignments.IMMEDIATE_UPGRADE": "ترقية فورية",
+  "st.plans.assignments.AT_RENEWAL": "تُطبَّق عند التجديد",
+  "st.plans.assignments.NO_CHANGE": "بلا تغيير"
 }

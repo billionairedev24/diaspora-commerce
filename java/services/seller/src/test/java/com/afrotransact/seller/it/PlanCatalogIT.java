@@ -134,6 +134,47 @@ class PlanCatalogIT extends SellerIntegrationTest {
     }
 
     @Test
+    void staffAssignANegotiatedPlanDirectlyWithAReasonAndItIsRecorded() {
+        String code = "seller_n" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String owner = unique("neg");
+        String org = approvedSeller(owner, "seller_growth", Cadence.MONTHLY);
+        TestActors.as(TestActors.staff(unique("plans"), SellerPermissions.PLANS_MANAGE));
+        post(PLANS, plan(code, "INVITE_ONLY"));
+        post(PLANS + "/" + code + "/publish", Map.of());
+
+        // The organisation was never invited and the owner can't pick it; staff with billing:adjust can assign it.
+        TestActors.as(TestActors.applicant(owner));
+        assertThat(post("/v1/orgs/" + org + "/billing/plan", Map.of("planCode", code)).text("/code"))
+                .isEqualTo("seller.unknown-plan");
+        assertThat(post("/v1/orgs/" + org + "/billing/staff-plan", Map.of("planCode", code, "reason",
+                "Negotiated with the owner")).status()).as("owners can't use the staff route").isEqualTo(403);
+        TestActors.as(TestActors.staff(unique("fin"), SellerPermissions.BILLING));
+        assertThat(post("/v1/orgs/" + org + "/billing/staff-plan", Map.of("planCode", code, "reason",
+                "Negotiated with the owner")).status()).as("billing:read alone can't assign").isEqualTo(403);
+
+        String agent = unique("agent");
+        TestActors.as(TestActors.staff(agent, SellerPermissions.BILLING_ADJUST, SellerPermissions.BILLING));
+        Response noReason = post("/v1/orgs/" + org + "/billing/staff-plan", Map.of("planCode", code, "reason", "short"));
+        assertThat(noReason.status()).isEqualTo(422);
+        assertThat(noReason.text("/code")).isEqualTo("seller.reason-required");
+        assertThat(post("/v1/orgs/" + org + "/billing/staff-plan", Map.of("planCode", "seller_nope", "reason",
+                "Negotiated with the owner")).text("/code")).isEqualTo("seller.unknown-plan");
+
+        Response assigned = post("/v1/orgs/" + org + "/billing/staff-plan", Map.of("planCode", code, "reason",
+                "Negotiated 15 % off with the owner"));
+        assertThat(assigned.status()).isEqualTo(200);
+        assertThat(assigned.text("/applied")).isIn("IMMEDIATE_UPGRADE", "AT_RENEWAL", "NO_CHANGE");
+        Response history = get("/v1/orgs/" + org + "/billing/plan-assignments");
+        assertThat(history.body()).hasSize(1);
+        assertThat(history.text("/0/toPlan")).isEqualTo(code);
+        assertThat(history.text("/0/fromPlan")).isEqualTo("seller_growth");
+        assertThat(history.text("/0/assignedBy")).isEqualTo(agent);
+        assertThat(history.text("/0/reason")).isEqualTo("Negotiated 15 % off with the owner");
+        assertThat(get("/v1/orgs/" + org + "/billing/panel").text("/planAssignments/0/toPlan")).as("the staff panel shows it")
+                .isEqualTo(code);
+    }
+
+    @Test
     void entitlementsAreConfiguredPerPlanAndReadByMembersAndServices() {
         String code = "seller_e" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         TestActors.as(TestActors.staff(unique("plans"), SellerPermissions.PLANS_MANAGE));

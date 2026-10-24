@@ -209,6 +209,19 @@ describe('Plans & billing (S292–S297)', { timeout: 30_000 }, () => {
     expect(within(screen.getByRole('table', { name: 'Rewards and adjustments' })).getAllByRole('row').length).toBeGreaterThan(2);
   });
 
+  it('lists the plans staff assigned in the seller billing panel (S306)', async () => {
+    const user = userEvent.setup();
+    getStaffDb().plans.orgs.find((o) => o.name.startsWith('Ade'))!.planAssignments = [{ id: 'a1', fromPlan: 'seller_growth', toPlan: 'seller_growth_org_ade', cadence: 'MONTHLY',
+      applied: 'AT_RENEWAL', reason: 'Two-year agreement', assignedBy: 'stf-6', assignedAt: '2026-10-09T10:00:00Z' }];
+    await renderScreen(<SellerBillingPanel />);
+    await user.type(screen.getByRole('searchbox'), 'ade');
+    await user.click(await screen.findByRole('button', { name: /Ade’s Kitchen/ }));
+    const list = await screen.findByTestId('panel-plan-assignments');
+    expect(list).toHaveTextContent('seller_growth_org_ade');
+    expect(list).toHaveTextContent('Applies at renewal');
+    expect(list).toHaveTextContent('Two-year agreement');
+  });
+
   it('gives free months and sets a charge condition with a reason, then removes it', async () => {
     const user = userEvent.setup();
     await renderScreen(<SellerBillingPanel />);

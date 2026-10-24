@@ -796,5 +796,10 @@
   "st.lola.thinking": "Lola is looking…",
   "st.lola.remaining": "{n} of {total} messages left today",
   "st.lola.readOnly": "Read-only",
-  "st.lola.spent": "You've used today's messages. Lola starts again at midnight UTC."
+  "st.lola.spent": "You've used today's messages. Lola starts again at midnight UTC.",
+  "st.rates.assignNow": "Also move this organisation onto the plan now",
+  "st.plans.assignments": "Plans assigned by staff",
+  "st.plans.assignments.IMMEDIATE_UPGRADE": "Upgraded now",
+  "st.plans.assignments.AT_RENEWAL": "Applies at renewal",
+  "st.plans.assignments.NO_CHANGE": "No change"
 }

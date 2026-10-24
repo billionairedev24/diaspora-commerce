@@ -803,5 +803,10 @@
   "st.lola.thinking": "Lola ń wò…",
   "st.lola.remaining": "{n} nínú {total} ìfiránṣẹ́ ló kù lónìí",
   "st.lola.readOnly": "Kíkà nìkan",
-  "st.lola.spent": "O ti lo àwọn ìfiránṣẹ́ òní. Lola yóò padà ní ọ̀gànjọ́ UTC."
+  "st.lola.spent": "O ti lo àwọn ìfiránṣẹ́ òní. Lola yóò padà ní ọ̀gànjọ́ UTC.",
+  "st.rates.assignNow": "Gbé ẹgbẹ́ yìí lọ sórí ètò náà nísinsin yìí pẹ̀lú",
+  "st.plans.assignments": "Àwọn ètò tí òṣìṣẹ́ yàn",
+  "st.plans.assignments.IMMEDIATE_UPGRADE": "Ìgbéga lẹsẹkẹsẹ",
+  "st.plans.assignments.AT_RENEWAL": "Yóò wáyé nígbà àtúnṣe",
+  "st.plans.assignments.NO_CHANGE": "Kò sí àyípadà"
 }

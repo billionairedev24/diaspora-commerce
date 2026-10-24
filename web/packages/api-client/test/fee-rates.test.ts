@@ -86,6 +86,15 @@ describe('staff mocks: plan rates, connection fees, negotiated rates and the cal
       reason: 'Two-year agreement', reference: 'SF-77' });
     expect(plan).toMatchObject({ planCode: 'seller_growth_org_kente', visibility: 'INVITE_ONLY', annualCents: 29000, quarterlyCents: 8265 });
   });
+
+  it('can also move the organisation onto the negotiated plan, which the billing panel then lists (S306)', async () => {
+    const api = staff('platform.finance');
+    const plan = await api.feeRates.negotiatePlan('org-lagos-textile', { basePlanCode: 'seller_growth', monthlyCents: 2900, quarterlyCents: null, annualCents: null,
+      reason: 'Two-year agreement', reference: null, assign: true });
+    expect(plan).toMatchObject({ assigned: true, assignedAs: 'AT_RENEWAL' });
+    const panel = await api.plans.panel('org-lagos-textile');
+    expect(panel.planAssignments).toMatchObject([{ toPlan: plan.planCode, fromPlan: 'seller_pro', applied: 'AT_RENEWAL', reason: 'Two-year agreement' }]);
+  });
 });
 
 describe('seller mocks: plan, negotiated rates and connection fees', () => {

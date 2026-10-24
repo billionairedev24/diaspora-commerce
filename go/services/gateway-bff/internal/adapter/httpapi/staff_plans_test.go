@@ -195,6 +195,12 @@ func (f *fakeSellerBilling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"id": "org_2", "displayName": "Ade's Kitchen", "kind": "seller", "status": "approved"}}, "total": 2})
 	case p == "/v1/orgs/org_1/billing/panel":
 		writeJ(w, 200, samplePanel())
+	case key == "POST /v1/orgs/org_1/billing/staff-plan":
+		if s, _ := body["reason"].(string); len(s) < 5 {
+			writeJ(w, 422, map[string]any{"status": 422, "code": "seller.invalid-plan-assignment", "detail": "Give a reason"})
+			return
+		}
+		writeJ(w, 200, map[string]any{"applied": "IMMEDIATE_UPGRADE", "billing": samplePanel()["billing"]})
 	case key == "PUT /v1/orgs/org_1/billing/plan-fee-collection/override":
 		switch {
 		case body["reasonCode"] == nil:
@@ -424,6 +430,9 @@ func TestStaffPlansAndBilling(t *testing.T) {
 	if pfc := panel["planFeeCollection"].(map[string]any); pfc["mode"] != "EARNINGS_FIRST" {
 		t.Errorf("panel plan fee collection = %v", pfc)
 	}
+	do("auditor", "POST", "/v1/staff/billing/orgs/org_1/plan", map[string]any{"planCode": "seller_growth_org_1", "reason": "Negotiated with the owner"}, 403)
+	do("finance", "POST", "/v1/staff/billing/orgs/org_1/plan", map[string]any{"planCode": "seller_growth_org_1", "reason": "no"}, 422)
+	do("finance", "POST", "/v1/staff/billing/orgs/org_1/plan", map[string]any{"planCode": "seller_growth_org_1", "reason": "Negotiated with the owner"}, 200)
 	do("auditor", "PUT", "/v1/staff/billing/orgs/org_1/plan-fee-collection", map[string]any{"mode": "CARD", "reasonCode": "SELLER_REQUEST"}, 403)
 	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/plan-fee-collection", map[string]any{"mode": "CARD"}, 422)
 	do("finance", "PUT", "/v1/staff/billing/orgs/org_1/plan-fee-collection", map[string]any{"mode": "EARNINGS_FIRST", "reasonCode": "OTHER",

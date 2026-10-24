@@ -94,6 +94,9 @@ var StaffPlanOps = []StaffPlanOp{
 	{Name: "waiveInvoice", Route: "POST /v1/staff/billing/orgs/{orgId}/invoices/{invoiceId}/waive", Method: http.MethodPost,
 		Path: "/v1/orgs/{orgId}/billing/invoices/{invoiceId}/waive", Permission: domain.PermBillingAdjust,
 		Status: http.StatusCreated, Body: true},
+	// S306: staff move an organisation to a plan (including an invite-only one) with a reason.
+	{Name: "assignStaffPlan", Route: "POST /v1/staff/billing/orgs/{orgId}/plan", Method: http.MethodPost,
+		Path: "/v1/orgs/{orgId}/billing/staff-plan", Permission: domain.PermBillingAdjust, Body: true},
 	// S298: how each seller pays its plan (staff override with a reason) and the default for new sellers.
 	{Name: "overridePlanFeeCollection", Route: "PUT /v1/staff/billing/orgs/{orgId}/plan-fee-collection", Method: http.MethodPut,
 		Path: "/v1/orgs/{orgId}/billing/plan-fee-collection/override", Permission: domain.PermBillingAdjust, Body: true},

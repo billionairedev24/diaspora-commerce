@@ -33,7 +33,12 @@ func feeRatesPlatform(f *fakePlatform) {
 		switch {
 		case p == "/v1/me" && token == "plans-finance":
 			writeJ(w, 200, map[string]any{"id": "stf-3", "firstName": "Bola", "lastName": "Ade", "email": "bola@afrotransact.com", "principalType": "STAFF",
+				"roles": []string{"platform.super_admin"}, "permissions": append(append([]string{}, adminPerms...), "plans:manage", "billing:adjust")})
+		case p == "/v1/me" && token == "plans-only":
+			writeJ(w, 200, map[string]any{"id": "stf-4", "firstName": "Chi", "lastName": "Eze", "email": "chi@afrotransact.com", "principalType": "STAFF",
 				"roles": []string{"platform.super_admin"}, "permissions": append(append([]string{}, adminPerms...), "plans:manage")})
+		case p == "/v1/orgs/org-1/billing/staff-plan" && r.Method == http.MethodPost:
+			writeJ(w, 200, map[string]any{"applied": "AT_RENEWAL", "billing": map[string]any{"orgId": "org-1"}})
 		case p == "/v1/negotiated-rates" && r.Method == http.MethodGet:
 			writeJ(w, 200, []any{rate("nr-1", "ACTIVE"), rate("nr-0", "EXPIRED")})
 		case p == "/v1/negotiated-rates" && r.Method == http.MethodPost:
@@ -203,6 +208,16 @@ func TestStaffFeeRatesConformance(t *testing.T) {
 	}
 	if b := f.bodies["PUT /v1/billing/plans/seller_growth_org_1/invites"]; b["orgIds"].([]any)[0] != "org-1" {
 		t.Fatalf("invites = %v", b)
+	}
+	// S306: the same step can also move the organisation onto the plan (billing:adjust).
+	np["assign"] = true
+	do("plans-only", "POST", "/v1/staff/fees/orgs/org-1/negotiated-plan", np, 403)
+	assigned := do("plans-finance", "POST", "/v1/staff/fees/orgs/org-1/negotiated-plan", np, 201)
+	if assigned["assigned"] != true || assigned["assignedAs"] != "AT_RENEWAL" {
+		t.Fatalf("assigned plan = %v", assigned)
+	}
+	if b := f.bodies["POST /v1/orgs/org-1/billing/staff-plan"]; b["planCode"] != "seller_growth_org_1" || b["reason"] != "Annual contract with Kente" {
+		t.Fatalf("staff-plan = %v", b)
 	}
 	if e := do("plans-finance", "POST", "/v1/staff/fees/orgs/org-retail/negotiated-plan", map[string]any{"basePlanCode": "seller_growth"}, 422)["errors"].(map[string]any); e["orgId"] == nil || e["monthlyCents"] == nil || e["reason"] == nil {
 		t.Fatalf("errors = %v", e)

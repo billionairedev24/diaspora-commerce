@@ -5,6 +5,7 @@ import java.util.Map;
 
 import com.afrotransact.seller.adapter.in.web.BillingDtos.BillingResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.InvoiceResponse;
+import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanAssignmentResponse;
 import com.afrotransact.seller.adapter.in.web.PlanFeeDtos.CollectionResponse;
 import com.afrotransact.seller.adapter.in.web.PlanFeeDtos.CollectionView;
 import com.afrotransact.seller.adapter.in.web.RewardDtos.ChargeGateBody;
@@ -50,7 +51,9 @@ class BillingAdminController {
                          List<InvoiceResponse> invoices, List<GrantView> grants, List<CollectionView> collections,
                          boolean earningsCollectionEnabled,
                          @Schema(description = "How the plan is paid (S298); null before the subscription exists")
-                         CollectionResponse planFeeCollection) {
+                         CollectionResponse planFeeCollection,
+                         @Schema(description = "Plans staff assigned to the organisation, newest first (S306)")
+                         List<PlanAssignmentResponse> planAssignments) {
 
         static PanelResponse of(BillingPanel p) {
             return new PanelResponse(p.orgId(), p.orgName(), p.kind().name(), p.orgStatus(),
@@ -58,7 +61,8 @@ class BillingAdminController {
                     p.invoices().stream().map(InvoiceResponse::of).toList(),
                     p.grants().stream().map(GrantView::of).toList(),
                     p.collections().stream().map(CollectionView::of).toList(), p.earningsCollectionEnabled(),
-                    p.planFeeCollection() == null ? null : CollectionResponse.of(p.planFeeCollection()));
+                    p.planFeeCollection() == null ? null : CollectionResponse.of(p.planFeeCollection()),
+                    p.planAssignments().stream().map(PlanAssignmentResponse::of).toList());
         }
     }
 

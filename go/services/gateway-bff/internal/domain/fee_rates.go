@@ -537,6 +537,8 @@ type NegotiatedPlanDraft struct {
 	AnnualCents    *int64  `json:"annualCents"`
 	Reason         string  `json:"reason"`
 	Reference      *string `json:"reference"`
+	// Assign also moves the organisation onto the plan now (S306); needs billing:adjust.
+	Assign bool `json:"assign"`
 }
 
 // TaxRatesImportResult is the outcome of a CSV import into tax-returns' rate table.
@@ -557,6 +559,9 @@ type NegotiatedPlan struct {
 	MonthlyCents   int64  `json:"monthlyCents"`
 	QuarterlyCents int64  `json:"quarterlyCents"`
 	AnnualCents    int64  `json:"annualCents"`
+	// Assigned says the organisation was moved onto the plan in the same step; AssignedAs is what that did.
+	Assigned   bool   `json:"assigned,omitempty"`
+	AssignedAs string `json:"assignedAs,omitempty"`
 	// Note says what happens next: the seller chooses the plan in Plan & billing (staff cannot switch it for them).
 	Note string `json:"note"`
 }

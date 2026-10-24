@@ -10,6 +10,7 @@ import com.afrotransact.seller.application.BillingOverview;
 import com.afrotransact.seller.application.EntitlementsService;
 import com.afrotransact.seller.application.PlanChangePreview;
 import com.afrotransact.seller.application.PlanOffer;
+import com.afrotransact.seller.domain.PlanAssignment;
 import com.afrotransact.seller.domain.ChargeGate;
 import com.afrotransact.seller.domain.FirstCharge;
 import com.afrotransact.seller.domain.Invoice;
@@ -168,6 +169,23 @@ final class BillingDtos {
     @Schema(name = "ChangePlanRequest")
     record ChangePlanRequest(@NotBlank String planCode,
                              @Schema(allowableValues = {"MONTHLY", "QUARTERLY", "ANNUAL"}) String cadence) {
+    }
+
+    @Schema(name = "AssignPlanRequest")
+    record AssignPlanRequest(@NotBlank String planCode,
+                             @Schema(allowableValues = {"MONTHLY", "QUARTERLY", "ANNUAL"}) String cadence,
+                             @NotBlank @Schema(description = "Why, at least 10 characters; recorded with the assignment")
+                             String reason) {
+    }
+
+    @Schema(name = "PlanAssignment")
+    record PlanAssignmentResponse(UUID id, String fromPlan, String toPlan, String cadence, String applied,
+                                  String reason, String assignedBy, Instant assignedAt) {
+
+        static PlanAssignmentResponse of(PlanAssignment a) {
+            return new PlanAssignmentResponse(a.id(), a.fromPlan(), a.toPlan(), a.cadence().name(), a.applied(),
+                    a.reason(), a.assignedBy(), a.assignedAt());
+        }
     }
 
     @Schema(name = "ChangePlanResponse", description = "applied: IMMEDIATE_UPGRADE (prorated now), AT_RENEWAL "

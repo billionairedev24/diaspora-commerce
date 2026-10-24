@@ -1,7 +1,7 @@
 'use client';
 
 import { type NegotiatedPlan, staffPlanKeys, staffPlanQueries } from '@afrotransact/api-client';
-import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Checkbox, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 
@@ -39,6 +39,7 @@ export function NegotiatePlanDialog({ orgId, orgName, kind, open, onClose, t }: 
   const [annual, setAnnual] = useState('');
   const [reason, setReason] = useState('');
   const [reference, setReference] = useState('');
+  const [assign, setAssign] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [done, setDone] = useState<NegotiatedPlan | null>(null);
   const save = useMutation({
@@ -55,7 +56,7 @@ export function NegotiatePlanDialog({ orgId, orgName, kind, open, onClose, t }: 
         throw new Error('invalid');
       }
       return feeRatesApi().negotiatePlan(orgId, { basePlanCode: base, monthlyCents: m ?? 0, quarterlyCents: cents(quarterly), annualCents: cents(annual),
-        reason: reason.trim(), reference: reference.trim() || null });
+        reason: reason.trim(), reference: reference.trim() || null, assign });
     },
     onSuccess: (p) => {
       setDone(p);
@@ -91,6 +92,7 @@ export function NegotiatePlanDialog({ orgId, orgName, kind, open, onClose, t }: 
           </div>
           <TextField id="np-reason" label={t('st.rates.reason')} value={reason} error={errors.reason} onChange={(e) => setReason(e.currentTarget.value)} />
           <TextField id="np-ref" label={t('st.rates.reference')} value={reference} error={errors.reference} onChange={(e) => setReference(e.currentTarget.value)} />
+          <Checkbox id="np-assign" label={t('st.rates.assignNow')} checked={assign} onChange={(e) => setAssign(e.currentTarget.checked)} />
           {errors._ || errors.orgId ? <p role="alert" className="m-0 text-sm text-danger">{errors._ ?? errors.orgId}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="neutral" onClick={onClose}>{t('st.rates.cancel')}</Button>

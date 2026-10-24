@@ -151,6 +151,8 @@ export interface NegotiatedPlanDraft {
   annualCents: number | null;
   reason: string;
   reference: string | null;
+  /** Also move the organisation onto the plan now (billing:adjust; S306). */
+  assign?: boolean;
 }
 export const NegotiatedPlanSchema = z.object({
   planCode: z.string(),
@@ -162,6 +164,8 @@ export const NegotiatedPlanSchema = z.object({
   monthlyCents: z.number().int(),
   quarterlyCents: z.number().int(),
   annualCents: z.number().int(),
+  assigned: z.boolean().optional(),
+  assignedAs: z.enum(['IMMEDIATE_UPGRADE', 'AT_RENEWAL', 'NO_CHANGE']).optional(),
   note: z.string()
 });
 export type NegotiatedPlan = z.infer<typeof NegotiatedPlanSchema>;

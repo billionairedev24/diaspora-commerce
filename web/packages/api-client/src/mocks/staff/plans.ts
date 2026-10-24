@@ -19,6 +19,7 @@ import {
   type StaffPlan,
   type StaffPlanEntitlements,
   type StaffPlanFeeCollection,
+  type StaffPlanAssignment,
   type StaffPlanFeeCollectionChange,
   type StaffPlanFeeMode,
   type StaffRewardPreviewRow,
@@ -45,6 +46,8 @@ interface MockBillingOrg {
   planFeeCollection: StaffPlanFeeMode;
   planFeeSource: StaffPlanFeeCollection['source'];
   planFeeHistory: StaffPlanFeeCollectionChange[];
+  /** Plans staff assigned (S306), newest first. */
+  planAssignments?: StaffPlanAssignment[];
   collections: StaffEarningsCollection[];
   /** Reward metrics the preview evaluates. */
   facts: Record<RewardMetric, number>;
@@ -292,7 +295,8 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       grants: st(ctx).grants.filter((g) => g.orgId === o.orgId),
       collections: o.collections,
       earningsCollectionEnabled: st(ctx).settings.earningsCollectionEnabled,
-      planFeeCollection: planFees(ctx, o)
+      planFeeCollection: planFees(ctx, o),
+      planAssignments: o.planAssignments ?? []
     };
   };
 

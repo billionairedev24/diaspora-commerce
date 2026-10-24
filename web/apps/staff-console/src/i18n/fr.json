@@ -803,5 +803,10 @@
   "st.lola.thinking": "Lola cherche…",
   "st.lola.remaining": "{n} messages sur {total} restants aujourd'hui",
   "st.lola.readOnly": "Lecture seule",
-  "st.lola.spent": "Vous avez utilisé les messages du jour. Lola reprend à minuit UTC."
+  "st.lola.spent": "Vous avez utilisé les messages du jour. Lola reprend à minuit UTC.",
+  "st.rates.assignNow": "Placer aussi cette organisation sur ce forfait maintenant",
+  "st.plans.assignments": "Forfaits attribués par le personnel",
+  "st.plans.assignments.IMMEDIATE_UPGRADE": "Mise à niveau immédiate",
+  "st.plans.assignments.AT_RENEWAL": "S'applique au renouvellement",
+  "st.plans.assignments.NO_CHANGE": "Aucun changement"
 }

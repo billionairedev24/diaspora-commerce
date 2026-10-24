@@ -535,6 +535,18 @@ export const StaffBillingSettingsSchema = z.object({
 });
 export type StaffBillingSettings = z.infer<typeof StaffBillingSettingsSchema>;
 
+export const StaffPlanAssignmentSchema = z.object({
+  id: z.string(),
+  fromPlan: nullableString.default(null),
+  toPlan: z.string(),
+  cadence: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']),
+  applied: z.enum(['IMMEDIATE_UPGRADE', 'AT_RENEWAL', 'NO_CHANGE']),
+  reason: z.string(),
+  assignedBy: z.string(),
+  assignedAt: z.string()
+});
+export type StaffPlanAssignment = z.infer<typeof StaffPlanAssignmentSchema>;
+
 export const StaffBillingPanelSchema = z.object({
   orgId: z.string(),
   orgName: nullableString.default(null),
@@ -545,7 +557,9 @@ export const StaffBillingPanelSchema = z.object({
   grants: z.array(StaffBillingGrantSchema),
   collections: z.array(StaffEarningsCollectionSchema),
   earningsCollectionEnabled: z.boolean(),
-  planFeeCollection: StaffPlanFeeCollectionSchema.nullable().default(null)
+  planFeeCollection: StaffPlanFeeCollectionSchema.nullable().default(null),
+  /** Plans staff assigned to the organisation, newest first (S306). */
+  planAssignments: z.array(StaffPlanAssignmentSchema).default([])
 });
 export type StaffBillingPanel = z.infer<typeof StaffBillingPanelSchema>;
 

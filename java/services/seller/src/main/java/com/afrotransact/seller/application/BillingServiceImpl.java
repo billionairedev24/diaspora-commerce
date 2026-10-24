@@ -14,6 +14,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.platform.security.Actor;
 import com.afrotransact.seller.domain.Application;
 import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.ChargeGate;
@@ -45,6 +46,8 @@ import com.afrotransact.seller.port.InvoiceRepository;
 import com.afrotransact.seller.port.OrganisationRepository;
 import com.afrotransact.seller.port.PaymentMethodRepository;
 import com.afrotransact.seller.port.PlanPaymentsGateway;
+import com.afrotransact.seller.domain.PlanAssignment;
+import com.afrotransact.seller.port.PlanAssignmentRepository;
 import com.afrotransact.seller.port.PlanRepository;
 import com.afrotransact.seller.port.SubscriptionRepository;
 import com.afrotransact.seller.port.SubscriptionTerms;
@@ -60,6 +63,8 @@ import org.springframework.transaction.support.TransactionOperations;
 class BillingServiceImpl implements BillingService {
 
     private static final Logger LOG = LoggerFactory.getLogger(BillingServiceImpl.class);
+    private static final int MIN_ASSIGN_REASON = 10;
+    private static final int ASSIGNMENT_HISTORY = 20;
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US);
 
     private final SubscriptionRepository subs;
@@ -83,6 +88,7 @@ class BillingServiceImpl implements BillingService {
     private final ChargeGateEvaluator gates;
     private final PlanPaymentsGateway payments;
     private final BillingCustomerRepository customers;
+    private final PlanAssignmentRepository assignments;
     private final Clock clock;
 
     BillingServiceImpl(SubscriptionRepository subs, PaymentMethodRepository methods, InvoiceRepository invoices,
@@ -93,7 +99,7 @@ class BillingServiceImpl implements BillingService {
                        BillingGrantRepository grants, EarningsCollectionRepository collections,
                        PlanFeeCollectionService planFees, InvoiceIssuingService invoicing,
                        InvoiceCollectionService collection, ChargeGateEvaluator gates, PlanPaymentsGateway payments,
-                       BillingCustomerRepository customers, Clock clock) {
+                       BillingCustomerRepository customers, PlanAssignmentRepository assignments, Clock clock) {
         this.subs = subs;
         this.methods = methods;
         this.invoices = invoices;
@@ -115,6 +121,7 @@ class BillingServiceImpl implements BillingService {
         this.gates = gates;
         this.payments = payments;
         this.customers = customers;
+        this.assignments = assignments;
         this.clock = clock;
     }
 
@@ -134,24 +141,56 @@ class BillingServiceImpl implements BillingService {
         BillingOverview overview = subs.find(orgId).map(this::build).orElse(null);
         return new BillingPanel(orgId, org.displayName() == null ? org.legalName() : org.displayName(), org.kind(),
                 org.status().name(), overview, invoices.list(orgId, 100), grants.forOrg(orgId, 100),
-                collections.forOrg(orgId, 50), earnings.enabled(), overview == null ? null : planFees.view(orgId));
+                collections.forOrg(orgId, 50), earnings.enabled(), overview == null ? null : planFees.view(orgId),
+                assignments.ofOrg(orgId, ASSIGNMENT_HISTORY));
     }
 
     @Override
     public PlanChangeResult changePlan(String orgId, String planCode, Cadence cadence) {
         List<String> toCollect = new ArrayList<>();
-        PlanChangeResult result = tx.execute(t -> changePlanLocked(orgId, planCode, cadence, toCollect));
+        PlanChangeResult result = tx.execute(t -> changePlanLocked(orgId, planCode, cadence, toCollect, null));
         collectAll(toCollect);
         return result;
     }
 
-    private PlanChangeResult changePlanLocked(String orgId, String planCode, Cadence cadence, List<String> toCollect) {
-        access.orgRole(orgId, AccessGuard.OWNER, null);
+    @Override
+    public PlanChangeResult assignPlan(String orgId, String planCode, Cadence cadence, String reason) {
+        Actor staff = access.staff(SellerPermissions.BILLING_ADJUST);
+        if (reason == null || reason.trim().length() < MIN_ASSIGN_REASON) {
+            throw new SellerRuleViolation("seller.reason-required", "Say why the plan is changed (at least "
+                    + MIN_ASSIGN_REASON + " characters)", Map.of("reason", "Required"));
+        }
+        List<String> toCollect = new ArrayList<>();
+        PlanChangeResult result = tx.execute(t -> {
+            Subscription before = subs.find(orgId).orElse(null);
+            PlanChangeResult r = changePlanLocked(orgId, planCode, cadence, toCollect, staff);
+            assignments.insert(new PlanAssignment(UUID.randomUUID(), orgId, before == null ? null : before.planCode(),
+                    planCode, cadence == null && before != null ? before.cadence() : cadence, r.applied().name(),
+                    reason.trim(), staff.subject(), Instant.now(clock)));
+            return r;
+        });
+        collectAll(toCollect);
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PlanAssignment> assignments(String orgId) {
+        access.staffAny(SellerPermissions.BILLING, SellerPermissions.BILLING_ADJUST, SellerPermissions.PLANS_MANAGE);
+        return assignments.ofOrg(orgId, ASSIGNMENT_HISTORY);
+    }
+
+    /** {@code byStaff} null: the owner's own change; otherwise staff assigning (may pick an invite-only plan). */
+    private PlanChangeResult changePlanLocked(String orgId, String planCode, Cadence cadence, List<String> toCollect,
+                                              Actor byStaff) {
+        if (byStaff == null) {
+            access.orgRole(orgId, AccessGuard.OWNER, null);
+        }
         requireNotRetail(orgId);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         requireActive(sub);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
-        Plan target = selectable(org, sub, planCode);
+        Plan target = byStaff == null ? selectable(org, sub, planCode) : assignable(org, planCode);
         Cadence targetCadence = cadence == null ? sub.cadence() : cadence;
         Plan current = plan(sub);
         PlanChange decision = current.isFree() && !target.isFree() ? PlanChange.IMMEDIATE_UPGRADE
@@ -693,6 +732,13 @@ class BillingServiceImpl implements BillingService {
      * A plan the organisation may move to: published, of its kind, and public, invite-only with an invitation, or its
      * current plan.
      */
+    /** Staff may assign any open plan of the organisation's kind: public, invite-only or hidden. */
+    private Plan assignable(Organisation org, String planCode) {
+        return plans.find(planCode).filter(p -> p.kind() == org.kind() && p.isOpen())
+                .orElseThrow(() -> new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode
+                        + " isn't available for this organisation", Map.of("planCode", "Unknown")));
+    }
+
     private Plan selectable(Organisation org, Subscription sub, String planCode) {
         return plans.find(planCode).filter(p -> p.kind() == org.kind() && p.isOpen())
                 .filter(p -> p.visibility() == PlanVisibility.PUBLIC || p.code().equals(sub.planCode())

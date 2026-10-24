@@ -1129,6 +1129,28 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/billing/orgs/{orgId}/plan:
+    post:
+      tags: [Plans & billing]
+      operationId: assignStaffPlan
+      security: [{sessionCookie: []}]
+      summary: "Move the organisation to a plan, including an invite-only (negotiated) one, with a reason (billing:adjust; S306)"
+      description: |
+        Needs EDIT on Plans & billing and `billing:adjust`. seller `POST /v1/orgs/{orgId}/billing/staff-plan`: upgrades prorate
+        now; downgrades and cadence changes apply at renewal. Recorded with the reason and shown in the seller billing panel.
+      parameters:
+        - {$ref: '#/components/parameters/BillingOrgId'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffAssignPlanRequest'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPlanChange'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/billing/orgs/{orgId}/plan-fee-collection:
     put:
       tags: [Plans & billing]
@@ -4908,6 +4930,35 @@ components:
           oneOf:
             - {$ref: '#/components/schemas/StaffPlanFeeCollection'}
             - {type: 'null'}
+        planAssignments:
+          description: Plans staff assigned to the organisation, newest first (S306)
+          type: array
+          items: {$ref: '#/components/schemas/StaffPlanAssignment'}
+    StaffPlanAssignment:
+      type: object
+      required: [id, toPlan, cadence, applied, reason, assignedBy, assignedAt]
+      properties:
+        id: {type: string, format: uuid}
+        fromPlan: {type: [string, 'null']}
+        toPlan: {type: string}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        applied: {type: string, enum: [IMMEDIATE_UPGRADE, AT_RENEWAL, NO_CHANGE]}
+        reason: {type: string}
+        assignedBy: {type: string}
+        assignedAt: {type: string, format: date-time}
+    StaffAssignPlanRequest:
+      type: object
+      required: [planCode, reason]
+      properties:
+        planCode: {type: string}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        reason: {type: string, minLength: 10, maxLength: 500}
+    StaffPlanChange:
+      type: object
+      required: [applied]
+      properties:
+        applied: {type: string, enum: [IMMEDIATE_UPGRADE, AT_RENEWAL, NO_CHANGE]}
+        billing: {description: "The organisation billing overview after the change", type: object, additionalProperties: true}
     StaffCreditRequest:
       type: object
       required: [amountCents, reasonCode]
@@ -5870,6 +5921,7 @@ components:
         annualCents: {type: [integer, 'null'], format: int64, minimum: 0, description: Default 10 months}
         reason: {type: string, minLength: 3, maxLength: 500}
         reference: {type: [string, 'null'], maxLength: 120}
+        assign: {type: boolean, description: "Also move the organisation to the plan now (billing:adjust; S306). Default: it chooses the plan itself."}
     NegotiatedPlan:
       type: object
       required: [planCode, planName, basePlanCode, orgId, visibility, published, monthlyCents, quarterlyCents, annualCents, note]
@@ -5883,6 +5935,8 @@ components:
         monthlyCents: {type: integer, format: int64}
         quarterlyCents: {type: integer, format: int64}
         annualCents: {type: integer, format: int64}
+        assigned: {type: boolean, description: "The organisation was moved to the plan in the same step (S306)"}
+        assignedAs: {type: string, enum: [IMMEDIATE_UPGRADE, AT_RENEWAL, NO_CHANGE], description: "What the assignment did, when assigned"}
         note: {type: string}
     FeeDraftRate:
       type: object

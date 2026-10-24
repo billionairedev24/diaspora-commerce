@@ -6,6 +6,7 @@ import {
   type StaffChargeGate,
   type StaffChargeGateInput,
   type StaffEarningsCollection,
+  type StaffPlanAssignment,
   type StaffPlanFeeCollection,
   type StaffPlanFeeMode,
   staffPlanKeys,
@@ -189,6 +190,20 @@ function PlanFeeSummary({ v, adjust, onChange, t }: { v: StaffPlanFeeCollection;
   );
 }
 
+/** Plans staff moved this organisation onto (S306): what, when it applies, who and why. */
+function PlanAssignments({ items, t }: { items: StaffPlanAssignment[]; t: T }) {
+  return (
+    <ul aria-label={t('st.plans.assignments')} className="m-0 flex list-none flex-col gap-1 p-0 text-sm" data-testid="panel-plan-assignments">
+      {items.map((a) => (
+        <li key={a.id}>
+          <strong>{a.toPlan}</strong> · {t(`st.plans.assignments.${a.applied}`)}
+          <span className="text-xs text-muted"> — {dateTime(a.assignedAt)} · {a.assignedBy} · {a.reason}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** The condition on this seller's plan charges, why it was set, and how far they are. */
 function GateSummary({ g, adjust, onClear, t }: { g: StaffChargeGate; adjust: boolean; onClear: () => void; t: T }) {
   return (
@@ -321,6 +336,11 @@ export function SellerBillingPanel() {
           {p.planFeeCollection ? (
             <Card title={t('st.plans.planFee')}>
               <PlanFeeSummary v={p.planFeeCollection} adjust={adjust} onChange={() => setPlanFeeOpen(true)} t={t} />
+            </Card>
+          ) : null}
+          {p.planAssignments.length ? (
+            <Card title={t('st.plans.assignments')}>
+              <PlanAssignments items={p.planAssignments} t={t} />
             </Card>
           ) : null}
           <h3 className="m-0 text-md font-semibold">{t('st.rates.negotiatedForOrg')}</h3>

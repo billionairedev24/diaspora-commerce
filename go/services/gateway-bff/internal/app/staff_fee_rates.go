@@ -333,6 +333,9 @@ func (s *staffFeesImpl) NegotiatePlan(ctx context.Context, c *domain.Caller, org
 	if !sc.access.Can(domain.PermPlansManage) {
 		return domain.NegotiatedPlan{}, needsPermission(domain.PermPlansManage)
 	}
+	if d.Assign && !sc.access.Can(domain.PermBillingAdjust) {
+		return domain.NegotiatedPlan{}, needsPermission(domain.PermBillingAdjust)
+	}
 	base := strings.ToLower(strings.TrimSpace(d.BasePlanCode))
 	var plan jobj
 	if err := sc.get(ctx, sc.up.Seller, "/v1/billing/plans/"+url.PathEscape(base), nil, &plan); err != nil {
@@ -389,6 +392,22 @@ func (s *staffFeesImpl) NegotiatePlan(ctx context.Context, c *domain.Caller, org
 		Note: fmt.Sprintf("%s can now choose %s in Plan & billing; it stays on its current plan until it does.", orgName, name)}
 	if !published {
 		out.Note = fmt.Sprintf("%s was saved as a draft and %s is invited; publish it in Plans & billing › Catalogue.", name, orgName)
+		return out, nil
+	}
+	if d.Assign {
+		var changed jobj
+		sc.idem = "negotiated-plan-assign-" + code + "-" + strconv.FormatInt(monthly, 10)
+		err := sc.post(ctx, sc.up.Seller, "/v1/orgs/"+url.PathEscape(orgID)+"/billing/staff-plan",
+			jobj{"planCode": code, "reason": strings.TrimSpace(d.Reason)}, &changed)
+		if err != nil {
+			out.Note = fmt.Sprintf("%s was created and %s is invited, but moving them onto it failed; assign it from their billing panel.", name, orgName)
+			return out, nil
+		}
+		out.Assigned, out.AssignedAs = true, jstr(changed, "applied")
+		out.Note = fmt.Sprintf("%s is on %s.", orgName, name)
+		if out.AssignedAs == "AT_RENEWAL" {
+			out.Note = fmt.Sprintf("%s moves to %s at their next renewal.", orgName, name)
+		}
 	}
 	return out, nil
 }

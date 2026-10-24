@@ -1559,6 +1559,53 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PaymentMethod'
+  /v1/orgs/{orgId}/billing/staff-plan:
+    post:
+      tags:
+      - Plans & billing
+      summary: Staff assign a plan, including an invite-only (negotiated) one, with the reason (billing:adjust)
+      description: Upgrades prorate now; downgrades and cadence changes apply at renewal, as for the owner. 422 seller.reason-required without a reason of 10+ characters. Recorded in the plan assignments.
+      operationId: assignPlan
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignPlanRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+  /v1/orgs/{orgId}/billing/plan-assignments:
+    get:
+      tags:
+      - Plans & billing
+      summary: Plans staff assigned to the organisation, newest first (staff)
+      operationId: planAssignments
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PlanAssignment'
   /v1/orgs/{orgId}/billing/plan:
     post:
       tags:
@@ -4862,6 +4909,29 @@ components:
         planFeeCollection:
           $ref: '#/components/schemas/PlanFeeCollection'
           description: How the plan is paid (S298); null before the subscription exists
+        planAssignments:
+          type: array
+          description: Plans staff assigned to the organisation, newest first (S306)
+          items:
+            $ref: '#/components/schemas/PlanAssignment'
+    PlanAssignment:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        fromPlan: {type: string}
+        toPlan: {type: string}
+        cadence: {type: string}
+        applied: {type: string, description: 'IMMEDIATE_UPGRADE, AT_RENEWAL or NO_CHANGE'}
+        reason: {type: string}
+        assignedBy: {type: string}
+        assignedAt: {type: string, format: date-time}
+    AssignPlanRequest:
+      type: object
+      required: [planCode, reason]
+      properties:
+        planCode: {type: string}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        reason: {type: string, description: 'Why, at least 10 characters; recorded with the assignment'}
     EarningsCollection:
       type: object
       description: One plan invoice paid (or asked to be paid) from earnings
