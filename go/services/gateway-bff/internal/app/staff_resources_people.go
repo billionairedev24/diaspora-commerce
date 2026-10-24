@@ -255,10 +255,10 @@ func applicationsResource() *staffResource {
 	approveForm, approveRun := decision("/review", "APPROVE", "Approve for final review (step 1)", "Approve",
 		"The documents and details check out. The application goes to a different approver for the final decision; the applicant is not told yet.", false)
 	flagForm, flagRun := decision("/review", "FLAG", "Flag for senior review", "Flag",
-		"Something does not check out and needs a senior decision. The application moves to the final approver with the failed checks and your note. The applicant is not told, and cannot change anything. To ask the applicant to fix or add something, use Return to applicant instead.", false,
+		"Something does not check out and needs a senior decision. The application moves to the final approver with the failed checks and your note. The applicant is not told, and cannot change anything until someone uses Return to applicant (you can, even though you flagged it).", false,
 		withOptions(ff("failedChecks", "Failed checks", "multiselect", true), domain.StaffOptions("TIN_MISMATCH", "IDENTITY_UNVERIFIED", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "ADDRESS_UNVERIFIED")))
 	infoForm, infoRun := decision("/review", "REQUEST_INFO", "Return to the applicant", "Return to applicant",
-		"The applicant is emailed what is missing, with your message, and can edit and resubmit. The review pauses until they do; then it starts again at step 1.", true,
+		"The applicant is emailed what is missing, with your message, and can edit and resubmit. The review pauses until they do; then it starts again at step 1. You can use this on a flagged application too, including one you flagged: a failed check the applicant can fix (a tax ID that does not match, an unreadable document) is best sent back to them.", true,
 		domain.FormField{Key: "requestedItems", Label: "What is missing (one per line)", Type: "textarea", Required: true})
 	finalForm, finalRun := decision("/decision", "FINAL_APPROVE", "Give final approval (step 2)", "Approve",
 		"Approves the seller or provider: their account opens and their plan starts. This cannot be undone here.", false)
@@ -330,9 +330,9 @@ func applicationsResource() *staffResource {
 		actions: []staffAction{
 			{key: "review-approve", label: "Approve (step 1)", tone: "primary", permission: "applications:review", level: domain.LevelApprove, form: approveForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: approveRun},
 			{key: "review-flag", label: "Flag for senior review", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: flagForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: flagRun},
-			{key: "review-request-info", label: "Return to applicant", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW"), settled: stepOneDone, run: infoRun},
+			{key: "review-request-info", label: "Return to applicant", tone: "neutral", permission: "applications:review", level: domain.LevelApprove, form: infoForm, when: inState("PENDING_REVIEW", "FLAGGED"), settled: past("INFO_REQUESTED", "AWAITING_FINAL_APPROVAL", "APPROVED", "REJECTED"), run: infoRun},
 			{key: "final-approve", label: "Final approval", tone: "primary", permission: "applications:approve", level: domain.LevelApprove, form: finalForm, when: finalStep, settled: decided, run: finalRun},
-			{key: "final-request-info", label: "Return to applicant", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: finalInfoForm, when: finalStep, settled: past("INFO_REQUESTED", "APPROVED", "REJECTED"), run: finalInfoRun},
+			{key: "final-request-info", label: "Return to applicant (step 2)", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: finalInfoForm, when: finalStep, settled: past("INFO_REQUESTED", "APPROVED", "REJECTED"), run: finalInfoRun},
 			{key: "send-back", label: "Send back", tone: "neutral", permission: "applications:approve", level: domain.LevelApprove, form: backForm, when: finalStep, settled: decided, run: backRun},
 			{key: "reject", label: "Reject", tone: "danger", permission: "applications:approve", level: domain.LevelApprove, form: rejectForm, when: finalStep, settled: decided, run: rejectRun},
 		},

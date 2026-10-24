@@ -86,7 +86,10 @@ public record Application(String id, String reference, String orgId, String appl
         if (!action.isReviewerAction()) {
             throw new SellerRuleViolation("seller.invalid-action", action + " is not a reviewer action");
         }
-        if (status != ApplicationStatus.PENDING_REVIEW) {
+        // A flagged application can still be returned to the applicant by any reviewer (including whoever flagged it):
+        // asking for a fix is not an approval, so the two-person rule does not apply to it.
+        boolean returnFlagged = status == ApplicationStatus.FLAGGED && action == ReviewAction.REQUEST_INFO;
+        if (status != ApplicationStatus.PENDING_REVIEW && !returnFlagged) {
             throw notReviewable(reviewer);
         }
         notApplicant(reviewer);

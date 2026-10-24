@@ -40,6 +40,18 @@ class ApplicationTest {
     }
 
     @Test
+    void aFlaggedApplicationCanBeReturnedToTheApplicantEvenByWhoeverFlaggedIt() {
+        Application flagged = draft().submit(NOW).review(ReviewAction.FLAG, "reviewer", "OTHER", List.of("TIN_MISMATCH"),
+                null, NOW);
+        Application returned = flagged.review(ReviewAction.REQUEST_INFO, "reviewer", "OTHER", null,
+                List.of("Correct the tax ID or legal name"), NOW);
+        assertThat(returned.status()).isEqualTo(ApplicationStatus.INFO_REQUESTED);
+        assertThat(returned.requestedItems()).containsExactly("Correct the tax ID or legal name");
+        assertThatThrownBy(() -> flagged.review(ReviewAction.REQUEST_INFO, "reviewer", "OTHER", null, List.of(), NOW))
+                .isInstanceOf(SellerRuleViolation.class);
+    }
+
+    @Test
     void flaggedApplicationsListFailedChecksAndGoToTheFinalApprover() {
         Application submitted = draft().submit(NOW);
         assertThatThrownBy(() -> submitted.review(ReviewAction.FLAG, "reviewer", "PERMIT_MISSING", List.of(), null,
@@ -159,8 +171,8 @@ class ApplicationTest {
                 });
         Application flagged = draft().submit(NOW).review(ReviewAction.FLAG, "reviewer", "OTHER", List.of("X"), null,
                 LATER);
-        assertThatThrownBy(() -> flagged.review(ReviewAction.REQUEST_INFO, "reviewer", "OTHER", null,
-                List.of("Y"), LATER)).hasMessageStartingWith("This application is already flagged (by you");
+        assertThatThrownBy(() -> flagged.review(ReviewAction.APPROVE, "reviewer", "OTHER", null,
+                null, LATER)).hasMessageStartingWith("This application is already flagged (by you");
         Application submitted = draft().submit(NOW);
         assertThatThrownBy(() -> submitted.decide(ReviewAction.FINAL_APPROVE, "a", "OTHER", NOW))
                 .hasMessage("Application APP-30200 needs a reviewer decision (step 1) first");

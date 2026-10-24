@@ -138,8 +138,8 @@ func TestApplicationDecisionsAreIdempotentAndAlreadyDoneIsInformation(t *testing
 	// Seller's state machine: step 1 only while pending review; step 2 while awaiting final approval or flagged.
 	rev.set("FLAGGED", nil)
 	flagged := jsonOf(t, do("admin", "GET", path, nil))
-	if actionOf(t, flagged, "review-approve")["allowed"] != false || actionOf(t, flagged, "review-request-info")["allowed"] != false {
-		t.Fatalf("step 1 on a flagged application: %v", flagged["actions"])
+	if actionOf(t, flagged, "review-approve")["allowed"] != false || actionOf(t, flagged, "review-request-info")["allowed"] != true {
+		t.Fatalf("step 1 on a flagged application: approve is closed but Return to applicant is open: %v", flagged["actions"])
 	}
 	for _, key := range []string{"final-approve", "send-back", "reject"} {
 		if actionOf(t, flagged, key)["allowed"] != true {
