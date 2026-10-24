@@ -422,6 +422,8 @@ type ProductImageInput struct {
 	Height      int    `json:"height,omitempty"`
 	Bytes       int64  `json:"bytes,omitempty"`
 	ContentType string `json:"contentType"`
+	// Alt is the optional alternative text stored with the image.
+	Alt string `json:"alt,omitempty"`
 }
 
 // VariantInput is one variant row (the variant matrix, or the single row of a product without variations).

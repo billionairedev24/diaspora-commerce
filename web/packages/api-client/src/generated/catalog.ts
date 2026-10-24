@@ -762,6 +762,8 @@ export interface components {
             /** Format: int64 */
             bytes?: number;
             contentType: string;
+            /** @description Optional alternative text (what the picture shows), stored with the image */
+            alt?: string;
         };
         /** @description The seller's ship-from location (snapshot) */
         ShipFrom: {

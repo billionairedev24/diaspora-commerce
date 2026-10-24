@@ -1329,6 +1329,10 @@ components:
         contentType:
           type: string
           minLength: 1
+        alt:
+          type: string
+          maxLength: 200
+          description: Optional alternative text (what the picture shows), stored with the image
       required:
       - contentType
       - url

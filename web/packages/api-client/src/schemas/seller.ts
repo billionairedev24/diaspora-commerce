@@ -872,7 +872,9 @@ export const ProductImageInputSchema = z.object({
   width: z.number().int().min(0).optional(),
   height: z.number().int().min(0).optional(),
   bytes: z.number().int().min(0).optional(),
-  contentType: z.string()
+  contentType: z.string(),
+  /** Optional alternative text, stored with the image. */
+  alt: z.string().max(200).nullable().optional()
 });
 export type ProductImageInput = z.infer<typeof ProductImageInputSchema>;
 export const VariantInputSchema = z.object({

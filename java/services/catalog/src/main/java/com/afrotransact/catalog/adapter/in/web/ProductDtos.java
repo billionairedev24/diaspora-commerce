@@ -140,14 +140,16 @@ final class ProductDtos {
 
     @Schema(name = "ProductImage")
     record ImageDto(@NotBlank String url, @PositiveOrZero int width, @PositiveOrZero int height,
-                    @PositiveOrZero long bytes, @NotBlank String contentType) {
+                    @PositiveOrZero long bytes, @NotBlank String contentType,
+                    @Schema(description = "Optional alternative text (what the picture shows), stored with the image")
+                    @Size(max = 200) String alt) {
 
         ProductImage toDomain() {
-            return new ProductImage(url, width, height, bytes, contentType);
+            return new ProductImage(url, width, height, bytes, contentType, alt == null || alt.isBlank() ? null : alt.trim());
         }
 
         static ImageDto of(ProductImage i) {
-            return new ImageDto(i.url(), i.width(), i.height(), i.bytes(), i.contentType());
+            return new ImageDto(i.url(), i.width(), i.height(), i.bytes(), i.contentType(), i.alt());
         }
     }
 

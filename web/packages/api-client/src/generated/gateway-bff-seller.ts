@@ -3511,6 +3511,8 @@ export interface components {
             height?: number;
             bytes?: number;
             contentType: string;
+            /** @description Optional alternative text (what the picture shows), stored with the image */
+            alt?: string | null;
         };
         VariantInput: {
             /** @description Empty for a product without variations */
