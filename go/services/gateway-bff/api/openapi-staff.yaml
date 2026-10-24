@@ -2114,6 +2114,116 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/{preorderId}/decision:
+    post:
+      tags: [Pre-orders]
+      operationId: decideStaffPreorder
+      security: [{sessionCookie: []}]
+      summary: Decide a window that closed below its minimum (cancel and refund everyone, or proceed)
+      description: |
+        delivery-runs `POST /v1/preorders/{id}/decision` (preorders:manage, EDIT; If-Match relayed). Only a window in
+        `AWAITING_DECISION` (closed with fewer orders than its `minOrders`; 409 otherwise). `CANCEL` cancels the window:
+        every order is refunded in full, delivery fee included, and its stock released (orders-service); the window
+        becomes `CANCELLED` and each order shows its `refundStatus`. `PROCEED` goes ahead below the minimum: the window
+        closes and hands its paid orders to a run on the scheduler's next tick. The `reason` is required (422) and is
+        logged with who and when (`GET .../decisions`).
+      parameters:
+        - {$ref: '#/components/parameters/PreorderId'}
+        - {name: If-Match, in: header, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderDecisionRequest'}}}
+      responses:
+        '200': {description: Decided, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderWindow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/{preorderId}/cancel:
+    post:
+      tags: [Pre-orders]
+      operationId: cancelStaffPreorder
+      security: [{sessionCookie: []}]
+      summary: Cancel a window and refund every order in full
+      description: |
+        delivery-runs `POST /v1/preorders/{id}/cancel` (preorders:manage, EDIT; If-Match relayed). Any published window
+        that is not delivered or cancelled: it becomes `CANCELLED`, a run it was handed to is cancelled too (409 once
+        that run is out for delivery) and every order is refunded in full, delivery fee included, with its stock
+        released. The reason is required and logged with who and when.
+      parameters:
+        - {$ref: '#/components/parameters/PreorderId'}
+        - {name: If-Match, in: header, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderReason'}}}
+      responses:
+        '200': {description: Cancelled, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderWindow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/{preorderId}/close-early:
+    post:
+      tags: [Pre-orders]
+      operationId: closeEarlyStaffPreorder
+      security: [{sessionCookie: []}]
+      summary: Close an open window early once its minimum is met
+      description: |
+        delivery-runs `POST /v1/preorders/{id}/close-early` (preorders:manage, EDIT; If-Match relayed). Only an `OPEN`
+        window whose `orderCount` has reached its `minOrders` (`canCloseEarly`; 422 `delivery-runs.preorder-minimum-not-met`
+        otherwise, 409 when not open). The close date moves to now and the scheduler closes the window on its next tick.
+        The reason is required and logged.
+      parameters:
+        - {$ref: '#/components/parameters/PreorderId'}
+        - {name: If-Match, in: header, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderReason'}}}
+      responses:
+        '200': {description: Closing, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderWindow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/{preorderId}/decisions:
+    get:
+      tags: [Pre-orders]
+      operationId: listStaffPreorderDecisions
+      security: [{sessionCookie: []}]
+      summary: The window's decision log (who, when, why)
+      description: delivery-runs `GET /v1/preorders/{id}/decisions`, oldest first.
+      parameters: [{$ref: '#/components/parameters/PreorderId'}]
+      responses:
+        '200': {description: Decisions, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderDecisions'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/{preorderId}/refunds:
+    get:
+      tags: [Pre-orders]
+      operationId: getStaffPreorderRefunds
+      security: [{sessionCookie: []}]
+      summary: Refund progress of a cancelled window
+      description: |
+        delivery-runs `GET /v1/preorders/{id}/refunds`: orders per refund status, `done` once none is pending or failed.
+        Each order's own `refundStatus` (PENDING, REFUNDED, VOIDED, FAILED), amount and error are on the orders list.
+      parameters: [{$ref: '#/components/parameters/PreorderId'}]
+      responses:
+        '200': {description: Refund progress, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderRefunds'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/preorders/{preorderId}/creatives/{slot}:
     put:
       tags: [Pre-orders]
@@ -6373,8 +6483,49 @@ components:
             additionalProperties: true
             description: 'Row: id, code, name, where, opensAt, closesAt, deliversOn, status, count, revenueMinor, areaOff'
         total: {type: [integer, 'null']}
-        counts: {type: object, additionalProperties: {type: integer}, description: Tab counts}
+        counts: {type: object, additionalProperties: {type: integer}, description: 'Tab counts: all, open, upcoming, decision (needs a staff decision), closed, draft'}
+        defaultMinOrders: {type: [integer, 'null'], description: 'Minimum order count a new window starts with'}
         can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffPreorderReason:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 500, description: 'Why; logged with who and when'}
+    StaffPreorderDecisionRequest:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: {type: string, enum: [CANCEL, PROCEED], description: 'CANCEL refunds every order in full; PROCEED goes ahead below the minimum'}
+        reason: {type: string, minLength: 1, maxLength: 500, description: 'Why; logged with who and when'}
+    StaffPreorderDecisions:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            required: [kind, reason, actor, at]
+            properties:
+              id: {type: string}
+              kind: {type: string, enum: [AWAITING, PROCEED, CANCEL, EARLY_CLOSE], description: 'AWAITING is the system noting the window closed below its minimum'}
+              reason: {type: string}
+              actor: {type: string, description: 'Staff subject, or system'}
+              orders: {type: integer, description: Orders that counted}
+              minimum: {type: integer}
+              at: {type: string, format: date-time}
+    StaffPreorderRefunds:
+      type: object
+      required: [total, pending, refunded, voided, failed, done]
+      additionalProperties: true
+      properties:
+        total: {type: integer}
+        pending: {type: integer, description: Cancelled; orders-service is refunding}
+        refunded: {type: integer, description: Captured payment refunded in full}
+        voided: {type: integer, description: Nothing had been captured; the authorisation was released}
+        failed: {type: integer, description: Could not be refunded automatically; staff must act}
+        done: {type: boolean, description: None pending or failed}
     StaffPreorderDraft:
       type: object
       additionalProperties: true
@@ -6399,6 +6550,7 @@ components:
         doorFeeOverride: {type: [integer, 'null']}
         pickupFeeOverride: {type: [integer, 'null']}
         showCount: {type: boolean}
+        minOrders: {type: [integer, 'null'], minimum: 0, maximum: 100000, description: 'Fewest orders the window needs (0 = none). Null: the default on create (`defaultMinOrders` of the list), unchanged on edit. Below it at the close date the window waits for a staff decision'}
         comms: {type: array, items: {type: string}}
         version: {type: integer}
     StaffPreorderWindow:
@@ -6409,7 +6561,13 @@ components:
         id: {type: string}
         code: {type: string, examples: [LBK-7]}
         name: {type: string}
-        status: {type: string, description: 'DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED (derived)'}
+        status: {type: string, description: 'DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED, AWAITING_DECISION (closed below its minimum), CANCELLED'}
+        minOrders: {type: integer, description: 'Fewest orders the window needs (0 = none)'}
+        orderCount: {type: integer, description: 'Orders that count (paid and late adds)'}
+        minimumMet: {type: boolean, description: 'A minimum is set and orderCount has reached it'}
+        canCloseEarly: {type: boolean, description: 'OPEN with the minimum met: staff may close it early'}
+        decisionNeeded: {type: boolean, description: 'AWAITING_DECISION: staff must cancel or proceed'}
+        outcome: {type: [string, 'null'], enum: [AWAITING_DECISION, PROCEEDED, CANCELLED, null], description: 'What became of the window beyond its dates'}
         doorFeeOverride: {type: [integer, 'null'], description: Window override in minor units (null = the settings' fee for its currency)}
         pickupFeeOverride: {type: [integer, 'null']}
         effectiveDoorFee: {type: integer, description: 'Door fee shoppers pay (override, else settings), minor units'}

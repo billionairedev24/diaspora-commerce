@@ -28,6 +28,17 @@ type StaffPreordersService interface {
 	Update(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
 	// Act runs publish, pause or resume.
 	Act(ctx context.Context, c *domain.Caller, id, action string) (any, error)
+	// Decide records the staff decision for a window that closed below its minimum order count ({decision: CANCEL |
+	// PROCEED, reason}); the reason is required and logged with who and when. CANCEL refunds every order in full.
+	Decide(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// Cancel cancels a published window that is not delivered and refunds every order in full ({reason}, required).
+	Cancel(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// CloseEarly closes an open window before its close date once its minimum is met ({reason}, required).
+	CloseEarly(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// Decisions is the window's decision log: who decided what, when and why.
+	Decisions(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// Refunds is the refund progress of a cancelled window (orders per status; each order's status is on Orders).
+	Refunds(ctx context.Context, c *domain.Caller, id string) (any, error)
 	// SetActive sets one window's own on/off switch ({active}); the master switch is never touched.
 	SetActive(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
 	// SetActiveMany switches several windows ({ids, active}), each on its own.
@@ -257,6 +268,97 @@ func (s *staffPreordersImpl) Act(ctx context.Context, c *domain.Caller, id, acti
 	return withCan(out, can), nil
 }
 
+// maxReason is delivery-runs' limit on the reason of a decision.
+const maxReason = 500
+
+// preorderChoices are the decisions for a window that closed below its minimum.
+var preorderChoices = []string{"CANCEL", "PROCEED"}
+
+// reasonOf reads the required reason of a decision.
+func reasonOf(body map[string]any) (string, error) {
+	reason, _ := body["reason"].(string)
+	reason = strings.TrimSpace(reason)
+	switch {
+	case reason == "":
+		return "", domain.ValidationProblem(map[string]string{"reason": "Say why: the reason is logged with your name"})
+	case len([]rune(reason)) > maxReason:
+		return "", domain.ValidationProblem(map[string]string{"reason": "At most 500 characters"})
+	}
+	return reason, nil
+}
+
+// decide sends one reasoned decision ({reason} plus extra) to delivery-runs as a manager.
+func (s *staffPreordersImpl) decide(ctx context.Context, c *domain.Caller, id, ifMatch, action string, body map[string]any, extra map[string]any) (any, error) {
+	if p := domain.ValidPreorderID(id); p != nil {
+		return nil, p
+	}
+	reason, err := reasonOf(body)
+	if err != nil {
+		return nil, err
+	}
+	sent := map[string]any{"reason": reason}
+	for k, v := range extra {
+		sent[k] = v
+	}
+	sc, can, err := s.need(ctx, c, poManage)
+	if err != nil {
+		return nil, err
+	}
+	out, err := sc.send(ctx, http.MethodPost, windowPath(id, "/", action), ifMatch, sent)
+	if err != nil {
+		return nil, err
+	}
+	return withCan(out, can), nil
+}
+
+func (s *staffPreordersImpl) Decide(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error) {
+	choice, _ := body["decision"].(string)
+	choice = strings.ToUpper(strings.TrimSpace(choice))
+	if !slices.Contains(preorderChoices, choice) {
+		return nil, domain.ValidationProblem(map[string]string{"decision": "Choose CANCEL or PROCEED"})
+	}
+	return s.decide(ctx, c, id, ifMatch, "decision", body, map[string]any{"decision": choice})
+}
+
+func (s *staffPreordersImpl) Cancel(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error) {
+	return s.decide(ctx, c, id, ifMatch, "cancel", body, nil)
+}
+
+func (s *staffPreordersImpl) CloseEarly(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error) {
+	return s.decide(ctx, c, id, ifMatch, "close-early", body, nil)
+}
+
+// read relays a view-level read of one window sub-resource.
+func (s *staffPreordersImpl) read(ctx context.Context, c *domain.Caller, id, rest string) (any, error) {
+	if p := domain.ValidPreorderID(id); p != nil {
+		return nil, p
+	}
+	sc, _, err := s.need(ctx, c, poView)
+	if err != nil {
+		return nil, err
+	}
+	var out any
+	if err := sc.get(ctx, sc.up.DeliveryRuns, windowPath(id, rest), nil, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		out = map[string]any{}
+	}
+	return out, nil
+}
+
+func (s *staffPreordersImpl) Decisions(ctx context.Context, c *domain.Caller, id string) (any, error) {
+	out, err := s.read(ctx, c, id, "/decisions")
+	if err != nil {
+		return nil, err
+	}
+	return items(out), nil
+}
+
+func (s *staffPreordersImpl) Refunds(ctx context.Context, c *domain.Caller, id string) (any, error) {
+	return s.read(ctx, c, id, "/refunds")
+}
+
 // maxBulkSwitch is how many windows one bulk switch may name (delivery-runs' limit).
 const maxBulkSwitch = 100
 
@@ -422,6 +524,7 @@ var PreorderOrderColumns = []domain.Column{
 	{Key: "zip", Label: "ZIP", Kind: "mono"}, {Key: "deliveryNote", Label: "Delivery note", Kind: "text"}, {Key: "placedAt", Label: "Placed", Kind: "datetime"},
 	{Key: "channel", Label: "Channel", Kind: "status"}, {Key: "trackingTag", Label: "Tracking tag", Kind: "mono"}, {Key: "units", Label: "Units", Kind: "number"},
 	{Key: "fulfilment", Label: "Fulfil", Kind: "status"}, {Key: "total", Label: "Total", Kind: "money"}, {Key: "status", Label: "Status", Kind: "status"},
+	{Key: "refundStatus", Label: "Refund", Kind: "status"},
 }
 
 func preorderOrderColumn(k string) bool {

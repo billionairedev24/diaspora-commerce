@@ -1,11 +1,13 @@
 package httpapi
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strconv"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 )
 
 // Pre-orders (S270–S275): storefront routes (contracts/openapi/gateway-bff.yaml, tag Pre-orders) and the staff
@@ -95,6 +97,11 @@ func (h *handlersImpl) registerStaffPreorders(route func(pattern string, fn http
 	route("PUT /v1/staff/preorders/{id}", h.staffUpdatePreorder)
 	route("PATCH /v1/staff/preorders/{id}", h.staffSwitchPreorder)
 	route("POST /v1/staff/preorders/{id}/{action}", h.staffPreorderAction)
+	route("POST /v1/staff/preorders/{id}/decision", h.staffPreorderDecision)
+	route("POST /v1/staff/preorders/{id}/cancel", h.staffPreorderCancel)
+	route("POST /v1/staff/preorders/{id}/close-early", h.staffPreorderCloseEarly)
+	route("GET /v1/staff/preorders/{id}/decisions", h.staffPreorderDecisions)
+	route("GET /v1/staff/preorders/{id}/refunds", h.staffPreorderRefunds)
 	route("PUT /v1/staff/preorders/{id}/creatives/{slot}", h.staffPutPreorderCreative)
 	route("DELETE /v1/staff/preorders/{id}/creatives/{slot}", h.staffDeletePreorderCreative)
 	route("GET /v1/staff/preorders/{id}/orders", h.staffPreorderOrders)
@@ -185,6 +192,41 @@ func (h *handlersImpl) staffUpdatePreorderRegion(w http.ResponseWriter, r *http.
 
 func (h *handlersImpl) staffPreorderAction(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Preorders.Act(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.PathValue("action"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// staffPreorderReasoned decodes {reason, …} and runs one reasoned decision, relaying If-Match and the new ETag.
+func (h *handlersImpl) staffPreorderReasoned(w http.ResponseWriter, r *http.Request,
+	run func(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := run(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.Header.Get("If-Match"), b)
+	setVersionETag(w, v)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPreorderDecision(w http.ResponseWriter, r *http.Request) {
+	h.staffPreorderReasoned(w, r, h.s.Staff.Preorders.Decide)
+}
+
+func (h *handlersImpl) staffPreorderCancel(w http.ResponseWriter, r *http.Request) {
+	h.staffPreorderReasoned(w, r, h.s.Staff.Preorders.Cancel)
+}
+
+func (h *handlersImpl) staffPreorderCloseEarly(w http.ResponseWriter, r *http.Request) {
+	h.staffPreorderReasoned(w, r, h.s.Staff.Preorders.CloseEarly)
+}
+
+func (h *handlersImpl) staffPreorderDecisions(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.Decisions(r.Context(), callerFrom(r.Context()), r.PathValue("id"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPreorderRefunds(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.Refunds(r.Context(), callerFrom(r.Context()), r.PathValue("id"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
