@@ -17,6 +17,7 @@ import com.afrotransact.catalog.domain.Gtin;
 import com.afrotransact.catalog.domain.ListingOwner;
 import com.afrotransact.catalog.domain.ProductType;
 import com.afrotransact.catalog.domain.imports.ExistingListing;
+import com.afrotransact.catalog.domain.imports.ImageColumns;
 import com.afrotransact.catalog.domain.imports.ImageLibrary;
 import com.afrotransact.catalog.domain.imports.ImportCategory;
 import com.afrotransact.catalog.domain.imports.ImportColumns;
@@ -122,7 +123,7 @@ class ProductImportServiceImpl implements ProductImportService {
             throw new SpreadsheetRejected("Upload an Excel (.xlsx) or CSV (.csv) file");
         }
         ProductType fixed = productType == null || productType.isBlank() ? null : typeOf(productType, null);
-        ParsedSheet sheet = reader.read(content, format);
+        ParsedSheet sheet = ImageColumns.fold(reader.read(content, format));
         ImportContext ctx = context(sheet, mode == null ? ImportMode.CREATE : mode, fixed, owner.orgId());
         ValidationResult result = ImportValidator.validate(sheet, ctx);
         Instant now = Instant.now(clock);

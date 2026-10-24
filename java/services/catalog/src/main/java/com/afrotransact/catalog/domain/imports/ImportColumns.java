@@ -164,6 +164,13 @@ public final class ImportColumns {
     }
 
     private static List<ImportColumn> listingColumns() {
+        List<ImportColumn> out = new ArrayList<>(baseListingColumns());
+        out.addAll(out.indexOf(out.stream().filter(c -> IMAGES.equals(c.key())).findFirst().orElseThrow()) + 1,
+                ImageColumns.template());
+        return out;
+    }
+
+    private static List<ImportColumn> baseListingColumns() {
         return List.of(
                 new ImportColumn(DESCRIPTION, "Description", "What shoppers should know: fit, feel, use, care. "
                         + "Up to 5,000 characters.", false, ColumnKind.LONG_TEXT, List.of(),

@@ -19,10 +19,14 @@ public final class ImportTemplates {
             "Columns marked * are required when creating products. A product's title, description, images and "
                     + "details are read from its first row; variant rows only need SKU, options, price, quantity "
                     + "and barcode.",
-            "Images: public https links to JPG, PNG or WebP files, the first being the main image (at least "
-                    + "1000 × 1000 px). We copy each image into AfroTransact and check it like an upload. Or upload "
-                    + "your photos to Products → Images first, named after the SKU (SKU.MAIN.jpg for the main image, "
-                    + "SKU.PT01.jpg to SKU.PT08.jpg for more) and leave the cell empty, or type their file names.",
+            "Images, method 1 (links): put a public https link to a JPG, PNG or WebP file in Main image URL and up to "
+                    + "eight more in Other image URL 1 to 8 (at least 1000 × 1000 px for the main image); Swatch image "
+                    + "URL is a small picture of the colour or pattern. We copy each image into AfroTransact and check "
+                    + "it like an upload. Example: https://example.com/ankara-front.jpg.",
+            "Images, method 2 (image library): upload your photos to Listings → Images first, named after the SKU "
+                    + "(SKU123.MAIN.jpg for the main image, SKU123.PT01.jpg to SKU123.PT08.jpg for more, "
+                    + "SKU123.SWCH.jpg for the swatch) and leave the image columns empty, or type a library file name "
+                    + "such as SKU123.PT01.jpg in any image column. You can mix both methods.",
             "Upload as .xlsx or .csv: at most 10 MB and 5,000 rows per file. Create mode adds new products; Update "
                     + "mode changes listings by SKU and leaves blank cells unchanged.",
             "Keep the header row: columns are matched by their names, so you can hide or reorder them. Rows whose "
@@ -35,7 +39,7 @@ public final class ImportTemplates {
     public static TemplateSpec forType(ProductType type, List<ImportCategory> categories) {
         List<String> paths = categories.stream().map(ImportCategory::path).toList();
         List<ImportColumn> columns = ImportColumns.forType(type, paths);
-        return new TemplateSpec(type.label(), "afrotransact-products-" + type.code(), columns, INSTRUCTIONS,
+        return new TemplateSpec(type.label(), "afrotransact-products-" + type.code(), shown(columns), INSTRUCTIONS,
                 examples(columns, type));
     }
 
@@ -43,8 +47,13 @@ public final class ImportTemplates {
     public static TemplateSpec generic(List<ImportCategory> categories) {
         List<String> paths = categories.stream().map(ImportCategory::path).toList();
         List<ImportColumn> columns = ImportColumns.generic(paths);
-        return new TemplateSpec("All categories", "afrotransact-products", columns, INSTRUCTIONS,
+        return new TemplateSpec("All categories", "afrotransact-products", shown(columns), INSTRUCTIONS,
                 examples(columns, null));
+    }
+
+    /** The template shows the dedicated image columns; the combined image_urls column is still read when present. */
+    private static List<ImportColumn> shown(List<ImportColumn> columns) {
+        return columns.stream().filter(c -> !ImportColumns.IMAGES.equals(c.key())).toList();
     }
 
     private static List<List<String>> examples(List<ImportColumn> columns, ProductType type) {
