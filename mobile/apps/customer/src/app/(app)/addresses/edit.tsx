@@ -11,6 +11,7 @@ import { useApi } from '@/api/ApiProvider';
 import { accountKeys, checkoutKeys } from '@/api/keys';
 import { useAddresses } from '@/api/queries';
 import { c, sp, t } from '@/theme';
+import { AddressSuggest } from '@/ui/AddressSuggest';
 import { PickerSheet } from '@/ui/PickerSheet';
 import { AppText, Banner, Button, Field } from '@/ui/primitives';
 import { Screen, SubHeader } from '@/ui/Screen';
@@ -102,7 +103,13 @@ export default function EditAddress() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ gap: sp['3'] }}>
         <Field label="Full name" value={d.name} onChangeText={(v) => set('name', v)} error={errors.name} autoComplete="name" textContentType="name" autoCapitalize="words" returnKeyType="next" />
         <Field label="Phone" value={d.phone} onChangeText={(v) => set('phone', v)} error={errors.phone} keyboardType="phone-pad" autoComplete="tel" textContentType="telephoneNumber" hint="For the driver, if they need to reach you." />
-        <Field label="Street address" value={d.line1} onChangeText={(v) => set('line1', v)} error={errors.line1} autoComplete="street-address" textContentType="streetAddressLine1" autoCapitalize="words" />
+        <AddressSuggest
+          label="Street address"
+          value={d.line1}
+          onChangeText={(v) => set('line1', v)}
+          error={errors.line1}
+          onPick={(a) => { setDraft({ ...d, line1: a.line1, city: a.city, state: a.state, zip: a.zip }); setUnverified(null); }}
+        />
         <Field label="Apt, suite, unit (optional)" value={d.line2} onChangeText={(v) => set('line2', v)} error={errors.line2} textContentType="streetAddressLine2" autoCapitalize="words" />
         <Field label="City" value={d.city} onChangeText={(v) => set('city', v)} error={errors.city} textContentType="addressCity" autoCapitalize="words" />
         <View style={styles.pair}>

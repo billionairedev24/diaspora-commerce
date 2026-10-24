@@ -370,7 +370,7 @@
 "S115","Story","Refund orchestration","Inspection outcome triggers refund and inventory restock or damaged.","- Refund reverses the seller transfer portion and commission
 - Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","Done"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
-- Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","In Progress"
+- Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","Done"
 "E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","Done"
 "S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
 - Decisions are audited","E18","","High","5","trust java","trust","Done"
@@ -434,7 +434,7 @@
 - Missing unit on multi-unit address produces a warning","E22","","High","5","geo go","geo","Done"
 "S139","Story","Address autocomplete everywhere","Checkout, account addresses, onboarding, warehouses, pickup points, deliver-to ZIP and category forms.","- Street suggestions from the first character
 - Picking a suggestion fills street, city, state, ZIP and coordinates
-- No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","In Progress"
+- No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","Done"
 "S140","Story","Service areas and delivery zones (PostGIS)","Zones for AfroTransact Delivery, FC catchments and provider service areas.","- Point-in-zone checks for delivery eligibility
 - Provider distance search ('within 15 miles')","E22","","Medium","5","geo go","geo","Done"
 "E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","Done"
@@ -569,9 +569,9 @@
 - Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","Done"
 "E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","To Do"
 "S195","Story","Dashboard data feeds per portal","One dashboard endpoint per portal returning chart series.","- Feeds are cached for 60 seconds
-- Respect the caller's org and permissions","E32","","Medium","5","exports","exports","To Do"
+- Respect the caller's org and permissions","E32","","Medium","5","exports","exports","Done"
 "S196","Story","Export service (PDF, CSV, XLSX with native charts)","Server-side generation for tables and dashboards.","- XLSX includes native Excel charts linked to data
-- PDF includes chart image, legend and data table","E32","","Medium","8","exports","exports","To Do"
+- PDF includes chart image, legend and data table","E32","","Medium","8","exports","exports","Done"
 "E33","Epic","Testing & quality","Test pyramid, E2E on web and mobile, Storybook, load and security testing as merge gates.","","","Testing & quality","High","","quality","quality","In Progress"
 "S197","Story","Unit, contract and integration test standards","JUnit/Go test/Vitest, Pact, Testcontainers; 80% coverage gate on domain modules.","- Every service has unit, ArchUnit/lint and Testcontainers integration tests
 - Coverage reported in CI","E33","","High","3","quality","quality","Done"

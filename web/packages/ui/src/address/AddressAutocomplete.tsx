@@ -52,7 +52,7 @@ export function AddressAutocomplete({
   error,
   help,
   attribution,
-  minChars = 2,
+  minChars = 1,
   debounceMs = 200,
   emptyLabel = 'No matching addresses',
   errorLabel = 'Address suggestions are unavailable — keep typing your full address.',

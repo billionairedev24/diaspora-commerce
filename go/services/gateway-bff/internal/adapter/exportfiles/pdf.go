@@ -184,10 +184,14 @@ func drawChart(d *pdfDoc, c domain.ExportChart, x, y, w, h float64, index int) {
 	d.SetDrawColor(pdfBorder.r, pdfBorder.g, pdfBorder.b)
 	d.SetLineWidth(0.2)
 	d.RoundedRect(x, y, w, h, 2, "1234", "D")
+	keyW := 0.0
+	if c.Type != domain.ChartPie && c.ValueLabel != "" {
+		keyW = drawKey(d, c, x+w-4, y+3, w*0.4, index)
+	}
 	d.SetXY(x+4, y+3)
 	d.font("B", 10)
 	d.color(pdfText, false)
-	d.CellFormat(w-8, 5, d.fit(c.Title, w-8), "", 0, "L", false, 0, "")
+	d.CellFormat(w-8-keyW, 5, d.fit(c.Title, w-8-keyW), "", 0, "L", false, 0, "")
 	area := struct{ x, y, w, h float64 }{x + 4, y + 11, w - 8, h - 15}
 	switch c.Type {
 	case domain.ChartPie:
@@ -197,6 +201,21 @@ func drawChart(d *pdfDoc, c domain.ExportChart, x, y, w, h float64, index int) {
 	default:
 		drawBars(d, c, area.x, area.y, area.w, area.h, index)
 	}
+}
+
+// drawKey is the legend of a bar or line chart: a swatch in the series colour and its name, right-aligned at (right, y).
+// It returns the width it took so the title can leave room (S196).
+func drawKey(d *pdfDoc, c domain.ExportChart, right, y, maxW float64, index int) float64 {
+	d.font("", 7.5)
+	label := d.fit(c.ValueLabel, maxW-6)
+	w := d.GetStringWidth(d.tr(label)) + 6
+	x := right - w
+	d.color(hexRGB(domain.ExportPalette[index%len(domain.ExportPalette)]), true)
+	d.Rect(x, y+1.2, 3.2, 3.2, "F")
+	d.color(pdfMuted, false)
+	d.SetXY(x+4.4, y)
+	d.CellFormat(w-4.4, 5, d.tr(label), "", 0, "L", false, 0, "")
+	return w + 2
 }
 
 func valueText(kind string, v float64) string {

@@ -128,6 +128,12 @@ describe('AddressAutocomplete', () => {
     expect(input).toHaveValue('9800 Westheimer Rd');
   });
 
+  it('suggests from the first character typed', async () => {
+    render(<Demo onSelect={vi.fn()} />);
+    await userEvent.type(screen.getByRole('combobox', { name: 'Street address' }), '9');
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBeGreaterThan(0));
+  });
+
   it('maps Nominatim results', () => {
     const s = fromNominatim({ place_id: 1, lat: '29.7', lon: '-95.5', display_name: '9800, Westheimer Road, Houston', address: { house_number: '9800', road: 'Westheimer Road', city: 'Houston', state: 'Texas', postcode: '77042', country_code: 'us' } });
     expect(s).toMatchObject({ label: '9800 Westheimer Road', secondary: 'Houston, TX 77042', source: 'osm', address: { state: 'TX', zip: '77042', country: 'US' } });
