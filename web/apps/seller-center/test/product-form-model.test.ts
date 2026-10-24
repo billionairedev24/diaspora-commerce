@@ -15,6 +15,7 @@ import {
   fromDraftPayload,
   gtinOk,
   leavesOf,
+  packagingOf,
   priceMinor,
   searchLeaves,
   sectionsFor,
@@ -30,7 +31,7 @@ const dress = PRODUCT_TYPES.dress as ProductTypeSchema;
 const book = PRODUCT_TYPES.book as ProductTypeSchema;
 const perishable = PRODUCT_TYPES.perishable as ProductTypeSchema;
 
-const image = { id: 'i1', previewUrl: 'https://img/a.webp', url: 'https://img/a.webp', width: 1600, height: 1600, bytes: 1000, contentType: 'image/webp', status: 'ready' as const };
+const image = { id: 'i1', previewUrl: 'https://img/a.webp', url: 'https://img/a.webp', width: 1600, height: 1600, bytes: 1000, contentType: 'image/webp', status: 'ready' as const, alt: '' };
 
 /** A complete simple grocery product. */
 function suya(): FormState {
@@ -47,15 +48,12 @@ function suya(): FormState {
 
 describe('one-step product form: sections follow the product type', () => {
   it('shows food details for food, permits for regulated items, shipping only when the seller ships, pre-order when eligible', () => {
-    expect(sectionsFor(undefined, emptyForm())).toEqual(['category', 'basics', 'images']);
-    expect(sectionsFor(grocery, suya())).toEqual(['category', 'basics', 'images', 'details', 'food', 'offer', 'fulfilment', 'shipping', 'preorder']);
-    expect(sectionsFor(perishable, suya())).toContain('regulated');
-    const fba = sectionsFor(dress, { ...suya(), fulfilment: 'AFROTRANSACT', hasVariants: true });
-    expect(fba).toContain('variants');
-    expect(fba).not.toContain('offer');
-    expect(fba).not.toContain('shipping');
-    expect(fba).not.toContain('food');
-    expect(fba).not.toContain('preorder');
+    expect(sectionsFor(undefined)).toEqual(['basics', 'images']);
+    // Page order: Basics, Photos, Price & stock, Details, Variants, Shipping & fulfilment, Compliance.
+    expect(sectionsFor(grocery)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'fulfilment', 'compliance']);
+    expect(sectionsFor(dress)).toEqual(['basics', 'images', 'offer', 'details', 'variants', 'fulfilment']);
+    expect(sectionsFor(perishable)).toContain('compliance');
+    expect(sectionsFor(book)).not.toContain('compliance');
   });
 
   it('searches categories by every word, accent-insensitively', () => {
@@ -71,7 +69,7 @@ describe('one-step product form: validation and readiness', () => {
   it('lists what is missing with field ids the readiness panel links to', () => {
     const p = validateForm(withCategory(emptyForm(), { id: 'pt-spices', path: 'x', productType: 'grocery' }), grocery);
     expect(Object.keys(p)).toEqual(expect.arrayContaining([fieldId.title, fieldId.brand, fieldId.images, fieldId.attr('ingredients'), fieldId.attr('shelf'), fieldId.sku, fieldId.gtin, fieldId.price, fieldId.qty]));
-    expect(p[fieldId.attr('ingredients')]?.section).toBe('food');
+    expect(p[fieldId.attr('ingredients')]?.section).toBe('compliance');
     expect(validateForm(emptyForm(), undefined)[fieldId.category]?.key).toBe('sc.pf.err.category');
   });
 
@@ -82,6 +80,12 @@ describe('one-step product form: validation and readiness', () => {
     expect(validateForm({ ...suya(), noGtin: false, single: { ...suya().single, gtin: '4006381333931' } }, grocery)).toEqual({});
     expect(validateForm({ ...suya(), fulfilment: 'AFROTRANSACT' }, grocery)[fieldId.pkg]?.key).toBe('sc.pf.err.packageFba');
     expect(validateForm({ ...suya(), fulfilment: 'AFROTRANSACT', pkg: { length: '6', width: '4', height: '2', weight: '0.5' } }, grocery)).toEqual({});
+    // The package can be typed in cm and kg: limits and the submission use inches and pounds.
+    const metric = { ...suya(), fulfilment: 'AFROTRANSACT' as const, pkgUnits: { size: 'cm' as const, weight: 'kg' as const }, pkg: { length: '30', width: '20', height: '10', weight: '1' } };
+    expect(packagingOf(metric)).toEqual({ lengthIn: 11.81, widthIn: 7.87, heightIn: 3.94, weightLb: 2.2 });
+    expect(validateForm(metric, grocery)).toEqual({});
+    expect(validateForm({ ...metric, pkg: { ...metric.pkg, length: '300' } }, grocery)[fieldId.pkg]?.key).toBe('sc.pf.err.packageLimits');
+    expect(toProductDraft(metric, grocery).listing?.packaging).toEqual({ lengthIn: 11.81, widthIn: 7.87, heightIn: 3.94, weightLb: 2.2 });
     expect(validateForm({ ...suya(), attrs: { ...suya().attrs, shelf: 'a year' } }, grocery)[fieldId.attr('shelf')]?.key).toBe('sc.pf.err.number');
     expect(validateForm({ ...suya(), images: [{ ...image, status: 'low' }] }, grocery)[fieldId.images]?.key).toBe('sc.pf.err.imagesMainSmall');
     expect(priceMinor('$1,299.50')).toBe(129950);
@@ -120,10 +124,19 @@ describe('one-step product form: submission, edit and drafts', () => {
     expect(toProductDraft(suya(), book).preorderEligible).toBeUndefined();
   });
 
+  it('stores the optional alt text with each image and drops it when empty', () => {
+    const s = { ...suya(), images: [{ ...image, alt: ' Jar of suya spice on a white table ' }, { ...image, id: 'i2', url: 'https://img/b.webp', alt: '' }] };
+    const images = toProductDraft(s, grocery).images;
+    expect(images[0]).toMatchObject({ url: 'https://img/a.webp', alt: 'Jar of suya spice on a white table' });
+    expect(images[1]).not.toHaveProperty('alt');
+    const back = fromDraftPayload(JSON.parse(JSON.stringify(toDraftPayload(s))) as Record<string, unknown>);
+    expect(back.images.map((i) => i.alt)).toEqual([' Jar of suya spice on a white table ', '']);
+  });
+
   it('round-trips an existing listing and a saved draft', () => {
     const detail: SellerProductDetail = {
       productId: 'p1', atin: 'AT1', status: 'LIVE', statusLabel: 'Live', moderationNote: null, categoryId: 'pt-dresses', categoryRequestId: null, categoryPath: 'Fashion › Women › Dresses',
-      productType: 'dress', title: 'Ankara Wrap Dress', attributes: { brand: 'Adire', material: 'Cotton' }, images: [{ url: 'https://img/a.webp', width: 1600, height: 1600, contentType: 'image/webp' }],
+      productType: 'dress', title: 'Ankara Wrap Dress', attributes: { brand: 'Adire', material: 'Cotton' }, images: [{ url: 'https://img/a.webp', width: 1600, height: 1600, contentType: 'image/webp', alt: 'Front of the dress' }],
       variationTheme: 'Size', variants: [
         { atin: 'AT1', sellerSku: 'ANK-M', gtin: null, gtinExempt: true, options: { Size: 'M' }, priceMinor: 4900, compareAtMinor: null, quantity: 3, images: [] },
         { atin: 'AT1-2', sellerSku: 'ANK-L', gtin: null, gtinExempt: true, options: { Size: 'L' }, priceMinor: 5100, compareAtMinor: 6000, quantity: 0, images: [{ url: 'https://img/l.webp', contentType: 'image/webp' }] }
@@ -135,6 +148,7 @@ describe('one-step product form: submission, edit and drafts', () => {
     expect(s).toMatchObject({ hasVariants: true, theme: 'Size', selected: { Size: ['M', 'L'] }, noGtin: true, keywords: 'ankara', handlingDays: '3' });
     expect(s.rows.L).toMatchObject({ sku: 'ANK-L', price: '51.00', compareAt: '60.00', qty: '0' });
     expect(s.images).toHaveLength(2);
+    expect(s.images[0]?.alt).toBe('Front of the dress');
     expect(toProductDraft(s, dress).variants[1]?.images?.[0]?.url).toBe('https://img/l.webp');
 
     const uploading = { ...suya(), images: [image, { ...image, id: 'i2', url: null, status: 'uploading' as const, previewUrl: 'blob:x' }] };

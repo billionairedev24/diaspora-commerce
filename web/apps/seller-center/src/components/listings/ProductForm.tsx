@@ -1,7 +1,7 @@
 'use client';
 
 import { type ApiError, type AttributeDef, isApiError, type ListingRow, type ProductTypeSchema, sellerKeys, type SellerProductDetail, sellerQueries } from '@afrotransact/api-client';
-import { Button, Checkbox, Field, fieldStyles, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Checkbox, ChipGroup, Field, fieldStyles, Select, TextField, useToast } from '@afrotransact/ui';
 import { Sparkle } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -19,6 +19,7 @@ import { useSeller } from '@/lib/session';
 import { AttributeField } from './form/AttributeField';
 import { BrandField } from './form/BrandField';
 import { CategoryPicker } from './form/CategoryPicker';
+import { Disclosure } from './form/Disclosure';
 import { ImagesField } from './form/ImagesField';
 import { goToField, ReadinessPanel } from './form/ReadinessPanel';
 import { VariantsSection } from './form/VariantsSection';
@@ -41,9 +42,11 @@ import {
   type SectionKey,
   sectionsFor,
   serverFieldId,
+  SIZE_UNITS,
   toDraftPayload,
   toProductDraft,
   validateForm,
+  WEIGHT_UNITS,
   withCategory,
   worthSaving
 } from './form-model';
@@ -53,7 +56,7 @@ const HANDLING_DAYS = [1, 2, 3, 4, 5, 7, 10, 14, 21, 30];
 
 function Section({ id, title, hint, children }: { id: SectionKey; title: string; hint?: ReactNode; children: ReactNode }) {
   return (
-    <section id={`pf-s-${id}`} aria-labelledby={`pf-h-${id}`} className="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:p-5" data-section={id}>
+    <section id={`pf-s-${id}`} aria-labelledby={`pf-h-${id}`} className="flex flex-col gap-4" data-section={id}>
       <div className="flex flex-col gap-0.5">
         <h2 id={`pf-h-${id}`} className="m-0 text-lg font-semibold">{title}</h2>
         {hint ? <p className="m-0 text-sm text-muted">{hint}</p> : null}
@@ -132,7 +135,7 @@ export function ProductForm({ productId }: { productId?: string }) {
     return new Set(d.variants.map((v) => comboKey((th?.dimensions ?? []).map((dim) => v.options[dim.name] ?? ''))));
   }, [live, detail.data, type]);
   const lockedSkus = live ? (detail.data?.variants.map((v) => v.sellerSku) ?? []) : [];
-  const sections = sectionsFor(type, s);
+  const sections = sectionsFor(type);
   const problems: Problems = { ...validateForm(s, type, { lockedSkus }), ...serverProblems };
   const ordered = orderedProblems(problems, sections);
   const err = (id: string) => (shown(id) && problems[id] ? t(problems[id].key, problems[id].vars) : undefined);
@@ -257,8 +260,8 @@ export function ProductForm({ productId }: { productId?: string }) {
   const prices = (s.hasVariants ? variantsList.map((c) => priceMinor(s.rows[comboKey(c)]?.price ?? '')) : [priceMinor(s.single.price)]).filter((n): n is number => n !== null);
   const main = s.images[0];
   const preview = (
-    <div className="flex gap-3 border-t border-border pt-3" aria-label={t('sc.pf.preview')}>
-      {main ? <img src={main.previewUrl} alt="" className="size-16 flex-none rounded-sm border border-border object-cover" /> : <div className="grid size-16 flex-none place-items-center rounded-sm bg-surface-muted text-2xs text-subtle">{t('sc.pf.noImage')}</div>}
+    <div className="flex gap-3" aria-label={t('sc.pf.preview')}>
+      {main ? <img src={main.previewUrl} alt="" className="size-12 flex-none rounded-sm object-cover" /> : <div className="grid size-12 flex-none place-items-center rounded-sm bg-surface-muted text-2xs text-subtle">{t('sc.pf.noImage')}</div>}
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="line-clamp-2 text-sm leading-tight font-medium">{s.title || t('sc.pf.previewTitle')}</span>
         <strong className="text-sm">{prices.length ? money(Math.min(...prices)) : '$—'}{prices.length > 1 && Math.max(...prices) !== Math.min(...prices) ? ` – ${money(Math.max(...prices))}` : ''}</strong>
@@ -271,32 +274,26 @@ export function ProductForm({ productId }: { productId?: string }) {
     <AttributeField key={a.key} def={a} value={s.attrs[a.key] ?? ''} unit={s.units[a.key] ?? ''} error={err(fieldId.attr(a.key))}
       onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, [a.key]: v } }))} onUnit={(u) => update((prev) => ({ ...prev, units: { ...prev.units, [a.key]: u } }))} />
   );
-  const attrField = (key: SectionKey, section: 'DETAILS' | 'FOOD' | 'REGULATED') => {
+  /** Required attributes are open; the optional ones fold under "More details" unless one is filled in or has a problem. */
+  const attrGroup = (section: 'DETAILS' | 'FOOD' | 'REGULATED') => {
     const all = attributesIn(type, section);
-    const required = all.filter((a) => a.required);
-    // Optional fields stay folded unless one is filled in or has a problem.
     const optional = all.filter((a) => !a.required);
-    const openByDefault = optional.some((a) => (s.attrs[a.key] ?? '').trim() || err(fieldId.attr(a.key)));
+    const force = optional.some((a) => (s.attrs[a.key] ?? '').trim() || err(fieldId.attr(a.key)));
     return (
-      <div className="flex flex-col gap-2" data-attrs={key}>
-        {required.length ? <div className="grid gap-x-3 sm:grid-cols-2">{required.map(attrInput)}</div> : null}
-        {optional.length ? (
-          required.length ? (
-            <details open={openByDefault} className="rounded-sm border border-border px-3 py-2">
-              <summary className="cursor-pointer text-sm font-semibold">{t('sc.pf.moreDetails', { count: optional.length })}</summary>
-              <div className="mt-2 grid gap-x-3 sm:grid-cols-2">{optional.map(attrInput)}</div>
-            </details>
-          ) : <div className="grid gap-x-3 sm:grid-cols-2">{optional.map(attrInput)}</div>
-        ) : null}
+      <div className="flex flex-col gap-3" data-attrs={section}>
+        {all.filter((a) => a.required).map(attrInput)}
+        {optional.length ? <Disclosure title={t('sc.pf.moreDetails', { count: optional.length })} force={force}>{optional.map(attrInput)}</Disclosure> : null}
       </div>
     );
   };
   const idLabel = type?.identifierRule === 'isbn' ? t('sc.pf.field.isbn') : t('sc.pf.field.gtin');
-  const noGtin = (
-    <Checkbox label={type?.identifierRule === 'isbn' ? t('sc.pf.noIsbn') : t('sc.pf.noGtin')} description={<span className="block text-xs text-muted">{t('sc.pf.noGtinHint')}</span>} checked={s.noGtin}
-      disabled={type?.identifierRule === 'isbn'} onChange={(e) => patch({ noGtin: e.target.checked })} />
-  );
   const defaultShipFrom = shipFrom.data?.find((a) => a.isDefault);
+  const pkgFilled = Object.values(s.pkg).some((v) => v.trim() !== '');
+  const pkgField = (key: keyof FormState['pkg'], label: string) => (
+    <TextField id={`pf-pkg-${key}`} label={label} inputMode="decimal" value={s.pkg[key]} onChange={(e) => patch({ pkg: { ...s.pkg, [key]: e.target.value } })} />
+  );
+  const hasFood = Boolean(type && (type.traits.food || attributesIn(type, 'FOOD').length));
+  const hasRegulated = Boolean(type && (type.traits.regulated || attributesIn(type, 'REGULATED').length));
 
   return (
     <>
@@ -313,22 +310,17 @@ export function ProductForm({ productId }: { productId?: string }) {
           {t('sc.pf.restoreBody')}
         </Notice>
       ) : null}
-      <div className="grid items-start gap-5 pb-28 lg:grid-cols-[minmax(0,1fr)_320px] lg:pb-0">
-        <form className="flex min-w-0 flex-col gap-4" noValidate onBlur={onBlur} onSubmit={(e) => { e.preventDefault(); primary(); }} aria-label={t('sc.pf.formLabel')}>
-          <Section id="category" title={t('sc.pf.s.category')} hint={editing ? undefined : t('sc.pf.s.categoryHint')}>
+      <div className="grid items-start gap-6 pb-28 lg:grid-cols-[minmax(0,40rem)_280px] lg:pb-0">
+        <form className="flex min-w-0 flex-col gap-8" noValidate onBlur={onBlur} onSubmit={(e) => { e.preventDefault(); primary(); }} aria-label={t('sc.pf.formLabel')}>
+          <Section id="basics" title={t('sc.pf.s.basics')} hint={editing ? undefined : t('sc.pf.s.basicsHint')}>
             <CategoryPicker tree={tree.data} s={s} locked={live} error={err(fieldId.category)}
               onChoose={(leaf: CategoryLeaf | null, request) => update((prev) => withCategory(prev, leaf, request ?? null))} />
-          </Section>
-
-          <Section id="basics" title={t('sc.pf.s.basics')}>
             <TextField id={fieldId.title} label={t('sc.pf.field.title')} help={t('sc.pf.titleHelp', { count: s.title.trim().length })} value={s.title} error={err(fieldId.title)} maxLength={200}
               onChange={(e) => patch({ title: e.target.value })} />
-            <div className="grid gap-x-3 sm:grid-cols-2">
-              <BrandField id={fieldId.brand} label={brandDef && !brandDef.required ? t('sc.pf.optional', { label: brandDef.label }) : (brandDef?.label ?? t('sc.pf.field.brandOptional'))} value={s.attrs.brand ?? ''}
-                error={err(fieldId.brand)} onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: v } }))} />
-              <Select id="pf-condition" label={t('sc.pf.field.condition')} value={s.condition} options={CONDITIONS.map((c) => ({ value: c, label: t(`sc.pf.condition.${c}` as MessageKey) }))}
-                onChange={(e) => patch({ condition: e.target.value as FormState['condition'] })} />
-            </div>
+            <BrandField id={fieldId.brand} label={brandDef && !brandDef.required ? t('sc.pf.optional', { label: brandDef.label }) : (brandDef?.label ?? t('sc.pf.field.brandOptional'))} value={s.attrs.brand ?? ''}
+              required={Boolean(brandDef?.required)} error={err(fieldId.brand)} onChange={(v) => update((prev) => ({ ...prev, attrs: { ...prev.attrs, brand: v } }))} />
+            <Select id="pf-condition" label={t('sc.pf.field.condition')} value={s.condition} options={CONDITIONS.map((c) => ({ value: c, label: t(`sc.pf.condition.${c}` as MessageKey) }))}
+              onChange={(e) => patch({ condition: e.target.value as FormState['condition'] })} />
             <Field id={fieldId.description} label={t('sc.pf.field.description')} error={err(fieldId.description)} help={t('sc.pf.descriptionHelp', { count: s.description.length, max: MAX_DESCRIPTION })}>
               {(a11y) => <textarea {...a11y} rows={5} className={`${fieldStyles.control} min-h-28 py-2`} value={s.description} onChange={(e) => patch({ description: e.target.value })} />}
             </Field>
@@ -354,110 +346,116 @@ export function ProductForm({ productId }: { productId?: string }) {
             ) : ctx.data?.aiListingWriter.reason === 'PLAN' ? (
               <p className="m-0 text-xs text-muted"><Sparkle size={14} aria-hidden /> {t('sc.pf.ai.plan')} <Link href="/billing">{t('sc.pf.ai.upgrade')}</Link></p>
             ) : null}
-            <TextField id={fieldId.keywords} label={t('sc.pf.field.keywords')} help={t('sc.pf.keywordsHelp')} value={s.keywords} error={err(fieldId.keywords)} onChange={(e) => patch({ keywords: e.target.value })} />
+            <Disclosure title={t('sc.pf.moreBasics')} force={Boolean(s.keywords.trim() || err(fieldId.keywords))}>
+              <TextField id={fieldId.keywords} label={t('sc.pf.field.keywords')} help={t('sc.pf.keywordsHelp')} value={s.keywords} error={err(fieldId.keywords)} onChange={(e) => patch({ keywords: e.target.value })} />
+            </Disclosure>
           </Section>
 
           <Section id="images" title={t('sc.pf.s.images')} hint={t('sc.pf.s.imagesHint')}>
             <ImagesField images={s.images} update={(fn) => update((prev) => ({ ...prev, images: fn(prev.images) }))} error={err(fieldId.images)} />
           </Section>
 
-          {sections.includes('details') ? <Section id="details" title={t('sc.pf.s.details', { type: type?.label ?? '' })}>{attrField('details', 'DETAILS')}</Section> : null}
-          {sections.includes('food') ? (
-            <Section id="food" title={t('sc.pf.s.food')} hint={t('sc.pf.s.foodHint')}>{attrField('food', 'FOOD')}</Section>
-          ) : null}
-          {sections.includes('regulated') ? (
-            <Section id="regulated" title={t('sc.pf.s.regulated')} hint={t('sc.pf.s.regulatedHint')}>{attrField('regulated', 'REGULATED')}</Section>
-          ) : null}
-
           {type ? (
-            <Section id={s.hasVariants && type.themes.length ? 'variants' : 'offer'} title={t('sc.pf.s.offer')}>
-              {type.themes.length ? (
-                <Checkbox label={t('sc.pf.hasVariants')} description={<span className="block text-xs text-muted">{t('sc.pf.hasVariantsHint')}</span>} checked={s.hasVariants} disabled={live}
-                  onChange={(e) => patch({ hasVariants: e.target.checked })} />
-              ) : null}
+            <Section id="offer" title={t('sc.pf.s.offer')}>
               {s.hasVariants && type.themes.length ? (
-                <VariantsSection s={s} type={type} set={update} problems={problems} shown={shown} locked={lockedCombos} />
+                <p className="m-0 text-sm text-muted">{t('sc.pf.offer.perVariant')}</p>
               ) : (
-                <div className="grid gap-x-3 sm:grid-cols-3">
-                  <TextField id={fieldId.price} label={t('sc.pf.field.priceUsd')} inputMode="decimal" value={s.single.price} error={err(fieldId.price)} onChange={(e) => patch({ single: { ...s.single, price: e.target.value } })} />
-                  <TextField id={fieldId.compareAt} label={t('sc.pf.field.compareAt')} help={t('sc.pf.compareAtHelp')} inputMode="decimal" value={s.single.compareAt} error={err(fieldId.compareAt)} onChange={(e) => patch({ single: { ...s.single, compareAt: e.target.value } })} />
-                  <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} help={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.qtyFba') : undefined} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
-                  <div className="flex at-align gap-2 sm:col-span-1">
-                    <TextField id={fieldId.sku} className="flex-1" label={t('sc.pf.field.sku')} value={s.single.sku} error={err(fieldId.sku)} readOnly={live} onChange={(e) => patch({ single: { ...s.single, sku: e.target.value } })} />
+                <>
+                  <div className="grid gap-x-3 sm:grid-cols-2">
+                    <TextField id={fieldId.price} label={t('sc.pf.field.priceUsd')} inputMode="decimal" value={s.single.price} error={err(fieldId.price)} onChange={(e) => patch({ single: { ...s.single, price: e.target.value } })} />
+                    <TextField id={fieldId.compareAt} label={t('sc.pf.field.compareAt')} help={t('sc.pf.compareAtHelp')} inputMode="decimal" value={s.single.compareAt} error={err(fieldId.compareAt)} onChange={(e) => patch({ single: { ...s.single, compareAt: e.target.value } })} />
+                    <TextField id={fieldId.qty} label={t('sc.pf.field.qty')} inputMode="numeric" value={s.single.qty} error={err(fieldId.qty)} help={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.qtyFba') : undefined} onChange={(e) => patch({ single: { ...s.single, qty: e.target.value } })} />
+                    <TextField id={fieldId.sku} label={t('sc.pf.field.sku')} value={s.single.sku} error={err(fieldId.sku)} readOnly={live} onChange={(e) => patch({ single: { ...s.single, sku: e.target.value } })} />
                   </div>
-                  {s.noGtin ? null : (
-                    <div className="sm:col-span-2">
-                      <TextField id={fieldId.gtin} label={idLabel} inputMode="numeric" value={s.single.gtin} error={err(fieldId.gtin)} help={t('sc.pf.gtinHelp')} onChange={(e) => patch({ single: { ...s.single, gtin: e.target.value } })} />
-                    </div>
-                  )}
                   {!s.single.sku.trim() && s.title.trim() ? (
-                    <button type="button" className="link-button self-start border-0 bg-transparent p-0 text-left text-xs text-link hover:underline sm:col-span-3" onClick={() => update((prev) => fillSkus(type, prev))}>
+                    <button type="button" className="link-button self-start border-0 bg-transparent p-0 text-left text-xs text-link hover:underline" onClick={() => update((prev) => fillSkus(type, prev))}>
                       {t('sc.pf.suggestSku')}
                     </button>
                   ) : null}
+                  {s.noGtin ? null : (
+                    <TextField id={fieldId.gtin} label={idLabel} inputMode="numeric" value={s.single.gtin} error={err(fieldId.gtin)} help={t('sc.pf.gtinHelp')} onChange={(e) => patch({ single: { ...s.single, gtin: e.target.value } })} />
+                  )}
+                </>
+              )}
+              <Checkbox label={type.identifierRule === 'isbn' ? t('sc.pf.noIsbn') : t('sc.pf.noGtin')} description={<span className="block text-xs text-muted">{t('sc.pf.noGtinHint')}</span>} checked={s.noGtin}
+                disabled={type.identifierRule === 'isbn'} onChange={(e) => patch({ noGtin: e.target.checked })} />
+            </Section>
+          ) : null}
+
+          {sections.includes('details') ? <Section id="details" title={t('sc.pf.s.details', { type: type?.label ?? '' })}>{attrGroup('DETAILS')}</Section> : null}
+
+          {type && type.themes.length ? (
+            <Section id="variants" title={t('sc.pf.s.variants')}>
+              {live ? null : (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm font-semibold">{t('sc.pf.hasVariants')}</span>
+                  <ChipGroup label={t('sc.pf.hasVariants')} value={s.hasVariants ? 'yes' : 'no'} onChange={(v) => patch({ hasVariants: v === 'yes' })}
+                    options={[{ value: 'no', label: t('sc.pf.variants.no') }, { value: 'yes', label: t('sc.pf.variants.yes') }]} />
+                  <span className="text-xs text-muted">{t('sc.pf.hasVariantsHint')}</span>
                 </div>
               )}
-              {noGtin}
+              {s.hasVariants ? <VariantsSection s={s} type={type} set={update} problems={problems} shown={shown} locked={lockedCombos} /> : null}
             </Section>
           ) : null}
 
           {type ? (
             <Section id="fulfilment" title={t('sc.pf.s.fulfilment')}>
-              <div role="radiogroup" aria-label={t('sc.pf.s.fulfilment')} className="grid gap-2 sm:grid-cols-2">
-                {(['SELLER', 'AFROTRANSACT'] as const).map((f) => (
-                  <label
-                    key={f}
-                    aria-label={t(`sc.pf.fulfilment.${f}` as MessageKey)}
-                    className={`flex cursor-pointer items-start gap-2.5 rounded-sm border p-3.5 transition-colors ${
-                      s.fulfilment === f ? 'border-gold-500 bg-gold-50' : 'border-border-strong bg-surface hover:bg-subtle'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="pf-fulfilment"
-                      value={f}
-                      checked={s.fulfilment === f}
-                      onChange={() => patch({ fulfilment: f })}
-                      className="mt-0.5 shrink-0"
-                    />
-                    <span className="flex flex-col gap-0.5">
-                      <strong className="text-sm font-semibold">{t(`sc.pf.fulfilment.${f}` as MessageKey)}</strong>
-                      <span className="text-xs text-muted">{t(`sc.pf.fulfilment.${f}.hint` as MessageKey)}</span>
-                    </span>
-                  </label>
-                ))}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-semibold">{t('sc.pf.fulfilment.how')}</span>
+                <ChipGroup label={t('sc.pf.fulfilment.how')} value={s.fulfilment} onChange={(f) => patch({ fulfilment: f })}
+                  options={[{ value: 'SELLER', label: t('sc.pf.fulfilment.SELLER') }, { value: 'AFROTRANSACT', label: t('sc.pf.fulfilment.AFROTRANSACT') }]} />
+                <span className="text-xs text-muted">{t(`sc.pf.fulfilment.${s.fulfilment}.hint` as MessageKey)}</span>
               </div>
-              <fieldset id={fieldId.pkg} tabIndex={-1} className="m-0 flex flex-col gap-1 border-0 p-0 outline-none">
-                <legend className="mb-1 text-sm font-semibold">{s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.field.package') : t('sc.pf.packageOptional')}</legend>
-                <div className="grid grid-cols-2 gap-x-3 sm:grid-cols-4">
-                  <TextField id="pf-pkg-length" label={t('sc.pf.pkg.length')} inputMode="decimal" value={s.pkg.length} onChange={(e) => patch({ pkg: { ...s.pkg, length: e.target.value } })} />
-                  <TextField id="pf-pkg-width" label={t('sc.pf.pkg.width')} inputMode="decimal" value={s.pkg.width} onChange={(e) => patch({ pkg: { ...s.pkg, width: e.target.value } })} />
-                  <TextField id="pf-pkg-height" label={t('sc.pf.pkg.height')} inputMode="decimal" value={s.pkg.height} onChange={(e) => patch({ pkg: { ...s.pkg, height: e.target.value } })} />
-                  <TextField id="pf-pkg-weight" label={t('sc.pf.pkg.weight')} inputMode="decimal" value={s.pkg.weight} onChange={(e) => patch({ pkg: { ...s.pkg, weight: e.target.value } })} />
+              {s.fulfilment === 'SELLER' ? (
+                <>
+                  <Select id={fieldId.shipFrom} label={t('sc.pf.field.shipFrom')} value={s.shipFromId} error={err(fieldId.shipFrom)}
+                    help={shipFrom.data?.length ? undefined : t('sc.pf.shipFromNone')}
+                    options={[{ value: '', label: defaultShipFrom ? t('sc.pf.shipFromDefault', { label: `${defaultShipFrom.label} · ${defaultShipFrom.city}, ${defaultShipFrom.state}` }) : t('sc.pf.shipFromAccount') },
+                      ...(shipFrom.data ?? []).filter((a) => !a.isDefault).map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))]}
+                    onChange={(e) => patch({ shipFromId: e.target.value })} />
+                  <Select id={fieldId.handling} label={t('sc.pf.field.handling')} help={t('sc.pf.handlingHelp')} value={s.handlingDays} error={err(fieldId.handling)}
+                    options={[...new Set([...HANDLING_DAYS, Number(s.handlingDays) || 2])].sort((x, y) => x - y).map((n) => ({ value: String(n), label: t('sc.pf.handlingDays', { count: n }) }))}
+                    onChange={(e) => patch({ handlingDays: e.target.value })} />
+                </>
+              ) : null}
+              {type.traits.preorder ? (
+                <Checkbox label={t('sc.pf.preorder')} description={<span className="block text-xs text-muted">{t('sc.pf.preorderHint')}</span>} checked={s.preorder} onChange={(e) => patch({ preorder: e.target.checked })} />
+              ) : null}
+              <Disclosure title={s.fulfilment === 'AFROTRANSACT' ? t('sc.pf.field.package') : t('sc.pf.packageOptional')} force={s.fulfilment === 'AFROTRANSACT' || pkgFilled || Boolean(err(fieldId.pkg))}>
+                <fieldset id={fieldId.pkg} tabIndex={-1} className="m-0 flex flex-col gap-1 border-0 p-0 outline-none">
+                  <legend className="sr-only">{t('sc.pf.field.package')}</legend>
+                  <div className="grid grid-cols-2 gap-x-3 sm:grid-cols-4">
+                    {pkgField('length', t('sc.pf.pkg.length'))}
+                    {pkgField('width', t('sc.pf.pkg.width'))}
+                    {pkgField('height', t('sc.pf.pkg.height'))}
+                    <Select label={t('sc.pf.pkg.sizeUnit')} value={s.pkgUnits.size} options={SIZE_UNITS.map((u) => ({ value: u, label: u }))}
+                      onChange={(e) => patch({ pkgUnits: { ...s.pkgUnits, size: e.target.value === 'cm' ? 'cm' : 'in' } })} />
+                    {pkgField('weight', t('sc.pf.pkg.weight'))}
+                    <Select label={t('sc.pf.pkg.weightUnit')} value={s.pkgUnits.weight} options={WEIGHT_UNITS.map((u) => ({ value: u, label: u }))}
+                      onChange={(e) => patch({ pkgUnits: { ...s.pkgUnits, weight: e.target.value === 'kg' ? 'kg' : 'lb' } })} />
+                  </div>
+                  {err(fieldId.pkg) ? <span role="alert" className="text-xs text-danger">{err(fieldId.pkg)}</span> : null}
+                </fieldset>
+              </Disclosure>
+            </Section>
+          ) : null}
+
+          {sections.includes('compliance') ? (
+            <Section id="compliance" title={t('sc.pf.s.compliance')} hint={t('sc.pf.s.complianceHint')}>
+              {hasFood ? (
+                <div className="flex flex-col gap-3">
+                  <h3 className="m-0 text-base font-semibold">{t('sc.pf.s.food')}</h3>
+                  <p className="m-0 -mt-2 text-xs text-muted">{t('sc.pf.s.foodHint')}</p>
+                  {attrGroup('FOOD')}
                 </div>
-                {err(fieldId.pkg) ? <span role="alert" className="text-xs text-danger">{err(fieldId.pkg)}</span> : null}
-              </fieldset>
-            </Section>
-          ) : null}
-
-          {sections.includes('shipping') ? (
-            <Section id="shipping" title={t('sc.pf.s.shipping')}>
-              <div className="grid gap-x-3 sm:grid-cols-2">
-                <Select id={fieldId.shipFrom} label={t('sc.pf.field.shipFrom')} value={s.shipFromId} error={err(fieldId.shipFrom)}
-                  help={shipFrom.data?.length ? undefined : t('sc.pf.shipFromNone')}
-                  options={[{ value: '', label: defaultShipFrom ? t('sc.pf.shipFromDefault', { label: `${defaultShipFrom.label} · ${defaultShipFrom.city}, ${defaultShipFrom.state}` }) : t('sc.pf.shipFromAccount') },
-                    ...(shipFrom.data ?? []).filter((a) => !a.isDefault).map((a) => ({ value: a.id, label: `${a.label} · ${a.city}, ${a.state}` }))]}
-                  onChange={(e) => patch({ shipFromId: e.target.value })} />
-                <Select id={fieldId.handling} label={t('sc.pf.field.handling')} help={t('sc.pf.handlingHelp')} value={s.handlingDays} error={err(fieldId.handling)}
-                  options={[...new Set([...HANDLING_DAYS, Number(s.handlingDays) || 2])].sort((x, y) => x - y).map((n) => ({ value: String(n), label: t('sc.pf.handlingDays', { count: n }) }))}
-                  onChange={(e) => patch({ handlingDays: e.target.value })} />
-              </div>
-            </Section>
-          ) : null}
-
-          {sections.includes('preorder') ? (
-            <Section id="preorder" title={t('sc.pf.s.preorder')}>
-              <Checkbox label={t('sc.pf.preorder')} description={<span className="block text-xs text-muted">{t('sc.pf.preorderHint')}</span>} checked={s.preorder} onChange={(e) => patch({ preorder: e.target.checked })} />
+              ) : null}
+              {hasRegulated ? (
+                <div className="flex flex-col gap-3">
+                  <h3 className="m-0 text-base font-semibold">{t('sc.pf.s.regulated')}</h3>
+                  <p className="m-0 -mt-2 text-xs text-muted">{t('sc.pf.s.regulatedHint')}</p>
+                  {attrGroup('REGULATED')}
+                </div>
+              ) : null}
             </Section>
           ) : null}
           <button type="submit" className="at-visually-hidden" tabIndex={-1}>{primaryLabel}</button>

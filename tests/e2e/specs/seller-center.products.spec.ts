@@ -4,8 +4,8 @@ import { expect, type Page, test } from '@playwright/test';
 
 import { SELLER_ORG, setActiveOrg } from '../support/seller';
 
-/* Seller Center products (S307, S308) against the mock BFF: adding a product on the one-step form (category first,
-   type-driven food fields, image upload, readiness panel), and a bulk upload whose file has errors, is fixed and
+/* Seller Center products (S307, S308) against the mock BFF: adding a product on the one-step form (one column of sections, the
+   searchable category and brand comboboxes, type-driven food fields, image upload with alt text, readiness panel, S309), and a bulk upload whose file has errors, is fixed and
    imported. The mock is process-wide state, so each journey uses its own SKUs. */
 
 /** A white square PNG drawn in the browser (the main image must be at least 1000 × 1000 px). */
@@ -45,16 +45,27 @@ test.describe('seller center · products', () => {
     const panel = page.getByRole('complementary', { name: 'Listing readiness' });
     await expect(panel.getByTestId('readiness')).toContainText('things missing');
 
-    await page.getByLabel('Search categories').fill('spices');
-    await page.getByRole('option').getByRole('button', { name: /Spices & seasonings/ }).click();
-    await expect(page.getByTestId('chosen-category')).toHaveText(SPICES);
+    // One column of sections; the category is a searchable combobox over the full path, chosen from the keyboard.
+    await expect(page.getByRole('form', { name: 'Product' }).getByRole('heading', { level: 2 })).toHaveText(['Basics', 'Photos']);
+    const category = page.getByRole('combobox', { name: 'Category' });
+    await category.fill('pantry spices');
+    // The full path is searched: "pantry" only appears in the path of the spices type. The last row requests a new category.
+    await expect(page.getByRole('listbox').getByRole('option')).toHaveText([/Spices & seasonings/, /Request “pantry spices” as a new category/]);
+    await page.keyboard.press('Enter');
+    await expect(category).toHaveValue(SPICES);
     await expect(page.getByRole('heading', { name: 'Food information' })).toBeVisible();
+    await expect(page.getByRole('form', { name: 'Product' }).getByRole('heading', { level: 2 })).toHaveText(
+      ['Basics', 'Photos', 'Price & stock', 'Details', 'Variants', 'Shipping & fulfilment', 'Compliance']
+    );
 
     await page.getByLabel('Product title', { exact: true }).fill('Yaji Suya Spice, Hand-Ground, 4 oz');
-    await page.getByLabel('Brand', { exact: true }).fill('Mama Kano');
+    await page.getByRole('combobox', { name: 'Brand' }).fill('Mama Kano');
+    await page.getByRole('option', { name: 'Add “Mama Kano” as a new brand' }).click();
+    await expect(page.getByRole('combobox', { name: 'Brand' })).toHaveValue('Mama Kano');
     await page.getByLabel('Description', { exact: true }).fill('Hand-ground in Kano from groundnut, chilli and ginger.');
     await page.getByTestId('image-input').setInputFiles({ name: 'yaji.png', mimeType: 'image/png', buffer: await productImage(page) });
     await expect(page.getByText('1200×1200')).toBeVisible();
+    await page.getByLabel('Description of image 1').fill('Jar of yaji suya spice on a white background');
     await page.getByLabel('Ingredients', { exact: true }).fill('Groundnut, chilli, ginger, salt');
     await page.getByLabel('Allergens (FALCPA)', { exact: true }).selectOption('Contains peanuts');
     await page.getByLabel('Shelf life', { exact: true }).fill('12');
@@ -65,6 +76,9 @@ test.describe('seller center · products', () => {
     await page.getByLabel('Quantity', { exact: true }).fill('48');
     await page.getByLabel('SKU', { exact: true }).fill(`E2E-${RUN}-YAJI-4`);
     await page.getByLabel(/I don’t have a barcode/).check();
+    // Fulfilment is a segmented control, handling time a dropdown.
+    await expect(page.getByRole('group', { name: 'Who ships it?' }).getByRole('button', { name: 'I ship it' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByLabel('Handling time (business days)').selectOption('3');
 
     await expect(panel.getByTestId('readiness')).toHaveText('Ready to publish');
     await expect(panel).toContainText('Draft saved');

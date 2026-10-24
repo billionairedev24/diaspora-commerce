@@ -25,6 +25,8 @@ export interface FormImage {
   bytes: number;
   contentType: string;
   status: 'uploading' | 'ready' | 'low' | 'error';
+  /** Optional alternative text (what the picture shows), stored with the image. */
+  alt: string;
 }
 
 export interface VariantRow {
@@ -43,6 +45,14 @@ export interface PackageInput {
   height: string;
   weight: string;
 }
+
+/** Units the seller types the package in; the catalog stores inches and pounds. */
+export interface PackageUnits {
+  size: 'in' | 'cm';
+  weight: 'lb' | 'kg';
+}
+export const SIZE_UNITS: PackageUnits['size'][] = ['in', 'cm'];
+export const WEIGHT_UNITS: PackageUnits['weight'][] = ['lb', 'kg'];
 
 export interface FormState {
   categoryId: string | null;
@@ -67,6 +77,7 @@ export interface FormState {
   single: VariantRow;
   fulfilment: ListingFulfilment;
   pkg: PackageInput;
+  pkgUnits: PackageUnits;
   shipFromId: string;
   handlingDays: string;
   preorder: boolean;
@@ -77,7 +88,7 @@ export const emptyRow = (): VariantRow => ({ sku: '', gtin: '', price: '', compa
 export const emptyForm = (): FormState => ({
   categoryId: null, categoryPath: '', productType: null, request: null, title: '', attrs: {}, units: {}, description: '', condition: 'NEW', keywords: '',
   images: [], noGtin: false, hasVariants: false, theme: '', selected: {}, rows: {}, single: emptyRow(), fulfilment: 'SELLER',
-  pkg: { length: '', width: '', height: '', weight: '' }, shipFromId: '', handlingDays: '2', preorder: false
+  pkg: { length: '', width: '', height: '', weight: '' }, pkgUnits: { size: 'in', weight: 'lb' }, shipFromId: '', handlingDays: '2', preorder: false
 });
 
 export const MIN_IMAGE_PX = 1000;
@@ -126,19 +137,18 @@ export function withCategory(s: FormState, leaf: { id: string; path: string; pro
 
 /* ── Sections ── */
 
-export type SectionKey = 'category' | 'basics' | 'images' | 'details' | 'food' | 'regulated' | 'offer' | 'variants' | 'fulfilment' | 'shipping' | 'preorder';
+export type SectionKey = 'basics' | 'images' | 'offer' | 'details' | 'variants' | 'fulfilment' | 'compliance';
 
-/** The sections the form shows for a product type and the seller's choices (conditional sections included). */
-export function sectionsFor(type: ProductTypeSchema | undefined, s: FormState): SectionKey[] {
-  if (!type) return ['category', 'basics', 'images'];
+/** The sections the form shows for a product type, in page order: Basics, Photos, Price & stock, Details, Variants,
+    Shipping & fulfilment, Compliance (the last three only when the product type has them). */
+export function sectionsFor(type: ProductTypeSchema | undefined): SectionKey[] {
+  if (!type) return ['basics', 'images'];
   const attrs = (section: AttributeDef['section']) => type.attributes.some((a) => a.section === section && a.key !== 'brand');
-  const out: SectionKey[] = ['category', 'basics', 'images'];
+  const out: SectionKey[] = ['basics', 'images', 'offer'];
   if (attrs('DETAILS')) out.push('details');
-  if (type.traits.food || attrs('FOOD')) out.push('food');
-  if (type.traits.regulated || attrs('REGULATED')) out.push('regulated');
-  out.push(s.hasVariants && type.themes.length ? 'variants' : 'offer', 'fulfilment');
-  if (s.fulfilment === 'SELLER') out.push('shipping');
-  if (type.traits.preorder) out.push('preorder');
+  if (type.themes.length) out.push('variants');
+  out.push('fulfilment');
+  if (type.traits.food || attrs('FOOD') || type.traits.regulated || attrs('REGULATED')) out.push('compliance');
   return out;
 }
 
@@ -216,6 +226,16 @@ const positive = (v: string) => {
   return v.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null;
 };
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The package in the catalog's inches and pounds, whatever units it was typed in; null unless all four are positive numbers. */
+export function packagingOf(s: Pick<FormState, 'pkg' | 'pkgUnits'>): { lengthIn: number; widthIn: number; heightIn: number; weightLb: number } | null {
+  const [l, w, h, wt] = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight].map(positive);
+  if (l == null || w == null || h == null || wt == null) return null;
+  const inch = (n: number) => round2(s.pkgUnits.size === 'cm' ? n / 2.54 : n);
+  return { lengthIn: inch(l), widthIn: inch(w), heightIn: inch(h), weightLb: round2(s.pkgUnits.weight === 'kg' ? wt * 2.2046226 : wt) };
+}
+
 export const keywordsOf = (v: string) => v.split(',').map((k) => k.trim()).filter(Boolean);
 
 export interface Problem {
@@ -255,7 +275,7 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   const add = (id: string, section: SectionKey, label: Problem['label'], key: MessageKey, vars?: Problem['vars']) => {
     if (!p[id]) p[id] = { key, vars, section, label };
   };
-  if (!s.request && (!s.categoryId || !s.productType)) add(fieldId.category, 'category', 'sc.pf.field.category', 'sc.pf.err.category');
+  if (!s.request && (!s.categoryId || !s.productType)) add(fieldId.category, 'basics', 'sc.pf.field.category', 'sc.pf.err.category');
   const title = s.title.trim();
   if (title.length < 10) add(fieldId.title, 'basics', 'sc.pf.field.title', title ? 'sc.pf.err.titleShort' : 'sc.pf.err.required');
   else if (title.length > 200) add(fieldId.title, 'basics', 'sc.pf.field.title', 'sc.pf.err.titleLong');
@@ -274,7 +294,7 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   type?.attributes.forEach((a) => {
     if (a.key === 'brand') return;
     const v = (s.attrs[a.key] ?? '').trim();
-    const section: SectionKey = a.section === 'FOOD' ? 'food' : a.section === 'REGULATED' ? 'regulated' : 'details';
+    const section: SectionKey = a.section === 'DETAILS' ? 'details' : 'compliance';
     if (!v) {
       if (a.required) add(fieldId.attr(a.key), section, { text: a.label }, 'sc.pf.err.required');
       return;
@@ -324,13 +344,13 @@ export function validateForm(s: FormState, type: ProductTypeSchema | undefined, 
   const dims = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight];
   const anyDim = dims.some((d) => d.trim() !== '');
   if (s.fulfilment === 'AFROTRANSACT' || anyDim) {
-    const [l, w, h, wt] = dims.map(positive);
-    if (l == null || w == null || h == null || wt == null) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', s.fulfilment === 'AFROTRANSACT' ? 'sc.pf.err.packageFba' : 'sc.pf.err.package');
-    else if (l > 108 || w > 108 || h > 108 || wt > 150) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', 'sc.pf.err.packageLimits');
+    const pkg = packagingOf(s);
+    if (!pkg) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', s.fulfilment === 'AFROTRANSACT' ? 'sc.pf.err.packageFba' : 'sc.pf.err.package');
+    else if (pkg.lengthIn > 108 || pkg.widthIn > 108 || pkg.heightIn > 108 || pkg.weightLb > 150) add(fieldId.pkg, 'fulfilment', 'sc.pf.field.package', 'sc.pf.err.packageLimits');
   }
   if (s.fulfilment === 'SELLER') {
-    if (!/^\d+$/.test(s.handlingDays.trim()) || Number(s.handlingDays) < 1 || Number(s.handlingDays) > 30) add(fieldId.handling, 'shipping', 'sc.pf.field.handling', 'sc.pf.err.handling');
-    if (opts.requireShipFrom && !s.shipFromId) add(fieldId.shipFrom, 'shipping', 'sc.pf.field.shipFrom', 'sc.pf.err.shipFrom');
+    if (!/^\d+$/.test(s.handlingDays.trim()) || Number(s.handlingDays) < 1 || Number(s.handlingDays) > 30) add(fieldId.handling, 'fulfilment', 'sc.pf.field.handling', 'sc.pf.err.handling');
+    if (opts.requireShipFrom && !s.shipFromId) add(fieldId.shipFrom, 'fulfilment', 'sc.pf.field.shipFrom', 'sc.pf.err.shipFrom');
   }
   return p;
 }
@@ -362,6 +382,7 @@ const attrValue = (a: AttributeDef | undefined, v: string, unit: string | undefi
 /** The catalog submission (call when validateForm is empty). */
 export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined, draftId?: string | null): ProductDraft {
   const image = (id: string) => s.images.find((i) => i.id === id && i.url);
+  const imageInput = (i: FormImage) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType, ...(i.alt.trim() ? { alt: i.alt.trim() } : {}) });
   const variant = (r: VariantRow, options: Record<string, string>): VariantInput => {
     const img = r.image ? image(r.image) : undefined;
     const compare = r.compareAt.trim() ? priceMinor(r.compareAt) : null;
@@ -372,7 +393,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
       priceMinor: priceMinor(r.price) ?? 0,
       ...(compare ? { compareAtMinor: compare } : {}),
       quantity: Number(r.qty || '0'),
-      ...(img?.url ? { images: [{ url: img.url, width: img.width, height: img.height, bytes: img.bytes, contentType: img.contentType }] } : {})
+      ...(img?.url ? { images: [imageInput(img)] } : {})
     };
   };
   const theme = type?.themes.find((t) => t.name === s.theme);
@@ -380,8 +401,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
     s.hasVariants && theme
       ? combos(type, s).map((c) => variant(s.rows[comboKey(c)] ?? emptyRow(), Object.fromEntries(theme.dimensions.map((d, i) => [d.name, c[i] ?? '']))))
       : [variant(s.single, {})];
-  const dims = [s.pkg.length, s.pkg.width, s.pkg.height, s.pkg.weight].map(positive);
-  const [l, w, h, wt] = dims;
+  const packaging = packagingOf(s);
   return {
     ...(s.request ? { categoryRequestId: s.request.id } : { categoryId: s.categoryId ?? '' }),
     title: s.title.trim(),
@@ -390,7 +410,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
         .filter(([, v]) => v.trim() !== '')
         .map(([k, v]) => [k, attrValue(type?.attributes.find((a) => a.key === k), v, s.units[k])])
     ),
-    images: s.images.filter((i) => i.url).map((i) => ({ url: i.url ?? '', width: i.width, height: i.height, bytes: i.bytes, contentType: i.contentType })),
+    images: s.images.filter((i) => i.url).map(imageInput),
     variationTheme: s.hasVariants && theme ? theme.name : '',
     variants,
     ...(type?.traits.preorder ? { preorderEligible: s.preorder } : {}),
@@ -399,7 +419,7 @@ export function toProductDraft(s: FormState, type: ProductTypeSchema | undefined
       condition: s.condition,
       keywords: keywordsOf(s.keywords),
       fulfilment: s.fulfilment,
-      packaging: l && w && h && wt ? { lengthIn: l, widthIn: w, heightIn: h, weightLb: wt } : null,
+      packaging,
       ...(s.fulfilment === 'SELLER' ? { handlingDays: Number(s.handlingDays) || 2, shipFromId: s.shipFromId || null } : {})
     },
     ...(draftId ? { draftId } : {})
@@ -423,13 +443,13 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
     } else attrs[k] = v;
   });
   const images: FormImage[] = d.images.map((im, i) => ({ id: `img-${i}`, previewUrl: im.url, url: im.url, width: im.width ?? 0, height: im.height ?? 0, bytes: im.bytes ?? 0,
-    contentType: im.contentType, status: (im.width ?? MIN_IMAGE_PX) < MIN_IMAGE_PX && i === 0 ? 'low' : 'ready' }));
+    contentType: im.contentType, status: (im.width ?? MIN_IMAGE_PX) < MIN_IMAGE_PX && i === 0 ? 'low' : 'ready', alt: im.alt ?? '' }));
   const rowOf = (v: SellerProductDetail['variants'][number]): VariantRow => {
     const img = v.images[0] ? images.find((i) => i.url === v.images[0]?.url) : undefined;
     let image = img?.id ?? '';
     if (v.images[0] && !img) {
       const extra: FormImage = { id: `img-${images.length}`, previewUrl: v.images[0].url, url: v.images[0].url, width: v.images[0].width ?? 0, height: v.images[0].height ?? 0,
-        bytes: v.images[0].bytes ?? 0, contentType: v.images[0].contentType, status: 'ready' };
+        bytes: v.images[0].bytes ?? 0, contentType: v.images[0].contentType, status: 'ready', alt: v.images[0].alt ?? '' };
       images.push(extra);
       image = extra.id;
     }
@@ -456,6 +476,7 @@ export function fromDetail(d: SellerProductDetail, type: ProductTypeSchema | und
     noGtin: d.variants.every((v) => v.gtinExempt), hasVariants, theme: hasVariants ? d.variationTheme : '', selected, rows,
     single: !hasVariants && first ? rowOf(first) : emptyRow(), fulfilment: d.listing.fulfilment,
     pkg: pkg ? { length: String(pkg.lengthIn), width: String(pkg.widthIn), height: String(pkg.heightIn), weight: String(pkg.weightLb) } : { length: '', width: '', height: '', weight: '' },
+    pkgUnits: { size: 'in', weight: 'lb' },
     shipFromId: d.listing.shipFromId ?? '', handlingDays: String(d.listing.handlingDays || 2), preorder: d.preorderEligible
   };
 }
@@ -480,10 +501,11 @@ export function fromDraftPayload(payload: Record<string, unknown>): FormState {
   const images = Array.isArray(p.images)
     ? p.images.filter(isRecord).filter((i) => typeof i.url === 'string').slice(0, MAX_IMAGES).map((i, n): FormImage => ({
         id: str(i.id, `img-${n}`), previewUrl: str(i.url), url: str(i.url), width: Number(i.width) || 0, height: Number(i.height) || 0, bytes: Number(i.bytes) || 0,
-        contentType: str(i.contentType, 'image/jpeg'), status: i.status === 'low' ? 'low' : 'ready' }))
+        contentType: str(i.contentType, 'image/jpeg'), status: i.status === 'low' ? 'low' : 'ready', alt: str(i.alt) }))
     : [];
   const req = isRecord(p.request) ? { id: str(p.request.id), path: str(p.request.path), reference: str(p.request.reference) } : null;
   const pkg = isRecord(p.pkg) ? p.pkg : {};
+  const units = isRecord(p.pkgUnits) ? p.pkgUnits : {};
   const selected: Record<string, string[]> = {};
   if (isRecord(p.selected)) Object.entries(p.selected).forEach(([k, v]) => {
     if (Array.isArray(v)) selected[k] = v.filter((x): x is string => typeof x === 'string');
@@ -513,6 +535,7 @@ export function fromDraftPayload(payload: Record<string, unknown>): FormState {
     single: rowFrom(p.single),
     fulfilment: p.fulfilment === 'AFROTRANSACT' ? 'AFROTRANSACT' : 'SELLER',
     pkg: { length: str(pkg.length), width: str(pkg.width), height: str(pkg.height), weight: str(pkg.weight) },
+    pkgUnits: { size: units.size === 'cm' ? 'cm' : 'in', weight: units.weight === 'kg' ? 'kg' : 'lb' },
     shipFromId: str(p.shipFromId),
     handlingDays: str(p.handlingDays, '2'),
     preorder: p.preorder === true

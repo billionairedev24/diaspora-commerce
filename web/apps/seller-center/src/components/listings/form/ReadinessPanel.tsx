@@ -61,10 +61,10 @@ export function ReadinessPanel({ problems, saveState, preview, primaryLabel, onP
   );
   return (
     <>
-      <aside aria-label={t('sc.pf.ready.label')} className="sticky top-[calc(var(--at-sticky-header-h)+1rem)] hidden flex-col gap-3 self-start rounded-md border border-border bg-surface p-4 lg:flex">
-        <h2 className="m-0 flex items-center gap-2 text-lg font-semibold" data-testid="readiness">{icon}{heading}</h2>
+      <aside aria-label={t('sc.pf.ready.label')} className="sticky top-[calc(var(--at-sticky-header-h)+1rem)] hidden flex-col gap-2.5 self-start rounded-md bg-surface-muted p-3.5 lg:flex">
+        <h2 className="m-0 flex items-center gap-2 text-base font-semibold" data-testid="readiness">{icon}{heading}</h2>
         {ready ? <p className="m-0 text-sm text-muted">{t('sc.pf.ready.readyHint')}</p> : (
-          <div className="flex max-h-[40vh] flex-col overflow-y-auto"><Items problems={problems} onGo={goToField} /></div>
+          <div className="flex max-h-48 flex-col overflow-y-auto"><Items problems={problems} onGo={goToField} /></div>
         )}
         {actions}
         <p className="m-0 text-xs text-muted" aria-live="polite">{saveState}</p>
