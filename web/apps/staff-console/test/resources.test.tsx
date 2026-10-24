@@ -81,3 +81,19 @@ describe('forms that name their change fields', () => {
     expect(save).toBeEnabled();
   });
 });
+
+describe('tables that share a tab and ?open=', () => {
+  it('open the record in the table that holds it, and stay quiet in the other', async () => {
+    nav.set('/fees?tab=tax-classification&open=dress%7C%7C');
+    await renderScreen(
+      <>
+        <ResourceTable resource="tax-rules" urlPrefix="tax-rules" />
+        <ResourceTable resource="tax-codes" urlPrefix="tax-codes" />
+      </>
+    );
+    const sheet = await screen.findByRole('dialog', { name: /dress/ });
+    expect(sheet).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument());
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+});

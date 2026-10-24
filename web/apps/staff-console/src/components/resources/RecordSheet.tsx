@@ -112,7 +112,7 @@ function Details({ record }: { record: RecordDetail }) {
  * client, every action button disabled while one is in flight. When the BFF answers ALREADY_DONE the current state is
  * shown as information and the record and its table are refreshed.
  */
-export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; id: string | null; onClose: () => void }) {
+export function RecordSheet({ resource, id, onClose, sharedOpen = false }: { resource: ResourceKey; id: string | null; onClose: () => void; sharedOpen?: boolean }) {
   const api = staffApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -125,6 +125,8 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
   const [reveal, setReveal] = useState<OneTimeSecret | null>(null);
   const q = useQuery({ ...staffQueries.record(api, resource, id ?? ''), enabled: id !== null });
   const record = q.data;
+  // Tables sharing a tab share ?open=: the one that does not hold the record stays closed instead of showing an error.
+  const notHere = sharedOpen && q.isError && isApiError(q.error) && q.error.status === 404;
 
   /** The record, its table pages and the console's queue counts (nav badges) after a change. */
   const refresh = () => {
@@ -207,7 +209,7 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
   const pendingForm = pending?.kind === 'edit' ? pending.form : pending?.kind === 'action' ? pending.action.form : null;
 
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle} className="w-[min(720px,100vw)]">
+    <Sheet open={id !== null && !notHere} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle} className="w-[min(720px,100vw)]">
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {record ? (

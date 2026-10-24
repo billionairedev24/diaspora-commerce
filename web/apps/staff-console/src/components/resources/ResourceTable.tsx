@@ -144,7 +144,7 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
           ) : null
         }
       />
-      <RecordSheet resource={resource} id={openId} onClose={() => setOpen(null)} />
+      <RecordSheet resource={resource} id={openId} onClose={() => setOpen(null)} sharedOpen={urlPrefix !== undefined} />
       <RevealDialog secret={reveal} onClose={() => setReveal(null)} />
       {data?.createForm ? (
         <Dialog open={creating} onOpenChange={setCreating} title={data.createForm.title} width={480}>
