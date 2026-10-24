@@ -26,7 +26,8 @@ export function IdentityAdminView() {
       <Tabs
         label={t('st.identity.tabs')}
         value={tab}
-        onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
+        // Inside Settings the section stays in the address; the tab replaces whatever record was open.
+        onValueChange={(v) => router.replace(`${pathname}?${new URLSearchParams([...params.entries()].filter(([k]) => k === 'section').concat([['tab', v]])).toString()}`, { scroll: false })}
         items={[
           { value: 'oauth-clients', label: t('st.identity.tab.clients'), content: <ResourceTable resource="oauth-clients" urlPrefix="oauth-clients" /> },
           { value: 'identity-sessions', label: t('st.identity.tab.sessions'), content: <ResourceTable resource="identity-sessions" urlPrefix="identity-sessions" /> },

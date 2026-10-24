@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { IdentityAdminView } from '@/components/identity/IdentityAdminView';
 import { moduleOf } from '@/lib/modules';
+import { visibleSections } from '@/lib/settings-sections';
 
 import { asRoles, mockApi } from './mock-api';
 import { renderScreen } from './render';
@@ -27,6 +28,12 @@ describe('Developer tools › Identity & access (S291)', () => {
     asRoles('platform.developer');
     const developer = (await mockApi().getSession()).navGroups.flatMap((g) => g.modules.map((m) => m.key));
     expect(developer).not.toContain('identity');
+  });
+
+  it('is a Settings section for identity:admin only', async () => {
+    expect(visibleSections(await mockApi().getSession()).map((x) => x.key)).toContain('identity');
+    asRoles('platform.developer');
+    expect(visibleSections(await mockApi().getSession()).map((x) => x.key)).not.toContain('identity');
   });
 
   it('lists the clients, with the platform’s own client locked against disabling', async () => {

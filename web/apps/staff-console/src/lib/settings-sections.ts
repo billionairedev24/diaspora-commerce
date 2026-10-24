@@ -17,6 +17,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { key: 'markets', label: 'Markets & locations', description: 'Turn AfroTransact on or off by country and by state.', module: 'markets', group: 'platform' },
   { key: 'notifications', label: 'Notifications', description: 'The email, SMS, push and WhatsApp messages the platform sends: preview, history and new versions.', module: 'notifications', group: 'platform' },
   { key: 'signin', label: 'Sign-in & integrations', description: 'Which social sign-in buttons appear on sign-in.', module: 'dev', group: 'platform' },
+  { key: 'identity', label: 'Identity & access', description: 'OAuth clients, sign-ins and tokens, signing keys, the token inspector and the sign-in settings of the identity service.', module: 'identity', group: 'platform' },
   { key: 'payments', label: 'Payments & payouts', description: 'How long money is held, the smallest payout, and which Stripe the platform uses.', module: 'payouts', group: 'money' },
   { key: 'fees', label: 'Fees & commissions', description: 'Fee schedule versions, commission by category and plan, connection fees, negotiated rates and delivery pricing.', module: 'fees', group: 'money' },
   { key: 'tax', label: 'Sales tax', description: 'Who calculates sales tax, the state and local rates, and what each item is for tax.', module: 'fees', group: 'money' },
@@ -29,7 +30,7 @@ export const SETTINGS_GROUPS: { key: SettingsSection['group']; label: string }[]
 ];
 
 /** Modules whose own sidebar entry moved into Settings (their old addresses redirect to the section). */
-export const SETTINGS_HOSTED: StaffModuleKey[] = ['markets', 'siteCfg', 'dev', 'notifications', 'fees'];
+export const SETTINGS_HOSTED: StaffModuleKey[] = ['markets', 'siteCfg', 'dev', 'identity', 'notifications', 'fees'];
 
 export const isSettingsPath = (pathname: string): boolean => pathname === '/settings' || pathname.startsWith('/settings/');
 
