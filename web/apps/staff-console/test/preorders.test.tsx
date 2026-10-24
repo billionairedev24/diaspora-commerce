@@ -189,12 +189,13 @@ describe('Pre-orders back office (S274)', () => {
     expect(nav.search).toBe('tab=orders');
   });
 
-  it('shows payment & fees read-only below Full access', async () => {
+  it('points the fees to Delivery fees and keeps payment settings read-only below Full access', async () => {
     asRoles('platform.operations_manager');
     nav.set('/preorders/settings');
     await renderScreen(<PreordersView screen={{ kind: 'settings' }} />);
-    expect(await screen.findByRole('textbox', { name: 'USD door delivery fee' })).toBeDisabled();
-    expect(screen.getByRole('textbox', { name: 'USD door delivery fee' })).toHaveValue('7.99');
+    const moved = await screen.findByTestId('fees-moved');
+    expect(within(moved).getByRole('link', { name: 'Open Delivery fees' })).toHaveAttribute('href', '/settings?section=delivery-fees');
+    expect(screen.queryByRole('textbox', { name: 'USD door delivery fee' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save payment & fees' })).not.toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Master switch' })).toBeDisabled();
   });
