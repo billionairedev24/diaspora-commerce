@@ -66,7 +66,8 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   coupons: 'marketing', organisations: 'orgs', 'connect-accounts': 'orgs',
   reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', 'stripe-lookup': 'payouts',
   'payment-settings': 'payouts', 'tax-settings': 'fees', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees',
-  'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity'
+  'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity',
+  'exchange-rates': 'inventory'
 };
 
 /** Refund ceiling per platform role in minor units (null = no limit). Roles not listed may not refund. */

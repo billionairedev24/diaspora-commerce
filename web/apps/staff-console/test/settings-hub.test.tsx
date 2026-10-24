@@ -28,7 +28,7 @@ describe('Settings', () => {
       </ConsoleShell>
     );
     const labels = (await railLinks()).map((a) => a.textContent);
-    expect(labels).toEqual(['General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access', 'Payments & payouts', 'Fees & commissions', 'Sales tax', 'Plans & billing']);
+    expect(labels).toEqual(['General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access', 'Payments & payouts', 'Fees & commissions', 'Sales tax', 'Exchange rates', 'Plans & billing']);
     expect(await screen.findByRole('heading', { name: 'General' })).toBeInTheDocument();
   });
 

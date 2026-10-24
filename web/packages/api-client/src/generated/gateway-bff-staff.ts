@@ -2354,6 +2354,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/inventory/currencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/currencies`
+         * @description Mirrors inventory `GET /v1/currencies` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The currencies stock can be received in (customers always pay in USD): `code`, `name`, `minorUnits`, and `base` for USD, first.
+         */
+        get: operations["getStaffCurrencies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/exchange-rates/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/exchange-rates/current`
+         * @description Mirrors inventory `GET /v1/exchange-rates/current` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The rate receiving suggests for every currency that has one: the latest on or before `asOf` (default today), as `currency`, `rateDate` and `rateToUsd` (US dollars per unit). The table itself is the `exchange-rates` Resource (Settings → Exchange rates).
+         */
+        get: operations["getStaffExchangeRatesCurrent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/inventory/inbound": {
         parameters: {
             query?: never;
@@ -4775,7 +4815,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings" | "exchange-rates";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
@@ -10474,6 +10514,58 @@ export interface operations {
     getStaffNodes: {
         parameters: {
             query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffCurrencies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffExchangeRatesCurrent: {
+        parameters: {
+            query?: {
+                asOf?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

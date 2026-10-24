@@ -10,6 +10,7 @@ import { useMemo, useState } from 'react';
 
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { dateTime, humanize, idempotencyKey, money, shortDate } from '@/lib/format';
 import { exportDataset } from '@/lib/table-export';
 
@@ -28,6 +29,7 @@ type Action = 'quarantine' | 'release' | 'transfer' | 'write-off' | 'adjust' | n
 
 /** One lot: batch, dates, receipt, movements trace, related lots and its actions (quarantine, release, transfer, write-off, count). */
 export function LotSheet({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const t = useT();
   const api = useHub();
   const { inventoryEdit, inventoryApprove } = useHubAccess();
   const trace = useQuery({ ...inventoryHubQueries.lotTrace(api, id ?? ''), enabled: id !== null });
@@ -88,7 +90,19 @@ export function LotSheet({ id, onClose }: { id: string | null; onClose: () => vo
               ['Made', shortDate(lot.mfgDate)],
               ['Expires', shortDate(lot.expDate)],
               ['Received', `${dateTime(lot.receivedAt)} · ${lot.receiptRef ?? '—'}`],
-              ['Landed cost', `${money(lot.unitLandedCostMinor, lot.currency)} / unit`],
+              [t('st.lot.costPaid'), `${money(lot.unitLandedCostMinor, lot.currency)} / unit`],
+              ...(lot.currency === 'USD'
+                ? []
+                : [
+                    [t('st.lot.rate'), t('st.lot.rateValue', { currency: lot.currency, rate: String(lot.fxRateToUsd), date: shortDate(lot.fxRateDate), source: t(`st.lot.source.${lot.fxRateSource}`) })],
+                    [t('st.lot.costUsd'), `${money(lot.unitCostUsdMinor)} / unit`]
+                  ]),
+              ...(lot.costComponents && (lot.costComponents.freightMinor || lot.costComponents.dutyMinor || lot.costComponents.otherMinor)
+                ? [[t('st.lot.components'), t('st.lot.componentsValue', {
+                    goods: money(lot.costComponents.goodsMinor, lot.currency), freight: money(lot.costComponents.freightMinor, lot.currency),
+                    duty: money(lot.costComponents.dutyMinor, lot.currency), other: money(lot.costComponents.otherMinor, lot.currency)
+                  })]]
+                : []),
               ['Reason', lot.reason ?? '—']
             ].map(([k, v]) => (
               <div key={k} className="contents">

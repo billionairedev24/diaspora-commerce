@@ -1,5 +1,7 @@
 import { type StaffModuleKey, type StaffSession } from '@afrotransact/api-client';
 
+import { type MessageKey } from '@/i18n/t';
+
 /**
  * Settings: everything that sets how AfroTransact runs, in one place. Each section is hosted by an existing console
  * module (its tables and forms are unchanged, and the module's access level still decides who may see or change it).
@@ -10,6 +12,9 @@ export interface SettingsSection {
   description: string;
   module: StaffModuleKey;
   group: 'platform' | 'money';
+  /** Catalogue keys of sections translated into the five languages; the plain label and description are the English fallback. */
+  labelKey?: MessageKey;
+  descriptionKey?: MessageKey;
 }
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
@@ -21,6 +26,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { key: 'payments', label: 'Payments & payouts', description: 'How long money is held, the smallest payout, and which Stripe the platform uses.', module: 'payouts', group: 'money' },
   { key: 'fees', label: 'Fees & commissions', description: 'Fee schedule versions, commission by category and plan, connection fees, negotiated rates and delivery pricing.', module: 'fees', group: 'money' },
   { key: 'tax', label: 'Sales tax', description: 'Who calculates sales tax, the state and local rates, and what each item is for tax.', module: 'fees', group: 'money' },
+  {
+    key: 'exchange-rates',
+    label: 'Exchange rates',
+    description: 'Rates to US dollars for the currencies stock is received in, suggested when a receipt is counted. Every change is kept with its reason.',
+    labelKey: 'st.settings.exchangeRates.label',
+    descriptionKey: 'st.settings.exchangeRates.description',
+    module: 'inventory',
+    group: 'money'
+  },
   { key: 'plans', label: 'Plans & billing', description: 'How sellers pay their plan fee.', module: 'plans', group: 'money' }
 ];
 

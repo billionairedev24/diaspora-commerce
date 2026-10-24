@@ -52,3 +52,18 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
   marked delivered by the driver app, fulfilment or staff in orders-service; a run's `completed` does not do it.
 - **Not built.** A dedicated permission for deciding (`preorders:manage` is used), a staff e-mail / chat recipient for
   `decision_needed`, and capture at order time (§1 says "charged at checkout").
+
+## Implementation notes (currency, §7)
+
+- **Where money is recorded.** Inventory lots keep the unit landed cost in the currency paid, the rate to USD used at receiving
+  (with its date and source: entered, or the latest staff-managed rate on or before the day) and the USD value fixed then. Orders,
+  payments and fees are untouched: customers pay in USD.
+- **Valuation, COGS and margin are USD.** The inventory overview totals in USD with the amounts paid alongside; a shipment's COGS is
+  the USD value of the lots picked (`cogsUsdMinor`), which is what retail-service posts to the GL.
+- **Retail purchase orders** already carry the supplier's currency and the rate captured on the PO; receiving a foreign-currency PO
+  now sends the lots to inventory in that currency with the PO's rate and the exact USD cost retail booked, so the lot shows what was
+  paid and ties to the GL.
+- **Rates are a default, not a rule.** The table (Settings → Exchange rates, `inventory:adjust`, a reason on every change, audited)
+  only prefills the receiving form; the receiver can enter another rate.
+- **Not built.** Components in more than one currency on a single lot (freight paid in dollars on pesos goods is entered in the lot's
+  currency at the same rate), automatic rate feeds, and re-valuing stock when a rate changes (by design, a lot keeps its receiving rate).

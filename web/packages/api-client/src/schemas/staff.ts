@@ -87,7 +87,7 @@ export const ResourceKeySchema = z.enum([
   'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'tax-codes', 'tax-rules', 'tax-review',
   'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons',
   'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'stripe-lookup', 'payment-settings', 'tax-settings', 'maintenance', 'tax-filings', 'tax-nexus',
-  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings'
+  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings', 'exchange-rates'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
 

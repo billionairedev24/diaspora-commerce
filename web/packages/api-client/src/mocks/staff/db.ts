@@ -4,6 +4,7 @@ import { type ExportJob } from '../../schemas/exports';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
 import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
+import { seedExchangeRates } from './exchange-rates';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { seedIdentityAdmin } from './identity';
@@ -256,7 +257,10 @@ function seed(now: Date): MockStaffDb {
       qtyAvailable: onHand - reserved,
       expDate: day(-90 + i * 9),
       status: i === 3 ? 'QUARANTINED' : 'SELLABLE',
-      unitLandedCostMinor: 180 + i * 35
+      // Every fourth lot was sourced in Mexico and paid in pesos: the cost as paid, the rate and the USD value.
+      ...(i % 4 === 1
+        ? { unitLandedCostMinor: 12_000, currency: 'MXN', fxRateToUsd: 0.0577, unitCostUsdMinor: 692, costPaid: 'MXN 120.00 @ 0.0577' }
+        : { unitLandedCostMinor: 180 + i * 35, currency: 'USD', fxRateToUsd: 1, unitCostUsdMinor: 180 + i * 35, costPaid: `USD ${((180 + i * 35) / 100).toFixed(2)}` })
     });
   });
 
@@ -522,7 +526,7 @@ function seed(now: Date): MockStaffDb {
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
-      'pickup-locations': pickupLocations,
+      'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
       ...seedIdentityAdmin(now)
     },
     notifications,

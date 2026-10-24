@@ -16,10 +16,12 @@ import { SettingsPanel as PlanSettingsPanel } from '@/components/plans/SettingsP
 import { ResourceTable } from '@/components/resources/ResourceTable';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { useT } from '@/i18n/t';
 import { useStaff } from '@/lib/session';
 import { SETTINGS_GROUPS, SETTINGS_SECTIONS, settingsHref, type SettingsSection, visibleSections } from '@/lib/settings-sections';
 
 function SectionBody({ section }: { section: SettingsSection }): ReactNode {
+  const t = useT();
   switch (section.key) {
     case 'general':
       return <ModuleView module="siteCfg" />;
@@ -45,6 +47,13 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
       return <FeesView scope="fees" />;
     case 'tax':
       return <FeesView scope="tax" />;
+    case 'exchange-rates':
+      return (
+        <div className="flex flex-col gap-3">
+          <p className="m-0 max-w-[80ch] text-sm text-muted">{t('st.rates.intro')}</p>
+          <ResourceTable resource="exchange-rates" urlPrefix="exchange-rates" />
+        </div>
+      );
     case 'plans':
       return (
         <div className="flex flex-col gap-4">
@@ -65,6 +74,7 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
  * still decided by their access to that module.
  */
 export function SettingsHub() {
+  const t = useT();
   const { session, module: navModule } = useStaff();
   const params = useSearchParams();
   const sections = visibleSections(session);
@@ -95,7 +105,7 @@ export function SettingsHub() {
                             active ? 'bg-gold-100 font-bold hover:bg-gold-100' : 'font-normal'
                           )}
                         >
-                          {s.label}
+                          {s.labelKey ? t(s.labelKey) : s.label}
                         </Link>
                       </li>
                     );
@@ -109,9 +119,9 @@ export function SettingsHub() {
           <header className="flex flex-col gap-1 border-b border-border pb-3">
             <h2 id="settings-section-title" className="m-0 flex items-center gap-2 text-xl font-bold">
               <Gear size={20} aria-hidden />
-              {current.label}
+              {current.labelKey ? t(current.labelKey) : current.label}
             </h2>
-            <p className="m-0 max-w-[80ch] text-sm text-muted">{current.description}</p>
+            <p className="m-0 max-w-[80ch] text-sm text-muted">{current.descriptionKey ? t(current.descriptionKey) : current.description}</p>
           </header>
           {level === 'VIEW' ? (
             <Notice tone="info" icon="eye" title="Read only">
