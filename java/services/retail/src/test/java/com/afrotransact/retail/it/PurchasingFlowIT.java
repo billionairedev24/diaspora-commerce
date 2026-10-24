@@ -76,7 +76,7 @@ class PurchasingFlowIT extends RetailIntegrationTest {
         assertThat(jollof.sku()).startsWith("AT-JOL-");
         assertThat(jollof.gtin()).startsWith("04000").hasSize(12);
         assertThat(jollof.listingStatus()).isEqualTo(ListingStatus.DRAFT);
-        DOWNSTREAM.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/public/variants/" + atin)));
+        DOWNSTREAM.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/variants/" + atin)));
         as(TestActors.BUYER);
         assertThat(items.changeListing(jollof.id(), ListingStatus.LIVE, null).listingStatus())
                 .isEqualTo(ListingStatus.LIVE);

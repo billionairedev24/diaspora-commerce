@@ -148,7 +148,7 @@ de-duplicated) for COGS. See [`contracts/asyncapi/fragments/retail.yaml`](../../
 
 | Port | Adapter | Call |
 |---|---|---|
-| `CatalogClient` | `HttpCatalogClient` | `GET {CATALOG_BASE_URL}/v1/public/variants/{atin}` (anonymous) |
+| `CatalogClient` | `HttpCatalogClient` | `GET {CATALOG_BASE_URL}/v1/variants/{atin}` (retail-service token, `catalog:read`; any status, so drafts can be linked) |
 | `InventoryClient` | `HttpInventoryClient` | `POST {INVENTORY_BASE_URL}/v1/receipts` (Idempotency-Key, `inboundRef`, line `holdReason`) |
 | `WarehouseCalendar` | `InventoryWarehouseCalendar` | `GET {INVENTORY_BASE_URL}/v1/nodes` (node time zones, cached) |
 | `MediaStore` | `HttpMediaStore` | `POST {MEDIA_BASE_URL}/v1/uploads`, `PUT` to the signed storage URL, `POST /v1/assets/{id}/complete`, `GET /v1/assets/{id}` |

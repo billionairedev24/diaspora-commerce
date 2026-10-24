@@ -659,7 +659,7 @@
 - Receipt lines carry holdReason so no separate quarantine call
 - Inventory reservation events include stockOwnerOrgId
 - Payments schedules supplier payment on retail.payment.released
-- Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","In Progress"
+- Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","Done"
 "S227","Story","Fix contract lint findings","Make every contract pass tools/contracts/lint_contracts.sh: tags, summaries and explicit security on all operations; fix YAML flow-mapping commas that truncate descriptions; align notifications topic names with producers.","- lint_contracts.sh passes for every contract
 - CI runs the lint on contract changes
 - No consumer subscribes to a topic without a producer","E27","","High","3","contracts docs","docs","Done"
