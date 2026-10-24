@@ -195,6 +195,18 @@ class DeliveryFeeServiceTest {
     }
 
     @Test
+    void shoppersSeeTheRulesOfOneCurrencyWithoutSigningIn() {
+        seedDoor();
+        service.replace(FeeMethod.PICKUP, "CAD", new FeeRuleCommand(null, 150L, null, null, null, "Canada"), 0L);
+
+        assertThat(service.publicRules("usd")).extracting(DeliveryFeeRule::method)
+                .containsExactly(FeeMethod.AFROTRANSACT_DELIVERY);
+        assertThat(service.publicRules("CAD")).extracting(DeliveryFeeRule::method).containsExactly(FeeMethod.PICKUP);
+        assertThat(service.publicRules("EUR")).isEmpty();
+        verify(permissions, never()).require("delivery-runs:read");
+    }
+
+    @Test
     void previewResolvesLikeCheckoutForEveryMethod() {
         seedDoor();
         service.replace(FeeMethod.PICKUP, "USD", new FeeRuleCommand(null, 150L, null, null, null, "Pickup"), 0L);

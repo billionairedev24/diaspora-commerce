@@ -126,6 +126,12 @@ class DeliveryFeeIT {
         assertThat(carrier.path("fallbackMinor").asLong()).isEqualTo(599);
         assertThat(carrier.path("freeAboveMinor").asLong()).isEqualTo(3500);
 
+        Res publicRules = call(HttpMethod.GET, "/v1/public/delivery-fees?currency=USD", null, null);
+        assertThat(publicRules.status()).isEqualTo(200);
+        assertThat(rule(publicRules.body(), "CARRIER", "USD").path("fallbackMinor").asLong()).isEqualTo(599);
+        assertThat(call(HttpMethod.GET, "/v1/public/delivery-fees?currency=EUR", null, null).body().path("items"))
+                .isEmpty();
+
         Res settings = call(HttpMethod.GET, "/v1/preorder-settings", null, null);
         assertThat(settings.body().path("payment").has("doorFee")).as("the flat fee maps are gone").isFalse();
     }

@@ -19,6 +19,12 @@ public interface DeliveryFeeService {
     List<DeliveryFeeRule> rules();
 
     /**
+     * The rules of one currency for shoppers and the storefront (no sign-in): what delivery costs is public. Empty
+     * when staff set no rule in that currency.
+     */
+    List<DeliveryFeeRule> publicRules(String currency);
+
+    /**
      * Sets a rule's numbers (creating its first version when there is none). {@code expectedVersion} is the version the
      * caller saw (null = any; 0 = none yet). 422 {@code delivery-runs.reason-required} without a reason, and for numbers
      * that do not form a valid rule; 409 {@code delivery-runs.version-mismatch} when the rule changed meanwhile.

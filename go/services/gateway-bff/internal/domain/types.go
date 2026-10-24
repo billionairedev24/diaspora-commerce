@@ -223,6 +223,20 @@ type DeliveryOption struct {
 	EarliestDate string `json:"earliestDate,omitempty"`
 	LatestDate   string `json:"latestDate,omitempty"`
 	CutoffLabel  string `json:"cutoffLabel,omitempty"`
+	// FeeRule is the staff delivery fee rule that priced the option (carrier shipping; ADR 0005 §3); absent when the
+	// flat estimate applies. Orders keep the rule they charge by with the order.
+	FeeRule *FeeRuleRef `json:"feeRule,omitempty"`
+}
+
+// FeeRuleRef names the delivery fee rule behind a fee: the method, the rule and its version, the amount and where it
+// came from (RULE, CARRIER_FALLBACK, ...). The storefront shows it next to the fee.
+type FeeRuleRef struct {
+	Method      string `json:"method"`
+	RuleID      string `json:"ruleId,omitempty"`
+	RuleVersion int64  `json:"ruleVersion"`
+	AmountMinor int64  `json:"amountMinor"`
+	Source      string `json:"source,omitempty"`
+	Band        string `json:"band,omitempty"`
 }
 
 // ShippingNudge is "Add $X for free shipping".

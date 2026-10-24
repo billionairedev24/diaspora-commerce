@@ -802,7 +802,19 @@ func PreorderCartBlock(fulfilment string) map[string]any {
 		"opensAt": "2026-10-06T14:00:00Z", "closesAt": "2026-10-22T04:59:00Z", "deliversOn": "2026-10-25", "timeZone": "America/Chicago",
 		"fulfilment": fulfilment, "door": true, "pickup": true, "doorFeeMinor": 799, "pickupFeeMinor": 0, "currency": "USD",
 		"pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"},
-		"options": []any{map[string]any{"fulfilment": "DOOR", "feeMinor": 799}, map[string]any{"fulfilment": "PICKUP", "feeMinor": 0}}}
+		"feeRule": preorderFeeRule(fulfilment),
+		"options": []any{map[string]any{"fulfilment": "DOOR", "feeMinor": 799, "rule": preorderFeeRule("DOOR")},
+			map[string]any{"fulfilment": "PICKUP", "feeMinor": 0, "rule": preorderFeeRule("PICKUP")}}}
+}
+
+// preorderFeeRule is the delivery fee rule (ADR 0005 §3) behind the fake window's door or pickup fee.
+func preorderFeeRule(fulfilment string) map[string]any {
+	if fulfilment == "PICKUP" {
+		return map[string]any{"method": "PICKUP", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a12", "ruleVersion": 2, "currency": "USD",
+			"amountMinor": 0, "source": "RULE"}
+	}
+	return map[string]any{"method": "AFROTRANSACT_DELIVERY", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a11", "ruleVersion": 3,
+		"currency": "USD", "amountMinor": 799, "source": "RULE", "band": "10–40 mi", "distanceMiles": 32.0}
 }
 
 // preorderRoutes fakes delivery-runs' public pre-order routes: Lubbock (US/TX/Lubbock) has an open window; every

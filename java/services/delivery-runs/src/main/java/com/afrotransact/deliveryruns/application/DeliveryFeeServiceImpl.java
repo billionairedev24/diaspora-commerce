@@ -54,6 +54,13 @@ class DeliveryFeeServiceImpl implements DeliveryFeeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<DeliveryFeeRule> publicRules(String currency) {
+        String code = currency == null ? "" : currency.trim().toUpperCase(Locale.ROOT);
+        return rules.findAll().stream().filter(r -> r.currency().equals(code)).toList();
+    }
+
+    @Override
     @Transactional
     public DeliveryFeeRule replace(FeeMethod method, String currency, FeeRuleCommand c, Long expectedVersion) {
         Actor actor = permissions.require(DeliveryRunsPermissions.PREORDERS_MANAGE);

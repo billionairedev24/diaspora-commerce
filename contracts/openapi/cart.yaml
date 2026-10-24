@@ -230,6 +230,20 @@ components:
           type: string
           description: Checkout delivery-selection key, <sellerOrgId>:<fulfilment> or preorder:<windowId>
         preorder: {$ref: '#/components/schemas/PackagePreorder'}
+    FeeRule:
+      type: object
+      description: |
+        The staff delivery fee rule behind a fee (ADR 0005 §3), as delivery-runs resolved it for this address: shown next
+        to the fee at checkout and kept on the order. Absent when delivery-runs sent none.
+      properties:
+        method: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}
+        ruleId: {type: string}
+        ruleVersion: {type: integer, format: int64}
+        currency: {type: string}
+        amountMinor: {type: integer, format: int64}
+        source: {type: string, enum: [RULE, WINDOW_OVERRIDE, CARRIER_QUOTE, CARRIER_FALLBACK]}
+        band: {type: string, description: 'Distance band applied, e.g. "10–40 mi"'}
+        distanceMiles: {type: number}
     PackagePreorder:
       type: object
       description: S272 pre-order window of a package (lines of several sellers delivered together)
@@ -250,6 +264,8 @@ components:
         pickupWindow: {type: string, description: 'Pickup hours on delivery day, e.g. 10am–2pm'}
         fulfilment: {type: string, enum: [DOOR, PICKUP]}
         feeMinor: {type: integer, format: int64, description: Fee of the chosen fulfilment}
+        feeRule:
+          $ref: '#/components/schemas/FeeRule'
         options:
           type: array
           items:
@@ -258,6 +274,8 @@ components:
               fulfilment: {type: string, enum: [DOOR, PICKUP]}
               feeMinor: {type: integer, format: int64}
               currency: {type: string}
+              rule:
+                $ref: '#/components/schemas/FeeRule'
         allowedMethods:
           type: array
           description: Payment methods the window allows (all when its setup names none)

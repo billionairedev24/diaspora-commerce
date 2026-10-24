@@ -11,6 +11,7 @@ import com.afrotransact.deliveryruns.application.DeliveryFeeService;
 import com.afrotransact.deliveryruns.domain.DeliveryFeeRule;
 import com.afrotransact.deliveryruns.domain.FeeMethod;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
@@ -43,6 +44,15 @@ class DeliveryFeeController {
     @GetMapping("/v1/delivery-fees")
     RulesResponse rules() {
         return RulesResponse.of(fees.rules());
+    }
+
+    @Operation(summary = "What delivery costs in one currency (no sign-in)",
+            description = "The AfroTransact delivery bands, carrier rate and pickup fee a shopper pays. The storefront "
+                    + "shows them; empty when staff set no rule in the currency.")
+    @SecurityRequirements
+    @GetMapping("/v1/public/delivery-fees")
+    RulesResponse publicRules(@RequestParam(defaultValue = "USD") String currency) {
+        return RulesResponse.of(fees.publicRules(currency));
     }
 
     @Operation(summary = "Set the delivery fee of one method and currency (preorders:manage)",
