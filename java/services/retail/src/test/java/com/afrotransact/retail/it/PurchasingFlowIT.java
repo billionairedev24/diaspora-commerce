@@ -162,7 +162,13 @@ class PurchasingFlowIT extends RetailIntegrationTest {
                 .withRequestBody(WireMock.matchingJsonPath("$.inboundRef", WireMock.equalTo(r.shipmentRef())))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].qtyDamaged", WireMock.equalTo("10")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].shelfLifeDays", WireMock.equalTo("548")))
-                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].currency", WireMock.equalTo("USD"))));
+                // A cedi PO: inventory gets what was paid (GHS), the PO's rate and the USD cost retail booked.
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].currency", WireMock.equalTo("GHS")))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].fxRateToUsd", WireMock.equalTo("0.0648508431")))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].fxRateDate"))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].unitCostUsdMinor"))
+                .withRequestBody(WireMock.matchingJsonPath("$[?(@.lines[1].unitLandedCostMinor > "
+                        + "@.lines[1].unitCostUsdMinor)]")));
         assertThat(done.postedLots()).hasSize(3);
         assertThat(done.landedCost().fobMinor()).isEqualTo(done.landedCost().lines().stream()
                 .mapToLong(l -> l.fobValueMinor()).sum());

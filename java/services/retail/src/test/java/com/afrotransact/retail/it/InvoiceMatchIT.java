@@ -154,4 +154,19 @@ class InvoiceMatchIT extends RetailIntegrationTest {
         assertThat(cogs.onShipped(eventId, "ORD-118204", lines)).isEmpty();
         assertThat(cogs.onShipped(UUID.randomUUID(), "ORD-3P", List.of(lines.get(1)))).isEmpty();
     }
+
+    @Test
+    void lotsPaidInPesosPostCogsAtTheirUsdValueFixedAtReceiving() {
+        Received rc = received();
+        // 2 units from a Mexican lot (MXN 120.00 each, valued $6.92 when received) and 1 from a dollar lot.
+        List<ShippedLine> lines = List.of(new ShippedLine(rc.item().sku(), 3, List.of(
+                new ShippedLine.LotCost("L-MX", 2, 12_000, "MXN", 692L), new ShippedLine.LotCost("L-US", 1, 140, "USD"))));
+        Optional<JournalEntry> posted = cogs.onShipped(UUID.randomUUID(), "ORD-MX-1", lines);
+        assertThat(posted).isPresent();
+        assertThat(posted.get().lines()).containsExactly(new JournalLine(GlAccount.COGS, 1_524, 0),
+                new JournalLine(GlAccount.INVENTORY, 0, 1_524));
+        List<ShippedLine> unknown = List.of(new ShippedLine(rc.item().sku(), 1, List.of(
+                new ShippedLine.LotCost("L-OLD", 1, 5_000, "MXN"))));
+        assertThat(cogs.onShipped(UUID.randomUUID(), "ORD-MX-2", unknown)).as("no USD value, no guess").isEmpty();
+    }
 }
