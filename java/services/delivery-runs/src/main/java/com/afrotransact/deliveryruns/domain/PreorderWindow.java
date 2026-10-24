@@ -152,12 +152,12 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         return failed;
     }
 
-    /** The design's checks plus the payment setup: a door window needs a door fee in its currency. */
-    public List<RuleViolation> publishChecks(PaymentSettings payment) {
+    /** The design's checks plus the delivery fees: a door window needs a fee rule (or its own fee) in its currency. */
+    public List<RuleViolation> publishChecks(DeliveryFees fees) {
         List<RuleViolation> failed = publishChecks();
-        if (details.door() && doorFee(payment).isEmpty()) {
+        if (details.door() && details.doorFeeOverride() == null && !fees.offersDoor(details.currency())) {
             failed.add(new RuleViolation("delivery-runs.preorder-fee-missing",
-                    "Door delivery fee set for " + details.currency()));
+                    "AfroTransact delivery fee set for " + details.currency() + " (Delivery fees)"));
         }
         return failed;
     }
@@ -169,9 +169,9 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         return details.smsCopy().replace(SMS_LINK, pageUrl + "?src=sms&po=" + code + "&cr=announce");
     }
 
-    /** As {@link #publishChecks(PaymentSettings)}, plus: the announcement SMS fits one message with its tracked link. */
-    public List<RuleViolation> publishChecks(PaymentSettings payment, String pageUrl) {
-        List<RuleViolation> failed = publishChecks(payment);
+    /** As {@link #publishChecks(DeliveryFees)}, plus: the announcement SMS fits one message with its tracked link. */
+    public List<RuleViolation> publishChecks(DeliveryFees fees, String pageUrl) {
+        List<RuleViolation> failed = publishChecks(fees);
         if (pageUrl != null && !Gsm7.fitsOneSegment(smsAsSent(pageUrl))) {
             failed.add(new RuleViolation("delivery-runs.preorder-sms-too-long",
                     "Announcement SMS fits one message with its tracked link"));
@@ -181,33 +181,32 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
 
     // ---- fees ------------------------------------------------------------------------------------------------
 
-    /** Effective door fee: the window override, else the platform fee in the window's currency. */
-    public Optional<Money> doorFee(PaymentSettings payment) {
-        if (details.doorFeeOverride() != null) {
-            return Optional.of(details.doorFeeOverride());
-        }
-        return payment.doorFee(details.currency());
+    /**
+     * The door fee a shopper pays and the rule behind it: the window's own fee, else the AfroTransact delivery rule's
+     * band for how far the window delivers. Empty when no door delivery is possible (no rule, or beyond the last band).
+     */
+    public Optional<FeeSnapshot> doorFee(DeliveryFees fees) {
+        return fees.door(this);
     }
 
-    /** Effective pickup fee: the window override, else the platform fee (free by default). */
-    public Money pickupFee(PaymentSettings payment) {
-        return details.pickupFeeOverride() != null ? details.pickupFeeOverride()
-                : payment.pickupFee(details.currency());
+    /** The pickup fee a shopper pays and the rule behind it: the window's own fee, else the pickup rule (free if none). */
+    public FeeSnapshot pickupFee(DeliveryFees fees) {
+        return fees.pickup(this);
     }
 
     // ---- lifecycle -------------------------------------------------------------------------------------------
 
     /** DRAFT → published (active). Every check must pass. */
-    public PreorderWindow publish(PaymentSettings payment, Instant now) {
-        return publish(payment, null, now);
+    public PreorderWindow publish(DeliveryFees fees, Instant now) {
+        return publish(fees, null, now);
     }
 
     /** DRAFT → published, also checking the announcement SMS with its link under {@code pageUrl} (null skips it). */
-    public PreorderWindow publish(PaymentSettings payment, String pageUrl, Instant now) {
+    public PreorderWindow publish(DeliveryFees fees, String pageUrl, Instant now) {
         if (!draft) {
             throw new InvalidTransitionException(status(now).name(), "PUBLISHED");
         }
-        List<RuleViolation> failed = publishChecks(payment, pageUrl);
+        List<RuleViolation> failed = publishChecks(fees, pageUrl);
         if (!failed.isEmpty()) {
             throw new PublishBlockedException(failed);
         }
@@ -234,12 +233,12 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
      * Resume, re-running the publish checks first: a window only goes back on the storefront when it would still be
      * allowed to publish (e.g. its currency still has a door fee).
      */
-    public PreorderWindow resume(PaymentSettings payment, String pageUrl, Instant now) {
+    public PreorderWindow resume(DeliveryFees fees, String pageUrl, Instant now) {
         PreorderStatus s = status(now);
         if (draft || active || timeStatus(now) == PreorderStatus.DELIVERED) {
             throw new InvalidTransitionException(s.name(), "ACTIVE");
         }
-        List<RuleViolation> failed = publishChecks(payment, pageUrl);
+        List<RuleViolation> failed = publishChecks(fees, pageUrl);
         if (!failed.isEmpty()) {
             throw new PublishBlockedException(failed);
         }
@@ -253,30 +252,30 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
 
     /**
      * Sets this window's own switch (idempotent: the same state returns this window unchanged). Switching on runs the
-     * publish checks ({@link #resume(PaymentSettings, String, Instant)}); drafts and delivered windows refuse.
+     * publish checks ({@link #resume(DeliveryFees, String, Instant)}); drafts and delivered windows refuse.
      */
-    public PreorderWindow switchTo(boolean on, PaymentSettings payment, String pageUrl, Instant now) {
+    public PreorderWindow switchTo(boolean on, DeliveryFees fees, String pageUrl, Instant now) {
         if (!switchable(now)) {
             throw new InvalidTransitionException(status(now).name(), on ? "ACTIVE" : PreorderStatus.PAUSED.name());
         }
         if (on == active) {
             return this;
         }
-        return on ? resume(payment, pageUrl, now) : pause(now);
+        return on ? resume(fees, pageUrl, now) : pause(now);
     }
 
     /** Changes the details; a published window must still pass its checks, a delivered one is read-only. */
-    public PreorderWindow edit(WindowDetails changed, PaymentSettings payment, Instant now) {
-        return edit(changed, payment, null, now);
+    public PreorderWindow edit(WindowDetails changed, DeliveryFees fees, Instant now) {
+        return edit(changed, fees, null, now);
     }
 
-    /** As {@link #edit(WindowDetails, PaymentSettings, Instant)}, checking the SMS link under {@code pageUrl}. */
-    public PreorderWindow edit(WindowDetails changed, PaymentSettings payment, String pageUrl, Instant now) {
+    /** As {@link #edit(WindowDetails, DeliveryFees, Instant)}, checking the SMS link under {@code pageUrl}. */
+    public PreorderWindow edit(WindowDetails changed, DeliveryFees fees, String pageUrl, Instant now) {
         requireEditable(now);
         PreorderWindow next = new PreorderWindow(id, code, changed, creatives, draft, active, runId, outcome, createdAt, now,
                 version);
         if (!draft) {
-            List<RuleViolation> failed = next.publishChecks(payment, pageUrl);
+            List<RuleViolation> failed = next.publishChecks(fees, pageUrl);
             if (!failed.isEmpty()) {
                 throw new PublishBlockedException(failed);
             }

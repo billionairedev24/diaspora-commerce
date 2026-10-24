@@ -11,6 +11,7 @@ import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.Coverage;
 import com.afrotransact.deliveryruns.domain.Markets;
 import com.afrotransact.deliveryruns.domain.Money;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
@@ -32,9 +33,12 @@ class PreorderSupport {
     private final PreorderOrderRepository orders;
     private final String pageUrl;
     private final int defaultMinOrders;
+    private final FeeBook fees;
 
     PreorderSupport(PreorderWindowRepository windows, PreorderSettingsRepository settings,
-                    PreorderOrderRepository orders, DeliveryRunsSettings runSettings, PreorderOptions options) {
+                    PreorderOrderRepository orders, DeliveryRunsSettings runSettings, PreorderOptions options,
+                    FeeBook fees) {
+        this.fees = fees;
         this.defaultMinOrders = options.defaultMinOrders();
         this.windows = windows;
         this.settings = settings;
@@ -53,7 +57,7 @@ class PreorderSupport {
     }
 
     Coverage coverage() {
-        return new Coverage(settings.settings(), settings.areas());
+        return new Coverage(settings.settings(), settings.areas(), fees.current());
     }
 
     PreorderWindow find(UUID id) {
@@ -81,8 +85,9 @@ class PreorderSupport {
         PaymentSettings payment = coverage.settings().payment();
         WindowTotals t = totals.getOrDefault(w.id(), new WindowTotals(0, 0));
         boolean areaOff = !coverage.settings().enabled() || coverage.allTargetsOff(w.details().targets());
-        return new WindowView(w, w.status(now), w.publishChecks(payment, pageUrl), w.doorFee(payment).orElse(null),
-                w.pickupFee(payment), payment.pickupWindow(), t.orders(),
+        FeeSnapshot door = w.details().door() ? w.doorFee(coverage.fees()).orElse(null) : null;
+        return new WindowView(w, w.status(now), w.publishChecks(coverage.fees(), pageUrl), door,
+                w.pickupFee(coverage.fees()), payment.pickupWindow(), t.orders(),
                 t.revenueMinor(), areaOff, WindowSwitch.of(w, coverage, now));
     }
 

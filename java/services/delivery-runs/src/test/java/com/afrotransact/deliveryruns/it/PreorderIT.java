@@ -278,13 +278,12 @@ class PreorderIT {
     void settingsCarryThePaymentSetupWithValidationAndIfMatch() {
         Res current = call(HttpMethod.GET, "/v1/preorder-settings", null, null);
         assertThat(current.status()).isEqualTo(200);
-        assertThat(current.body().path("payment").path("doorFee").path("USD").asLong()).isEqualTo(799);
+        assertThat(current.body().path("payment").has("doorFee")).as("fees are delivery fee rules now").isFalse();
         assertThat(current.body().path("payment").path("lateAdd").path("linkExpiryHours").asInt()).isEqualTo(24);
         assertThat(current.body().path("payment").path("pickupWindow").asString()).isEqualTo("10am–2pm");
         assertThat(current.body().path("placements").path("family").asBoolean()).isTrue();
         try {
             Map<String, Object> payment = new LinkedHashMap<>();
-            payment.put("doorFee", Map.of("USD", 899, "CAD", 1099));
             payment.put("allowedMethods", List.of("CARD", "WALLET"));
             payment.put("lateAdd", Map.of("savedCard", true, "paymentLink", false, "linkExpiryHours", 12));
             Res saved = call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("fallback", "WAITLIST", "placements",
@@ -293,16 +292,11 @@ class PreorderIT {
             assertThat(saved.body().path("fallback").asString()).isEqualTo("WAITLIST");
             assertThat(saved.body().path("placements").path("family").asBoolean()).isFalse();
             assertThat(saved.body().path("placements").path("hero").asBoolean()).isTrue();
-            assertThat(saved.body().path("payment").path("doorFee").path("CAD").asLong()).isEqualTo(1099);
             assertThat(saved.body().path("payment").path("allowedMethods")).hasSize(2);
             assertThat(saved.body().path("payment").path("lateAdd").path("paymentLink").asBoolean()).isFalse();
 
             Res stale = call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("enabled", true), current.etag());
             assertThat(stale.status()).isEqualTo(412);
-            Res tooHigh = call(HttpMethod.PUT, "/v1/preorder-settings",
-                    Map.of("payment", Map.of("doorFee", Map.of("USD", 10_001))), null);
-            assertThat(tooHigh.status()).isEqualTo(422);
-            assertThat(tooHigh.body().path("code").asString()).isEqualTo("delivery-runs.invalid-fee");
             Res noMethod = call(HttpMethod.PUT, "/v1/preorder-settings",
                     Map.of("payment", Map.of("allowedMethods", List.of())), null);
             assertThat(noMethod.status()).isEqualTo(422);
@@ -315,7 +309,6 @@ class PreorderIT {
             assertThat(outboxTypes("preorder-settings")).contains("preorder.settings.changed");
         } finally {
             Map<String, Object> defaults = new LinkedHashMap<>();
-            defaults.put("doorFee", Map.of("USD", 799, "CAD", 999));
             defaults.put("allowedMethods", List.of("CARD", "WALLET", "ACH"));
             defaults.put("lateAdd", Map.of("savedCard", true, "paymentLink", true, "linkExpiryHours", 24));
             assertThat(call(HttpMethod.PUT, "/v1/preorder-settings", Map.of("enabled", true, "fallback", "SHIP",

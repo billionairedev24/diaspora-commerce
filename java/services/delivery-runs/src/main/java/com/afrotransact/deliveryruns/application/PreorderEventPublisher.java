@@ -13,7 +13,8 @@ import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.CommKind;
 import com.afrotransact.deliveryruns.domain.CreativeRef;
 import com.afrotransact.deliveryruns.domain.CreativeSlot;
-import com.afrotransact.deliveryruns.domain.Money;
+import com.afrotransact.deliveryruns.domain.DeliveryFees;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderSettings;
@@ -36,8 +37,11 @@ class PreorderEventPublisher {
     private final DomainEventPublisher events;
     private final DeliveryRunsSettings settings;
     private final PreorderOptions options;
+    private final FeeBook book;
 
-    PreorderEventPublisher(DomainEventPublisher events, DeliveryRunsSettings settings, PreorderOptions options) {
+    PreorderEventPublisher(DomainEventPublisher events, DeliveryRunsSettings settings, PreorderOptions options,
+                           FeeBook book) {
+        this.book = book;
         this.events = events;
         this.settings = settings;
         this.options = options;
@@ -162,8 +166,9 @@ class PreorderEventPublisher {
                                          Instant now, List<PreorderEventPayload.OrderRef> orders,
                                          String actorId, WindowDecision decision) {
         WindowDetails d = w.details();
-        Long door = d.door() ? w.doorFee(payment).map(Money::minor).orElse(null) : null;
-        Long pickup = d.pickup() ? w.pickupFee(payment).minor() : null;
+        DeliveryFees fees = book.current();
+        Long door = d.door() ? w.doorFee(fees).map(FeeSnapshot::amountMinor).orElse(null) : null;
+        Long pickup = d.pickup() ? w.pickupFee(fees).amountMinor() : null;
         CreativeRef hero = w.creatives().get(CreativeSlot.HERO);
         CreativeRef email = w.creatives().get(CreativeSlot.EMAIL);
         List<String> targets = d.targets().stream().map(AreaKey::key).toList();

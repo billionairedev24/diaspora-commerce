@@ -2,7 +2,7 @@ package com.afrotransact.deliveryruns.application;
 
 import java.util.List;
 
-import com.afrotransact.deliveryruns.domain.Money;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.PreorderResolver.Eligibility;
 import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
@@ -28,7 +28,7 @@ public interface PreorderPublicService {
      * @param doorFee   effective door fee (null without door delivery)
      * @param pickupFee effective pickup fee (null without pickup)
      */
-    record OpenWindow(PreorderWindow window, PreorderStatus stage, Money doorFee, Money pickupFee) {
+    record OpenWindow(PreorderWindow window, PreorderStatus stage, FeeSnapshot doorFee, FeeSnapshot pickupFee) {
     }
 
     /**
