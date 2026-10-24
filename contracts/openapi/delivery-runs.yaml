@@ -23,6 +23,9 @@ tags:
 - name: Pre-orders
   description: 'Staff: pre-order windows, creatives, orders, analytics, exports and late adds (delivery-runs:read to view;
     preorders:manage, preorders:export, preorders:late-add)'
+- name: Delivery fees
+  description: 'Staff: the delivery fee by delivery method (AfroTransact delivery by distance band, carrier shipping, pickup)
+    and its audit trail (delivery-runs:read to view; preorders:manage to change)'
 - name: Locations
   description: 'Staff: towns / areas served by delivery runs (delivery-runs:read / :manage)'
 - name: Public runs
@@ -39,6 +42,147 @@ tags:
 - name: Public pre-orders
   description: 'No sign-in: what the storefront shows for a delivery place; service: per-product eligibility for orders-service'
 paths:
+  /v1/delivery-fees:
+    get:
+      tags:
+      - Delivery fees
+      summary: Every delivery fee rule (delivery-runs:read)
+      description: 'One rule per method and currency: AFROTRANSACT_DELIVERY (flat fee by distance band, inside covered locations),
+        CARRIER (carrier-gateway quote plus handling, beyond coverage) and PICKUP (often 0).'
+      operationId: rules
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryFeeRules'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/delivery-fees/changes:
+    get:
+      tags:
+      - Delivery fees
+      summary: Audit trail of the delivery fees, newest first (delivery-runs:read)
+      description: Every version of every rule (or one method and currency) with the rule before and after, who changed it,
+        when and why.
+      operationId: changes
+      parameters:
+      - name: method
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryFeeChanges'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/delivery-fees/preview:
+    post:
+      tags:
+      - Delivery fees
+      summary: What would a customer pay? (delivery-runs:read)
+      description: 'The same resolution checkout runs: the window''s own fee first, then the method''s rule. applies is false
+        when no rule can price it (no rule, or beyond how far AfroTransact delivers: the order ships by carrier).'
+      operationId: preview_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryFeePreviewRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryFeeResolution'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/delivery-fees/{method}/{currency}:
+    put:
+      tags:
+      - Delivery fees
+      summary: Set the delivery fee of one method and currency (preorders:manage)
+      description: Creates the rule or makes its next version. A reason is required (422 delivery-runs.reason-required) and
+        is logged with who and when; numbers that are not a valid rule are 422 (bands must start at 0 and not overlap or leave
+        a gap, fees are 0 to 100.00). If-Match is the version seen (0 when the rule does not exist yet; 412 delivery-runs.version-mismatch
+        when it changed). A save that changes nothing makes no new version. Orders already placed keep the rule version they
+        were charged by.
+      operationId: replace
+      parameters:
+      - name: method
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
+      - name: currency
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryFeeRuleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryFeeRule'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/locations:
     get:
       tags:
@@ -2192,6 +2336,34 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/service/delivery-fees/carrier:
+    post:
+      tags:
+      - Delivery fees
+      summary: The carrier rate of an order shipped beyond coverage (delivery-runs:reserve, orders-service)
+      description: The carrier-gateway quote plus the rule's handling fee; the rule's fallback fee when there is no quote;
+        0 over the free-shipping threshold. applies is false without a CARRIER rule for the currency (orders-service then
+        uses its own flat rates).
+      operationId: carrier
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CarrierFeeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryFeeResolution'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/service/locations/{locationId}/audience:
     get:
       tags:
@@ -2838,6 +3010,40 @@ components:
           type: string
         message:
           type: string
+    DeliveryFeeRuleRef:
+      type: object
+      description: 'What a customer pays for delivery and which rule said so: the method, the rule and its version, the
+
+        distance band applied and how far the address is, and where the amount came from.'
+      properties:
+        method:
+          type: string
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
+        ruleId:
+          type: string
+          format: uuid
+        ruleVersion:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        source:
+          type: string
+          enum:
+          - RULE
+          - WINDOW_OVERRIDE
+          - CARRIER_QUOTE
+          - CARRIER_FALLBACK
+        band:
+          type: string
+        distanceMiles:
+          type: number
     PreorderCreative:
       type: object
       description: An uploaded creative
@@ -3040,6 +3246,13 @@ components:
           - AWAITING_DECISION
           - PROCEEDED
           - CANCELLED
+        doorFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+          description: The rule behind the door fee (or the window's own fee); absent when door delivery is not offered or
+            no rule applies
+        pickupFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+          description: The rule behind the pickup fee (or the window's own fee)
     TargetResponse:
       type: object
       properties:
@@ -3078,25 +3291,10 @@ components:
           type: boolean
     PreorderPaymentSettings:
       type: object
-      description: 'Fees per currency in minor units (0–10000), at least one payment method. Customers cancel for a full
+      description: 'At least one payment method. Customers cancel for a full refund incl. the delivery fee until the window
 
-        refund incl. the delivery fee until the window closes (cancelUntil CLOSE).'
+        closes (cancelUntil CLOSE). Delivery fees are not here: see the delivery fee rules (/v1/delivery-fees).'
       properties:
-        doorFee:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int64
-          example:
-            USD: 799
-            CAD: 999
-        pickupFee:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int64
-          example:
-            USD: 0
         pickupWindow:
           type: string
           example: 10am–2pm
@@ -3451,6 +3649,103 @@ components:
         radiusMiles:
           type: number
           format: double
+    DeliveryFeeBand:
+      type: object
+      description: Addresses fromMiles (inclusive) up to toMiles (exclusive) from the hub pay feeMinor
+      properties:
+        fromMiles:
+          type: number
+          minimum: 0
+        toMiles:
+          type: number
+        feeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - feeMinor
+      - fromMiles
+      - toMiles
+    DeliveryFeeRuleRequest:
+      type: object
+      description: 'The rule''s new numbers; a method ignores what it does not use. The reason is required and is logged with
+
+        who and when.'
+      properties:
+        bands:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryFeeBand'
+          maxItems: 12
+          minItems: 0
+        feeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        handlingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        fallbackMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        freeAboveMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    DeliveryFeeRule:
+      type: object
+      description: 'The delivery fee for one method in one currency; the ETag carries the version for If-Match.
+
+        AFROTRANSACT_DELIVERY has bands; CARRIER the handling, fallback and free-over amounts; PICKUP its fee.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
+        currency:
+          type: string
+        version:
+          type: integer
+          format: int64
+        bands:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryFeeBand'
+        feeMinor:
+          type: integer
+          format: int64
+        handlingMinor:
+          type: integer
+          format: int64
+        fallbackMinor:
+          type: integer
+          format: int64
+        freeAboveMinor:
+          type: integer
+          format: int64
+        coverageMiles:
+          type: number
+          description: How far AfroTransact delivers (end of the last band); 0 for the other methods
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        reason:
+          type: string
     ReserveSlotRequest:
       type: object
       properties:
@@ -3531,6 +3826,36 @@ components:
           format: int64
         currency:
           type: string
+    CarrierFeeRequest:
+      type: object
+      description: The carrier rate for an order shipped beyond coverage
+      properties:
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 0
+        carrierQuoteMinor:
+          type: integer
+          format: int64
+          description: The carrier-gateway quote, if there is one
+          minimum: 0
+        itemsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - currency
+      - itemsMinor
+    DeliveryFeeResolution:
+      type: object
+      description: 'applies is false when no rule can price it: no rule for the method and currency, or the address is beyond
+
+        how far AfroTransact delivers (the order ships by carrier).'
+      properties:
+        applies:
+          type: boolean
+        fee:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
     ExtendRunRequest:
       type: object
       description: New cutoff; without a new window the window moves by as much
@@ -4147,6 +4472,41 @@ components:
       required:
       - channels
       - locationId
+    DeliveryFeePreviewRequest:
+      type: object
+      description: What would a customer pay?
+      properties:
+        method:
+          type: string
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 0
+        distanceMiles:
+          type: number
+          description: 'AFROTRANSACT_DELIVERY: miles from the hub (absent: the window''s own distance, else the farthest band)'
+          minimum: 0
+        windowId:
+          type: string
+          format: uuid
+          description: Apply this window's own fee and distance
+        carrierQuoteMinor:
+          type: integer
+          format: int64
+          description: 'CARRIER: the carrier-gateway quote, if any'
+          minimum: 0
+        itemsMinor:
+          type: integer
+          format: int64
+          description: 'CARRIER: goods subtotal (free-shipping threshold)'
+          minimum: 0
+      required:
+      - currency
+      - method
     PreorderBulkSwitchRequest:
       type: object
       description: Switch several windows on or off; each on its own
@@ -4422,6 +4782,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PreorderEligibilityItem'
+        routedTo:
+          type: string
+          description: 'CARRIER when a window covers the place but the address is beyond how far AfroTransact delivers: the
+            order ships by carrier, not on a run'
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
     PreorderEligibilityItem:
       type: object
       description: 'One product. Window fields are set when preorder is true: orders-service builds the PREORDER package from
@@ -4482,9 +4850,17 @@ components:
           type: string
         pickupPointId:
           type: string
+        doorFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+          description: The rule behind doorFeeMinor; orders-service keeps it on the order
+        pickupFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+          description: The rule behind pickupFeeMinor
     PreorderFees:
       type: object
-      description: Effective fees in minor units (null = option not offered)
+      description: 'Effective fees in minor units (null = option not offered) and the rule each came from. Orders keeps the
+
+        rule with the order, so later edits never change an order already placed.'
       properties:
         doorFeeMinor:
           type: integer
@@ -4496,6 +4872,10 @@ components:
           type: string
         pickupWindow:
           type: string
+        doorFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+        pickupFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
     AudiencePage:
       type: object
       properties:
@@ -5205,6 +5585,49 @@ components:
         count:
           type: integer
           format: int64
+    DeliveryFeeRules:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryFeeRule'
+    DeliveryFeeChange:
+      type: object
+      description: 'One entry of the audit trail: the rule before and after, who, when and why'
+      properties:
+        id:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum:
+          - AFROTRANSACT_DELIVERY
+          - CARRIER
+          - PICKUP
+        currency:
+          type: string
+        version:
+          type: integer
+          format: int64
+        before:
+          $ref: '#/components/schemas/DeliveryFeeRule'
+        after:
+          $ref: '#/components/schemas/DeliveryFeeRule'
+        actor:
+          type: string
+        reason:
+          type: string
+        at:
+          type: string
+          format: date-time
+    DeliveryFeeChanges:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryFeeChange'
     Problem:
       type: object
       description: RFC 9457 problem details; `code` is a stable delivery-runs.* (or auth.*) code
