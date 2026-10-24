@@ -497,8 +497,11 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"id": "org-2", "displayName": "Ade's Kitchen", "kind": "SELLER", "status": "APPROVED"},
 			map[string]any{"id": "org-retail", "displayName": "AfroTransact Retail", "kind": "SELLER", "status": "APPROVED"}}, "page": 0, "size": 200, "total": 3})
 	// inventory, retail, fulfilment
+	case p == "/v1/exchange-rates" || p == "/v1/exchange-rates/history":
+		writeJ(w, 200, page(map[string]any{"currency": "MXN", "rateDate": "2026-10-20", "rateToUsd": 0.0577, "updatedBy": "ops", "updatedAt": now, "version": 0}))
 	case p == "/v1/lots" || strings.HasPrefix(p, "/v1/lots/"):
-		lot := map[string]any{"id": "lot-1", "sku": "AT-SHEA", "lotNo": "L1", "nodeId": "HOU", "qtyOnHand": 10, "qtyReserved": 2, "qtyAvailable": 8, "status": "SELLABLE", "version": 4}
+		lot := map[string]any{"id": "lot-1", "sku": "AT-SHEA", "lotNo": "L1", "nodeId": "HOU", "qtyOnHand": 10, "qtyReserved": 2, "qtyAvailable": 8, "status": "SELLABLE", "version": 4,
+			"unitLandedCostMinor": 192, "currency": "USD", "fxRateToUsd": 1, "unitCostUsdMinor": 192}
 		if p == "/v1/lots" {
 			writeJ(w, 200, page(lot))
 		} else {

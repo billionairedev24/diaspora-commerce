@@ -113,6 +113,8 @@ var opsRoutes = []opsRoute{
 	// ---- inventory-service
 	route(areaInventory, opGet, "/overview", "/v1/overview", lvView, "nodeId", "ownerOrg"),
 	route(areaInventory, opGet, "/nodes", "/v1/nodes", lvView),
+	route(areaInventory, opGet, "/currencies", "/v1/currencies", lvView),
+	route(areaInventory, opGet, "/exchange-rates/current", "/v1/exchange-rates/current", lvView, "asOf"),
 	route(areaInventory, opGet, "/inbound", "/v1/inbound/shipments", lvView, withPage("ownerOrg", "nodeId", "status", "source", "sku")...),
 	route(areaInventory, opPost, "/inbound", "/v1/inbound/shipments", lvEdit),
 	route(areaInventory, opGet, "/inbound/{id}", "/v1/inbound/shipments/{id}", lvView),

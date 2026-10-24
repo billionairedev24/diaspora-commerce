@@ -2732,6 +2732,36 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/currencies:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffCurrencies
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/currencies`
+      description: 'Mirrors inventory `GET /v1/currencies` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The currencies stock can be received in (customers always pay in USD): `code`, `name`, `minorUnits`, and `base` for USD, first.'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/exchange-rates/current:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffExchangeRatesCurrent
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/exchange-rates/current`
+      description: 'Mirrors inventory `GET /v1/exchange-rates/current` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The rate receiving suggests for every currency that has one: the latest on or before `asOf` (default today), as `currency`, `rateDate` and `rateToUsd` (US dollars per unit). The table itself is the `exchange-rates` Resource (Settings → Exchange rates).'
+      parameters:
+        - {name: asOf, in: query, schema: {type: string, maxLength: 120}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/inventory/inbound:
     get:
       tags: [Inventory hub]
@@ -5432,7 +5462,7 @@ components:
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, tax-codes, tax-rules, tax-review, dispatch-shipments, sos-alerts, vehicle-defects,
         driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
-        oauth-clients, identity-sessions, signing-keys, auth-settings]
+        oauth-clients, identity-sessions, signing-keys, auth-settings, exchange-rates]
     Tone: {type: string, enum: [good, warn, bad, info, brand]}
     CellValue:
       type: [string, number, 'null']

@@ -64,7 +64,10 @@ func (f *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"lines": []any{map[string]any{"lineNo": 1, "sku": "AT-JOL-200061", "expectedQty": 12, "receivedGood": 0, "receivedDamaged": 0,
 			"shortQty": 12, "overQty": 0, "casePack": 6, "cases": 2, "lotNo": "B-77", "mfgDate": "2026-09-01", "expDate": "2027-09-01"}}}
 	lot := map[string]any{"id": "5b1d0c9e-0000-4000-8000-000000000002", "sku": "AT-JOL-200061", "lotNo": "B-77", "nodeId": "HOU-FC",
-		"qtyOnHand": 12, "qtyReserved": 0, "qtyAvailable": 12, "expDate": "2027-09-01", "status": "SELLABLE", "markdownFlag": "NONE", "version": 0}
+		"qtyOnHand": 12, "qtyReserved": 0, "qtyAvailable": 12, "expDate": "2027-09-01", "status": "SELLABLE", "markdownFlag": "NONE", "version": 0,
+		"unitLandedCostMinor": 12000, "currency": "MXN", "fxRateToUsd": 0.0577, "fxRateDate": "2026-10-20", "fxRateSource": "TABLE", "unitCostUsdMinor": 692}
+	rate := map[string]any{"currency": "MXN", "rateDate": "2026-10-20", "rateToUsd": 0.0577, "note": "Banxico FIX", "updatedBy": "ops", "createdAt": "2026-10-20T10:00:00Z",
+		"updatedAt": "2026-10-21T10:00:00Z", "version": 1}
 	count := map[string]any{"id": "c0c0c0c0-0000-4000-8000-000000000003", "number": "CC-000001", "nodeId": "HOU-FC", "status": "OPEN", "blind": false,
 		"netVariance": 0, "varianceLines": 0, "version": 0, "lines": []any{map[string]any{"lineNo": 1, "lotId": lot["id"], "sku": "AT-JOL-200061",
 			"lotNo": "B-77", "expectedQty": 12, "countedQty": nil, "variance": 0}}}
@@ -101,6 +104,21 @@ func (f *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, page(count))
 	case strings.HasPrefix(p, "/v1/cycle-counts"):
 		writeJ(w, 200, count)
+	case p == "/v1/currencies":
+		writeJ(w, 200, []any{map[string]any{"code": "USD", "name": "US Dollar", "minorUnits": 2, "base": true},
+			map[string]any{"code": "MXN", "name": "Mexican Peso", "minorUnits": 2, "base": false}})
+	case p == "/v1/exchange-rates/current":
+		writeJ(w, 200, []any{rate})
+	case p == "/v1/exchange-rates/history":
+		writeJ(w, 200, page(map[string]any{"id": 2, "occurredAt": "2026-10-21T10:00:00Z", "currency": "MXN", "rateDate": "2026-10-20", "action": "UPDATE",
+			"oldRate": 0.055, "newRate": 0.0577, "reason": "Corrected a typo", "actor": "ops"},
+			map[string]any{"id": 1, "occurredAt": "2026-10-20T10:00:00Z", "currency": "MXN", "rateDate": "2026-10-20", "action": "CREATE",
+				"newRate": 0.055, "reason": "Weekly rate", "actor": "ops"}))
+	case p == "/v1/exchange-rates":
+		later := map[string]any{"currency": "MXN", "rateDate": "2026-10-24", "rateToUsd": 0.0577, "updatedBy": "ops", "updatedAt": "2026-10-24T10:00:00Z", "version": 0}
+		writeJ(w, 200, page(later, rate))
+	case strings.HasPrefix(p, "/v1/exchange-rates/") && r.Method == http.MethodPut:
+		writeJ(w, 200, rate)
 	case p == "/v1/availability":
 		writeJ(w, 200, []any{map[string]any{"sku": "AT-JOL-200061", "available": 12}})
 	case p == "/v1/nodes":
@@ -280,6 +298,72 @@ func TestStaffInventoryHub(t *testing.T) {
 	do("auditor", "POST", "/v1/staff/retail/purchase-orders/2f000000-0000-4000-8000-000000000005/approve", map[string]any{}, 403)
 	do("inv", "POST", "/v1/staff/retail/purchase-orders/2f000000-0000-4000-8000-000000000005/approve", map[string]any{}, 403)
 
+	// Exchange rates (ADR 0005 §7): the currencies stock is received in and the rate receiving suggests are mirrored
+	// read-only; the table itself is the exchange-rates resource of Settings.
+	cur := jsonOf(t, do("inv", "GET", "/v1/staff/inventory/currencies", nil, 200))
+	if items := cur["items"].([]any); len(items) != 2 || items[0].(map[string]any)["code"] != "USD" || items[0].(map[string]any)["base"] != true {
+		t.Fatalf("currencies = %v", cur)
+	}
+	do("inv", "GET", "/v1/staff/inventory/exchange-rates/current?asOf=2026-10-20&evil=1", nil, 200)
+	if !f.seen("GET /v1/exchange-rates/current?asOf=2026-10-20") || f.seen("GET /v1/exchange-rates/current?asOf=2026-10-20&evil") {
+		t.Fatalf("asOf passes, nothing else does: %v", f.calls)
+	}
+	do("finance", "GET", "/v1/staff/inventory/exchange-rates/current", nil, 200)
+	do("", "GET", "/v1/staff/inventory/currencies", nil, 401)
+	do("inv", "PUT", "/v1/staff/inventory/exchange-rates/MXN/2026-10-20", map[string]any{"rateToUsd": 0.06, "reason": "x"}, 404)
+	do("inv", "GET", "/v1/staff/inventory/exchange-rates", nil, 404)
+	do("inv", "GET", "/v1/staff/inventory/exchange-rates/history", nil, 404)
+
+	// Lots show what was paid, the rate and the USD value alongside.
+	lotsTable := jsonOf(t, do("inv", "GET", "/v1/staff/resources/inventory", nil, 200))
+	row := lotsTable["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any)
+	if row["costPaid"] != "MXN 120.00 @ 0.0577" || row["unitCostUsdMinor"] != float64(692) {
+		t.Fatalf("lot cost cells = %v", row)
+	}
+
+	// Settings → Exchange rates: a table with create and edit for inventory:adjust, a reason on every change, the audit trail
+	// on the sheet; read only for finance.
+	rates := jsonOf(t, do("inv", "GET", "/v1/staff/resources/exchange-rates", nil, 200))
+	if rates["canCreate"] != true || len(rates["rows"].([]any)) != 2 || rates["rows"].([]any)[1].(map[string]any)["id"] != "MXN_2026-10-20" {
+		t.Fatalf("exchange rates table = %v", rates)
+	}
+	createForm := rates["createForm"].(map[string]any)["fields"].([]any)
+	options := createForm[0].(map[string]any)["options"].([]any)
+	if createForm[0].(map[string]any)["type"] != "select" || len(options) != 1 || options[0].(map[string]any)["value"] != "MXN" {
+		t.Fatalf("the currency is chosen from the configured list without USD: %v", createForm)
+	}
+	sheet := jsonOf(t, do("inv", "GET", "/v1/staff/resources/exchange-rates/MXN_2026-10-20", nil, 200))
+	if sheet["title"] != "MXN on 2026-10-20" || sheet["subtitle"] != "1 MXN = 0.0577 USD" || sheet["editForm"] == nil {
+		t.Fatalf("rate sheet = %v", sheet)
+	}
+	activity := sheet["activity"].([]any)
+	if len(activity) != 2 || !strings.Contains(activity[0].(map[string]any)["text"].(string), "Changed from 0.055 to 0.0577: Corrected a typo") {
+		t.Fatalf("the audit trail is on the sheet: %v", activity)
+	}
+	do("inv", "GET", "/v1/staff/resources/exchange-rates/MXN_2026-01-01", nil, 404)
+	do("inv", "GET", "/v1/staff/resources/exchange-rates/nope", nil, 404)
+	do("inv", "POST", "/v1/staff/resources/exchange-rates", map[string]any{"values": map[string]any{"currency": "MXN", "rateDate": "2026-10-24", "rateToUsd": 0.0577}}, 422)
+	made := jsonOf(t, do("inv", "POST", "/v1/staff/resources/exchange-rates", map[string]any{"values": map[string]any{"currency": "MXN", "rateDate": "2026-10-24",
+		"rateToUsd": 0.0577, "note": "Banxico FIX", "reason": "Weekly rate"}}, 201))
+	if made["id"] != "MXN_2026-10-24" {
+		t.Fatalf("created = %v", made)
+	}
+	if got := f.bodies["PUT /v1/exchange-rates/MXN/2026-10-24"]; got["rateToUsd"] != 0.0577 || got["reason"] != "Weekly rate" || got["note"] != "Banxico FIX" {
+		t.Fatalf("the rate and the reason reach inventory: %v", got)
+	}
+	do("inv", "PATCH", "/v1/staff/resources/exchange-rates/MXN_2026-10-20", map[string]any{"values": map[string]any{"rateToUsd": 0.0601, "reason": "Bank restated it"}, "version": "1"}, 200)
+	if got := f.bodies["PUT /v1/exchange-rates/MXN/2026-10-20"]; got["rateToUsd"] != 0.0601 || got["reason"] != "Bank restated it" {
+		t.Fatalf("edit reaches inventory: %v", got)
+	}
+	do("inv", "PATCH", "/v1/staff/resources/exchange-rates/MXN_2026-10-20", map[string]any{"values": map[string]any{"rateToUsd": 0.0601}, "version": "1"}, 422)
+	do("finance", "GET", "/v1/staff/resources/exchange-rates", nil, 200)
+	if fin := jsonOf(t, do("finance", "GET", "/v1/staff/resources/exchange-rates", nil, 200)); fin["canCreate"] == true {
+		t.Fatalf("finance can view the rates but not change them: %v", fin)
+	}
+	do("finance", "POST", "/v1/staff/resources/exchange-rates", map[string]any{"values": map[string]any{"currency": "MXN", "rateDate": "2026-10-24", "rateToUsd": 0.05, "reason": "no"}}, 403)
+	do("finance", "PATCH", "/v1/staff/resources/exchange-rates/MXN_2026-10-20", map[string]any{"values": map[string]any{"rateToUsd": 0.05, "reason": "no"}, "version": "1"}, 403)
+	do("", "GET", "/v1/staff/resources/exchange-rates", nil, 401)
+
 	// Anything not in the route table is 404, never relayed.
 	do("inv", "GET", "/v1/staff/inventory/reservations", nil, 404)
 	do("inv", "POST", "/v1/staff/inventory/lots/x/y/release", map[string]any{}, 404)
@@ -331,7 +415,8 @@ func TestStaffInventoryHub(t *testing.T) {
 	do("inv", "GET", "/v1/staff/inventory/trace?atin=nope", nil, 422)
 
 	for _, op := range []string{"getStaffInventoryFlow", "getStaffInventoryTrace", "getStaffInbound", "postStaffInbound", "postStaffInboundShip",
-		"postStaffInboundReceipts", "getStaffInboundLabels", "getStaffLots", "postStaffCycleCounts", "putStaffCycleCountsCounts", "postStaffPurchaseOrdersApprove"} {
+		"postStaffInboundReceipts", "getStaffInboundLabels", "getStaffLots", "postStaffCycleCounts", "putStaffCycleCountsCounts", "postStaffPurchaseOrdersApprove",
+		"getStaffCurrencies", "getStaffExchangeRatesCurrent", "listStaffResource", "getStaffRecord"} {
 		if validated[op] == 0 {
 			t.Errorf("%s was not exercised", op)
 		}
