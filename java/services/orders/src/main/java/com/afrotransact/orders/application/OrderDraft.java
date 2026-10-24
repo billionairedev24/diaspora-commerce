@@ -7,6 +7,7 @@ import java.util.List;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.OrderOrigin;
 import com.afrotransact.orders.domain.PreorderPackage;
@@ -87,7 +88,19 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
                                 boolean perishable, boolean handoverRequired, String handoverCodeHash,
                                 String handoverCodeSealed, long shippingMinor, LocalDate promisedFrom,
                                 LocalDate promisedBy, List<CheckoutPlan.Line> lines, LocalDelivery localDelivery,
-                                PreorderPackage preorder) {
+                                PreorderPackage preorder, FeeRuleSnapshot feeRule) {
+
+        /** A shipment without a fee rule snapshot. */
+        public DraftShipment(String id, int seq, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                             String nodeId, DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                             DeliveryPreferences preferences, boolean perishable, boolean handoverRequired,
+                             String handoverCodeHash, String handoverCodeSealed, long shippingMinor,
+                             LocalDate promisedFrom, LocalDate promisedBy, List<CheckoutPlan.Line> lines,
+                             LocalDelivery localDelivery, PreorderPackage preorder) {
+            this(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel, pickupLocationId,
+                    preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed, shippingMinor,
+                    promisedFrom, promisedBy, lines, localDelivery, preorder, null);
+        }
 
         /** A shipment that is not a pre-order. */
         public DraftShipment(String id, int seq, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
@@ -116,7 +129,8 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
         public DraftShipment with(List<CheckoutPlan.Line> newLines, long newShippingMinor) {
             return new DraftShipment(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel,
                     pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
-                    handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, newLines, localDelivery, preorder);
+                    handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, newLines, localDelivery, preorder,
+                    feeRule);
         }
     }
 }

@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.PreorderFulfilment;
 import com.afrotransact.orders.domain.PreorderStage;
 
@@ -40,11 +41,22 @@ public interface PreorderEligibility {
      * @param currency       fee currency (default USD)
      * @param allowedMethods CARD, WALLET, ACH (default all)
      * @param pickupPointId  the window's pickup point (null when not sent)
+     * @param doorFeeRule    the rule behind {@code doorFeeMinor} (ADR 0005 §3), kept on the order; null when not sent
+     * @param pickupFeeRule  the rule behind {@code pickupFeeMinor}; null when not sent
      */
     record Line(String variantAtin, boolean preorder, String windowId, String windowCode, String windowName,
                 PreorderStage stage, LocalDate deliversOn, Instant closesAt, boolean door, boolean pickup,
                 long doorFeeMinor, long pickupFeeMinor, String currency, Set<String> allowedMethods,
-                String pickupPointId) {
+                String pickupPointId, FeeRuleSnapshot doorFeeRule, FeeRuleSnapshot pickupFeeRule) {
+
+        /** A line whose fees come without their rules (tests, older delivery-runs). */
+        public Line(String variantAtin, boolean preorder, String windowId, String windowCode, String windowName,
+                    PreorderStage stage, LocalDate deliversOn, Instant closesAt, boolean door, boolean pickup,
+                    long doorFeeMinor, long pickupFeeMinor, String currency, Set<String> allowedMethods,
+                    String pickupPointId) {
+            this(variantAtin, preorder, windowId, windowCode, windowName, stage, deliversOn, closesAt, door, pickup,
+                    doorFeeMinor, pickupFeeMinor, currency, allowedMethods, pickupPointId, null, null);
+        }
 
         public Line {
             allowedMethods = allowedMethods == null || allowedMethods.isEmpty() ? ALL_METHODS
@@ -60,6 +72,11 @@ public interface PreorderEligibility {
         /** The window's fee for this fulfilment. */
         public long feeMinor(PreorderFulfilment f) {
             return f == PreorderFulfilment.DOOR ? doorFeeMinor : pickupFeeMinor;
+        }
+
+        /** The rule behind the window's fee for this fulfilment (null when delivery-runs sent none). */
+        public FeeRuleSnapshot feeRule(PreorderFulfilment f) {
+            return f == PreorderFulfilment.DOOR ? doorFeeRule : pickupFeeRule;
         }
 
         /** Default fulfilment: door when offered, else pickup. */

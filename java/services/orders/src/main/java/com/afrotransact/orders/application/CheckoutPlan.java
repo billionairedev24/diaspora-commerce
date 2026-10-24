@@ -5,6 +5,7 @@ import java.util.List;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.PreorderPackage;
 
@@ -34,11 +35,30 @@ public record CheckoutPlan(String currency, List<Package> packages, List<String>
      * @param preorder      the pre-order window of a PREORDER package (S272); null otherwise
      * @param preorderFeeMinor the window's delivery fee for the chosen fulfilment (door / pickup), spread over the
      *                      package's shipments
+     * @param feeRule       the staff delivery fee rule that priced the package (ADR 0005 §3: window door / pickup fee,
+     *                      carrier rate beyond coverage), kept on the shipment; null when flat rates applied
      */
     public record Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
                           DeliveryMethod method, String serviceLevel, String pickupLocationId,
                           DeliveryPreferences preferences, int promiseDays, List<Line> lines,
-                          LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor) {
+                          LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor,
+                          FeeRuleSnapshot feeRule) {
+
+        /** A package priced without a fee rule. */
+        public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                       DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                       DeliveryPreferences preferences, int promiseDays, List<Line> lines,
+                       LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor) {
+            this(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel, pickupLocationId,
+                    preferences, promiseDays, lines, localDelivery, preorder, preorderFeeMinor, null);
+        }
+
+        /** The package priced by {@code rule} (its amount is the shipping). */
+        public Package withFeeRule(FeeRuleSnapshot rule) {
+            return new Package(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel,
+                    pickupLocationId, preferences, promiseDays, lines, localDelivery, preorder, preorderFeeMinor,
+                    rule);
+        }
 
         /** A package that is not a pre-order. */
         public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,

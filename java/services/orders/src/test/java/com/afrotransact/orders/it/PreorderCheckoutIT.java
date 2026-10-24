@@ -271,6 +271,78 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
     }
 
     @Test
+    void theRuleThatPricedTheDoorFeeIsKeptOnTheOrderAndLaterEditsNeverChangeIt() {
+        String customer = id("cust");
+        String bearer = "tok-" + customer;
+        String atin = id("ATR");
+        String org = id("org-r");
+        String window = "win-" + UUID.randomUUID();
+        String ruleId = UUID.randomUUID().toString();
+        UPSTREAMS.cart(bearer, Upstreams.pkg(org, "Mama Tee", "SELLER", Upstreams.line(atin, org, "SELLER", 1500, 1)));
+        UPSTREAMS.addresses(bearer, "addr-1", "TX");
+        eligibility(atin, open(atin, window, "OPEN", Instant.now().plus(2, ChronoUnit.DAYS),
+                LocalDate.now().plusDays(4), ",\"doorFeeMinor\":899,\"doorFeeRule\":{\"method\":"
+                        + "\"AFROTRANSACT_DELIVERY\",\"ruleId\":\"" + ruleId + "\",\"ruleVersion\":3,"
+                        + "\"currency\":\"USD\",\"amountMinor\":899,\"source\":\"RULE\",\"band\":"
+                        + "\"10–40 mi\",\"distanceMiles\":32.0}"));
+        UPSTREAMS.paymentIntent(customer, UUID.randomUUID().toString());
+
+        JsonNode created = placeCheckout(customer, bearer, "{\"addressId\":\"addr-1\"}");
+        UUID shipmentId = UUID.fromString(created.path("shipments").get(0).path("shipmentId").asString());
+        assertThat(jdbc.sql("select shipping_minor from shipment where id = :id").param("id", shipmentId)
+                .query(Long.class).single()).isEqualTo(899);
+        JsonNode kept = JSON.readTree(jdbc.sql("select delivery_fee_rule::text from shipment where id = :id")
+                .param("id", shipmentId).query(String.class).single());
+        assertThat(kept.path("method").asString()).isEqualTo("AFROTRANSACT_DELIVERY");
+        assertThat(kept.path("ruleId").asString()).isEqualTo(ruleId);
+        assertThat(kept.path("ruleVersion").asLong()).isEqualTo(3);
+        assertThat(kept.path("band").asString()).isEqualTo("10–40 mi");
+        assertThat(kept.path("amountMinor").asLong()).isEqualTo(899);
+        assertThat(kept.path("source").asString()).isEqualTo("RULE");
+
+        // Staff edit the rule afterwards (the next quote is version 4 at $9.99): the placed order is unchanged.
+        eligibility(atin, open(atin, window, "OPEN", Instant.now().plus(2, ChronoUnit.DAYS),
+                LocalDate.now().plusDays(4), ",\"doorFeeMinor\":999,\"doorFeeRule\":{\"method\":"
+                        + "\"AFROTRANSACT_DELIVERY\",\"ruleId\":\"" + ruleId + "\",\"ruleVersion\":4,"
+                        + "\"currency\":\"USD\",\"amountMinor\":999,\"source\":\"RULE\"}"));
+        TestSupport.as(TestSupport.customer(customer));
+        JsonNode order = ok(send("GET", "/v1/orders/" + created.path("orderNumber").asString(), null));
+        JsonNode rule = order.path("shipments").get(0).path("deliveryFeeRule");
+        assertThat(rule.path("ruleVersion").asLong()).isEqualTo(3);
+        assertThat(rule.path("amountMinor").asLong()).isEqualTo(899);
+        assertThat(rule.path("band").asString()).isEqualTo("10–40 mi");
+        assertThat(order.path("shipments").get(0).path("shippingMinor").asLong()).isEqualTo(899);
+    }
+
+    @Test
+    void anAddressBeyondCoverageShipsByCarrierAtTheStaffRateAndKeepsTheRule() {
+        String customer = id("cust");
+        String bearer = "tok-" + customer;
+        String atin = id("ATK");
+        String org = id("org-k");
+        String ruleId = UUID.randomUUID().toString();
+        UPSTREAMS.cart(bearer, Upstreams.pkg(org, "Mama Tee", "SELLER", Upstreams.line(atin, org, "SELLER", 1537, 1)));
+        UPSTREAMS.addresses(bearer, "addr-1", "TX");
+        eligibility(atin, shipsNow(atin));
+        UPSTREAMS.json(WireMock.post(WireMock.urlPathEqualTo("/v1/service/delivery-fees/carrier"))
+                .withRequestBody(WireMock.matchingJsonPath("$.itemsMinor", WireMock.equalTo("1537"))), 200,
+                "{\"applies\":true,\"fee\":{\"method\":\"CARRIER\",\"ruleId\":\"" + ruleId + "\","
+                        + "\"ruleVersion\":2,\"currency\":\"USD\",\"amountMinor\":1350,\"source\":"
+                        + "\"CARRIER_FALLBACK\"}}");
+        UPSTREAMS.paymentIntent(customer, UUID.randomUUID().toString());
+
+        JsonNode created = placeCheckout(customer, bearer, "{\"addressId\":\"addr-1\"}");
+        UUID shipmentId = UUID.fromString(created.path("shipments").get(0).path("shipmentId").asString());
+        assertThat(jdbc.sql("select shipping_minor from shipment where id = :id").param("id", shipmentId)
+                .query(Long.class).single()).as("the staff carrier rate, not the flat $5.99").isEqualTo(1350);
+        JsonNode kept = JSON.readTree(jdbc.sql("select delivery_fee_rule::text from shipment where id = :id")
+                .param("id", shipmentId).query(String.class).single());
+        assertThat(kept.path("method").asString()).isEqualTo("CARRIER");
+        assertThat(kept.path("ruleVersion").asLong()).isEqualTo(2);
+        assertThat(kept.path("source").asString()).isEqualTo("CARRIER_FALLBACK");
+    }
+
+    @Test
     void linesOfAnUpcomingOrClosedWindowBlockCheckout() {
         String customer = id("cust");
         String bearer = "tok-" + customer;

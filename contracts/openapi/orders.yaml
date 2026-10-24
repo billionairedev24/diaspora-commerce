@@ -867,6 +867,37 @@ components:
           type: string
         productType:
           type: string
+    DeliveryFeeRuleView:
+      type: object
+      description: 'The staff delivery fee rule that priced this shipment''s shipping (ADR 0005 §3), as it was at checkout:
+        later edits of the rule never change it. Absent when flat rates applied or for AfroTransact Delivery from a
+        seller''s store (see localDelivery).'
+      properties:
+        method:
+          type: string
+          description: AFROTRANSACT_DELIVERY, CARRIER or PICKUP
+        ruleId:
+          type: string
+          description: The rule (absent when staff set the fee on the window and no rule existed)
+        ruleVersion:
+          type: integer
+          format: int64
+          description: The version applied
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          description: The fee that applied (a pre-order's fee is shared by its sellers' shipments)
+        source:
+          type: string
+          description: RULE, WINDOW_OVERRIDE, CARRIER_QUOTE or CARRIER_FALLBACK
+        band:
+          type: string
+          description: The distance band applied ("10–40 mi"), or the free-over threshold
+        distanceMiles:
+          type: number
+          description: The distance the band was chosen by
     LocalDeliveryView:
       type: object
       properties:
@@ -1312,6 +1343,8 @@ components:
           $ref: '#/components/schemas/LocalDeliveryView'
         preorder:
           $ref: '#/components/schemas/PreorderView'
+        deliveryFeeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleView'
     TimelineEntry:
       type: object
       properties:

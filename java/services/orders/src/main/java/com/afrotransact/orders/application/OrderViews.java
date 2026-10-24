@@ -100,7 +100,11 @@ class OrderViews {
                 s.preorder() == null ? null : new OrderView.PreorderView(s.preorder().windowId(),
                         s.preorder().windowCode(), s.preorder().windowName(), s.preorder().deliversOn(),
                         s.preorder().fulfilment().name(), s.preorder().closesAt(), s.preorder().deliveryMissed(),
-                        s.preorder().missedChoice() == null ? null : s.preorder().missedChoice().name()));
+                        s.preorder().missedChoice() == null ? null : s.preorder().missedChoice().name()),
+                s.feeRule() == null ? null : new OrderView.DeliveryFeeRuleView(s.feeRule().method(),
+                        s.feeRule().ruleId(), s.feeRule().ruleVersion(), s.feeRule().currency(),
+                        s.feeRule().amountMinor(), s.feeRule().source(), s.feeRule().band(),
+                        s.feeRule().distanceMiles()));
     }
 
     /**
