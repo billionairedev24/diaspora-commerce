@@ -58,7 +58,7 @@ func minutes(o jobj, path string) string {
 }
 
 func reasonField() domain.FormField {
-	return withMax(ff("reason", "Reason (10 to 500 characters, kept in the access log)", "textarea", true), 500)
+	return withPattern(withMax(ff("reason", "Reason (10 to 500 characters, kept in the access log)", "textarea", true), 500), `^[\s\S]{10,500}$`, "Give a reason of 10 to 500 characters")
 }
 
 // ---------------------------------------------------------------- OAuth clients

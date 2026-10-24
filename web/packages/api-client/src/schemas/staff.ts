@@ -13,7 +13,7 @@ const nullableString = z.string().nullable();
 
 export const StaffModuleKeySchema = z.enum([
   'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'orgs', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
-  'audit', 'markets', 'siteCfg', 'dev', 'notifications', 'preorders', 'plans'
+  'audit', 'markets', 'siteCfg', 'dev', 'identity', 'notifications', 'preorders', 'plans'
 ]);
 export type StaffModuleKey = z.infer<typeof StaffModuleKeySchema>;
 
@@ -86,7 +86,8 @@ export const ResourceKeySchema = z.enum([
   'users', 'roles', 'applications', 'organisations', 'connect-accounts', 'orders', 'products', 'moderation', 'claims', 'returns', 'payouts', 'inventory', 'purchase-orders', 'routes',
   'support-cases', 'audit', 'markets', 'site-settings', 'legal-documents', 'help-articles', 'privacy-requests', 'announcements', 'placements', 'identity-providers', 'fee-schedules', 'tax-rates', 'tax-codes', 'tax-rules', 'tax-review',
   'dispatch-shipments', 'sos-alerts', 'vehicle-defects', 'driver-events', 'pickup-locations', 'coupons',
-  'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'stripe-lookup', 'payment-settings', 'tax-settings', 'maintenance', 'tax-filings', 'tax-nexus'
+  'reconciliation', 'reconciliation-runs', 'ledger-adjustments', 'stripe-lookup', 'payment-settings', 'tax-settings', 'maintenance', 'tax-filings', 'tax-nexus',
+  'oauth-clients', 'identity-sessions', 'signing-keys', 'auth-settings'
 ]);
 export type ResourceKey = z.infer<typeof ResourceKeySchema>;
 
@@ -177,6 +178,10 @@ export type RecordAction = z.infer<typeof RecordActionSchema>;
 export const RecordLinkSchema = z.object({ label: z.string(), href: z.string(), external: z.boolean().optional() });
 export type RecordLink = z.infer<typeof RecordLinkSchema>;
 
+/** A secret shown once, right after it was created (a new OAuth client secret): never cached, stored or logged. */
+export const OneTimeSecretSchema = z.object({ label: z.string(), value: z.string(), note: z.string() });
+export type OneTimeSecret = z.infer<typeof OneTimeSecretSchema>;
+
 export const RecordDetailSchema = z.object({
   resource: ResourceKeySchema,
   id: z.string(),
@@ -193,11 +198,33 @@ export const RecordDetailSchema = z.object({
   editForm: StaffFormSchema.nullable(),
   links: z.array(RecordLinkSchema),
   version: nullableString,
-  removed: z.boolean().optional()
+  removed: z.boolean().optional(),
+  reveal: OneTimeSecretSchema.optional()
 });
 export type RecordDetail = z.infer<typeof RecordDetailSchema>;
 
 export type RecordValues = Record<string, FieldValue>;
+
+/* ── Identity & access (S291): token inspector and published documents ─────────────── */
+
+export const IdentityTokenInspectionSchema = z.object({
+  wellFormed: z.boolean(),
+  header: z.record(z.string(), z.unknown()).default({}),
+  claims: z.record(z.string(), z.unknown()).default({}),
+  scopes: z.array(z.string()).default([]),
+  keyId: nullableString.optional(),
+  issuedAt: nullableString.optional(),
+  expiresAt: nullableString.optional(),
+  expired: z.boolean().nullable().optional(),
+  signatureValid: z.boolean(),
+  issuerValid: z.boolean(),
+  valid: z.boolean(),
+  problems: z.array(z.string())
+});
+export type IdentityTokenInspection = z.infer<typeof IdentityTokenInspectionSchema>;
+
+export const IdentityDocumentsSchema = z.object({ discovery: z.record(z.string(), z.unknown()), jwks: z.record(z.string(), z.unknown()) });
+export type IdentityDocuments = z.infer<typeof IdentityDocumentsSchema>;
 
 /* ── Exports (shared schemas in ./exports) ─────────────────── */
 
