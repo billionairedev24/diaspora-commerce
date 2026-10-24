@@ -834,6 +834,86 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/cancel:
+    post:
+      tags:
+      - Pre-orders
+      summary: Cancel a pre-order and refund every order (preorders:manage)
+      description: Any published window that is not delivered or cancelled. The window becomes CANCELLED, a run it was handed
+        to is cancelled too (409 once that run is out for delivery) and every order is refunded in full, delivery fee included,
+        with its stock released; the orders list shows each order's refundStatus. The reason is required and logged. If-Match.
+      operationId: cancel_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/close-early:
+    post:
+      tags:
+      - Pre-orders
+      summary: Close an open pre-order early once its minimum is met (preorders:manage)
+      description: 422 delivery-runs.preorder-minimum-not-met while orderCount is below minOrders; 409 when the window is
+        not OPEN. The close date moves to now and the scheduler closes it on its next tick. The reason is required and logged.
+        If-Match.
+      operationId: closeEarly
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/preorders/{id}/creatives/{slot}:
     put:
       tags:
@@ -925,6 +1005,73 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/decision:
+    post:
+      tags:
+      - Pre-orders
+      summary: Decide a window that closed below its minimum (preorders:manage)
+      description: 'Only a window in AWAITING_DECISION (409 delivery-runs.invalid-transition otherwise). CANCEL cancels the
+        window: every order is refunded in full, delivery fee included, and its stock released (orders-service, on preorder.window.cancelled).
+        PROCEED goes ahead below the minimum: the window closes and hands its paid orders to a run on the scheduler''s next
+        tick. The reason is required (422 delivery-runs.reason-required) and logged with who and when. If-Match.'
+      operationId: decide
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/decisions:
+    get:
+      tags:
+      - Pre-orders
+      summary: 'The window''s decision log: who, when and why (delivery-runs:read)'
+      operationId: decisions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderDecisionLog'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/preorders/{id}/exports/{kind}.csv:
     get:
       tags:
@@ -996,9 +1143,11 @@ paths:
       tags:
       - Pre-orders
       summary: Add a late order for a customer (preorders:late-add)
-      description: OPEN (assisted) or CLOSED pre-orders; 422 once delivered. Placed through orders-service (saved card off-session
-        or an SMS pay-now link to AfroTransact's own pay page); recorded as LATE_ADD with channel AGENT_LATE and returned as the projected order (with paymentLinkUrl
-        / ordersStatus). Idempotency-Key is required; the same key returns the same order and charges once.
+      description: 'OPEN (assisted) or CLOSED pre-orders; 422 once delivered. Placed through orders-service (saved card off-session,
+        or an SMS pay-now link to AfroTransact''s own pay page where the customer pays with Stripe Elements); recorded as
+        LATE_ADD with channel AGENT_LATE and returned as the projected order (with paymentLinkUrl / ordersStatus). Idempotency-Key
+        is required (422 delivery-runs.idempotency-key-required): the same key returns the same order and charges once. 409
+        orders.late-add-duplicate when the same items were just added for the customer under another key.'
       operationId: addLateOrder
       parameters:
       - name: id
@@ -1009,9 +1158,7 @@ paths:
           format: uuid
       - name: Idempotency-Key
         in: header
-        description: Required (422 delivery-runs.idempotency-key-required); the same key on every retry returns the same
-          order and charges once
-        required: true
+        required: false
         schema:
           type: string
       requestBody:
@@ -1194,6 +1341,34 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/refunds:
+    get:
+      tags:
+      - Pre-orders
+      summary: Refund progress of a cancelled pre-order (delivery-runs:read)
+      description: 'Orders per refund status: PENDING, REFUNDED, VOIDED (nothing had been captured), FAILED. done when none
+        is pending or failed. Per-order status is on the orders list.'
+      operationId: refunds
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderRefundSummary'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -2645,6 +2820,13 @@ components:
           type: string
           format: uuid
           description: Location of the closing run (null = matched by city)
+        minOrders:
+          type: integer
+          format: int32
+          description: 'Fewest orders the window needs; 0 = none. Null: the configured default on create, unchanged on edit.
+            Below it at the close date the window waits for a staff decision'
+          maximum: 100000
+          minimum: 0
       required:
       - closesAt
       - deliversOn
@@ -2769,6 +2951,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         areaOff:
           type: boolean
         creatives:
@@ -2836,6 +3020,26 @@ components:
         live:
           type: boolean
           description: switchState is ON
+        minOrders:
+          type: integer
+          format: int32
+          description: Fewest orders the window needs (0 = none)
+        minimumMet:
+          type: boolean
+          description: A minimum is set and orderCount has reached it
+        canCloseEarly:
+          type: boolean
+          description: 'OPEN, minimum met: staff may close it early'
+        decisionNeeded:
+          type: boolean
+          description: 'Closed below the minimum: staff must cancel or proceed'
+        outcome:
+          type: string
+          description: AWAITING_DECISION, PROCEEDED or CANCELLED; absent when the window follows its dates
+          enum:
+          - AWAITING_DECISION
+          - PROCEEDED
+          - CANCELLED
     TargetResponse:
       type: object
       properties:
@@ -3786,6 +3990,24 @@ components:
           type: string
         ordersStatus:
           type: string
+        refundStatus:
+          type: string
+          description: 'Refund progress once the window or run was cancelled: PENDING, REFUNDED (captured payment refunded
+            in full), VOIDED (authorisation released, nothing charged) or FAILED (staff must act); absent otherwise'
+          enum:
+          - PENDING
+          - REFUNDED
+          - VOIDED
+          - FAILED
+        refundAmount:
+          type: integer
+          format: int64
+          description: Amount refunded or released, minor units
+        refundUpdatedAt:
+          type: string
+          format: date-time
+        refundError:
+          type: string
     PreorderOrderLine:
       type: object
       properties:
@@ -3798,6 +4020,34 @@ components:
         qty:
           type: integer
           format: int32
+    PreorderDecisionRequest:
+      type: object
+      description: What staff decide for a window that closed below its minimum. The reason is required and is logged with
+        who and when.
+      properties:
+        decision:
+          type: string
+          description: CANCEL refunds every order in full; PROCEED goes ahead below the minimum
+          enum:
+          - CANCEL
+          - PROCEED
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - decision
+      - reason
+    PreorderReasonRequest:
+      type: object
+      description: A reason that is logged with who and when
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
     PreorderAreaRequest:
       type: object
       properties:
@@ -3979,6 +4229,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         areaOff:
           type: boolean
         orderCount:
@@ -4009,6 +4261,13 @@ components:
           - NOT_LIVE
         live:
           type: boolean
+        minOrders:
+          type: integer
+          format: int32
+          description: Fewest orders the window needs (0 = none)
+        decisionNeeded:
+          type: boolean
+          description: 'Closed below the minimum: staff must cancel or proceed'
     PreorderSwitchRequest:
       type: object
       description: The window's own on/off switch (true = on)
@@ -4149,6 +4408,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         windowId:
           type: string
           format: uuid
@@ -4187,6 +4448,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         deliversOn:
           type: string
           format: date
@@ -4442,6 +4705,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         metro:
           type: boolean
         fallback:
@@ -4509,6 +4774,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         open:
           type: boolean
         city:
@@ -4603,7 +4870,7 @@ components:
           additionalProperties:
             type: integer
             format: int32
-          description: 'Counts per tab: all, open, upcoming, closed, draft'
+          description: 'Counts per tab: all, open, upcoming, decision, closed, draft'
         total:
           type: integer
           format: int32
@@ -4616,6 +4883,10 @@ components:
         enabled:
           type: boolean
           description: The pre-order master switch
+        defaultMinOrders:
+          type: integer
+          format: int32
+          description: Minimum order count a new window starts with
     ChannelResponse:
       type: object
       properties:
@@ -4758,6 +5029,28 @@ components:
         pickupPct:
           type: integer
           format: int32
+    PreorderRefundSummary:
+      type: object
+      description: 'Refund progress of a cancelled window: orders per status. done is true when every order is refunded or
+        released.'
+      properties:
+        total:
+          type: integer
+          format: int32
+        pending:
+          type: integer
+          format: int32
+        refunded:
+          type: integer
+          format: int32
+        voided:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        done:
+          type: boolean
     PreorderProduct:
       type: object
       description: A product of the window's categories (late-add picker)
@@ -4797,6 +5090,41 @@ components:
         size:
           type: integer
           format: int32
+    PreorderDecision:
+      type: object
+      description: One entry of a window's decision log
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - AWAITING
+          - PROCEED
+          - CANCEL
+          - EARLY_CLOSE
+        reason:
+          type: string
+        actor:
+          type: string
+          description: Staff subject, or system
+        orders:
+          type: integer
+          format: int32
+        minimum:
+          type: integer
+          format: int32
+        at:
+          type: string
+          format: date-time
+    PreorderDecisionLog:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderDecision'
     Place:
       type: object
       properties:

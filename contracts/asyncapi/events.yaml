@@ -213,6 +213,12 @@ channels:
         $ref: '#/components/messages/preorderWindowClosed'
       preorderWindowDelivered:
         $ref: '#/components/messages/preorderWindowDelivered'
+      preorderWindowDecisionNeeded:
+        $ref: '#/components/messages/preorderWindowDecisionNeeded'
+      preorderWindowDecided:
+        $ref: '#/components/messages/preorderWindowDecided'
+      preorderWindowCancelled:
+        $ref: '#/components/messages/preorderWindowCancelled'
       preorderSettingsChanged:
         $ref: '#/components/messages/preorderSettingsChanged'
       preorderAreasChanged:
@@ -587,6 +593,10 @@ channels:
         $ref: '#/components/messages/ordersPreorderMissedDeliveryAnswered'
       ordersPreorderPaymentLinkCreated:
         $ref: '#/components/messages/ordersPreorderPaymentLinkCreated'
+      ordersPreorderRefundSettled:
+        $ref: '#/components/messages/ordersPreorderRefundSettled'
+      ordersPreorderRefundFailed:
+        $ref: '#/components/messages/ordersPreorderRefundFailed'
   paymentsPaymentEvents:
     address: at.payment.events
     description: Payment lifecycle, captures, refunds, settlement transfers and chargebacks from payments-service (key = order
@@ -1257,6 +1267,28 @@ components:
     preorderWindowDelivered:
       name: preorder.window.delivered
       title: The day after the delivery day (projected orders are deleted after the retention period)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PreorderWindowEvent'
+    preorderWindowDecisionNeeded:
+      name: preorder.window.decision_needed
+      title: The window closed below its minimum order count and waits for staff to cancel or proceed (notify staff)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PreorderWindowEvent'
+    preorderWindowDecided:
+      name: preorder.window.decided
+      title: Staff proceeded below the minimum, cancelled the window or closed it early (audit - who, when, why)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PreorderWindowEvent'
+    preorderWindowCancelled:
+      name: preorder.window.cancelled
+      title: 'The window was cancelled: orders-service refunds every order in orders[] in full (delivery fee included) and
+        releases stock; a run it was handed to is cancelled too (delivery-runs.run.cancelled)'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1982,6 +2014,20 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/OrdersPreorderPaymentLinkCreated'
+    ordersPreorderRefundSettled:
+      name: orders.preorder.refund_settled
+      title: A cancelled pre-order package was refunded in full (REFUNDED) or its authorisation released (VOIDED)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersPreorderRefundSettled'
+    ordersPreorderRefundFailed:
+      name: orders.preorder.refund_failed
+      title: A cancelled pre-order package could not be cancelled or refunded automatically; staff must act
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersPreorderRefundFailed'
     paymentsIntentCreated:
       name: payments.intent.created
       title: PaymentIntent created for an order (manual capture)
@@ -4613,6 +4659,8 @@ components:
           - OPEN
           - CLOSED
           - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
         targets:
           type: array
           items:
@@ -4716,6 +4764,63 @@ components:
           - string
           - 'null'
           description: Staff subject who paused, resumed or edited the window (audit); null for scheduler events
+        minOrders:
+          type: integer
+          description: Fewest orders the window needs (0 = none)
+        orders:
+          type:
+          - array
+          - 'null'
+          description: preorder.window.cancelled only - every order orders-service must refund
+          items:
+            type: object
+            required:
+            - orderId
+            properties:
+              orderId:
+                type: string
+              customerId:
+                type:
+                - string
+                - 'null'
+              fulfilment:
+                type: string
+                enum:
+                - DOOR
+                - PICKUP
+        decision:
+          type:
+          - object
+          - 'null'
+          description: decision_needed, decided and cancelled only
+          required:
+          - kind
+          - reason
+          - actor
+          - orders
+          - minimum
+          - at
+          properties:
+            kind:
+              type: string
+              enum:
+              - AWAITING
+              - PROCEED
+              - CANCEL
+              - EARLY_CLOSE
+            reason:
+              type: string
+            actor:
+              type: string
+              description: Staff subject, or system
+            orders:
+              type: integer
+              description: Orders that counted
+            minimum:
+              type: integer
+            at:
+              type: string
+              format: date-time
     PreorderAreasChanged:
       type: object
       required:
@@ -7070,6 +7175,81 @@ components:
           - REFUND
           - WAIT
         answeredAt:
+          type: string
+          format: date-time
+    OrdersPreorderRefundSettled:
+      type: object
+      required:
+      - orderId
+      - orderNumber
+      - customerId
+      - shipmentId
+      - status
+      - amountMinor
+      - currency
+      - at
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        windowId:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - REFUNDED
+          - VOIDED
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'Refunded or released: items, tax and the delivery fee'
+        currency:
+          type: string
+        at:
+          type: string
+          format: date-time
+    OrdersPreorderRefundFailed:
+      type: object
+      required:
+      - orderId
+      - orderNumber
+      - customerId
+      - shipmentId
+      - code
+      - error
+      - at
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        windowId:
+          type:
+          - string
+          - 'null'
+        code:
+          type: string
+          examples:
+          - orders.invalid-transition
+          - payments.unavailable
+        error:
+          type: string
+        at:
           type: string
           format: date-time
     OrdersPreorderPaymentLinkCreated:
@@ -10552,7 +10732,13 @@ operations:
       follow a window''s lifecycle (keyed by window id; opened / closed / delivered come from the scheduler, closed after
       the paid orders were handed to a run, which publishes delivery-runs.run.confirmed; paused / resumed carry the staff
       actorId); preorder.settings.changed and preorder.areas.changed (key preorder-settings) and preorder.export.created are
-      audit records; preorder.waitlist.joined records a waitlist sign-up.'
+      audit records; preorder.waitlist.joined records a waitlist sign-up. ADR 0005 §4: staff set a minimum order count per
+      window. When the close date passes below it the window is not cancelled: it becomes AWAITING_DECISION and preorder.window.decision_needed
+      tells staff (decision.kind AWAITING, orders and minimum counted). Staff then CANCEL or PROCEED with a required reason;
+      every decision (and an early close once the minimum is met) is published as preorder.window.decided with who, when and
+      why. A cancelled window (preorder.window.cancelled, orders[] = every order) is refunded in full by orders-service (consumer
+      orders-delivery-runs-events), which also consumes delivery-runs.run.cancelled the same way; progress per order comes
+      back as orders.preorder.refund_settled / refund_failed.'
   receiveDeliveryRunsOrderEvents:
     action: receive
     channel:
@@ -10560,8 +10746,9 @@ operations:
     summary: 'delivery-runs projects pre-orders (consumer delivery-runs-preorders, inbox-deduplicated on event-id): orders.order.placed
       with shipments[] of fulfilmentType PREORDER (preorder.windowId, preorder.fulfilment, attribution {src, cr, po} on the
       order or the preorder block) becomes a window order numbered <CODE>-1001…; orders.shipment.cancelled cancels that package
-      (the order once none is left); orders.order.cancelled of a placed order cancels it. Late adds (<CODE>-L90…) are completed
-      by their order''s placed event.'
+      (the order once none is left, with its refund PENDING); orders.preorder.refund_settled (REFUNDED or VOIDED) and orders.preorder.refund_failed
+      record the refund progress of a cancelled order; orders.order.cancelled of a placed order cancels it. Late adds (<CODE>-L90…)
+      are completed by their order''s placed event.'
   publishFulfilmentEvents:
     action: send
     channel:
@@ -10851,6 +11038,16 @@ operations:
       (notifications sends preorder.delivery_missed with refund / new-date links) and the customer''s answer as orders.preorder.missed_delivery_answered;
       late adds paid by link publish orders.preorder.payment_link_created (notifications texts preorder.late_order.payment_link).
       orders also routes payments.intent.* of late adds (no saga) to place or void them.'
+  receiveOrdersDeliveryRunsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/deliveryRunsEvents'
+    summary: 'ADR 0005 §1 (consumer orders-delivery-runs-events): preorder.window.cancelled cancels every placed PREORDER
+      shipment of the window, and delivery-runs.run.cancelled the PREORDER shipments of the orders[] it lists, through the
+      same cancellation path a customer''s own cancellation uses (orders.shipment.cancelled, then the CANCEL follow-up: a
+      captured payment is refunded in full with the delivery fee, an uncaptured authorisation is released, stock held for
+      the lines is released). Idempotent per shipment, so redeliveries and the window event followed by its run''s event do
+      no harm. A package that can no longer be cancelled (already on its way) publishes orders.preorder.refund_failed.'
   receiveOrdersPaymentEvents:
     action: receive
     channel:
