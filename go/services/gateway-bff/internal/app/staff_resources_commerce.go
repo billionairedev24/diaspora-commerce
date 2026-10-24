@@ -353,9 +353,18 @@ func inventoryResource() *staffResource {
 	}
 	return &staffResource{
 		key: "inventory", module: "inventory", title: "Lots", statusKey: "status", exportable: true, searchPlaceholder: "SKU",
-		columns: []domain.Column{col("sku", "SKU", "mono", 14), col("lotNo", "Lot", "mono", 16), col("nodeId", "Centre", "text", 13), col("qtyOnHand", "On hand", "number", 10),
-			col("qtyReserved", "Reserved", "number", 10), col("qtyAvailable", "Available", "number", 10), col("expDate", "Expires", "date", 13), col("status", "Status", "status", 14)},
+		columns: []domain.Column{col("sku", "SKU", "mono", 12), col("lotNo", "Lot", "mono", 13), col("nodeId", "Centre", "text", 10), col("qtyOnHand", "On hand", "number", 8),
+			col("qtyReserved", "Reserved", "number", 8), col("qtyAvailable", "Available", "number", 8), col("costPaid", "Unit cost paid", "text", 13),
+			col("unitCostUsdMinor", "Unit cost (USD)", "money", 10), col("expDate", "Expires", "date", 10), col("status", "Status", "status", 8)},
 		facets: domain.StaffFacets("SELLABLE", "QUARANTINED", "DAMAGED", "EXPIRED"),
+		// Stock is received in the currency actually paid; the table shows it with the rate and the USD value alongside.
+		cells: func(o jobj) map[string]any {
+			paid := formatPaid(int64(num(o, "unitLandedCostMinor")), jstr(o, "currency"))
+			if jstr(o, "currency") != "USD" {
+				paid += " @ " + jstr(o, "fxRateToUsd")
+			}
+			return map[string]any{"costPaid": paid}
+		},
 		list: listPaged("/v1/lots", upInventory, func(q staffQuery, v url.Values) {
 			if q.Q != "" {
 				v.Set("sku", strings.ToUpper(q.Q))

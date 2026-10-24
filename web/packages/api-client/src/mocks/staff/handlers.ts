@@ -722,7 +722,9 @@ export const staffHandlers = [
       const errors = validateForm(def.form, values);
       if (Object.keys(errors).length) throw invalid(errors);
       const rec = def.build(values, `${resource}-${ctx.db.seq++}`, ctx.action);
-      if (records(ctx, resource).some((r) => r.id === rec.id)) throw conflict('That record already exists.');
+      // A rate set for a currency and day that already has one replaces it (the reason is in the audit trail).
+      if (resource === 'exchange-rates') ctx.db.records[resource] = records(ctx, resource).filter((r) => r.id !== rec.id);
+      else if (records(ctx, resource).some((r) => r.id === rec.id)) throw conflict('That record already exists.');
       records(ctx, resource).unshift(rec);
       if (resource === 'announcements') records(ctx, 'placements').unshift(rec);
       audit(ctx, `${resource}.created`, rec.id, `Created ${RESOURCES[resource].titleOf(rec)}`);
@@ -752,8 +754,8 @@ export const staffHandlers = [
       if (version && current && version !== current) throw conflict('Someone else changed this record. Reload and try again.');
       const errors = validateForm(def.form(rec), values);
       if (Object.keys(errors).length) throw invalid(errors);
-      def.apply(rec, values);
-      rec.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, text: 'Edited' });
+      def.apply(rec, values, ctx.action);
+      if (resource !== 'exchange-rates') rec.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, text: 'Edited' });
       audit(ctx, `${resource}.updated`, rec.id, `Edited ${RESOURCES[resource].titleOf(rec)}`);
       return detail(ctx, resource, rec);
     })
@@ -1211,7 +1213,8 @@ export const staffHandlers = [
   ...planHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   ...feeRateHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }, (ctx) => activeFeeSchedule(ctx.db.feeSchedules, ctx.now)),
   /* Inventory hub and AfroTransact Retail (1P) (S281) */
-  ...inventoryHubHandlers(W, hubGate),
+  ...inventoryHubHandlers(W, hubGate, (request) =>
+    records(context(request), 'exchange-rates').map((r) => ({ currency: String(r.fields.currency), rateDate: String(r.fields.rateDate), rateToUsd: Number(r.fields.rateToUsd) }))),
   /* Anything else under /v1/staff is not part of the contract. */
   http.all(`${W}/*`, () => problemResponse(notFound('No such staff route.'))),
   /* My account (profile, sign-in & security, alerts, preferences): /v1/account/… */

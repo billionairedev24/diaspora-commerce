@@ -6,13 +6,14 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * A batch of one SKU at one node (unique per sku, lotNo, nodeId) with its dates, bin and unit landed cost.
+ * A batch of one SKU at one node (unique per sku, lotNo, nodeId) with its dates, bin and unit landed cost (in the
+ * currency paid, with the rate to USD and the USD value fixed at receiving).
  * Only SELLABLE lots can be reserved; reserved units must be released or shipped before a lot changes status.
  */
 public record Lot(UUID id, String sku, String lotNo, String nodeId, String ownerOrg, String bin, int qtyOnHand,
                   int qtyReserved, LocalDate mfgDate, LocalDate expDate, Instant receivedAt,
-                  long unitLandedCostMinor, String currency, LotStatus status, String reason,
-                  MarkdownFlag markdownFlag, String receiptRef, long version) {
+                  LotCost cost, LotStatus status, String reason, MarkdownFlag markdownFlag, String receiptRef,
+                  long version) {
 
     /** Suffix of the separate quarantine lot that holds units damaged on receipt or on return. */
     public static final String DAMAGED_SUFFIX = "-DMG";
@@ -28,6 +29,21 @@ public record Lot(UUID id, String sku, String lotNo, String nodeId, String owner
                     + " reserved units; release or ship them first");
         }
         markdownFlag = markdownFlag == null ? MarkdownFlag.NONE : markdownFlag;
+    }
+
+    /** Unit landed cost in the currency paid, in minor units. */
+    public long unitLandedCostMinor() {
+        return cost.unitMinor();
+    }
+
+    /** ISO 4217 code of the currency the lot was paid in. */
+    public String currency() {
+        return cost.currency();
+    }
+
+    /** Unit landed cost in US cents, fixed at receiving: what valuation and COGS use. */
+    public long unitCostUsdMinor() {
+        return cost.unitUsdMinor();
     }
 
     /** Units that can still be allocated. */
@@ -122,7 +138,7 @@ public record Lot(UUID id, String sku, String lotNo, String nodeId, String owner
 
     public Lot withMarkdown(MarkdownFlag flag) {
         return new Lot(id, sku, lotNo, nodeId, ownerOrg, bin, qtyOnHand, qtyReserved, mfgDate, expDate, receivedAt,
-                unitLandedCostMinor, currency, status, reason, flag, receiptRef, version);
+                cost, status, reason, flag, receiptRef, version);
     }
 
     private void requireStatus(LotStatus expected, String action) {
@@ -141,11 +157,11 @@ public record Lot(UUID id, String sku, String lotNo, String nodeId, String owner
 
     private Lot withQty(int onHand, int reservedQty) {
         return new Lot(id, sku, lotNo, nodeId, ownerOrg, bin, onHand, reservedQty, mfgDate, expDate, receivedAt,
-                unitLandedCostMinor, currency, status, reason, markdownFlag, receiptRef, version);
+                cost, status, reason, markdownFlag, receiptRef, version);
     }
 
     private Lot withStatus(LotStatus next, String why) {
         return new Lot(id, sku, lotNo, nodeId, ownerOrg, bin, qtyOnHand, qtyReserved, mfgDate, expDate, receivedAt,
-                unitLandedCostMinor, currency, next, why, markdownFlag, receiptRef, version);
+                cost, next, why, markdownFlag, receiptRef, version);
     }
 }

@@ -15,6 +15,7 @@ import {
   type StaffForm
 } from '../../schemas/staff';
 import { type MockRecord, type Scalar } from './db';
+import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 
 export interface ActionCtx {
@@ -64,7 +65,7 @@ export interface MockResource {
   lineColumns?: ResourceColumn[];
   links?: (r: MockRecord) => RecordLink[];
   actions: MockAction[];
-  edit?: { permission: string; form: (r: MockRecord) => StaffForm; apply: (r: MockRecord, values: Record<string, FieldValue>) => void };
+  edit?: { permission: string; form: (r: MockRecord) => StaffForm; apply: (r: MockRecord, values: Record<string, FieldValue>, ctx?: ActionCtx) => void };
   create?: { permission: string; form: StaffForm; build: (values: Record<string, FieldValue>, id: string, ctx: ActionCtx) => MockRecord };
 }
 
@@ -339,7 +340,8 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   inventory: {
     title: 'Lots',
-    columns: [col('sku', 'SKU', 'mono', 14), col('lotNo', 'Lot', 'mono', 16), col('node', 'Centre', 'text', 13), col('qtyOnHand', 'On hand', 'number', 10), col('qtyReserved', 'Reserved', 'number', 10), col('qtyAvailable', 'Available', 'number', 10), col('expDate', 'Expires', 'date', 13), col('status', 'Status', 'status', 14)],
+    columns: [col('sku', 'SKU', 'mono', 12), col('lotNo', 'Lot', 'mono', 13), col('node', 'Centre', 'text', 10), col('qtyOnHand', 'On hand', 'number', 8), col('qtyReserved', 'Reserved', 'number', 8), col('qtyAvailable', 'Available', 'number', 8),
+      col('costPaid', 'Unit cost paid', 'text', 13), col('unitCostUsdMinor', 'Unit cost (USD)', 'money', 10), col('expDate', 'Expires', 'date', 10), col('status', 'Status', 'status', 8)],
     statusKey: 'status',
     facets: facets('SELLABLE', 'QUARANTINED', 'DAMAGED', 'EXPIRED'),
     search: ['sku', 'lotNo'],
@@ -988,6 +990,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       })
     }
   },
+  'exchange-rates': exchangeRatesDef,
   // Identity & access (S291)
   ...IDENTITY_RESOURCES
 };

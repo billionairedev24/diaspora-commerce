@@ -347,8 +347,8 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
                         : asn.lotNo() != null ? asn.lotNo() : receiptRef;
                 LocalDate mfg = l.mfgDate() != null ? l.mfgDate() : asn.mfgDate();
                 LocalDate exp = l.expDate() != null ? l.expDate() : asn.expDate();
-                lines.add(new ReceiveCommand.Line(sku, lotNo, mfg, exp, l.qtyGood(), l.qtyDamaged(), l.bin(), 0,
-                        FBA_COST_CURRENCY, null, l.holdReason()));
+                lines.add(costed(s, l, new ReceiveCommand.Line(sku, lotNo, mfg, exp, l.qtyGood(), l.qtyDamaged(), l.bin(),
+                        0, FBA_COST_CURRENCY, null, l.holdReason()), i));
             }
             result = receiving.receive(new ReceiveCommand(receiptRef, s.nodeId(), s.ownerOrg(), s.number(), lines),
                     idempotencyKey);
@@ -707,6 +707,26 @@ class InboundShipmentServiceImpl implements InboundShipmentService {
     private static ExpectedBatch announced(InboundShipment s, String sku) {
         return s.lines().stream().filter(x -> x.sku().equals(sku)).findFirst().map(InboundLine::batch)
                 .orElse(ExpectedBatch.NONE);
+    }
+
+    /**
+     * The line with the cost the receiver entered. Seller units (FBA) carry none (they are not on AfroTransact's books);
+     * AfroTransact Retail units may be costed in the currency paid, at the receiver's rate or the table's.
+     */
+    private static ReceiveCommand.Line costed(InboundShipment s, InboundCommands.ReceiveLine l,
+                                              ReceiveCommand.Line zeroCost, int i) {
+        InboundCommands.ReceiveCost c = l.cost();
+        if (c == null) {
+            return zeroCost;
+        }
+        if (s.source() == InboundSource.FBA) {
+            throw new InventoryRuleViolation("inventory.fba-cost-not-allowed", "Seller units carry no cost on "
+                    + "AfroTransact's books", Map.of("lines[" + i + "].cost", "Not for FBA shipments"));
+        }
+        return new ReceiveCommand.Line(zeroCost.sku(), zeroCost.lotNo(), zeroCost.mfgDate(), zeroCost.expDate(),
+                zeroCost.qtyGood(), zeroCost.qtyDamaged(), zeroCost.bin(), c.unitMinor(),
+                c.currency() == null ? FBA_COST_CURRENCY : c.currency(), null, zeroCost.holdReason(), c.fxRateToUsd(),
+                c.fxRateDate(), null, c.components());
     }
 
     private String resolveSku(InboundShipment s, InboundCommands.ReceiveLine l, int i) {

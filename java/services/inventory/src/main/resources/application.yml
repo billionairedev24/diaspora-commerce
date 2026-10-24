@@ -90,6 +90,8 @@ at:
     reservation-ttl: ${RESERVATION_TTL:15m}
     # FEFO skips lots that would expire within this many days of today (node-local date).
     fefo-min-remaining-days: ${FEFO_MIN_REMAINING_DAYS:7}
+    # Currencies stock may be sourced and received in (ADR 0005 §7); customers always pay in USD and USD is always accepted.
+    cost-currencies: ${COST_CURRENCIES:USD,MXN,NGN,GHS,CAD,EUR,GBP,ZAR,KES,XOF}
     shelf-life:
       # Receipts quarantine lots whose remaining life is below max(min-days, min-fraction × shelf life).
       min-days: 90

@@ -20,6 +20,7 @@ import com.afrotransact.inventory.domain.InboundShipment;
 import com.afrotransact.inventory.domain.InboundStatus;
 import com.afrotransact.inventory.domain.InventoryRuleViolation;
 import com.afrotransact.inventory.domain.Lot;
+import com.afrotransact.inventory.domain.LotCost;
 import com.afrotransact.inventory.domain.LotStatus;
 import com.afrotransact.inventory.domain.MarkdownFlag;
 import com.afrotransact.inventory.domain.MovementType;
@@ -54,13 +55,14 @@ class ReceivingServiceImpl implements ReceivingService {
     private final InventoryAccess access;
     private final InventorySettings settings;
     private final InboundShipmentRepository inbounds;
+    private final LotCostValuer valuer;
     private final DomainEventPublisher events;
     private final Clock clock;
 
     ReceivingServiceImpl(NodeRepository nodes, PositionRepository positions, LotRepository lots,
                          ShelfLifePolicy shelfLife, StockWriter writer, IdempotencyStore idempotency,
                          InventoryAccess access, InventorySettings settings, InboundShipmentRepository inbounds,
-                         DomainEventPublisher events, Clock clock) {
+                         LotCostValuer valuer, DomainEventPublisher events, Clock clock) {
         this.nodes = nodes;
         this.positions = positions;
         this.lots = lots;
@@ -70,6 +72,7 @@ class ReceivingServiceImpl implements ReceivingService {
         this.access = access;
         this.settings = settings;
         this.inbounds = inbounds;
+        this.valuer = valuer;
         this.events = events;
         this.clock = clock;
     }
@@ -82,11 +85,12 @@ class ReceivingServiceImpl implements ReceivingService {
         Optional<ReceiptResult> prior = idempotency.claim(SCOPE, idempotencyKey, Fingerprint.of(cmd),
                 ReceiptResult.class);
         if (prior.isPresent()) {
-            return prior.get().asReplay();
+            return replay(prior.get());
         }
         Node node = activeNode(cmd.nodeId());
         LocalDate today = node.today(clock);
         List<ShelfLifeDecision> decisions = assess(cmd, today);
+        List<LotCost> costs = valuer.value(cmd.lines(), today);
         // Lock order: inbound shipment, then positions (sku, node), then lots.
         Optional<InboundShipment> inbound = receivableInbound(cmd, node);
 
@@ -125,7 +129,7 @@ class ReceivingServiceImpl implements ReceivingService {
             }
             ShelfLifeDecision decision = decisions.get(i);
             if (line.qtyGood() > 0) {
-                Lot lot = receiveLot(changes, cmd, node, line, line.lotNo(), line.qtyGood());
+                Lot lot = receiveLot(changes, cmd, node, line, line.lotNo(), line.qtyGood(), costs.get(i));
                 created.add(lot);
                 if (decision.outcome() == ShelfLifeDecision.Outcome.QUARANTINE) {
                     String reason = line.holdReason() == null ? decision.reason()
@@ -137,7 +141,7 @@ class ReceivingServiceImpl implements ReceivingService {
             }
             if (line.qtyDamaged() > 0) {
                 Lot damaged = receiveLot(changes, cmd, node, line, line.lotNo() + Lot.DAMAGED_SUFFIX,
-                        line.qtyDamaged());
+                        line.qtyDamaged(), costs.get(i));
                 created.add(damaged);
                 quarantined.add(quarantine(changes, cmd, damaged, "Damaged on receipt"));
             }
@@ -213,14 +217,27 @@ class ReceivingServiceImpl implements ReceivingService {
         return writer.flush(changes).stream().findFirst().orElse(position);
     }
 
+    /**
+     * The stored answer of an earlier call. Receipts stored before lots carried an exchange rate hold lots without a
+     * cost in US dollars: those are read again.
+     */
+    private ReceiptResult replay(ReceiptResult prior) {
+        boolean legacy = prior.lots().stream().anyMatch(l -> l.cost() == null);
+        if (!legacy) {
+            return prior.asReplay();
+        }
+        List<Lot> current = prior.lots().stream().map(l -> lots.findById(l.id()).orElse(l)).toList();
+        return new ReceiptResult(prior.receiptRef(), prior.nodeId(), prior.ownerOrg(), current, false).asReplay();
+    }
+
     private Lot receiveLot(StockChanges changes, ReceiveCommand cmd, Node node, ReceiveCommand.Line line, String lotNo,
-                           int qty) {
+                           int qty, LotCost cost) {
         if (lots.lockByKey(line.sku(), lotNo, node.id()).isPresent()) {
             throw new ConflictException("inventory.lot-exists", "Lot " + lotNo + " of " + line.sku()
                     + " was already received at " + node.id() + "; lot numbers must be new");
         }
         Lot lot = new Lot(UUID.randomUUID(), line.sku(), lotNo, node.id(), cmd.ownerOrg(), line.bin(), qty, 0,
-                line.mfgDate(), line.expDate(), changes.now(), line.unitLandedCostMinor(), line.currency(),
+                line.mfgDate(), line.expDate(), changes.now(), cost,
                 LotStatus.SELLABLE, "Received on " + cmd.receiptRef(), MarkdownFlag.of(line.expDate(), node.today(clock)),
                 cmd.receiptRef(), 0);
         changes.newLot(lot);
@@ -302,7 +319,8 @@ class ReceivingServiceImpl implements ReceivingService {
                     l.bin() == null || l.bin().isBlank() ? null : l.bin().trim().toUpperCase(Locale.ROOT),
                     l.unitLandedCostMinor(), l.currency() == null ? null : l.currency().toUpperCase(Locale.ROOT),
                     l.shelfLifeDays(), l.holdReason() == null || l.holdReason().isBlank() ? null
-                    : l.holdReason().trim()));
+                    : l.holdReason().trim(), l.fxRateToUsd(), l.fxRateDate(), l.unitCostUsdMinor(),
+                    l.costComponents()));
         }
         if (!errors.isEmpty()) {
             throw new InventoryRuleViolation("inventory.invalid-request", "Invalid receipt", errors);
