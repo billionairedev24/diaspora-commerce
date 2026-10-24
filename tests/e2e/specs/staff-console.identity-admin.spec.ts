@@ -13,8 +13,8 @@ test.describe('staff console · identity & access', () => {
 
     // Super Admin finds it under Settings (Platform), as well as at /identity.
     await page.goto('/settings');
-    await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: 'Identity & access' }).click();
-    await expect(page.getByRole('heading', { level: 2, name: 'Identity & access' })).toBeVisible();
+    await page.getByRole('region', { name: 'Platform' }).getByRole('link', { name: /Identity & access/ }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Identity & access' })).toBeVisible();
     await page.goto('/identity');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Identity & access');
     const clients = page.getByRole('table', { name: 'OAuth clients' });
@@ -117,9 +117,9 @@ test.describe('staff console · identity & access', () => {
   test('is not in the sidebar of staff without identity:admin', async ({ page, context, baseURL }) => {
     await context.addCookies([{ name: 'at_mock_staff_role', value: 'platform.developer', url: baseURL ?? 'http://localhost:3412' }]);
     await page.goto('/settings');
-    const sections = page.getByRole('navigation', { name: 'Settings sections' });
-    await expect(sections.getByRole('link', { name: 'Sign-in & integrations' })).toBeVisible();
-    await expect(sections.getByRole('link', { name: 'Identity & access' })).toHaveCount(0);
+    const sections = page.getByRole('region', { name: 'Platform' });
+    await expect(sections.getByRole('link', { name: /Sign-in & integrations/ })).toBeVisible();
+    await expect(sections.getByRole('link', { name: /Identity & access/ })).toHaveCount(0);
     await page.goto('/identity');
     await expect(page.getByText(/can.t open identity/i)).toBeVisible();
   });

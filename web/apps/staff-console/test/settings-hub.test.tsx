@@ -9,10 +9,6 @@ import { asRoles } from './mock-api';
 import { renderWithProviders } from './render';
 import { nav } from './setup';
 
-const railLinks = async () => {
-  const rail = await screen.findByRole('navigation', { name: 'Settings sections' });
-  return within(rail).getAllByRole('link');
-};
 
 describe('Settings', () => {
   beforeEach(() => {
@@ -21,27 +17,29 @@ describe('Settings', () => {
     nav.set('/settings');
   });
 
-  it('lists every section a super admin can open, grouped, with the first one open', async () => {
+  it('is a hub of grouped cards with no second sidebar', async () => {
     renderWithProviders(
       <ConsoleShell>
         <SettingsHub />
       </ConsoleShell>
     );
-    const labels = (await railLinks()).map((a) => a.textContent);
-    expect(labels).toEqual(['General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access', 'Payments & payouts', 'Fees & commissions', 'Sales tax', 'Plans & billing']);
-    expect(await screen.findByRole('heading', { name: 'General' })).toBeInTheDocument();
+    const platform = await screen.findByRole('region', { name: 'Platform' });
+    const labels = within(platform).getAllByRole('link').map((a) => a.querySelector('span span')?.textContent);
+    expect(labels).toEqual(['General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access']);
+    expect(within(await screen.findByRole('region', { name: 'Money' })).getAllByRole('link')).toHaveLength(4);
+    expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
   });
 
-  it('opens the section named in the address and marks it current', async () => {
+  it('opens the section named in the address under a breadcrumb', async () => {
     nav.set('/settings?section=payments');
     renderWithProviders(
       <ConsoleShell>
         <SettingsHub />
       </ConsoleShell>
     );
-    const links = await railLinks();
-    const current = links.find((a) => a.getAttribute('aria-current') === 'page');
-    expect(current?.textContent).toBe('Payments & payouts');
+    const crumbs = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    expect(within(crumbs).getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    expect(within(crumbs).getByText('Payments & payouts')).toHaveAttribute('aria-current', 'page');
     expect(await screen.findByRole('heading', { name: 'Payments & payouts' })).toBeInTheDocument();
     expect(await screen.findByText('Hold before a seller can be paid')).toBeInTheDocument();
   });
