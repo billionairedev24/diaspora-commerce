@@ -1479,6 +1479,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/identity/token-inspector": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decode a JWT and check its signature and issuer
+         * @description identity `POST /v1/admin/identity/token-inspector` (`identity:admin`). The pasted token is decoded and verified in
+         *     memory at identity: it is never stored, cached or logged, it is not echoed back, and the audit trail records the
+         *     subject and key id only. A bad token is a 200 that says what is wrong (`valid`, `problems`), not an error; empty or
+         *     oversized input is a 422 on `token`.
+         */
+        post: operations["inspectIdentityToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/identity/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The OIDC discovery document and the JWKS
+         * @description identity `GET /v1/admin/identity/discovery` (`identity:admin`). The JWKS holds public keys only.
+         */
+        get: operations["getIdentityDocuments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/preorders": {
         parameters: {
             query?: never;
@@ -3795,6 +3838,41 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        IdentityTokenInspectionRequest: {
+            /** @description The JWT to inspect */
+            token: string;
+        };
+        IdentityTokenInspection: {
+            /** @description The text is a signed JWT */
+            wellFormed: boolean;
+            header?: {
+                [key: string]: unknown;
+            };
+            claims?: {
+                [key: string]: unknown;
+            };
+            scopes?: string[];
+            keyId?: string | null;
+            /** Format: date-time */
+            issuedAt?: string | null;
+            /** Format: date-time */
+            expiresAt?: string | null;
+            expired?: boolean | null;
+            /** @description The signature verifies against a key identity publishes */
+            signatureValid: boolean;
+            issuerValid: boolean;
+            /** @description Well formed, signature and issuer valid, and not expired */
+            valid: boolean;
+            problems: string[];
+        };
+        IdentityDocuments: {
+            discovery: {
+                [key: string]: unknown;
+            };
+            jwks: {
+                [key: string]: unknown;
+            };
+        };
         /** @description What the plan lets an organisation do (read from `limits`). A capability that is off is not offered to the plan's members. */
         StaffPlanEntitlements: {
             /**
@@ -4591,10 +4669,10 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /**
-         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
+         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications and identity are derived; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "notifications" | "preorders" | "plans";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "orgs" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "identity" | "notifications" | "preorders" | "plans";
         StaffUser: {
             id: string;
             firstName: string;
@@ -4697,7 +4775,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus";
+        ResourceKey: "users" | "roles" | "applications" | "organisations" | "connect-accounts" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "tax-codes" | "tax-rules" | "tax-review" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events" | "pickup-locations" | "coupons" | "reconciliation" | "reconciliation-runs" | "ledger-adjustments" | "stripe-lookup" | "payment-settings" | "tax-settings" | "maintenance" | "tax-filings" | "tax-nexus" | "oauth-clients" | "identity-sessions" | "signing-keys" | "auth-settings";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;
@@ -4842,6 +4920,13 @@ export interface components {
             version: string | null;
             /** @description Set when an action deleted the record; the console closes the sheet */
             removed?: boolean;
+            reveal?: components["schemas"]["OneTimeSecret"];
+        };
+        /** @description A secret shown once, right after it was created (a new OAuth client secret). It is in this answer only; the BFF keeps nothing and the upstream cannot return it again. The console shows it in a dialog and never stores it. */
+        OneTimeSecret: {
+            label: string;
+            value: string;
+            note: string;
         };
         RecordValues: {
             values?: {
@@ -8841,6 +8926,60 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    inspectIdentityToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IdentityTokenInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description What the token says and whether it checks out */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityTokenInspection"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getIdentityDocuments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The documents */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IdentityDocuments"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

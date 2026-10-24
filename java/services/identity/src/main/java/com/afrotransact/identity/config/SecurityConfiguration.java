@@ -1,5 +1,6 @@
 package com.afrotransact.identity.config;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -18,12 +19,14 @@ import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationPr
 import com.afrotransact.identity.adapter.in.security.MfaAwareAuthenticationSuccessHandler;
 import com.afrotransact.identity.adapter.in.security.MfaChallengeAccessDeniedHandler;
 import com.afrotransact.identity.adapter.in.security.PromptParameterFilter;
+import com.afrotransact.identity.adapter.in.security.SessionTimeoutFilter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationConverter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.adapter.out.passkey.SignCountVerifyingRelyingParty;
 import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyAssertions;
 import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyRegistrations;
+import com.afrotransact.identity.application.AuthSettingsService;
 import com.afrotransact.identity.application.FederatedLoginService;
 import com.afrotransact.identity.application.FirstPartySignInService;
 import com.afrotransact.identity.application.IdentityProviderService;
@@ -102,7 +105,8 @@ class SecurityConfiguration {
                                                  SecurityContextRepository contexts, RequestCache requestCache,
                                                  FirstPartySignInService firstParty, UserDetailsService accounts,
                                                  AuthorizationServerSettings settings,
-                                                 IdentityProviderService identityProviders)
+                                                 IdentityProviderService identityProviders,
+                                                 AuthSettingsService authSettings, Clock clock)
             throws Exception {
         http.oauth2AuthorizationServer(as -> {
             http.securityMatcher(as.getEndpointsMatcher());
@@ -131,6 +135,8 @@ class SecurityConfiguration {
                 SecurityContextHolderFilter.class);
         http.addFilterAfter(new PromptParameterFilter(settings.getAuthorizationEndpoint(), contexts),
                 LoginTicketAuthenticationFilter.class);
+        // Session timeouts of the auth settings (S291), applied before the session's security context is read.
+        http.addFilterBefore(new SessionTimeoutFilter(authSettings, clock), SecurityContextHolderFilter.class);
         return http.build();
     }
 
@@ -157,7 +163,8 @@ class SecurityConfiguration {
                                      TrustedBrowserCookie trustedBrowser, SecurityContextRepository contexts,
                                      RequestCache requestCache, ClientRegistrationRepository registrations,
                                      IdentityProviderService providers, FederatedLoginService federated,
-                                     SignInProtectionService protection)
+                                     SignInProtectionService protection, AuthSettingsService authSettings,
+                                     Clock clock)
             throws Exception {
         HostedLoginProtection hostedProtection = new HostedLoginProtection(protection);
         MfaAwareAuthenticationSuccessHandler success = new MfaAwareAuthenticationSuccessHandler(signIn,
@@ -166,6 +173,7 @@ class SecurityConfiguration {
                         .anyRequest().authenticated())
                 .securityContext(c -> c.securityContextRepository(contexts))
                 .requestCache(r -> r.requestCache(requestCache))
+                .addFilterBefore(new SessionTimeoutFilter(authSettings, clock), SecurityContextHolderFilter.class)
                 .addFilterBefore(hostedProtection, UsernamePasswordAuthenticationFilter.class)
                 .formLogin(f -> f.loginPage("/login").successHandler(success).failureHandler(hostedProtection)
                         .permitAll())

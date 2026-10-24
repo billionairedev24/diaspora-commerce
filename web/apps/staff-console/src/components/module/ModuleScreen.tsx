@@ -6,6 +6,7 @@ import { DashboardView } from '@/components/dashboard/DashboardView';
 import { DispatchView } from '@/components/dispatch/DispatchView';
 import { ExportsView } from '@/components/exports/ExportsView';
 import { FeesView } from '@/components/fees/FeesView';
+import { IdentityAdminView } from '@/components/identity/IdentityAdminView';
 import { InventoryHubView } from '@/components/inventory/InventoryHubView';
 import { MarketingView } from '@/components/marketing/MarketingView';
 import { MarketsView } from '@/components/markets/MarketsView';
@@ -19,7 +20,7 @@ import { SupportView } from '@/components/support/SupportView';
 import { ModuleView } from './ModuleView';
 
 /** The screen of a module: dashboard, exports, support, fees, dispatch, notifications, pre-orders, the inventory hub,
-    AfroTransact Retail, Markets & locations (the location tree) and Plans & billing have their own; the rest are server-driven tables. */
+    AfroTransact Retail, Markets & locations (the location tree), Plans & billing and Identity & access have their own; the rest are server-driven tables. */
 export function ModuleScreen({ module }: { module: StaffModuleKey }) {
   switch (module) {
     case 'dash':
@@ -48,6 +49,8 @@ export function ModuleScreen({ module }: { module: StaffModuleKey }) {
       return <MarketsView />;
     case 'plans':
       return <PlansView />;
+    case 'identity':
+      return <IdentityAdminView />;
     default:
       return <ModuleView module={module} />;
   }

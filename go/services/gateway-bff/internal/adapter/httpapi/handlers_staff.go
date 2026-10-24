@@ -40,6 +40,9 @@ type StaffServices struct {
 	Inventory app.StaffInventoryService
 	// Plans serves Plans & billing (S292–S297); routes are registered when it is set.
 	Plans app.StaffPlansService
+	// Identity serves the token inspector and published documents of Identity & access (S291); routes are registered when
+	// it is set.
+	Identity app.StaffIdentityService
 	// Assistant is Lola in the staff console (read-only); routes are registered when it is set.
 	Assistant app.StaffAssistantService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
@@ -110,6 +113,10 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Markets != nil {
 		h.registerStaffMarkets(route)
+	}
+	if s.Identity != nil {
+		route("POST /v1/staff/identity/token-inspector", h.staffInspectToken)
+		route("GET /v1/staff/identity/documents", h.staffIdentityDocuments)
 	}
 }
 

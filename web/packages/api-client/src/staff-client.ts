@@ -22,6 +22,10 @@ import {
   FeeScheduleViewSchema,
   type FeesOverview,
   FeesOverviewSchema,
+  type IdentityDocuments,
+  IdentityDocumentsSchema,
+  type IdentityTokenInspection,
+  IdentityTokenInspectionSchema,
   type NotificationPreview,
   type NotificationPreviewRequest,
   NotificationPreviewSchema,
@@ -117,6 +121,12 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`${record(resource, id)}/actions/${enc(action)}`, RecordDetailSchema, { method: 'POST', body: { values }, headers: idem(key) }),
     addNote: (resource: ResourceKey, id: string, text: string): Promise<RecordDetail> =>
       request(`${record(resource, id)}/notes`, RecordDetailSchema, { method: 'POST', body: { text } }),
+
+    /* Identity & access (S291): the module's tables are Resources; the token inspector and the OIDC documents are routes of their own.
+       The pasted token goes in the request body only and is not part of the answer. */
+    inspectIdentityToken: (token: string): Promise<IdentityTokenInspection> =>
+      request('/v1/staff/identity/token-inspector', IdentityTokenInspectionSchema, { method: 'POST', body: { token } }),
+    getIdentityDocuments: (signal?: AbortSignal): Promise<IdentityDocuments> => request('/v1/staff/identity/documents', IdentityDocumentsSchema, { signal }),
 
     /* Exports */
     listExports: (signal?: AbortSignal): Promise<ExportJobList> => request('/v1/staff/exports', ExportJobListSchema, { signal }),

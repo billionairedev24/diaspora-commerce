@@ -7,6 +7,7 @@ import { useSearchParams } from 'next/navigation';
 import { type ReactNode } from 'react';
 
 import { FeesView } from '@/components/fees/FeesView';
+import { IdentityAdminView } from '@/components/identity/IdentityAdminView';
 import { MarketsView } from '@/components/markets/MarketsView';
 import { EmbeddedInSettings } from '@/components/module/ModulePage';
 import { ModuleView } from '@/components/module/ModuleView';
@@ -28,6 +29,8 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
       return <NotificationsView />;
     case 'signin':
       return <ModuleView module="dev" />;
+    case 'identity':
+      return <IdentityAdminView />;
     case 'payments':
       return (
         <div className="flex flex-col gap-3">

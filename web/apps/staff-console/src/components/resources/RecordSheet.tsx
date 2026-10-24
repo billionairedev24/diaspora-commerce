@@ -1,6 +1,6 @@
 'use client';
 
-import { definitiveFailure, type FieldValue, isApiError, type RecordAction, type RecordDetail, type ResourceKey, type StaffForm, staffKeys, staffQueries } from '@afrotransact/api-client';
+import { definitiveFailure, type FieldValue, isApiError, type OneTimeSecret, type RecordAction, type RecordDetail, type ResourceKey, type StaffForm, staffKeys, staffQueries } from '@afrotransact/api-client';
 import { Button, Dialog, Sheet, SheetTableScroll, useToast } from '@afrotransact/ui';
 import { LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -16,6 +16,7 @@ import { dateTime, humanize, idempotencyKey } from '@/lib/format';
 
 import { Cell, fieldText } from './cells';
 import { FormFields } from './FormFields';
+import { RevealDialog } from './RevealDialog';
 
 /** An open dialog. An action keeps one Idempotency-Key from opening until it is done, so a retry never repeats it. */
 type Pending = { kind: 'action'; action: RecordAction; key: string } | { kind: 'edit'; form: StaffForm };
@@ -120,6 +121,8 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [info, setInfo] = useState<{ id: string; text: string } | null>(null);
+  /** A secret the action just created (a new OAuth client secret): shown once, kept out of the query cache. */
+  const [reveal, setReveal] = useState<OneTimeSecret | null>(null);
   const q = useQuery({ ...staffQueries.record(api, resource, id ?? ''), enabled: id !== null });
   const record = q.data;
 
@@ -138,7 +141,9 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
       onClose();
       return;
     }
-    qc.setQueryData(staffKeys.record(resource, r.id), r);
+    const { reveal: secret, ...sheet } = r;
+    qc.setQueryData(staffKeys.record(resource, r.id), sheet);
+    if (secret) setReveal(secret);
     refresh();
     setPending(null);
     setInfo(null);
@@ -342,6 +347,7 @@ export function RecordSheet({ resource, id, onClose }: { resource: ResourceKey; 
           </div>
         ) : null}
       </Dialog>
+      <RevealDialog secret={reveal} onClose={() => setReveal(null)} />
     </Sheet>
   );
 }

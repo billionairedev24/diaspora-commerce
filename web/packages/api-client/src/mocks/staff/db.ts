@@ -6,6 +6,7 @@ import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
+import { seedIdentityAdmin } from './identity';
 import { type MockMarketsState, seedMarkets } from './markets';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { type MockPlansState, seedPlans } from './plans';
@@ -521,7 +522,8 @@ function seed(now: Date): MockStaffDb {
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
-      'pickup-locations': pickupLocations
+      'pickup-locations': pickupLocations,
+      ...seedIdentityAdmin(now)
     },
     notifications,
     exports: [],

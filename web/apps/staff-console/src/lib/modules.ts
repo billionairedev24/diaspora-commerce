@@ -10,6 +10,7 @@ import {
   GlobeHemisphereWest,
   Headset,
   IdentificationCard,
+  Key,
   ListMagnifyingGlass,
   Megaphone,
   Package,
@@ -27,7 +28,7 @@ import {
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
   dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
   orgs: UsersThree, apps: IdentificationCard, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
-  audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, notifications: BellRinging, preorders: CalendarCheck,
+  audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, identity: Key, notifications: BellRinging, preorders: CalendarCheck,
   plans: CreditCard
 };
 
@@ -35,7 +36,7 @@ export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
 export const MODULE_PATHS: Record<StaffModuleKey, string> = {
   dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
   orgs: '/organisations', apps: '/applications', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
-  audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', notifications: '/notifications', preorders: '/preorders',
+  audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', identity: '/identity', notifications: '/notifications', preorders: '/preorders',
   plans: '/plans'
 };
 
@@ -112,7 +113,14 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'help-articles', label: 'Help center' },
     { resource: 'privacy-requests', label: 'Privacy requests' }
   ],
-  dev: [{ resource: 'identity-providers', label: 'Identity providers' }]
+  dev: [{ resource: 'identity-providers', label: 'Identity providers' }],
+  // Identity & access (S291) has its own screen (tabs, plus the token inspector); the list lets recordHref find the right tab.
+  identity: [
+    { resource: 'oauth-clients', label: 'OAuth clients' },
+    { resource: 'identity-sessions', label: 'Sessions & tokens' },
+    { resource: 'signing-keys', label: 'Signing keys' },
+    { resource: 'auth-settings', label: 'Settings' }
+  ]
 };
 
 /** Every console module key (URL segments are validated against these). */

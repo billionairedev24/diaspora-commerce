@@ -24,6 +24,9 @@ tags:
     when an approval event was missed or arrived late
 - name: Two-step verification
   description: Authenticator app, SMS codes and recovery codes
+- name: Identity admin
+  description: 'OAuth clients, sessions and tokens, signing keys, token inspector and authentication settings (identity:admin;
+    every change needs a reason and is written to the access change log)'
 - name: Data protection
   description: 'Encryption at rest of MFA secrets: key status and key rotation (staff with platform.super_admin only)'
 - name: Notification preferences
@@ -224,6 +227,395 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/IdentityProviderAdmin'
+  /v1/admin/identity/clients:
+    get:
+      tags:
+      - Identity admin
+      summary: Every registered OAuth client (identity:admin)
+      operationId: adminClients
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OAuthClient'
+    post:
+      tags:
+      - Identity admin
+      summary: Register an OAuth client; a confidential client's secret is in the response, once
+      description: Needs a reason. Written to the access change log.
+      operationId: createAdminClient
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthClientRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClientSecret'
+  /v1/admin/identity/clients/{clientId}:
+    get:
+      tags:
+      - Identity admin
+      summary: One OAuth client (identity:admin)
+      operationId: adminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+    put:
+      tags:
+      - Identity admin
+      summary: Edit an OAuth client (everything but its id and type)
+      description: Needs a reason. Written to the access change log with the before and after values.
+      operationId: updateAdminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthClientRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+  /v1/admin/identity/clients/{clientId}/disable:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Disable a client: the token endpoint refuses it and its refresh tokens stop working'
+      operationId: disableAdminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+  /v1/admin/identity/clients/{clientId}/enable:
+    post:
+      tags:
+      - Identity admin
+      summary: Enable a disabled client
+      operationId: enableAdminClient
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClient'
+  /v1/admin/identity/clients/{clientId}/rotate-secret:
+    post:
+      tags:
+      - Identity admin
+      summary: Rotate a confidential client's secret; the new secret is in the response, once
+      description: The previous secret keeps working for 24 hours so deployed callers can switch over.
+      operationId: rotateAdminClientSecret
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OAuthClientSecret'
+  /v1/admin/identity/clients/{clientId}/sessions/revoke:
+    post:
+      tags:
+      - Identity admin
+      summary: Revoke every sign-in of a client
+      operationId: revokeAdminClientSessions
+      parameters:
+      - name: clientId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SessionsRevoked'
+  /v1/admin/identity/sessions:
+    get:
+      tags:
+      - Identity admin
+      summary: Active sign-ins and refresh tokens, by user or client
+      description: q matches the user's name or email and the client's id or name.
+      operationId: adminSessions
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: userId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: clientId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdminSessionPage'
+  /v1/admin/identity/sessions/{sessionId}:
+    get:
+      tags:
+      - Identity admin
+      summary: One active sign-in
+      operationId: adminSession
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdminSession'
+  /v1/admin/identity/sessions/{sessionId}/revoke:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Revoke one sign-in: its refresh token stops working at once'
+      operationId: revokeAdminSession
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '204':
+          description: No Content
+  /v1/admin/identity/users/{userId}/sessions/revoke:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Sign a user out everywhere: every sign-in and single sign-on browser session'
+      operationId: revokeAdminUserSessions
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SessionsRevoked'
+  /v1/admin/identity/signing-keys:
+    get:
+      tags:
+      - Identity admin
+      summary: 'The JWKS signing keys: active, retiring and retired'
+      operationId: adminSigningKeys
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SigningKey'
+  /v1/admin/identity/signing-keys/rotate:
+    post:
+      tags:
+      - Identity admin
+      summary: 'Rotate the signing key: a new key signs new tokens, the old one stays published until the longest access
+        token has expired'
+      operationId: rotateAdminSigningKey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonBody'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SigningKey'
+  /v1/admin/identity/token-inspector:
+    post:
+      tags:
+      - Identity admin
+      summary: Decode a JWT and check its signature and issuer; the token is never stored or logged
+      operationId: inspectToken
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenInspectionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TokenInspection'
+  /v1/admin/identity/discovery:
+    get:
+      tags:
+      - Identity admin
+      summary: The OIDC discovery document and the JWKS (public keys only)
+      operationId: adminDiscovery
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OidcDocuments'
+  /v1/admin/identity/settings:
+    get:
+      tags:
+      - Identity admin
+      summary: 'Authentication settings: in force, stored overrides and configured defaults'
+      operationId: adminAuthSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AuthSettings'
+    put:
+      tags:
+      - Identity admin
+      summary: Replace the stored authentication settings
+      description: Validated, needs a reason, written to the access change log with before and after.
+      operationId: updateAdminAuthSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthSettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AuthSettings'
   /v1/admin/module-access:
     get:
       tags:
@@ -3504,6 +3896,318 @@ components:
           minLength: 0
       required:
       - token
+    ReasonBody:
+      type: object
+      description: 'Why: 10 to 500 characters, kept in the access log'
+      properties:
+        reason:
+          type: string
+    OAuthClientRequest:
+      type: object
+      properties:
+        clientId:
+          type: string
+          description: Create only; lower-case letters, digits, dots, dashes and underscores
+        type:
+          type: string
+          description: Create only
+          enum:
+          - public
+          - confidential
+        name:
+          type: string
+        grantTypes:
+          type: array
+          items:
+            type: string
+            enum:
+            - authorization_code
+            - refresh_token
+            - client_credentials
+        scopes:
+          type: array
+          items:
+            type: string
+        redirectUris:
+          type: array
+          items:
+            type: string
+        postLogoutRedirectUris:
+          type: array
+          items:
+            type: string
+        requireConsent:
+          type: boolean
+        publicRefreshTokens:
+          type: boolean
+        accessTokenTtlMinutes:
+          type: integer
+          format: int64
+        refreshTokenTtlMinutes:
+          type: integer
+          format: int64
+        reason:
+          type: string
+    OAuthClient:
+      type: object
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - public
+          - confidential
+        grantTypes:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        redirectUris:
+          type: array
+          items:
+            type: string
+        postLogoutRedirectUris:
+          type: array
+          items:
+            type: string
+        requirePkce:
+          type: boolean
+        requireConsent:
+          type: boolean
+        publicRefreshTokens:
+          type: boolean
+        accessTokenTtlMinutes:
+          type: integer
+          format: int64
+        refreshTokenTtlMinutes:
+          type: integer
+          format: int64
+        enabled:
+          type: boolean
+        platformClient:
+          type: boolean
+          description: The platform's own sign-in client; it cannot be disabled
+        issuedAt:
+          type: string
+          format: date-time
+        secretRotatedAt:
+          type: string
+          format: date-time
+        previousSecretExpiresAt:
+          type: string
+          format: date-time
+          description: While set and in the future, the previous secret still works
+    OAuthClientSecret:
+      type: object
+      description: The new client and its secret. The secret is shown here once and cannot be read again; it is stored only
+        as a hash.
+      properties:
+        client:
+          $ref: '#/components/schemas/OAuthClient'
+        secret:
+          type: string
+          description: Null for a public client
+    AdminSession:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        clientId:
+          type: string
+        clientName:
+          type: string
+        ipAddress:
+          type: string
+        signedInAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        refreshable:
+          type: boolean
+    AdminSessionPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSession'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    SessionsRevoked:
+      type: object
+      properties:
+        sessions:
+          type: integer
+          format: int32
+        browserSessions:
+          type: integer
+          format: int32
+    SigningKey:
+      type: object
+      properties:
+        kid:
+          type: string
+        algorithm:
+          type: string
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - RETIRING
+          - RETIRED
+        createdAt:
+          type: string
+          format: date-time
+        rotatedAt:
+          type: string
+          format: date-time
+        retireAfter:
+          type: string
+          format: date-time
+        retiredAt:
+          type: string
+          format: date-time
+    TokenInspectionRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 16384
+    TokenInspection:
+      type: object
+      properties:
+        wellFormed:
+          type: boolean
+        header:
+          type: object
+          additionalProperties: {}
+        claims:
+          type: object
+          additionalProperties: {}
+        scopes:
+          type: array
+          items:
+            type: string
+        keyId:
+          type: string
+        issuedAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        expired:
+          type: boolean
+        signatureValid:
+          type: boolean
+        issuerValid:
+          type: boolean
+        valid:
+          type: boolean
+        problems:
+          type: array
+          items:
+            type: string
+    OidcDocuments:
+      type: object
+      description: The OIDC discovery document and the JWKS (public keys only)
+      properties:
+        discovery:
+          type: object
+          additionalProperties: {}
+        jwks:
+          type: object
+          additionalProperties: {}
+    AuthSettingsValues:
+      type: object
+      properties:
+        passwordMinLength:
+          type: integer
+          format: int32
+        mfaRequiredAccount:
+          type: boolean
+        mfaRequiredSeller:
+          type: boolean
+        mfaRequiredProvider:
+          type: boolean
+        sessionIdleTimeoutMinutes:
+          type: integer
+          format: int32
+        sessionAbsoluteTimeoutMinutes:
+          type: integer
+          format: int32
+        accessTokenTtlCapMinutes:
+          type: integer
+          format: int32
+        refreshTokenTtlCapMinutes:
+          type: integer
+          format: int32
+    AuthSettingsOverrides:
+      type: object
+      description: What is stored; a null field uses the configured default
+      properties:
+        passwordMinLength:
+          type: integer
+          format: int32
+        mfaRequiredAccount:
+          type: boolean
+        mfaRequiredSeller:
+          type: boolean
+        mfaRequiredProvider:
+          type: boolean
+        sessionIdleTimeoutMinutes:
+          type: integer
+          format: int32
+        sessionAbsoluteTimeoutMinutes:
+          type: integer
+          format: int32
+        accessTokenTtlCapMinutes:
+          type: integer
+          format: int32
+        refreshTokenTtlCapMinutes:
+          type: integer
+          format: int32
+    AuthSettings:
+      type: object
+      properties:
+        effective:
+          $ref: '#/components/schemas/AuthSettingsValues'
+        overrides:
+          $ref: '#/components/schemas/AuthSettingsOverrides'
+        defaults:
+          $ref: '#/components/schemas/AuthSettingsValues'
+    AuthSettingsUpdate:
+      type: object
+      description: 'Replaces the stored overrides: send null to go back to the configured default'
+      properties:
+        overrides:
+          $ref: '#/components/schemas/AuthSettingsOverrides'
+        reason:
+          type: string
   securitySchemes:
     bearer:
       type: http

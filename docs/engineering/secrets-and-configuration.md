@@ -353,7 +353,9 @@ for email; `twilio, aws, vonage` for SMS) and webhook signatures are verified, s
 Internal secrets: generate with `openssl rand -base64 32` (data and field encryption keys: exactly 32 random bytes,
 base64), `openssl rand -hex 32` (HMAC keys), `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072` (identity's
 `SIGNING_KEY_PEM`). Each `<SERVICE>_CLIENT_SECRET` must hold the same value in the service's secret and in identity's
-(identity registers the client with it).
+(identity registers the client with it, **only when the client does not exist yet**: after that the staff console owns it,
+and a secret rotated there must be copied into the service's secret; `SIGNING_KEY_PEM` likewise only seeds the first signing
+key, later rotations are done in the console). See [identity-admin.md](identity-admin.md).
 
 ### Web apps (Cloudflare Workers)
 

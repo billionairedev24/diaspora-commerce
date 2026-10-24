@@ -75,6 +75,16 @@ type staffCtx struct {
 	maint  MaintenanceService
 	// idem is the request's Idempotency-Key (relayed to upstreams that accept one).
 	idem string
+	// reveal collects a secret an action or creation wants to show once (see showOnce); nil elsewhere.
+	reveal *domain.OneTimeSecret
+}
+
+// showOnce puts a secret in the answer of the current action or creation, and nowhere else: it is not cached, logged
+// or kept, and the upstream cannot return it again.
+func (s staffCtx) showOnce(label, value, note string) {
+	if s.reveal != nil {
+		*s.reveal = domain.OneTimeSecret{Label: label, Value: value, Note: note}
+	}
 }
 
 // call runs one upstream call with the staff member's token.

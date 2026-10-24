@@ -34,6 +34,10 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
   markets: { label: 'Markets & locations', description: 'Turn AfroTransact on or off by country and by state.' },
   siteCfg: { label: 'Site content & legal', description: 'Contacts, social links and legal document versions, published without a deployment.' },
   dev: { label: 'Developers', description: 'Identity providers: which social sign-in buttons appear.' },
+  identity: {
+    label: 'Identity & access',
+    description: 'Developer tools for the identity service: OAuth clients, sessions and tokens, signing keys, the token inspector and sign-in settings.'
+  },
   notifications: {
     label: 'Notifications',
     description: 'Email, SMS, push and WhatsApp templates: live preview with production-shaped sample data, version history and new versions.'
@@ -51,7 +55,7 @@ export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKe
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
   { key: 'trust', label: 'Trust & compliance', modules: ['disputes', 'audit'] },
-  { key: 'settings', label: 'Settings', modules: ['markets', 'siteCfg', 'dev', 'notifications'] }
+  { key: 'settings', label: 'Settings', modules: ['markets', 'siteCfg', 'dev', 'identity', 'notifications'] }
 ];
 
 export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
@@ -61,7 +65,8 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   'fee-schedules': 'fees', 'tax-rates': 'fees', 'tax-codes': 'fees', 'tax-rules': 'fees', 'tax-review': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',
   coupons: 'marketing', organisations: 'orgs', 'connect-accounts': 'orgs',
   reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', 'stripe-lookup': 'payouts',
-  'payment-settings': 'payouts', 'tax-settings': 'fees', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees'
+  'payment-settings': 'payouts', 'tax-settings': 'fees', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees',
+  'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity'
 };
 
 /** Refund ceiling per platform role in minor units (null = no limit). Roles not listed may not refund. */
@@ -100,6 +105,9 @@ PENDING_PERMISSIONS['platform.marketing']?.push(...PREORDER_GRANTS);
 
 /* Plans & billing grants (identity migration V25, S292–S297) until rbac-data.ts is regenerated from identity's seeds. */
 PENDING_PERMISSIONS['platform.super_admin']?.push('plans:manage', 'billing:adjust', 'seller:billing');
+
+/* Identity admin console (identity migration V31, S291): Super Admin only. */
+PENDING_PERMISSIONS['platform.super_admin']?.push('identity:admin');
 PENDING_PERMISSIONS['platform.finance']?.push('plans:manage', 'billing:adjust', 'seller:billing');
 PENDING_PERMISSIONS['platform.product_owner']?.push('seller:billing');
 PENDING_PERMISSIONS['platform.auditor']?.push('seller:billing');
@@ -134,6 +142,8 @@ function matrixLevel(roles: string[], module: MatrixModule | 'preorders'): Acces
 /** The staff member's level on a console module: the best level over their roles (support, exports and notifications are derived). */
 export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | null {
   if (module === 'exports') return matrixLevel(roles, 'dash');
+  // Identity & access follows identity's own permission, not the module matrix.
+  if (module === 'identity') return permissionsOf(roles).includes('identity:admin') ? 'EDIT' : null;
   if (module === 'support') {
     const perms = permissionsOf(roles);
     return perms.includes('support:respond') ? 'EDIT' : perms.includes('users:read') ? 'VIEW' : null;

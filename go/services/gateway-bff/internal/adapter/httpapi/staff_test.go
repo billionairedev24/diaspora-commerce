@@ -54,7 +54,7 @@ func TestEmbeddedStaffContractIsIdentical(t *testing.T) {
 var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispatch", "disputes:manage", "inventory:read", "notifications:read", "orders:read",
 	"orders:update-status", "orgs:read", "payments:read", "refunds:issue", "reports:read", "returns:manage", "support:respond", "users:read"}
 
-var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "content:legal.edit",
+var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "identity:admin", "content:legal.edit",
 	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "delivery:dispatch", "disputes:manage",
 	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "ledger:adjust", "ledger:approve", "payments:configure", "payments:read", "payouts:approve", "payouts:read",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
@@ -66,6 +66,8 @@ type fakePlatform struct {
 	payoutSt  string
 	bigOrders bool
 	fees      []map[string]any
+	// idAdmin is identity's admin console API (S291), see staff_identity_test.go.
+	idAdmin fakeIdentityAdmin
 	// override answers a request before the defaults when it returns true (scenario tests).
 	override func(w http.ResponseWriter, r *http.Request, body map[string]any) bool
 }
@@ -289,6 +291,8 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"at": now, "actorId": "stf-1", "action": "ROLE_ASSIGNED", "targetRole": "platform.finance"}}})
 	case p == "/v1/admin/roles":
 		writeJ(w, 200, []any{map[string]any{"key": "platform.finance", "portal": "PLATFORM", "name": "Finance", "description": "Money", "permissions": []string{"payouts:approve"}}})
+	case strings.HasPrefix(p, "/v1/admin/identity/"):
+		f.idAdmin.serve(w, r, p, body)
 	case strings.HasPrefix(p, "/v1/admin/identity-providers"):
 		writeJ(w, 200, []any{map[string]any{"id": "google", "displayName": "Google", "enabled": false, "configured": true}})
 	// seller

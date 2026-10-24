@@ -1,6 +1,6 @@
 'use client';
 
-import { type FieldValue, isApiError, type ResourceKey, type ResourceRow, staffKeys, staffQueries } from '@afrotransact/api-client';
+import { type FieldValue, isApiError, type OneTimeSecret, type ResourceKey, type ResourceRow, staffKeys, staffQueries } from '@afrotransact/api-client';
 import { DataTable, type TableExportRequest, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, useToast } from '@afrotransact/ui';
 import { Plus } from '@phosphor-icons/react/ssr';
@@ -19,6 +19,7 @@ import { BulkActions } from './BulkActions';
 import { Cell } from './cells';
 import { FormFields } from './FormFields';
 import { RecordSheet } from './RecordSheet';
+import { RevealDialog } from './RevealDialog';
 
 /**
  * Server-driven table of one resource on the shared DataTable: columns, rows and the create form come from the BFF; one
@@ -39,6 +40,8 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
   const [creating, setCreating] = useState(false);
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
   const [createError, setCreateError] = useState<string | null>(null);
+  /** A secret the new record came with (a new OAuth client secret): shown once, kept out of the query cache. */
+  const [reveal, setReveal] = useState<OneTimeSecret | null>(null);
 
   const query = useQuery({
     ...staffQueries.page(api, resource, { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize, cursor: state.cursor }),
@@ -57,7 +60,9 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
   const create = useMutation({
     mutationFn: (values: Record<string, FieldValue>) => api.createRecord(resource, values, idempotencyKey()),
     onSuccess: (r) => {
-      qc.setQueryData(staffKeys.record(resource, r.id), r);
+      const { reveal: secret, ...sheet } = r;
+      qc.setQueryData(staffKeys.record(resource, r.id), sheet);
+      if (secret) setReveal(secret);
       void qc.invalidateQueries({ queryKey: staffKeys.resource(resource) });
       setCreating(false);
       toast.show(t('st.resourceTable.created', { title: r.title }));
@@ -140,6 +145,7 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
         }
       />
       <RecordSheet resource={resource} id={openId} onClose={() => setOpen(null)} />
+      <RevealDialog secret={reveal} onClose={() => setReveal(null)} />
       {data?.createForm ? (
         <Dialog open={creating} onOpenChange={setCreating} title={data.createForm.title} width={480}>
           <FormFields form={data.createForm} busy={create.isPending} serverErrors={createErrors} error={createError} onCancel={() => setCreating(false)} onSubmit={(v) => create.mutate(v)} />

@@ -15,12 +15,15 @@ import {
   type StaffForm
 } from '../../schemas/staff';
 import { type MockRecord, type Scalar } from './db';
+import { IDENTITY_RESOURCES } from './identity';
 
 export interface ActionCtx {
   actor: string;
   actorId: string;
   now: Date;
   refundLimit: number | null;
+  /** Puts a secret in the answer of the current action or creation, and nowhere else (a new OAuth client secret). */
+  showOnce?: (label: string, value: string, note: string) => void;
 }
 
 export interface MockAction {
@@ -984,7 +987,9 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         activity: []
       })
     }
-  }
+  },
+  // Identity & access (S291)
+  ...IDENTITY_RESOURCES
 };
 
 function placementsDef(title: string, announcementsOnly: boolean): MockResource {

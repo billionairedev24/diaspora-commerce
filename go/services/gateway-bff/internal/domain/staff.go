@@ -76,6 +76,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"markets", "markets", "Markets & locations", "Turn AfroTransact on or off by country and by state."},
 		{"siteCfg", "siteCfg", "Site content & legal", "Contacts, social links and legal document versions, published without a deployment."},
 		{"dev", "dev", "Developers", "Identity providers: which social sign-in buttons appear."},
+		{IdentityModule, "", "Identity & access", "Developer tools for the identity service: OAuth clients, sessions and tokens, signing keys, the token inspector and sign-in settings."},
 		{"notifications", "", "Notifications", "Email, SMS, push and WhatsApp templates: live preview with production-shaped sample data, version history and new versions."},
 	}},
 }
@@ -127,6 +128,12 @@ func (a StaffAccess) Level(module string) string {
 		default:
 			return LevelNone
 		}
+	case IdentityModule:
+		// Derived from identity's own permission: Super Admin by default, not part of the module matrix (S291).
+		if a.Can(PermIdentityAdmin) {
+			return LevelEdit
+		}
+		return LevelNone
 	case "exports":
 		module = "dash"
 	}
@@ -276,7 +283,8 @@ func RefundLimitProblem(limit int64) *Problem {
 var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "moderation", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
-	"reconciliation", "reconciliation-runs", "ledger-adjustments", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus"}
+	"reconciliation", "reconciliation-runs", "ledger-adjustments", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
+	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings"}
 
 // Column is one table column; Width is its share of the table in percent.
 type Column struct {
@@ -430,6 +438,8 @@ type RecordDetail struct {
 	Version      *string         `json:"version"`
 	// Removed is set when an action deleted the record; the console closes the sheet and refreshes the table.
 	Removed *bool `json:"removed,omitempty"`
+	// Reveal carries a secret that is shown once (a new OAuth client secret); it is in this answer only and nowhere else.
+	Reveal *OneTimeSecret `json:"reveal,omitempty"`
 }
 
 var statusTones = map[string]string{

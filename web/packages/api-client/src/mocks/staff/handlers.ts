@@ -24,6 +24,7 @@ import {
   type NotificationTemplateVariant,
   type NotificationTemplateVersion,
   type NotificationTestSendResult,
+  type OneTimeSecret,
   type PickupAssignmentList,
   type PickupAssignResult,
   type PickupList,
@@ -46,6 +47,7 @@ import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
+import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop } from './identity';
 import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
@@ -99,7 +101,12 @@ interface Ctx {
   request: Request;
   now: Date;
   action: ActionCtx;
+  /** The secret the current action or creation shows once (never stored in a record). */
+  once: { current: OneTimeSecret | null };
 }
+
+/** The sheet an action or creation produced, with the secret it shows once. */
+const withReveal = (ctx: Ctx, d: RecordDetail): RecordDetail => (ctx.once.current ? { ...d, reveal: ctx.once.current } : d);
 
 function context(request: Request): Ctx {
   const db = getStaffDb();
@@ -109,7 +116,11 @@ function context(request: Request): Ctx {
   const roles = cookie ? cookie.split(',').map((r) => r.trim()).filter(Boolean) : DEFAULT_ROLES;
   const now = new Date();
   const actor = `${db.user.firstName} ${db.user.lastName}`;
-  return { db, roles, permissions: permissionsOf(roles), request, now, action: { actor, actorId: db.user.id, now, refundLimit: refundLimit(roles) } };
+  const once: Ctx['once'] = { current: null };
+  const showOnce = (label: string, value: string, note: string) => {
+    once.current = { label, value, note };
+  };
+  return { db, roles, permissions: permissionsOf(roles), request, now, once, action: { actor, actorId: db.user.id, now, refundLimit: refundLimit(roles), showOnce } };
 }
 
 function requireModule(ctx: Ctx, resource: ResourceKey, min: AccessLevel = 'VIEW') {
@@ -715,7 +726,8 @@ export const staffHandlers = [
       records(ctx, resource).unshift(rec);
       if (resource === 'announcements') records(ctx, 'placements').unshift(rec);
       audit(ctx, `${resource}.created`, rec.id, `Created ${RESOURCES[resource].titleOf(rec)}`);
-      return detail(ctx, resource, rec);
+      if (resource === 'signing-keys') retireActiveKeys(records(ctx, resource), rec.id, ctx.now);
+      return withReveal(ctx, detail(ctx, resource, rec));
     }, 201)
   ),
   http.get(
@@ -772,13 +784,33 @@ export const staffHandlers = [
       }
       def.apply(rec, values, ctx.action);
       audit(ctx, `${resource}.${def.key}`, rec.id, `${def.label}: ${RESOURCES[resource].titleOf(rec)}`);
+      // A revoke takes the sign-ins it covers with it (all of a client's, or all of a person's).
+      const sessions = records(ctx, 'identity-sessions');
+      sessionsToDrop(resource, def.key, rec, sessions).forEach((s) => sessions.splice(sessions.indexOf(s), 1));
       if (def.removes) {
         const list = records(ctx, resource);
         const idx = list.indexOf(rec);
         if (idx >= 0) list.splice(idx, 1);
         return { resource, id: rec.id, title: 'Deleted', subtitle: '', status: null, tone: null, sections: [], tables: [], activity: [], notes: [], notesEnabled: false, actions: [], editForm: null, links: [], version: null, removed: true };
       }
-      return detail(ctx, resource, rec);
+      return withReveal(ctx, detail(ctx, resource, rec));
+    })
+  ),
+  /* ── Identity & access: token inspector and published documents (S291) ── */
+  http.post(
+    `${W}/identity/token-inspector`,
+    route(async (ctx) => {
+      requireModule(ctx, 'oauth-clients', 'EDIT');
+      if (!ctx.permissions.includes('identity:admin')) throw forbidden('This needs the identity:admin permission.');
+      const { token } = await json(ctx.request, z.object({ token: z.string().max(16_384, 'Paste a token of up to 16,384 characters').min(1, 'Paste a JWT') }));
+      return inspectToken(token, ctx.now, records(ctx, 'signing-keys').filter((k) => k.fields.status !== 'RETIRED').map((k) => String(k.fields.kid)));
+    })
+  ),
+  http.get(
+    `${W}/identity/documents`,
+    route((ctx) => {
+      requireModule(ctx, 'oauth-clients');
+      return identityDocuments(records(ctx, 'signing-keys'));
     })
   ),
   http.post(
