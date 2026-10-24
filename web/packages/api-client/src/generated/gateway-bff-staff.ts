@@ -2062,6 +2062,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/delivery-fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every delivery fee rule (one per delivery method and currency)
+         * @description delivery-runs `GET /v1/delivery-fees` (delivery-runs:read; module `preorders`, any level). The screen shows three
+         *     sections, one per method: AfroTransact's own delivery inside covered locations (a flat fee by distance band),
+         *     carrier shipping beyond coverage (the carrier-gateway quote plus handling, a fallback fee, free over a
+         *     threshold) and pickup (often 0). Answers carry `can.manage`.
+         */
+        get: operations["listStaffDeliveryFees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-fees/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit trail of the delivery fees (who changed what, when and why)
+         * @description delivery-runs `GET /v1/delivery-fees/changes`, newest first: every version of every rule (or one method and
+         *     currency) with the rule before and after, the staff subject, the time and the reason.
+         */
+        get: operations["listStaffDeliveryFeeChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-fees/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What would a customer pay?
+         * @description delivery-runs `POST /v1/delivery-fees/preview`: the resolution checkout runs. A fee set on the pre-order itself
+         *     (`windowId`) wins, then the method's rule: AFROTRANSACT_DELIVERY by `distanceMiles` (or the window's own
+         *     distance), PICKUP, CARRIER by `carrierQuoteMinor` and `itemsMinor`. `applies` is false when no rule can price
+         *     it: no rule, or the address is beyond how far AfroTransact delivers (the order ships by carrier).
+         */
+        post: operations["previewStaffDeliveryFee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-fees/{method}/{currency}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the delivery fee of one method and currency
+         * @description delivery-runs `PUT /v1/delivery-fees/{method}/{currency}` (preorders:manage, EDIT; If-Match relayed: the
+         *     version seen, `0` when the rule does not exist yet). Creates the rule or makes its next version; a save that
+         *     changes nothing makes no new version. AFROTRANSACT_DELIVERY takes `bands` (1 to 12 of `fromMiles`, `toMiles`,
+         *     `feeMinor`; the first starts at 0 miles and each starts where the last ends; the last band's end is how far
+         *     AfroTransact delivers, beyond it the order ships by carrier), CARRIER `handlingMinor` (added to the carrier
+         *     quote), `fallbackMinor` (when there is no quote) and `freeAboveMinor` (goods subtotal from which it is free; null
+         *     = never), PICKUP `feeMinor`. Fees are 0 to 10000 minor units. The `reason` is required (422) and is logged with
+         *     who and when. Orders already placed keep the rule version they were charged by.
+         */
+        put: operations["updateStaffDeliveryFee"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/customers/search": {
         parameters: {
             query?: never;
@@ -5926,6 +6020,110 @@ export interface components {
             /** @description APPROVE, EDIT or FULL and preorders:late-add */
             lateAdd: boolean;
         };
+        StaffDeliveryFeeBand: {
+            /** @description Inclusive; the first band starts at 0 */
+            fromMiles: number;
+            /** @description Exclusive; the next band starts here */
+            toMiles: number;
+            /** @description Flat fee for an address in the band (minor units) */
+            feeMinor: number;
+        };
+        /**
+         * @description The delivery fee of one method in one currency; the ETag carries the version for If-Match. Fields a method does
+         *     not use are 0 / empty.
+         */
+        StaffDeliveryFeeRule: {
+            id: string;
+            /** @enum {string} */
+            method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+            /** @example USD */
+            currency: string;
+            version: number;
+            /** @description AFROTRANSACT_DELIVERY only */
+            bands?: components["schemas"]["StaffDeliveryFeeBand"][];
+            /** @description PICKUP only */
+            feeMinor?: number;
+            /** @description CARRIER: added to the carrier-gateway quote */
+            handlingMinor?: number;
+            /** @description CARRIER: the fee when there is no quote */
+            fallbackMinor?: number;
+            /** @description CARRIER: goods subtotal from which shipping is free; null = never */
+            freeAboveMinor?: number | null;
+            /** @description AFROTRANSACT_DELIVERY: how far AfroTransact delivers (end of the last band) */
+            coverageMiles?: number;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** @description Staff subject of the last change */
+            updatedBy?: string | null;
+            /** @description Why the last change was made */
+            reason?: string | null;
+            can?: components["schemas"]["PreorderCan"];
+        };
+        StaffDeliveryFeeRules: {
+            items: components["schemas"]["StaffDeliveryFeeRule"][];
+            can: components["schemas"]["PreorderCan"];
+        };
+        /** @description The rule's new numbers; a method ignores what it does not use. */
+        StaffDeliveryFeeRequest: {
+            bands?: components["schemas"]["StaffDeliveryFeeBand"][];
+            feeMinor?: number;
+            handlingMinor?: number;
+            fallbackMinor?: number;
+            freeAboveMinor?: number | null;
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffDeliveryFeeChanges: {
+            items: ({
+                id?: string;
+                /** @enum {string} */
+                method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+                currency: string;
+                version: number;
+                /** @description Null for the first version */
+                before?: components["schemas"]["StaffDeliveryFeeRule"] | null;
+                after: components["schemas"]["StaffDeliveryFeeRule"];
+                /** @description Staff subject, or migration */
+                actor: string;
+                reason: string;
+                /** Format: date-time */
+                at: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        };
+        StaffDeliveryFeePreviewRequest: {
+            /** @enum {string} */
+            method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+            currency: string;
+            /** @description AFROTRANSACT_DELIVERY: miles from the hub (absent: the window distance, else the farthest band) */
+            distanceMiles?: number | null;
+            /** @description Apply this pre-order's own fee and distance */
+            windowId?: string | null;
+            /** @description CARRIER: the carrier-gateway quote, if any */
+            carrierQuoteMinor?: number | null;
+            /** @description CARRIER: goods subtotal (free-shipping threshold) */
+            itemsMinor?: number | null;
+        };
+        StaffDeliveryFeePreview: {
+            /** @description False: no rule can price it (no rule, or beyond how far AfroTransact delivers) */
+            applies: boolean;
+            fee?: null | ({
+                /** @enum {string} */
+                method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+                ruleId?: string | null;
+                ruleVersion: number;
+                currency?: string;
+                amountMinor: number;
+                /** @enum {string} */
+                source?: "RULE" | "WINDOW_OVERRIDE" | "CARRIER_QUOTE" | "CARRIER_FALLBACK";
+                /** @example 10–40 mi */
+                band?: string | null;
+                distanceMiles?: number | null;
+            } & {
+                [key: string]: unknown;
+            });
+        };
         StaffPreorderObject: {
             [key: string]: unknown;
         };
@@ -6139,7 +6337,7 @@ export interface components {
         };
         /**
          * @description Platform settings (delivery-runs): enabled, fallback (SHIP | WAITLIST), placements {ribbon, hero, badge, pdp,
-         *     cart, family}, payment {doorFee and pickupFee (per currency, minor units), pickupWindow, allowedMethods
+         *     cart, family}, payment {pickupWindow, allowedMethods
          *     [CARD, WALLET, ACH], lateAdd {savedCard, paymentLink, linkExpiryHours}, missedDelivery {offerRefund,
          *     offerNewDate}}. Answers carry `can`.
          */
@@ -6151,26 +6349,6 @@ export interface components {
                 [key: string]: boolean;
             };
             payment?: {
-                /**
-                 * @description Minor units per currency
-                 * @example {
-                 *       "USD": 799,
-                 *       "CAD": 999
-                 *     }
-                 */
-                doorFee?: {
-                    [key: string]: number;
-                };
-                /**
-                 * @description Minor units per currency
-                 * @example {
-                 *       "USD": 0,
-                 *       "CAD": 0
-                 *     }
-                 */
-                pickupFee?: {
-                    [key: string]: number;
-                };
                 /** @example 10am–2pm */
                 pickupWindow?: string;
                 allowedMethods?: ("CARD" | "WALLET" | "ACH")[];
@@ -6577,6 +6755,9 @@ export interface components {
         ShipmentId: string;
         /** @description Window id or code */
         PreorderId: string;
+        DeliveryFeeMethod: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+        /** @description ISO 4217 code, for example USD */
+        DeliveryFeeCurrency: string;
         CreativeSlot: "HERO" | "PDP" | "STORY" | "FEED" | "EMAIL";
         /** @example order.confirmed */
         TemplateKey: string;
@@ -10019,6 +10200,124 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeeRules"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryFeeChanges: {
+        parameters: {
+            query?: {
+                method?: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+                currency?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Changes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeeChanges"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffDeliveryFee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDeliveryFeePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Resolution */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeePreview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffDeliveryFee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                method: components["parameters"]["DeliveryFeeMethod"];
+                /** @description ISO 4217 code, for example USD */
+                currency: components["parameters"]["DeliveryFeeCurrency"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffDeliveryFeeRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffDeliveryFeeRule"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };

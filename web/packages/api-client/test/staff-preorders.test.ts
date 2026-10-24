@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createStaffApiClient, isApiError, staffPreorderKeys } from '../src';
 import { MOCK_STAFF_ROLE_COOKIE, resetStaffDb } from '../src/mocks/staff';
+import { seedFeeRules } from '../src/mocks/staff/preorders';
 import { handleStaffMockRequest } from '../src/mocks/staff-runtime';
 import {
   areaFromKey,
@@ -69,11 +70,16 @@ describe('pre-order rules', () => {
     expect(windowAreaOn(off, ['US/TX'])).toBe(false);
   });
 
-  it('uses per-window fee overrides before the platform default', () => {
-    const payment = { doorFee: { USD: 799, CAD: 999 }, pickupFee: { USD: 0 }, pickupWindow: '', allowedMethods: [], lateAdd: { savedCard: true, paymentLink: true, linkExpiryHours: 24 }, missedDelivery: { offerRefund: true, offerNewDate: true } } as const;
-    const p = { ...payment, allowedMethods: [...payment.allowedMethods] };
-    expect(effectiveFees({ doorFeeOverride: null, pickupFeeOverride: null }, p, 'CAD')).toEqual({ door: 999, pickup: 0 });
-    expect(effectiveFees({ doorFeeOverride: 499, pickupFeeOverride: 150 }, p, 'USD')).toEqual({ door: 499, pickup: 150 });
+  it('uses per-window fee overrides before the delivery fee rules', () => {
+    const { rules } = seedFeeRules(Date.parse('2026-10-10T15:00:00Z'));
+    const cad = effectiveFees({ doorFeeOverride: null, pickupFeeOverride: null }, rules, 'CAD');
+    expect(cad).toMatchObject({ door: 999, pickup: 0 });
+    expect(cad.doorRule).toMatchObject({ method: 'AFROTRANSACT_DELIVERY', source: 'RULE', ruleVersion: 1 });
+    const own = effectiveFees({ doorFeeOverride: 499, pickupFeeOverride: 150 }, rules, 'USD');
+    expect(own).toMatchObject({ door: 499, pickup: 150 });
+    expect(own.doorRule).toMatchObject({ source: 'WINDOW_OVERRIDE', ruleVersion: 1 });
+    expect(own.pickupRule).toMatchObject({ method: 'PICKUP', source: 'WINDOW_OVERRIDE' });
+    expect(effectiveFees({ doorFeeOverride: null, pickupFeeOverride: null }, rules, 'GBP')).toMatchObject({ door: 0, doorRule: null, pickup: 0 });
   });
 
   it('validates a late add', () => {

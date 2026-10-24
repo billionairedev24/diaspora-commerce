@@ -50,6 +50,7 @@ export {
 } from './staff-markets';
 export * from './staff-plans';
 export { createStaffPreordersApi, staffPreorderKeys, staffPreorderQueries, type StaffPreordersApi } from './staff-preorders';
+export { createStaffDeliveryFeesApi, staffDeliveryFeeKeys, staffDeliveryFeeQueries, type StaffDeliveryFeesApi } from './staff-delivery-fees';
 export { tableSearchParams } from './table-query';
 export { US_STATES } from './us-states';
 export { randomUuid } from './uuid';
