@@ -116,6 +116,31 @@ public final class OrdersEventPayloads {
     }
 
     /**
+     * orders.preorder.refund_settled (ADR 0005): {@code status} is REFUNDED (a captured payment was refunded, delivery
+     * fee included) or VOIDED (nothing had been captured: the authorisation was released).
+     */
+    public record PreorderRefundSettled(String orderId, String orderNumber, String customerId, String shipmentId,
+                                        String windowId, String status, long amountMinor, String currency,
+                                        Instant at) {
+
+        static PreorderRefundSettled of(Order o, Shipment s, Instant at) {
+            return new PreorderRefundSettled(o.id(), o.number(), o.customerId(), s.id(),
+                    s.preorder() == null ? null : s.preorder().windowId(), s.captured() ? "REFUNDED" : "VOIDED",
+                    s.totalMinor(), o.currency(), at);
+        }
+    }
+
+    /** orders.preorder.refund_failed (ADR 0005): the pre-order could not be cancelled or refunded automatically. */
+    public record PreorderRefundFailed(String orderId, String orderNumber, String customerId, String shipmentId,
+                                       String windowId, String code, String error, Instant at) {
+
+        static PreorderRefundFailed of(Order o, Shipment s, String code, String error, Instant at) {
+            return new PreorderRefundFailed(o.id(), o.number(), o.customerId(), s.id(),
+                    s.preorder() == null ? null : s.preorder().windowId(), code, error, at);
+        }
+    }
+
+    /**
      * orders.preorder.payment_link_created (S272): a pay-now late add; {@code url} is AfroTransact's pay page with its
      * signed token (never a Stripe page). The SMS itself is sent from delivery-runs' preorder.late_order.added.
      */

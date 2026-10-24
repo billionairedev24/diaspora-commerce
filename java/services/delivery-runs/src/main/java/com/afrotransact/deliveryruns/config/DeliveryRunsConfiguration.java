@@ -68,7 +68,7 @@ class DeliveryRunsConfiguration {
         DeliveryRunsProperties.Preorders o = p.preorders();
         return new PreorderOptions(o.pagePath(), o.metroCities().stream().filter(k -> !k.isBlank())
                         .map(AreaKey::parse).toList(),
-                o.retentionDays(), o.seedDemoAreas(), o.supportPhone());
+                o.retentionDays(), o.seedDemoAreas(), o.supportPhone(), o.defaultMinOrders());
     }
 
     @Bean

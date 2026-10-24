@@ -16,7 +16,7 @@ export interface PreorderAccess {
 }
 
 const ROLE_NOTE: Record<PreorderRole, string> = {
-  manager: 'Pre-order manager: can open, edit, pause and publish pre-orders, upload creatives, export data and add late orders.',
+  manager: 'Pre-order manager: can open, edit, pause and publish pre-orders, decide pre-orders that close below their minimum, cancel and refund, upload creatives, export data and add late orders.',
   cs: 'Customer service: can view pre-orders and add late orders for customers who call or chat. Can’t export or edit.',
   analyst: 'Analyst: view only, plus exports and analytics.',
   viewer: 'Viewer: read-only.'
@@ -50,7 +50,9 @@ export const STATUS_PILL: Record<PreorderStatus, string> = {
   CLOSED: 'bg-gold-100 text-gold-900',
   DELIVERED: 'bg-ink-100 text-ink-600',
   DRAFT: 'bg-ink-50 text-ink-600',
-  PAUSED: 'bg-red-50 text-red-700'
+  PAUSED: 'bg-red-50 text-red-700',
+  AWAITING_DECISION: 'bg-gold-100 text-gold-900',
+  CANCELLED: 'bg-red-50 text-red-700'
 };
 export const AREA_OFF_PILL = 'bg-red-50 text-red-700';
 export const ORDER_PILL: Record<PreorderOrderStatus, string> = { PAID: 'bg-green-50 text-green-800', LATE_ADD: 'bg-gold-100 text-gold-900', CANCELLED: 'bg-red-50 text-red-700' };

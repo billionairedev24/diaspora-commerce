@@ -124,7 +124,7 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		problemDetail(w, 422, "delivery-runs.publish-checks-failed", "2 checks to fix")
 	case strings.HasSuffix(p, "/orders"):
 		writeJ(w, 200, []any{map[string]any{"orderId": "ord-1", "number": "LBK-1001", "customerName": "Amara Nwosu", "status": "PAID", "channel": "INSTAGRAM",
-			"total": 2598, "placedAt": "2026-10-01T15:00:00Z"},
+			"total": 2598, "placedAt": "2026-10-01T15:00:00Z", "refundStatus": "REFUNDED"},
 			map[string]any{"orderId": "ord-2", "number": "LBK-1002", "customerName": "Bola Ade", "status": "LATE_ADD", "channel": "WHATSAPP", "total": 1299,
 				"placedAt": "2026-10-02T15:00:00Z"}})
 	case strings.HasSuffix(p, "/products"):
@@ -137,6 +137,31 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, "number,customer,status\nLBK-1001,Amara Nwosu,PAID\n")
 	case strings.HasSuffix(p, "/late-orders"):
 		writeJ(w, 201, map[string]any{"orderId": "ord-90", "number": "LBK-L90", "status": "LATE_ADD"})
+	case strings.HasSuffix(p, "/decisions") && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{
+			map[string]any{"id": "dec-1", "kind": "AWAITING", "reason": "Closed with 7 of 10 orders", "actor": "system", "orders": 7, "minimum": 10, "at": "2026-10-23T05:00:00Z"},
+			map[string]any{"id": "dec-2", "kind": "CANCEL", "reason": "Not enough orders to make the trip", "actor": "stf-21", "orders": 7, "minimum": 10, "at": "2026-10-23T09:30:00Z"}})
+	case strings.HasSuffix(p, "/refunds") && r.Method == http.MethodGet:
+		writeJ(w, 200, map[string]any{"total": 7, "pending": 2, "refunded": 4, "voided": 0, "failed": 1, "done": false})
+	case r.Method == http.MethodPost && (strings.HasSuffix(p, "/decision") || strings.HasSuffix(p, "/cancel") || strings.HasSuffix(p, "/close-early")):
+		if strings.Contains(p, "win-gone") {
+			problemDetail(w, 409, "delivery-runs.invalid-transition", "Cannot move from DELIVERED to CANCELLED")
+			return
+		}
+		out := map[string]any{}
+		for k, v := range window {
+			out[k] = v
+		}
+		switch {
+		case strings.HasSuffix(p, "/close-early"):
+			out["status"] = "OPEN"
+		case strings.HasSuffix(p, "/cancel") || body["decision"] == "CANCEL":
+			out["status"], out["outcome"] = "CANCELLED", "CANCELLED"
+		default:
+			out["status"], out["outcome"] = "CLOSED", "PROCEEDED"
+		}
+		out["minOrders"], out["orderCount"] = 10, 7
+		writeJ(w, 200, out)
 	case strings.HasPrefix(p, "/v1/preorders/"):
 		writeJ(w, 200, window)
 	case p == "/v1/preorder-settings":

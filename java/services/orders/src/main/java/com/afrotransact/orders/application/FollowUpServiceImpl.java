@@ -19,6 +19,7 @@ import com.afrotransact.orders.port.OrderCouponRepository;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.events.DomainEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -34,7 +35,10 @@ import org.springframework.transaction.support.TransactionOperations;
  *   <li>SETTLE — every live shipment delivered: payments starts the settlement hold for the order.</li>
  *   <li>CANCEL — captured: line refund. Not captured: when nothing is left, cancel the PaymentIntent; release the
  *       reservation when no AfroTransact-fulfilled shipment remains; release the order's coupon redemption
- *       (offers-service) once every shipment is cancelled.</li>
+ *       (offers-service) once every shipment is cancelled. A cancelled PREORDER shipment (window or run cancelled, or
+ *       the customer's own cancellation) then publishes {@code orders.preorder.refund_settled} (REFUNDED, or VOIDED
+ *       when nothing was captured) or, when the task fails for good, {@code orders.preorder.refund_failed}, so staff
+ *       see each order's refund progress; stock held for its lines is released where inventory has any.</li>
  * </ul>
  * Tasks are claimed with a lease and retried with exponential backoff; upstream calls are idempotent.
  */
@@ -52,11 +56,13 @@ class FollowUpServiceImpl implements FollowUpService {
     private final OrderCouponRepository orderCoupons;
     private final TransactionOperations tx;
     private final OrdersSettings settings;
+    private final DomainEventPublisher events;
     private final Clock clock;
 
     FollowUpServiceImpl(FollowUpRepository tasks, OrderRepository orders, PaymentsClient payments,
                         InventoryClient inventory, CouponsClient coupons, OrderCouponRepository orderCoupons,
-                        TransactionOperations tx, OrdersSettings settings, Clock clock) {
+                        TransactionOperations tx, OrdersSettings settings, DomainEventPublisher events,
+                        Clock clock) {
         this.tasks = tasks;
         this.orders = orders;
         this.payments = payments;
@@ -65,6 +71,7 @@ class FollowUpServiceImpl implements FollowUpService {
         this.orderCoupons = orderCoupons;
         this.tx = tx;
         this.settings = settings;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -83,6 +90,7 @@ class FollowUpServiceImpl implements FollowUpService {
                 if (permanent || attempts >= settings.followUpMaxAttempts()) {
                     LOG.error("Follow-up {} failed permanently after {} attempts", task.key(), attempts, e);
                     tasks.fail(task.id(), attempts, message(e));
+                    reportRefundFailure(task, e);
                 } else {
                     Duration backoff = Duration.ofSeconds(Math.min(1800, 5L << Math.min(attempts, 9)));
                     LOG.warn("Follow-up {} failed (attempt {}), retrying in {}: {}", task.key(), attempts, backoff,
@@ -173,7 +181,50 @@ class FollowUpServiceImpl implements FollowUpService {
         payments.delivered(order.id(), deliveredAt);
     }
 
+    /** A pre-order whose cancellation could not be completed: staff are told, with the reason. */
+    private void reportRefundFailure(FollowUpRepository.FollowUp task, RuntimeException e) {
+        if (task.kind() != FollowUpRepository.Kind.CANCEL || task.shipmentId() == null) {
+            return;
+        }
+        try {
+            orders.findById(task.orderId()).ifPresent(order -> {
+                Shipment s = order.shipment(task.shipmentId());
+                if (s.preorderShipment()) {
+                    tx.executeWithoutResult(status -> events.publish(OrdersEvents.PREORDER_REFUND_FAILED,
+                            OrdersEvents.AGGREGATE, order.id(), OrdersEventPayloads.PreorderRefundFailed.of(order, s,
+                                    e instanceof UpstreamFailure f ? f.code() : "orders.refund-failed", message(e),
+                                    Instant.now(clock))));
+                }
+            });
+        } catch (RuntimeException publishing) {
+            LOG.error("Could not report the failed refund of {}", task.key(), publishing);
+        }
+    }
+
     private void cancelled(Order order, Shipment s) {
+        cancelMoneyAndStock(order, s);
+        if (s.preorderShipment()) {
+            releasePreorderStock(order, s);
+            tx.executeWithoutResult(status -> events.publish(OrdersEvents.PREORDER_REFUND_SETTLED,
+                    OrdersEvents.AGGREGATE, order.id(),
+                    OrdersEventPayloads.PreorderRefundSettled.of(order, s, Instant.now(clock))));
+        }
+    }
+
+    /**
+     * PREORDER packages are not inventory-tracked here (the window sells goods AfroTransact already holds), but if
+     * inventory holds a per-line reservation for them it is released. Best effort: the money has been dealt with.
+     */
+    private void releasePreorderStock(Order order, Shipment s) {
+        try {
+            inventory.releaseGroups(order.id(), s.id(), PaymentLines.lineIds(s), "Pre-order cancelled");
+        } catch (UpstreamFailure f) {
+            LOG.info("No stock reservation released for pre-order shipment {} ({}); nothing to release", s.id(),
+                    f.code());
+        }
+    }
+
+    private void cancelMoneyAndStock(Order order, Shipment s) {
         String reason = "Shipment " + s.seq() + " of " + order.number() + " cancelled";
         if (s.captured()) {
             payments.refund(requirePayment(order), "refund-" + s.id(), PaymentLines.refundOf(s), reason);

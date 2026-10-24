@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo } from 'react';
 
 import { ErrorState } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { exportDataset } from '@/lib/table-export';
 
 import { AREA_OFF_PILL, fD, fS, href, num, STATUS_PILL, wholeMoney } from './model';
@@ -35,6 +36,7 @@ export function PreorderList({ tab }: { tab: PreorderListTab }) {
   const query = useQuery(staffPreorderQueries.list(api, { status: tab, page: 0 }));
   const access = usePreorderAccess();
   const { many } = useSwitchPreorders();
+  const t = useT();
   const columns = useMemo<ColumnDef<PreorderListRow>[]>(
     () => [
       {
@@ -54,6 +56,20 @@ export function PreorderList({ tab }: { tab: PreorderListTab }) {
       { id: 'opensAt', accessorFn: (r) => r.opensAt, header: 'Order window', size: 160, meta: { kind: 'datetime' }, cell: ({ row }) => `${fS(row.original.opensAt)} – ${fS(row.original.closesAt)}` },
       { id: 'deliversOn', accessorFn: (r) => r.deliversOn, header: 'Delivers', size: 120, meta: { kind: 'date' }, cell: ({ row }) => fD(row.original.deliversOn) },
       { id: 'orderCount', accessorFn: (r) => r.orderCount, header: 'Pre-orders', size: 100, meta: { kind: 'number', align: 'end' }, cell: ({ row }) => <strong>{num(row.original.orderCount)}</strong> },
+      {
+        id: 'minimum',
+        accessorFn: (r) => r.minOrders,
+        header: t('st.preorders.list.minimum'),
+        size: 150,
+        meta: { kind: 'number', align: 'end' },
+        cell: ({ row }) => (
+          <span className={row.original.decisionNeeded ? 'font-bold text-red-700' : undefined}>
+            {row.original.minOrders > 0
+              ? t('st.preorders.list.minimumValue', { count: row.original.orderCount, min: row.original.minOrders })
+              : t('st.preorders.list.noMinimum', { count: row.original.orderCount })}
+          </span>
+        )
+      },
       { id: 'revenue', accessorFn: (r) => r.revenue, header: 'Revenue', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => wholeMoney(row.original.revenue, row.original.currency) },
       {
         id: 'switch',
@@ -75,7 +91,7 @@ export function PreorderList({ tab }: { tab: PreorderListTab }) {
         }
       }
     ],
-    []
+    [t]
   );
   return (
     <DataTable<PreorderListRow>

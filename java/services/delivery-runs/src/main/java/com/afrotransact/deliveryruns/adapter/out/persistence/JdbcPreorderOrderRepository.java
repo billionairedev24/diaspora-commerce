@@ -2,8 +2,10 @@ package com.afrotransact.deliveryruns.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,9 +16,11 @@ import com.afrotransact.deliveryruns.domain.AttributionChannel;
 import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderOrderStatus;
+import com.afrotransact.deliveryruns.domain.OrderRefund;
 import com.afrotransact.deliveryruns.domain.PreorderPackage;
 import com.afrotransact.deliveryruns.port.ConcurrentUpdateException;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
+import com.afrotransact.deliveryruns.domain.RefundStatus;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -107,6 +111,31 @@ class JdbcPreorderOrderRepository implements PreorderOrderRepository {
     }
 
     @Override
+    public boolean recordRefund(String orderId, RefundStatus status, Long amountMinor, String error, Instant at) {
+        // A later report never moves a settled refund back to PENDING or FAILED (events can arrive out of order).
+        return jdbc.sql("""
+                update preorder_order set refund_status = :status, refund_amount_minor = coalesce(:amount, refund_amount_minor),
+                    refund_error = :error, refund_updated_at = :at, updated_at = :at
+                where order_id = :id and (refund_status is null or refund_status not in ('REFUNDED', 'VOIDED')
+                    or :status in ('REFUNDED', 'VOIDED'))
+                """).param("status", status.name()).param("amount", amountMinor).param("error", error)
+                .param("at", Sql.ts(at)).param("id", orderId).update() > 0;
+    }
+
+    @Override
+    public Map<RefundStatus, Integer> refundCounts(UUID windowId) {
+        Map<RefundStatus, Integer> out = new EnumMap<>(RefundStatus.class);
+        jdbc.sql("""
+                select refund_status, count(*) as n from preorder_order
+                where window_id = :w and refund_status is not null group by refund_status
+                """).param("w", windowId).query((rs, n) -> {
+                    out.put(RefundStatus.valueOf(rs.getString("refund_status")), rs.getInt("n"));
+                    return null;
+                }).list();
+        return out;
+    }
+
+    @Override
     public int deleteDeliveredBefore(LocalDate deliveredBefore) {
         return jdbc.sql("""
                 delete from preorder_order o using preorder_window w
@@ -137,6 +166,17 @@ class JdbcPreorderOrderRepository implements PreorderOrderRepository {
                 .param("updatedAt", Sql.ts(o.updatedAt()));
     }
 
+    private static OrderRefund refund(ResultSet rs) throws SQLException {
+        String status = rs.getString("refund_status");
+        if (status == null) {
+            return null;
+        }
+        long amount = rs.getLong("refund_amount_minor");
+        Long amountMinor = rs.wasNull() ? null : amount;
+        return new OrderRefund(RefundStatus.valueOf(status), amountMinor, Sql.instant(rs, "refund_updated_at"),
+                rs.getString("refund_error"));
+    }
+
     private PreorderOrder map(ResultSet rs, int rowNum) throws SQLException {
         return new PreorderOrder(rs.getString("order_id"), rs.getString("number"),
                 rs.getObject("window_id", UUID.class), rs.getString("customer_id"), rs.getString("customer_name"),
@@ -147,6 +187,6 @@ class JdbcPreorderOrderRepository implements PreorderOrderRepository {
                 AttributionChannel.valueOf(rs.getString("channel")), rs.getString("tracking_tag"),
                 json.read(rs.getString("packages"), PACKAGES), PreorderFulfilment.valueOf(rs.getString("fulfilment")),
                 rs.getString("currency"), PreorderOrderStatus.valueOf(rs.getString("status")), rs.getString("note"),
-                Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"), rs.getLong("version"));
+                Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"), rs.getLong("version"), refund(rs));
     }
 }

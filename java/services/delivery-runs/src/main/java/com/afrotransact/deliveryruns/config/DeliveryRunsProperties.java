@@ -46,7 +46,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
                 : catalog.orDefault("http://localhost:8101");
         search = search == null ? new Upstream("http://localhost:8201", null)
                 : search.orDefault("http://localhost:8201");
-        preorders = preorders == null ? new Preorders(null, null, null, null, null) : preorders;
+        preorders = preorders == null ? new Preorders(null, null, null, null, null, null) : preorders;
     }
 
     /**
@@ -74,9 +74,10 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
      * @param retentionDays projected orders are deleted this many days after delivery
      * @param seedDemoAreas seed the design's demo coverage areas (local profile only)
      * @param supportPhone  "Missed it? Call …" number
+     * @param defaultMinOrders minimum order count a new window starts with (staff change it per window; 0 = none)
      */
     public record Preorders(String pagePath, List<String> metroCities, Integer retentionDays, Boolean seedDemoAreas,
-                            String supportPhone) {
+                            String supportPhone, Integer defaultMinOrders) {
 
         public Preorders {
             pagePath = pagePath == null || pagePath.isBlank() ? "/pre-orders" : pagePath;
@@ -84,6 +85,7 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
             retentionDays = retentionDays == null ? 90 : retentionDays;
             seedDemoAreas = seedDemoAreas != null && seedDemoAreas;
             supportPhone = supportPhone == null ? "+1 (833) 555-0199" : supportPhone;
+            defaultMinOrders = defaultMinOrders == null ? 10 : Math.max(0, defaultMinOrders);
         }
     }
 

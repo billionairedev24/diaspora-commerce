@@ -656,7 +656,7 @@ class PreorderIT {
             // Bulk: each window on its own.
             WindowView draft = windows.create(new WindowCommand("Draft #9", List.of("US/NM/Roswell"), now,
                     now.plus(Duration.ofDays(3)), LocalDate.now(clock).plusDays(5), "America/Chicago", "", "", "",
-                    Set.of("Pantry"), true, false, null, null, true, 0L, Set.of(), null, null, null));
+                    Set.of("Pantry"), true, false, null, null, true, 0L, Set.of(), null, null, null, 0));
             Res bulk = call(HttpMethod.PATCH, "/v1/preorders",
                     Map.of("ids", List.of(a, b, draft.window().id().toString()), "active", true), null);
             assertThat(bulk.status()).isEqualTo(200);
@@ -760,11 +760,15 @@ class PreorderIT {
     }
 
     private PreorderWindow publish(String name, String target, Instant opens, Instant closes) {
+        return publish(name, target, opens, closes, 0);
+    }
+
+    private PreorderWindow publish(String name, String target, Instant opens, Instant closes, int minOrders) {
         LocalDate delivers = closes.plus(Duration.ofDays(2)).atZone(CHICAGO).toLocalDate();
         WindowView v = windows.create(new WindowCommand(name, List.of(target), opens, closes, delivers,
                 "America/Chicago", name + " is open", "Fresh egusi delivered", "AfroTransact: pre-order open",
                 Set.of("Pantry", "Spices"), true, true, null, null, true, 20_000L, Set.of(CommKind.values()), null,
-                null, null));
+                null, null, minOrders));
         WindowView withHero = windows.setCreative(v.window().id(), CreativeSlot.HERO, upstreams.image(1920, 640),
                 v.window().version());
         return windows.publish(v.window().id(), withHero.window().version()).window();

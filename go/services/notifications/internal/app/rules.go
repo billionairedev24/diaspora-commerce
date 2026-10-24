@@ -476,10 +476,20 @@ func enrichShipment(d map[string]any, l Links) {
 func enrichShipmentCancelled(d map[string]any, l Links) {
 	enrichShipmentView(d, l)
 	d["refund"] = ""
-	if boolean(d, "captured") {
+	// ADR 0005: a pre-order cancelled by AfroTransact (its window or delivery run was cancelled) is refunded in full,
+	// delivery fee included; say so plainly.
+	byUs := str(d, "fulfilmentType") == "PREORDER" && str(d, "actorType") != "CUSTOMER"
+	switch {
+	case boolean(d, "captured") && byUs:
+		d["refund"] = moneyField(d, "totalMinor")
+		d["refundNote"] = "AfroTransact cancelled this pre-order. We're refunding the full " + moneyField(d, "totalMinor") +
+			", delivery fee included, to your original payment method. It can take 5–10 business days to show."
+	case boolean(d, "captured"):
 		d["refund"] = moneyField(d, "totalMinor")
 		d["refundNote"] = "We're refunding " + moneyField(d, "totalMinor") + " to your original payment method. It can take 5–10 business days to show."
-	} else {
+	case byUs:
+		d["refundNote"] = "AfroTransact cancelled this pre-order. You haven't been charged, and the hold on your card is being released."
+	default:
 		d["refundNote"] = "You haven't been charged for these items."
 	}
 }

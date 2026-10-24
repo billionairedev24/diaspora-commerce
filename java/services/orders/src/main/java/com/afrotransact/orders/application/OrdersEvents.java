@@ -17,6 +17,13 @@ public final class OrdersEvents {
     /** S272: the customer answered a missed pre-order delivery (REFUND or WAIT). */
     public static final String PREORDER_MISSED_DELIVERY_ANSWERED = "orders.preorder.missed_delivery_answered";
     /** S272: a late pre-order add waits for the customer to pay its payment link (sent by SMS). */
+    /**
+     * ADR 0005: a cancelled PREORDER shipment was refunded in full (captured payment refunded) or its authorisation
+     * released (nothing captured). delivery-runs shows the progress to staff.
+     */
+    public static final String PREORDER_REFUND_SETTLED = "orders.preorder.refund_settled";
+    /** ADR 0005: a cancelled PREORDER shipment could not be cancelled or refunded; staff must act. */
+    public static final String PREORDER_REFUND_FAILED = "orders.preorder.refund_failed";
     public static final String PREORDER_PAYMENT_LINK_CREATED = "orders.preorder.payment_link_created";
 
     private OrdersEvents() {

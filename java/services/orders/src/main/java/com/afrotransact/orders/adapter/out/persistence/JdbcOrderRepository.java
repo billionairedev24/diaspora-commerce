@@ -337,6 +337,16 @@ class JdbcOrderRepository implements OrderRepository {
     }
 
     @Override
+    public List<String> preorderShipmentsOfWindow(String windowId) {
+        return jdbc.sql("""
+                select s.id from shipment s
+                where s.fulfilment_type = 'PREORDER' and s.preorder_window_id = :window
+                order by s.created_at, s.id
+                """)
+                .param("window", windowId).query(UUID.class).list().stream().map(UUID::toString).toList();
+    }
+
+    @Override
     public List<String> lateAddsAwaitingPayment(int limit) {
         return jdbc.sql("""
                 select id from customer_order where channel = 'AGENT_LATE' and status = 'PENDING_PAYMENT'

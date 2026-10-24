@@ -17,6 +17,8 @@ channels:
       ordersPreorderDeliveryMissed: {$ref: '#/components/messages/ordersPreorderDeliveryMissed'}
       ordersPreorderMissedDeliveryAnswered: {$ref: '#/components/messages/ordersPreorderMissedDeliveryAnswered'}
       ordersPreorderPaymentLinkCreated: {$ref: '#/components/messages/ordersPreorderPaymentLinkCreated'}
+      ordersPreorderRefundSettled: {$ref: '#/components/messages/ordersPreorderRefundSettled'}
+      ordersPreorderRefundFailed: {$ref: '#/components/messages/ordersPreorderRefundFailed'}
 operations:
   publishOrdersOrderEvents:
     action: send
@@ -34,6 +36,16 @@ operations:
       orders.preorder.missed_delivery_answered; late adds paid by link publish orders.preorder.payment_link_created
       (notifications texts preorder.late_order.payment_link). orders also routes payments.intent.* of late adds (no
       saga) to place or void them.
+  receiveOrdersDeliveryRunsEvents:
+    action: receive
+    channel: {$ref: '#/channels/deliveryRunsEvents'}
+    summary: >-
+      ADR 0005 §1 (consumer orders-delivery-runs-events): preorder.window.cancelled cancels every placed PREORDER
+      shipment of the window, and delivery-runs.run.cancelled the PREORDER shipments of the orders[] it lists, through the
+      same cancellation path a customer's own cancellation uses (orders.shipment.cancelled, then the CANCEL follow-up:
+      a captured payment is refunded in full with the delivery fee, an uncaptured authorisation is released, stock held for
+      the lines is released). Idempotent per shipment, so redeliveries and the window event followed by its run's event do
+      no harm. A package that can no longer be cancelled (already on its way) publishes orders.preorder.refund_failed.
   receiveOrdersPaymentEvents:
     action: receive
     channel: {$ref: '#/channels/paymentsPaymentEvents'}
@@ -96,6 +108,16 @@ components:
       title: 'A late pre-order add waits for the customer to pay its payment link (send it by SMS)'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/OrdersPreorderPaymentLinkCreated'}
+    ordersPreorderRefundSettled:
+      name: orders.preorder.refund_settled
+      title: 'A cancelled pre-order package was refunded in full (REFUNDED) or its authorisation released (VOIDED)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersPreorderRefundSettled'}
+    ordersPreorderRefundFailed:
+      name: orders.preorder.refund_failed
+      title: 'A cancelled pre-order package could not be cancelled or refunded automatically; staff must act'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersPreorderRefundFailed'}
   schemas:
     OrdersAttribution:
       type: [object, 'null']
@@ -155,6 +177,31 @@ components:
         windowId: {type: string}
         choice: {type: string, enum: [REFUND, WAIT]}
         answeredAt: {type: string, format: date-time}
+    OrdersPreorderRefundSettled:
+      type: object
+      required: [orderId, orderNumber, customerId, shipmentId, status, amountMinor, currency, at]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string}
+        customerId: {type: string}
+        shipmentId: {type: string, format: uuid}
+        windowId: {type: [string, 'null']}
+        status: {type: string, enum: [REFUNDED, VOIDED]}
+        amountMinor: {type: integer, format: int64, description: 'Refunded or released: items, tax and the delivery fee'}
+        currency: {type: string}
+        at: {type: string, format: date-time}
+    OrdersPreorderRefundFailed:
+      type: object
+      required: [orderId, orderNumber, customerId, shipmentId, code, error, at]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string}
+        customerId: {type: string}
+        shipmentId: {type: string, format: uuid}
+        windowId: {type: [string, 'null']}
+        code: {type: string, examples: ['orders.invalid-transition', 'payments.unavailable']}
+        error: {type: string}
+        at: {type: string, format: date-time}
     OrdersPreorderPaymentLinkCreated:
       type: object
       required: [orderId, orderNumber, customerId, url, expiresAt, amountMinor, currency]

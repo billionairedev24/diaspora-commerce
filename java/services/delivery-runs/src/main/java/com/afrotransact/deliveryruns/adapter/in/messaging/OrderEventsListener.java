@@ -13,6 +13,7 @@ import com.afrotransact.deliveryruns.application.OrderPlaced;
 import com.afrotransact.deliveryruns.application.PreorderProjectionService;
 import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
 import com.afrotransact.deliveryruns.domain.PreorderLine;
+import com.afrotransact.deliveryruns.domain.RefundStatus;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
@@ -36,6 +37,8 @@ class OrderEventsListener {
     static final String ORDER_PLACED = "orders.order.placed";
     static final String SHIPMENT_CANCELLED = "orders.shipment.cancelled";
     static final String ORDER_CANCELLED = "orders.order.cancelled";
+    static final String REFUND_SETTLED = "orders.preorder.refund_settled";
+    static final String REFUND_FAILED = "orders.preorder.refund_failed";
     static final String PREORDER = "PREORDER";
 
     private static final Logger LOG = LoggerFactory.getLogger(OrderEventsListener.class);
@@ -53,7 +56,8 @@ class OrderEventsListener {
             autoStartup = "${at.consumers.enabled:true}")
     void onMessage(ConsumerRecord<String, String> rec) {
         String type = header(rec, "event-type").orElse("");
-        if (!ORDER_PLACED.equals(type) && !SHIPMENT_CANCELLED.equals(type) && !ORDER_CANCELLED.equals(type)) {
+        if (!ORDER_PLACED.equals(type) && !SHIPMENT_CANCELLED.equals(type) && !ORDER_CANCELLED.equals(type)
+                && !REFUND_SETTLED.equals(type) && !REFUND_FAILED.equals(type)) {
             return;
         }
         Optional<UUID> eventId = header(rec, "event-id").flatMap(OrderEventsListener::uuid);
@@ -92,10 +96,24 @@ class OrderEventsListener {
                 }
                 projection.onOrderCancelled(eventId, orderId, instant(n, "cancelledAt"));
             }
+            case REFUND_SETTLED, REFUND_FAILED -> refund(type, eventId, n);
             default -> {
                 // other order events are not needed
             }
         }
+    }
+
+    private void refund(String type, UUID eventId, JsonNode n) {
+        String orderId = text(n, "orderId");
+        if (orderId == null) {
+            LOG.warn("Skipping {} {}: orderId missing", type, eventId);
+            return;
+        }
+        RefundStatus status = REFUND_FAILED.equals(type) ? RefundStatus.FAILED : "VOIDED".equalsIgnoreCase(
+                text(n, "status")) ? RefundStatus.VOIDED : RefundStatus.REFUNDED;
+        JsonNode amount = n.path("amountMinor");
+        projection.onRefund(eventId, orderId, status, amount.isNumber() ? amount.asLong() : null, text(n, "error"),
+                instant(n, "at"));
     }
 
     /** The order's pre-order packages; empty when it has none (most orders). */

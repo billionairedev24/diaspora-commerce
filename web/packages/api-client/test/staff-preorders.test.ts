@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createStaffApiClient, isApiError, staffPreorderKeys } from '../src';
 import { MOCK_STAFF_ROLE_COOKIE, resetStaffDb } from '../src/mocks/staff';
@@ -6,6 +6,7 @@ import { handleStaffMockRequest } from '../src/mocks/staff-runtime';
 import {
   areaFromKey,
   areaOn,
+  decisionReasonProblem,
   effectiveFees,
   lateAddAddressSnapshot,
   type LateAddCustomer,
@@ -19,6 +20,7 @@ import {
   type PreorderWindowInput,
   setAreasOn,
   smsPreview,
+  tabOf,
   toCsvText,
   windowAreaOn
 } from '../src/staff-preorders';
@@ -139,7 +141,9 @@ describe('mock /v1/staff/preorders', () => {
     expect(by['lbk-6']?.status).toBe('DELIVERED');
     expect(by['ama-5']?.status).toBe('PAUSED');
     expect(by['lrd-1']?.areaOff).toBe(true);
-    expect(list.counts).toEqual({ all: 8, open: 1, upcoming: 3, closed: 2, draft: 1 });
+    expect(by['ode-1']?.status).toBe('AWAITING_DECISION');
+    expect(list.counts).toEqual({ all: 9, open: 1, upcoming: 3, decision: 1, closed: 2, draft: 1 });
+    expect(list.defaultMinOrders).toBe(10);
     expect((await api().list({ status: 'closed', page: 0 })).items.map((r) => r.id).sort()).toEqual(['ama-4', 'lbk-6']);
   });
 
@@ -214,5 +218,120 @@ describe('mock /v1/staff/preorders', () => {
     expect((await api().get('lbk-7')).areaOff).toBe(true);
     const places = await api().places({ country: 'US', region: 'TX' });
     expect(places.items.map((p) => p.name)).toContain('Lubbock');
+  });
+});
+
+describe('minimum order count and decisions (ADR 0005 §4)', () => {
+  const ops = 'platform.operations_manager';
+
+  beforeEach(() => {
+    resetStaffDb(new Date('2026-10-10T15:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lets the outcome override the dates and files the window under the right tab', () => {
+    const w = { draft: false, active: true, opensAt: '2026-10-06T14:00:00Z', closesAt: '2026-10-23T04:59:00Z', deliversOn: '2026-10-25' };
+    const closed = Date.parse('2026-10-24T00:00:00Z');
+    expect(preorderStatus({ ...w, outcome: 'AWAITING_DECISION' }, closed)).toBe('AWAITING_DECISION');
+    expect(preorderStatus({ ...w, outcome: 'AWAITING_DECISION' }, Date.parse('2026-12-01T00:00:00Z'))).toBe('AWAITING_DECISION');
+    expect(preorderStatus({ ...w, outcome: 'PROCEEDED' }, closed)).toBe('CLOSED');
+    expect(preorderStatus({ ...w, outcome: 'CANCELLED', active: false }, 0)).toBe('CANCELLED');
+    expect(tabOf('AWAITING_DECISION')).toBe('decision');
+    expect(tabOf('CANCELLED')).toBe('closed');
+    expect(decisionReasonProblem('  ')).toBe('required');
+    expect(decisionReasonProblem('x'.repeat(501))).toBe('tooLong');
+    expect(decisionReasonProblem('Not enough orders')).toBeNull();
+  });
+
+  it('shows the minimum, the orders so far and when staff may close early', async () => {
+    const lbk = await api().get('lbk-7');
+    expect(lbk).toMatchObject({ status: 'OPEN', minOrders: 100, minimumMet: true, canCloseEarly: true, decisionNeeded: false, outcome: null });
+    const abl = await api().get('ode-1');
+    expect(abl).toMatchObject({ status: 'AWAITING_DECISION', minOrders: 10, minimumMet: false, canCloseEarly: false, decisionNeeded: true, outcome: 'AWAITING_DECISION' });
+    expect(abl.orderCount).toBeLessThan(10);
+    const row = (await api().list({ status: 'decision', page: 0 })).items;
+    expect(row.map((r) => r.id)).toEqual(['ode-1']);
+    expect(row[0]).toMatchObject({ minOrders: 10, decisionNeeded: true });
+  });
+
+  it('takes the default minimum for a new window, keeps it on an edit and saves one that is set', async () => {
+    const base = inputOf(await api().get('elp-3'));
+    const created = await api().create({ ...base, name: 'Houston Pre-order #1', targets: ['US/TX/Houston'] });
+    expect(created.minOrders).toBe(10);
+    const edited = await api().update(created.id, { ...inputOf(created), ribbon: 'Houston pre-order' }, created.version);
+    expect(edited.minOrders).toBe(10);
+    const raised = await api().update(created.id, { ...inputOf(edited), minOrders: 25 }, edited.version);
+    expect(raised.minOrders).toBe(25);
+    const none = await api().create({ ...base, name: 'Dallas Pre-order #1', targets: ['US/TX/Dallas'], minOrders: 0 });
+    expect(none.minOrders).toBe(0);
+  });
+
+  it('closes an open window early only once its minimum is met, with a reason', async () => {
+    await expect(api(ops).closeEarly('lbk-7', ' ')).rejects.toMatchObject({ status: 422 });
+    const closed = await api(ops).closeEarly('lbk-7', 'Both seller lots are gone');
+    expect(closed.status).toBe('CLOSED');
+    expect((await api(ops).decisions('lbk-7')).map((d) => [d.kind, d.reason])).toEqual([['EARLY_CLOSE', 'Both seller lots are gone']]);
+    await expect(api(ops).closeEarly('lbk-7', 'again')).rejects.toMatchObject({ status: 409 });
+    await expect(api(ops).closeEarly('elp-3', 'not yet')).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('proceeds below the minimum: needs a reason, is logged with who and when, and cannot be decided twice', async () => {
+    const err = await api(ops).decide('ode-1', 'PROCEED', '').catch((e: unknown) => e);
+    expect(isApiError(err) && err.status === 422 && Object.keys(err.fieldErrors)).toEqual(['reason']);
+    const done = await api(ops).decide('ode-1', 'PROCEED', 'Two orders still cover the drive');
+    expect(done).toMatchObject({ outcome: 'PROCEEDED', status: 'CLOSED', decisionNeeded: false });
+    const log = await api(ops).decisions('ode-1');
+    expect(log.map((d) => d.kind)).toEqual(['AWAITING', 'PROCEED']);
+    expect(log[0]).toMatchObject({ actor: 'system', minimum: 10 });
+    expect(log[1]).toMatchObject({ reason: 'Two orders still cover the drive', minimum: 10 });
+    expect(log[1]?.actor).not.toBe('system');
+    expect(Date.parse(log[1]?.at ?? '')).not.toBeNaN();
+    await expect(api(ops).decide('ode-1', 'CANCEL', 'changed my mind')).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('cancels, refunds every order and shows each order’s refund progress until it settles', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T15:00:00Z'));
+    const before = await api().orders('ode-1', { page: 0, size: 50 });
+    const counted = before.items.filter((o) => o.status !== 'CANCELLED').length;
+    expect(counted).toBeGreaterThan(0);
+    const cancelled = await api(ops).decide('ode-1', 'CANCEL', 'Not enough orders to make the trip');
+    expect(cancelled).toMatchObject({ status: 'CANCELLED', outcome: 'CANCELLED', orderCount: 0 });
+
+    const refunding = (await api().orders('ode-1', { page: 0, size: 50 })).items.filter((o) => o.refundStatus);
+    expect(refunding).toHaveLength(counted);
+    expect(refunding.every((o) => o.refundStatus === 'PENDING' && o.status === 'CANCELLED')).toBe(true);
+    expect(await api().refunds('ode-1')).toMatchObject({ total: counted, pending: counted, done: false });
+
+    vi.setSystemTime(new Date('2026-10-10T15:00:10Z'));
+    const settled = (await api().orders('ode-1', { page: 0, size: 50 })).items.filter((o) => o.refundStatus);
+    expect(settled.every((o) => o.refundStatus === 'REFUNDED' || o.refundStatus === 'VOIDED')).toBe(true);
+    expect(settled.every((o) => o.refundAmount === o.total)).toBe(true);
+    const summary = await api().refunds('ode-1');
+    expect(summary).toMatchObject({ total: counted, pending: 0, failed: 0, done: true });
+    expect(summary.refunded + summary.voided).toBe(counted);
+    expect((await api(ops).decisions('ode-1')).map((d) => d.kind)).toEqual(['AWAITING', 'CANCEL']);
+    await expect(api(ops).cancel('ode-1', 'again')).rejects.toMatchObject({ status: 409 });
+    await expect(api(ops).update('ode-1', inputOf(cancelled), cancelled.version)).rejects.toMatchObject({ status: 422 });
+  });
+
+  it('cancels an open window with a reason, and only managers may decide', async () => {
+    await expect(api(ops).cancel('lbk-7', '')).rejects.toMatchObject({ status: 422 });
+    expect(await api(ops).cancel('lbk-7', 'Seller stock fell through')).toMatchObject({ status: 'CANCELLED' });
+    await expect(api(ops).cancel('lbk-6', 'delivered long ago')).rejects.toMatchObject({ status: 409 });
+    for (const role of ['platform.customer_support', 'platform.finance']) {
+      await expect(api(role).decide('ode-1', 'CANCEL', 'x')).rejects.toMatchObject({ status: 403 });
+      await expect(api(role).cancel('ama-4', 'x')).rejects.toMatchObject({ status: 403 });
+      await expect(api(role).closeEarly('lbk-7', 'x')).rejects.toMatchObject({ status: 403 });
+    }
+    await expect(api('platform.finance').decisions('ode-1')).resolves.toHaveLength(1);
+  });
+
+  it('keeps the new routes in the query-key family so a decision refreshes the screen', () => {
+    expect(staffPreorderKeys.decisions('ode-1')).toEqual(['staff', 'preorders', 'window', 'ode-1', 'decisions']);
+    expect(staffPreorderKeys.refunds('ode-1')[0]).toBe('staff');
   });
 });

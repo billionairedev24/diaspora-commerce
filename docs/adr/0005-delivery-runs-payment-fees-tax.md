@@ -33,3 +33,22 @@ Runs are only offered for goods that are already in stock, so a preorder is an o
 - No second charge, no card holds that expire, no dunning for runs.
 - Refund-on-cancel must be reliable and idempotent, and visible to the customer and to staff.
 - Fee rules, run minimums and coverage need staff screens with audit and reasons.
+
+## Implementation notes (pre-order windows)
+
+Pre-order windows are the one customer-facing offer; a delivery run is how a closed window's paid orders are delivered.
+
+- **Minimum and decision (§4).** `PreorderWindow.minOrders` is staff-set (default `PREORDERS_DEFAULT_MIN_ORDERS`). A window that
+  closes below it becomes `AWAITING_DECISION`: nothing is cancelled or handed to a run, and `preorder.window.decision_needed`
+  tells staff. Staff cancel or proceed with a required reason; each decision is logged (who, when, why) and published as
+  `preorder.window.decided`. Reaching the minimum early lets staff close the window early.
+- **Cancellation (§1).** `preorder.window.cancelled` and `delivery-runs.run.cancelled` make orders-service cancel the PREORDER
+  shipments through the customer-cancellation path: a captured payment is refunded in full with the delivery fee, an
+  authorisation that was never captured is released (orders authorise at checkout and capture when a package leaves, so a
+  cancel before pick-up usually *releases* rather than refunds; the customer is whole either way). Cancelling is idempotent
+  per shipment; orders reports `orders.preorder.refund_settled` / `refund_failed` and staff see the progress per order.
+- **Payout (§5).** Settlement is not window specific: delivering a package starts payments' settlement hold (7 days by
+  default), then the seller net is transferred; the delivery fee stays with AfroTransact (ledger 4250). Packages are
+  marked delivered by the driver app, fulfilment or staff in orders-service; a run's `completed` does not do it.
+- **Not built.** A dedicated permission for deciding (`preorders:manage` is used), a staff e-mail / chat recipient for
+  `decision_needed`, and capture at order time (§1 says "charged at checkout").
