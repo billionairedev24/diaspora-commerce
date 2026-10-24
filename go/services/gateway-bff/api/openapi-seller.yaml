@@ -3687,6 +3687,7 @@ components:
         height: {type: integer, minimum: 0}
         bytes: {type: integer, minimum: 0}
         contentType: {type: string}
+        alt: {type: [string, 'null'], maxLength: 200, description: 'Optional alternative text (what the picture shows), stored with the image'}
     VariantInput:
       type: object
       required: [options, sellerSku, priceMinor, quantity]
