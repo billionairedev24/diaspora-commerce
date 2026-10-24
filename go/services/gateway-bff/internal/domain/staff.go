@@ -338,6 +338,9 @@ type Form struct {
 	// Intro says in a sentence or two what submitting does (shown above the fields).
 	Intro  string      `json:"intro,omitempty"`
 	Fields []FormField `json:"fields"`
+	// ChangeKeys are the fields whose change makes the form worth saving: when set, Save stays disabled until one of
+	// them differs from its initial value, and the server refuses a save in which none does.
+	ChangeKeys []string `json:"changeKeys,omitempty"`
 }
 
 // ResourcePage is GET /v1/staff/resources/{resource}.
@@ -779,4 +782,22 @@ type StaffDashboard struct {
 	GeneratedAt time.Time   `json:"generatedAt"`
 	Kpis        []Kpi       `json:"kpis"`
 	Charts      []ChartSpec `json:"charts"`
+}
+
+// FormChanged reports whether the submitted values differ from the form's initial values in a field the form says
+// matters (ChangeKeys); a form without ChangeKeys is always worth saving.
+func FormChanged(f Form, values map[string]any) bool {
+	if len(f.ChangeKeys) == 0 {
+		return true
+	}
+	initial := map[string]any{}
+	for _, field := range f.Fields {
+		initial[field.Key] = field.Value
+	}
+	for _, k := range f.ChangeKeys {
+		if fmt.Sprint(initial[k]) != fmt.Sprint(values[k]) {
+			return true
+		}
+	}
+	return false
 }

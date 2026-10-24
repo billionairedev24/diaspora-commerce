@@ -5498,6 +5498,7 @@ components:
         submitLabel: {type: string}
         intro: {type: string, description: 'What submitting does, in a sentence or two (shown above the fields)'}
         fields: {type: array, items: {$ref: '#/components/schemas/FormField'}}
+        changeKeys: {type: array, items: {type: string}, description: 'Fields whose change makes the form worth saving: Save stays disabled until one differs from its initial value, and the server refuses a save in which none does'}
     ResourcePage:
       type: object
       required: [resource, title, columns, rows, page, size, total, nextCursor, hasNext, facets, searchable, canCreate, createForm, exportable, sort, partial]

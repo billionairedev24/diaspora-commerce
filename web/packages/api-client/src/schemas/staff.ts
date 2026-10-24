@@ -123,7 +123,7 @@ export const FormFieldSchema = z.object({
   value: FieldValueSchema.optional()
 });
 export type FormField = z.infer<typeof FormFieldSchema>;
-export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), intro: z.string().optional(), fields: z.array(FormFieldSchema) });
+export const StaffFormSchema = z.object({ title: z.string(), submitLabel: z.string(), intro: z.string().optional(), fields: z.array(FormFieldSchema), changeKeys: z.array(z.string()).optional() });
 export type StaffForm = z.infer<typeof StaffFormSchema>;
 
 export const ResourcePageSchema = z.object({

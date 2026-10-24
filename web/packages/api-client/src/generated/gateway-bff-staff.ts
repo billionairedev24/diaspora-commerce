@@ -4828,6 +4828,8 @@ export interface components {
             /** @description What submitting does, in a sentence or two (shown above the fields) */
             intro?: string;
             fields: components["schemas"]["FormField"][];
+            /** @description Fields whose change makes the form worth saving: Save stays disabled until one differs from its initial value, and the server refuses a save in which none does */
+            changeKeys?: string[];
         };
         ResourcePage: {
             resource: components["schemas"]["ResourceKey"];

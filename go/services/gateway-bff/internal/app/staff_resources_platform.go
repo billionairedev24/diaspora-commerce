@@ -82,9 +82,6 @@ func taxSettingsResource() *staffResource {
 			w.set(ctx, h, "changedBy", "changedByName")
 			h["fromLabel"] = taxMethodLabel(jstr(h, "from"))
 			h["toLabel"] = taxMethodLabel(jstr(h, "to"))
-			if jstr(h, "from") == jstr(h, "to") {
-				h["toLabel"] = taxMethodLabel(jstr(h, "to")) + " (confirmed, unchanged)"
-			}
 		}
 		return o, nil
 	}
@@ -133,7 +130,7 @@ func taxSettingsResource() *staffResource {
 					Fields: []domain.FormField{
 						withValue(withOptions(ff("method", "Method", "select", true), taxMethodOptions), jstr(o, "method")),
 						withMax(ff("reason", "Why (at least 10 characters)", "textarea", true), 500),
-					}}
+					}, ChangeKeys: []string{"method"}}
 			},
 			save: func(ctx context.Context, sc staffCtx, _ jobj, v jobj, _ string) error {
 				return sc.call(ctx, sc.up.TaxReturns, port.StaffCall{Method: http.MethodPut, Path: "/v1/tax/settings",

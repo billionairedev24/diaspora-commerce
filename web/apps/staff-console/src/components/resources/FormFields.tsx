@@ -134,10 +134,13 @@ export function FormFields({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [attempts, setAttempts] = useState(0);
   const shown = { ...serverErrors, ...errors };
+  const initial = draftOf(form);
+  // A form that names its change fields can only be saved once one of them differs from what it opened with.
+  const unchanged = form.changeKeys !== undefined && form.changeKeys.length > 0 && form.changeKeys.every((k) => String(draft[k]) === String(initial[k]));
   const submit = (e: FormEvent) => {
     e.preventDefault();
     // One request at a time: Enter or a second click while the first is in flight does nothing.
-    if (busy) return;
+    if (busy || unchanged) return;
     const values = valuesOf(form, draft);
     const found = validateStaffForm(form, values);
     setErrors(found);
@@ -162,7 +165,7 @@ export function FormFields({
             Cancel
           </Button>
         ) : null}
-        <Button type="submit" loading={busy}>
+        <Button type="submit" loading={busy} disabled={unchanged}>
           {form.submitLabel}
         </Button>
       </div>

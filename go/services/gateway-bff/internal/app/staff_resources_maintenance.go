@@ -116,7 +116,7 @@ func maintenanceResource() *staffResource {
 						withValue(withMax(ff("title", "Heading", "text", false), 80), jstr(o, "title")),
 						withValue(withMax(ff("message", "What customers are told (required when turning on)", "textarea", false), 600), msg),
 						withValue(withOptions(ff("backIn", "When we expect to be back", "select", false), maintenanceBackIn), "0"),
-					}}
+					}, ChangeKeys: []string{"enabled", "scope", "title", "message", "backIn"}}
 			},
 			save: func(ctx context.Context, sc staffCtx, _ jobj, v jobj, _ string) error {
 				back := time.Duration(0)

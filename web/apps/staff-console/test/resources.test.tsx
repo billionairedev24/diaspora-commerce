@@ -1,9 +1,10 @@
 import { resetStaffDb } from '@afrotransact/api-client/mocks/staff';
-import { screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ModuleView } from '@/components/module/ModuleView';
+import { FormFields } from '@/components/resources/FormFields';
 import { ResourceTable } from '@/components/resources/ResourceTable';
 
 import { asRoles } from './mock-api';
@@ -61,5 +62,22 @@ describe('server-driven tables and detail sheets', () => {
     await user.type(within(dialog).getByLabelText('Rate'), '0.02');
     await user.click(within(dialog).getByRole('button', { name: 'Add rate' }));
     await waitFor(() => expect(nav.search).toContain('open=local%3ATX%3A772'));
+  });
+});
+
+describe('forms that name their change fields', () => {
+  it('keep Save disabled until one of them differs from what the form opened with', async () => {
+    const user = userEvent.setup();
+    const form = { title: 'Change who calculates sales tax', submitLabel: 'Change method', changeKeys: ['method'], fields: [
+      { key: 'method', label: 'Method', type: 'select' as const, required: true, value: 'RULES', options: [{ value: 'RULES', label: 'Our own rules' }, { value: 'STRIPE_TAX', label: 'Stripe Tax' }] },
+      { key: 'reason', label: 'Why', type: 'textarea' as const, required: true }
+    ] };
+    render(<FormFields form={form} onSubmit={vi.fn()} />);
+    const save = screen.getByRole('button', { name: 'Change method' });
+    expect(save).toBeDisabled();
+    await user.type(screen.getByLabelText(/Why/), 'Reviewing the method this quarter');
+    expect(save).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText('Method'), 'STRIPE_TAX');
+    expect(save).toBeEnabled();
   });
 });

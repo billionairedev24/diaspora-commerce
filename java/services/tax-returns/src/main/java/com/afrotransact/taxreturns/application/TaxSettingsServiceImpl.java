@@ -53,7 +53,9 @@ class TaxSettingsServiceImpl implements TaxSettingsService {
                     "Stripe Tax cannot be used until its key is set and Stripe Tax is set up (registrations) in the "
                             + "Stripe dashboard; our own rules keep working meanwhile", Map.of("method", "Not available"));
         }
-        // Saving the method already in force is recorded too (who confirmed it, when and why): the screen shows it.
+        if (method == resolver.method()) {
+            return view();
+        }
         settings.changeMethod(method, reason.trim(), actor.subject(), Instant.now(clock));
         resolver.refresh();
         return view();

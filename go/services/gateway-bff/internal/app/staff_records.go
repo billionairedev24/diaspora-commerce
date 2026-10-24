@@ -383,8 +383,12 @@ func (s *staffRecordsImpl) Update(ctx context.Context, c *domain.Caller, name, i
 	if values == nil {
 		values = map[string]any{}
 	}
-	if errs := domain.ValidateForm(r.edit.form(o), values); len(errs) > 0 {
+	form := r.edit.form(o)
+	if errs := domain.ValidateForm(form, values); len(errs) > 0 {
 		return domain.RecordDetail{}, domain.ValidationProblem(errs)
+	}
+	if !domain.FormChanged(form, values) {
+		return domain.RecordDetail{}, domain.ValidationProblem(map[string]string{form.ChangeKeys[0]: "Nothing has changed. Change it to save."})
 	}
 	if version == "" && r.version != nil {
 		version = r.version(o)

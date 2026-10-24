@@ -72,7 +72,7 @@ const MARKET_ORDER: Record<string, number> = { LIVE: 0, COMING_SOON: 1, PAUSED: 
 const col = (key: string, label: string, kind: ColumnKind, width: number): ResourceColumn => ({ key, label, kind, width });
 const facets = (...values: string[]): ResourceFacet[] => values.map((v) => ({ value: v, label: humanize(v) }));
 const field = (key: string, label: string, type: FormField['type'], required: boolean, extra: Partial<FormField> = {}): FormField => ({ key, label, type, required, ...extra });
-const form = (title: string, submitLabel: string, fields: FormField[], intro?: string): StaffForm => ({ title, submitLabel, fields, ...(intro ? { intro } : {}) });
+const form = (title: string, submitLabel: string, fields: FormField[], intro?: string, changeKeys?: string[]): StaffForm => ({ title, submitLabel, fields, ...(intro ? { intro } : {}), ...(changeKeys ? { changeKeys } : {}) });
 const options = (...values: string[]) => values.map((v) => ({ value: v, label: humanize(v) }));
 const str = (v: FieldValue | Scalar | undefined): string => (v === null || v === undefined ? '' : String(v));
 const num = (v: FieldValue | Scalar | undefined): number => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -874,7 +874,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       form: (r) => form('Change who calculates sales tax', 'Change method', [
         field('method', 'Method', 'select', true, { options: [{ value: 'RULES', label: 'Our own rules (rate tables and tax codes)' }, { value: 'STRIPE_TAX', label: 'Stripe Tax (needs to be set up)' }], value: str(r.fields.method) }),
         field('reason', 'Why (at least 10 characters)', 'textarea', true, { maxLength: 500 })
-      ], 'Our own rules are always available. Stripe Tax can only be chosen once it is set up. The change applies to new quotes; orders already placed keep their tax.'),
+      ], 'Our own rules are always available. Stripe Tax can only be chosen once it is set up. The change applies to new quotes; orders already placed keep their tax.', ['method']),
       apply: (r, v) => {
         if (str(v.method) === 'STRIPE_TAX') throw new Error('Stripe Tax is not set up yet');
         r.fields.method = str(v.method);
