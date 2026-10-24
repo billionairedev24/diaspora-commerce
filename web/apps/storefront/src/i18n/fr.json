@@ -1225,5 +1225,6 @@
   "ord.andMore": "+ {count} more",
   "ord.codeOrder": "Order {number}",
   "ord.showCode": "Show delivery code",
-  "ord.hideCode": "Hide delivery code"
+  "ord.hideCode": "Hide delivery code",
+  "co.useNewMethod": "Utiliser un autre moyen de paiement"
 }

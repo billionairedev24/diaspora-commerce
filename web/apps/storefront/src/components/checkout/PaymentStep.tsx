@@ -37,13 +37,14 @@ type Props = {
 };
 
 /**
- * Payment section: every saved method is listed, and the full Stripe Payment Element is directly visible on the page
- * in deferred mode. Selecting a saved method selects it for order placement; interacting with the Payment Element
- * switches seamlessly to the new method flow.
+ * Payment section: with methods on file they are listed (the default is chosen) and the form stays closed until the
+ * shopper picks "Use a different payment method"; with none on file the form is open. The Stripe Payment Element is
+ * always mounted (deferred mode), only hidden while a saved method is chosen, so Place order can confirm it.
  */
 export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save, setSave, newMethod: _newMethod, onNewMethod, payEl, methodTypes }: Props) {
   const t = useT();
   const saved = s.paymentMethods;
+  const formOpen = saved.length === 0 || payWith === 'new';
 
   return (
     <div className={styles.payment} id="co-payment">
@@ -68,11 +69,15 @@ export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save
               {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
             </label>
           ))}
+          <label className={styles.choiceCompact} data-testid="checkout-use-new">
+            <input type="radio" name="paym" checked={payWith === 'new'} onChange={() => setPayWith('new')} />
+            <strong>{t('co.useNewMethod')}</strong>
+          </label>
         </fieldset>
       )}
 
-      <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method">
-        <span className={styles.legend}>{saved.length > 0 ? t('co.orNew') : t('co.payWith')}</span>
+      <div className={payWith === 'new' ? styles.newMethodOn : styles.newMethod} data-testid="checkout-new-method" hidden={!formOpen}>
+        {saved.length === 0 ? <span className={styles.legend}>{t('co.payWith')}</span> : null}
         <PaymentElementField
           ref={payEl}
           publishableKey={s.publishableKey ?? ''}
@@ -96,14 +101,11 @@ export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save
       </div>
 
       <div className={styles.paymentFoot}>
-        <AcceptedPaymentsHint />
+        {formOpen ? <AcceptedPaymentsHint /> : null}
         <p className={styles.secureText}>
-          <ShieldCheck aria-hidden /> {t('pay.storedByStripe')}
+          <ShieldCheck aria-hidden /> <span>{t('pay.storedByStripe')} {t('co.chargeNote')}</span>
         </p>
-        <div className={styles.stripeLine}>
-          <PoweredByStripe height={22} />
-          <span>{t('co.chargeNote')}</span>
-        </div>
+        <PoweredByStripe height={22} />
       </div>
     </div>
   );
