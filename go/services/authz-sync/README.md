@@ -37,7 +37,14 @@ Kafka → OpenFGA projection of who belongs to which organisation, and which sta
 `config/<APP_ENV>.yaml` + env: `KAFKA_BOOTSTRAP`, `KAFKA_GROUP`, `KAFKA_TOPICS`, `OPENFGA_API_URL`,
 `OPENFGA_API_TOKEN` (secret: one of OpenFGA's pre-shared keys; empty locally), `OPENFGA_STORE_NAME`,
 `OPENFGA_STORE_ID` (pin a store instead of looking it up), `OPENFGA_TIMEOUT`, `OPENFGA_MANAGE_MODEL`,
-`RETAIL_ORG_ID`, `RETRY_BACKOFF_MS`, `RETRY_MAX_BACKOFF_MS`, `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`, `TRACE_SAMPLING`.
+`RETAIL_ORG_ID`, `SERVICE_CLIENTS` (comma-separated), `RETRY_BACKOFF_MS`, `RETRY_MAX_BACKOFF_MS`, `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`, `TRACE_SAMPLING`.
+
+## Service-client tuples (S266)
+
+On start, after the model is deployed, authz-sync writes `client:<id> service platform:afrotransact` for every id in
+`serviceClients` (identity's first-party `client_credentials` clients), so a service-to-service call passes
+relationship checks once `FGA_ENFORCE=true`. The write is idempotent. A test keeps each environment's list equal to
+the clients identity registers: add a new first-party service client to both.
 
 ## Rebuild every tuple
 

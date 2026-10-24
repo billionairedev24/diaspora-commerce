@@ -26,7 +26,10 @@ type Config struct {
 	} `yaml:"openfga"`
 	// RetailOrgID is AfroTransact Retail's organisation; platform.retail_buyer gets its catalog role.
 	RetailOrgID string `yaml:"retailOrgId" env:"RETAIL_ORG_ID"`
-	Retry       struct {
+	// ServiceClients are the first-party service client ids that get the `service` relation on the platform at start-up,
+	// so service-to-service calls pass relationship checks (S266).
+	ServiceClients []string `yaml:"serviceClients" env:"SERVICE_CLIENTS"`
+	Retry          struct {
 		BackoffMs    int `yaml:"backoffMs" env:"RETRY_BACKOFF_MS"`
 		MaxBackoffMs int `yaml:"maxBackoffMs" env:"RETRY_MAX_BACKOFF_MS"`
 	} `yaml:"retry"`
