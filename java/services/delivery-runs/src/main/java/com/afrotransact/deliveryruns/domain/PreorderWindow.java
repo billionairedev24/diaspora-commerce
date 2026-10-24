@@ -370,8 +370,8 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
     }
 
     /**
-     * Closes the window now because it reached its minimum before the close date. Only an OPEN, live window with a
-     * minimum that has been met.
+     * Closes the window now because it reached its minimum before the close date (the close date becomes just before
+     * {@code now}). Only an OPEN, live window with a minimum that has been met.
      */
     public PreorderWindow closeEarly(int orders, Instant now) {
         PreorderStatus s = status(now);
@@ -382,7 +382,9 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
             throw new RuleViolation("delivery-runs.preorder-minimum-not-met",
                     "The minimum of " + details.minOrders() + " orders has not been reached (" + orders + ")");
         }
-        Instant closes = now.isAfter(details.opensAt()) ? now : details.opensAt().plusSeconds(1);
+        // One millisecond ago, so the window reads CLOSED at once and the scheduler's next tick closes it.
+        Instant justBefore = now.minusMillis(1);
+        Instant closes = justBefore.isAfter(details.opensAt()) ? justBefore : details.opensAt().plusMillis(1);
         return new PreorderWindow(id, code, details.withClosesAt(closes), creatives, draft, active, runId, outcome,
                 createdAt, now, version);
     }

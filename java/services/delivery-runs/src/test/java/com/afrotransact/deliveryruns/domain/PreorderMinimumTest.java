@@ -107,8 +107,8 @@ class PreorderMinimumTest {
                 .isInstanceOf(InvalidTransitionException.class);
 
         PreorderWindow early = w.closeEarly(10, DURING);
-        assertThat(early.details().closesAt()).isEqualTo(DURING);
-        assertThat(early.status(DURING.plusSeconds(1))).isEqualTo(PreorderStatus.CLOSED);
+        assertThat(early.details().closesAt()).isEqualTo(DURING.minusMillis(1));
+        assertThat(early.status(DURING)).as("closed at once").isEqualTo(PreorderStatus.CLOSED);
         assertThat(early.outcome()).as("met: no decision needed").isNull();
     }
 

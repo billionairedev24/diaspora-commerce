@@ -48,6 +48,40 @@ class SettlementPayoutIT extends PaymentsIntegrationTest {
                 .query(Integer.class).single();
     }
 
+    /**
+     * ADR 0005 §5: a community pre-order package settles like any other line. The seller's net is held for the
+     * settlement period after delivery and then transferred; the window's delivery fee (4250) stays with AfroTransact.
+     */
+    @Test
+    void preorderSellerNetIsHeldAfterDeliveryThenTransferredAndTheDeliveryFeeStaysWithAfroTransact() {
+        String order = id("PRE");
+        String org = id("org_p").toLowerCase(Locale.ROOT);
+        String account = "acct_" + org.replace("-", "").replace("_", "");
+        TestSupport.as(TestSupport.FINANCE);
+        ok(send("PUT", "/v1/connected-accounts/" + org, Map.of("stripeAccountId", account), null));
+        JsonNode payment = createAuthorisedPayment(order, List.of(line("L1", org, "Groceries", "PREORDER", 1, 10_000,
+                799, 825)));
+        STRIPE.chargeFees("ch_" + order, new long[] {11_624, 320});
+        capture(payment.path("id").asString(), order, order + "-S1", List.of(), 11_624, 320, true);
+        long net = balance(order, "2000", org);
+        assertThat(net).as("the seller's payable excludes the delivery fee").isPositive().isLessThan(10_000);
+        assertThat(balance(order, "4250", "")).isEqualTo(799);
+
+        TestSupport.as(TestSupport.ORDERS_SERVICE);
+        ok(send("POST", "/v1/settlements/" + order + "/delivered", Map.of(), null));
+        STRIPE.transfer(order, account, "tr_" + org, net);
+        TestSupport.CLOCK.advance(Duration.ofDays(7).minusMinutes(5));
+        assertThat(releaseMaturedOnlyFor(order)).isZero();
+        TestSupport.CLOCK.advance(Duration.ofMinutes(10));
+        assertThat(releaseMaturedOnlyFor(order)).isEqualTo(1);
+        LoggedRequest transfer = WIREMOCK.findAll(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/transfers"))
+                .withRequestBody(WireMock.containing("transfer_group=" + order))).getFirst();
+        assertThat(transfer.getBodyAsString()).contains("amount=" + net, "destination=" + account);
+        assertThat(balance(order, "2000", org)).isZero();
+        assertThat(balance(order, "4250", "")).isEqualTo(799);
+        assertEveryJournalBalances();
+    }
+
     @Test
     void transfersOnlyAfterTheHoldThenPayoutOnRequest() {
         String order = id("ORD");
