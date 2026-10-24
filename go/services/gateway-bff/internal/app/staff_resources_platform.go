@@ -82,6 +82,9 @@ func taxSettingsResource() *staffResource {
 			w.set(ctx, h, "changedBy", "changedByName")
 			h["fromLabel"] = taxMethodLabel(jstr(h, "from"))
 			h["toLabel"] = taxMethodLabel(jstr(h, "to"))
+			if jstr(h, "from") == jstr(h, "to") {
+				h["toLabel"] = taxMethodLabel(jstr(h, "to")) + " (confirmed, unchanged)"
+			}
 		}
 		return o, nil
 	}

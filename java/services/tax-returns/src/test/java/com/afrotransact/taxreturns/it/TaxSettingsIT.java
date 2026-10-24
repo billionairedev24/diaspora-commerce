@@ -69,11 +69,11 @@ class TaxSettingsIT {
         });
 
         assertThat(settings.change(TaxMethod.STRIPE_TAX, "Choosing the same thing again").history())
-                .as("no change, no history row").hasSize(1);
+                .as("confirming the method in force is recorded").hasSize(2);
 
         TaxSettings off = settings.change(TaxMethod.RULES, "Falling back to our own rules");
         assertThat(off.method()).isEqualTo(TaxMethod.RULES);
-        assertThat(off.history()).extracting(h -> h.to()).containsExactly(TaxMethod.RULES, TaxMethod.STRIPE_TAX);
+        assertThat(off.history()).extracting(h -> h.to()).containsExactly(TaxMethod.RULES, TaxMethod.STRIPE_TAX, TaxMethod.STRIPE_TAX);
         assertThat(off.history().getFirst().from()).isEqualTo(TaxMethod.STRIPE_TAX);
     }
 
