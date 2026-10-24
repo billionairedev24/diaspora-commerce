@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 
 import { CreativesPanel } from './CreativesPanel';
+import { type DecisionAction, DecisionBanner, DecisionButtons, DecisionDialog, DecisionLog, MinimumLine, RefundProgress } from './Decisions';
 import { LateAddDialog } from './LateAddDialog';
 import { fD, fDT, fS, href, money2, num, STATUS_PILL, wholeMoney } from './model';
 import { ByDayChart, channelRows, HBars } from './PreorderCharts';
@@ -152,6 +153,7 @@ export function PreorderDetail({ id }: { id: string }) {
   const raw = params.get('tab') ?? 'overview';
   const tab: DetailTab = (TABS as string[]).includes(raw) ? (raw as DetailTab) : 'overview';
   const [lateOpen, setLateOpen] = useState(false);
+  const [decision, setDecision] = useState<DecisionAction | null>(null);
   const [ordersKey, setOrdersKey] = useState(0);
   const query = useQuery(staffPreorderQueries.window(api, id));
   const summary = useQuery(staffPreorderQueries.summary(api, id));
@@ -224,6 +226,7 @@ export function PreorderDetail({ id }: { id: string }) {
                   {w.active ? 'Pause' : 'Resume'}
                 </button>
               ) : null}
+              <DecisionButtons w={w} onChoose={setDecision} className={`${outlineButton} bg-ink-0`} />
               <Link href={href.edit(w.id)} className={`${outlineButton} bg-ink-0 no-underline hover:text-text hover:no-underline`}>
                 <PencilSimple size={16} aria-hidden />
                 Edit
@@ -256,6 +259,7 @@ export function PreorderDetail({ id }: { id: string }) {
           ) : null}
         </div>
       </div>
+      <DecisionBanner w={w} canDecide={access.canEdit} onChoose={setDecision} />
       <div role="tablist" aria-label="Pre-order" className="flex flex-wrap gap-1 border-b border-border px-5">
         {TABS.map((t) => (
           <Link
@@ -282,7 +286,10 @@ export function PreorderDetail({ id }: { id: string }) {
               {tab === 'overview' ? (
                 <>
                   <Kpis s={s} w={w} />
+                  <MinimumLine w={w} />
                   <TimeProgress w={w} />
+                  <RefundProgress w={w} />
+                  <DecisionLog id={w.id} />
                 </>
               ) : null}
               <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-5">
@@ -303,6 +310,7 @@ export function PreorderDetail({ id }: { id: string }) {
           </>
         ) : null}
       </div>
+      <DecisionDialog w={w} action={decision} onClose={() => setDecision(null)} />
       {access.canLate ? (
         <LateAddDialog
           w={w}

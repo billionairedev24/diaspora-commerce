@@ -41,10 +41,11 @@ describe('Pre-orders back office (S274)', () => {
     nav.set('/preorders');
     await renderScreen(<PreordersView screen={{ kind: 'list' }} />);
     const table = await screen.findByRole('table', { name: 'Pre-orders' });
-    await waitFor(() => expect(within(table).getAllByTestId('preorder-row')).toHaveLength(8));
-    await waitFor(() => expect(screen.getByTestId('tab-count-all')).toHaveTextContent('8'));
+    await waitFor(() => expect(within(table).getAllByTestId('preorder-row')).toHaveLength(9));
+    await waitFor(() => expect(screen.getByTestId('tab-count-all')).toHaveTextContent('9'));
     expect(screen.getByTestId('tab-count-open')).toHaveTextContent('1');
     expect(screen.getByTestId('tab-count-upcoming')).toHaveTextContent('3');
+    expect(screen.getByTestId('tab-count-decision')).toHaveTextContent('1');
     expect(screen.getByTestId('tab-count-closed')).toHaveTextContent('2');
     expect(screen.getByTestId('tab-count-draft')).toHaveTextContent('1');
     const row = (name: string) => within(table).getByRole('link', { name }).closest('tr') as HTMLElement;
@@ -54,6 +55,10 @@ describe('Pre-orders back office (S274)', () => {
     expect(row('Laredo Pre-order #1')).toHaveTextContent('Area off');
     expect(row('Midland–Odessa Pre-order #2')).toHaveTextContent('Draft');
     expect(row('Lubbock Pre-order #6')).toHaveTextContent('Delivered');
+    expect(row('Odessa Pre-order #1')).toHaveTextContent('Needs a decision');
+    expect(row('Odessa Pre-order #1')).toHaveTextContent(/\d+ of 10/);
+    expect(row('Lubbock Pre-order #7')).toHaveTextContent('140 of 100');
+    expect(screen.getByTestId('decision-notice')).toHaveTextContent('1 pre-order closed below its minimum and needs a decision.');
     expect(screen.getByRole('tab', { name: /Scheduled/ })).toHaveAttribute('href', '/preorders?status=upcoming');
     expect(screen.getByRole('button', { name: 'Open a pre-order' })).toBeEnabled();
   });

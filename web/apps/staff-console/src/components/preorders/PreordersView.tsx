@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 
 import { ModulePage } from '@/components/module/ModulePage';
 import { problemMessage } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 
 import { href, NO_EDIT_TITLE, NO_SETTINGS_TITLE } from './model';
 import { PreorderDetail } from './PreorderDetail';
@@ -61,8 +62,16 @@ function MasterSwitchButton() {
 
 function ListTabs({ tab }: { tab: PreorderListTab }) {
   const api = usePreordersApi();
+  const t = useT();
   const counts = useQuery(staffPreorderQueries.list(api, { status: 'all', page: 0 })).data?.counts;
-  const tabs: [PreorderListTab, string][] = [['all', 'All'], ['open', 'Open'], ['upcoming', 'Scheduled'], ['closed', 'Closed'], ['draft', 'Drafts']];
+  const tabs: [PreorderListTab, string][] = [
+    ['all', 'All'],
+    ['open', 'Open'],
+    ['upcoming', 'Scheduled'],
+    ['decision', t('st.preorders.tab.decision')],
+    ['closed', 'Closed'],
+    ['draft', 'Drafts']
+  ];
   return (
     <div role="tablist" aria-label="Pre-order status" className="flex max-w-full gap-0.5 overflow-x-auto overscroll-x-contain rounded-md border border-border bg-surface-muted p-0.5">
       {tabs.map(([k, label]) => (
@@ -81,6 +90,22 @@ function ListTabs({ tab }: { tab: PreorderListTab }) {
           </span>
         </Link>
       ))}
+    </div>
+  );
+}
+
+/** Pre-orders that closed below their minimum wait for a staff decision: say so on every list tab, and link to them. */
+function DecisionNotice() {
+  const api = usePreordersApi();
+  const t = useT();
+  const n = useQuery(staffPreorderQueries.list(api, { status: 'all', page: 0 })).data?.counts.decision ?? 0;
+  if (!n) return null;
+  return (
+    <div role="status" data-testid="decision-notice" className="flex flex-wrap items-center gap-3 rounded-md border border-gold-500 bg-gold-50 px-4 py-3 text-sm">
+      <strong>{t('st.preorders.banner.decision', { n })}</strong>
+      <Link href={href.list('decision')} className="font-bold text-link">
+        {t('st.preorders.banner.review')}
+      </Link>
     </div>
   );
 }
@@ -129,6 +154,7 @@ export function PreordersView({ screen }: { screen: PreorderScreen }) {
             Open a pre-order
           </button>
         </div>
+        {inList && tab !== 'decision' ? <DecisionNotice /> : null}
         {screen.kind === 'list' ? <PreorderList tab={tab} /> : null}
         {screen.kind !== 'list' ? (
           <section className="min-w-0 rounded-md border border-border bg-surface">

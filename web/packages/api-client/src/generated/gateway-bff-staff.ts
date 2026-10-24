@@ -1790,6 +1790,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/preorders/{preorderId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide a window that closed below its minimum (cancel and refund everyone, or proceed)
+         * @description delivery-runs `POST /v1/preorders/{id}/decision` (preorders:manage, EDIT; If-Match relayed). Only a window in
+         *     `AWAITING_DECISION` (closed with fewer orders than its `minOrders`; 409 otherwise). `CANCEL` cancels the window:
+         *     every order is refunded in full, delivery fee included, and its stock released (orders-service); the window
+         *     becomes `CANCELLED` and each order shows its `refundStatus`. `PROCEED` goes ahead below the minimum: the window
+         *     closes and hands its paid orders to a run on the scheduler's next tick. The `reason` is required (422) and is
+         *     logged with who and when (`GET .../decisions`).
+         */
+        post: operations["decideStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a window and refund every order in full
+         * @description delivery-runs `POST /v1/preorders/{id}/cancel` (preorders:manage, EDIT; If-Match relayed). Any published window
+         *     that is not delivered or cancelled: it becomes `CANCELLED`, a run it was handed to is cancelled too (409 once
+         *     that run is out for delivery) and every order is refunded in full, delivery fee included, with its stock
+         *     released. The reason is required and logged with who and when.
+         */
+        post: operations["cancelStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/close-early": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close an open window early once its minimum is met
+         * @description delivery-runs `POST /v1/preorders/{id}/close-early` (preorders:manage, EDIT; If-Match relayed). Only an `OPEN`
+         *     window whose `orderCount` has reached its `minOrders` (`canCloseEarly`; 422 `delivery-runs.preorder-minimum-not-met`
+         *     otherwise, 409 when not open). The close date moves to now and the scheduler closes the window on its next tick.
+         *     The reason is required and logged.
+         */
+        post: operations["closeEarlyStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The window's decision log (who, when, why)
+         * @description delivery-runs `GET /v1/preorders/{id}/decisions`, oldest first.
+         */
+        get: operations["listStaffPreorderDecisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Refund progress of a cancelled window
+         * @description delivery-runs `GET /v1/preorders/{id}/refunds`: orders per refund status, `done` once none is pending or failed.
+         *     Each order's own `refundStatus` (PENDING, REFUNDED, VOIDED, FAILED), amount and error are on the orders list.
+         */
+        get: operations["getStaffPreorderRefunds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/preorders/{preorderId}/creatives/{slot}": {
         parameters: {
             query?: never;
@@ -5747,11 +5859,61 @@ export interface components {
                 [key: string]: unknown;
             }[];
             total?: number | null;
-            /** @description Tab counts */
+            /** @description Tab counts: all, open, upcoming, decision (needs a staff decision), closed, draft */
             counts?: {
                 [key: string]: number;
             };
+            /** @description Minimum order count a new window starts with */
+            defaultMinOrders?: number | null;
             can: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        StaffPreorderReason: {
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffPreorderDecisionRequest: {
+            /**
+             * @description CANCEL refunds every order in full; PROCEED goes ahead below the minimum
+             * @enum {string}
+             */
+            decision: "CANCEL" | "PROCEED";
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffPreorderDecisions: {
+            items: ({
+                id?: string;
+                /**
+                 * @description AWAITING is the system noting the window closed below its minimum
+                 * @enum {string}
+                 */
+                kind: "AWAITING" | "PROCEED" | "CANCEL" | "EARLY_CLOSE";
+                reason: string;
+                /** @description Staff subject, or system */
+                actor: string;
+                /** @description Orders that counted */
+                orders?: number;
+                minimum?: number;
+                /** Format: date-time */
+                at: string;
+            } & {
+                [key: string]: unknown;
+            })[];
+        };
+        StaffPreorderRefunds: {
+            total: number;
+            /** @description Cancelled; orders-service is refunding */
+            pending: number;
+            /** @description Captured payment refunded in full */
+            refunded: number;
+            /** @description Nothing had been captured; the authorisation was released */
+            voided: number;
+            /** @description Could not be refunded automatically; staff must act */
+            failed: number;
+            /** @description None pending or failed */
+            done: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -5782,6 +5944,8 @@ export interface components {
             doorFeeOverride?: number | null;
             pickupFeeOverride?: number | null;
             showCount?: boolean;
+            /** @description Fewest orders the window needs (0 = none). Null: the default on create (`defaultMinOrders` of the list), unchanged on edit. Below it at the close date the window waits for a staff decision */
+            minOrders?: number | null;
             comms?: string[];
             version?: number;
         } & {
@@ -5792,8 +5956,23 @@ export interface components {
             /** @example LBK-7 */
             code?: string;
             name?: string;
-            /** @description DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED (derived) */
+            /** @description DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED, AWAITING_DECISION (closed below its minimum), CANCELLED */
             status?: string;
+            /** @description Fewest orders the window needs (0 = none) */
+            minOrders?: number;
+            /** @description Orders that count (paid and late adds) */
+            orderCount?: number;
+            /** @description A minimum is set and orderCount has reached it */
+            minimumMet?: boolean;
+            /** @description OPEN with the minimum met: staff may close it early */
+            canCloseEarly?: boolean;
+            /** @description AWAITING_DECISION: staff must cancel or proceed */
+            decisionNeeded?: boolean;
+            /**
+             * @description What became of the window beyond its dates
+             * @enum {string|null}
+             */
+            outcome?: "AWAITING_DECISION" | "PROCEEDED" | "CANCELLED" | null;
             /** @description Window override in minor units (null = the settings' fee for its currency) */
             doorFeeOverride?: number | null;
             pickupFeeOverride?: number | null;
@@ -9335,6 +9514,174 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    decideStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description Decided */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderReason"];
+            };
+        };
+        responses: {
+            /** @description Cancelled */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    closeEarlyStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderReason"];
+            };
+        };
+        responses: {
+            /** @description Closing */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPreorderDecisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Decisions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderDecisions"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorderRefunds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Refund progress */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderRefunds"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
