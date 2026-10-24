@@ -67,6 +67,15 @@ type StaffPreordersService interface {
 	VerifyAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressVerification, error)
 	// RequestUpload signs a direct media upload for a creative.
 	RequestUpload(ctx context.Context, c *domain.Caller, in PreorderUploadInput) (domain.PreorderUploadTicket, error)
+	// DeliveryFees lists the delivery fee rules (ADR 0005 §3): one per delivery method and currency.
+	DeliveryFees(ctx context.Context, c *domain.Caller) (any, error)
+	// UpdateDeliveryFee sets one rule ({bands} | {handlingMinor, fallbackMinor, freeAboveMinor} | {feeMinor}, {reason}
+	// required, If-Match); the audit trail records who, when and why.
+	UpdateDeliveryFee(ctx context.Context, c *domain.Caller, method, currency, ifMatch string, body map[string]any) (any, error)
+	// DeliveryFeeChanges is the audit trail of the rules, newest first (?method=&currency=&limit=).
+	DeliveryFeeChanges(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// PreviewDeliveryFee answers what a customer would pay with the resolution checkout runs.
+	PreviewDeliveryFee(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	// Customers is the late-add customer picker: identity's people search with each customer's saved addresses.
 	Customers(ctx context.Context, c *domain.Caller, q, windowID string) (domain.LateAddCustomers, error)
 }
