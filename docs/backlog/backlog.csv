@@ -138,13 +138,13 @@
 - Responses are cacheable for 30 seconds","E04","","Highest","5","search go","search","Done"
 "S036","Story","Semantic (hybrid) retrieval via AI gateway embeddings","Natural-language queries blend kNN with lexical relevance and degrade gracefully.","- Queries of 3+ words request an embedding with a 150 ms budget
 - If the embedder fails or times out, lexical results are returned
-- Response reports whether semantic retrieval was used","E04","","High","5","search go ai","search","In Progress"
+- Response reports whether semantic retrieval was used","E04","","High","5","search go ai","search","Done"
 "S037","Story","Indexer: Kafka → Elasticsearch projection","Indexer consumes catalog, offers and inventory events and upserts product documents idempotently by version.","- catalog.product.approved creates/updates a document
 - inventory.availability.changed updates available_qty and in_stock
 - Out-of-order events with an older version are ignored
 - Bulk indexing with retries and a dead-letter topic","E04","","Highest","8","search go events","search","Done"
 "S038","Story","Low-stock signals on cards","Product cards and search hits show 'Only N left' at 5 units or fewer.","- lowStock is true when 1–5 units are available
-- Out-of-stock items show 'Currently unavailable'","E04","","Medium","1","search","search","In Progress"
+- Out-of-stock items show 'Currently unavailable'","E04","","Medium","1","search","search","Done"
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
 - A relevance test set runs in CI","E04","","Medium","5","search","search","Done"
@@ -239,7 +239,7 @@
 - Lots can be quarantined, released or written off with reasons
 - Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","In Progress"
 "S067","Story","Seller FBA inventory","Sellers send stock into AfroTransact FCs with seller-specific unit labels.","- Inbound shipment plan with carton labels
-- Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","In Progress"
+- Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","Done"
 "E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","In Progress"
 "S068","Story","Product master for platform products","Category managers create 1P products with supplier, HTS code, duty, shelf life, storage, reorder point and price.","- SKU and GTIN (AfroTransact GS1 prefix, check digit) assigned automatically
 - Listing starts as Draft","E10","","High","3","retail java","retail","Done"

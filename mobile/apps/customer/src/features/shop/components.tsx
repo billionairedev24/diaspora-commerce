@@ -112,6 +112,7 @@ export function ProductRow({ p, onPress }: { p: ProductSummary; onPress: () => v
         <AppText variant="caption" color={c.textMuted}>{p.sellerName} · ★ {p.rating}</AppText>
         <AppText variant="bodyStrong">{formatMoney(p.priceMinor, p.currency)}</AppText>
         <AppText variant="caption" color={c.success}>{p.delivery.label}</AppText>
+        {p.availableQty === 0 ? <AppText variant="caption" color={c.textMuted}>Currently unavailable</AppText> : null}
         {p.lowStock ? <AppText variant="caption" color={c.lowStock}>Only {p.availableQty} left — order soon</AppText> : null}
       </View>
     </Pressable>
