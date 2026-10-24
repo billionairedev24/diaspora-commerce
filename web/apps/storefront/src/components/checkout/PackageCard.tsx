@@ -5,6 +5,7 @@ import { useFormatters } from '@afrotransact/i18n/react';
 import { AirplaneTilt, Button, ImagePlaceholder, Key, Lightning, MapPin, Storefront, Truck, Warning } from '@afrotransact/ui';
 
 import { useT } from '@/i18n/t';
+import { feeRuleNote } from '@/lib/fee-rule';
 
 import styles from './Checkout.module.css';
 
@@ -249,6 +250,11 @@ export function PackageCard({
                         {undeliverable ? t('ld.notAvailableOption') : o.label}
                         {o.cutoffLabel ? ` · ${o.cutoffLabel}` : ''}
                       </p>
+                      {o.feeRule && !undeliverable ? (
+                        <p className={styles.optionCardDesc} data-testid={`fee-rule-${o.key}`}>
+                          {feeRuleNote(t, o.feeRule)}
+                        </p>
+                      ) : null}
                     </div>
                   </label>
                 );

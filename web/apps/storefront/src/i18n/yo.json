@@ -1225,5 +1225,12 @@
   "ord.andMore": "+ {count} more",
   "ord.codeOrder": "Order {number}",
   "ord.showCode": "Show delivery code",
-  "ord.hideCode": "Hide delivery code"
+  "ord.hideCode": "Hide delivery code",
+  "fee.rule.band": "Owó ìfiránṣẹ́ fún {band}",
+  "fee.rule.door": "Owó ìfiránṣẹ́ AfroTransact",
+  "fee.rule.override": "Owó tí a ṣètò fún ìpèsè ṣáájú yìí",
+  "fee.rule.pickup": "Owó ibùdó ìgbà ọjà",
+  "fee.rule.carrierQuote": "Owó olùgbé ọjà fún àdírẹ́sì rẹ",
+  "fee.rule.carrierFallback": "Owó olùgbé ọjà déédé",
+  "ord.deliveryFee": "Owó ìfiránṣẹ́ {amount}: {note}"
 }

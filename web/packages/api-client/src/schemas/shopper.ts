@@ -4,7 +4,7 @@ import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preord
 import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './account';
 import { CartPackageSchema } from './cart';
 import { ProductSummarySchema } from './catalog';
-import { MinorSchema } from './common';
+import { DeliveryFeeRuleRefSchema, MinorSchema } from './common';
 import { RailSchema } from './home';
 
 /* Storefront account (address input, order detail & tracking, returns, login & security), checkout, services &
@@ -99,6 +99,8 @@ export const ShipmentDetailSchema = z.object({
   problemReportOnly: z.boolean().optional(),
   /** AfroTransact Delivery from the seller's store (S255), as charged at checkout. */
   localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional(),
+  /** The delivery fee rule the shipping was charged by when the order was placed (later edits never change it). */
+  deliveryFeeRule: DeliveryFeeRuleRefSchema.nullable().optional(),
   /** Pickup shipments: where to collect it. */
   pickup: OrderPickupSchema.nullable().optional()
 });

@@ -1218,5 +1218,12 @@
   "ord.andMore": "+ {count} more",
   "ord.codeOrder": "Order {number}",
   "ord.showCode": "Show delivery code",
-  "ord.hideCode": "Hide delivery code"
+  "ord.hideCode": "Hide delivery code",
+  "fee.rule.band": "Delivery fee for {band}",
+  "fee.rule.door": "AfroTransact delivery fee",
+  "fee.rule.override": "Fee set for this pre-order",
+  "fee.rule.pickup": "Pickup point fee",
+  "fee.rule.carrierQuote": "Carrier rate for your address",
+  "fee.rule.carrierFallback": "Standard carrier rate",
+  "ord.deliveryFee": "Delivery fee {amount}: {note}"
 }

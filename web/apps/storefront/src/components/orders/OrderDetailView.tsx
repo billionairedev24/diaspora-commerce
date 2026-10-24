@@ -10,6 +10,7 @@ import pageStyles from '@/components/account/Pages.module.css';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
+import { feeRuleNote } from '@/lib/fee-rule';
 import { productHref } from '@/lib/links';
 
 import { CancelShipment } from './CancelShipment';
@@ -72,6 +73,11 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                             amount: fmt.money(s.localDelivery.chargeMinor)
                           })
                         : t('ld.orderInfoShort', { amount: fmt.money(s.localDelivery.chargeMinor) })}
+                    </p>
+                  )}
+                  {s.deliveryFeeRule && (
+                    <p className={pageStyles.muted} data-testid="order-fee-rule">
+                      {t('ord.deliveryFee', { amount: fmt.money(s.deliveryFeeRule.amountMinor), note: feeRuleNote(t, s.deliveryFeeRule) })}
                     </p>
                   )}
                   {s.pickup && <PickupDetails pickup={s.pickup} />}
