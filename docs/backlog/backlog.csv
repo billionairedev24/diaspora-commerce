@@ -366,7 +366,7 @@
 "E17","Epic","Returns, refunds & tax","RMAs, refunds orchestration and marketplace-facilitator sales tax.","","","Returns, refunds & tax","High","","returns","returns","In Progress"
 "S114","Story","Start a return on delivered items","Pick items, reason and method; get return number, drop-off instructions and refund amount.","- Food items show 'report a problem' instead of return
 - Return can be cancelled before drop-off
-- Mobile app shows a QR code for drop-off","E17","","High","5","returns java","returns","In Progress"
+- Mobile app shows a QR code for drop-off","E17","","High","5","returns java","returns","Done"
 "S115","Story","Refund orchestration","Inspection outcome triggers refund and inventory restock or damaged.","- Refund reverses the seller transfer portion and commission
 - Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","Done"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
@@ -778,7 +778,7 @@
 - Driver pickup stops are created for these orders","E12","","High","8","fulfilment payments offers seller-center","delivery","Done"
 "S256","Story","Shipping labels bought through AfroTransact are charged to the seller","When a seller buys a carrier label through Seller Center, the label cost is debited from the seller's balance in the ledger, voids are credited back, and statements show label charges.","- Label purchase posts a seller debit at the label cost
 - Void credits it back
-- Seller statement lists label charges","E11","","High","3","carrier-gateway payments","carriers","In Progress"
+- Seller statement lists label charges","E11","","High","3","carrier-gateway payments","carriers","Done"
 "S257","Story","Send stock to AfroTransact (seller FBA inbound)","Sellers create inbound shipments to an AfroTransact fulfilment centre from Seller Center: choose SKUs and quantities, get box and unit labels (AT-FN), track the shipment, and see received quantities and discrepancies; offers switch to Fulfilled by AfroTransact once stock is received.","- Seller creates an inbound plan and prints labels
 - FC receives against the plan with discrepancies reported
 - Received stock becomes available and the offer shows Fulfilled by AfroTransact
@@ -788,7 +788,7 @@
 "S259","Story","Local delivery follow-ups","Shipments carry the pickup location id; fulfilment lists routed pickups; orders split and payments payout balance expose delivery-fee totals; catalog/product creation can choose fulfilment; cart groups packages by pickup location; offers updates use optimistic locking.","- Dispatch sees routed and unrouted pickups
 - Seller earnings show delivery-fee totals from payments
 - Cart shows one package per pickup location
-- Concurrent offer edits are rejected with 409","E12","","Medium","5","fulfilment payments orders offers cart","delivery","To Do"
+- Concurrent offer edits are rejected with 409","E12","","Medium","5","fulfilment payments orders offers cart","delivery","Done"
 "E34","Epic","Community delivery runs (preorders)","Scheduled batched deliveries to towns outside regular delivery areas: customers preorder for a run, sellers' items are collected in one sweep, and the run is announced through WhatsApp communities, email, push, social and location-targeted advertorials.","","","Community delivery runs","High","","delivery-runs","delivery-runs","In Progress"
 "S260","Story","Delivery runs service and run lifecycle","New delivery-runs service: staff create runs per location (town/area by polygon or radius from geo), with delivery window, order cutoff, minimum orders, capacity, run delivery fee, and doorstep or community pickup-point drop. Lifecycle draft, announced, open, cutoff, confirmed (minimum met) or extended or cancelled, collecting, out for delivery, completed.","- Staff create, schedule, extend and cancel runs from the staff console
 - Run area comes from geo (polygon or radius around a town)

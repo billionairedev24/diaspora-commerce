@@ -19,7 +19,7 @@ export interface MockShipment {
   items: Array<{ atin: string; quantity: number }>;
 }
 export interface MockOrder { orderNumber: string; placedAt: string; totalMinor: number; shipTo: string; status: string; shipments: MockShipment[] }
-export interface MockReturn { rmaId: string; orderNumber: string; title: string; status: string; refundMinor: number; atin: string }
+export interface MockReturn { rmaId: string; orderNumber: string; title: string; status: string; refundMinor: number; atin: string; number?: string; method?: 'DROP_OFF' | 'DRIVER_PICKUP' | 'NO_RETURN'; cancellable?: boolean; qrPayload?: string | null; dropOffBy?: string | null }
 
 const daysFromNow = (d: number, h = 10) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(h, 0, 0, 0); return x; };
 

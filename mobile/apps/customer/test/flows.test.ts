@@ -79,15 +79,18 @@ describe('returns', () => {
 
   it('starts a return and lists it', async () => {
     const a = api();
-    const orders = await a.bff.getOrders();
-    const o = orders[0];
-    expect(o).toBeDefined();
-    if (!o) return;
-    const t = await a.account.tracking(o.orderNumber);
-    const item = t.shipments.flatMap((s) => s.items)[0];
-    const rma = await a.account.startReturn({ orderNumber: o.orderNumber, atin: item?.atin ?? '', reason: 'DAMAGED' });
+    const delivered = { orderNumber: 'AT-0988-1120' };
+    const elig = await a.account.returnEligibility(delivered.orderNumber);
+    const shipment = elig.shipments[0];
+    const line = shipment?.lines.find((l) => !l.reportProblemOnly);
+    expect(line?.methods).toContain('DROP_OFF');
+    if (!shipment || !line) return;
+    const rma = await a.account.startReturn({ orderNumber: delivered.orderNumber, shipmentId: shipment.shipmentId, method: 'DROP_OFF', lines: [{ lineId: line.lineId, quantity: 1, reason: 'DAMAGED' }] });
     expect(rma.rmaId).toMatch(/^RMA-/);
+    expect(rma.qrPayload).toContain(rma.rmaId);
     expect((await a.bff.getReturns()).some((r) => r.rmaId === rma.rmaId)).toBe(true);
+    // Cancelled before drop-off.
+    expect((await a.account.cancelReturn(rma.rmaId)).status).toBe('CANCELLED');
   });
 });
 

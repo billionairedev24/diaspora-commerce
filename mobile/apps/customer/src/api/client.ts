@@ -31,6 +31,8 @@ import {
   type PublicServiceSearch,
   type RegisterDeviceRequest,
   type SetupIntent,
+  type ReturnEligibility,
+  type ReturnSummary,
   type StartReturnRequest
 } from './types';
 
@@ -54,7 +56,12 @@ export function createCustomerApi(tokens: TokenSource, network: FetchLike = with
     account: {
       createSetupIntent: () => bffJson<SetupIntent>('/v1/account/payment-methods/setup-intents', { method: 'POST' }),
       deletePaymentMethod: (id: string) => bffJson<void>(`/v1/account/payment-methods/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-      startReturn: (body: StartReturnRequest) => bffJson<{ rmaId: string; orderNumber: string; title: string; status: string; refundMinor: number }>('/v1/account/returns', { method: 'POST', body }),
+      /** What can be returned from an order: per shipment and line, with the window, the methods and food (report a problem only). */
+      returnEligibility: (orderNumber: string) => bffJson<ReturnEligibility>(`/v1/account/orders/${encodeURIComponent(orderNumber)}/returnable`),
+      startReturn: (body: StartReturnRequest, idempotencyKey?: string) =>
+        bffJson<ReturnSummary>('/v1/account/returns', { method: 'POST', body, headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined }),
+      /** Cancels a return before the items are dropped off. */
+      cancelReturn: (rmaId: string) => bffJson<ReturnSummary>(`/v1/account/returns/${encodeURIComponent(rmaId)}/cancel`, { method: 'POST' }),
       /** Proposed BFF route (see OrderTracking). */
       tracking: (orderNumber: string) => bffJson<OrderTracking>(`/v1/account/orders/${encodeURIComponent(orderNumber)}/tracking`)
     },
