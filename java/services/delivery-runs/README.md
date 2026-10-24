@@ -33,6 +33,7 @@ parts of S261–S265 that belong to this service. The other services' parts are 
 | **Economics** | `cost(n) = (fixedMinutes / 60 × perHour + miles × perMile) + n × (perOrderMinutes / 60 × perHour)`; fixed minutes = drive both ways (geo road minutes) + seller collection (+ one pickup-point stop), per-order minutes = a doorstep stop or a handover. Revenue = fees (+ a commission share when one is reported; not computed here). Break-even = fewest orders whose fees cover the cost (none when the fee does not cover a stop). Settings `at.delivery-runs.economics.*`. |
 
 | **Pre-order window** | Name and code (`LBK-7`), targets (country / region / city), opening, closing and delivery dates, door / pickup with their fees, creatives and comms, **`minOrders`** (staff-set; new windows start with `PREORDERS_DEFAULT_MIN_ORDERS`, default 10; 0 = none) and an **outcome** (`AWAITING_DECISION`, `PROCEEDED`, `CANCELLED`; empty while the window simply follows its dates). Status is derived from the dates and the outcome: `DRAFT`, `PAUSED`, `UPCOMING`, `OPEN`, `CLOSED`, `DELIVERED`, `AWAITING_DECISION`, `CANCELLED`. |
+| **Delivery fee rule** | One row per method and currency (`AFROTRANSACT_DELIVERY`, `CARRIER`, `PICKUP`, `USD`...), versioned: distance bands (miles, contiguous from 0, at most 12 and 500 miles) or a pickup fee or the carrier handling / fallback / free-above numbers. Every change keeps a `delivery_fee_rule_change` row (before, after, who, reason, time). See *Delivery fees*. |
 | **Window decision** | Append-only log per window: `AWAITING` (the system found it below the minimum), `PROCEED`, `CANCEL`, `EARLY_CLOSE`, each with who (staff subject or `system`), when, the reason, the orders that counted and the minimum. |
 | **Window order** (projection) | An order's pre-order packages in a window, projected from orders-service events, with its **refund progress** (`PENDING`, `REFUNDED`, `VOIDED`, `FAILED`) once the order was cancelled. |
 
@@ -82,6 +83,36 @@ published. Open it, choose *Cancel and refund everyone* with a reason: each orde
 charged* (authorised only) or *Refunded* (already captured), and the customers get the cancellation email. Or choose *Go
 ahead anyway*: the window closes and the run appears. With the minimum met before the closing date, *Close early* ends
 ordering at once.
+
+### Delivery fees (ADR 0005 §3)
+
+Fees are configuration that staff manage; nothing about a fee is a constant in code or a payment-settings JSON any more
+(`preorder_settings.payment` no longer has `doorFees` / `pickupFees`; migration `V6` carried the old values over as the
+first rule versions). A window, a run and checkout resolve a fee the same way (`DeliveryFees`):
+
+1. **AfroTransact delivery** (door, inside coverage): a window's own door-fee override wins and still names the rule.
+   Otherwise the band of the location's road distance from the hub (`GeoWindowDistances`, geo, cached 6 h). A distance
+   that cannot be measured uses the farthest band, so a fee is never understated. Beyond the last band there is no door
+   fee: a door-only window is `on=false` with `routedTo=CARRIER`, and checkout ships the order by carrier.
+2. **Carrier** (beyond coverage, shipped): the carrier-gateway quote plus handling, else the fallback; free from a goods
+   subtotal. orders-service reads it from `POST /v1/service/delivery-fees/carrier` for standard packages (express keeps
+   its flat rates; if this service cannot answer, orders-service keeps its flat rates too).
+3. **Pickup**: the pickup fee (often 0; free when no rule exists), or the window's override.
+
+The order records a snapshot (method, rule id and version, band, distance, amount, source) on its shipment, so a later edit
+never changes a past order. Saves are optimistic (`If-Match` / `ETag` = version), a save that changes nothing makes no new
+version, and a reason (at most 500 characters) is required.
+
+| Method | Path | |
+|---|---|---|
+| GET | `/v1/delivery-fees` | all rules, `delivery-runs:read` |
+| PUT | `/v1/delivery-fees/{method}/{currency}` | set a rule `{bands / feeMinor / handlingMinor / fallbackMinor / freeAboveMinor, reason}` with `If-Match`; `preorders:manage` |
+| GET | `/v1/delivery-fees/changes` | audit trail, newest first (`method`, `currency`, `limit`) |
+| POST | `/v1/delivery-fees/preview` | what a customer would pay: the same resolution checkout runs |
+| POST | `/v1/service/delivery-fees/carrier` | service call from orders: the carrier rule for a quote and a subtotal |
+| GET | `/v1/public/delivery-fees` | the rules the storefront estimate follows (carrier) |
+
+The staff BFF exposes them as `/v1/staff/delivery-fees` (screen: Settings, Money, Delivery fees in the staff console).
 
 ### Lifecycle
 
@@ -274,6 +305,11 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
   counts, audience), `HttpApiIT` (HTTP API and problems), `OutboxRelayIT` (events on `at.delivery-runs.events`).
 
 ## Known gaps
+
+- **Delivery fees.** Express carrier packages stay on orders-service's flat rates, and carrier-gateway live quotes are not
+  yet passed from orders (the carrier rule uses its fallback fee). The payments `DeliveryPricing` for AfroTransact
+  Delivery from a *seller's store* is a separate rule set and is unchanged. Distance is per location (hub to the location
+  centre), not per address. Changing fees uses `preorders:manage` (no separate permission).
 
 - **Charge timing.** ADR 0005 says customers are charged at checkout. orders-service still authorises at checkout and
   captures per shipment when the package leaves (existing, shared with every order). A window cancelled before pick-up
