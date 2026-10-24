@@ -212,6 +212,8 @@ at:
     topics:
       payment-events: at.payment.events
       carrier-events: at.carrier-shipment.events
+      # ADR 0005: preorder.window.cancelled and delivery-runs.run.cancelled refund every order on them in full.
+      delivery-runs-events: at.delivery-runs.events
     consumers:
       enabled: ${ORDERS_CONSUMERS_ENABLED:true}
     # S272 community pre-orders: cart lines in an open window become a PREORDER package (door or pickup, charged at
