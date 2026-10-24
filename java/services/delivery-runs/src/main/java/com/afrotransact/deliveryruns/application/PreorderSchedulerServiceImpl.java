@@ -14,7 +14,11 @@ import com.afrotransact.deliveryruns.domain.CommKind;
 import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.WindowDecision;
+import com.afrotransact.deliveryruns.domain.WindowOutcome;
+import com.afrotransact.deliveryruns.port.PreorderDecisionLog;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository;
+import com.afrotransact.deliveryruns.port.PreorderOrderRepository.WindowTotals;
 import com.afrotransact.deliveryruns.port.PreorderSettingsRepository;
 import com.afrotransact.deliveryruns.port.PreorderStepLog;
 import com.afrotransact.deliveryruns.port.PreorderWindowRepository;
@@ -38,6 +42,7 @@ class PreorderSchedulerServiceImpl implements PreorderSchedulerService {
     private final PreorderOrderRepository orders;
     private final PreorderSettingsRepository settings;
     private final PreorderStepLog steps;
+    private final PreorderDecisionLog decisions;
     private final PreorderEventPublisher events;
     private final RunService runs;
     private final PreorderOptions options;
@@ -45,12 +50,13 @@ class PreorderSchedulerServiceImpl implements PreorderSchedulerService {
 
     PreorderSchedulerServiceImpl(PreorderWindowRepository windows, PreorderOrderRepository orders,
                                  PreorderSettingsRepository settings, PreorderStepLog steps,
-                                 PreorderEventPublisher events, RunService runs, PreorderOptions options,
+                                 PreorderDecisionLog decisions, PreorderEventPublisher events, RunService runs, PreorderOptions options,
                                  Clock clock) {
         this.windows = windows;
         this.orders = orders;
         this.settings = settings;
         this.steps = steps;
+        this.decisions = decisions;
         this.events = events;
         this.runs = runs;
         this.options = options;
@@ -68,6 +74,7 @@ class PreorderSchedulerServiceImpl implements PreorderSchedulerService {
         return windows.findPublished().stream()
                 .filter(w -> !now.isBefore(w.details().opensAt())
                         || !now.isBefore(w.details().closesAt().minus(REMIND_LEAD)))
+                .filter(w -> w.outcome() != WindowOutcome.CANCELLED && w.outcome() != WindowOutcome.AWAITING_DECISION)
                 .filter(w -> !steps.done(w.id()).contains(DELIVERED))
                 .map(PreorderWindow::id).limit(Math.max(limit, 1)).toList();
     }
@@ -80,6 +87,9 @@ class PreorderSchedulerServiceImpl implements PreorderSchedulerService {
             return 0;
         }
         PreorderWindow w = locked.get();
+        if (w.outcome() == WindowOutcome.CANCELLED) {
+            return 0;
+        }
         Instant now = Instant.now(clock);
         Set<String> done = steps.done(w.id());
         PaymentSettings payment = settings.settings().payment();
@@ -99,6 +109,22 @@ class PreorderSchedulerServiceImpl implements PreorderSchedulerService {
                 now);
         n += comms(w, CommKind.LAST_CALL_6H, closes.minus(LAST_CALL_LEAD), closes, done, payment, now);
 
+        if (now.isAfter(closes) && w.outcome() == null && !done.contains(CLOSED)) {
+            int counted = orders.totals(List.of(w.id())).getOrDefault(w.id(), new WindowTotals(0, 0)).orders();
+            if (w.belowMinimum(counted)) {
+                // ADR 0005 §4: below the minimum at the close date nothing is cancelled or handed over; staff decide.
+                w = windows.update(w.awaitingDecision(now));
+                WindowDecision awaiting = WindowDecision.awaiting(w.id(), counted, w.details().minOrders(), now);
+                decisions.append(awaiting);
+                events.decision(DeliveryRunsEvents.PREORDER_WINDOW_DECISION_NEEDED, w, payment, now, awaiting, null);
+                LOG.info("Pre-order {} closed with {} of {} orders: waiting for a staff decision", w.code(), counted,
+                        w.details().minOrders());
+                return n + 1;
+            }
+        }
+        if (!w.closeCleared()) {
+            return n;
+        }
         if (now.isAfter(closes) && !done.contains(CLOSED)) {
             steps.markDone(w.id(), CLOSED, closes, now);
             Optional<Run> run = runs.fromWindow(w.id());

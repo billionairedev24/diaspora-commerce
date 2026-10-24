@@ -31,13 +31,20 @@ class PreorderSupport {
     private final PreorderSettingsRepository settings;
     private final PreorderOrderRepository orders;
     private final String pageUrl;
+    private final int defaultMinOrders;
 
     PreorderSupport(PreorderWindowRepository windows, PreorderSettingsRepository settings,
                     PreorderOrderRepository orders, DeliveryRunsSettings runSettings, PreorderOptions options) {
+        this.defaultMinOrders = options.defaultMinOrders();
         this.windows = windows;
         this.settings = settings;
         this.orders = orders;
         this.pageUrl = runSettings.publicWebUrl() + options.pagePath();
+    }
+
+    /** Minimum order count a new window starts with. */
+    int defaultMinOrders() {
+        return defaultMinOrders;
     }
 
     /** Storefront pre-order page, the base of the tracked SMS link ({@code <PUBLIC_WEB_URL>/pre-orders}). */
@@ -83,8 +90,11 @@ class PreorderSupport {
         return view(w, coverage(), orders.totals(List.of(w.id())), now);
     }
 
-    /** Builds validated details from a command; null flags take the wizard's defaults. */
-    static WindowDetails details(WindowCommand c) {
+    /**
+     * Builds validated details from a command; null flags take the wizard's defaults and a null minimum takes
+     * {@code defaultMin} (the configured default on create, the window's current minimum on edit).
+     */
+    static WindowDetails details(WindowCommand c, int defaultMin) {
         List<AreaKey> targets = c.targets() == null ? List.of()
                 : c.targets().stream().map(AreaKey::parse).toList();
         String currency = Markets.currencyOf(targets.isEmpty() ? null : targets.get(0).country());
@@ -102,6 +112,6 @@ class PreorderSupport {
                 new Money(c.socialBudgetMinor() == null ? 0 : c.socialBudgetMinor(), currency), c.comms(),
                 c.doorFeeOverrideMinor() == null ? null : new Money(c.doorFeeOverrideMinor(), currency),
                 c.pickupFeeOverrideMinor() == null ? null : new Money(c.pickupFeeOverrideMinor(), currency),
-                c.locationId());
+                c.locationId(), c.minOrders() == null ? defaultMin : c.minOrders());
     }
 }

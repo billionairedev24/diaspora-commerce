@@ -18,6 +18,7 @@ import com.afrotransact.deliveryruns.domain.PaymentSettings;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderSettings;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
+import com.afrotransact.deliveryruns.domain.WindowDecision;
 import com.afrotransact.deliveryruns.domain.WindowDetails;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import org.springframework.stereotype.Component;
@@ -49,7 +50,21 @@ class PreorderEventPublisher {
     /** A staff change of the window; {@code actorId} lands in the audit log. */
     void window(String type, PreorderWindow w, PaymentSettings payment, Instant now, String actorId) {
         events.publish(type, DeliveryRunsEvents.AGGREGATE, w.id().toString(),
-                payload(w, payment, null, null, now, null, actorId));
+                payload(w, payment, null, null, now, null, actorId, null));
+    }
+
+    /**
+     * A decision about the window ({@code decision_needed}, {@code decided}, {@code cancelled}); {@code orders} are
+     * attached to {@code cancelled} (every order orders-service must refund).
+     */
+    void decision(String type, PreorderWindow w, PaymentSettings payment, Instant now, WindowDecision d,
+                  List<PreorderOrder> orders) {
+        List<PreorderEventPayload.OrderRef> refs = orders == null ? null : orders.stream()
+                .filter(PreorderOrder::counts)
+                .map(o -> new PreorderEventPayload.OrderRef(o.orderId(), o.customerId(), o.fulfilment().name()))
+                .toList();
+        events.publish(type, DeliveryRunsEvents.AGGREGATE, w.id().toString(), payload(w, payment, null, null, now,
+                refs, WindowDecision.SYSTEM.equals(d.actor()) ? null : d.actor(), d));
     }
 
     /** {@code orders} (paid) are attached to CLOSED. */
@@ -59,7 +74,7 @@ class PreorderEventPublisher {
                 .map(o -> new PreorderEventPayload.OrderRef(o.orderId(), o.customerId(), o.fulfilment().name()))
                 .toList();
         events.publish(DeliveryRunsEvents.PREORDER_COMMS_DUE, DeliveryRunsEvents.AGGREGATE, w.id().toString(),
-                payload(w, payment, kind.name(), dueAt, now, refs, null));
+                payload(w, payment, kind.name(), dueAt, now, refs, null, null));
     }
 
     void settingsChanged(PreorderSettings s, String actor) {
@@ -145,7 +160,7 @@ class PreorderEventPublisher {
 
     private PreorderEventPayload payload(PreorderWindow w, PaymentSettings payment, String kind, Instant dueAt,
                                          Instant now, List<PreorderEventPayload.OrderRef> orders,
-                                         String actorId) {
+                                         String actorId, WindowDecision decision) {
         WindowDetails d = w.details();
         Long door = d.door() ? w.doorFee(payment).map(Money::minor).orElse(null) : null;
         Long pickup = d.pickup() ? w.pickupFee(payment).minor() : null;
@@ -160,6 +175,8 @@ class PreorderEventPublisher {
                 d.comms().stream().sorted().map(Enum::name).toList(), hero == null ? null : hero.url(),
                 email == null ? null : email.url(), w.runId(), pageUrl(w), links(w), options.supportPhone(),
                 DATE_TIME.format(d.opensAt().atZone(d.timeZone())), DATE_TIME.format(d.closesAt().atZone(d.timeZone())),
-                DATE.format(d.deliversOn()), orders, actorId);
+                DATE.format(d.deliversOn()), orders, actorId, d.minOrders(), decision == null ? null
+                : new PreorderEventPayload.Decision(decision.kind().name(), decision.reason(), decision.actor(),
+                        decision.orders(), decision.minimum(), decision.at()));
     }
 }

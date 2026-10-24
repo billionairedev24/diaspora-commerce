@@ -143,6 +143,9 @@ at:
       retention-days: ${PREORDERS_RETENTION_DAYS:90}
       seed-demo-areas: false
       support-phone: ${PREORDERS_SUPPORT_PHONE:+1 (833) 555-0199}
+      # Minimum order count a new window starts with; staff set it per window (0 = no minimum). Below it at the
+      # close date a window waits for a staff decision (cancel and refund everyone, or proceed).
+      default-min-orders: ${PREORDERS_DEFAULT_MIN_ORDERS:10}
     # Auto-open, 24 h cutoff reminder and cutoff decision, pre-order comms / close / hand-over; safe on every replica
     # (FOR UPDATE SKIP LOCKED).
     jobs:

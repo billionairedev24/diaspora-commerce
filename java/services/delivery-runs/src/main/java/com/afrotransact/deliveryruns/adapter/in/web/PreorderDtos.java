@@ -16,6 +16,7 @@ import java.util.UUID;
 import com.afrotransact.deliveryruns.application.LateOrderCommand;
 import com.afrotransact.deliveryruns.application.PreorderOrderService.LateOrderResult;
 import com.afrotransact.deliveryruns.application.PreorderOrderService.OrderPage;
+import com.afrotransact.deliveryruns.application.PreorderDecisionService;
 import com.afrotransact.deliveryruns.application.PreorderPublicService.EligibilityResult;
 import com.afrotransact.deliveryruns.application.PreorderPublicService.OpenWindow;
 import com.afrotransact.deliveryruns.application.SettingsCommand;
@@ -29,6 +30,7 @@ import com.afrotransact.deliveryruns.domain.CancelUntil;
 import com.afrotransact.deliveryruns.domain.CommKind;
 import com.afrotransact.deliveryruns.domain.CreativeRef;
 import com.afrotransact.deliveryruns.domain.CreativeSlot;
+import com.afrotransact.deliveryruns.domain.DecisionKind;
 import com.afrotransact.deliveryruns.domain.Fallback;
 import com.afrotransact.deliveryruns.domain.Gsm7;
 import com.afrotransact.deliveryruns.domain.LateAddReason;
@@ -48,10 +50,13 @@ import com.afrotransact.deliveryruns.domain.PreorderSettings;
 import com.afrotransact.deliveryruns.domain.PreorderStatus;
 import com.afrotransact.deliveryruns.domain.PreorderSummary;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
+import com.afrotransact.deliveryruns.domain.RefundStatus;
 import com.afrotransact.deliveryruns.domain.RegionCoverage;
 import com.afrotransact.deliveryruns.domain.Resolution;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
+import com.afrotransact.deliveryruns.domain.WindowDecision;
 import com.afrotransact.deliveryruns.domain.WindowDetails;
+import com.afrotransact.deliveryruns.domain.WindowOutcome;
 import com.afrotransact.deliveryruns.domain.WindowSwitch;
 import com.afrotransact.deliveryruns.port.OrdersGateway.Address;
 import com.afrotransact.deliveryruns.port.OrdersGateway.Item;
@@ -99,12 +104,16 @@ final class PreorderDtos {
                          @PositiveOrZero Long socialBudget, Set<CommKind> comms,
                          @Schema(description = "IANA zone (default America/Chicago)") String timeZone,
                          @Size(max = 80) String pickupPointId,
-                         @Schema(description = "Location of the closing run (null = matched by city)") UUID locationId) {
+                         @Schema(description = "Location of the closing run (null = matched by city)") UUID locationId,
+                         @PositiveOrZero @Max(100_000)
+                         @Schema(description = "Fewest orders the window needs; 0 = none. Null: the configured default on"
+                                 + " create, unchanged on edit. Below it at the close date the window waits for a staff decision")
+                         Integer minOrders) {
 
         WindowCommand toCommand() {
             return new WindowCommand(name, targets, opensAt, closesAt, deliversOn, timeZone, ribbon, headline,
                     smsCopy, categories, door, pickup, pickupPointId, pickupPoint, showCount, socialBudget, comms,
-                    doorFeeOverride, pickupFeeOverride, locationId);
+                    doorFeeOverride, pickupFeeOverride, locationId, minOrders);
         }
     }
 
@@ -157,7 +166,13 @@ final class PreorderDtos {
                           @Schema(description = "ON when live (master AND window AND an area on); else which switch "
                                   + "holds it: PAUSED (this window), GLOBAL_OFF (master switch), AREA_OFF; NOT_LIVE "
                                   + "for drafts and delivered windows") WindowSwitch switchState,
-                          @Schema(description = "switchState is ON") boolean live) {
+                          @Schema(description = "switchState is ON") boolean live,
+                          @Schema(description = "Fewest orders the window needs (0 = none)") int minOrders,
+                          @Schema(description = "A minimum is set and orderCount has reached it") boolean minimumMet,
+                          @Schema(description = "OPEN, minimum met: staff may close it early") boolean canCloseEarly,
+                          @Schema(description = "Closed below the minimum: staff must cancel or proceed")
+                          boolean decisionNeeded,
+                          @Schema(description = "AWAITING_DECISION, PROCEEDED or CANCELLED; absent when the window follows its dates") WindowOutcome outcome) {
 
         static WindowResponse of(WindowView v) {
             PreorderWindow w = v.window();
@@ -186,7 +201,10 @@ final class PreorderDtos {
                     d.locationId(), w.runId(),
                     v.checks().stream().map(c -> new CheckResponse(c.code(), c.getMessage())).toList(),
                     v.checks().isEmpty(), progress, w.createdAt(), w.updatedAt(),
-                    v.switchState() != WindowSwitch.NOT_LIVE, v.switchState(), v.switchState().live());
+                    v.switchState() != WindowSwitch.NOT_LIVE, v.switchState(), v.switchState().live(), d.minOrders(),
+                    reached(d.minOrders(), v.count()), v.status() == PreorderStatus.OPEN
+                    && reached(d.minOrders(), v.count()), v.status() == PreorderStatus.AWAITING_DECISION,
+                    w.outcome());
         }
     }
 
@@ -195,7 +213,10 @@ final class PreorderDtos {
                              LocalDate deliversOn, PreorderStatus status, boolean areaOff, int orderCount, long revenue,
                              String currency, String statusLabel, long version,
                              @Schema(description = "The window's own switch") boolean active,
-                             boolean switchable, WindowSwitch switchState, boolean live) {
+                             boolean switchable, WindowSwitch switchState, boolean live,
+                             @Schema(description = "Fewest orders the window needs (0 = none)") int minOrders,
+                             @Schema(description = "Closed below the minimum: staff must cancel or proceed")
+                             boolean decisionNeeded) {
 
         static WindowRowResponse of(WindowView v) {
             WindowDetails d = v.window().details();
@@ -203,7 +224,7 @@ final class PreorderDtos {
                     d.opensAt(), d.closesAt(), d.deliversOn(), v.status(), v.areaOff(), v.count(), v.revenueMinor(),
                     d.currency(), statusLabelOf(v.status(), v.switchState()), v.window().version(),
                     v.window().active(), v.switchState() != WindowSwitch.NOT_LIVE, v.switchState(),
-                    v.switchState().live());
+                    v.switchState().live(), d.minOrders(), v.status() == PreorderStatus.AWAITING_DECISION);
         }
     }
 
@@ -234,13 +255,15 @@ final class PreorderDtos {
 
     @Schema(name = "PreorderWindowPage")
     record WindowPageResponse(List<WindowRowResponse> items,
-                              @Schema(description = "Counts per tab: all, open, upcoming, closed, draft")
+                              @Schema(description = "Counts per tab: all, open, upcoming, decision, closed, draft")
                               Map<String, Integer> counts, int total, int page, int size,
-                              @Schema(description = "The pre-order master switch") boolean enabled) {
+                              @Schema(description = "The pre-order master switch") boolean enabled,
+                              @Schema(description = "Minimum order count a new window starts with")
+                              int defaultMinOrders) {
 
         static WindowPageResponse of(WindowPage p) {
             return new WindowPageResponse(p.items().stream().map(WindowRowResponse::of).toList(), p.counts(),
-                    p.total(), p.page(), p.size(), p.enabled());
+                    p.total(), p.page(), p.size(), p.enabled(), p.defaultMinOrders());
         }
     }
 
@@ -260,7 +283,12 @@ final class PreorderDtos {
                          @Schema(description = "Pre-order total incl. delivery, minor units") long total,
                          PreorderOrderStatus status, String note, String customerId, String channelLabel,
                          String statusLabel, long deliveryFee, String currency, String paymentLinkUrl,
-                         String ordersStatus) {
+                         String ordersStatus,
+                         @Schema(description = "Refund progress once the window or run was cancelled: PENDING, "
+                                 + "REFUNDED (captured payment refunded in full), VOIDED (authorisation released, nothing "
+                                 + "charged) or FAILED (staff must act); absent otherwise") RefundStatus refundStatus,
+                         @Schema(description = "Amount refunded or released, minor units") Long refundAmount,
+                         Instant refundUpdatedAt, String refundError) {
 
         static OrderResponse of(PreorderOrder o) {
             return of(o, null, null);
@@ -278,7 +306,10 @@ final class PreorderDtos {
                     nz(o.address().zip()), nz(o.deliveryNote()), o.placedAt(), o.channel(), nz(o.trackingTag()),
                     lines, o.units(), o.fulfilment(), o.totalMinor(), o.status(), nz(o.note()), o.customerId(),
                     o.channel().label(), o.status().label(), o.deliveryFeeMinor(), o.currency(), paymentLinkUrl,
-                    ordersStatus);
+                    ordersStatus, o.refund() == null ? null : o.refund().status(),
+                    o.refund() == null ? null : o.refund().amountMinor(),
+                    o.refund() == null ? null : o.refund().updatedAt(),
+                    o.refund() == null ? null : o.refund().error());
         }
 
         static OrderResponse of(LateOrderResult r) {
@@ -611,6 +642,52 @@ final class PreorderDtos {
         }
     }
 
+    // ---- staff: minimum, decisions, cancellation -------------------------------------------------------------------
+
+    @Schema(name = "PreorderDecisionRequest", description = "What staff decide for a window that closed below its "
+            + "minimum. The reason is required and is logged with who and when.")
+    record DecisionRequest(@NotNull @Schema(description = "CANCEL refunds every order in full; PROCEED goes ahead "
+            + "below the minimum") PreorderDecisionService.Choice decision,
+                           @NotBlank @Size(max = 500) String reason) {
+    }
+
+    @Schema(name = "PreorderReasonRequest", description = "A reason that is logged with who and when")
+    record ReasonRequest(@NotBlank @Size(max = 500) String reason) {
+    }
+
+    @Schema(name = "PreorderDecision", description = "One entry of a window's decision log")
+    record DecisionResponse(UUID id, DecisionKind kind, String reason,
+                            @Schema(description = "Staff subject, or system") String actor, int orders, int minimum,
+                            Instant at) {
+
+        static DecisionResponse of(WindowDecision d) {
+            return new DecisionResponse(d.id(), d.kind(), d.reason(), d.actor(), d.orders(), d.minimum(), d.at());
+        }
+    }
+
+    @Schema(name = "PreorderDecisionLog")
+    record DecisionLogResponse(List<DecisionResponse> items) {
+
+        static DecisionLogResponse of(List<WindowDecision> log) {
+            return new DecisionLogResponse(log.stream().map(DecisionResponse::of).toList());
+        }
+    }
+
+    @Schema(name = "PreorderRefundSummary", description = "Refund progress of a cancelled window: orders per status. "
+            + "done is true when every order is refunded or released.")
+    record RefundSummaryResponse(int total, int pending, int refunded, int voided, int failed, boolean done) {
+
+        static RefundSummaryResponse of(Map<RefundStatus, Integer> counts) {
+            int pending = counts.getOrDefault(RefundStatus.PENDING, 0);
+            int refunded = counts.getOrDefault(RefundStatus.REFUNDED, 0);
+            int voided = counts.getOrDefault(RefundStatus.VOIDED, 0);
+            int failed = counts.getOrDefault(RefundStatus.FAILED, 0);
+            int total = pending + refunded + voided + failed;
+            return new RefundSummaryResponse(total, pending, refunded, voided, failed,
+                    pending == 0 && failed == 0);
+        }
+    }
+
     // ---- helpers -----------------------------------------------------------------------------------------------
 
     /** The window's own Pause reads "Paused"; a window held off by the master switch "Off (global switch)". */
@@ -628,7 +705,13 @@ final class PreorderDtos {
             case DELIVERED -> "Delivered";
             case DRAFT -> "Draft";
             case PAUSED -> "Paused";
+            case AWAITING_DECISION -> "Needs a decision";
+            case CANCELLED -> "Cancelled";
         };
+    }
+
+    static boolean reached(int minimum, int orders) {
+        return minimum > 0 && orders >= minimum;
     }
 
     /** {@code locName} of the design: up to three labels, else two and "+ N more". */

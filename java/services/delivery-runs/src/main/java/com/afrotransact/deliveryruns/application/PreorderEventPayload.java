@@ -46,6 +46,8 @@ import java.util.UUID;
  * @param deliversDisplay e.g. "Sun, Oct 25"
  * @param orders        comms.due CLOSED only: the window's paid orders (notifications resolves contacts)
  * @param actorId       staff subject who made the change (paused / resumed / updated; null for scheduler events)
+ * @param minOrders     the window's minimum order count (0 = none)
+ * @param decision      decision_needed / decided / cancelled only: what was decided, by whom, why
  */
 public record PreorderEventPayload(UUID windowId, String code, String name, String status, String kind,
                                    Instant dueAt, List<String> targets, String where, Instant opensAt,
@@ -55,7 +57,21 @@ public record PreorderEventPayload(UUID windowId, String code, String name, Stri
                                    String pickupWindow, String pickupAddress, List<String> comms, String heroUrl,
                                    String emailImageUrl, UUID runId, String pageUrl, Map<String, String> links,
                                    String supportPhone, String opensDisplay, String closesDisplay,
-                                   String deliversDisplay, List<OrderRef> orders, String actorId) {
+                                   String deliversDisplay, List<OrderRef> orders, String actorId, int minOrders,
+                                   Decision decision) {
+
+    /**
+     * A decision about the window.
+     *
+     * @param kind    AWAITING, PROCEED, CANCEL or EARLY_CLOSE
+     * @param reason  why (the system's note for AWAITING)
+     * @param actor   staff subject or {@code system}
+     * @param orders  orders that counted
+     * @param minimum the window's minimum
+     * @param at      when
+     */
+    public record Decision(String kind, String reason, String actor, int orders, int minimum, Instant at) {
+    }
 
     /**
      * A paid order of the window.
