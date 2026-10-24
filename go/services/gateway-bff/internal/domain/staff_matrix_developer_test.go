@@ -11,7 +11,7 @@ func TestDeveloperDefaultMatrixOpensEveryStaffModule(t *testing.T) {
 	for _, g := range StaffNav {
 		for _, m := range g.Modules {
 			key := m.Key
-			if key == "" {
+			if key == "" || key == IdentityModule { // Identity & access follows the identity:admin permission (Super Admin), not the matrix
 				continue
 			}
 			if lv := access.Level(key); lv == LevelNone {

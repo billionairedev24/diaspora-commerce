@@ -309,14 +309,26 @@ func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, 
 			return domain.RecordDetail{}, domain.ValidationProblem(errs)
 		}
 	}
+	var once domain.OneTimeSecret
+	sc.reveal = &once
 	if err := a.run(ctx, sc, o, values); err != nil {
 		return domain.RecordDetail{}, err
 	}
 	if a.removes {
 		yes := true
-		return domain.RecordDetail{Resource: name, ID: id, Title: "Deleted", Subtitle: "", Removed: &yes}, nil
+		return domain.RecordDetail{Resource: name, ID: id, Title: "Deleted", Subtitle: "", Removed: &yes, Sections: []domain.DetailSection{},
+			Tables: []domain.DetailTable{}, Activity: []domain.ActivityEntry{}, Notes: []domain.Note{}, Actions: []domain.RecordAction{}, Links: []domain.RecordLink{}}, nil
 	}
-	return s.sheet(ctx, r, sc, id)
+	d, err := s.sheet(ctx, r, sc, id)
+	return withReveal(d, err, &once)
+}
+
+// withReveal attaches a secret to a sheet that an action or creation just produced.
+func withReveal(d domain.RecordDetail, err error, once *domain.OneTimeSecret) (domain.RecordDetail, error) {
+	if err == nil && once.Value != "" {
+		d.Reveal = once
+	}
+	return d, err
 }
 
 func (s *staffRecordsImpl) Create(ctx context.Context, c *domain.Caller, name string, values map[string]any, idem string) (domain.RecordDetail, error) {
@@ -338,11 +350,14 @@ func (s *staffRecordsImpl) Create(ctx context.Context, c *domain.Caller, name st
 	if errs := domain.ValidateForm(r.create.form(ctx, sc), values); len(errs) > 0 {
 		return domain.RecordDetail{}, domain.ValidationProblem(errs)
 	}
+	var once domain.OneTimeSecret
+	sc.reveal = &once
 	id, err := r.create.create(ctx, sc, values)
 	if err != nil {
 		return domain.RecordDetail{}, err
 	}
-	return s.sheet(ctx, r, sc, id)
+	d, err := s.sheet(ctx, r, sc, id)
+	return withReveal(d, err, &once)
 }
 
 func (s *staffRecordsImpl) Update(ctx context.Context, c *domain.Caller, name, id string, values map[string]any, version string) (domain.RecordDetail, error) {

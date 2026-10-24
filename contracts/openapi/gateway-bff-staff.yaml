@@ -54,6 +54,8 @@ tags:
     description: Platform KPIs and charts from one dashboard feed
   - name: Resources
     description: Server-driven tables, detail sheets, create / edit forms and RBAC-gated actions
+  - name: Identity & access
+    description: 'Developer tools for the identity service (identity:admin): the token inspector and the published OIDC documents. Its tables (oauth-clients, identity-sessions, signing-keys, auth-settings) are Resources.'
   - name: Exports
     description: Server-side CSV / XLSX exports with signed, expiring download links
   - name: Support
@@ -1655,6 +1657,42 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── identity & access (S291)
+  /v1/staff/identity/token-inspector:
+    post:
+      tags: [Identity & access]
+      operationId: inspectIdentityToken
+      security: [{sessionCookie: []}]
+      summary: Decode a JWT and check its signature and issuer
+      description: |
+        identity `POST /v1/admin/identity/token-inspector` (`identity:admin`). The pasted token is decoded and verified in
+        memory at identity: it is never stored, cached or logged, it is not echoed back, and the audit trail records the
+        subject and key id only. A bad token is a 200 that says what is wrong (`valid`, `problems`), not an error; empty or
+        oversized input is a 422 on `token`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/IdentityTokenInspectionRequest'}}}
+      responses:
+        '200': {description: What the token says and whether it checks out, content: {application/json: {schema: {$ref: '#/components/schemas/IdentityTokenInspection'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/identity/documents:
+    get:
+      tags: [Identity & access]
+      operationId: getIdentityDocuments
+      security: [{sessionCookie: []}]
+      summary: The OIDC discovery document and the JWKS
+      description: identity `GET /v1/admin/identity/discovery` (`identity:admin`). The JWKS holds public keys only.
+      responses:
+        '200': {description: The documents, content: {application/json: {schema: {$ref: '#/components/schemas/IdentityDocuments'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── pre-orders (S270–S275)
@@ -4401,6 +4439,34 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    # ── Identity & access (S291) ────────────────────────────────────────────
+    IdentityTokenInspectionRequest:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string, minLength: 1, maxLength: 16384, description: The JWT to inspect}
+    IdentityTokenInspection:
+      type: object
+      required: [wellFormed, signatureValid, issuerValid, valid, problems]
+      properties:
+        wellFormed: {type: boolean, description: The text is a signed JWT}
+        header: {type: object, additionalProperties: true}
+        claims: {type: object, additionalProperties: true}
+        scopes: {type: array, items: {type: string}}
+        keyId: {type: [string, 'null']}
+        issuedAt: {type: [string, 'null'], format: date-time}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        expired: {type: [boolean, 'null']}
+        signatureValid: {type: boolean, description: The signature verifies against a key identity publishes}
+        issuerValid: {type: boolean}
+        valid: {type: boolean, description: "Well formed, signature and issuer valid, and not expired"}
+        problems: {type: array, items: {type: string}}
+    IdentityDocuments:
+      type: object
+      required: [discovery, jwks]
+      properties:
+        discovery: {type: object, additionalProperties: true}
+        jwks: {type: object, additionalProperties: true}
     # ── Plans & billing (S292–S297) ─────────────────────────────────────────
     StaffPlanEntitlements:
       type: object
@@ -5121,8 +5187,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
-      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, orgs, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders, plans]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports, notifications and identity are derived; identity needs the identity:admin permission; preorders follows the Pre-orders matrix column).
+      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, orgs, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, identity, notifications, preorders, plans]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -5255,7 +5321,8 @@ components:
       enum: [users, roles, applications, organisations, connect-accounts, orders, products, moderation, claims, returns, payouts, inventory, purchase-orders,
         routes, support-cases, audit, markets, site-settings, legal-documents, help-articles, privacy-requests, announcements,
         placements, identity-providers, fee-schedules, tax-rates, tax-codes, tax-rules, tax-review, dispatch-shipments, sos-alerts, vehicle-defects,
-        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus]
+        driver-events, pickup-locations, coupons, reconciliation, reconciliation-runs, ledger-adjustments, stripe-lookup, payment-settings, tax-settings, maintenance, tax-filings, tax-nexus,
+        oauth-clients, identity-sessions, signing-keys, auth-settings]
     Tone: {type: string, enum: [good, warn, bad, info, brand]}
     CellValue:
       type: [string, number, 'null']
@@ -5417,6 +5484,15 @@ components:
         links: {type: array, items: {$ref: '#/components/schemas/RecordLink'}}
         version: {type: [string, 'null'], description: Optimistic-locking version to send back with edits}
         removed: {type: boolean, description: Set when an action deleted the record; the console closes the sheet}
+        reveal: {$ref: '#/components/schemas/OneTimeSecret'}
+    OneTimeSecret:
+      type: object
+      description: A secret shown once, right after it was created (a new OAuth client secret). It is in this answer only; the BFF keeps nothing and the upstream cannot return it again. The console shows it in a dialog and never stores it.
+      required: [label, value, note]
+      properties:
+        label: {type: string}
+        value: {type: string}
+        note: {type: string}
     RecordValues:
       type: object
       properties:
