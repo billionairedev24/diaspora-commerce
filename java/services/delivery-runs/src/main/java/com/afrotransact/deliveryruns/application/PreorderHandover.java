@@ -15,9 +15,12 @@ class PreorderHandover {
     private final PreorderSettingsRepository settings;
     private final HandoverCodes codes;
     private final DeliveryRunsEventPublisher events;
+    private final FeeBook fees;
 
     PreorderHandover(PreorderWindowRepository windows, PreorderOrderRepository orders,
-                     PreorderSettingsRepository settings, HandoverCodes codes, DeliveryRunsEventPublisher events) {
+                     PreorderSettingsRepository settings, HandoverCodes codes, DeliveryRunsEventPublisher events,
+                     FeeBook fees) {
+        this.fees = fees;
         this.windows = windows;
         this.orders = orders;
         this.settings = settings;
@@ -35,6 +38,10 @@ class PreorderHandover {
 
     PreorderSettingsRepository settings() {
         return settings;
+    }
+
+    FeeBook fees() {
+        return fees;
     }
 
     HandoverCodes codes() {

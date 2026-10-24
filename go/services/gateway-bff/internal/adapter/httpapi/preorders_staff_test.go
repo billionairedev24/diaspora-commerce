@@ -83,6 +83,10 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"id": "ast-9", "status": "READY"})
 		return
 	}
+	if strings.HasPrefix(p, "/v1/delivery-fees") {
+		f.deliveryFees(w, r)
+		return
+	}
 	if !strings.HasPrefix(p, "/v1/preorder") && !strings.HasPrefix(p, "/v1/places/") {
 		f.fakePlatform.ServeHTTP(w, r)
 		return
@@ -98,7 +102,7 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"doorFeeOverride": nil, "pickupFeeOverride": nil, "effectiveDoorFee": 799, "effectivePickupFee": 0, "currency": "USD", "version": 3,
 		"creatives": map[string]any{"HERO": map[string]any{"assetId": "ast-1", "width": 1920, "height": 640}}}
 	settings := map[string]any{"enabled": true, "fallback": "SHIP", "placements": map[string]any{"ribbon": true}, "version": 2,
-		"payment": map[string]any{"doorFee": map[string]any{"USD": 799, "CAD": 999}, "pickupFee": map[string]any{"USD": 0, "CAD": 0}, "pickupWindow": "10am–2pm",
+		"payment": map[string]any{"pickupWindow": "10am–2pm",
 			"allowedMethods": []string{"CARD", "WALLET"}, "lateAdd": map[string]any{"savedCard": true, "paymentLink": true, "linkExpiryHours": 24},
 			"missedDelivery": map[string]any{"offerRefund": true, "offerNewDate": true}}}
 	switch {
@@ -468,15 +472,15 @@ func TestStaffPreordersConformance(t *testing.T) {
 	do("cs", "POST", "/v1/staff/preorders/uploads", map[string]any{"fileName": "hero.jpg", "contentType": "image/jpeg", "size": 1}, 403)
 
 	// Settings (incl. payment): FULL only for changes.
-	if s := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/settings", nil, 200)); s["payment"].(map[string]any)["doorFee"].(map[string]any)["USD"] != float64(799) {
+	if s := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/settings", nil, 200)); s["payment"].(map[string]any)["pickupWindow"] != "10am–2pm" {
 		t.Fatalf("settings = %v", s)
 	}
-	update := map[string]any{"enabled": true, "fallback": "WAITLIST", "payment": map[string]any{"doorFee": map[string]any{"USD": 899}, "allowedMethods": []string{"CARD", "ACH"}}}
+	update := map[string]any{"enabled": true, "fallback": "WAITLIST", "payment": map[string]any{"pickupWindow": "9am–1pm", "allowedMethods": []string{"CARD", "ACH"}}}
 	do("ops", "PUT", "/v1/staff/preorders/settings", update, 403)
 	if etag := do("marketing", "PUT", "/v1/staff/preorders/settings", update, 200, "If-Match", `"2"`).Header().Get("ETag"); etag != `"2"` {
 		t.Fatalf("settings ETag = %q", etag)
 	}
-	if b := f.bodies["PUT /v1/preorder-settings"]; b["payment"].(map[string]any)["doorFee"].(map[string]any)["USD"] != float64(899) {
+	if b := f.bodies["PUT /v1/preorder-settings"]; b["payment"].(map[string]any)["pickupWindow"] != "9am–1pm" {
 		t.Fatalf("settings body = %v", b)
 	}
 

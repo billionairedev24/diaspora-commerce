@@ -1,6 +1,7 @@
 'use client';
 
-import { staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { staffDeliveryFeeQueries, staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { type DeliveryFeeRule } from '@afrotransact/api-client/staff-delivery-fees';
 import {
   COMMS,
   CREATIVE_SLOTS,
@@ -23,6 +24,7 @@ import { useState } from 'react';
 
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
+import { staffApi } from '@/lib/api';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 
 import { AreaPicker } from './AreaPicker';
@@ -98,7 +100,7 @@ export function inputOf(f: WizardForm): { input: PreorderWindowInput | null; err
 
 const STEPS = ['Details', 'Advertorials', 'Comms', 'Review'] as const;
 
-function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partial<WizardForm>) => void; payment: PreorderPaymentSettings; currency: string }) {
+function Details({ f, set, payment, rules, currency }: { f: WizardForm; set: (p: Partial<WizardForm>) => void; payment: PreorderPaymentSettings; rules: DeliveryFeeRule[]; currency: string }) {
   const api = usePreordersApi();
   const t = useT();
   const defaultMin = useQuery(staffPreorderQueries.list(api, { status: 'all', page: 0 })).data?.defaultMinOrders ?? 10;
@@ -106,7 +108,7 @@ function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partia
   const minBad = minText !== '' && !/^\d{1,6}$/.test(minText);
   const areas = useQuery(staffPreorderQueries.areas(api, { page: 0 }));
   const saved = (areas.data?.saved ?? []).filter((a) => !f.targets.some((t) => t.key === a.key));
-  const fees = effectiveFees({ doorFeeOverride: null, pickupFeeOverride: null }, payment, currency);
+  const fees = effectiveFees({ doorFeeOverride: null, pickupFeeOverride: null }, rules, currency);
   const add = (key: string, label?: string) => {
     if (f.targets.some((t) => t.key === key)) return;
     const [c, r, city] = key.split('/');
@@ -230,7 +232,7 @@ function Details({ f, set, payment, currency }: { f: WizardForm; set: (p: Partia
         </label>
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-4 rounded-md border border-border p-4">
-        <span className="col-span-full text-xs text-muted">{`Fee overrides for this pre-order only (${currency}). Leave blank to use the platform default from Areas & settings.`}</span>
+        <span className="col-span-full text-xs text-muted">{`Fee overrides for this pre-order only (${currency}). Leave blank to use the Delivery fees rule (Settings, Money).`}</span>
         <label className={labelClass}>
           Door fee override
           <input inputMode="decimal" value={f.doorFee} onChange={(e) => set({ doorFee: e.currentTarget.value })} placeholder={`Default ${amountText(fees.door)}`} className={controlClass} />
@@ -341,6 +343,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
   const saved = useQuery({ ...staffPreorderQueries.window(api, id ?? ''), enabled: !!id });
   const w = saved.data ?? null;
   const payment = settings.data?.payment ?? DEFAULT_PAYMENT;
+  const rules = useQuery(staffDeliveryFeeQueries.rules(staffApi().deliveryFees)).data?.items ?? [];
   const currency = currencyOfTargets(f.targets.map((t) => t.key));
   const hasHero = !!w?.creatives.some((c) => c.slot === 'HERO');
   const checks = preorderChecks({ ...f, targets: f.targets.map((t) => t.key), opensAt: fromLocalInput(f.opens), closesAt: fromLocalInput(f.closes), deliversOn: f.delivers }, hasHero);
@@ -392,7 +395,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
     onError: (e) => toast.show(e instanceof Error && !('problem' in e) ? e.message : problemMessage(e), 'error')
   });
   const busy = go.isPending || saveDraft.isPending || publish.isPending;
-  const fees = effectiveFees({ doorFeeOverride: parseAmount(f.doorFee), pickupFeeOverride: parseAmount(f.pickupFee) }, { ...payment }, currency);
+  const fees = effectiveFees({ doorFeeOverride: parseAmount(f.doorFee), pickupFeeOverride: parseAmount(f.pickupFee) }, rules, currency);
   const validFees = !Number.isNaN(fees.door) && !Number.isNaN(fees.pickup);
   const summary: [string, string][] = [
     ['Where', f.targets.length ? (f.targets.length <= 3 ? f.targets.map((t) => t.label).join(' · ') : `${f.targets.slice(0, 2).map((t) => t.label).join(' · ')} + ${f.targets.length - 2} more`) : 'No area chosen'],
@@ -431,7 +434,7 @@ function WizardBody({ initial }: { initial: PreorderWindow | null }) {
         </ol>
       </div>
       <div className="flex flex-col gap-5 p-5">
-        {step === 0 ? <Details f={f} set={set} payment={payment} currency={currency} /> : null}
+        {step === 0 ? <Details f={f} set={set} payment={payment} rules={rules} currency={currency} /> : null}
         {step === 1 ? w ? <CreativesPanel w={w} canEdit /> : <Spinner /> : null}
         {step === 2 ? <Comms f={f} set={set} code={w?.code ?? null} /> : null}
         {step === 3 ? (

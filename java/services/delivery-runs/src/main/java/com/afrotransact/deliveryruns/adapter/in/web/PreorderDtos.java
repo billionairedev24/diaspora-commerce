@@ -1,5 +1,6 @@
 package com.afrotransact.deliveryruns.adapter.in.web;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -32,6 +33,9 @@ import com.afrotransact.deliveryruns.domain.CreativeRef;
 import com.afrotransact.deliveryruns.domain.CreativeSlot;
 import com.afrotransact.deliveryruns.domain.DecisionKind;
 import com.afrotransact.deliveryruns.domain.Fallback;
+import com.afrotransact.deliveryruns.domain.FeeMethod;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
+import com.afrotransact.deliveryruns.domain.FeeSource;
 import com.afrotransact.deliveryruns.domain.Gsm7;
 import com.afrotransact.deliveryruns.domain.LateAddReason;
 import com.afrotransact.deliveryruns.domain.LateAddSettings;
@@ -172,7 +176,11 @@ final class PreorderDtos {
                           @Schema(description = "OPEN, minimum met: staff may close it early") boolean canCloseEarly,
                           @Schema(description = "Closed below the minimum: staff must cancel or proceed")
                           boolean decisionNeeded,
-                          @Schema(description = "AWAITING_DECISION, PROCEEDED or CANCELLED; absent when the window follows its dates") WindowOutcome outcome) {
+                          @Schema(description = "AWAITING_DECISION, PROCEEDED or CANCELLED; absent when the window follows its dates") WindowOutcome outcome,
+                          @Schema(description = "The rule behind the door fee (or the window's own fee); absent when "
+                                  + "door delivery is not offered or no rule applies") FeeRuleRef doorFeeRule,
+                          @Schema(description = "The rule behind the pickup fee (or the window's own fee)")
+                          FeeRuleRef pickupFeeRule) {
 
         static WindowResponse of(WindowView v) {
             PreorderWindow w = v.window();
@@ -204,7 +212,7 @@ final class PreorderDtos {
                     v.switchState() != WindowSwitch.NOT_LIVE, v.switchState(), v.switchState().live(), d.minOrders(),
                     reached(d.minOrders(), v.count()), v.status() == PreorderStatus.OPEN
                     && reached(d.minOrders(), v.count()), v.status() == PreorderStatus.AWAITING_DECISION,
-                    w.outcome());
+                    w.outcome(), FeeRuleRef.of(v.doorFee()), FeeRuleRef.of(v.pickupFee()));
         }
     }
 
@@ -428,26 +436,22 @@ final class PreorderDtos {
     // ---- staff: settings ----------------------------------------------------------------------------------------
 
     @Schema(name = "PreorderPaymentSettings", description = """
-            Fees per currency in minor units (0–10000), at least one payment method. Customers cancel for a full
-            refund incl. the delivery fee until the window closes (cancelUntil CLOSE).""")
-    record PaymentBody(@Schema(example = "{\"USD\": 799, \"CAD\": 999}") Map<String, Long> doorFee,
-                       @Schema(example = "{\"USD\": 0}") Map<String, Long> pickupFee,
-                       @Size(max = 40) @Schema(example = "10am–2pm") String pickupWindow,
+            At least one payment method. Customers cancel for a full refund incl. the delivery fee until the window
+            closes (cancelUntil CLOSE). Delivery fees are not here: see the delivery fee rules (/v1/delivery-fees).""")
+    record PaymentBody(@Size(max = 40) @Schema(example = "10am–2pm") String pickupWindow,
                        @Schema(description = "CARD, WALLET (Apple Pay, Google Pay, Link), ACH")
                        List<PaymentMethod> allowedMethods, @Valid LateAddBody lateAdd,
                        @Valid MissedDeliveryBody missedDelivery, CancelUntil cancelUntil) {
 
         static PaymentBody of(PaymentSettings p) {
-            return new PaymentBody(p.doorFees(), p.pickupFees(), p.pickupWindow(), sorted(p.allowedMethods()),
+            return new PaymentBody(p.pickupWindow(), sorted(p.allowedMethods()),
                     new LateAddBody(p.lateAdd().savedCard(), p.lateAdd().paymentLink(), p.lateAdd().linkExpiryHours()),
                     new MissedDeliveryBody(p.missedDelivery().offerRefund(), p.missedDelivery().offerNewDate()),
                     p.cancelUntil());
         }
 
         PaymentSettings toDomain(PaymentSettings current) {
-            return new PaymentSettings(doorFee == null ? current.doorFees() : doorFee,
-                    pickupFee == null ? current.pickupFees() : pickupFee,
-                    allowedMethods == null ? current.allowedMethods() : Set.copyOf(allowedMethods),
+            return new PaymentSettings(allowedMethods == null ? current.allowedMethods() : Set.copyOf(allowedMethods),
                     cancelUntil == null ? current.cancelUntil() : cancelUntil,
                     lateAdd == null ? current.lateAdd()
                             : new LateAddSettings(lateAdd.savedCard(), lateAdd.paymentLink(), lateAdd.linkExpiryHours()),
@@ -551,8 +555,23 @@ final class PreorderDtos {
     record PlaceResponse(String key, String country, String region, String city) {
     }
 
-    @Schema(name = "PreorderFees", description = "Effective fees in minor units (null = option not offered)")
-    record FeesResponse(Long doorFeeMinor, Long pickupFeeMinor, String currency, String pickupWindow) {
+    @Schema(name = "PreorderFees", description = """
+            Effective fees in minor units (null = option not offered) and the rule each came from. Orders keeps the
+            rule with the order, so later edits never change an order already placed.""")
+    record FeesResponse(Long doorFeeMinor, Long pickupFeeMinor, String currency, String pickupWindow,
+                        FeeRuleRef doorFeeRule, FeeRuleRef pickupFeeRule) {
+    }
+
+    @Schema(name = "DeliveryFeeRuleRef", description = """
+            What a customer pays for delivery and which rule said so: the method, the rule and its version, the
+            distance band applied and how far the address is, and where the amount came from.""")
+    record FeeRuleRef(FeeMethod method, UUID ruleId, long ruleVersion, String currency, long amountMinor,
+                      FeeSource source, String band, BigDecimal distanceMiles) {
+
+        static FeeRuleRef of(FeeSnapshot s) {
+            return s == null ? null : new FeeRuleRef(s.method(), s.ruleId(), s.ruleVersion(), s.currency(),
+                    s.amountMinor(), s.source(), s.band(), s.distanceMiles());
+        }
     }
 
     @Schema(name = "PreorderResolution", description = """
@@ -568,7 +587,8 @@ final class PreorderDtos {
         static ResolveResponse of(Resolution r) {
             PreorderSettings s = r.settings();
             FeesResponse fees = r.window() == null ? null : new FeesResponse(minor(r.doorFee()), minor(r.pickupFee()),
-                    r.window().details().currency(), s.payment().pickupWindow());
+                    r.window().details().currency(), s.payment().pickupWindow(), FeeRuleRef.of(r.doorFee()),
+                    FeeRuleRef.of(r.pickupFee()));
             return new ResolveResponse(new PlaceResponse(r.place().key(), r.place().country(), r.place().region(),
                     r.place().city()), r.on(), r.stage(), r.metro(), s.fallback(), placementsOf(s),
                     r.window() == null ? null : PublicWindow.of(r.window()), r.countdownTarget(), r.count(), fees,
@@ -605,20 +625,24 @@ final class PreorderDtos {
     record EligibilityItem(String atin, boolean preorder, UUID windowId, String windowCode, String windowName,
                            PreorderStatus stage, LocalDate deliversOn, Instant closesAt, String timeZone,
                            Boolean door, Boolean pickup, Long doorFeeMinor, Long pickupFeeMinor, String currency,
-                           List<PaymentMethod> allowedMethods, String pickupWindow, String pickupPointId) {
+                           List<PaymentMethod> allowedMethods, String pickupWindow, String pickupPointId,
+                           @Schema(description = "The rule behind doorFeeMinor; orders-service keeps it on the order")
+                           FeeRuleRef doorFeeRule,
+                           @Schema(description = "The rule behind pickupFeeMinor") FeeRuleRef pickupFeeRule) {
 
         static EligibilityItem of(Eligibility e, Resolution r) {
             PreorderWindow w = e.window();
             if (w == null) {
                 return new EligibilityItem(e.atin(), false, null, null, null, null, null, null, null, null, null,
-                        null, null, null, null, null, null);
+                        null, null, null, null, null, null, null, null);
             }
             WindowDetails d = w.details();
             PaymentSettings pay = r.settings().payment();
             return new EligibilityItem(e.atin(), e.preorder(), w.id(), w.code(), d.name(), e.stage(), d.deliversOn(),
-                    d.closesAt(), d.timeZone().getId(), d.door(), d.pickup(), minor(w.doorFee(pay).orElse(null)),
-                    w.pickupFee(pay).minor(), d.currency(), sorted(pay.allowedMethods()), pay.pickupWindow(),
-                    d.pickupPointId());
+                    d.closesAt(), d.timeZone().getId(), r.doorFee() != null, d.pickup(), minor(r.doorFee()),
+                    r.pickupFee() == null ? null : r.pickupFee().amountMinor(), d.currency(),
+                    sorted(pay.allowedMethods()), pay.pickupWindow(), d.pickupPointId(), FeeRuleRef.of(r.doorFee()),
+                    FeeRuleRef.of(r.pickupFee()));
         }
     }
 
@@ -627,18 +651,23 @@ final class PreorderDtos {
             its catalog category is in the window's categories and it is not flagged shipsNow. fees are what orders
             charges for the PREORDER package (DOOR or PICKUP); lines of an UPCOMING or CLOSED window block checkout.""")
     record EligibilityResponse(PlaceResponse place, boolean on, PreorderStatus stage, UUID windowId,
-                               LocalDate deliversOn, FeesResponse fees, List<EligibilityItem> items) {
+                               LocalDate deliversOn, FeesResponse fees, List<EligibilityItem> items,
+                               @Schema(description = "CARRIER when a window covers the place but the address is beyond "
+                                       + "how far AfroTransact delivers: the order ships by carrier, not on a run")
+                               FeeMethod routedTo) {
 
         static EligibilityResponse of(EligibilityResult r) {
             Resolution res = r.resolution();
             FeesResponse fees = res.window() == null ? null : new FeesResponse(minor(res.doorFee()),
                     minor(res.pickupFee()), res.window().details().currency(),
-                    res.settings().payment().pickupWindow());
+                    res.settings().payment().pickupWindow(), FeeRuleRef.of(res.doorFee()),
+                    FeeRuleRef.of(res.pickupFee()));
             return new EligibilityResponse(new PlaceResponse(res.place().key(), res.place().country(),
                     res.place().region(), res.place().city()), res.on(), res.stage(),
                     res.window() == null ? null : res.window().id(),
                     res.window() == null ? null : res.window().details().deliversOn(), fees,
-                    r.items().stream().map(e -> EligibilityItem.of(e, res)).toList());
+                    r.items().stream().map(e -> EligibilityItem.of(e, res)).toList(),
+                    res.beyondRange() ? FeeMethod.CARRIER : null);
         }
     }
 
@@ -747,6 +776,14 @@ final class PreorderDtos {
 
     private static Long minor(Money m) {
         return m == null ? null : m.minor();
+    }
+
+    private static Long minor(FeeSnapshot s) {
+        return s == null ? null : s.amountMinor();
+    }
+
+    private static long orZero(FeeSnapshot s) {
+        return s == null ? 0 : s.amountMinor();
     }
 
     private static long orZero(Money m) {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { CartPreorderSchema } from '../preorders';
 import { AtinSchema, DeliveryPromiseSchema, FulfilmentSchema, SellerSchema, StockStatusSchema } from './catalog';
-import { MinorSchema } from './common';
+import { DeliveryFeeRuleRefSchema, MinorSchema } from './common';
 
 export const MAX_LINE_QUANTITY = 99;
 
@@ -40,7 +40,9 @@ export const DeliveryOptionSchema = z.object({
   /** Checkout only: promise dates for this option. */
   earliestDate: z.string().optional(),
   latestDate: z.string().optional(),
-  cutoffLabel: z.string().optional()
+  cutoffLabel: z.string().optional(),
+  /** The delivery fee rule this fee comes from (absent for flat rates). */
+  feeRule: DeliveryFeeRuleRefSchema.optional()
 });
 export type DeliveryOption = z.infer<typeof DeliveryOptionSchema>;
 

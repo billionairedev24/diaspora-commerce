@@ -42,6 +42,10 @@ final class Upstreams {
         server.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility")).atPriority(100)
                 .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
                         .withBody("{\"items\":[]}")));
+        // ADR 0005 §3: no staff carrier rule unless a test says so (checkouts keep the flat carrier rates).
+        server.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/service/delivery-fees/carrier")).atPriority(100)
+                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"applies\":false}")));
     }
 
     /** A cart for one customer token. Lines: {atin, sellerOrg, fulfilment AFROTRANSACT|SELLER, price, qty}. */

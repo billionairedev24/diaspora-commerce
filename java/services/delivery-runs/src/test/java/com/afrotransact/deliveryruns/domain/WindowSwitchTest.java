@@ -17,12 +17,12 @@ import org.junit.jupiter.api.Test;
 class WindowSwitchTest {
 
     private static final Instant NOW = Instant.parse("2026-10-10T15:00:00Z");
-    private static final PaymentSettings PAYMENT = PaymentSettings.DEFAULT;
+    private static final DeliveryFees FEES = DeliveryFees.DEFAULT;
 
     private final PreorderResolver resolver = new PreorderResolver();
 
     private static Coverage coverage(boolean master, CoverageArea... areas) {
-        return new Coverage(new PreorderSettings(master, Fallback.SHIP, EnumSet.allOf(Placement.class), PAYMENT, null,
+        return new Coverage(new PreorderSettings(master, Fallback.SHIP, EnumSet.allOf(Placement.class), PaymentSettings.DEFAULT, null,
                 0), List.of(areas));
     }
 
@@ -43,7 +43,7 @@ class WindowSwitchTest {
 
     @Test
     void pausingOneWindowLeavesTheOthersOn() {
-        PreorderWindow paused = lubbock.switchTo(false, PAYMENT, null, NOW);
+        PreorderWindow paused = lubbock.switchTo(false, FEES, null, NOW);
 
         assertThat(paused.active()).isFalse();
         assertThat(WindowSwitch.of(paused, areas, NOW)).isEqualTo(WindowSwitch.PAUSED);
@@ -53,7 +53,7 @@ class WindowSwitchTest {
 
     @Test
     void theMasterSwitchHoldsEveryWindowOffWithoutRewritingThem() {
-        PreorderWindow paused = lubbock.switchTo(false, PAYMENT, null, NOW);
+        PreorderWindow paused = lubbock.switchTo(false, FEES, null, NOW);
         Coverage masterOff = coverage(false, on("US/TX/Lubbock"), on("US/TX/El Paso"));
 
         assertThat(WindowSwitch.of(elPaso, masterOff, NOW)).isEqualTo(WindowSwitch.GLOBAL_OFF);
@@ -73,7 +73,7 @@ class WindowSwitchTest {
         assertThat(WindowSwitch.of(lubbock, lubbockOff, NOW)).isEqualTo(WindowSwitch.AREA_OFF);
         for (boolean master : new boolean[] {true, false}) {
             for (boolean window : new boolean[] {true, false}) {
-                PreorderWindow w = window ? lubbock : lubbock.switchTo(false, PAYMENT, null, NOW);
+                PreorderWindow w = window ? lubbock : lubbock.switchTo(false, FEES, null, NOW);
                 Coverage c = coverage(master, on("US/TX/Lubbock"));
                 assertThat(WindowSwitch.of(w, c, NOW).live()).as("master %s, window %s", master, window)
                         .isEqualTo(master && window);
@@ -85,7 +85,7 @@ class WindowSwitchTest {
 
     @Test
     void aPausedWindowLeavesResolutionEligibilityAndTheCartWhileOthersStay() {
-        PreorderWindow paused = lubbock.switchTo(false, PAYMENT, null, NOW);
+        PreorderWindow paused = lubbock.switchTo(false, FEES, null, NOW);
         List<PreorderWindow> all = List.of(paused, elPaso);
 
         Resolution lbk = resolver.resolve("US", "TX", "Lubbock", all, areas, Map.of(), false, NOW);
@@ -100,7 +100,7 @@ class WindowSwitchTest {
         assertThat(elp.window()).isEqualTo(elPaso);
 
         // Resuming restores exposure.
-        PreorderWindow resumed = paused.switchTo(true, PAYMENT, null, NOW);
+        PreorderWindow resumed = paused.switchTo(true, FEES, null, NOW);
         Resolution back = resolver.resolve("US", "TX", "Lubbock", List.of(resumed, elPaso), areas, Map.of(), false,
                 NOW);
         assertThat(back.on()).isTrue();
@@ -109,25 +109,25 @@ class WindowSwitchTest {
 
     @Test
     void switchingIsIdempotentAndRespectsTheStateMachine() {
-        assertThat(lubbock.switchTo(true, PAYMENT, null, NOW)).isSameAs(lubbock);
-        PreorderWindow paused = lubbock.switchTo(false, PAYMENT, null, NOW);
-        assertThat(paused.switchTo(false, PAYMENT, null, NOW)).isSameAs(paused);
-        assertThat(paused.switchTo(true, PAYMENT, null, NOW).active()).isTrue();
+        assertThat(lubbock.switchTo(true, FEES, null, NOW)).isSameAs(lubbock);
+        PreorderWindow paused = lubbock.switchTo(false, FEES, null, NOW);
+        assertThat(paused.switchTo(false, FEES, null, NOW)).isSameAs(paused);
+        assertThat(paused.switchTo(true, FEES, null, NOW).active()).isTrue();
 
         PreorderWindow draft = Preorders.draft(Preorders.lubbock());
         assertThat(draft.switchable(NOW)).isFalse();
         assertThat(WindowSwitch.of(draft, areas, NOW)).isEqualTo(WindowSwitch.NOT_LIVE);
-        assertThatThrownBy(() -> draft.switchTo(false, PAYMENT, null, NOW))
+        assertThatThrownBy(() -> draft.switchTo(false, FEES, null, NOW))
                 .isInstanceOf(InvalidTransitionException.class);
 
         Instant delivered = lubbock.deliveredAt();
         assertThat(lubbock.switchable(delivered)).isFalse();
-        assertThatThrownBy(() -> lubbock.switchTo(false, PAYMENT, null, delivered))
+        assertThatThrownBy(() -> lubbock.switchTo(false, FEES, null, delivered))
                 .isInstanceOf(InvalidTransitionException.class);
 
         PreorderWindow closed = lubbock;
         Instant afterClose = lubbock.details().closesAt().plusSeconds(60);
-        assertThat(closed.switchTo(false, PAYMENT, null, afterClose).status(afterClose))
+        assertThat(closed.switchTo(false, FEES, null, afterClose).status(afterClose))
                 .as("a closed (delivering) window can still be held off the storefront")
                 .isEqualTo(PreorderStatus.PAUSED);
     }
@@ -135,12 +135,11 @@ class WindowSwitchTest {
     @Test
     void switchingOnReRunsThePublishChecks() {
         PreorderWindow toronto = Preorders.published(Preorders.details(List.of("CA/ON/Toronto")))
-                .switchTo(false, PAYMENT, null, NOW);
-        PaymentSettings usdOnly = new PaymentSettings(Map.of("USD", 799L), Map.of(), PAYMENT.allowedMethods(), null,
-                null, null, null);
+                .switchTo(false, Preorders.feesWithCad(), null, NOW);
+        DeliveryFees usdOnly = DeliveryFees.DEFAULT;
         assertThatThrownBy(() -> toronto.switchTo(true, usdOnly, null, NOW))
                 .isInstanceOf(PublishBlockedException.class);
         assertThatThrownBy(() -> toronto.resume(usdOnly, null, NOW)).isInstanceOf(PublishBlockedException.class);
-        assertThat(toronto.switchTo(true, PAYMENT, null, NOW).active()).isTrue();
+        assertThat(toronto.switchTo(true, Preorders.feesWithCad(), null, NOW).active()).isTrue();
     }
 }

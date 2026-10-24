@@ -1,8 +1,10 @@
 package com.afrotransact.deliveryruns.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +15,15 @@ import java.util.UUID;
 final class Preorders {
 
     static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+
+    /** The default rules (USD) plus a Canadian door fee of $9.99 within 100 miles. */
+    static DeliveryFees feesWithCad() {
+        List<DeliveryFeeRule> rules = new ArrayList<>(DeliveryFees.DEFAULT.rules());
+        rules.add(new DeliveryFeeRule(UUID.randomUUID(), FeeMethod.AFROTRANSACT_DELIVERY, "CAD",
+                List.of(new FeeBand(BigDecimal.ZERO, BigDecimal.valueOf(100), 999)), 0, 0, 0, null, 1, Instant.EPOCH,
+                "test", "test"));
+        return new DeliveryFees(rules, WindowDistances.UNKNOWN);
+    }
     static final Instant OPENS = Instant.parse("2026-10-06T14:00:00Z");
     static final Instant CLOSES = Instant.parse("2026-10-23T04:59:00Z");
     static final LocalDate DELIVERS = LocalDate.parse("2026-10-25");

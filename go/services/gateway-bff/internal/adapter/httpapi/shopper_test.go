@@ -139,6 +139,10 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	if sh["returnable"] != true || sh["returnWindowEndsAt"] != "2026-11-02T17:00:00Z" || sh["problemReportOnly"] != false {
 		t.Fatalf("order detail should carry the return window: %v", sh)
 	}
+	if rule, _ := sh["deliveryFeeRule"].(map[string]any); rule == nil || rule["method"] != "CARRIER" || rule["ruleVersion"] != float64(4) ||
+		rule["band"] != "free over 35.00" || rule["source"] != "RULE" || rule["amountMinor"] != float64(0) {
+		t.Fatalf("order detail keeps the delivery fee rule it was charged by: %v", sh["deliveryFeeRule"])
+	}
 	if line := sh["lines"].([]any)[0].(map[string]any); line["refundedMinor"] != float64(1353) {
 		t.Fatalf("line refunds from payments: %v", line)
 	}

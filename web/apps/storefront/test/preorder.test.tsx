@@ -12,6 +12,7 @@ import { PreorderHome } from '@/components/preorder/PreorderHome';
 import { PreorderView } from '@/components/preorder/PreorderPage';
 import { WaitlistUnsubscribe } from '@/components/preorder/WaitlistUnsubscribe';
 import { tEn } from '@/i18n/t';
+import { feeRuleNote } from '@/lib/fee-rule';
 import { ATTRIBUTION_COOKIE, captureAttribution, CONSENT_COOKIE, hasAttributionConsent, readAttribution, setAttribution } from '@/lib/preorder/attribution';
 import { deliveryTerms, familyCities, paymentMethodsText, payNotes, preorderDates, stageCopy } from '@/lib/preorder/copy';
 
@@ -42,6 +43,18 @@ const product = async (atin: string): Promise<ProductSummary> => {
 };
 const JOLLOF = 'AT000000P2';
 const SHEA = 'AT00000P15';
+
+describe('delivery fee rule note (ADR 0005 §3)', () => {
+  const rule = { ruleVersion: 3, amountMinor: 999 };
+  it('says which staff rule a fee comes from', () => {
+    expect(feeRuleNote(tEn, { ...rule, method: 'AFROTRANSACT_DELIVERY', band: '10–40 mi' })).toBe('Delivery fee for 10–40 mi');
+    expect(feeRuleNote(tEn, { ...rule, method: 'AFROTRANSACT_DELIVERY' })).toBe('AfroTransact delivery fee');
+    expect(feeRuleNote(tEn, { ...rule, method: 'AFROTRANSACT_DELIVERY', source: 'WINDOW_OVERRIDE' })).toBe('Fee set for this pre-order');
+    expect(feeRuleNote(tEn, { ...rule, method: 'PICKUP' })).toBe('Pickup point fee');
+    expect(feeRuleNote(tEn, { ...rule, method: 'CARRIER', source: 'CARRIER_QUOTE' })).toBe('Carrier rate for your address');
+    expect(feeRuleNote(tEn, { ...rule, method: 'CARRIER', source: 'CARRIER_FALLBACK' })).toBe('Standard carrier rate');
+  });
+});
 
 describe('pre-order copy (design v2 strings)', () => {
   it('formats the window dates in the market time zone', () => {
@@ -224,6 +237,8 @@ describe('storefront pre-order states (mock BFF)', () => {
     expect(door).toHaveTextContent('$7.99');
     expect(pickup).toHaveTextContent('Free');
     expect(pickup).toHaveTextContent(/10am–2pm/);
+    expect(screen.getByTestId('fulfil-rule-door')).toHaveTextContent('Delivery fee for Up to 100 mi');
+    expect(screen.getByTestId('fulfil-rule-pickup')).toHaveTextContent('Pickup point fee');
     const summary = screen.getByTestId('cart-preorder-summary');
     expect(summary).toHaveTextContent('Pre-order · door delivery$7.99');
     const items = jollof.buyBox?.priceMinor ?? 0;

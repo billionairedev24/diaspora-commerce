@@ -121,6 +121,8 @@ type UpShipment struct {
 	LocalDelivery *LocalDeliveryView `json:"localDelivery"`
 	// PickupLocationID is the pickup point of a PICKUP shipment (carrier-gateway pickup location).
 	PickupLocationID string `json:"pickupLocationId"`
+	// DeliveryFeeRule is the staff delivery fee rule the shipping was charged by, as it was at checkout (ADR 0005 §3).
+	DeliveryFeeRule *domain.FeeRuleRef `json:"deliveryFeeRule"`
 }
 
 // UpShipTo is orders' ShipTo snapshot.

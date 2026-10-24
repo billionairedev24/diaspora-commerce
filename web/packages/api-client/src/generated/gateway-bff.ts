@@ -2409,6 +2409,25 @@ export interface components {
             latestDate?: string;
             /** @example Order within 3 h 12 min */
             cutoffLabel?: string;
+            feeRule?: components["schemas"]["DeliveryFeeRuleRef"];
+        };
+        /**
+         * @description The staff delivery fee rule behind a fee (ADR 0005 §3, staff manage them under Settings → Delivery fees): the
+         *     delivery method, the rule and its version, the amount and where it came from. The cart and checkout show it next
+         *     to the fee; the order keeps the rule it was charged by, so later edits never change it.
+         */
+        DeliveryFeeRuleRef: {
+            /** @enum {string} */
+            method: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
+            ruleId?: string;
+            ruleVersion: number;
+            currency?: string;
+            amountMinor: number;
+            /** @enum {string} */
+            source?: "RULE" | "WINDOW_OVERRIDE" | "CARRIER_QUOTE" | "CARRIER_FALLBACK";
+            /** @example 10–40 mi */
+            band?: string;
+            distanceMiles?: number;
         };
         CartPackage: {
             /** @description {sellerId}:{fulfilment} */
@@ -3117,7 +3136,7 @@ export interface components {
         } | null;
         /**
          * @description Money and payment setup of a window, all money in minor units: the window's doorFeeOverride / pickupFeeOverride,
-         *     else Back office → Pre-orders → Settings → payment for the window's currency.
+         *     else the staff delivery fee rules (Settings → Delivery fees: AfroTransact delivery by distance band, pickup fee).
          */
         PreorderTerms: {
             door?: boolean;
@@ -3218,10 +3237,14 @@ export interface components {
             timeZone?: string;
             /** @enum {string} */
             fulfilment?: "DOOR" | "PICKUP";
+            /** @description Fee of the chosen fulfilment */
+            feeMinor?: number;
+            feeRule?: components["schemas"]["DeliveryFeeRuleRef"];
             options?: {
                 /** @enum {string} */
                 fulfilment: "DOOR" | "PICKUP";
                 feeMinor: number;
+                rule?: components["schemas"]["DeliveryFeeRuleRef"];
             }[];
         };
         PlaceOrderRequest: {
@@ -3434,6 +3457,12 @@ export interface components {
                 problemReportOnly?: boolean;
                 /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
                 localDelivery?: components["schemas"]["OrderLocalDelivery"] | null;
+                /**
+                 * @description The delivery fee rule the shipping was charged by, as it was when the order was placed (ADR 0005 §3):
+                 *     later edits of the rule never change it. Null for flat rates and for AfroTransact Delivery from a
+                 *     seller's store (see localDelivery).
+                 */
+                deliveryFeeRule?: components["schemas"]["DeliveryFeeRuleRef"] | null;
                 /** @description Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments */
                 pickup?: null | {
                     id: string;

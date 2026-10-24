@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode } from 'react';
 
+import { DeliveryFeesView } from '@/components/fees/DeliveryFeesView';
 import { FeesView } from '@/components/fees/FeesView';
 import { IdentityAdminView } from '@/components/identity/IdentityAdminView';
 import { MarketsView } from '@/components/markets/MarketsView';
@@ -45,6 +46,8 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
       );
     case 'fees':
       return <FeesView scope="fees" />;
+    case 'delivery-fees':
+      return <DeliveryFeesView />;
     case 'tax':
       return <FeesView scope="tax" />;
     case 'exchange-rates':

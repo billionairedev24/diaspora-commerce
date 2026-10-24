@@ -62,7 +62,7 @@ class PreorderMinimumTest {
         assertThat(waiting.awaitingDecision(AFTER_CLOSE.plusSeconds(5))).as("idempotent").isSameAs(waiting);
         assertThat(waiting.switchable(AFTER_CLOSE)).isFalse();
         assertThatThrownBy(() -> waiting.pause(AFTER_CLOSE)).isInstanceOf(InvalidTransitionException.class);
-        assertThatThrownBy(() -> waiting.edit(waiting.details(), PaymentSettings.DEFAULT, AFTER_CLOSE))
+        assertThatThrownBy(() -> waiting.edit(waiting.details(), DeliveryFees.DEFAULT, AFTER_CLOSE))
                 .isInstanceOf(RuleViolation.class);
     }
 

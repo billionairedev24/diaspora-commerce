@@ -62,3 +62,43 @@ func TestEligibilityUsesAServiceTokenAndDefaultsFees(t *testing.T) {
 		t.Fatalf("token cached: %d requests", tokens)
 	}
 }
+
+func TestEligibilityKeepsTheFeeRulesBehindTheDoorAndPickupFees(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth2/token" {
+			_, _ = w.Write([]byte(`{"access_token":"tok","expires_in":3600}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"items":[
+		  {"atin":"A1","preorder":true,"windowId":"w1","stage":"OPEN","door":true,"pickup":true,
+		   "doorFeeMinor":899,"pickupFeeMinor":100,"currency":"USD",
+		   "doorFeeRule":{"method":"AFROTRANSACT_DELIVERY","ruleId":"r-1","ruleVersion":3,"currency":"USD",
+		    "amountMinor":899,"source":"RULE","band":"10–40 mi","distanceMiles":32},
+		   "pickupFeeRule":{"method":"PICKUP","ruleVersion":2,"amountMinor":100,"source":"WINDOW_OVERRIDE"}},
+		  {"atin":"A2","preorder":true,"windowId":"w2","stage":"OPEN","doorFeeMinor":799,
+		   "window":{"doorFeeRule":{"method":"AFROTRANSACT_DELIVERY","ruleVersion":1,"amountMinor":799,"source":"RULE"}}},
+		  {"atin":"A3","preorder":true,"windowId":"w3","stage":"OPEN","doorFeeMinor":799}]}`))
+	}))
+	defer srv.Close()
+	e := deliveryruns.New(deliveryruns.Options{BaseURL: srv.URL, TokenURL: srv.URL + "/oauth2/token",
+		ClientID: "cart-service", ClientSecret: "secret"}, srv.Client())
+	got, err := e.Eligibility(context.Background(), domain.Location{Country: "US", Region: "TX", City: "Lubbock"},
+		[]string{"A1", "A2", "A3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	door := got["A1"].DoorFeeRule
+	if door == nil || door.Method != "AFROTRANSACT_DELIVERY" || door.RuleID != "r-1" || door.RuleVersion != 3 ||
+		door.Band != "10–40 mi" || door.DistanceMiles == nil || *door.DistanceMiles != 32 || door.AmountMinor != 899 {
+		t.Fatalf("door rule: %+v", door)
+	}
+	if p := got["A1"].PickupFeeRule; p == nil || p.Method != "PICKUP" || p.Source != "WINDOW_OVERRIDE" || p.RuleVersion != 2 {
+		t.Fatalf("pickup rule: %+v", p)
+	}
+	if r := got["A2"].DoorFeeRule; r == nil || r.RuleVersion != 1 {
+		t.Fatalf("rule inside window: %+v", r)
+	}
+	if got["A3"].DoorFeeRule != nil || got["A3"].PickupFeeRule != nil {
+		t.Fatalf("no rules sent, none kept: %+v", got["A3"])
+	}
+}

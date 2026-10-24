@@ -31,6 +31,19 @@ type Location struct {
 // Known reports whether a location was given.
 func (l Location) Known() bool { return l.Country != "" || l.Region != "" || l.City != "" }
 
+// FeeRule is the staff delivery fee rule behind a fee (ADR 0005 §3): the method, the rule and its version, the distance
+// band applied and where the amount came from. The cart shows it next to the fee; orders keep it with the order.
+type FeeRule struct {
+	Method        string   `json:"method"`
+	RuleID        string   `json:"ruleId,omitempty"`
+	RuleVersion   int64    `json:"ruleVersion"`
+	Currency      string   `json:"currency,omitempty"`
+	AmountMinor   int64    `json:"amountMinor"`
+	Source        string   `json:"source,omitempty"`
+	Band          string   `json:"band,omitempty"`
+	DistanceMiles *float64 `json:"distanceMiles,omitempty"`
+}
+
 // PreorderLine is delivery-runs' answer for one product at the shopper's location. Money is in minor units.
 type PreorderLine struct {
 	Preorder       bool     `json:"preorder"`
@@ -49,6 +62,9 @@ type PreorderLine struct {
 	AllowedMethods []string `json:"allowedMethods,omitempty"`
 	PickupWindow   string   `json:"pickupWindow,omitempty"`
 	TimeZone       string   `json:"timeZone,omitempty"`
+	// DoorFeeRule / PickupFeeRule are the rules behind the two fees (nil when delivery-runs sent none).
+	DoorFeeRule   *FeeRule `json:"doorFeeRule,omitempty"`
+	PickupFeeRule *FeeRule `json:"pickupFeeRule,omitempty"`
 }
 
 // AllPaymentMethods is what a window allows when its payment setup names none.
@@ -59,6 +75,8 @@ type PreorderOption struct {
 	Fulfilment string `json:"fulfilment"`
 	FeeMinor   int64  `json:"feeMinor"`
 	Currency   string `json:"currency"`
+	// Rule is the delivery fee rule that priced this option (absent when none was sent).
+	Rule *FeeRule `json:"rule,omitempty"`
 }
 
 // PackagePreorder is the pre-order part of a cart package (the storefront's CartPreorder): the window, its stage, the
@@ -84,6 +102,8 @@ type PackagePreorder struct {
 	Options        []PreorderOption `json:"options"`
 	// FeeMinor is the fee of the chosen fulfilment.
 	FeeMinor int64 `json:"feeMinor"`
+	// FeeRule is the rule behind FeeMinor: what the shopper is shown at checkout and what the order records.
+	FeeRule *FeeRule `json:"feeRule,omitempty"`
 	// Locked is true when the window is not open: its lines cannot be checked out (upcoming or closed).
 	Locked bool `json:"locked"`
 }
@@ -121,18 +141,20 @@ func preorderOf(p PreorderLine, chosen string) *PackagePreorder {
 		Currency: currency, PickupWindow: p.PickupWindow, AllowedMethods: methods,
 		Locked: !strings.EqualFold(p.Stage, StageOpen), Options: []PreorderOption{}}
 	if p.Door {
-		pp.Options = append(pp.Options, PreorderOption{Fulfilment: FulfilmentDoor, FeeMinor: p.DoorFeeMinor, Currency: currency})
+		pp.Options = append(pp.Options, PreorderOption{Fulfilment: FulfilmentDoor, FeeMinor: p.DoorFeeMinor, Currency: currency,
+			Rule: p.DoorFeeRule})
 	}
 	if p.Pickup {
-		pp.Options = append(pp.Options, PreorderOption{Fulfilment: FulfilmentPickup, FeeMinor: p.PickupFeeMinor, Currency: currency})
+		pp.Options = append(pp.Options, PreorderOption{Fulfilment: FulfilmentPickup, FeeMinor: p.PickupFeeMinor, Currency: currency,
+			Rule: p.PickupFeeRule})
 	}
 	for _, o := range pp.Options {
 		if o.Fulfilment == chosen {
-			pp.Fulfilment, pp.FeeMinor = o.Fulfilment, o.FeeMinor
+			pp.Fulfilment, pp.FeeMinor, pp.FeeRule = o.Fulfilment, o.FeeMinor, o.Rule
 		}
 	}
 	if pp.Fulfilment == "" && len(pp.Options) > 0 {
-		pp.Fulfilment, pp.FeeMinor = pp.Options[0].Fulfilment, pp.Options[0].FeeMinor
+		pp.Fulfilment, pp.FeeMinor, pp.FeeRule = pp.Options[0].Fulfilment, pp.Options[0].FeeMinor, pp.Options[0].Rule
 	}
 	return pp
 }

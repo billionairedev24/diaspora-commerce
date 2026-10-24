@@ -132,7 +132,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         PreorderWindow w = support.lock(id, expectedVersion);
         PaymentSettings payment = support.coverage().settings().payment();
         WindowDetails details = PreorderSupport.details(command, w.details().minOrders());
-        PreorderWindow saved = windows.update(w.edit(details, payment, support.pageUrl(), now));
+        PreorderWindow saved = windows.update(w.edit(details, support.coverage().fees(), support.pageUrl(), now));
         rememberAreas(details);
         if (!saved.draft()) {
             events.window(DeliveryRunsEvents.PREORDER_WINDOW_UPDATED, saved, payment, now);
@@ -147,7 +147,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         Instant now = Instant.now(clock);
         PreorderWindow w = support.lock(id, expectedVersion);
         PaymentSettings payment = support.coverage().settings().payment();
-        PreorderWindow saved = windows.update(w.publish(payment, support.pageUrl(), now));
+        PreorderWindow saved = windows.update(w.publish(support.coverage().fees(), support.pageUrl(), now));
         events.window(DeliveryRunsEvents.PREORDER_WINDOW_PUBLISHED, saved, payment, now);
         return support.view(saved, now);
     }
@@ -170,7 +170,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         Instant now = Instant.now(clock);
         PaymentSettings payment = support.coverage().settings().payment();
         PreorderWindow saved = windows.update(support.lock(id, expectedVersion)
-                .resume(payment, support.pageUrl(), now));
+                .resume(support.coverage().fees(), support.pageUrl(), now));
         events.window(DeliveryRunsEvents.PREORDER_WINDOW_RESUMED, saved, payment, now, actor.subject());
         return support.view(saved, now);
     }
@@ -221,7 +221,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
     /** Flips the window's own switch when it differs (never the master switch) and records who did it. */
     private WindowView switchOne(PreorderWindow w, boolean active, Actor actor, Instant now) {
         PaymentSettings payment = support.coverage().settings().payment();
-        PreorderWindow next = w.switchTo(active, payment, support.pageUrl(), now);
+        PreorderWindow next = w.switchTo(active, support.coverage().fees(), support.pageUrl(), now);
         if (next == w) {
             return support.view(w, now);
         }

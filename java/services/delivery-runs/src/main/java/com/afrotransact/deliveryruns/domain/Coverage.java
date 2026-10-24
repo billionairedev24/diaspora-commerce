@@ -13,8 +13,9 @@ import java.util.Optional;
  *
  * @param settings master switch, fallback, placements and payment
  * @param areas    coverage switches
+ * @param fees     the delivery fee rules and how far each window delivers
  */
-public record Coverage(PreorderSettings settings, List<CoverageArea> areas) {
+public record Coverage(PreorderSettings settings, List<CoverageArea> areas, DeliveryFees fees) {
 
     /** 2^53 - 1: versions travel as JSON numbers, which browsers and the BFF read as doubles. */
     private static final long SAFE_INTEGER = (1L << 53) - 1;
@@ -22,6 +23,12 @@ public record Coverage(PreorderSettings settings, List<CoverageArea> areas) {
     public Coverage {
         settings = settings == null ? PreorderSettings.DEFAULT : settings;
         areas = areas == null ? List.of() : List.copyOf(areas);
+        fees = fees == null ? DeliveryFees.DEFAULT : fees;
+    }
+
+    /** Settings and areas with the default delivery fee rules. */
+    public Coverage(PreorderSettings settings, List<CoverageArea> areas) {
+        this(settings, areas, null);
     }
 
     /** {@code at-preorder.js#areaOn}: a matching city row wins; otherwise the region row; otherwise off. */
@@ -127,7 +134,7 @@ public record Coverage(PreorderSettings settings, List<CoverageArea> areas) {
             next.add(sw.map(x -> new CoverageArea(a.key(), x.on(), a.version() + 1)).orElse(a));
         }
         next.addAll(changes.added());
-        return new Coverage(settings, next);
+        return new Coverage(settings, next, fees);
     }
 
     /**

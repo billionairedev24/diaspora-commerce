@@ -2925,6 +2925,24 @@ components:
         earliestDate: {type: string, format: date, description: Checkout only — promise service date range}
         latestDate: {type: string, format: date}
         cutoffLabel: {type: string, examples: [Order within 3 h 12 min]}
+        feeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+    DeliveryFeeRuleRef:
+      type: object
+      description: |
+        The staff delivery fee rule behind a fee (ADR 0005 §3, staff manage them under Settings → Delivery fees): the
+        delivery method, the rule and its version, the amount and where it came from. The cart and checkout show it next
+        to the fee; the order keeps the rule it was charged by, so later edits never change it.
+      required: [method, ruleVersion, amountMinor]
+      properties:
+        method: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}
+        ruleId: {type: string}
+        ruleVersion: {type: integer}
+        currency: {type: string}
+        amountMinor: {type: integer}
+        source: {type: string, enum: [RULE, WINDOW_OVERRIDE, CARRIER_QUOTE, CARRIER_FALLBACK]}
+        band: {type: string, examples: ['10–40 mi']}
+        distanceMiles: {type: number}
     CartPackage:
       type: object
       required: [packageId, seller, fulfilment, heading, shipsFrom, delivery, deliveryOptions, lines, itemCount, subtotalMinor, freeShippingNudge]
@@ -3698,7 +3716,7 @@ components:
       type: object
       description: |
         Money and payment setup of a window, all money in minor units: the window's doorFeeOverride / pickupFeeOverride,
-        else Back office → Pre-orders → Settings → payment for the window's currency.
+        else the staff delivery fee rules (Settings → Delivery fees: AfroTransact delivery by distance band, pickup fee).
       properties:
         door: {type: boolean}
         pickup: {type: boolean}
@@ -3780,6 +3798,9 @@ components:
             deliversOn: {type: string, format: date}
             timeZone: {type: string}
             fulfilment: {type: string, enum: [DOOR, PICKUP]}
+            feeMinor: {type: integer, description: Fee of the chosen fulfilment}
+            feeRule:
+              $ref: '#/components/schemas/DeliveryFeeRuleRef'
             options:
               type: array
               items:
@@ -3788,6 +3809,8 @@ components:
                 properties:
                   fulfilment: {type: string, enum: [DOOR, PICKUP]}
                   feeMinor: {type: integer}
+                  rule:
+                    $ref: '#/components/schemas/DeliveryFeeRuleRef'
     PlaceOrderRequest:
       type: object
       required: [addressId, deliverySelections]
@@ -3992,6 +4015,12 @@ components:
               localDelivery:
                 oneOf: [{$ref: '#/components/schemas/OrderLocalDelivery'}, {type: 'null'}]
                 description: AfroTransact Delivery from the seller's store (S255); null for other shipments
+              deliveryFeeRule:
+                description: |
+                  The delivery fee rule the shipping was charged by, as it was when the order was placed (ADR 0005 §3):
+                  later edits of the rule never change it. Null for flat rates and for AfroTransact Delivery from a
+                  seller's store (see localDelivery).
+                oneOf: [{$ref: '#/components/schemas/DeliveryFeeRuleRef'}, {type: 'null'}]
               pickup:
                 description: Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments
                 oneOf:

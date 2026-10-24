@@ -668,6 +668,7 @@ export const shopperHandlers = [
         deliveryCode: needsCode ? String(1000 + ((n * 7919) % 9000)) : null,
         lines: p.lines.map((l) => ({ lineId: l.lineId, atin: l.atin, title: l.title, imageUrl: null, quantity: l.quantity, unitPriceMinor: l.priceMinor, itemsMinor: l.lineTotalMinor })),
         timeline: [{ status: 'placed', label: 'Order placed', at: iso(ctx.now) }],
+        deliveryFeeRule: opt?.feeRule ?? null,
         localDelivery: p.localDelivery?.available
           ? { roadMiles: p.localDelivery.roadMiles, durationMinutes: p.localDelivery.durationMinutes, chargeMinor: p.localDelivery.chargeMinor ?? 0 }
           : null,

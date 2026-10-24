@@ -1226,5 +1226,12 @@
   "ord.codeOrder": "Order {number}",
   "ord.showCode": "Show delivery code",
   "ord.hideCode": "Hide delivery code",
-  "co.useNewMethod": "Usar otro método de pago"
+  "co.useNewMethod": "Usar otro método de pago",
+  "fee.rule.band": "Tarifa de entrega para {band}",
+  "fee.rule.door": "Tarifa de entrega AfroTransact",
+  "fee.rule.override": "Tarifa fijada para esta preventa",
+  "fee.rule.pickup": "Tarifa del punto de recogida",
+  "fee.rule.carrierQuote": "Tarifa del transportista para su dirección",
+  "fee.rule.carrierFallback": "Tarifa estándar del transportista",
+  "ord.deliveryFee": "Tarifa de entrega {amount}: {note}"
 }

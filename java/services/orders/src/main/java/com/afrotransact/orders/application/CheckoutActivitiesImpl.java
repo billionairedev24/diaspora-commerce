@@ -16,8 +16,10 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 import com.afrotransact.orders.domain.BusinessDays;
+import com.afrotransact.orders.domain.DefaultShippingPolicy;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.LocalDelivery;
@@ -42,6 +44,7 @@ import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.PickupLocations;
 import com.afrotransact.orders.port.PickupPoints;
+import com.afrotransact.orders.port.DeliveryFeeRules;
 import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.PromiseClient;
@@ -79,6 +82,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final LocalDeliveryQuotes localDelivery;
     private final PickupPoints pickupPoints;
     private final PreorderEligibility preorders;
+    private final DeliveryFeeRules deliveryFees;
     private final PreorderSettings preorderSettings;
     private final OrdersSettings settings;
     private final Clock clock;
@@ -89,8 +93,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                            OfferInventory offerInventory, PaymentsClient payments, CartClient cart, CouponsClient coupons,
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
-                           PickupPoints pickupPoints, PreorderEligibility preorders, PreorderSettings preorderSettings,
-                           OrdersSettings settings, Clock clock) {
+                           PickupPoints pickupPoints, PreorderEligibility preorders, DeliveryFeeRules deliveryFees,
+                           PreorderSettings preorderSettings, OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
         this.promises = promises;
@@ -110,6 +114,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.localDelivery = localDelivery;
         this.pickupPoints = pickupPoints;
         this.preorders = preorders;
+        this.deliveryFees = deliveryFees;
         this.preorderSettings = preorderSettings;
         this.settings = settings;
         this.clock = clock;
@@ -344,7 +349,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         return new CheckoutPlan.Package(PREORDER_PACKAGE + w.windowId(), lines.isEmpty() ? null
                 : sellerOf(in, lines.getFirst()), w.windowName(), FulfilmentType.PREORDER, fulfilment.method(),
                 "preorder_" + fulfilment.name().toLowerCase(Locale.ROOT), pickupPoint, prefs, 0, lines, null,
-                preorder, fee);
+                preorder, fee, w.feeRule(fulfilment));
     }
 
     private static String sellerOf(CheckoutInput in, CheckoutPlan.Line line) {
@@ -437,11 +442,12 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 }
                 int days = lines.stream().mapToInt(CheckoutPlan.Line::promiseDays).max().orElse(p.promiseDays());
                 int slack = p.method() == DeliveryMethod.CARRIER ? 2 : 0;
+                FeeRuleSnapshot rule = carrierRule(p, items, plan.currency());
                 shipments.add(new OrderDraft.DraftShipment(id, seq, p.sellerOrgId(), p.sellerName(),
                         p.fulfilmentType(), group.getKey().isEmpty() ? null : group.getKey(), p.method(),
                         p.serviceLevel(), p.pickupLocationId(), p.preferences(), perishable, codeNeeded, hash, sealed,
-                        shippingOf(p, items), BusinessDays.add(today, days), BusinessDays.add(today, days + slack),
-                        lines, p.localDelivery()));
+                        shippingOf(p, items, rule), BusinessDays.add(today, days),
+                        BusinessDays.add(today, days + slack), lines, p.localDelivery(), null, rule));
             }
         }
         OrderOrigin origin = in.lateAdd() != null ? null : OrderOrigin.checkout(in.attribution());
@@ -488,7 +494,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             out.add(new OrderDraft.DraftShipment(id, seq, e.getKey(), sellerNames.get(e.getKey()),
                     FulfilmentType.PREORDER, null, p.method(), p.serviceLevel(), p.pickupLocationId(),
                     p.preferences(), perishable, codeNeeded, hash, sealed, fees[g++], deliversOn, deliversOn, lines,
-                    null, p.preorder()));
+                    null, p.preorder(), p.feeRule()));
         }
         return out;
     }
@@ -537,7 +543,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             List<CouponsClient.Line> lines = new ArrayList<>();
             for (CheckoutPlan.Package p : plan.packages()) {
                 long items = p.lines().stream().mapToLong(CheckoutPlan.Line::itemsMinor).sum();
-                shippingEstimate += shippingOf(p, items);
+                shippingEstimate += shippingOf(p, items, carrierRule(p, items, in.currency()));
                 p.lines().stream().filter(l -> l.offerId() != null)
                         .forEach(l -> lines.add(new CouponsClient.Line(l.offerId(), l.quantity())));
             }
@@ -730,12 +736,27 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
      * The quoted AfroTransact Delivery charge for a seller's store (S255), the pre-order window's fee (S272), else the
      * shipping policy's fee.
      */
-    private long shippingOf(CheckoutPlan.Package p, long itemsMinor) {
+    private long shippingOf(CheckoutPlan.Package p, long itemsMinor, FeeRuleSnapshot rule) {
         if (p.preorder() != null) {
             return p.preorderFeeMinor();
         }
-        return p.localDelivery() != null ? p.localDelivery().customerChargeMinor()
-                : shipping.fee(p.method(), p.serviceLevel(), itemsMinor);
+        if (p.localDelivery() != null) {
+            return p.localDelivery().customerChargeMinor();
+        }
+        return rule != null ? rule.amountMinor() : shipping.fee(p.method(), p.serviceLevel(), itemsMinor);
+    }
+
+    /**
+     * The staff carrier rate (ADR 0005 §3) of a standard carrier shipment, which is what an address beyond
+     * AfroTransact's coverage pays; the rule is kept on the shipment. Null for every other method and for express
+     * (flat rates), and when staff configured no carrier rule or delivery-runs cannot answer.
+     */
+    private FeeRuleSnapshot carrierRule(CheckoutPlan.Package p, long itemsMinor, String currency) {
+        if (p.preorder() != null || p.localDelivery() != null || p.method() != DeliveryMethod.CARRIER
+                || DefaultShippingPolicy.EXPRESS.equalsIgnoreCase(p.serviceLevel())) {
+            return null;
+        }
+        return deliveryFees.carrier(currency, null, itemsMinor).orElse(null);
     }
 
     private static boolean fromSellerStore(CartClient.Item i) {

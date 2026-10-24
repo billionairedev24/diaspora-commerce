@@ -80,6 +80,14 @@ tags:
       APPROVE (view + late add), Finance / Auditor / Product owner / Fulfilment / Retail VIEW. Writes need EDIT and
       `preorders:manage`, settings need FULL and `preorders:manage`, exports `preorders:export`, late adds
       `preorders:late-add` with APPROVE or above. Window, list, settings and area answers carry `can`.
+  - name: Delivery fees
+    description: |
+      Settings → Delivery fees (ADR 0005 §3): delivery fees are configuration staff manage, by delivery method, in one
+      currency each: AfroTransact's own delivery inside covered locations (a flat fee by distance band), carrier shipping
+      beyond coverage (the carrier-gateway quote plus handling) and pickup (often 0). Checkout resolves one rule (a fee
+      set on the pre-order itself wins), shows the rule that applies and its amount, and the order keeps a snapshot of it.
+      Mirrors delivery-runs with the staff member's token; part of the `preorders` module (view to read, EDIT with
+      `preorders:manage` to change). Every change needs a reason and is logged (who, when, why).
   - name: Markets
     description: |
       Settings → Markets & locations as one location tree (country → states → cities). Mirrors content's draft markets
@@ -2397,6 +2405,92 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-fees:
+    get:
+      tags: [Delivery fees]
+      operationId: listStaffDeliveryFees
+      security: [{sessionCookie: []}]
+      summary: Every delivery fee rule (one per delivery method and currency)
+      description: |
+        delivery-runs `GET /v1/delivery-fees` (delivery-runs:read; module `preorders`, any level). The screen shows three
+        sections, one per method: AfroTransact's own delivery inside covered locations (a flat fee by distance band),
+        carrier shipping beyond coverage (the carrier-gateway quote plus handling, a fallback fee, free over a
+        threshold) and pickup (often 0). Answers carry `can.manage`.
+      responses:
+        '200': {description: Rules, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDeliveryFeeRules'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-fees/changes:
+    get:
+      tags: [Delivery fees]
+      operationId: listStaffDeliveryFeeChanges
+      security: [{sessionCookie: []}]
+      summary: Audit trail of the delivery fees (who changed what, when and why)
+      description: |
+        delivery-runs `GET /v1/delivery-fees/changes`, newest first: every version of every rule (or one method and
+        currency) with the rule before and after, the staff subject, the time and the reason.
+      parameters:
+        - {name: method, in: query, schema: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}}
+        - {name: currency, in: query, schema: {type: string, pattern: '^[A-Za-z]{3}$'}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Changes, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDeliveryFeeChanges'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-fees/preview:
+    post:
+      tags: [Delivery fees]
+      operationId: previewStaffDeliveryFee
+      security: [{sessionCookie: []}]
+      summary: What would a customer pay?
+      description: |
+        delivery-runs `POST /v1/delivery-fees/preview`: the resolution checkout runs. A fee set on the pre-order itself
+        (`windowId`) wins, then the method's rule: AFROTRANSACT_DELIVERY by `distanceMiles` (or the window's own
+        distance), PICKUP, CARRIER by `carrierQuoteMinor` and `itemsMinor`. `applies` is false when no rule can price
+        it: no rule, or the address is beyond how far AfroTransact delivers (the order ships by carrier).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffDeliveryFeePreviewRequest'}}}
+      responses:
+        '200': {description: Resolution, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDeliveryFeePreview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-fees/{method}/{currency}:
+    put:
+      tags: [Delivery fees]
+      operationId: updateStaffDeliveryFee
+      security: [{sessionCookie: []}]
+      summary: Set the delivery fee of one method and currency
+      description: |
+        delivery-runs `PUT /v1/delivery-fees/{method}/{currency}` (preorders:manage, EDIT; If-Match relayed: the
+        version seen, `0` when the rule does not exist yet). Creates the rule or makes its next version; a save that
+        changes nothing makes no new version. AFROTRANSACT_DELIVERY takes `bands` (1 to 12 of `fromMiles`, `toMiles`,
+        `feeMinor`; the first starts at 0 miles and each starts where the last ends; the last band's end is how far
+        AfroTransact delivers, beyond it the order ships by carrier), CARRIER `handlingMinor` (added to the carrier
+        quote), `fallbackMinor` (when there is no quote) and `freeAboveMinor` (goods subtotal from which it is free; null
+        = never), PICKUP `feeMinor`. Fees are 0 to 10000 minor units. The `reason` is required (422) and is logged with
+        who and when. Orders already placed keep the rule version they were charged by.
+      parameters:
+        - {$ref: '#/components/parameters/DeliveryFeeMethod'}
+        - {$ref: '#/components/parameters/DeliveryFeeCurrency'}
+        - {name: If-Match, in: header, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffDeliveryFeeRequest'}}}
+      responses:
+        '200': {description: Saved, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDeliveryFeeRule'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/customers/search:
     get:
       tags: [Pre-orders]
@@ -4556,6 +4650,8 @@ components:
     ExportId: {name: exportId, in: path, required: true, schema: {type: string, maxLength: 64}}
     ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string, maxLength: 64}}
     PreorderId: {name: preorderId, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}, description: Window id or code}
+    DeliveryFeeMethod: {name: method, in: path, required: true, schema: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}}
+    DeliveryFeeCurrency: {name: currency, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{3}$'}, description: 'ISO 4217 code, for example USD'}
     CreativeSlot: {name: slot, in: path, required: true, schema: {type: string, enum: [HERO, PDP, STORY, FEED, EMAIL]}}
     TemplateKey: {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,119}$'}, example: order.confirmed}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
@@ -6566,6 +6662,101 @@ components:
         settings: {type: boolean, description: 'FULL and preorders:manage: master switch, fallback, placements, payment setup'}
         export: {type: boolean, description: preorders:export}
         lateAdd: {type: boolean, description: 'APPROVE, EDIT or FULL and preorders:late-add'}
+    StaffDeliveryFeeBand:
+      type: object
+      required: [fromMiles, toMiles, feeMinor]
+      properties:
+        fromMiles: {type: number, minimum: 0, maximum: 500, description: 'Inclusive; the first band starts at 0'}
+        toMiles: {type: number, minimum: 0, maximum: 500, description: 'Exclusive; the next band starts here'}
+        feeMinor: {type: integer, minimum: 0, maximum: 10000, description: 'Flat fee for an address in the band (minor units)'}
+    StaffDeliveryFeeRule:
+      type: object
+      required: [id, method, currency, version]
+      description: |
+        The delivery fee of one method in one currency; the ETag carries the version for If-Match. Fields a method does
+        not use are 0 / empty.
+      properties:
+        id: {type: string}
+        method: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}
+        currency: {type: string, examples: [USD]}
+        version: {type: integer}
+        bands: {type: array, items: {$ref: '#/components/schemas/StaffDeliveryFeeBand'}, description: AFROTRANSACT_DELIVERY only}
+        feeMinor: {type: integer, description: PICKUP only}
+        handlingMinor: {type: integer, description: 'CARRIER: added to the carrier-gateway quote'}
+        fallbackMinor: {type: integer, description: 'CARRIER: the fee when there is no quote'}
+        freeAboveMinor: {type: [integer, 'null'], description: 'CARRIER: goods subtotal from which shipping is free; null = never'}
+        coverageMiles: {type: number, description: 'AFROTRANSACT_DELIVERY: how far AfroTransact delivers (end of the last band)'}
+        updatedAt: {type: string, format: date-time}
+        updatedBy: {type: [string, 'null'], description: Staff subject of the last change}
+        reason: {type: [string, 'null'], description: Why the last change was made}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffDeliveryFeeRules:
+      type: object
+      required: [items, can]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffDeliveryFeeRule'}}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffDeliveryFeeRequest:
+      type: object
+      required: [reason]
+      description: The rule's new numbers; a method ignores what it does not use.
+      properties:
+        bands: {type: array, maxItems: 12, items: {$ref: '#/components/schemas/StaffDeliveryFeeBand'}}
+        feeMinor: {type: integer, minimum: 0, maximum: 10000}
+        handlingMinor: {type: integer, minimum: 0, maximum: 10000}
+        fallbackMinor: {type: integer, minimum: 0, maximum: 10000}
+        freeAboveMinor: {type: [integer, 'null'], minimum: 0}
+        reason: {type: string, minLength: 1, maxLength: 500, description: 'Why; logged with who and when'}
+    StaffDeliveryFeeChanges:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            required: [method, currency, version, after, actor, reason, at]
+            properties:
+              id: {type: string}
+              method: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}
+              currency: {type: string}
+              version: {type: integer}
+              before: {oneOf: [{$ref: '#/components/schemas/StaffDeliveryFeeRule'}, {type: 'null'}], description: Null for the first version}
+              after: {$ref: '#/components/schemas/StaffDeliveryFeeRule'}
+              actor: {type: string, description: 'Staff subject, or migration'}
+              reason: {type: string}
+              at: {type: string, format: date-time}
+    StaffDeliveryFeePreviewRequest:
+      type: object
+      required: [method, currency]
+      properties:
+        method: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}
+        currency: {type: string, pattern: '^[A-Za-z]{3}$'}
+        distanceMiles: {type: [number, 'null'], minimum: 0, maximum: 500, description: 'AFROTRANSACT_DELIVERY: miles from the hub (absent: the window distance, else the farthest band)'}
+        windowId: {type: [string, 'null'], description: 'Apply this pre-order''s own fee and distance'}
+        carrierQuoteMinor: {type: [integer, 'null'], minimum: 0, description: 'CARRIER: the carrier-gateway quote, if any'}
+        itemsMinor: {type: [integer, 'null'], minimum: 0, description: 'CARRIER: goods subtotal (free-shipping threshold)'}
+    StaffDeliveryFeePreview:
+      type: object
+      required: [applies]
+      properties:
+        applies: {type: boolean, description: 'False: no rule can price it (no rule, or beyond how far AfroTransact delivers)'}
+        fee:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: true
+              required: [method, ruleVersion, amountMinor]
+              properties:
+                method: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}
+                ruleId: {type: [string, 'null']}
+                ruleVersion: {type: integer}
+                currency: {type: string}
+                amountMinor: {type: integer}
+                source: {type: string, enum: [RULE, WINDOW_OVERRIDE, CARRIER_QUOTE, CARRIER_FALLBACK]}
+                band: {type: [string, 'null'], examples: ['10–40 mi']}
+                distanceMiles: {type: [number, 'null']}
     StaffPreorderObject:
       type: object
       additionalProperties: true
@@ -6745,7 +6936,7 @@ components:
       additionalProperties: true
       description: |
         Platform settings (delivery-runs): enabled, fallback (SHIP | WAITLIST), placements {ribbon, hero, badge, pdp,
-        cart, family}, payment {doorFee and pickupFee (per currency, minor units), pickupWindow, allowedMethods
+        cart, family}, payment {pickupWindow, allowedMethods
         [CARD, WALLET, ACH], lateAdd {savedCard, paymentLink, linkExpiryHours}, missedDelivery {offerRefund,
         offerNewDate}}. Answers carry `can`.
       properties:
@@ -6756,8 +6947,6 @@ components:
           type: object
           additionalProperties: true
           properties:
-            doorFee: {type: object, additionalProperties: {type: integer}, description: Minor units per currency, examples: [{USD: 799, CAD: 999}]}
-            pickupFee: {type: object, additionalProperties: {type: integer}, description: Minor units per currency, examples: [{USD: 0, CAD: 0}]}
             pickupWindow: {type: string, examples: [10am–2pm]}
             allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
             lateAdd:

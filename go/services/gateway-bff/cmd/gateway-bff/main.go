@@ -137,6 +137,11 @@ func run() error {
 	sellerDeps.Location = tz
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: cfg.Commerce.SellerShippingMinor,
 		FreeShippingThresholdMinor: cfg.Commerce.FreeShippingThresholdMinor, Location: tz})
+	// ADR 0005 §3: the carrier estimate in the cart and checkout follows the staff-managed carrier rule (read from
+	// delivery-runs every 30 s; the flat configured fee applies until a rule is read).
+	if setter, ok := estimator.(domain.CarrierRuleSetter); ok {
+		go app.NewCarrierRuleSync(upstreams.NewPublicDeliveryFees(deliveryRunsClient), setter, domain.Currency, 30*time.Second, log).Run(ctx)
+	}
 	sellers := app.SellerDirectory{RetailOrgID: cfg.Commerce.RetailOrgID, Names: cfg.Commerce.SellerNames}
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: cfg.Session.SigningKey,
 		IdleTTL: cfg.Session.IdleTTL, VerifyBearer: cfg.OIDC.VerifyBearer, Log: log})

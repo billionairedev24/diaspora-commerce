@@ -1226,5 +1226,12 @@
   "ord.codeOrder": "Order {number}",
   "ord.showCode": "Show delivery code",
   "ord.hideCode": "Hide delivery code",
-  "co.useNewMethod": "استخدام طريقة دفع أخرى"
+  "co.useNewMethod": "استخدام طريقة دفع أخرى",
+  "fee.rule.band": "رسوم التوصيل لمسافة {band}",
+  "fee.rule.door": "رسوم توصيل أفروترانزاكت",
+  "fee.rule.override": "رسوم محددة لهذا الطلب المسبق",
+  "fee.rule.pickup": "رسوم نقطة الاستلام",
+  "fee.rule.carrierQuote": "سعر شركة النقل لعنوانك",
+  "fee.rule.carrierFallback": "سعر شركة النقل المعتاد",
+  "ord.deliveryFee": "رسوم التوصيل {amount}: {note}"
 }

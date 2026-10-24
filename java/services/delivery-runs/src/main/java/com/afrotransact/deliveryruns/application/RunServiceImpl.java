@@ -7,16 +7,15 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.Capacity;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
 import com.afrotransact.deliveryruns.domain.DeliveryWindow;
 import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
@@ -221,7 +220,7 @@ class RunServiceImpl implements RunService {
         permissions.require(DeliveryRunsPermissions.READ);
         Location location = location(c.locationId());
         LocationDetails d = location.details();
-        long fee = c.feeMinor() == null ? d.defaultFeeMinor() : c.feeMinor();
+        long fee = c.feeMinor() == null ? defaultFee(location, d.currency()) : c.feeMinor();
         int min = c.minOrders() == null ? d.defaultMinOrders() : c.minOrders();
         Integer capacity = c.capacityOrders() == null ? d.defaultCapacity().maxOrders() : c.capacityOrders();
         DropMode mode = c.dropMode() == null ? d.dropMode() : c.dropMode();
@@ -275,7 +274,7 @@ class RunServiceImpl implements RunService {
         boolean pickupOnly = !w.details().door() && w.details().pickup();
         PickupPoint point = pickupOnly ? location.details().pickupPoint() : null;
         DropMode mode = point != null ? DropMode.PICKUP_POINT : DropMode.DOORSTEP;
-        long fee = w.doorFee(preorders.settings().settings().payment()).map(m -> m.minor())
+        long fee = w.doorFee(preorders.fees().current()).map(FeeSnapshot::amountMinor)
                 .orElse(location.details().defaultFeeMinor());
         RunTerms terms = new RunTerms(new DeliveryWindow(start, end), cutoff, null, null, fee,
                 w.details().currency(), 1, Capacity.UNLIMITED, mode, point, CutoffPolicy.CANCEL, 1);
@@ -302,19 +301,7 @@ class RunServiceImpl implements RunService {
 
     /** The window's location, else the active location named like its first target city in that state. */
     private Optional<Location> windowLocation(PreorderWindow w) {
-        if (w.details().locationId() != null) {
-            return locations.findById(w.details().locationId()).filter(Location::active);
-        }
-        Optional<AreaKey> city = w.details().targets().stream().filter(AreaKey::isCity).findFirst();
-        if (city.isEmpty()) {
-            return Optional.empty();
-        }
-        AreaKey k = city.get();
-        return locations.findAll(true).stream()
-                .filter(l -> l.name().equalsIgnoreCase(k.city())
-                        && k.region().equalsIgnoreCase(l.details().state() == null ? "" : l.details().state())
-                        && k.country().equals(l.details().market().toUpperCase(Locale.ROOT)))
-                .findFirst();
+        return preorders.fees().distances().locate(w);
     }
 
     private RunTerms terms(Location location, RunCommand c) {
@@ -328,11 +315,21 @@ class RunServiceImpl implements RunService {
         Capacity capacity = c.capacityOrders() == null && c.capacityPackages() == null ? d.defaultCapacity()
                 : new Capacity(c.capacityOrders(), c.capacityPackages());
         return new RunTerms(new DeliveryWindow(c.windowStart(), c.windowEnd()), c.cutoffAt(), c.opensAt(),
-                c.sellerPickupAt(), c.feeMinor() == null ? d.defaultFeeMinor() : c.feeMinor(),
+                c.sellerPickupAt(), c.feeMinor() == null ? defaultFee(location, c.currency() == null ? d.currency()
+                : c.currency()) : c.feeMinor(),
                 c.currency() == null ? d.currency() : c.currency(),
                 c.minOrders() == null ? d.defaultMinOrders() : c.minOrders(), capacity, mode, point,
                 c.cutoffPolicy() == null ? d.defaultCutoffPolicy() : c.cutoffPolicy(),
                 c.extendDays() == null ? d.defaultExtendDays() : c.extendDays());
+    }
+
+    /**
+     * A run staff schedule without naming a fee costs what the AfroTransact delivery rule says for the distance of
+     * the location (ADR 0005 §3); the default of the location only applies when no rule can price it.
+     */
+    private long defaultFee(Location location, String currency) {
+        return preorders.fees().doorFeeAt(location, currency).map(FeeSnapshot::amountMinor)
+                .orElse(location.details().defaultFeeMinor());
     }
 
     private RouteEstimate route(Location location) {

@@ -7,7 +7,7 @@ import { queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { type Requester } from './http';
-import { MinorSchema } from './schemas/common';
+import { DeliveryFeeRuleRefSchema, MinorSchema } from './schemas/common';
 
 /* ── Schemas ───────────────────────────────────────────────────── */
 
@@ -127,7 +127,7 @@ export type PreorderListItem = z.infer<typeof PreorderListItemSchema>;
 export const PreorderOpenListSchema = z.object({ windows: z.array(PreorderListItemSchema), placements: PreorderPlacementsSchema });
 export type PreorderOpenList = z.infer<typeof PreorderOpenListSchema>;
 
-export const PreorderOptionSchema = z.object({ fulfilment: PreorderFulfilmentSchema, feeMinor: MinorSchema });
+export const PreorderOptionSchema = z.object({ fulfilment: PreorderFulfilmentSchema, feeMinor: MinorSchema, /** The delivery fee rule behind this fee (ADR 0005 §3). */ rule: DeliveryFeeRuleRefSchema.optional() });
 export type PreorderOption = z.infer<typeof PreorderOptionSchema>;
 
 /** Cart / checkout `packages[].preorder`: lines eligible for the place's window are one pre-order package. */
@@ -141,6 +141,8 @@ export const CartPreorderSchema = PreorderTermsSchema.extend({
   deliversOn: z.string(),
   timeZone: z.string(),
   fulfilment: PreorderFulfilmentSchema,
+  /** The delivery fee of the chosen fulfilment: the rule and its version. */
+  feeRule: DeliveryFeeRuleRefSchema.optional(),
   options: z.array(PreorderOptionSchema)
 });
 export type CartPreorder = z.infer<typeof CartPreorderSchema>;

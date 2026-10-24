@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { withCorrelationHeaders } from './correlation';
 import { ApiError, problemFrom } from './errors';
 import { absolute, type ApiClientOptions, type FetchLike, joinUrl, type Requester } from './http';
+import { type DeliveryFeeRule, type FeeRuleRef, FeeRuleRefSchema, resolveDoorFee, resolvePickupFee } from './staff-delivery-fees';
 import { tableSearchParams } from './table-query';
 import { randomUuid } from './uuid';
 
@@ -185,13 +186,16 @@ export const PreorderWindowSchema = z.object({
   door: z.boolean(),
   pickup: z.boolean(),
   pickupPoint: z.string().nullable(),
-  /** Per-window fee overrides in minor units (null = the platform default for the window's currency). */
+  /** Per-window fee overrides in minor units (null = the delivery fee rule of the method, see Delivery fees). */
   doorFeeOverride: z.number().int().nullable(),
   pickupFeeOverride: z.number().int().nullable(),
   currency: z.string(),
-  /** Fees shoppers pay for this window (override, else the platform default). */
+  /** Fees shoppers pay for this window (override, else the delivery fee rule). */
   effectiveDoorFee: z.number().int(),
   effectivePickupFee: z.number().int(),
+  /** The rule behind each fee (method, rule version, distance band, source); null when door delivery is not offered. */
+  doorFeeRule: FeeRuleRefSchema.nullable().default(null),
+  pickupFeeRule: FeeRuleRefSchema.nullable().default(null),
   showCount: z.boolean(),
   socialBudget: z.number().int(),
   comms: z.array(CommKindSchema),
@@ -384,9 +388,6 @@ export function linkExpiryProblem(hours: number): string | null {
 }
 
 export const PreorderPaymentSettingsSchema = z.object({
-  /** Door delivery fee per currency, minor units (default USD 799). */
-  doorFee: z.record(z.string(), z.number().int().min(0)),
-  pickupFee: z.record(z.string(), z.number().int().min(0)),
   pickupWindow: z.string(),
   allowedMethods: z.array(PaymentMethodSchema),
   lateAdd: z.object({
@@ -759,24 +760,24 @@ export const currencyOfCountry = (country: string): string => CURRENCY[country] 
 export const currencyOfTargets = (targets: string[]): string => currencyOfCountry(areaFromKey(targets[0] ?? 'US').country);
 
 export const DEFAULT_PAYMENT: PreorderPaymentSettings = {
-  doorFee: { USD: 799, CAD: 999 },
-  pickupFee: { USD: 0, CAD: 0 },
   pickupWindow: '10am–2pm',
   allowedMethods: ['CARD', 'WALLET', 'ACH'],
   lateAdd: { savedCard: true, paymentLink: true, linkExpiryHours: 24 },
   missedDelivery: { offerRefund: true, offerNewDate: true }
 };
 
-/** Fees a window charges: its override, else the platform default for its currency (USD default when none is set). */
+/**
+ * Fees a window charges and the rules behind them (ADR 0005 §3): its own fee, else the delivery fee rules of the door
+ * and pickup methods. A door fee is 0 and its rule null when no rule can price it.
+ */
 export function effectiveFees(
   w: Pick<PreorderWindowInput, 'doorFeeOverride' | 'pickupFeeOverride'>,
-  payment: PreorderPaymentSettings,
+  rules: readonly DeliveryFeeRule[],
   currency: string
-): { door: number; pickup: number } {
-  return {
-    door: w.doorFeeOverride ?? payment.doorFee[currency] ?? payment.doorFee.USD ?? DEFAULT_PAYMENT.doorFee.USD ?? 0,
-    pickup: w.pickupFeeOverride ?? payment.pickupFee[currency] ?? payment.pickupFee.USD ?? 0
-  };
+): { door: number; pickup: number; doorRule: FeeRuleRef | null; pickupRule: FeeRuleRef } {
+  const doorRule = resolveDoorFee(rules, currency, null, w.doorFeeOverride);
+  const pickupRule = resolvePickupFee(rules, currency, w.pickupFeeOverride);
+  return { door: doorRule?.amountMinor ?? 0, pickup: pickupRule.amountMinor, doorRule, pickupRule };
 }
 
 export interface LateAddDraft {

@@ -1,5 +1,6 @@
 package com.afrotransact.orders.application;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -65,7 +66,24 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                List<String> nextActions,
                                List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
                                Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns,
-                               LocalDeliveryView localDelivery, PreorderView preorder) {
+                               LocalDeliveryView localDelivery, PreorderView preorder,
+                               DeliveryFeeRuleView deliveryFeeRule) {
+    }
+
+    /**
+     * The staff delivery fee rule that priced this shipment's shipping (ADR 0005 §3), as it was at checkout: later
+     * edits of the rule never change it.
+     *
+     * @param method        AFROTRANSACT_DELIVERY, CARRIER or PICKUP
+     * @param ruleId        the rule (null when staff set the fee on the window and no rule existed)
+     * @param ruleVersion   the version applied
+     * @param amountMinor   the fee that applied (a pre-order's fee is shared by its sellers' shipments)
+     * @param source        RULE, WINDOW_OVERRIDE, CARRIER_QUOTE or CARRIER_FALLBACK
+     * @param band          the distance band applied ("10–40 mi"), or the free-over threshold
+     * @param distanceMiles the distance the band was chosen by
+     */
+    public record DeliveryFeeRuleView(String method, String ruleId, long ruleVersion, String currency,
+                                      long amountMinor, String source, String band, BigDecimal distanceMiles) {
     }
 
     /**

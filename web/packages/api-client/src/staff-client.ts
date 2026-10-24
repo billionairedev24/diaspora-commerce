@@ -67,6 +67,7 @@ import {
   type SupportRefundRequest,
   type TaxRatesImportResult,
   TaxRatesImportResultSchema} from './schemas/staff';
+import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
 import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
@@ -190,6 +191,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
     preorders: createStaffPreordersApi(request, options),
+    /* Delivery fees (ADR 0005 §3): /v1/staff/delivery-fees/** mirrors delivery-runs' fee rules */
+    deliveryFees: createStaffDeliveryFeesApi(request, options),
 
     /* Inventory hub and AfroTransact Retail (1P) (S281): /v1/staff/inventory/** and /v1/staff/retail/** */
     inventory: createInventoryHubApi(request, options)

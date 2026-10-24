@@ -171,6 +171,8 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 				"carrier": "ups", "trackingNumber": "1Z999", "promisedBy": "2026-10-03", "deliveredAt": "2026-10-03T17:00:00Z", "cancellable": cancellable,
 				"preferences": map[string]any{"handover": "DOOR"}, "perishable": false,
 				"returnable": true, "returnWindowEndsAt": "2026-11-02T17:00:00Z", "problemReportOnly": false,
+				"deliveryFeeRule": map[string]any{"method": "CARRIER", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a11", "ruleVersion": 4, "currency": "USD",
+					"amountMinor": 0, "source": "RULE", "band": "free over 35.00"},
 				"returns":  map[string]any{"eligibility": "/v1/returns/eligibility?orderId=" + ShopperOrderID, "list": "/v1/returns?orderId=" + ShopperOrderID},
 				"lines":    []map[string]any{{"id": ShopperLineID, "variantAtin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250, "itemsMinor": 2500}},
 				"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "at": "2026-10-01T15:00:00Z"}, {"from": "out_for_delivery", "to": "delivered", "at": "2026-10-03T17:00:00Z"}}}}}

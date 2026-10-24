@@ -13,11 +13,14 @@ import java.time.Instant;
  * @param count           live pre-order count (only when the window shows it and it is not upcoming)
  * @param fallback        platform fallback where pre-order is off
  * @param metro           next-day metro city: pre-order is never shown
- * @param doorFee         effective door fee (null without a window or door delivery)
- * @param pickupFee       effective pickup fee (null without a window or pickup)
+ * @param doorFee         door fee and the rule behind it (null without a window, door delivery, or when the address is
+ *                        beyond how far AfroTransact delivers)
+ * @param pickupFee       pickup fee and the rule behind it (null without a window or pickup)
+ * @param beyondRange     a window covers the place but its address is beyond the last distance band and the window
+ *                        offers no pickup: the order ships by carrier instead of going on a run
  * @param settings        platform settings (placements, payment)
  */
 public record Resolution(AreaKey place, boolean on, PreorderStatus stage, PreorderWindow window,
-                         Instant countdownTarget, Integer count, Fallback fallback, boolean metro, Money doorFee,
-                         Money pickupFee, PreorderSettings settings) {
+                         Instant countdownTarget, Integer count, Fallback fallback, boolean metro, FeeSnapshot doorFee,
+                         FeeSnapshot pickupFee, boolean beyondRange, PreorderSettings settings) {
 }

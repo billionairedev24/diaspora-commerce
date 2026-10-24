@@ -8,6 +8,16 @@ import { z } from 'zod';
 
 import { type AccessLevel } from '../../schemas/seller';
 import {
+  type DeliveryFeeChange,
+  type DeliveryFeeRule,
+  FeeMethodSchema,
+  feeRuleOf,
+  resolveCarrierFee,
+  resolveDoorFee,
+  resolvePickupFee,
+  ruleInputProblems
+} from '../../staff-delivery-fees';
+import {
   areaFromKey,
   type AreaLevel,
   areaOn,
@@ -161,6 +171,9 @@ export interface MockPreorderState {
   windows: MockPreorderWindow[];
   orders: PreorderOrder[];
   settings: PreorderSettings;
+  /** Delivery fee rules (ADR 0005 §3) and their audit trail, newest first. */
+  feeRules: DeliveryFeeRule[];
+  feeChanges: DeliveryFeeChange[];
   areas: CoverageArea[];
   assets: Record<string, { url: string | null; width: number; height: number; contentType: string }>;
   /** Real-clock time each order of a cancelled window started refunding (the mock settles refunds a few seconds later). */
@@ -253,6 +266,27 @@ function genOrders(w: MockPreorderWindow, now: number, doorFee: number): Preorde
 }
 const SEED_N: Record<string, number> = Object.fromEntries(SEED.map((s) => [s.id, s.seedN]));
 
+/**
+ * The rules delivery-runs starts with (its migration of the old per-currency fee maps): $7.99 within 100 miles in USD and
+ * $9.99 in CAD, free pickup, and the flat carrier rate orders-service used ($5.99, free over $35).
+ */
+export function seedFeeRules(base: number): { rules: DeliveryFeeRule[]; changes: DeliveryFeeChange[] } {
+  const at0 = new Date(base - 14 * DAY).toISOString();
+  const rule = (id: string, method: DeliveryFeeRule['method'], currency: string, extra: Partial<DeliveryFeeRule>): DeliveryFeeRule => ({
+    id: `fee-${id}`, method, currency, version: 1, bands: [], feeMinor: 0, handlingMinor: 0, fallbackMinor: 0, freeAboveMinor: null, coverageMiles: 0, updatedAt: at0, updatedBy: 'migration',
+    reason: 'Carried over from the pre-order payment settings', ...extra
+  });
+  const rules = [
+    rule('door-usd', 'AFROTRANSACT_DELIVERY', 'USD', { bands: [{ fromMiles: 0, toMiles: 100, feeMinor: 799 }], coverageMiles: 100 }),
+    rule('door-cad', 'AFROTRANSACT_DELIVERY', 'CAD', { bands: [{ fromMiles: 0, toMiles: 100, feeMinor: 999 }], coverageMiles: 100 }),
+    rule('carrier-usd', 'CARRIER', 'USD', { fallbackMinor: 599, freeAboveMinor: 3500, reason: 'The flat carrier rate orders-service used before fee rules' }),
+    rule('pickup-usd', 'PICKUP', 'USD', {}),
+    rule('pickup-cad', 'PICKUP', 'CAD', {})
+  ];
+  const changes = rules.map((r): DeliveryFeeChange => ({ id: `chg-${r.id}-1`, method: r.method, currency: r.currency, version: 1, before: null, after: r, actor: 'migration', reason: r.reason ?? '', at: at0 }));
+  return { rules, changes: changes.reverse() };
+}
+
 export function seedPreorders(now: Date): MockPreorderState {
   const base = now.getTime();
   const shift = Math.round((base - DESIGN_TODAY) / DAY) * DAY;
@@ -264,6 +298,7 @@ export function seedPreorders(now: Date): MockPreorderState {
     minOrders: s.min ?? MIN_ORDERS_DEFAULT, outcome: s.outcome ?? null, decisions: []
   }));
   const settings: PreorderSettings = { enabled: true, fallback: 'SHIP', placements: { ribbon: true, hero: true, badge: true, pdp: true, cart: true, family: true }, payment: structuredClone(DEFAULT_PAYMENT), version: 1 };
+  const { rules: feeRules, changes: feeChanges } = seedFeeRules(base);
   const lbk = windows.find((w) => w.id === 'lbk-7');
   const lbk6 = windows.find((w) => w.id === 'lbk-6');
   const assets: MockPreorderState['assets'] = {};
@@ -279,12 +314,12 @@ export function seedPreorders(now: Date): MockPreorderState {
   seedCreative(lbk, 'FEED', 1080, 1350); // 4:5, flagged "Ratio off"
   seedCreative(lbk6, 'HERO', 1920, 640);
   windows.filter((w) => !w.draft && w.id !== 'lbk-7' && w.id !== 'lbk-6').forEach((w) => seedCreative(w, 'HERO', 1920, 640));
-  const orders = windows.flatMap((w) => genOrders(w, base, effectiveFees(w, settings.payment, currencyOfTargets(w.targets)).door));
+  const orders = windows.flatMap((w) => genOrders(w, base, effectiveFees(w, feeRules, currencyOfTargets(w.targets)).door));
   const awaiting = windows.find((w) => w.outcome === 'AWAITING_DECISION');
   if (awaiting) {
     awaiting.decisions.push({ id: `dec-${awaiting.id}-1`, kind: 'AWAITING', reason: `Closed with ${orders.filter((o) => o.windowId === awaiting.id && o.status !== 'CANCELLED').length} of ${awaiting.minOrders} orders`, actor: 'system', orders: orders.filter((o) => o.windowId === awaiting.id && o.status !== 'CANCELLED').length, minimum: awaiting.minOrders, at: awaiting.closesAt });
   }
-  return { seededAt: Date.now(), base, windows, orders, settings, areas: DEF_AREAS.map((a) => ({ ...a })), assets, refunds: {}, seq: 0 };
+  return { seededAt: Date.now(), base, windows, orders, settings, feeRules, feeChanges, areas: DEF_AREAS.map((a) => ({ ...a })), assets, refunds: {}, seq: 0 };
 }
 
 /* ── Views ── */
@@ -332,7 +367,7 @@ function areaOffOf(s: MockPreorderState, w: MockPreorderWindow): boolean {
 export function windowView(s: MockPreorderState, w: MockPreorderWindow): PreorderWindow {
   const paid = ordersOf(s, w).filter(live);
   const currency = currencyOfTargets(w.targets);
-  const fees = effectiveFees(w, s.settings.payment, currency);
+  const fees = effectiveFees(w, s.feeRules, currency);
   return {
     ...w,
     targets: w.targets.map((key) => ({ key, label: areaLabel(key) })),
@@ -340,6 +375,8 @@ export function windowView(s: MockPreorderState, w: MockPreorderWindow): Preorde
     currency,
     effectiveDoorFee: fees.door,
     effectivePickupFee: fees.pickup,
+    doorFeeRule: w.door ? fees.doorRule : null,
+    pickupFeeRule: w.pickup ? fees.pickupRule : null,
     status: statusOf(s, w),
     areaOff: areaOffOf(s, w),
     switchState: switchStateOf({ draft: w.draft, active: w.active, status: statusOf(s, w) }, s.settings.enabled, windowAreaOn(s.areas, w.targets)),
@@ -593,6 +630,25 @@ export interface PreorderHandlerDeps {
   problem: (status: number, code: string, title: string, detail: string, errors?: Record<string, string>) => Error;
 }
 
+/** What the preview route takes. */
+const FeePreviewBodySchema = z.object({
+  method: FeeMethodSchema,
+  currency: z.string().regex(/^[A-Za-z]{3}$/),
+  distanceMiles: z.number().min(0).max(500).nullish(),
+  windowId: z.string().nullish(),
+  carrierQuoteMinor: z.number().int().min(0).nullish(),
+  itemsMinor: z.number().int().min(0).nullish()
+});
+/** What the rule route takes (the numbers are checked by ruleInputProblems, like the BFF does). */
+const FeeInputBodySchema = z.object({
+  bands: z.array(z.object({ fromMiles: z.number(), toMiles: z.number(), feeMinor: z.number() })).optional(),
+  feeMinor: z.number().optional(),
+  handlingMinor: z.number().optional(),
+  fallbackMinor: z.number().optional(),
+  freeAboveMinor: z.number().nullish(),
+  reason: z.string()
+});
+
 const RANK: Record<AccessLevel, number> = { VIEW: 1, EDIT: 2, APPROVE: 3, FULL: 4 };
 
 export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
@@ -610,6 +666,10 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
     view(ctx);
     const lv = levelOf(ctx.roles, 'preorders');
     if (!ctx.permissions.includes('preorders:manage') || !lv || RANK[lv] < RANK.EDIT) throw forbidden('Only pre-order managers can open, edit, pause or publish pre-orders and upload creatives.');
+  };
+  const canManage = (ctx: PreorderCtx) => {
+    const lv = levelOf(ctx.roles, 'preorders');
+    return ctx.permissions.includes('preorders:manage') && !!lv && RANK[lv] >= RANK.EDIT;
   };
   const full = (ctx: PreorderCtx) => {
     view(ctx);
@@ -747,8 +807,6 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         full(ctx);
         const s = st(ctx);
         ifMatch(ctx, s.settings.version);
-        const fees = [...Object.entries(b.payment.doorFee), ...Object.entries(b.payment.pickupFee)];
-        if (fees.some(([c]) => !/^[A-Z]{3}$/.test(c))) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Fees are keyed by ISO 4217 currency.', { 'payment.doorFee': 'Use a 3-letter currency code' });
         if (!b.payment.allowedMethods.length) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Allow at least one payment method.', { 'payment.allowedMethods': 'Allow at least one payment method' });
         if (!b.payment.lateAdd.savedCard && !b.payment.lateAdd.paymentLink) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Late adds need a way to pay.', { 'payment.lateAdd': 'Keep saved card or payment link on' });
         if (!b.payment.missedDelivery.offerRefund && !b.payment.missedDelivery.offerNewDate) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Shoppers need a choice when a delivery is missed.', { 'payment.missedDelivery': 'Offer a refund or a new date' });
@@ -1163,7 +1221,7 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
           return { atin: i.atin, name: prod.name, sellerName: prod.seller, qty: i.qty, price: prod.price };
         });
         s.seq += 1;
-        const fee = effectiveFees(w, s.settings.payment, currencyOfTargets(w.targets)).door;
+        const fee = effectiveFees(w, s.feeRules, currencyOfTargets(w.targets)).door;
         const order: PreorderOrder = {
           orderId: `ord-${w.id}-late-${s.seq}`, number: `${slugOf(w.targets)}-L${90 + s.orders.filter((o) => o.windowId === w.id && o.number.includes('-L9')).length}`, windowId: w.id,
           customerName: cust.name, phone: cust.phone, email: cust.email, addressLine: addr.line1, city: addr.city, region: addr.region, zip: addr.zip, deliveryNote: b.note,
@@ -1188,6 +1246,80 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         const w = s.windows.find((x) => x.id === qs.get('windowId')) ?? s.windows[0];
         const q = (qs.get('q') ?? '').trim().toLowerCase();
         return { items: w ? directory(w).filter((c) => !q || `${c.name} ${c.phone} ${c.email}`.toLowerCase().includes(q)) : [] };
+      })
+    ),
+    http.get(
+      `${W}/delivery-fees`,
+      route((ctx) => {
+        view(ctx);
+        const can = { manage: canManage(ctx), settings: levelOf(ctx.roles, 'preorders') === 'FULL', export: ctx.permissions.includes('preorders:export'), lateAdd: ctx.permissions.includes('preorders:late-add') };
+        return { items: st(ctx).feeRules, can };
+      })
+    ),
+    http.get(
+      `${W}/delivery-fees/changes`,
+      route((ctx) => {
+        view(ctx);
+        const qs = new URL(ctx.request.url).searchParams;
+        const method = qs.get('method');
+        const currency = qs.get('currency')?.toUpperCase();
+        const limit = Math.min(Math.max(Number(qs.get('limit') ?? 50) || 50, 1), 200);
+        return { items: st(ctx).feeChanges.filter((c) => (!method || c.method === method) && (!currency || c.currency === currency)).slice(0, limit) };
+      })
+    ),
+    http.post(
+      `${W}/delivery-fees/preview`,
+      route(async (ctx) => {
+        view(ctx);
+        const b = await json(ctx.request, FeePreviewBodySchema);
+        const s = st(ctx);
+        const currency = b.currency.toUpperCase();
+        const w = b.windowId ? s.windows.find((x) => x.id === b.windowId) : undefined;
+        if (b.windowId && !w) throw notFound('No such pre-order.');
+        const fee =
+          b.method === 'AFROTRANSACT_DELIVERY'
+            ? resolveDoorFee(s.feeRules, currency, b.distanceMiles ?? null, w?.doorFeeOverride ?? null)
+            : b.method === 'PICKUP'
+              ? resolvePickupFee(s.feeRules, currency, w?.pickupFeeOverride ?? null)
+              : resolveCarrierFee(s.feeRules, currency, b.carrierQuoteMinor ?? null, b.itemsMinor ?? 0);
+        return { applies: fee !== null, fee };
+      })
+    ),
+    http.put(
+      `${W}/delivery-fees/:method/:currency`,
+      route(async (ctx, params) => {
+        const method = FeeMethodSchema.safeParse(String(params.method ?? '').toUpperCase());
+        const currency = String(params.currency ?? '').toUpperCase();
+        if (!method.success || !/^[A-Z]{3}$/.test(currency)) throw notFound('No such delivery fee.');
+        manage(ctx);
+        const b = await json(ctx.request, FeeInputBodySchema);
+        const errors = ruleInputProblems(method.data, b);
+        if (Object.keys(errors).length) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', errors);
+        const s = st(ctx);
+        const current = feeRuleOf(s.feeRules, method.data, currency);
+        ifMatch(ctx, current?.version ?? 0);
+        const bands = [...(b.bands ?? [])].sort((x, y) => x.fromMiles - y.fromMiles);
+        const next: DeliveryFeeRule = {
+          id: current?.id ?? `fee-${method.data.toLowerCase()}-${currency.toLowerCase()}`,
+          method: method.data,
+          currency,
+          version: (current?.version ?? 0) + 1,
+          bands: method.data === 'AFROTRANSACT_DELIVERY' ? bands : [],
+          feeMinor: method.data === 'PICKUP' ? (b.feeMinor ?? 0) : 0,
+          handlingMinor: method.data === 'CARRIER' ? (b.handlingMinor ?? 0) : 0,
+          fallbackMinor: method.data === 'CARRIER' ? (b.fallbackMinor ?? 0) : 0,
+          freeAboveMinor: method.data === 'CARRIER' ? (b.freeAboveMinor ?? null) : null,
+          coverageMiles: method.data === 'AFROTRANSACT_DELIVERY' ? (bands[bands.length - 1]?.toMiles ?? 0) : 0,
+          updatedAt: ctx.now.toISOString(),
+          updatedBy: ctx.action.actor,
+          reason: b.reason.trim()
+        };
+        const same = current && JSON.stringify({ ...current, version: 0, updatedAt: '', updatedBy: '', reason: '' }) === JSON.stringify({ ...next, version: 0, updatedAt: '', updatedBy: '', reason: '' });
+        if (same) return withEtag(current);
+        s.feeRules = current ? s.feeRules.map((r) => (r === current ? next : r)) : [...s.feeRules, next];
+        s.feeChanges.unshift({ id: `chg-${next.id}-${next.version}`, method: next.method, currency, version: next.version, before: current ?? null, after: next, actor: ctx.action.actor, reason: next.reason ?? '', at: next.updatedAt });
+        audit(ctx, 'delivery-fee.changed', next.id, `Set the ${next.method} delivery fee in ${currency} (version ${next.version}): ${next.reason}`);
+        return withEtag(next);
       })
     )
   ];

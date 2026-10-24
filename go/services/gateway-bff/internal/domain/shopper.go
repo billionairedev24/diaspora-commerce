@@ -68,6 +68,9 @@ type ShipmentDetail struct {
 	Pickup *OrderPickup `json:"pickup"`
 	// Proof is how our driver handed it over (photo, who received it); null for carrier, pickup and manual deliveries.
 	Proof *DeliveryProof `json:"proof"`
+	// DeliveryFeeRule is the delivery fee rule the shipping was charged by, as it was when the order was placed: later
+	// edits of the rule never change it. Null for flat rates and AfroTransact Delivery from a seller's store.
+	DeliveryFeeRule *FeeRuleRef `json:"deliveryFeeRule"`
 }
 
 // OrderPickup is the pickup point of a pickup shipment as the order page shows it.

@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { type ReactNode } from 'react';
 
 import { useT } from '@/i18n/t';
+import { feeRuleNote } from '@/lib/fee-rule';
 import { payNotes, preorderDates, stageCopy } from '@/lib/preorder/copy';
 import { usePreorderResolution } from '@/lib/preorder/usePreorder';
 
@@ -73,6 +74,7 @@ export function FulfilmentChoice({ block, busy, onChange }: { block: CartPreorde
           const title = door ? t('preorder.cart.door') : t('preorder.cart.pickup');
           const sub = door ? dates.deliversT : t('preorder.cart.pickupSub', { date: dates.deliversT, window: block.pickupWindow });
           const checked = block.fulfilment === o.fulfilment;
+          const rule = block.options.find((x) => x.fulfilment === o.fulfilment)?.rule;
           return (
             <button
               key={o.fulfilment}
@@ -87,6 +89,11 @@ export function FulfilmentChoice({ block, busy, onChange }: { block: CartPreorde
               <span className={styles.fulfilText}>
                 <strong className={styles.fulfilTitle}>{title}</strong>
                 <span className={styles.fulfilSub}>{sub}</span>
+                {rule ? (
+                  <span className={styles.fulfilSub} data-testid={`fulfil-rule-${o.fulfilment.toLowerCase()}`}>
+                    {feeRuleNote(t, rule)}
+                  </span>
+                ) : null}
               </span>
               <strong className={styles.fulfilPrice}>{price(o.feeMinor)}</strong>
             </button>

@@ -7,14 +7,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
 class PreorderWindowTest {
 
-    private static final PaymentSettings PAYMENT = PaymentSettings.DEFAULT;
+    private static final DeliveryFees FEES = DeliveryFees.DEFAULT;
+    private static final DeliveryFees WITH_CAD = Preorders.feesWithCad();
 
     @Test
     void statusIsDerivedFromDraftPauseAndDates() {
@@ -46,11 +46,11 @@ class PreorderWindowTest {
     void aCompleteDraftPassesEveryCheckAndPublishes() {
         PreorderWindow draft = Preorders.draft(Preorders.lubbock())
                 .withCreative(CreativeSlot.HERO, Preorders.HERO, Preorders.OPENS);
-        assertThat(draft.publishChecks(PAYMENT)).isEmpty();
-        PreorderWindow published = draft.publish(PAYMENT, Preorders.OPENS);
+        assertThat(draft.publishChecks(FEES)).isEmpty();
+        PreorderWindow published = draft.publish(FEES, Preorders.OPENS);
         assertThat(published.draft()).isFalse();
         assertThat(published.active()).isTrue();
-        assertThatThrownBy(() -> published.publish(PAYMENT, Preorders.OPENS))
+        assertThatThrownBy(() -> published.publish(FEES, Preorders.OPENS))
                 .isInstanceOf(InvalidTransitionException.class);
     }
 
@@ -64,15 +64,15 @@ class PreorderWindowTest {
         String page = "https://afrotransact.com/pre-orders";
         assertThat(w.smsAsSent(page)).contains(page + "?src=sms&po=LUB-7&cr=announce").doesNotContain("{link}");
         assertThat(copy.length()).as("raw copy fits").isLessThanOrEqualTo(160);
-        assertThat(w.publishChecks(PAYMENT, page)).extracting(RuleViolation::code)
+        assertThat(w.publishChecks(FEES, page)).extracting(RuleViolation::code)
                 .containsExactly("delivery-runs.preorder-sms-too-long");
-        assertThatThrownBy(() -> w.publish(PAYMENT, page, Preorders.OPENS))
+        assertThatThrownBy(() -> w.publish(FEES, page, Preorders.OPENS))
                 .isInstanceOf(PublishBlockedException.class);
 
         PreorderWindow shortCopy = Preorders.draft(withSms(base, "AfroTransact: Lubbock pre-order is open. {link} "
                 + "Reply STOP to opt out")).withCreative(CreativeSlot.HERO, Preorders.HERO, Preorders.OPENS);
-        assertThat(shortCopy.publishChecks(PAYMENT, page)).isEmpty();
-        assertThat(w.publishChecks(PAYMENT)).as("without a page URL the link is not checked").isEmpty();
+        assertThat(shortCopy.publishChecks(FEES, page)).isEmpty();
+        assertThat(w.publishChecks(FEES)).as("without a page URL the link is not checked").isEmpty();
     }
 
     private static WindowDetails withSms(WindowDetails d, String sms) {
@@ -95,7 +95,7 @@ class PreorderWindowTest {
                 "delivery-runs.preorder-fulfilment-required");
         assertThat(draft.publishChecks()).extracting(RuleViolation::getMessage).contains("Name set",
                 "Storefront hero uploaded (required)", "At least one fulfilment option");
-        assertThatThrownBy(() -> draft.publish(PAYMENT, Preorders.OPENS))
+        assertThatThrownBy(() -> draft.publish(FEES, Preorders.OPENS))
                 .isInstanceOfSatisfying(PublishBlockedException.class, e -> {
                     assertThat(e.violations()).hasSize(7);
                     assertThat(e.getMessage()).isEqualTo("7 checks to fix before publishing");
@@ -118,13 +118,13 @@ class PreorderWindowTest {
     @Test
     void aDoorWindowNeedsADoorFeeInItsCurrency() {
         PreorderWindow toronto = Preorders.published(Preorders.details(List.of("CA/ON/Toronto")));
-        PaymentSettings usdOnly = new PaymentSettings(Map.of("USD", 799L), Map.of(), PAYMENT.allowedMethods(), null,
-                null, null, null);
+        DeliveryFees usdOnly = DeliveryFees.DEFAULT;
         assertThat(toronto.details().currency()).isEqualTo("CAD");
         assertThat(toronto.publishChecks(usdOnly)).extracting(RuleViolation::code)
                 .containsExactly("delivery-runs.preorder-fee-missing");
-        assertThat(toronto.doorFee(PAYMENT)).contains(new Money(999, "CAD"));
-        assertThat(toronto.pickupFee(PAYMENT)).isEqualTo(new Money(0, "CAD"));
+        assertThat(toronto.publishChecks(WITH_CAD)).isEmpty();
+        assertThat(toronto.doorFee(WITH_CAD)).map(FeeSnapshot::amount).contains(new Money(999, "CAD"));
+        assertThat(toronto.pickupFee(WITH_CAD).amount()).isEqualTo(new Money(0, "CAD"));
     }
 
     @Test
@@ -134,8 +134,10 @@ class PreorderWindowTest {
                 d.deliversOn(), d.timeZone(), d.ribbon(), d.headline(), d.smsCopy(), d.categories(), true, true, null,
                 null, true, null, d.comms(), new Money(499, "USD"), new Money(150, "USD"), null);
         PreorderWindow w = Preorders.published(overridden);
-        assertThat(w.doorFee(PAYMENT)).contains(new Money(499, "USD"));
-        assertThat(w.pickupFee(PAYMENT)).isEqualTo(new Money(150, "USD"));
+        assertThat(w.doorFee(FEES)).map(FeeSnapshot::amount).contains(new Money(499, "USD"));
+        assertThat(w.doorFee(FEES).orElseThrow().source()).isEqualTo(FeeSource.WINDOW_OVERRIDE);
+        assertThat(w.pickupFee(FEES).amount()).isEqualTo(new Money(150, "USD"));
+        assertThat(w.pickupFee(FEES).source()).isEqualTo(FeeSource.WINDOW_OVERRIDE);
         assertThatThrownBy(() -> new WindowDetails(d.name(), d.targets(), d.opensAt(), d.closesAt(), d.deliversOn(),
                 d.timeZone(), d.ribbon(), d.headline(), d.smsCopy(), d.categories(), true, true, null, null, true,
                 null, d.comms(), new Money(10_001, "USD"), null, null))
@@ -161,10 +163,10 @@ class PreorderWindowTest {
         WindowDetails noRibbon = new WindowDetails("Lubbock", w.details().targets(), Preorders.OPENS, Preorders.CLOSES,
                 Preorders.DELIVERS, Preorders.CHICAGO, "", "", "", null, true, false, null, null, true, null, null,
                 null, null, null);
-        assertThatThrownBy(() -> w.edit(noRibbon, PAYMENT, Preorders.OPENS))
+        assertThatThrownBy(() -> w.edit(noRibbon, FEES, Preorders.OPENS))
                 .isInstanceOf(PublishBlockedException.class);
         Instant delivered = w.deliveredAt();
-        assertThatThrownBy(() -> w.edit(w.details(), PAYMENT, delivered)).isInstanceOf(RuleViolation.class)
+        assertThatThrownBy(() -> w.edit(w.details(), FEES, delivered)).isInstanceOf(RuleViolation.class)
                 .hasMessageContaining("delivered");
         assertThatThrownBy(() -> w.withoutCreative(CreativeSlot.HERO, Preorders.OPENS))
                 .isInstanceOf(RuleViolation.class);

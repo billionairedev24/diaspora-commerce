@@ -109,6 +109,41 @@ func (h *handlersImpl) registerStaffPreorders(route func(pattern string, fn http
 	route("GET /v1/staff/preorders/{id}/exports/{file}", h.staffPreorderExport)
 	route("POST /v1/staff/preorders/{id}/late-orders", h.staffPreorderLateOrder)
 	route("GET /v1/staff/customers/search", h.staffCustomerSearch)
+	route("GET /v1/staff/delivery-fees", h.staffDeliveryFees)
+	route("GET /v1/staff/delivery-fees/changes", h.staffDeliveryFeeChanges)
+	route("POST /v1/staff/delivery-fees/preview", h.staffPreviewDeliveryFee)
+	route("PUT /v1/staff/delivery-fees/{method}/{currency}", h.staffUpdateDeliveryFee)
+}
+
+func (h *handlersImpl) staffDeliveryFees(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.DeliveryFees(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffUpdateDeliveryFee(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.UpdateDeliveryFee(r.Context(), callerFrom(r.Context()), r.PathValue("method"), r.PathValue("currency"), r.Header.Get("If-Match"), b)
+	setVersionETag(w, v)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffDeliveryFeeChanges(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.DeliveryFeeChanges(r.Context(), callerFrom(r.Context()), r.URL.Query())
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPreviewDeliveryFee(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.PreviewDeliveryFee(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) staffPreorders(w http.ResponseWriter, r *http.Request) {

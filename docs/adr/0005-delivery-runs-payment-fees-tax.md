@@ -50,6 +50,13 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
 - **Payout (§5).** Settlement is not window specific: delivering a package starts payments' settlement hold (7 days by
   default), then the seller net is transferred; the delivery fee stays with AfroTransact (ledger 4250). Packages are
   marked delivered by the driver app, fulfilment or staff in orders-service; a run's `completed` does not do it.
+- **Delivery fee rules (§3).** `delivery_fee_rule` holds one versioned rule per method (`AFROTRANSACT_DELIVERY` bands by
+  distance, `CARRIER` handling / fallback / free-above, `PICKUP` fee) and currency; `delivery_fee_rule_change` is the audit
+  trail with a required reason. Windows, runs and checkout resolve a fee through one code path (`DeliveryFees`), a window may
+  override the door or pickup fee, and beyond the last band a door-only window is routed to carrier shipping. Orders store a
+  snapshot (`shipment.delivery_fee_rule`), so edits never change past orders. Staff manage all of it on one screen
+  (Settings, Money, Delivery fees). See the delivery-runs README. Not built: carrier-gateway live quotes in orders (the
+  fallback fee applies), express on rules, and a dedicated permission (`preorders:manage` is used).
 - **Not built.** A dedicated permission for deciding (`preorders:manage` is used), a staff e-mail / chat recipient for
   `decision_needed`, and capture at order time (§1 says "charged at checkout").
 

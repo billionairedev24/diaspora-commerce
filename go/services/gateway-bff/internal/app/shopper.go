@@ -329,7 +329,7 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 			Cancellable: sh.Cancellable, CancellableUntil: optStr(sh.CancellableUntil), Carrier: optStr(sh.Carrier), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
 			PromisedBy: optStr(sh.PromisedBy), DeliveredAt: optStr(sh.DeliveredAt), DeliveryCode: optStr(sh.HandoverCode),
 			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline), Returnable: sh.Returnable,
-			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly}
+			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly, DeliveryFeeRule: sh.DeliveryFeeRule}
 		if ld := sh.LocalDelivery; ld != nil {
 			d.LocalDelivery = &domain.OrderLocalDelivery{RoadMiles: ld.RoadMiles, DurationMinutes: ld.DurationMinutes, ChargeMinor: ld.CustomerChargeMinor}
 		}

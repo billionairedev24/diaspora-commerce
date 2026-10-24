@@ -17,6 +17,7 @@ import com.afrotransact.orders.domain.CourierProof;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
@@ -49,7 +50,7 @@ class JdbcOrderRepository implements OrderRepository {
             s.handover_required, s.handover_code_hash, s.handover_code_sealed, s.status, s.shipping_minor, s.carrier,
             s.tracking_number, s.promised_from, s.promised_by, s.capture_id, s.captured_at, s.delivered_at,
             s.last_external_event_at, s.status_changed_at, s.version, s.local_delivery::text as local_delivery,
-            s.preorder::text as preorder""";
+            s.preorder::text as preorder, s.delivery_fee_rule::text as delivery_fee_rule""";
 
     private final JdbcClient jdbc;
     private final JsonCodec json;
@@ -89,11 +90,12 @@ class JdbcOrderRepository implements OrderRepository {
                         handover_code_hash, handover_code_sealed, status, shipping_minor, carrier, tracking_number,
                         promised_from, promised_by, capture_id, captured_at, delivered_at, last_external_event_at,
                         status_changed_at, created_at, updated_at, version, local_delivery, preorder,
-                        preorder_window_id)
+                        preorder_window_id, delivery_fee_rule)
                     values (:id, :order, :seq, :seller, :sellerName, :type, :node, :method, :level, :pickup,
                         cast(:prefs as jsonb), :perishable, :handover, :hash, :sealed, :status, :shipping, :carrier,
                         :tracking, :from, :by, :capture, :capturedAt, :deliveredAt, :lastExternal, :changedAt, :now,
-                        :now, 0, cast(:localDelivery as jsonb), cast(:preorder as jsonb), :windowId)
+                        :now, 0, cast(:localDelivery as jsonb), cast(:preorder as jsonb), :windowId,
+                        cast(:feeRule as jsonb))
                     """)
                     .param("id", Sql.uuid(s.id())).param("order", Sql.uuid(o.id())).param("seq", s.seq())
                     .param("seller", s.sellerOrgId()).param("sellerName", s.sellerName())
@@ -111,6 +113,7 @@ class JdbcOrderRepository implements OrderRepository {
                     .param("localDelivery", s.localDelivery() == null ? null : json.write(s.localDelivery()))
                     .param("preorder", s.preorder() == null ? null : json.write(s.preorder()))
                     .param("windowId", s.preorder() == null ? null : s.preorder().windowId())
+                    .param("feeRule", s.feeRule() == null ? null : json.write(s.feeRule()))
                     .update();
             for (OrderLine l : s.lines()) {
                 jdbc.sql("""
@@ -432,13 +435,13 @@ class JdbcOrderRepository implements OrderRepository {
                                long shippingMinor, String carrier, String trackingNumber, LocalDate promisedFrom,
                                LocalDate promisedBy, String captureId, Instant capturedAt, Instant deliveredAt,
                                Instant lastExternalEventAt, Instant statusChangedAt, long version,
-                               LocalDelivery localDelivery, PreorderPackage preorder) {
+                               LocalDelivery localDelivery, PreorderPackage preorder, FeeRuleSnapshot feeRule) {
 
         Shipment build(List<OrderLine> lines) {
             return new Shipment(id.toString(), orderId.toString(), seq, sellerOrgId, sellerName, type, nodeId, method,
                     serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, hash, sealed, status,
                     shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
-                    deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery, preorder);
+                    deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery, preorder, feeRule);
         }
     }
 
@@ -456,6 +459,8 @@ class JdbcOrderRepository implements OrderRepository {
                 Sql.instant(rs, "last_external_event_at"), Sql.instant(rs, "status_changed_at"), rs.getLong("version"),
                 rs.getString("local_delivery") == null ? null
                         : json.read(rs.getString("local_delivery"), LocalDelivery.class),
-                rs.getString("preorder") == null ? null : json.read(rs.getString("preorder"), PreorderPackage.class));
+                rs.getString("preorder") == null ? null : json.read(rs.getString("preorder"), PreorderPackage.class),
+                rs.getString("delivery_fee_rule") == null ? null
+                        : json.read(rs.getString("delivery_fee_rule"), FeeRuleSnapshot.class));
     }
 }
