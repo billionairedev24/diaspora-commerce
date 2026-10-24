@@ -26,6 +26,7 @@ export { PendingNavigation, type PendingNavigationProps } from './feedback/Pendi
 export { Spinner, type SpinnerProps, type SpinnerSize, type SpinnerVariant } from './feedback/Spinner';
 export { Checkbox, type CheckboxProps } from './form/Checkbox';
 export { ChipGroup, type ChipGroupProps } from './form/ChipGroup';
+export { Combobox, type ComboboxOption, type ComboboxProps } from './form/Combobox';
 export { ErrorSummary, type ErrorSummaryItem, type ErrorSummaryProps } from './form/ErrorSummary';
 export { Field, type FieldProps, type FieldRenderProps, fieldStyles } from './form/Field';
 export { PasswordField, type PasswordFieldProps, type PasswordRuleView } from './form/PasswordField';
