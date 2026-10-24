@@ -9,13 +9,18 @@ import java.util.Set;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.adapter.in.web.LoginPageSettings;
 import com.afrotransact.identity.adapter.out.crypto.KeycloakPbkdf2PasswordEncoder;
+import com.afrotransact.identity.adapter.out.persistence.RotatingSecretEncoder;
+import com.afrotransact.identity.application.AuthSettingsService;
 import com.afrotransact.identity.application.FirstPartySignInSettings;
 import com.afrotransact.identity.application.InvitationSettings;
+import com.afrotransact.identity.application.ProtectedClients;
+import com.afrotransact.identity.application.TokenIssuer;
 import com.afrotransact.identity.adapter.out.notification.LoggingVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.MailpitVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.OutboxVerificationCodeSender;
 import com.afrotransact.identity.domain.AccessPolicy;
 import com.afrotransact.identity.domain.AddressBookPolicy;
+import com.afrotransact.identity.domain.AuthSettings;
 import com.afrotransact.identity.domain.DefaultAccessPolicy;
 import com.afrotransact.identity.domain.DefaultAddressBookPolicy;
 import com.afrotransact.identity.domain.DefaultLandingPolicy;
@@ -54,8 +59,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class IdentityConfiguration {
 
     @Bean
-    PasswordPolicy passwordPolicy() {
-        return new DefaultPasswordPolicy();
+    PasswordPolicy passwordPolicy(AuthSettingsService authSettings) {
+        return new DefaultPasswordPolicy(() -> authSettings.effective().passwordMinLength());
     }
 
     @Bean
@@ -123,14 +128,37 @@ class IdentityConfiguration {
      * from Keycloak ({@code {kc-pbkdf2-sha256}} and friends) verify but are never produced.
      */
     @Bean
-    PasswordEncoder passwordEncoder() {
+    PasswordEncoder passwordEncoder(Clock clock) {
         Map<String, PasswordEncoder> encoders = new HashMap<>();
         PasswordEncoder bcrypt = new BCryptPasswordEncoder();
         encoders.put("bcrypt", bcrypt);
         for (KeycloakPbkdf2PasswordEncoder.Variant v : KeycloakPbkdf2PasswordEncoder.Variant.values()) {
             encoders.put(v.id(), new KeycloakPbkdf2PasswordEncoder(v));
         }
+        // A client secret in rotation (S291) reads as {rotating}: either of its two hashes verifies until the old one
+        // expires. The encoder for it is built over the hashes above.
+        encoders.put(RotatingSecretEncoder.ID,
+                new RotatingSecretEncoder(new DelegatingPasswordEncoder("bcrypt", Map.copyOf(encoders)), clock));
         return new DelegatingPasswordEncoder("bcrypt", encoders);
+    }
+
+    /** The configured defaults of the settings the staff console can override. */
+    @Bean
+    AuthSettings authSettingsDefaults(IdentityProperties props) {
+        IdentityProperties.Auth a = props.auth();
+        return new AuthSettings(a.passwordMinLength(), a.mfaRequiredAccount(), a.mfaRequiredSeller(),
+                a.mfaRequiredProvider(), (int) a.sessionIdleTimeout().toMinutes(),
+                (int) a.sessionAbsoluteTimeout().toMinutes(), null, null);
+    }
+
+    @Bean
+    ProtectedClients protectedClients(IdentityProperties props) {
+        return new ProtectedClients(Set.copyOf(props.firstParty().clientIds()));
+    }
+
+    @Bean
+    TokenIssuer tokenIssuer(IdentityProperties props) {
+        return new TokenIssuer(props.issuer());
     }
 
     @Bean
