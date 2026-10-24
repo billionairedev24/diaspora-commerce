@@ -74,6 +74,15 @@ any published, undelivered window ── staff "cancel" (reason) ─▶ CANCELLE
 - **Audit.** Every decision is in `GET /v1/preorders/{id}/decisions` (who, when, why) and published as
   `preorder.window.decided`.
 
+**Demo on a test environment.** In the staff console (Pre-orders): open a window for a covered city with a short order
+window (it closes in a few minutes), set *Minimum orders* to 3, add the hero and publish. Place two orders from the
+storefront (test card), or add them as late adds. When the closing time passes (the job runs every
+`DELIVERY_RUNS_JOBS_INTERVAL`, 60 s) the window moves to *Needs a decision* and `preorder.window.decision_needed` is
+published. Open it, choose *Cancel and refund everyone* with a reason: each order shows *Refunding*, then *Released, not
+charged* (authorised only) or *Refunded* (already captured), and the customers get the cancellation email. Or choose *Go
+ahead anyway*: the window closes and the run appears. With the minimum met before the closing date, *Close early* ends
+ordering at once.
+
 ### Lifecycle
 
 ```

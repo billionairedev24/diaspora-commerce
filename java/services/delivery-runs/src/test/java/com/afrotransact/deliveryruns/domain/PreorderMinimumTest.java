@@ -5,6 +5,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -125,5 +128,26 @@ class PreorderMinimumTest {
         assertThat(d.at()).isEqualTo(DURING);
         assertThat(WindowDecision.awaiting(window, 3, 10, DURING).actor()).isEqualTo(WindowDecision.SYSTEM);
         assertThat(WindowDecision.awaiting(window, 3, 10, DURING).reason()).contains("3 of 10");
+    }
+
+    @Test
+    void shoppersNeverSeeAWindowWaitingForADecisionOrCancelled() {
+        PreorderResolver resolver = new PreorderResolver();
+        Coverage coverage = new Coverage(new PreorderSettings(true, Fallback.SHIP, EnumSet.allOf(Placement.class),
+                PaymentSettings.DEFAULT, null, 0), List.of(new CoverageArea(AreaKey.parse("US/TX/Lubbock"), true)));
+        PreorderWindow open = windowWithMinimum(10);
+        Resolution seen = resolver.resolve("US", "TX", "Lubbock", List.of(open), coverage, Map.of(), false, DURING);
+        assertThat(seen.stage()).isEqualTo(PreorderStatus.OPEN);
+        assertThat(resolver.openList(List.of(open), coverage, DURING)).containsExactly(open);
+
+        PreorderWindow waiting = open.awaitingDecision(AFTER_CLOSE);
+        PreorderWindow cancelled = open.cancel(DURING);
+        for (PreorderWindow w : List.of(waiting, cancelled)) {
+            Instant now = w == waiting ? AFTER_CLOSE : DURING;
+            Resolution r = resolver.resolve("US", "TX", "Lubbock", List.of(w), coverage, Map.of(), false, now);
+            assertThat(r.window()).as(w.status(now) + " is not offered").isNull();
+            assertThat(r.fallback()).as("items ship normally instead").isEqualTo(Fallback.SHIP);
+            assertThat(resolver.openList(List.of(w), coverage, now)).isEmpty();
+        }
     }
 }
