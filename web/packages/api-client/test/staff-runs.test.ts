@@ -178,21 +178,21 @@ describe('advertorials through the mock BFF', () => {
     expect(items.every((a) => a.serving)).toBe(true);
   });
 
-  it('drafts one from the window, publishes, edits with If-Match, pauses and ends it', async () => {
-    const draft = await runs().generateAdvertorial('WINDOW', 'amr-1').catch((e: unknown) => e);
-    expect(isApiError(draft) && draft.status).toBe(422);
+  it('generates one from the window, edits with If-Match, pauses, publishes again and ends it', async () => {
+    const refused = await runs().generateAdvertorial('WINDOW', 'amr-1').catch((e: unknown) => e);
+    expect(isApiError(refused) && refused.status).toBe(422);
     const created = await runs().generateAdvertorial('WINDOW', 'lbk-6');
-    expect(created).toMatchObject({ status: 'DRAFT', generated: true, serving: false, version: 0 });
+    expect(created).toMatchObject({ status: 'LIVE', generated: true, variant: 'A', version: 0 });
     expect((await runs().generateAdvertorial('WINDOW', 'lbk-6')).id).toBe(created.id);
-    const edited = await runs().updateAdvertorial(created.id, { headline: 'Come and get it', ctaLabel: 'Order', body: 'Short and sweet' }, created.version);
-    expect(edited).toMatchObject({ headline: 'Come and get it', generated: false, version: 1 });
+    const edited = await runs().updateAdvertorial(created.id, { headline: 'Come and get it', ctaLabel: 'Order', body: 'Short and sweet' }, 1);
+    expect(edited).toMatchObject({ headline: 'Come and get it', generated: false });
     await expect(runs().updateAdvertorial(created.id, { headline: 'Stale', ctaLabel: 'Order' }, 0)).rejects.toMatchObject({ status: 412 });
-    const live = await runs().actAdvertorial(created.id, 'publish', edited.version);
-    expect(live.status).toBe('LIVE');
-    await expect(runs().actAdvertorial(created.id, 'publish', live.version)).rejects.toMatchObject({ status: 422 });
-    const paused = await runs().actAdvertorial(created.id, 'pause', live.version);
+    const paused = await runs().actAdvertorial(created.id, 'pause', edited.version);
     expect(paused.status).toBe('PAUSED');
-    const ended = await runs().actAdvertorial(created.id, 'end', paused.version);
+    await expect(runs().actAdvertorial(created.id, 'pause', paused.version)).rejects.toMatchObject({ status: 422 });
+    const live = await runs().actAdvertorial(created.id, 'publish', paused.version);
+    expect(live.status).toBe('LIVE');
+    const ended = await runs().actAdvertorial(created.id, 'end', live.version);
     expect(ended).toMatchObject({ status: 'ENDED', ended: 'STAFF', serving: false });
     await expect(runs().updateAdvertorial(created.id, { headline: 'Late', ctaLabel: 'Go' }, ended.version)).rejects.toMatchObject({ status: 422 });
   });

@@ -30,7 +30,7 @@ describe('Run economics settings (S265)', () => {
     await renderScreen(<EconomicsSettingsView />);
     expect(await screen.findByRole('textbox', { name: 'Driver cost per hour' })).toHaveValue('25.00');
     expect(screen.getByRole('textbox', { name: 'Vehicle cost per mile' })).toHaveValue('0.70');
-    expect(screen.getByRole('textbox', { name: 'Minutes per doorstep drop' })).toHaveValue('6.5');
+    expect(screen.getByRole('textbox', { name: 'Minutes per doorstep drop' })).toHaveValue('6');
     expect(screen.getByRole('checkbox', { name: /Count the drive back/ })).toBeChecked();
     expect(screen.getByTestId('economics-meta')).toHaveTextContent('Nobody has changed these yet');
     expect(screen.getByRole('button', { name: 'Save cost model' })).toBeDisabled();
@@ -202,13 +202,15 @@ describe('Advertorials (S263)', () => {
     expect(within(b).getByTestId('adv-results-B')).toHaveTextContent('Orders52');
   });
 
-  it('drafts from the details, edits, publishes, pauses and ends one', async () => {
+  it('generates from the details, edits, pauses, publishes again and ends one', async () => {
     const user = userEvent.setup();
     await renderScreen(<AdvertorialsPanel source="WINDOW" sourceId="lbk-6" />);
     expect(await screen.findByText('No advertorials yet')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Draft from the details' }));
+    await user.click(screen.getByRole('button', { name: 'Generate from the details' }));
     const card = await screen.findByTestId('adv-A');
-    expect(within(card).getByTestId('adv-status-A')).toHaveTextContent('Draft');
+    expect(within(card).getByTestId('adv-status-A')).toHaveTextContent('Live');
+    expect(within(card).getByText('Follows the details until edited')).toBeInTheDocument();
+    // Its pre-order is delivered, so nothing is shown to visitors.
     expect(within(card).queryByText('Showing now')).not.toBeInTheDocument();
 
     await user.click(within(card).getByRole('button', { name: 'Edit' }));
@@ -224,10 +226,10 @@ describe('Advertorials (S263)', () => {
     expect(edited).toHaveTextContent('Last call for Lubbock');
     expect(within(edited).queryByText('Follows the details until edited')).not.toBeInTheDocument();
 
-    await user.click(within(edited).getByRole('button', { name: 'Publish' }));
-    await waitFor(() => expect(screen.getByTestId('adv-status-A')).toHaveTextContent('Live'));
-    await user.click(within(screen.getByTestId('adv-A')).getByRole('button', { name: 'Pause' }));
+    await user.click(within(edited).getByRole('button', { name: 'Pause' }));
     await waitFor(() => expect(screen.getByTestId('adv-status-A')).toHaveTextContent('Paused'));
+    await user.click(within(screen.getByTestId('adv-A')).getByRole('button', { name: 'Publish' }));
+    await waitFor(() => expect(screen.getByTestId('adv-status-A')).toHaveTextContent('Live'));
     await user.click(within(screen.getByTestId('adv-A')).getByRole('button', { name: 'End' }));
     await waitFor(() => expect(screen.getByTestId('adv-status-A')).toHaveTextContent('Ended'));
     expect(within(screen.getByTestId('adv-A')).queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();

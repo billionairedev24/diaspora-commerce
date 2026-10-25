@@ -41,7 +41,7 @@ export const DEFAULT_ECONOMICS: EconomicsNumbers = {
   driverCostPerHourMinor: 2500,
   driverCostPerMileMinor: 70,
   collectionMinutes: 45,
-  perStopMinutes: 6.5,
+  perStopMinutes: 6,
   pickupPointStopMinutes: 30,
   handoverMinutesPerOrder: 1,
   roundTrip: true
@@ -466,18 +466,22 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       manage(ctx);
       const b = await json(ctx.request, GenerateBody);
       const s = st(ctx);
-      const existing = s.advertorials.find((a) => a.source === b.source && a.sourceId === b.sourceId && a.generated && a.status === 'DRAFT');
-      if (existing) return withEtag(decorate(ctx, existing));
       const info = sourceInfo(ctx, b.source, b.sourceId);
+      if (info.status === 'CANCELLED') throw problem(409, 'delivery-runs.invalid-transition', 'Not possible now', 'A cancelled pre-order or run has no advertorial.');
+      const existing = s.advertorials.find((a) => a.source === b.source && a.sourceId === b.sourceId && a.generated);
+      if (existing) {
+        const words = draftWords(info);
+        return withEtag(existing.status === 'ENDED' ? decorate(ctx, existing) : save(ctx, existing, { ...words, generated: true }));
+      }
       s.seq += 1;
       const a: StaffAdvertorial = {
         id: `5c3a0e4b-0000-4000-8000-${String(s.seq).padStart(12, '0')}`, source: b.source, sourceId: b.sourceId, sourceName: info.name, sourceCode: info.code, sourceStatus: info.status,
         sourceCloses: info.closes, locationId: info.location?.id ?? null, locationName: info.location?.name ?? null, variant: nextVariant(s.advertorials, b.source, b.sourceId), weight: 1, priority: 0,
-        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'DRAFT', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: b.source === 'WINDOW' ? 0 : null },
+        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'LIVE', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: b.source === 'WINDOW' ? 0 : null },
         createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
       };
       s.advertorials.unshift(a);
-      audit(ctx, 'advertorial.generated', a.id, `Drafted an advertorial for ${info.name}`);
+      audit(ctx, 'advertorial.generated', a.id, `Generated the advertorial of ${info.name}`);
       return withEtag(decorate(ctx, a));
     })),
     http.post(`${W}/advertorials`, route(async (ctx) => {
