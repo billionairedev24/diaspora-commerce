@@ -205,16 +205,21 @@ public final class OrdersEventPayloads {
      * @param localTaxJurisdiction local jurisdiction from the tax quote (US-TX-770), null when none
      * @param shippingTaxMinor     part of taxMinor charged on the shipment's shipping
      * @param imageUrl             product photo snapshotted at checkout (order emails, S279); null when none
+     * @param sellerOrgId          seller of the line: a community pre-order package mixes sellers, so delivery-runs
+     *                             and fulfilment plan seller pickups and pick lists from it (null for older orders)
+     * @param sellerName           seller display name
      */
     public record LineSummary(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
                               long taxMinor, String productAtin, String productType, String category,
                               boolean perishable, long discountMinor, String taxJurisdiction,
-                              String localTaxJurisdiction, long shippingTaxMinor, int lineNo, String imageUrl) {
+                              String localTaxJurisdiction, long shippingTaxMinor, int lineNo, String imageUrl,
+                              String sellerOrgId, String sellerName) {
 
         static LineSummary of(OrderLine l) {
             return new LineSummary(l.id(), l.variantAtin(), l.title(), l.quantity(), l.unitPriceMinor(),
                     l.taxMinor(), l.productAtin(), l.productType(), l.category(), l.perishable(), l.discountMinor(),
-                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo(), l.imageUrl());
+                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo(), l.imageUrl(),
+                    l.sellerOrgId(), l.sellerName());
         }
     }
 

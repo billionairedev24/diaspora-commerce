@@ -247,7 +247,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                         i.productAtin(), i.title(), i.imageUrl(), i.quantity(), i.priceMinor(),
                         rate.taxOf(itemsMinor), f.map(ProductFactsClient.Facts::category).orElse(null),
                         f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
-                        i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0));
+                        i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0,
+                        i.sellerOrgId(), i.sellerName()));
             }
             LocalDelivery quoted = sellerStore && method == DeliveryMethod.AFROTRANSACT_DELIVERY
                     ? localDelivery.quote(first.sellerOrgId(), first.sellerName(), pickups.get(offerKey(first)), to)
@@ -366,7 +367,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 i.title(), i.imageUrl(), i.quantity(), i.priceMinor(), rate.taxOf(itemsMinor),
                 f.map(ProductFactsClient.Facts::category).orElse(null),
                 f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
-                i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0);
+                i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0,
+                i.sellerOrgId(), i.sellerName());
     }
 
     // ------------------------------------------------------------------ reserve + split
