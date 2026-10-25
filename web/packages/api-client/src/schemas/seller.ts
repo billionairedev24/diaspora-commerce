@@ -770,6 +770,32 @@ export interface BusinessPageSettingsInput {
   logoUrl: string;
 }
 export const ShipFromListSchema = z.object({ items: z.array(ShipFromAddressSchema) });
+
+/* ── Delivery run pick lists (S264): when the driver comes and what to pack ── */
+
+export const RunPickItemSchema = z.object({ atin: z.string(), name: z.string(), units: z.number().int() });
+export type RunPickItem = z.infer<typeof RunPickItemSchema>;
+export const RunOrderBagSchema = z.object({ orderNumber: z.string(), collected: z.boolean(), units: z.number().int(), lines: z.array(RunPickItemSchema) });
+export type RunOrderBag = z.infer<typeof RunOrderBagSchema>;
+export const SellerRunPickupSchema = z.object({
+  runId: z.string(),
+  town: z.string(),
+  state: z.string(),
+  timeZone: z.string(),
+  runStatus: z.enum(['CONFIRMED', 'COLLECTING', 'OUT_FOR_DELIVERY', 'COMPLETED']),
+  windowStart: z.string(),
+  windowEnd: z.string(),
+  pickupAt: z.string().nullable(),
+  dropMode: z.enum(['DOORSTEP', 'PICKUP_POINT']),
+  orders: z.number().int(),
+  units: z.number().int(),
+  collectedOrders: z.number().int(),
+  items: z.array(RunPickItemSchema),
+  bags: z.array(RunOrderBagSchema)
+});
+export type SellerRunPickup = z.infer<typeof SellerRunPickupSchema>;
+export const SellerRunPickupListSchema = z.object({ items: z.array(SellerRunPickupSchema) });
+export type SellerRunPickupList = z.infer<typeof SellerRunPickupListSchema>;
 export type ShipFromInput = ShipFromForm & { label?: string; company?: string; country?: string; makeDefault?: boolean; version?: number | null };
 
 export function shipFromToForm(a: ShipFromAddress): ShipFromForm {

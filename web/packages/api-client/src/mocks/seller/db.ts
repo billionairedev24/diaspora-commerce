@@ -28,6 +28,7 @@ import {
   type SellerProductDetail,
   type SellerReturn,
   type SellerRewardsView,
+  type SellerRunPickup,
   type ServiceOffer,
   type ShipFromAddress,
   type ShipmentStatus,
@@ -38,6 +39,7 @@ import { chargeTermsOf, planFeatureList } from '../../staff-plans';
 import { type MockDraft, type MockImport } from './listing-form';
 import { allowedBookingActions, BOOKING_LABELS, SHIPMENT_LABELS, takeHome } from './model';
 import { type MockApplication } from './onboarding';
+import { seedRunPickups } from './run-pickups';
 
 export interface MockOrg {
   id: string;
@@ -81,6 +83,8 @@ export interface MockSellerDb {
   onboarding: Record<string, MockApplication>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
   shipFrom: Record<string, ShipFromAddress[]>;
+  /** Delivery run pick lists per organisation (delivery-runs /v1/seller/run-pickups; S264). */
+  runPickups: Record<string, SellerRunPickup[]>;
   /** How each organisation's public page looks (seller service /v1/orgs/{orgId}/business-page). */
   businessPage: Record<string, { description: string; brandColor: string; logoUrl: string }>;
   /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
@@ -566,6 +570,7 @@ function freshDb(now: Date): MockSellerDb {
     policy: { kind: 'MODERATE', freeHours: 48, partialRefund: true, partialFromHours: 24, partialPercent: 50, noShow: 'DEPOSIT', rescheduleHours: 48, maxReschedules: 2 },
     earnings: [],
     businessPage: {},
+    runPickups: { [SELLER_ORG]: seedRunPickups(now) },
     shipFrom: {
       [SELLER_ORG]: [
         { id: 'sfa-store', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',

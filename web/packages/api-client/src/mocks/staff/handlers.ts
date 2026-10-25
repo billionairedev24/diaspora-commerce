@@ -33,6 +33,10 @@ import {
   type ResourceKey,
   ResourceKeySchema,
   type ResourcePage,
+  RUN_LIFECYCLE,
+  type RunDispatch,
+  type RunDispatchList,
+  RunDispatchStatusSchema,
   type ShipFromLocation,
   type StaffAssistantStatus,
   type StaffDashboard,
@@ -45,6 +49,7 @@ import { exportFileOf, type MockExportColumn } from '../export-file';
 import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
+import { canAdvance, planRun } from './dispatch';
 import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
 import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop } from './identity';
@@ -616,6 +621,7 @@ function requireTaxConfigure(ctx: Ctx) {
   if (!ctx.permissions.includes('tax:configure')) throw forbidden('This needs the tax:configure permission.');
 }
 
+const canManageRuns = (ctx: Ctx) => ctx.permissions.includes('delivery:dispatch') && allows(ctx.roles, 'dispatch', 'EDIT');
 const canAssignPickups = (ctx: Ctx) => ctx.permissions.includes('delivery:dispatch') && allows(ctx.roles, 'dispatch', 'EDIT');
 
 function syncFeeRecords(ctx: Ctx) {
@@ -1148,6 +1154,62 @@ export const staffHandlers = [
       requireModule(ctx, 'routes');
       if (!ctx.db.dispatch.suggestions[p.id ?? '']) throw notFound('No such pickup.');
       return { items: ctx.db.dispatch.assignments.filter((a) => a.shipmentId === p.id).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')) };
+    })
+  ),
+  /* ── dispatch: delivery runs (S264) ── */
+  http.get(
+    `${W}/dispatch/runs`,
+    route((ctx): RunDispatchList => {
+      const status = query(ctx).get('status');
+      const parsed = status ? RunDispatchStatusSchema.safeParse(status) : null;
+      if (parsed && !parsed.success) throw invalid({ status: 'Unknown status' });
+      requireModule(ctx, 'routes');
+      const can = canManageRuns(ctx);
+      const items = ctx.db.dispatch.runs
+        .filter((r) => !parsed || r.status === parsed.data)
+        .sort((a, b) => b.serviceDate.localeCompare(a.serviceDate))
+        .map((r): RunDispatch => ({ ...r, routes: r.routes.map((x) => ({ ...x, stops: [] })), orders: null, canManage: can }));
+      return { items, canManage: can };
+    })
+  ),
+  http.get(
+    `${W}/dispatch/runs/:id`,
+    route((ctx, p): RunDispatch => {
+      requireModule(ctx, 'routes');
+      const run = ctx.db.dispatch.runs.find((r) => r.runId === p.id);
+      if (!run) throw notFound('No such run.');
+      return { ...run, canManage: canManageRuns(ctx) };
+    })
+  ),
+  http.post(
+    `${W}/dispatch/runs/:id/plan`,
+    route((ctx, p): RunDispatch => {
+      requireModule(ctx, 'routes', 'EDIT');
+      if (!ctx.permissions.includes('delivery:dispatch')) throw forbidden('This needs the delivery:dispatch permission.');
+      const d = ctx.db.dispatch;
+      const at = d.runs.findIndex((r) => r.runId === p.id);
+      const run = d.runs[at];
+      if (!run) throw notFound('No such run.');
+      if (run.runStatus === 'CANCELLED') throw conflict('This run was cancelled.');
+      const planned = run.routes.length > 0 ? run : planRun(run);
+      d.runs[at] = planned;
+      audit(ctx, 'run.planned', planned.runId, `Planned the routes of the ${planned.town} run`);
+      return { ...planned, canManage: true };
+    })
+  ),
+  http.post(
+    `${W}/dispatch/runs/:id/advance`,
+    route(async (ctx, p): Promise<RunDispatch> => {
+      const steps = RUN_LIFECYCLE.filter((s) => s !== 'CONFIRMED');
+      const b = await json(ctx.request, z.object({ to: z.enum(steps as ['COLLECTING', 'OUT_FOR_DELIVERY', 'COMPLETED'], { error: 'Choose collecting, out for delivery or completed' }) }));
+      requireModule(ctx, 'routes', 'EDIT');
+      if (!ctx.permissions.includes('delivery:dispatch')) throw forbidden('This needs the delivery:dispatch permission.');
+      const run = ctx.db.dispatch.runs.find((r) => r.runId === p.id);
+      if (!run) throw notFound('No such run.');
+      if (!canAdvance(run, b.to)) throw conflict('That step does not follow where the run is now.');
+      run.runStatus = b.to;
+      audit(ctx, 'run.advanced', run.runId, `Moved the ${run.town} run to ${b.to}`);
+      return { ...run, canManage: true };
     })
   ),
   http.get(
