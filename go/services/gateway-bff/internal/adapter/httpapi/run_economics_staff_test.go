@@ -31,7 +31,7 @@ func runEconomicsFake(minOrders int) map[string]any {
 			"contributionMarginMinor": fees - cost}
 	}
 	return map[string]any{"route": map[string]any{"roadMiles": 32, "driveMinutes": 40, "method": "FAKE"},
-		"cost":    map[string]any{"driveMiles": 64, "fixedMinutes": 125, "perOrderMinutes": 6, "fixedCostMinor": 9688, "perOrderCostMinor": 250},
+		"cost":     map[string]any{"driveMiles": 64, "fixedMinutes": 125, "perOrderMinutes": 6, "fixedCostMinor": 9688, "perOrderCostMinor": 250},
 		"feeMinor": 799, "currency": "USD", "breakEvenOrders": 18, "atMinimum": snap(minOrders, minOrders*799, 9688+minOrders*250),
 		"atCapacity": nil, "atOrders": snap(3, 3*799, 9688+3*250)}
 }

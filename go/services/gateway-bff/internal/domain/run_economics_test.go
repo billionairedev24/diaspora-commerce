@@ -79,7 +79,10 @@ func TestAdvertorialBody(t *testing.T) {
 	if _, err := domain.AdvertorialBody(map[string]any{"headline": "x", "ctaLabel": "y"}, false); err != nil {
 		t.Fatalf("an edit needs no source: %v", err)
 	}
-	if f := problemFields(t, func() error { _, err := domain.AdvertorialBody(map[string]any{"headline": "x", "ctaLabel": "y"}, true); return err }()); f["source"] == "" || f["sourceId"] == "" {
+	if f := problemFields(t, func() error {
+		_, err := domain.AdvertorialBody(map[string]any{"headline": "x", "ctaLabel": "y"}, true)
+		return err
+	}()); f["source"] == "" || f["sourceId"] == "" {
 		t.Fatalf("a new one needs its source: %v", f)
 	}
 	long := strings.Repeat("é", 141)
