@@ -14,7 +14,9 @@ import (
 const (
 	SellerOrgID   = "11111111-1111-1111-1111-111111111111"
 	ProviderOrgID = "22222222-2222-2222-2222-222222222222"
-	PendingOrgID  = "33333333-3333-3333-3333-333333333333"
+	// RunPickupID is the delivery run the fake delivery-runs lists for the seller.
+	RunPickupID  = "8c1f0e52-3a47-4d0e-9b6a-5d2e7c1a9f10"
+	PendingOrgID = "33333333-3333-3333-3333-333333333333"
 )
 
 // MissingAssetID is an upload media does not know (POST /v1/assets/{id}/complete answers 404).
@@ -721,6 +723,34 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"id": "5b1d0c9e-0000-4000-8000-000000000002", "sku": "ATF1234567", "lotNo": "B-77",
 			"nodeId": "ATL-FC", "ownerOrg": SellerOrgID, "qtyOnHand": 11, "qtyReserved": 1, "qtyAvailable": 10, "expDate": "2027-09-01",
 			"status": "SELLABLE", "markdownFlag": "NONE", "version": 0}}, "total": 1, "page": 0, "size": 50})
+	})
+	// delivery-runs' pick lists for the active organisation (S264); orgId is always the active org's
+	runPickup := func() map[string]any {
+		return map[string]any{"runId": RunPickupID, "town": "Lubbock", "state": "TX", "timeZone": "America/Chicago", "runStatus": "CONFIRMED",
+			"windowStart": "2026-11-07T15:00:00Z", "windowEnd": "2026-11-07T19:00:00Z", "sellerPickupAt": "2026-11-06T16:00:00Z", "dropMode": "DOORSTEP",
+			"orders": 2, "units": 5, "collectedOrders": 1,
+			"items": []map[string]any{{"atin": "AT00000042", "name": "Palm oil 1L", "units": 3}, {"atin": "AT00000043", "name": "Gari 1kg", "units": 2}},
+			"bags": []map[string]any{
+				{"orderNumber": "LBK-1001", "stage": "COLLECTED", "units": 3, "lines": []map[string]any{{"atin": "AT00000042", "name": "Palm oil 1L", "units": 3}}},
+				{"orderNumber": "LBK-1002", "stage": "PENDING", "units": 2, "lines": []map[string]any{{"atin": "AT00000043", "name": "Gari 1kg", "units": 2}}}}}
+	}
+	mux.HandleFunc("GET /v1/seller/run-pickups", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("orgId") != SellerOrgID {
+			writeJSON(w, 403, map[string]any{"status": 403, "title": "orgId must be the active org", "code": "test.owner"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{runPickup()}})
+	})
+	mux.HandleFunc("GET /v1/seller/run-pickups/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("orgId") != SellerOrgID {
+			writeJSON(w, 403, map[string]any{"status": 403, "title": "orgId must be the active org", "code": "test.owner"})
+			return
+		}
+		if r.PathValue("id") != RunPickupID {
+			writeJSON(w, 404, map[string]any{"status": 404, "title": "No such run", "code": "delivery-runs.not-found"})
+			return
+		}
+		writeJSON(w, 200, runPickup())
 	})
 	// seller ship-from addresses (one org's list, default first)
 	shipFrom := []map[string]any{}

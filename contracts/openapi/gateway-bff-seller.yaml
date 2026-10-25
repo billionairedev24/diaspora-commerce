@@ -2478,8 +2478,8 @@ components:
         orders: {type: integer, description: Run orders with lines of the organisation}
         units: {type: integer, description: Units to pick in total}
         collectedOrders: {type: integer, description: Orders the driver has already collected}
-        items: {type: array, items: {$ref: '#/components/schemas/RunPickItem'}, description: Units per product across all orders, most units first}
-        bags: {type: array, items: {$ref: '#/components/schemas/RunOrderBag'}, description: One per order, by order number}
+        items: {type: array, items: {$ref: '#/components/schemas/RunPickItem'}, description: 'Units per product across all orders, most units first'}
+        bags: {type: array, items: {$ref: '#/components/schemas/RunOrderBag'}, description: 'One per order, by order number'}
     RunPickItem:
       type: object
       required: [atin, name, units]

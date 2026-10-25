@@ -46,6 +46,10 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/label", h.downloadLabel)
 	route("GET /v1/seller/business-page", h.businessPageGet)
 	route("PUT /v1/seller/business-page", h.businessPageUpdate)
+	if h.s.SellerRunPickups != nil {
+		route("GET /v1/seller/run-pickups", h.sellerRunPickups)
+		route("GET /v1/seller/run-pickups/{runId}", h.sellerRunPickup)
+	}
 	route("GET /v1/seller/ship-from-addresses", h.shipFromList)
 	route("POST /v1/seller/ship-from-addresses", h.shipFromCreate)
 	route("PUT /v1/seller/ship-from-addresses/{addressId}", h.shipFromUpdate)
@@ -702,6 +706,16 @@ func (h *handlersImpl) earnings(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------- ship-from addresses
+
+func (h *handlersImpl) sellerRunPickups(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerRunPickups.List(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerRunPickup(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerRunPickups.Get(r.Context(), callerFrom(r.Context()), r.PathValue("runId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
 
 func (h *handlersImpl) shipFromList(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerShipFrom.List(r.Context(), callerFrom(r.Context()))

@@ -1552,7 +1552,7 @@ paths:
         - {name: status, in: query, schema: {type: string, enum: [PENDING, PLANNED, CANCELLED]}, description: Dispatch status}
       responses:
         '200': {description: Runs, content: {application/json: {schema: {$ref: '#/components/schemas/RunDispatchList'}}}}
-        '400': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -1590,6 +1590,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/dispatch/runs/{runId}/advance:

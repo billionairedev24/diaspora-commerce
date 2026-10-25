@@ -122,8 +122,8 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
 		Payouts: upstreams.NewPayouts(client("payments", base)), TaxStatements: upstreams.NewTaxStatements(client("tax-returns", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
-		InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)),
-		Bookings:     upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
+		InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)), RunPickups: upstreams.NewStaffUpstream(client("delivery-runs", base)),
+		Bookings: upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
 		ListingCache: app.NewListingCache(clock.Now),
 		Clock:        clock.Now, Log: log, PublishableKey: u.opts.SellerPublishableKey}
 
@@ -169,6 +169,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerTeam:         app.NewSellerTeamService(sellerDeps),
 		ProviderHub:        app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:     app.NewSellerShipFromService(sellerDeps),
+		SellerRunPickups:   app.NewSellerRunPickupsService(sellerDeps),
 		SellerBusinessPage: app.NewSellerBusinessPageService(sellerDeps),
 		SellerOffers:       app.NewSellerOffersService(sellerDeps),
 		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),

@@ -401,6 +401,16 @@ func TestSellerContractConformance(t *testing.T) {
 		"logoUrl": "https://img.afrotransact.dev/a1.webp"}); r.status != 200 || r.json(t)["logoUrl"] != "https://img.afrotransact.dev/a1.webp" {
 		t.Fatalf("business page save = %d %s", r.status, r.body)
 	}
+	// Run pick lists (S264): the active org's runs, the collected flag from the bag's stage, a run that is not there is 404.
+	if r := b.do("GET", "/v1/seller/run-pickups?orgId=someone-else", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 1 {
+		t.Fatalf("run pickups = %d %s", r.status, r.body)
+	}
+	if r := b.do("GET", "/v1/seller/run-pickups/"+testkit.RunPickupID, nil); r.status != 200 || r.json(t)["bags"].([]any)[0].(map[string]any)["collected"] != true ||
+		r.json(t)["bags"].([]any)[1].(map[string]any)["collected"] != false || r.json(t)["pickupAt"] != "2026-11-06T16:00:00Z" {
+		t.Fatalf("run pickup = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("GET", "/v1/seller/run-pickups/0b1f0e52-3a47-4d0e-9b6a-5d2e7c1a9f99", nil), 404)
+	mustStatus(t, b.do("GET", "/v1/seller/run-pickups/not-a-run", nil), 404)
 	// Ship-from addresses live in the seller service (no more browser storage).
 	if r := b.do("GET", "/v1/seller/ship-from-addresses", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 0 {
 		t.Fatalf("ship-from list = %d %s", r.status, r.body)
