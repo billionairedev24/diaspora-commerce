@@ -36,6 +36,8 @@ tags:
   description: 'Staff: schedule runs and move them through their lifecycle (delivery-runs:manage)'
 - name: Service
   description: 'Service clients: orders (run slots), fulfilment (dispatch), notifications (audience)'
+- name: Run pickups
+  description: Seller pickup times and pick lists of pre-order runs, and run progress
 - name: Pre-order settings
   description: 'Staff: master switch, fallback, placements, payment setup and coverage areas (delivery-runs:read to view;
     preorders:manage to change)'
@@ -2339,6 +2341,58 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/pick-lists:
+    get:
+      tags:
+      - Run pickups
+      summary: Every seller's pick list of a run, largest first (delivery-runs:read)
+      operationId: runPickLists
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunPickListPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/progress:
+    get:
+      tags:
+      - Run pickups
+      summary: 'How far the run has got: orders per stage, from the drivers'' shipment events (delivery-runs:read)'
+      operationId: runProgress
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunProgress'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/runs/{id}/start-collecting:
     post:
       tags:
@@ -2359,6 +2413,65 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/seller/run-pickups:
+    get:
+      tags:
+      - Run pickups
+      summary: 'The seller''s pick lists: runs to pack for, with the pickup time (seller members: orders:read)'
+      description: A seller reads its own organisation; staff and services (delivery-runs:read) name `orgId`. Runs that are
+        confirmed, being collected or out for delivery, and those completed in the last two weeks, earliest pickup first.
+        Only the seller's own lines; no customer details.
+      operationId: sellerRunPickups
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunPickListPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/seller/run-pickups/{runId}:
+    get:
+      tags:
+      - Run pickups
+      summary: The seller's pick list for one run (404 when nothing is collected from the organisation)
+      operationId: sellerRunPickup
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunPickList'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -3828,6 +3941,17 @@ components:
         updatedAt:
           type: string
           format: date-time
+        stage:
+          type: string
+          description: 'Where the order''s package is on the run: PENDING, COLLECTED, OUT_FOR_DELIVERY, FAILED, DELIVERED
+            or RETURNED (from orders-service shipment events)'
+        stageAt:
+          type: string
+          format: date-time
+        deliveredAt:
+          type: string
+          format: date-time
+          description: When the package was handed over; the seller payout hold starts from it
     SlotReservation:
       type: object
       properties:
@@ -4742,6 +4866,13 @@ components:
         centerLng:
           type: number
           format: double
+        originLat:
+          type: number
+          format: double
+          description: Where the run leaves from (the hub); drops are ordered by road distance from it
+        originLng:
+          type: number
+          format: double
     AudiencePageView:
       type: object
       properties:
@@ -4915,6 +5046,124 @@ components:
         next:
           type: string
           format: uuid
+    RunOrderBag:
+      type: object
+      description: What goes into one order's bag; the order number is written on it
+      properties:
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        stage:
+          type: string
+          description: PENDING until the driver collects the bag
+        units:
+          type: integer
+          format: int32
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunPickItem'
+    RunPickItem:
+      type: object
+      description: Units of one product
+      properties:
+        atin:
+          type: string
+        name:
+          type: string
+        units:
+          type: integer
+          format: int32
+    RunPickList:
+      type: object
+      description: One seller's pick list for a run
+      properties:
+        runId:
+          type: string
+          format: uuid
+        town:
+          type: string
+        state:
+          type: string
+        timeZone:
+          type: string
+        runStatus:
+          type: string
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        sellerPickupAt:
+          type: string
+          format: date-time
+          description: When the driver collects from the sellers
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        sellerOrgId:
+          type: string
+        sellerName:
+          type: string
+        orders:
+          type: integer
+          format: int32
+        units:
+          type: integer
+          format: int32
+        collectedOrders:
+          type: integer
+          format: int32
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunPickItem'
+        bags:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunOrderBag'
+    RunPickListPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunPickList'
+    RunProgress:
+      type: object
+      description: Orders per stage; derived from orders-service shipment events
+      properties:
+        runId:
+          type: string
+          format: uuid
+        orders:
+          type: integer
+          format: int32
+        pending:
+          type: integer
+          format: int32
+        collected:
+          type: integer
+          format: int32
+        outForDelivery:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        delivered:
+          type: integer
+          format: int32
+        returned:
+          type: integer
+          format: int32
+        lastDeliveredAt:
+          type: string
+          format: date-time
     Advertorial:
       type: object
       properties:

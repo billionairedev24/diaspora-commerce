@@ -14,6 +14,7 @@ channels:
       deliveryRunsRunCutoffReminder: {$ref: '#/components/messages/deliveryRunsRunCutoffReminder'}
       deliveryRunsRunConfirmed: {$ref: '#/components/messages/deliveryRunsRunConfirmed'}
       deliveryRunsRunExtended: {$ref: '#/components/messages/deliveryRunsRunExtended'}
+      deliveryRunsRunCollecting: {$ref: '#/components/messages/deliveryRunsRunCollecting'}
       deliveryRunsRunCancelled: {$ref: '#/components/messages/deliveryRunsRunCancelled'}
       deliveryRunsRunOutForDelivery: {$ref: '#/components/messages/deliveryRunsRunOutForDelivery'}
       deliveryRunsRunCompleted: {$ref: '#/components/messages/deliveryRunsRunCompleted'}
@@ -46,7 +47,8 @@ operations:
       subscribers (audience from GET /v1/service/locations/{id}/audience) and the run's customers (orders[]), sends the
       double opt-in link of subscription.created (confirmUrl) and confirms / cancels customers' preorders on
       confirmed / cancelled. orders captures payment on run.confirmed and releases stock and payment holds on
-      run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch). content
+      run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch) and cancels the
+      routes that have not started on run.cancelled. content
       refreshes run advertorials on announced / opened / extended and expires them on cancelled / confirmed.
       Pre-orders (S270–S275): notifications sends preorder.comms.due by kind — ANNOUNCE (preorder.announce email / SMS
       / push to the window's audience from GET /v1/service/preorders/{windowId}/audience?segment=SUBSCRIBERS, and
@@ -76,6 +78,13 @@ operations:
       orders.preorder.refund_settled (REFUNDED or VOIDED) and orders.preorder.refund_failed record the refund progress
       of a cancelled order; orders.order.cancelled of a placed
       order cancels it. Late adds (<CODE>-L90…) are completed by their order's placed event.
+      S264: the run follows what happens to its orders' PREORDER shipments (consumer delivery-runs-progress,
+      inbox-deduplicated on event-id, forward only, harmless when repeated or late): orders.shipment.status_changed
+      to picked_up (collected from the seller), out_for_delivery, delivery_failed or returned, and
+      orders.shipment.delivered (deliveredAt is kept on the order's slot). The first collection moves the run to
+      COLLECTING (delivery-runs.run.collecting), the last one to OUT_FOR_DELIVERY, and when every order is delivered
+      or back the run is COMPLETED. A cancelled shipment (orders.shipment.cancelled) leaves the run. The seller payout
+      hold starts in orders-service / payments from the same delivered event.
 components:
   messages:
     preorderCommsDue:
@@ -200,14 +209,25 @@ components:
         affected order and customer. Release stock and payment holds and tell the customers.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
+    deliveryRunsRunCollecting:
+      name: delivery-runs.run.collecting
+      title: >-
+        The first order was collected from its seller (the driver's pickup, or staff): the sweep has started (S264).
+        Not sent to customers.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
     deliveryRunsRunOutForDelivery:
       name: delivery-runs.run.out_for_delivery
-      title: The run left for the town (dispatch announcement); orders[] are the orders on board
+      title: >-
+        Every order was collected from its seller and the run is on the road (S264: derived from the drivers' shipment
+        events; staff can still press it); orders[] are the orders on board
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
     deliveryRunsRunCompleted:
       name: delivery-runs.run.completed
-      title: Every drop was made; orders[] are the run's orders
+      title: >-
+        Every order was delivered or came back (S264: derived from orders-service shipment events when the last one
+        is handed over; staff can still press it); orders[] are the run's orders
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/DeliveryRunsRunEvent'}
     deliveryRunsSubscriptionCreated:
@@ -248,7 +268,16 @@ components:
         customerId: {type: string, description: Customer (token subject); notifications resolves contacts}
         packages: {type: integer}
         status: {type: string, enum: [RESERVED, CONFIRMED, RELEASED, CANCELLED]}
-        handoverCode: {type: [string, 'null'], description: Six digits; confirmed pickup-point runs only}
+        handoverCode: {type: [string, 'null'], description: 'Six digits; confirmed pickup-point runs only. Window runs hand over with the order''s own 4-digit code (orders-service), which the driver app checks.'}
+    DeliveryRunsSellerRef:
+      type: object
+      description: A seller the run collects from (confirmed pre-order runs; notifications tells each seller the pickup time)
+      required: [sellerOrgId, orders, units]
+      properties:
+        sellerOrgId: {type: string}
+        sellerName: {type: [string, 'null']}
+        orders: {type: integer, description: Run orders with lines of this seller}
+        units: {type: integer, description: Units to pick}
     DeliveryRunsRunEvent:
       type: object
       required: [runId, status, locationId, locationSlug, town, market, timeZone, windowStart, windowEnd, cutoffAt,
@@ -303,6 +332,12 @@ components:
           type: [array, 'null']
           description: confirmed, cancelled, out_for_delivery and completed only
           items: {$ref: '#/components/schemas/DeliveryRunsOrderRef'}
+        sellers:
+          type: [array, 'null']
+          description: >-
+            confirmed pre-order runs only (S264): the sellers to collect from at sellerPickupAt, largest first. Each
+            reads its own pick list in Seller Center.
+          items: {$ref: '#/components/schemas/DeliveryRunsSellerRef'}
     DeliveryRunsSubscriptionEvent:
       type: object
       required: [subscriptionId, locationId, locationSlug, town, status, channels, changedChannels, unsubscribeUrl,

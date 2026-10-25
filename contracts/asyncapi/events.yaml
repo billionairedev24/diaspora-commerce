@@ -183,6 +183,8 @@ channels:
         $ref: '#/components/messages/deliveryRunsRunConfirmed'
       deliveryRunsRunExtended:
         $ref: '#/components/messages/deliveryRunsRunExtended'
+      deliveryRunsRunCollecting:
+        $ref: '#/components/messages/deliveryRunsRunCollecting'
       deliveryRunsRunCancelled:
         $ref: '#/components/messages/deliveryRunsRunCancelled'
       deliveryRunsRunOutForDelivery:
@@ -248,6 +250,8 @@ channels:
         $ref: '#/components/messages/fulfilmentTaskReady'
       fulfilmentTaskCancelled:
         $ref: '#/components/messages/fulfilmentTaskCancelled'
+      fulfilmentRunPlanned:
+        $ref: '#/components/messages/fulfilmentRunPlanned'
       fulfilmentRoutePlanned:
         $ref: '#/components/messages/fulfilmentRoutePlanned'
       fulfilmentRouteAssigned:
@@ -1374,16 +1378,26 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunCollecting:
+      name: delivery-runs.run.collecting
+      title: 'The first order was collected from its seller (the driver''s pickup, or staff): the sweep has started (S264).
+        Not sent to customers.'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
     deliveryRunsRunOutForDelivery:
       name: delivery-runs.run.out_for_delivery
-      title: The run left for the town (dispatch announcement); orders[] are the orders on board
+      title: 'Every order was collected from its seller and the run is on the road (S264: derived from the drivers'' shipment
+        events; staff can still press it); orders[] are the orders on board'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/DeliveryRunsRunEvent'
     deliveryRunsRunCompleted:
       name: delivery-runs.run.completed
-      title: Every drop was made; orders[] are the run's orders
+      title: 'Every order was delivered or came back (S264: derived from orders-service shipment events when the last one
+        is handed over; staff can still press it); orders[] are the run''s orders'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1452,6 +1466,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/FulfilmentTaskEvent'
+    fulfilmentRunPlanned:
+      name: fulfilment.run.planned
+      title: A delivery run's routes were planned (S264; key = run id). Planning again publishes it again for the new routes.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentRunPlanned'
     fulfilmentRoutePlanned:
       name: fulfilment.route.planned
       title: Route created by hand or by the zone route builder
@@ -4072,7 +4093,28 @@ components:
           type:
           - string
           - 'null'
-          description: Six digits; confirmed pickup-point runs only
+          description: Six digits; confirmed pickup-point runs only. Window runs hand over with the order's own 4-digit code
+            (orders-service), which the driver app checks.
+    DeliveryRunsSellerRef:
+      type: object
+      description: A seller the run collects from (confirmed pre-order runs; notifications tells each seller the pickup time)
+      required:
+      - sellerOrgId
+      - orders
+      - units
+      properties:
+        sellerOrgId:
+          type: string
+        sellerName:
+          type:
+          - string
+          - 'null'
+        orders:
+          type: integer
+          description: Run orders with lines of this seller
+        units:
+          type: integer
+          description: Units to pick
     DeliveryRunsRunEvent:
       type: object
       required:
@@ -4255,6 +4297,14 @@ components:
           description: confirmed, cancelled, out_for_delivery and completed only
           items:
             $ref: '#/components/schemas/DeliveryRunsOrderRef'
+        sellers:
+          type:
+          - array
+          - 'null'
+          description: 'confirmed pre-order runs only (S264): the sellers to collect from at sellerPickupAt, largest first.
+            Each reads its own pick list in Seller Center.'
+          items:
+            $ref: '#/components/schemas/DeliveryRunsSellerRef'
     DeliveryRunsSubscriptionEvent:
       type: object
       required:
@@ -5256,6 +5306,43 @@ components:
           - string
           - 'null'
           description: short-pick or cancellation reason
+        at:
+          type: string
+          format: date-time
+    FulfilmentRunPlanned:
+      type: object
+      required:
+      - runId
+      - town
+      - serviceDate
+      - dropMode
+      - routes
+      - orders
+      - shipments
+      - at
+      properties:
+        runId:
+          type: string
+          description: delivery-runs run id
+        town:
+          type: string
+          examples:
+          - Bastrop
+        serviceDate:
+          type: string
+          format: date
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        routes:
+          type: integer
+          description: Routes planned now (more than one when the run is split by capacity)
+        orders:
+          type: integer
+        shipments:
+          type: integer
         at:
           type: string
           format: date-time
@@ -7691,6 +7778,16 @@ components:
                       - 'null'
                     quantity:
                       type: integer
+                    sellerOrgId:
+                      type:
+                      - string
+                      - 'null'
+                      description: 'The line''s own seller (S264): a PREORDER package mixes sellers, so delivery-runs and
+                        fulfilment plan seller pickups and pick lists from it. Null for orders placed before it was kept.'
+                    sellerName:
+                      type:
+                      - string
+                      - 'null'
                     unitPriceMinor:
                       type: integer
                       format: int64
@@ -10742,18 +10839,18 @@ operations:
       (24 h before cutoff, again after an extension) and out_for_delivery to the location''s opted-in subscribers (audience
       from GET /v1/service/locations/{id}/audience) and the run''s customers (orders[]), sends the double opt-in link of subscription.created
       (confirmUrl) and confirms / cancels customers'' preorders on confirmed / cancelled. orders captures payment on run.confirmed
-      and releases stock and payment holds on run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch).
-      content refreshes run advertorials on announced / opened / extended and expires them on cancelled / confirmed. Pre-orders
-      (S270–S275): notifications sends preorder.comms.due by kind — ANNOUNCE (preorder.announce email / SMS / push to the
-      window''s audience from GET /v1/service/preorders/{windowId}/audience?segment=SUBSCRIBERS, and preorder.waitlist.opened
-      email to segment=WAITLIST), REMIND_48H (preorder.reminder email / push), LAST_CALL_6H (preorder.last_call SMS / push),
-      CLOSED (preorder.closed email to orders[]) and OUT_FOR_DELIVERY (preorder.out_for_delivery SMS / push to orders[]) —
-      and texts the payment link of preorder.late_order.added (payment PAYMENT_LINK, preorder.late_order.payment_link). preorder.window.*
-      follow a window''s lifecycle (keyed by window id; opened / closed / delivered come from the scheduler, closed after
-      the paid orders were handed to a run, which publishes delivery-runs.run.confirmed; paused / resumed carry the staff
-      actorId); preorder.settings.changed and preorder.areas.changed (key preorder-settings) and preorder.export.created are
-      audit records; preorder.waitlist.joined records a waitlist sign-up. ADR 0005 §4: staff set a minimum order count per
-      window. When the close date passes below it the window is not cancelled: it becomes AWAITING_DECISION and preorder.window.decision_needed
+      and releases stock and payment holds on run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch)
+      and cancels the routes that have not started on run.cancelled. content refreshes run advertorials on announced / opened
+      / extended and expires them on cancelled / confirmed. Pre-orders (S270–S275): notifications sends preorder.comms.due
+      by kind — ANNOUNCE (preorder.announce email / SMS / push to the window''s audience from GET /v1/service/preorders/{windowId}/audience?segment=SUBSCRIBERS,
+      and preorder.waitlist.opened email to segment=WAITLIST), REMIND_48H (preorder.reminder email / push), LAST_CALL_6H (preorder.last_call
+      SMS / push), CLOSED (preorder.closed email to orders[]) and OUT_FOR_DELIVERY (preorder.out_for_delivery SMS / push to
+      orders[]) — and texts the payment link of preorder.late_order.added (payment PAYMENT_LINK, preorder.late_order.payment_link).
+      preorder.window.* follow a window''s lifecycle (keyed by window id; opened / closed / delivered come from the scheduler,
+      closed after the paid orders were handed to a run, which publishes delivery-runs.run.confirmed; paused / resumed carry
+      the staff actorId); preorder.settings.changed and preorder.areas.changed (key preorder-settings) and preorder.export.created
+      are audit records; preorder.waitlist.joined records a waitlist sign-up. ADR 0005 §4: staff set a minimum order count
+      per window. When the close date passes below it the window is not cancelled: it becomes AWAITING_DECISION and preorder.window.decision_needed
       tells staff (decision.kind AWAITING, orders and minimum counted). Staff then CANCEL or PROCEED with a required reason;
       every decision (and an early close once the minimum is met) is published as preorder.window.decided with who, when and
       why. A cancelled window (preorder.window.cancelled, orders[] = every order) is refunded in full by orders-service (consumer
@@ -10768,7 +10865,13 @@ operations:
       order or the preorder block) becomes a window order numbered <CODE>-1001…; orders.shipment.cancelled cancels that package
       (the order once none is left, with its refund PENDING); orders.preorder.refund_settled (REFUNDED or VOIDED) and orders.preorder.refund_failed
       record the refund progress of a cancelled order; orders.order.cancelled of a placed order cancels it. Late adds (<CODE>-L90…)
-      are completed by their order''s placed event.'
+      are completed by their order''s placed event. S264: the run follows what happens to its orders'' PREORDER shipments
+      (consumer delivery-runs-progress, inbox-deduplicated on event-id, forward only, harmless when repeated or late): orders.shipment.status_changed
+      to picked_up (collected from the seller), out_for_delivery, delivery_failed or returned, and orders.shipment.delivered
+      (deliveredAt is kept on the order''s slot). The first collection moves the run to COLLECTING (delivery-runs.run.collecting),
+      the last one to OUT_FOR_DELIVERY, and when every order is delivered or back the run is COMPLETED. A cancelled shipment
+      (orders.shipment.cancelled) leaves the run. The seller payout hold starts in orders-service / payments from the same
+      delivered event.'
   publishFulfilmentEvents:
     action: send
     channel:
@@ -10780,15 +10883,30 @@ operations:
       a shipment to the driver or the FC loads it out (trust-ops seller health); fulfilment.return_pickup.* (key RMA id) follow
       return pickups scheduled by tax-returns-service. fulfilment.pickup.auto_assigned / dispatch_assigned (S255, key shipment
       id): a seller pickup (AfroTransact Delivery from the seller''s store) joined the nearest available driver''s route,
-      or dispatch moved it with a logged reason.'
+      or dispatch moved it with a logged reason. fulfilment.run.planned (S264, key = delivery-runs run id): a delivery run''s
+      routes were planned.'
+  receiveFulfilmentDeliveryRunsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/deliveryRunsEvents'
+    summary: 'fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) plans delivery runs (S264): delivery-runs.run.confirmed
+      (a closed pre-order window''s paid orders) fetches GET /v1/service/runs/{id}/dispatch (scope delivery-runs:read) and
+      turns the shipments of the run''s orders into routes: one route per capacity chunk (RUN_ROUTE_CAPACITY bags), a pickup
+      stop per seller before the drops, doorstep drops ordered by road distance from the hub (geo POST /v1/distance/batch)
+      or one drop per order at the community pickup point (each needing the customer''s handover code). The shipments are
+      confirmed in orders-service. When delivery-runs cannot be reached the run is kept PENDING with the reason and staff
+      plan it from the console. delivery-runs.run.cancelled cancels the routes that have not started. Other run events are
+      ignored.'
   receiveFulfilmentOrderEvents:
     action: receive
     channel:
       $ref: '#/channels/ordersOrderEvents'
     summary: 'fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) handles orders.order.placed: a pick
       / pack task per FBA_AFROTRANSACT or RETAIL_1P shipment (node from inventory''s reservation), and an entry in the dispatch
-      pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label. A seller pickup
-      with a pickup position (shipments[].pickup, S255) goes to the nearest available driver''s route at once (fulfilment.pickup.auto_assigned);
+      pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label. PREORDER shipments
+      (door or pickup point, S264) wait for their run instead: they are kept out of the zone builder and the seller-pickup
+      screens, and their lines (each with its own sellerOrgId) become one labelled bag per seller. A seller pickup with a
+      pickup position (shipments[].pickup, S255) goes to the nearest available driver''s route at once (fulfilment.pickup.auto_assigned);
       otherwise it waits for the zone route builder. orders.shipment.cancelled cancels the task and takes the shipment off
       a route that has not started. Other order events are ignored.'
   receiveFulfilmentIdentityEvents:
