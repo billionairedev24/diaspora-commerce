@@ -465,7 +465,7 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	do("ops", "POST", "/v1/staff/advertorials/nope/pause", nil, 404)
 
 	for _, op := range []string{"getStaffEconomicsSettings", "updateStaffEconomicsSettings", "listStaffEconomicsChanges", "previewStaffWindowEconomics",
-		"getStaffPreorderEconomics", "listStaffRunLocations", "getStaffRunLocationHistory", "listStaffRuns", "getStaffRunPnl", "previewStaffRunEconomics",
+		"getStaffPreorderEconomics", "listStaffRunLocations", "getStaffRunLocationHistory", "listStaffPreorderRuns", "getStaffRunPnl", "previewStaffRunEconomics",
 		"listStaffAdvertorials", "createStaffAdvertorial", "generateStaffAdvertorial", "getStaffAdvertorial", "updateStaffAdvertorial", "actStaffAdvertorial"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)

@@ -16,7 +16,7 @@ import (
 // moving it by hand need EDIT and delivery:dispatch (and delivery-runs:manage upstream for the move).
 
 const (
-	runsPath       = "/v1/dispatch/runs"
+	dispatchRunsPath       = "/v1/dispatch/runs"
 	runsLimit      = "50"
 	deliveryRuns   = "/v1/runs/"
 	runListStates  = "CONFIRMED,COLLECTING,OUT_FOR_DELIVERY,COMPLETED,CANCELLED"
@@ -50,7 +50,7 @@ func (s *staffDispatchImpl) Runs(ctx context.Context, c *domain.Caller, status s
 		q.Set("status", status)
 	}
 	var up []jobj
-	if err := sc.get(ctx, sc.up.Fulfilment, runsPath, q, &up); err != nil {
+	if err := sc.get(ctx, sc.up.Fulfilment, dispatchRunsPath, q, &up); err != nil {
 		return domain.RunDispatchList{}, err
 	}
 	states := s.runStates(ctx, sc)
@@ -89,7 +89,7 @@ func (s *staffDispatchImpl) PlanRun(ctx context.Context, c *domain.Caller, runID
 		return domain.RunDispatch{}, needsPermission(deliveryDispatch)
 	}
 	var up jobj
-	if err := sc.post(ctx, sc.up.Fulfilment, runsPath+"/"+url.PathEscape(runID)+"/plan", nil, &up); err != nil {
+	if err := sc.post(ctx, sc.up.Fulfilment, dispatchRunsPath+"/"+url.PathEscape(runID)+"/plan", nil, &up); err != nil {
 		return domain.RunDispatch{}, err
 	}
 	return s.withLifecycle(ctx, sc, runDispatchOf(up, true), runID), nil
@@ -127,7 +127,7 @@ func (s *staffDispatchImpl) AdvanceRun(ctx context.Context, c *domain.Caller, ru
 // delivery-runs, which are left out when it cannot be read.
 func (s *staffDispatchImpl) runDetail(ctx context.Context, sc staffCtx, runID string) (domain.RunDispatch, error) {
 	var up jobj
-	if err := sc.get(ctx, sc.up.Fulfilment, runsPath+"/"+url.PathEscape(runID), nil, &up); err != nil {
+	if err := sc.get(ctx, sc.up.Fulfilment, dispatchRunsPath+"/"+url.PathEscape(runID), nil, &up); err != nil {
 		return domain.RunDispatch{}, err
 	}
 	return s.withLifecycle(ctx, sc, runDispatchOf(up, canManageRuns(sc.access)), runID), nil

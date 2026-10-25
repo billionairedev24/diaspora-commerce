@@ -2712,7 +2712,7 @@ paths:
   /v1/staff/delivery-runs/runs:
     get:
       tags: [Run economics]
-      operationId: listStaffRuns
+      operationId: listStaffPreorderRuns
       security: [{sessionCookie: []}]
       summary: Delivery runs, newest window first
       description: delivery-runs `GET /v1/runs` (delivery-runs:read).
@@ -2738,7 +2738,7 @@ paths:
         `refundedFeesMinor` say what went back to customers. `commissionShareMinor` is the commission attributed to the run,
         reported by analytics.
       parameters:
-        - {$ref: '#/components/parameters/RunId'}
+        - {$ref: '#/components/parameters/PreorderRunId'}
         - {name: commissionShareMinor, in: query, schema: {type: integer, minimum: 0}}
       responses:
         '200': {description: P&L, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunPnl'}}}}
@@ -5048,7 +5048,7 @@ components:
     RunId: {name: runId, in: path, required: true, schema: {type: string, maxLength: 64}, description: Delivery run id (delivery-runs)}
     PreorderId: {name: preorderId, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}, description: Window id or code}
     LocationId: {name: locationId, in: path, required: true, schema: {type: string, format: uuid}}
-    RunId: {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+    PreorderRunId: {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
     AdvertorialId: {name: advertorialId, in: path, required: true, schema: {type: string, format: uuid}}
     DeliveryFeeMethod: {name: method, in: path, required: true, schema: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}}
     DeliveryFeeCurrency: {name: currency, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{3}$'}, description: 'ISO 4217 code, for example USD'}

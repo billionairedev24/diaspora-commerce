@@ -15,9 +15,9 @@ func (h *handlersImpl) registerStaffRuns(route func(pattern string, fn http.Hand
 	route("GET /v1/staff/preorders/{id}/economics", h.staffWindowEconomics)
 	route("GET /v1/staff/delivery-runs/locations", h.staffRunLocations)
 	route("GET /v1/staff/delivery-runs/locations/{id}/history", h.staffRunLocationHistory)
-	route("GET /v1/staff/delivery-runs/runs", h.staffRuns)
+	route("GET /v1/staff/delivery-runs/runs", h.staffPreorderRuns)
 	route("GET /v1/staff/delivery-runs/runs/{id}/pnl", h.staffRunPnl)
-	route("POST /v1/staff/delivery-runs/economics-preview", h.staffPlanRun)
+	route("POST /v1/staff/delivery-runs/economics-preview", h.staffPreorderPlanRun)
 	route("GET /v1/staff/advertorials", h.staffAdvertorials)
 	route("POST /v1/staff/advertorials", h.staffCreateAdvertorial)
 	route("POST /v1/staff/advertorials/generate", h.staffGenerateAdvertorial)
@@ -73,7 +73,7 @@ func (h *handlersImpl) staffRunLocationHistory(w http.ResponseWriter, r *http.Re
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
-func (h *handlersImpl) staffRuns(w http.ResponseWriter, r *http.Request) {
+func (h *handlersImpl) staffPreorderRuns(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Preorders.Runs(r.Context(), callerFrom(r.Context()), r.URL.Query())
 	h.reply(w, r, http.StatusOK, v, err)
 }
@@ -83,7 +83,7 @@ func (h *handlersImpl) staffRunPnl(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
-func (h *handlersImpl) staffPlanRun(w http.ResponseWriter, r *http.Request) {
+func (h *handlersImpl) staffPreorderPlanRun(w http.ResponseWriter, r *http.Request) {
 	b, err := staffBody(r)
 	if err != nil {
 		h.reply(w, r, 0, nil, err)

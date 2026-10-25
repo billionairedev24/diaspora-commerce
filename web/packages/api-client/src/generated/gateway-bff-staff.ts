@@ -2396,7 +2396,7 @@ export interface paths {
          * Delivery runs, newest window first
          * @description delivery-runs `GET /v1/runs` (delivery-runs:read).
          */
-        get: operations["listStaffRuns"];
+        get: operations["listStaffPreorderRuns"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7649,7 +7649,7 @@ export interface components {
         /** @description Window id or code */
         PreorderId: string;
         LocationId: string;
-        RunId: string;
+        PreorderRunId: string;
         AdvertorialId: string;
         DeliveryFeeMethod: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
         /** @description ISO 4217 code, for example USD */
@@ -11525,7 +11525,7 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
-    listStaffRuns: {
+    listStaffPreorderRuns: {
         parameters: {
             query?: {
                 locationId?: string;
@@ -11561,7 +11561,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                runId: components["parameters"]["RunId"];
+                runId: components["parameters"]["PreorderRunId"];
             };
             cookie?: never;
         };
