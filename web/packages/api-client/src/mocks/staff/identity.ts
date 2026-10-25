@@ -27,6 +27,22 @@ const lines = (v: FieldValue | undefined): string[] =>
 const list = (csv: Scalar | undefined): string[] => str(csv).split(',').map((s) => s.trim()).filter(Boolean);
 const log = (r: MockRecord, actor: string, now: Date, text: string) => r.activity.unshift({ at: now.toISOString(), actor, text });
 
+/* Step-up (S291): the forms of the most dangerous actions end with the staff member's own password. The real BFF has
+   identity check it and relay a proof; the mock knows one password, and a blank field is refused (the mock has no
+   "signed in within five minutes" to fall back on). */
+export const STEP_UP_KEY = 'stepUpPassword';
+export const MOCK_STEP_UP_PASSWORD = 'Mock-Password-1';
+const stepUpField = (): FormField =>
+  field(STEP_UP_KEY, 'Your password (to confirm it is you)', 'password', false, { maxLength: 128, help: 'Leave blank if you signed in within the last 5 minutes.' });
+
+/** Errors on the password field of a form that asks for step-up: none for the mock password. */
+export function stepUpErrors(f: StaffForm, values: Record<string, FieldValue>): Record<string, string> {
+  if (!f.fields.some((x) => x.key === STEP_UP_KEY)) return {};
+  const given = values[STEP_UP_KEY];
+  if (given === MOCK_STEP_UP_PASSWORD) return {};
+  return { [STEP_UP_KEY]: given ? 'That password isn’t right' : 'Enter your password to confirm this. It can stay blank only within five minutes of signing in.' };
+}
+
 const GRANTS = [
   { value: 'authorization_code', label: 'Authorization code' },
   { value: 'refresh_token', label: 'Refresh token' },
@@ -164,7 +180,7 @@ function applyClient(r: MockRecord, v: Record<string, FieldValue>) {
   });
 }
 
-const reasonOnly = (title: string, submit: string, intro?: string) => () => form(title, submit, [reasonField()], intro);
+const reasonOnly = (title: string, submit: string, intro?: string, stepUp = false) => () => form(title, submit, stepUp ? [reasonField(), stepUpField()] : [reasonField()], intro);
 const randomSecret = () => `mock-${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
 
 const clientActions: MockAction[] = [
@@ -187,7 +203,7 @@ const clientActions: MockAction[] = [
     label: 'Disable client',
     tone: 'danger',
     permission: IDENTITY_ADMIN,
-    form: reasonOnly('Disable the client', 'Disable', 'The token endpoint refuses the client at once and its refresh tokens stop working. You can enable it again.'),
+    form: reasonOnly('Disable the client', 'Disable', 'The token endpoint refuses the client at once and its refresh tokens stop working. You can enable it again.', true),
     when: (r) => (r.fields.enabled !== true ? 'Already disabled.' : r.fields.platformClient === true ? 'The platform signs in with this client; disabling it would lock every staff member out.' : null),
     apply: (r, _v, ctx) => {
       r.fields.enabled = false;
@@ -213,7 +229,7 @@ const clientActions: MockAction[] = [
     label: 'Revoke all its sign-ins',
     tone: 'danger',
     permission: IDENTITY_ADMIN,
-    form: reasonOnly('Revoke every sign-in of this client', 'Revoke all', 'Every refresh token of the client stops working at once; people sign in again. Access tokens already issued expire within minutes.'),
+    form: reasonOnly('Revoke every sign-in of this client', 'Revoke all', 'Every refresh token of the client stops working at once; people sign in again. Access tokens already issued expire within minutes.', true),
     when: () => null,
     apply: (r, _v, ctx) => log(r, ctx.actor, ctx.now, 'Revoked every sign-in')
   }
@@ -327,7 +343,7 @@ const sessionDef: MockResource = {
       tone: 'danger',
       permission: IDENTITY_ADMIN,
       removes: true,
-      form: reasonOnly('Sign the user out everywhere', 'Sign out everywhere', 'Every sign-in of this person on every app stops working, and their single sign-on browser sessions end.'),
+      form: reasonOnly('Sign the user out everywhere', 'Sign out everywhere', 'Every sign-in of this person on every app stops working, and their single sign-on browser sessions end.', true),
       when: (r) => (str(r.fields.userName) || str(r.fields.userEmail) ? null : 'This sign-in belongs to a service account, not a person.'),
       apply: () => undefined
     }
@@ -357,7 +373,7 @@ const keyDef: MockResource = {
     form: form(
       'Rotate the signing key',
       'Rotate',
-      [reasonField()],
+      [reasonField(), stepUpField()],
       'A new key signs every new token from now on. The current key stays published until the longest access token issued under it has expired, then retires. Nothing needs redeploying.'
     ),
     build: (_v, _id, ctx) => {
@@ -421,7 +437,8 @@ const settingsDef: MockResource = {
               value: s.type === 'toggle' ? r.fields[s.key] === true : (r.fields[s.key] ?? null)
             })
           ),
-          reasonField()
+          reasonField(),
+          stepUpField()
         ],
         'A value equal to the configured default is stored as "use the default". The change is recorded with your reason and what it was before.'
       ),

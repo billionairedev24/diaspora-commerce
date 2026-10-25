@@ -55,7 +55,7 @@ tags:
   - name: Resources
     description: Server-driven tables, detail sheets, create / edit forms and RBAC-gated actions
   - name: Identity & access
-    description: 'Developer tools for the identity service (identity:admin): the token inspector and the published OIDC documents. Its tables (oauth-clients, identity-sessions, signing-keys, auth-settings) are Resources.'
+    description: 'Developer tools for the identity service (identity:admin): the token inspector and the published OIDC documents. Its tables (oauth-clients, identity-sessions, signing-keys, auth-settings) are Resources. Step-up: the forms of the most dangerous actions (rotate the signing key, sign a user or a client out, disable a client, change the settings) end with a `stepUpPassword` field (type password, not required). The BFF checks it at identity (`POST /v1/admin/identity/step-up`) and relays the proof as `X-Step-Up`; a blank value is accepted when the person signed in within five minutes, otherwise the action answers 422 on `stepUpPassword`. A wrong password counts towards the account lockout. The password is never stored, cached or logged.'
   - name: Exports
     description: Server-side CSV / XLSX exports with signed, expiring download links
   - name: Support

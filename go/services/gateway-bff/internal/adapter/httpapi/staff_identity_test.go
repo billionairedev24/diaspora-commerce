@@ -31,12 +31,17 @@ type fakeIdentityAdmin struct {
 	settings map[string]any
 	// seen collects every request body, to check that tokens and secrets travel only where they must.
 	seen []string
+	// stepUps are the X-Step-Up values the dangerous calls arrived with ("" when the header was missing).
+	stepUps []string
 }
 
 const (
 	createdSecret = "created-secret-SHOWN-ONCE-0001"
 	rotatedSecret = "rotated-secret-SHOWN-ONCE-0002"
 	inspectedJWT  = "eyJhbGciOiJSUzI1NiIsImtpZCI6ImsxIn0.eyJzdWIiOiJ1c2VyLTEiLCJpc3MiOiJodHRwczovL2lkLnRlc3QifQ.c2lnbmF0dXJl"
+	// The staff member's own password and the step-up proof identity issues for it (S291).
+	staffPassword = "Correct-Horse-Battery-1"
+	stepUpProof   = "step-up-proof-SHOWN-ONCE-0003"
 )
 
 func (f *fakeIdentityAdmin) init() {
@@ -105,13 +110,35 @@ func (f *fakeIdentityAdmin) serve(w http.ResponseWriter, r *http.Request, p stri
 	f.init()
 	raw, _ := json.Marshal(body)
 	f.seen = append(f.seen, r.Method+" "+p+" "+string(raw))
-	needsReason := r.Method != http.MethodGet && !strings.HasSuffix(p, "/token-inspector")
+	needsReason := r.Method != http.MethodGet && !strings.HasSuffix(p, "/token-inspector") && !strings.HasSuffix(p, "/step-up")
 	if reason, _ := body["reason"].(string); needsReason && len(strings.TrimSpace(reason)) < 10 {
 		invalidReason(w)
 		return
 	}
 	rest := strings.TrimPrefix(p, "/v1/admin/identity/")
 	parts := strings.Split(rest, "/")
+	if rest == "step-up" {
+		if body["password"] != staffPassword {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(422)
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": 422, "code": "identity.step-up-failed", "detail": "That password isn't right",
+				"fieldErrors": map[string]string{"password": "That password isn't right"}})
+			return
+		}
+		writeJ(w, 200, map[string]any{"proof": stepUpProof, "expiresAt": "2026-10-24T10:05:00Z"})
+		return
+	}
+	// The dangerous actions need the proof (or a sign-in from the last five minutes, which this fake never has).
+	if dangerous := strings.HasSuffix(rest, "/disable") || strings.HasSuffix(rest, "/sessions/revoke") || rest == "signing-keys/rotate" ||
+		(rest == "settings" && r.Method == http.MethodPut); dangerous {
+		f.stepUps = append(f.stepUps, r.Header.Get("X-Step-Up"))
+		if r.Header.Get("X-Step-Up") != stepUpProof {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(403)
+			_ = json.NewEncoder(w).Encode(map[string]any{"status": 403, "code": "identity.step-up-required", "detail": "Confirm your password to continue"})
+			return
+		}
+	}
 	switch {
 	case rest == "clients" && r.Method == http.MethodGet:
 		out := make([]any, 0, len(f.clients))
@@ -348,7 +375,7 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 		t.Fatalf("rotated = %v", rotated["reveal"])
 	}
 	do("admin", "POST", res("oauth-clients")+"/partner-ui/actions/rotate-secret", map[string]any{"values": map[string]any{"reason": why}}, 409)
-	off := do("admin", "POST", res("oauth-clients")+"/partner-api/actions/disable", map[string]any{"values": map[string]any{"reason": why}}, 200)
+	off := do("admin", "POST", res("oauth-clients")+"/partner-api/actions/disable", map[string]any{"values": map[string]any{"reason": why, "stepUpPassword": staffPassword}}, 200)
 	if off["status"] != "DISABLED" {
 		t.Fatalf("disabled = %v", off["status"])
 	}
@@ -356,7 +383,39 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 	if on["status"] != "ENABLED" {
 		t.Fatalf("enabled = %v", on["status"])
 	}
-	do("admin", "POST", res("oauth-clients")+"/partner-api/actions/revoke-sessions", map[string]any{"values": map[string]any{"reason": why}}, 200)
+	do("admin", "POST", res("oauth-clients")+"/partner-api/actions/revoke-sessions", map[string]any{"values": map[string]any{"reason": why, "stepUpPassword": staffPassword}}, 200)
+
+	// Step-up (S291): the dangerous actions end with a password field, identity checks it and the call carries its proof.
+	for _, k := range []string{"disable", "revoke-sessions"} {
+		var field map[string]any
+		for _, a := range do("admin", "GET", res("oauth-clients")+"/partner-api", nil, 200)["actions"].([]any) {
+			if a.(map[string]any)["key"] != k {
+				continue
+			}
+			fields := a.(map[string]any)["form"].(map[string]any)["fields"].([]any)
+			field = fields[len(fields)-1].(map[string]any)
+		}
+		if field == nil || field["key"] != "stepUpPassword" || field["type"] != "password" || field["required"] != false {
+			t.Fatalf("%s must end with the optional password field: %v", k, field)
+		}
+	}
+	before := len(f.idAdmin.stepUps)
+	// No password and no recent sign-in: identity refuses, the form shows it on the password field and nothing happened.
+	blank := do("admin", "POST", res("oauth-clients")+"/partner-api/actions/disable", map[string]any{"values": map[string]any{"reason": why}}, 422)
+	if !strings.Contains(asJSON(blank), "stepUpPassword") {
+		t.Fatalf("a missing confirmation is an error on the password field: %v", blank)
+	}
+	// A wrong password is refused at the step-up call: the dangerous call is never made.
+	wrong := do("admin", "POST", res("oauth-clients")+"/partner-api/actions/disable", map[string]any{"values": map[string]any{"reason": why, "stepUpPassword": "not-the-password"}}, 422)
+	if !strings.Contains(asJSON(wrong), "stepUpPassword") || !strings.Contains(asJSON(wrong), "isn't right") {
+		t.Fatalf("a wrong password is an error on the password field: %v", wrong)
+	}
+	if got := f.idAdmin.stepUps[before:]; len(got) != 1 || got[0] != "" {
+		t.Fatalf("only the blank attempt reached the dangerous endpoint, without a proof: %v", got)
+	}
+	do("admin", "POST", res("signing-keys"), map[string]any{"values": map[string]any{"reason": why, "stepUpPassword": "not-the-password"}}, 422)
+	do("admin", "PATCH", res("auth-settings")+"/settings", map[string]any{"values": map[string]any{"passwordMinLength": 14, "mfaRequiredAccount": false, "mfaRequiredSeller": false,
+		"mfaRequiredProvider": false, "sessionIdleTimeoutMinutes": 30, "sessionAbsoluteTimeoutMinutes": 1440, "reason": why}}, 422)
 
 	// Sessions and tokens: list, sheet, revoke one, sign a person out everywhere.
 	sessions := do("admin", "GET", res("identity-sessions"), nil, 200)
@@ -377,7 +436,7 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 	if gone := do("admin", "POST", res("identity-sessions")+"/auth-1/actions/revoke", map[string]any{"values": map[string]any{"reason": why}}, 200); gone["removed"] != true {
 		t.Fatalf("revoked = %v", gone)
 	}
-	if gone := do("admin", "POST", res("identity-sessions")+"/auth-1/actions/revoke-user", map[string]any{"values": map[string]any{"reason": why}}, 200); gone["removed"] != true {
+	if gone := do("admin", "POST", res("identity-sessions")+"/auth-1/actions/revoke-user", map[string]any{"values": map[string]any{"reason": why, "stepUpPassword": staffPassword}}, 200); gone["removed"] != true {
 		t.Fatalf("signed out everywhere = %v", gone)
 	}
 	do("admin", "GET", res("identity-sessions")+"/nope", nil, 404)
@@ -388,7 +447,7 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 		t.Fatalf("signing keys = %v", keys)
 	}
 	do("admin", "POST", res("signing-keys"), map[string]any{"values": map[string]any{}}, 422)
-	newKey := do("admin", "POST", res("signing-keys"), map[string]any{"values": map[string]any{"reason": why}}, 201)
+	newKey := do("admin", "POST", res("signing-keys"), map[string]any{"values": map[string]any{"reason": why, "stepUpPassword": staffPassword}}, 201)
 	if newKey["id"] != "k20261024T100000-ef56" || newKey["status"] != "ACTIVE" {
 		t.Fatalf("rotated key = %v", newKey)
 	}
@@ -400,7 +459,7 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 		t.Fatalf("settings sheet = %v", st)
 	}
 	values := map[string]any{"passwordMinLength": 16, "mfaRequiredAccount": false, "mfaRequiredSeller": true, "mfaRequiredProvider": false,
-		"sessionIdleTimeoutMinutes": 30, "sessionAbsoluteTimeoutMinutes": 600, "accessTokenTtlCapMinutes": 10, "reason": why}
+		"sessionIdleTimeoutMinutes": 30, "sessionAbsoluteTimeoutMinutes": 600, "accessTokenTtlCapMinutes": 10, "reason": why, "stepUpPassword": staffPassword}
 	do("admin", "GET", res("auth-settings"), nil, 200)
 	do("admin", "PATCH", res("auth-settings")+"/settings", map[string]any{"values": map[string]any{"passwordMinLength": 4, "reason": why, "sessionIdleTimeoutMinutes": 30, "sessionAbsoluteTimeoutMinutes": 600}}, 422)
 	saved := do("admin", "PATCH", res("auth-settings")+"/settings", map[string]any{"values": values}, 200)
@@ -431,10 +490,25 @@ func TestStaffIdentityAdminConformance(t *testing.T) {
 		t.Fatalf("documents = %v", docs)
 	}
 
+	// The password travels only in the step-up request; the proof only as the header of the dangerous calls.
+	for _, line := range strings.Split(f.idAdmin.bodies(), "\n") {
+		if strings.Contains(line, staffPassword) && !strings.HasPrefix(line, "POST /v1/admin/identity/step-up ") {
+			t.Fatalf("the password reached identity outside the step-up call: %s", line)
+		}
+		if strings.Contains(line, stepUpProof) {
+			t.Fatalf("the proof belongs in a header, not a body: %s", line)
+		}
+	}
+	for _, got := range f.idAdmin.stepUps {
+		if got != "" && got != stepUpProof {
+			t.Fatalf("unexpected X-Step-Up value %q", got)
+		}
+	}
+
 	// Secrets and tokens reach identity only in the requests that need them and are never in a sheet or table.
 	for _, r := range []string{"oauth-clients", "identity-sessions", "signing-keys", "auth-settings"} {
 		page := asJSON(do("admin", "GET", res(r), nil, 200))
-		if strings.Contains(page, createdSecret) || strings.Contains(page, rotatedSecret) || strings.Contains(page, inspectedJWT) {
+		if strings.Contains(page, createdSecret) || strings.Contains(page, rotatedSecret) || strings.Contains(page, inspectedJWT) || strings.Contains(page, staffPassword) || strings.Contains(page, stepUpProof) {
 			t.Fatalf("%s leaks a secret: %s", r, page)
 		}
 	}

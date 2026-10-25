@@ -47,7 +47,7 @@ import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { feeRateHandlers } from './fee-rates';
 import { activeFeeSchedule, createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
-import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop } from './identity';
+import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop, stepUpErrors } from './identity';
 import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
@@ -719,7 +719,7 @@ export const staffHandlers = [
       requireModule(ctx, resource, 'EDIT');
       if (!ctx.permissions.includes(def.permission)) throw forbidden(`Needs the ${def.permission} permission.`);
       const { values } = await json(ctx.request, ValuesBody);
-      const errors = validateForm(def.form, values);
+      const errors = { ...validateForm(def.form, values), ...stepUpErrors(def.form, values) };
       if (Object.keys(errors).length) throw invalid(errors);
       const rec = def.build(values, `${resource}-${ctx.db.seq++}`, ctx.action);
       // A rate set for a currency and day that already has one replaces it (the reason is in the audit trail).
@@ -752,7 +752,8 @@ export const staffHandlers = [
       const { values, version } = await json(ctx.request, ValuesBody);
       const current = rec.fields.version === undefined || rec.fields.version === null ? null : String(rec.fields.version);
       if (version && current && version !== current) throw conflict('Someone else changed this record. Reload and try again.');
-      const errors = validateForm(def.form(rec), values);
+      const editForm = def.form(rec);
+      const errors = { ...validateForm(editForm, values), ...stepUpErrors(editForm, values) };
       if (Object.keys(errors).length) throw invalid(errors);
       def.apply(rec, values, ctx.action);
       if (resource !== 'exchange-rates') rec.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, text: 'Edited' });
@@ -781,7 +782,7 @@ export const staffHandlers = [
       }
       const { values } = await json(ctx.request, ValuesBody);
       if (view.form) {
-        const errors = validateForm(view.form, values);
+        const errors = { ...validateForm(view.form, values), ...stepUpErrors(view.form, values) };
         if (Object.keys(errors).length) throw invalid(errors);
       }
       def.apply(rec, values, ctx.action);

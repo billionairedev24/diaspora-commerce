@@ -61,6 +61,62 @@ func reasonField() domain.FormField {
 	return withPattern(withMax(ff("reason", "Reason (10 to 500 characters, kept in the access log)", "textarea", true), 500), `^[\s\S]{10,500}$`, "Give a reason of 10 to 500 characters")
 }
 
+const (
+	stepUpKey         = "stepUpPassword"
+	codeStepUpFailed  = "identity.step-up-failed"
+	codeStepUpNoPass  = "identity.step-up-no-password"
+	codeStepUpNeeded  = "identity.step-up-required"
+	stepUpNeededHint  = "Enter your password to confirm this. It can stay blank only within five minutes of signing in."
+	stepUpFieldLabel  = "Your password (to confirm it is you)"
+	stepUpFieldHelp   = "Leave blank if you signed in within the last 5 minutes."
+	identityStepUpURL = "/v1/admin/identity/step-up"
+)
+
+// stepUpField ends the forms of the most dangerous actions (rotate the signing key, sign a user or a client out, disable a
+// client, change the settings): the staff member re-enters their own password. Identity checks it and the dangerous
+// call carries the proof it issues; a blank field is accepted only within five minutes of signing in.
+func stepUpField() domain.FormField {
+	f := withMax(ff(stepUpKey, stepUpFieldLabel, "password", false), 128)
+	f.Help = stepUpFieldHelp
+	return f
+}
+
+// dangerous runs one dangerous identity call with step-up. The password the person typed is exchanged at identity for a
+// five-minute proof, relayed as X-Step-Up; it is never stored, cached or logged here. A wrong password, an account that
+// has none and a missing confirmation all come back as errors on the form's password field.
+func (s staffCtx) dangerous(ctx context.Context, v jobj, c port.StaffCall, out any) error {
+	up := s.up.Identity
+	if up == nil {
+		return domain.UpstreamUnavailable("identity")
+	}
+	if password := vs(v, stepUpKey); password != "" {
+		var proof jobj
+		err := up.Call(ctx, s.bearer, port.StaffCall{Method: http.MethodPost, Path: identityStepUpURL, Body: jobj{"password": password}}, &proof)
+		if err != nil {
+			return stepUpProblem(up.Name(), err)
+		}
+		c.StepUp = jstr(proof, "proof")
+	}
+	c.IdempotencyKey = s.idem
+	if err := up.Call(ctx, s.bearer, c, out); err != nil {
+		return stepUpProblem(up.Name(), err)
+	}
+	return nil
+}
+
+// stepUpProblem turns identity's step-up answers into an error on the password field and maps everything else as usual.
+func stepUpProblem(upstream string, err error) error {
+	if p, ok := port.AsUpstreamProblem(err); ok {
+		switch p.Code {
+		case codeStepUpFailed, codeStepUpNoPass:
+			return domain.ValidationProblem(map[string]string{stepUpKey: firstNonEmpty(p.Fields["password"], p.Detail)}).WithCause(err)
+		case codeStepUpNeeded:
+			return domain.ValidationProblem(map[string]string{stepUpKey: stepUpNeededHint}).WithCause(err)
+		}
+	}
+	return mapErr(upstream, err)
+}
+
 // ---------------------------------------------------------------- OAuth clients
 
 func oauthClientsResource() *staffResource {
@@ -176,10 +232,10 @@ func oauthClientsResource() *staffResource {
 				},
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
 					return &domain.Form{Title: "Disable the client", SubmitLabel: "Disable",
-						Intro: "The token endpoint refuses the client at once and its refresh tokens stop working. You can enable it again.", Fields: []domain.FormField{reasonField()}}
+						Intro: "The token endpoint refuses the client at once and its refresh tokens stop working. You can enable it again.", Fields: []domain.FormField{reasonField(), stepUpField()}}
 				},
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
-					return sc.post(ctx, sc.up.Identity, clientPath(o, "/disable"), jobj{"reason": vs(v, "reason")}, nil)
+					return sc.dangerous(ctx, v, port.StaffCall{Method: http.MethodPost, Path: clientPath(o, "/disable"), Body: jobj{"reason": vs(v, "reason")}}, nil)
 				}},
 			{key: "enable", label: "Enable client", tone: "primary", permission: identityAdmin,
 				when: func(_ staffCtx, o jobj) string {
@@ -198,10 +254,10 @@ func oauthClientsResource() *staffResource {
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
 					return &domain.Form{Title: "Revoke every sign-in of this client", SubmitLabel: "Revoke all",
 						Intro:  "Every refresh token of the client stops working at once; people sign in again. Access tokens already issued expire within minutes.",
-						Fields: []domain.FormField{reasonField()}}
+						Fields: []domain.FormField{reasonField(), stepUpField()}}
 				},
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
-					return sc.post(ctx, sc.up.Identity, clientPath(o, "/sessions/revoke"), jobj{"reason": vs(v, "reason")}, nil)
+					return sc.dangerous(ctx, v, port.StaffCall{Method: http.MethodPost, Path: clientPath(o, "/sessions/revoke"), Body: jobj{"reason": vs(v, "reason")}}, nil)
 				}},
 		},
 		edit: &staffEdit{permission: identityAdmin,
@@ -290,10 +346,10 @@ func identitySessionsResource() *staffResource {
 				},
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
 					return &domain.Form{Title: "Sign the user out everywhere", SubmitLabel: "Sign out everywhere",
-						Intro: "Every sign-in of this person on every app stops working, and their single sign-on browser sessions end.", Fields: []domain.FormField{reasonField()}}
+						Intro: "Every sign-in of this person on every app stops working, and their single sign-on browser sessions end.", Fields: []domain.FormField{reasonField(), stepUpField()}}
 				},
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
-					return sc.post(ctx, sc.up.Identity, "/v1/admin/identity/users/"+url.PathEscape(jstr(o, "userId"))+"/sessions/revoke", jobj{"reason": vs(v, "reason")}, nil)
+					return sc.dangerous(ctx, v, port.StaffCall{Method: http.MethodPost, Path: "/v1/admin/identity/users/" + url.PathEscape(jstr(o, "userId")) + "/sessions/revoke", Body: jobj{"reason": vs(v, "reason")}}, nil)
 				}},
 		},
 	}
@@ -333,11 +389,11 @@ func signingKeysResource() *staffResource {
 			form: func(context.Context, staffCtx) domain.Form {
 				return domain.Form{Title: "Rotate the signing key", SubmitLabel: "Rotate",
 					Intro:  "A new key signs every new token from now on. The current key stays published until the longest access token issued under it has expired, then retires. Nothing needs redeploying.",
-					Fields: []domain.FormField{reasonField()}}
+					Fields: []domain.FormField{reasonField(), stepUpField()}}
 			},
 			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {
 				var out jobj
-				if err := sc.post(ctx, sc.up.Identity, "/v1/admin/identity/signing-keys/rotate", jobj{"reason": vs(v, "reason")}, &out); err != nil {
+				if err := sc.dangerous(ctx, v, port.StaffCall{Method: http.MethodPost, Path: "/v1/admin/identity/signing-keys/rotate", Body: jobj{"reason": vs(v, "reason")}}, &out); err != nil {
 					return "", err
 				}
 				return jstr(out, "kid"), nil
@@ -439,7 +495,7 @@ func authSettingsResource() *staffResource {
 				}
 				return domain.Form{Title: "Change the settings", SubmitLabel: "Save settings",
 					Intro:  "A value equal to the configured default is stored as \"use the default\". The change is recorded with your reason and what it was before.",
-					Fields: append(fields, reasonField())}
+					Fields: append(fields, reasonField(), stepUpField())}
 			},
 			save: func(ctx context.Context, sc staffCtx, o jobj, v jobj, _ string) error {
 				overrides := jobj{}
@@ -456,7 +512,7 @@ func authSettingsResource() *staffResource {
 						overrides[s.key] = val
 					}
 				}
-				return sc.call(ctx, sc.up.Identity, port.StaffCall{Method: http.MethodPut, Path: "/v1/admin/identity/settings",
+				return sc.dangerous(ctx, v, port.StaffCall{Method: http.MethodPut, Path: "/v1/admin/identity/settings",
 					Body: jobj{"overrides": overrides, "reason": vs(v, "reason")}}, nil)
 			}},
 	}

@@ -10,6 +10,9 @@ test.describe('staff console · identity & access', () => {
   test('clients, a secret shown once, a revoked sign-in, key rotation, the token inspector @a11y', async ({ page }, testInfo) => {
     const run = Date.now().toString(36).slice(-6);
     const reason = 'End-to-end journey of the identity admin console';
+    // The mock BFF's one staff password for step-up (web/packages/api-client/src/mocks/staff/identity.ts); the dangerous
+    // actions (disable a client, rotate the signing key, change the settings) ask for it, the ordinary ones do not.
+    const password = 'Mock-Password-1';
 
     // Super Admin finds it under Settings (Platform), as well as at /identity.
     await page.goto('/settings');
@@ -57,6 +60,14 @@ test.describe('staff console · identity & access', () => {
     const disable = page.getByRole('dialog', { name: 'Disable the client' });
     await disable.getByLabel(/^Reason/).fill(reason);
     await disable.getByRole('button', { name: 'Disable' }).click();
+    // Step-up: no password, then a wrong one, are refused on the password field; the client stays enabled.
+    await expect(disable.getByText(/Enter your password to confirm this/).first()).toBeVisible();
+    await disable.getByLabel(/^Your password/).fill('not-my-password');
+    await disable.getByRole('button', { name: 'Disable' }).click();
+    await expect(disable.getByText('That password isn’t right').first()).toBeVisible();
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'staff identity step-up dialog' });
+    await disable.getByLabel(/^Your password/).fill(password);
+    await disable.getByRole('button', { name: 'Disable' }).click();
     await expect(page.getByRole('button', { name: 'Enable client' })).toBeEnabled();
     await page.keyboard.press('Escape');
 
@@ -78,6 +89,7 @@ test.describe('staff console · identity & access', () => {
     await page.getByRole('button', { name: 'New' }).click();
     const rotateKey = page.getByRole('dialog', { name: 'Rotate the signing key' });
     await rotateKey.getByLabel(/^Reason/).fill(reason);
+    await rotateKey.getByLabel(/^Your password/).fill(password);
     await rotateKey.getByRole('button', { name: 'Rotate' }).click();
     await expect(rotateKey).toBeHidden();
     await expect(keys.getByText('Active')).toHaveCount(1);
@@ -109,6 +121,7 @@ test.describe('staff console · identity & access', () => {
     await settings.getByRole('button', { name: 'Save settings' }).click();
     await expect(settings.getByText('Must be at least 8').first()).toBeVisible();
     await settings.getByLabel('Shortest password (characters)').fill('14');
+    await settings.getByLabel(/^Your password/).fill(password);
     await settings.getByRole('button', { name: 'Save settings' }).click();
     await expect(settings).toBeHidden();
     await expect(page.getByRole('table', { name: 'Settings' }).getByRole('cell', { name: '14', exact: true })).toBeVisible();

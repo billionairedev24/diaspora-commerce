@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 import { createStaffApiClient, type IdentityDocuments, type IdentityTokenInspection, isApiError, type OneTimeSecret, type RecordDetail } from '../src';
 import { type components } from '../src/generated/gateway-bff-staff';
 import { MOCK_STAFF_ROLE_COOKIE, resetStaffDb } from '../src/mocks/staff';
-import { MOCK_VALID_SIGNATURE } from '../src/mocks/staff/identity';
+import { MOCK_STEP_UP_PASSWORD, MOCK_VALID_SIGNATURE } from '../src/mocks/staff/identity';
 import { handleStaffMockRequest } from '../src/mocks/staff-runtime';
 
 type S = components['schemas'];
@@ -16,6 +16,7 @@ const client = (roles?: string) =>
   });
 
 const WHY = 'Routine check by the security team';
+const SURE = { stepUpPassword: MOCK_STEP_UP_PASSWORD };
 const b64 = (o: unknown) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const jwt = (header: object, claims: object, signature = MOCK_VALID_SIGNATURE) => `${b64(header)}.${b64(claims)}.${signature}`;
 
@@ -89,10 +90,35 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
 
   it('every change needs a reason, and a public client has no secret to rotate', async () => {
     const api = client();
-    await expect(api.runAction('oauth-clients', 'driver-app', 'disable', { reason: 'short' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && 'reason' in e.fieldErrors);
+    await expect(api.runAction('oauth-clients', 'driver-app', 'disable', { reason: 'short', ...SURE })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && 'reason' in e.fieldErrors);
     await expect(api.runAction('oauth-clients', 'driver-app', 'rotate-secret', { reason: WHY })).rejects.toMatchObject({ status: 409 });
-    await expect(api.createRecord('signing-keys', {})).rejects.toMatchObject({ status: 422 });
+    await expect(api.createRecord('signing-keys', { ...SURE })).rejects.toMatchObject({ status: 422 });
     await expect(api.updateRecord('auth-settings', 'settings', { passwordMinLength: 12 }, null)).rejects.toMatchObject({ status: 422 });
+  });
+
+  it('asks for the password on the most dangerous actions and refuses a missing or wrong one', async () => {
+    const api = client();
+    const sheet = await api.getRecord('oauth-clients', 'driver-app');
+    for (const key of ['disable', 'revoke-sessions']) {
+      const fields = sheet.actions.find((a) => a.key === key)?.form?.fields ?? [];
+      expect(fields.at(-1)).toMatchObject({ key: 'stepUpPassword', type: 'password', required: false });
+    }
+    // not asked for the ordinary ones
+    expect(sheet.actions.find((a) => a.key === 'enable')?.form?.fields.map((f) => f.key)).toEqual(['reason']);
+    expect((await api.getRecord('identity-sessions', 'auth-1001')).actions.find((a) => a.key === 'revoke-user')?.form?.fields.at(-1)?.key).toBe('stepUpPassword');
+    expect((await api.listResource('signing-keys', { page: 0, size: 25 })).createForm?.fields.at(-1)?.key).toBe('stepUpPassword');
+    expect((await api.getRecord('auth-settings', 'settings')).editForm?.fields.at(-1)?.key).toBe('stepUpPassword');
+
+    const refused = (e: unknown) => isApiError(e) && e.status === 422 && 'stepUpPassword' in e.fieldErrors;
+    await expect(api.runAction('oauth-clients', 'driver-app', 'disable', { reason: WHY })).rejects.toSatisfy(refused);
+    await expect(api.runAction('oauth-clients', 'driver-app', 'disable', { reason: WHY, stepUpPassword: 'not-it' })).rejects.toSatisfy(refused);
+    await expect(api.createRecord('signing-keys', { reason: WHY, stepUpPassword: 'not-it' })).rejects.toSatisfy(refused);
+    // nothing happened
+    expect((await api.getRecord('oauth-clients', 'driver-app')).status).toBe('ENABLED');
+    expect((await api.listResource('signing-keys', { page: 0, size: 25 })).rows).toHaveLength(3);
+    // the password is never part of an answer
+    const done = await api.runAction('oauth-clients', 'driver-app', 'disable', { reason: WHY, ...SURE });
+    expect(JSON.stringify(done)).not.toContain(MOCK_STEP_UP_PASSWORD);
   });
 
   it('disables and enables a client, but not the platform’s own', async () => {
@@ -101,8 +127,8 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
     const disable = sheet.actions.find((a) => a.key === 'disable');
     expect(disable?.allowed).toBe(false);
     expect(disable?.reason).toMatch(/lock every staff member out/);
-    await expect(api.runAction('oauth-clients', 'gateway-bff', 'disable', { reason: WHY })).rejects.toMatchObject({ status: 409 });
-    expect((await api.runAction('oauth-clients', 'driver-app', 'disable', { reason: WHY })).status).toBe('DISABLED');
+    await expect(api.runAction('oauth-clients', 'gateway-bff', 'disable', { reason: WHY, ...SURE })).rejects.toMatchObject({ status: 409 });
+    expect((await api.runAction('oauth-clients', 'driver-app', 'disable', { reason: WHY, ...SURE })).status).toBe('DISABLED');
     expect((await api.runAction('oauth-clients', 'driver-app', 'enable', { reason: WHY })).status).toBe('ENABLED');
   });
 
@@ -111,9 +137,9 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
     await api.runAction('identity-sessions', 'auth-1001', 'revoke', { reason: WHY });
     expect((await api.listResource('identity-sessions', { page: 0, size: 25 })).rows.map((r) => r.id)).not.toContain('auth-1001');
     // Amara's other sign-in goes with "sign out everywhere"
-    const out = await api.runAction('identity-sessions', 'auth-1002', 'revoke-user', { reason: WHY });
+    const out = await api.runAction('identity-sessions', 'auth-1002', 'revoke-user', { reason: WHY, ...SURE });
     expect(out.removed).toBe(true);
-    await api.runAction('oauth-clients', 'gateway-bff', 'revoke-sessions', { reason: WHY });
+    await api.runAction('oauth-clients', 'gateway-bff', 'revoke-sessions', { reason: WHY, ...SURE });
     const left = await api.listResource('identity-sessions', { page: 0, size: 25 });
     expect(left.rows.map((r) => r.id)).toEqual(['auth-1004', 'auth-1006']);
     const service = await api.getRecord('identity-sessions', 'auth-1006');
@@ -122,7 +148,7 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
 
   it('rotates the signing key: the new key signs, the old one stays published but retiring', async () => {
     const api = client();
-    const made = await api.createRecord('signing-keys', { reason: WHY });
+    const made = await api.createRecord('signing-keys', { reason: WHY, ...SURE });
     expect(made.status).toBe('ACTIVE');
     const rows = (await api.listResource('signing-keys', { page: 0, size: 25 })).rows;
     expect(rows.filter((r) => r.tone === 'good')).toHaveLength(1);
@@ -137,8 +163,8 @@ describe('Identity & access mocks (every answer is parsed by the Zod client)', (
     const api = client();
     const sheet = await api.getRecord('auth-settings', 'settings');
     const values = Object.fromEntries((sheet.editForm?.fields ?? []).map((f) => [f.key, f.value ?? null]));
-    await expect(api.updateRecord('auth-settings', 'settings', { ...values, passwordMinLength: 4, reason: WHY }, null)).rejects.toMatchObject({ status: 422 });
-    const saved = await api.updateRecord('auth-settings', 'settings', { ...values, passwordMinLength: 16, mfaRequiredSeller: true, reason: WHY }, null);
+    await expect(api.updateRecord('auth-settings', 'settings', { ...values, passwordMinLength: 4, reason: WHY, ...SURE }, null)).rejects.toMatchObject({ status: 422 });
+    const saved = await api.updateRecord('auth-settings', 'settings', { ...values, passwordMinLength: 16, mfaRequiredSeller: true, reason: WHY, ...SURE }, null);
     expect(saved.sections[0]?.fields.find((f) => f.label === 'Password min length')?.value).toBe('16');
   });
 

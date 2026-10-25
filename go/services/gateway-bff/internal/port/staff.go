@@ -26,6 +26,9 @@ type StaffCall struct {
 	IfMatch string
 	// Accept is the media type a streamed document is asked for (default text/csv).
 	Accept string
+	// StepUp is relayed as X-Step-Up: the proof identity issued after the staff member re-entered their password
+	// (identity admin console, S291). Never logged.
+	StepUp string
 	// Slow uses the upstream's slowTimeout (calls that wait for a downstream chain, e.g. late pre-order adds).
 	Slow bool
 }

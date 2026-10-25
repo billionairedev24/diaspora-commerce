@@ -104,7 +104,7 @@ function Input({ f, value, error, onChange }: { f: FormField; value: string | bo
           step={f.type === 'number' ? 'any' : undefined}
           maxLength={f.maxLength}
           placeholder={f.placeholder}
-          autoComplete={f.type === 'password' ? 'new-password' : 'off'}
+          autoComplete={f.type === 'password' ? (f.key === 'stepUpPassword' ? 'current-password' : 'new-password') : 'off'}
           value={typeof value === 'string' ? value : ''}
           onChange={(e) => onChange(e.currentTarget.value)}
           error={error}
