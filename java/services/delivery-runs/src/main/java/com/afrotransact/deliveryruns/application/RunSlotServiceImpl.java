@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.Run;
@@ -120,7 +121,8 @@ class RunSlotServiceImpl implements RunSlotService {
                     + "; dispatch lists exist once it is confirmed");
         }
         Location location = locations.findById(run.locationId()).orElseThrow();
-        return new DispatchList(run, location, runOrders.findByRun(runId, RunOrderStatus.CONFIRMED));
+        GeoPoint origin = location.details().origin() == null ? settings.defaultOrigin() : location.details().origin();
+        return new DispatchList(run, location, runOrders.findByRun(runId, RunOrderStatus.CONFIRMED), origin);
     }
 
     @Override

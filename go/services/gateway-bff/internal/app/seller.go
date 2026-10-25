@@ -46,6 +46,9 @@ type SellerDeps struct {
 	PublishableKey string
 	// InventoryAPI relays Seller Center's FBA inbound plans and lots to inventory-service with the member's token (S281).
 	InventoryAPI port.StaffUpstream
+	// RunPickups reads the organisation's delivery-run pick lists at delivery-runs with the member's token (S264); nil
+	// answers 503.
+	RunPickups port.StaffUpstream
 	// Sessions rotates the session's tokens after identity repaired an approval it had missed (nil: never).
 	Sessions TokenRefresher
 	// Cache holds identity's module matrix per portal (not personal data).

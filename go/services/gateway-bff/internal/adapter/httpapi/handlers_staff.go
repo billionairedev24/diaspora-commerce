@@ -92,6 +92,10 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/fees/orgs/{orgId}/negotiated-plan", h.staffNegotiatePlan)
 	}
 	if s.Dispatch != nil {
+		route("GET /v1/staff/dispatch/runs", h.staffRuns)
+		route("GET /v1/staff/dispatch/runs/{runId}", h.staffRun)
+		route("POST /v1/staff/dispatch/runs/{runId}/plan", h.staffPlanRun)
+		route("POST /v1/staff/dispatch/runs/{runId}/advance", h.staffAdvanceRun)
 		route("GET /v1/staff/dispatch/pickups", h.staffPickups)
 		route("GET /v1/staff/dispatch/pickups/{shipmentId}/driver-suggestions", h.staffPickupSuggestions)
 		route("POST /v1/staff/dispatch/pickups/{shipmentId}/assign", h.staffAssignPickup)
@@ -551,6 +555,33 @@ func (h *handlersImpl) staffAssignPickup(w http.ResponseWriter, r *http.Request)
 
 func (h *handlersImpl) staffPickupAssignments(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Dispatch.Assignments(r.Context(), callerFrom(r.Context()), r.PathValue("shipmentId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- dispatch: delivery runs (S264)
+
+func (h *handlersImpl) staffRuns(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.Runs(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("status"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffRun(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.Run(r.Context(), callerFrom(r.Context()), r.PathValue("runId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPlanRun(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.PlanRun(r.Context(), callerFrom(r.Context()), r.PathValue("runId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffAdvanceRun(w http.ResponseWriter, r *http.Request) {
+	var b domain.RunAdvanceRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Dispatch.AdvanceRun(r.Context(), callerFrom(r.Context()), r.PathValue("runId"), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

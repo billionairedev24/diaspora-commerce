@@ -120,9 +120,14 @@ export function OrdersView() {
         description={copy.description}
         actions={
           isProvider ? null : (
-            <Link href="/orders/ship-from" className={buttonClassName({ variant: 'neutral' })}>
-              {t('sc.shipFrom.link')}
-            </Link>
+            <>
+              <Link href="/orders/run-pickups" className={buttonClassName({ variant: 'neutral' })}>
+                {t('sc.runPickups.link')}
+              </Link>
+              <Link href="/orders/ship-from" className={buttonClassName({ variant: 'neutral' })}>
+                {t('sc.shipFrom.link')}
+              </Link>
+            </>
           )
         }
       />

@@ -147,6 +147,10 @@ import {
   SellerReturnListSchema,
   type SellerRewardsView,
   SellerRewardsViewSchema,
+  type SellerRunPickup,
+  type SellerRunPickupList,
+  SellerRunPickupListSchema,
+  SellerRunPickupSchema,
   type SellerSession,
   SellerSessionSchema,
   type SellerStatusAction,
@@ -282,6 +286,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     getBusinessPage: (signal?: AbortSignal): Promise<BusinessPageSettings> => request('/v1/seller/business-page', BusinessPageSettingsSchema, { signal }),
     updateBusinessPage: (input: BusinessPageSettingsInput): Promise<BusinessPageSettings> =>
       request('/v1/seller/business-page', BusinessPageSettingsSchema, { method: 'PUT', body: input }),
+    /* Delivery run pick lists (S264) */
+    listRunPickups: async (signal?: AbortSignal): Promise<SellerRunPickupList> => request('/v1/seller/run-pickups', SellerRunPickupListSchema, { signal }),
+    getRunPickup: (runId: string, signal?: AbortSignal): Promise<SellerRunPickup> => request(`/v1/seller/run-pickups/${enc(runId)}`, SellerRunPickupSchema, { signal }),
     listShipFrom: async (signal?: AbortSignal): Promise<ShipFromAddress[]> => (await request('/v1/seller/ship-from-addresses', ShipFromListSchema, { signal })).items,
     createShipFrom: (input: ShipFromInput): Promise<ShipFromAddress> =>
       request('/v1/seller/ship-from-addresses', ShipFromAddressSchema, { method: 'POST', body: input }),

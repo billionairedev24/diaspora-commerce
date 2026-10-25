@@ -813,7 +813,7 @@
 - One route per run (or split by capacity) with seller pickups before drops
 - Pickup-point drops use handover codes per order
 - Proof of delivery per order as for regular deliveries; the seller is paid at delivery after the existing complaint hold window
-- A window or run that is cancelled is not dispatched","E34","","High","13","delivery-runs fulfilment seller-center","delivery-runs","To Do"
+- A window or run that is cancelled is not dispatched","E34","","High","13","delivery-runs fulfilment seller-center","delivery-runs","Done"
 "S265","Story","Run economics and reporting","Per run and per pre-order window: orders, revenue, delivery fees collected, estimated cost (road distance and drive time from geo x configurable driver cost per hour and per mile), contribution margin, and break-even orders; used to decide fees and the minimum order count per location and window. Cancelled windows and runs report the orders refunded, not revenue.","- Staff see run P&L before and after the run
 - Break-even orders shown when creating a run, next to the window's minimum order count
 - Per-location history (orders per run, growth of subscribers)

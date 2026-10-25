@@ -2022,6 +2022,23 @@ export const sellerHandlers = [
       return businessPage(ctx);
     })
   ),
+  /* ── Delivery run pick lists (S264) ── */
+  http.get(
+    `${W}/run-pickups`,
+    route((ctx) => {
+      require(ctx, 'orders', 'VIEW', 'SELLER');
+      return { items: ctx.db.runPickups[ctx.org.id] ?? [] };
+    })
+  ),
+  http.get(
+    `${W}/run-pickups/:runId`,
+    route((ctx, p) => {
+      require(ctx, 'orders', 'VIEW', 'SELLER');
+      const found = (ctx.db.runPickups[ctx.org.id] ?? []).find((r) => r.runId === p.runId);
+      if (!found) throw notFound('No such run.');
+      return found;
+    })
+  ),
   /* ── Ship-from addresses ── */
   http.get(
     `${W}/ship-from-addresses`,

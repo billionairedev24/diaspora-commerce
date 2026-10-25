@@ -19,6 +19,8 @@ import java.util.Set;
  *   <li><b>Customers</b> may cancel a shipment until it is packed.</li>
  *   <li><b>Carriers and couriers</b> only move forward: an event for an earlier step than the current one is ignored,
  *       never applied (a failed delivery may be re-attempted).</li>
+ *   <li><b>Pre-order pickup points</b> (S264): the run's AfroTransact driver moves a PREORDER pickup shipment through
+ *       the transit steps and hands it over with the customer's code, exactly as at a doorstep.</li>
  *   <li><b>Pickup points</b> ({@code carrier.pickup.ready}) only mark a pickup shipment ready: from confirmed or
  *       packed; a shipment already ready or further along is left as it is.</li>
  * </ul>
@@ -85,7 +87,10 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         }
         DeliveryMethod expected = actor == ActorKind.CARRIER ? DeliveryMethod.CARRIER
                 : DeliveryMethod.AFROTRANSACT_DELIVERY;
-        if (s.deliveryMethod() != expected) {
+        // A run's driver also hands pre-order packages to their customers at the window's pickup point (S264).
+        boolean runPickupDrop = actor == ActorKind.COURIER && s.fulfilmentType() == FulfilmentType.PREORDER
+                && s.deliveryMethod() == DeliveryMethod.PICKUP;
+        if (s.deliveryMethod() != expected && !runPickupDrop) {
             throw TransitionRefused.forbidden((actor == ActorKind.CARRIER ? "Carrier events" : "Courier events")
                     + " only apply to " + expected.name().toLowerCase(Locale.ROOT).replace('_', ' ')
                     + " shipments");

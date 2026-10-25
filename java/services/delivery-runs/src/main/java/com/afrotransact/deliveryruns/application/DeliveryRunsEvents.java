@@ -14,6 +14,8 @@ public final class DeliveryRunsEvents {
     public static final String RUN_CUTOFF_REMINDER = "delivery-runs.run.cutoff_reminder";
     public static final String RUN_CONFIRMED = "delivery-runs.run.confirmed";
     public static final String RUN_EXTENDED = "delivery-runs.run.extended";
+    /** The first order was collected from its seller (S264): the sweep has started. */
+    public static final String RUN_COLLECTING = "delivery-runs.run.collecting";
     public static final String RUN_CANCELLED = "delivery-runs.run.cancelled";
     public static final String RUN_OUT_FOR_DELIVERY = "delivery-runs.run.out_for_delivery";
     public static final String RUN_COMPLETED = "delivery-runs.run.completed";

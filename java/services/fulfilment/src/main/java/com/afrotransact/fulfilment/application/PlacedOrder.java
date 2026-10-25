@@ -51,13 +51,30 @@ public record PlacedOrder(String orderId, String orderNumber, String customerId,
         public boolean afrotransactDelivery() {
             return "AFROTRANSACT_DELIVERY".equals(deliveryMethod);
         }
+
+        /**
+         * A community pre-order package (S264): delivered to the door or a pickup point by the window's run, whatever
+         * its delivery method says.
+         */
+        public boolean preorder() {
+            return "PREORDER".equals(fulfilmentType);
+        }
     }
 
     /** Where an AfroTransact driver collects a seller-packed shipment (orders' checkout snapshot). */
     public record SellerPickup(String locationId, Double lat, Double lng) {
     }
 
-    /** One order line. */
-    public record PlacedLine(String lineId, String variantAtin, String title, int quantity) {
+    /**
+     * One order line; {@code sellerOrgId} is the line's own seller (a pre-order package mixes sellers; null for
+     * orders placed before orders kept it).
+     */
+    public record PlacedLine(String lineId, String variantAtin, String title, int quantity, String sellerOrgId,
+                             String sellerName) {
+
+        /** A line without its seller. */
+        public PlacedLine(String lineId, String variantAtin, String title, int quantity) {
+            this(lineId, variantAtin, title, quantity, null, null);
+        }
     }
 }

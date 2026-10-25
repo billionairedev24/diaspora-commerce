@@ -3,6 +3,7 @@ package com.afrotransact.fulfilment.adapter.out.persistence;
 import java.util.List;
 
 import com.afrotransact.fulfilment.domain.ContactAttempt;
+import com.afrotransact.fulfilment.domain.RunPickupPoint;
 import com.afrotransact.fulfilment.domain.TaskLine;
 import com.afrotransact.fulfilment.port.CourierEvent;
 import org.springframework.stereotype.Component;
@@ -37,6 +38,10 @@ class Json {
 
     List<String> strings(String json) {
         return json == null ? List.of() : mapper.readValue(json, STRINGS);
+    }
+
+    RunPickupPoint pickupPoint(String json) {
+        return json == null ? null : mapper.readValue(json, RunPickupPoint.class);
     }
 
     CourierEvent courier(String json) {

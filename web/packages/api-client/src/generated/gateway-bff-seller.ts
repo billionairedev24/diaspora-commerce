@@ -526,6 +526,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/run-pickups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delivery runs that collect from the organisation, with the pickup time and a pick list (S264)
+         * @description delivery-runs `GET /v1/seller/run-pickups` for the active organisation (Orders view): the pre-order runs that are
+         *     confirmed, being collected or out for delivery, and those completed in the last two weeks, earliest pickup first.
+         *     Each carries when the driver comes (`pickupAt`), the units to pack per product and, per order, what goes into its
+         *     bag (the order number is written on it). Only the organisation's own lines; no customer details.
+         */
+        get: operations["listSellerRunPickups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/run-pickups/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's pick list for one delivery run (S264)
+         * @description delivery-runs `GET /v1/seller/run-pickups/{runId}` for the active organisation (Orders view). 404 when the run collects nothing from it.
+         */
+        get: operations["getSellerRunPickup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/ship-from-addresses": {
         parameters: {
             query?: never;
@@ -2314,6 +2357,65 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        SellerRunPickupList: {
+            items: components["schemas"]["SellerRunPickup"][];
+        };
+        /** @description One delivery run's pick list for the organisation (S264) */
+        SellerRunPickup: {
+            /** Format: uuid */
+            runId: string;
+            /** @example Bastrop */
+            town: string;
+            /** @example TX */
+            state: string;
+            /** @example America/Chicago */
+            timeZone: string;
+            /**
+             * @description CONFIRMED: pack for the pickup; COLLECTING: the driver is collecting; OUT_FOR_DELIVERY and COMPLETED: everything left the sellers
+             * @enum {string}
+             */
+            runStatus: "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED";
+            /**
+             * Format: date-time
+             * @description The delivery window opens
+             */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description When the driver collects from the sellers
+             */
+            pickupAt: string | null;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            /** @description Run orders with lines of the organisation */
+            orders: number;
+            /** @description Units to pick in total */
+            units: number;
+            /** @description Orders the driver has already collected */
+            collectedOrders: number;
+            /** @description Units per product across all orders, most units first */
+            items: components["schemas"]["RunPickItem"][];
+            /** @description One per order, by order number */
+            bags: components["schemas"]["RunOrderBag"][];
+        };
+        RunPickItem: {
+            atin: string;
+            name: string;
+            units: number;
+        };
+        RunOrderBag: {
+            /**
+             * @description Write it on the bag
+             * @example LBK-7-1001
+             */
+            orderNumber: string;
+            /** @description The driver has collected the bag */
+            collected: boolean;
+            units: number;
+            lines: components["schemas"]["RunPickItem"][];
+        };
         Problem: {
             /** Format: uri */
             type: string;
@@ -5746,6 +5848,57 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerRunPickups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerRunPickupList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerRunPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pick list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerRunPickup"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

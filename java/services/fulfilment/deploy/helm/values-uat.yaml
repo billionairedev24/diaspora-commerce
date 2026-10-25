@@ -19,5 +19,6 @@ extraEnv:
   ORDERS_URL: http://orders:8080
   INVENTORY_URL: http://inventory:8080
   GEO_URL: http://geo:8080
+  DELIVERY_RUNS_URL: http://delivery-runs:8080
   # Node for FC tasks when inventory has no reservation (empty = ops assign it).
   FULFILMENT_DEFAULT_NODE: ""

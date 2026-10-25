@@ -605,6 +605,78 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Route'
+  /v1/dispatch/runs:
+    get:
+      tags:
+      - Dispatch
+      summary: Delivery runs in dispatch, latest delivery day first (fulfilment:operate or delivery:dispatch)
+      description: A run appears when delivery-runs confirms it (a closed pre-order window's paid orders). Each carries its
+        progress and its routes without their stops.
+      operationId: listRuns
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunDispatch'
+  /v1/dispatch/runs/{runId}:
+    get:
+      tags:
+      - Dispatch
+      summary: A run with its routes, stops (seller pickups before drops) and progress
+      operationId: getRun
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunDispatch'
+  /v1/dispatch/runs/{runId}/plan:
+    post:
+      tags:
+      - Dispatch
+      summary: Plan the run's routes again (delivery:dispatch)
+      description: One route per run, split by capacity (RUN_ROUTE_CAPACITY bags), seller pickups before the drops; doorstep
+        drops are ordered by road distance from the hub, pickup-point runs make one drop per order needing the customer's
+        handover code. Only shipments that are not on a live route are planned, so planning twice is harmless. 502/503 when
+        delivery-runs cannot be reached.
+      operationId: planRun
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunDispatch'
   /v1/dispatch/shipments:
     get:
       tags:
@@ -1733,6 +1805,230 @@ components:
           enum:
           - SYNC
           - PING
+    ContactAttempt:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - CALL
+          - TEXT
+          - WAIT_STARTED
+        at:
+          type: string
+          format: date-time
+    RouteStop:
+      type: object
+      properties:
+        id:
+          type: string
+        sequence:
+          type: integer
+          format: int32
+        kind:
+          type: string
+          description: PICKUP | DROPOFF
+        name:
+          type: string
+        sellerOrgId:
+          type: string
+        orderNumber:
+          type: string
+        addressLine:
+          type: string
+        city:
+          type: string
+        postalCode:
+          type: string
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        window:
+          type: string
+        handoverRequired:
+          type: boolean
+        safePlaceAllowed:
+          type: boolean
+        status:
+          type: string
+          description: PENDING | ARRIVED | DONE | FAILED | RETRY | SKIPPED | REASSIGNED | CANCELLED
+        reattempts:
+          type: integer
+          format: int32
+        contacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactAttempt'
+        partialAccepted:
+          type: boolean
+        handedOverBy:
+          type: string
+        note:
+          type: string
+        handoverMethod:
+          type: string
+        podDistanceMeters:
+          type: number
+          format: double
+        reassignedTo:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        pickupLocationId:
+          type: string
+          description: Seller ship-from location of a PICKUP stop (seller-service id; S259)
+    RunDispatch:
+      type: object
+      description: 'A delivery run in dispatch: its schedule, routes and progress'
+      properties:
+        runId:
+          type: string
+        town:
+          type: string
+        state:
+          type: string
+        timeZone:
+          type: string
+        serviceDate:
+          type: string
+          format: date
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        sellerPickupAt:
+          type: string
+          format: date-time
+          description: When the driver collects from the sellers
+        dropMode:
+          type: string
+          description: DOORSTEP | PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/RunPickupPoint'
+        depotNodeId:
+          type: string
+        status:
+          type: string
+          description: PENDING (not planned; see planError) | PLANNED | CANCELLED
+        planError:
+          type: string
+          description: Why the routes could not be planned; plan again to retry
+        plannedAt:
+          type: string
+          format: date-time
+        progress:
+          $ref: '#/components/schemas/RunProgress'
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunRoute'
+    RunPickupPoint:
+      type: object
+      description: Where a pickup-point run hands every order over
+      properties:
+        name:
+          type: string
+        line1:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        hours:
+          type: string
+        notes:
+          type: string
+    RunProgress:
+      type: object
+      description: What has happened on the run's routes
+      properties:
+        orders:
+          type: integer
+          format: int32
+        bags:
+          type: integer
+          format: int32
+        pickupStops:
+          type: integer
+          format: int32
+        pickupsDone:
+          type: integer
+          format: int32
+        bagsCollected:
+          type: integer
+          format: int32
+        dropStops:
+          type: integer
+          format: int32
+        dropsDone:
+          type: integer
+          format: int32
+        dropsFailed:
+          type: integer
+          format: int32
+        bagsDelivered:
+          type: integer
+          format: int32
+        unrouted:
+          type: integer
+          format: int32
+          description: Run shipments waiting for a route (a route was cancelled, or planning is not done)
+    RunRoute:
+      type: object
+      description: 'One route of a run: seller pickups first, then the drops'
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          description: PLANNED | ASSIGNED | IN_PROGRESS | COMPLETED | CANCELLED
+        driverId:
+          type: string
+        vehicleId:
+          type: string
+        blocked:
+          type: boolean
+        blockedReason:
+          type: string
+        packages:
+          type: integer
+          format: int32
+        bagsCollected:
+          type: integer
+          format: int32
+        bagsDelivered:
+          type: integer
+          format: int32
+        pickupStops:
+          type: integer
+          format: int32
+        pickupsDone:
+          type: integer
+          format: int32
+        dropStops:
+          type: integer
+          format: int32
+        dropsDone:
+          type: integer
+          format: int32
+        dropsFailed:
+          type: integer
+          format: int32
+        stops:
+          type: array
+          description: The stops in visiting order; empty in the list of runs
+          items:
+            $ref: '#/components/schemas/RouteStop'
     CreateRouteRequest:
       type: object
       properties:
@@ -1762,18 +2058,6 @@ components:
       required:
       - depotNodeId
       - serviceDate
-    ContactAttempt:
-      type: object
-      properties:
-        kind:
-          type: string
-          enum:
-          - CALL
-          - TEXT
-          - WAIT_STARTED
-        at:
-          type: string
-          format: date-time
     Route:
       type: object
       description: A delivery route with stops and packages (the driver's offline manifest)
@@ -1868,70 +2152,6 @@ components:
         updatedAt:
           type: string
           format: date-time
-    RouteStop:
-      type: object
-      properties:
-        id:
-          type: string
-        sequence:
-          type: integer
-          format: int32
-        kind:
-          type: string
-          description: PICKUP | DROPOFF
-        name:
-          type: string
-        sellerOrgId:
-          type: string
-        orderNumber:
-          type: string
-        addressLine:
-          type: string
-        city:
-          type: string
-        postalCode:
-          type: string
-        lat:
-          type: number
-          format: double
-        lon:
-          type: number
-          format: double
-        window:
-          type: string
-        handoverRequired:
-          type: boolean
-        safePlaceAllowed:
-          type: boolean
-        status:
-          type: string
-          description: PENDING | ARRIVED | DONE | FAILED | RETRY | SKIPPED | REASSIGNED | CANCELLED
-        reattempts:
-          type: integer
-          format: int32
-        contacts:
-          type: array
-          items:
-            $ref: '#/components/schemas/ContactAttempt'
-        partialAccepted:
-          type: boolean
-        handedOverBy:
-          type: string
-        note:
-          type: string
-        handoverMethod:
-          type: string
-        podDistanceMeters:
-          type: number
-          format: double
-        reassignedTo:
-          type: string
-        updatedAt:
-          type: string
-          format: date-time
-        pickupLocationId:
-          type: string
-          description: Seller ship-from location of a PICKUP stop (seller-service id; S259)
     ReassignRequest:
       type: object
       description: Move the stop to another open route

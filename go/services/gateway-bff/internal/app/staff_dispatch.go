@@ -21,6 +21,15 @@ type StaffDispatchService interface {
 	Assign(ctx context.Context, c *domain.Caller, shipmentID string, req domain.PickupAssignRequest) (domain.PickupAssignResult, error)
 	Assignments(ctx context.Context, c *domain.Caller, shipmentID string) (domain.PickupAssignmentList, error)
 	ShipFromLocation(ctx context.Context, c *domain.Caller, locationID string) (domain.ShipFromLocation, error)
+	// Runs lists the delivery runs fulfilment plans (S264): a closed pre-order window's paid orders delivered in one
+	// trip, with their progress and, when delivery-runs can be read, their lifecycle.
+	Runs(ctx context.Context, c *domain.Caller, status string) (domain.RunDispatchList, error)
+	// Run is one run with its routes and every stop (seller pickups before drops).
+	Run(ctx context.Context, c *domain.Caller, runID string) (domain.RunDispatch, error)
+	// PlanRun plans the routes of the shipments that are not on a live route yet (harmless to repeat).
+	PlanRun(ctx context.Context, c *domain.Caller, runID string) (domain.RunDispatch, error)
+	// AdvanceRun moves a run to its next step by hand when the drivers' events did not arrive.
+	AdvanceRun(ctx context.Context, c *domain.Caller, runID string, req domain.RunAdvanceRequest) (domain.RunDispatch, error)
 }
 
 type staffDispatchImpl struct{ r *staffResolver }

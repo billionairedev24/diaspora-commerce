@@ -1343,6 +1343,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/dispatch/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delivery runs in dispatch, latest delivery day first (S264)
+         * @description fulfilment `GET /v1/dispatch/runs` (delivery:dispatch or fulfilment:operate), with each run's lifecycle status from
+         *     delivery-runs when it can be read. A run appears when delivery-runs confirms it (a closed pre-order window's paid
+         *     orders). Needs VIEW on dispatch; `canManage` says whether the caller may plan or move a run.
+         */
+        get: operations["listStaffRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One run, its routes with every stop (seller pickups before drops) and how far it has got (S264)
+         * @description fulfilment `GET /v1/dispatch/runs/{runId}` plus delivery-runs `GET /v1/runs/{id}` and `/progress` (the run's
+         *     lifecycle status and its orders per stage, when readable). Needs VIEW on dispatch.
+         */
+        get: operations["getStaffRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/runs/{runId}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plan the run's routes (again) (S264)
+         * @description fulfilment `POST /v1/dispatch/runs/{runId}/plan` (delivery:dispatch, EDIT on dispatch). Only shipments that are not
+         *     on a live route get new routes, so planning twice is harmless. Use it when planning could not finish (the run says
+         *     why in `planError`), after a route was cancelled, or for an order that arrived late.
+         */
+        post: operations["planStaffRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/runs/{runId}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a run to its next step by hand when the drivers' events did not arrive (S264)
+         * @description delivery-runs `POST /v1/runs/{id}/start-collecting`, `/out-for-delivery` or `/complete` (delivery-runs:manage, EDIT
+         *     on dispatch). A run normally moves by itself from the drivers' shipment events (the first pickup, the last pickup,
+         *     the last delivery); this is the override for when those did not arrive. It never marks packages delivered: those
+         *     are delivered in the driver app or by staff in orders. 409 `CONFLICT` when the step does not follow the run's
+         *     status; 422 for a step other than COLLECTING, OUT_FOR_DELIVERY or COMPLETED.
+         */
+        post: operations["advanceStaffRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/ship-from-locations/{locationId}": {
         parameters: {
             query?: never;
@@ -3972,6 +4061,127 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        RunDispatchList: {
+            items: components["schemas"]["RunDispatch"][];
+            /** @description The caller may plan a run and move it by hand */
+            canManage: boolean;
+        };
+        /** @description A delivery run in dispatch (S264) */
+        RunDispatch: {
+            runId: string;
+            /** @example Bastrop */
+            town: string;
+            /** @example TX */
+            state: string;
+            /** @example America/Chicago */
+            timeZone: string;
+            /** Format: date */
+            serviceDate: string;
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description When the driver collects from the sellers
+             */
+            sellerPickupAt: string | null;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint: components["schemas"]["RunPickupPoint"] | null;
+            /**
+             * @description Dispatch status: PENDING = not planned (see planError)
+             * @enum {string}
+             */
+            status: "PENDING" | "PLANNED" | "CANCELLED";
+            /**
+             * @description The run's lifecycle in delivery-runs; null when it could not be read
+             * @enum {string|null}
+             */
+            runStatus: "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED" | "CANCELLED" | null;
+            /** @description Why the routes could not be planned */
+            planError: string | null;
+            /** Format: date-time */
+            plannedAt: string | null;
+            progress: components["schemas"]["RunDispatchProgress"];
+            /** @description The run's orders per stage from the drivers' shipment events (detail only; null when delivery-runs could not be read) */
+            orders: components["schemas"]["RunOrderProgress"] | null;
+            routes: components["schemas"]["RunDispatchRoute"][];
+            canManage: boolean;
+        };
+        RunPickupPoint: {
+            name: string;
+            line1: string;
+            city: string;
+            state: string;
+            postalCode: string;
+            hours: string;
+            notes: string;
+        };
+        /** @description What has happened on the run's routes (bags are one seller's package of an order) */
+        RunDispatchProgress: {
+            orders: number;
+            bags: number;
+            pickupStops: number;
+            pickupsDone: number;
+            bagsCollected: number;
+            dropStops: number;
+            dropsDone: number;
+            dropsFailed: number;
+            bagsDelivered: number;
+            /** @description Run shipments waiting for a route */
+            unrouted: number;
+        };
+        /** @description Orders on the run per stage (from orders-service shipment events) */
+        RunOrderProgress: {
+            orders: number;
+            pending: number;
+            collected: number;
+            outForDelivery: number;
+            failed: number;
+            delivered: number;
+            returned: number;
+            /** Format: date-time */
+            lastDeliveredAt: string | null;
+        };
+        RunDispatchRoute: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            status: "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+            driverId: string | null;
+            vehicleId: string | null;
+            blocked: boolean;
+            packages: number;
+            bagsCollected: number;
+            bagsDelivered: number;
+            pickupStops: number;
+            pickupsDone: number;
+            dropStops: number;
+            dropsDone: number;
+            dropsFailed: number;
+            /** @description In visiting order; empty in the list of runs */
+            stops: components["schemas"]["RunDispatchStop"][];
+        };
+        RunDispatchStop: {
+            id: string;
+            sequence: number;
+            /** @enum {string} */
+            kind: "PICKUP" | "DROPOFF";
+            name: string;
+            /** @enum {string} */
+            status: "PENDING" | "ARRIVED" | "DONE" | "FAILED" | "RETRY" | "SKIPPED" | "REASSIGNED" | "CANCELLED";
+            orderNumber: string | null;
+            /** @description The pickup point of a pickup-point run */
+            addressLine: string | null;
+            /** @description The customer's code is needed */
+            handoverRequired: boolean;
+            note: string | null;
+        };
+        RunAdvanceRequest: {
+            /** @enum {string} */
+            to: "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED";
+        };
         IdentityTokenInspectionRequest: {
             /** @description The JWT to inspect */
             token: string;
@@ -6795,6 +7005,8 @@ export interface components {
         RecordId: string;
         ExportId: string;
         ShipmentId: string;
+        /** @description Delivery run id (delivery-runs) */
+        RunId: string;
         /** @description Window id or code */
         PreorderId: string;
         DeliveryFeeMethod: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
@@ -8964,6 +9176,125 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffRuns: {
+        parameters: {
+            query?: {
+                /** @description Dispatch status */
+                status?: "PENDING" | "PLANNED" | "CANCELLED";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatchList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Delivery run id (delivery-runs) */
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    planStaffRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Delivery run id (delivery-runs) */
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Planned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    advanceStaffRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Delivery run id (delivery-runs) */
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunAdvanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Moved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunDispatch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

@@ -51,6 +51,12 @@ import {
   type ResourceKey,
   type ResourcePage,
   ResourcePageSchema,
+  type RunAdvanceRequest,
+  type RunDispatch,
+  type RunDispatchList,
+  RunDispatchListSchema,
+  RunDispatchSchema,
+  type RunDispatchStatus,
   type ShipFromLocation,
   ShipFromLocationSchema,
   type StaffAssistantChatRequest,
@@ -167,6 +173,13 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assign`, PickupAssignResultSchema, { method: 'POST', body }),
     getPickupAssignments: (shipmentId: string, signal?: AbortSignal): Promise<PickupAssignmentList> =>
       request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assignments`, PickupAssignmentListSchema, { signal }),
+    /* Dispatch: delivery runs (S264) */
+    listRuns: (status?: RunDispatchStatus, signal?: AbortSignal): Promise<RunDispatchList> =>
+      request('/v1/staff/dispatch/runs', RunDispatchListSchema, { query: { status: status || undefined }, signal }),
+    getRun: (runId: string, signal?: AbortSignal): Promise<RunDispatch> => request(`/v1/staff/dispatch/runs/${enc(runId)}`, RunDispatchSchema, { signal }),
+    planRun: (runId: string): Promise<RunDispatch> => request(`/v1/staff/dispatch/runs/${enc(runId)}/plan`, RunDispatchSchema, { method: 'POST' }),
+    advanceRun: (runId: string, body: RunAdvanceRequest): Promise<RunDispatch> =>
+      request(`/v1/staff/dispatch/runs/${enc(runId)}/advance`, RunDispatchSchema, { method: 'POST', body }),
     getShipFromLocation: (locationId: string, signal?: AbortSignal): Promise<ShipFromLocation> =>
       request(`/v1/staff/ship-from-locations/${enc(locationId)}`, ShipFromLocationSchema, { signal }),
 

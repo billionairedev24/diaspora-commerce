@@ -82,6 +82,15 @@ class JdbcPreorderOrderRepository implements PreorderOrderRepository {
     }
 
     @Override
+    public List<PreorderOrder> findByIds(Collection<String> orderIds) {
+        if (orderIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("select * from preorder_order where order_id in (:ids)").param("ids", orderIds)
+                .query(this::map).list();
+    }
+
+    @Override
     public Optional<PreorderOrder> findByShipment(String shipmentId) {
         return jdbc.sql("select * from preorder_order where packages @> cast(:probe as jsonb) limit 1")
                 .param("probe", json.write(List.of(Map.of("shipmentId", shipmentId)))).query(this::map).optional();

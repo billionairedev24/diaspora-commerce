@@ -584,6 +584,107 @@ export const PickupAssignmentSchema = z.object({
 export type PickupAssignment = z.infer<typeof PickupAssignmentSchema>;
 export const PickupAssignmentListSchema = z.object({ items: z.array(PickupAssignmentSchema) });
 export type PickupAssignmentList = z.infer<typeof PickupAssignmentListSchema>;
+
+/* ── Dispatch: delivery runs (S264) — a closed pre-order window's paid orders, planned into routes ── */
+
+export const RUN_DISPATCH_STATUSES = ['PENDING', 'PLANNED', 'CANCELLED'] as const;
+export const RunDispatchStatusSchema = z.enum(RUN_DISPATCH_STATUSES);
+export type RunDispatchStatus = z.infer<typeof RunDispatchStatusSchema>;
+/** The run's lifecycle in delivery-runs, in the order a run moves through it. */
+export const RUN_LIFECYCLE = ['CONFIRMED', 'COLLECTING', 'OUT_FOR_DELIVERY', 'COMPLETED'] as const;
+export const RunLifecycleSchema = z.enum([...RUN_LIFECYCLE, 'CANCELLED']);
+export type RunLifecycle = z.infer<typeof RunLifecycleSchema>;
+export const RunPickupPointSchema = z.object({
+  name: z.string(),
+  line1: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  hours: z.string(),
+  notes: z.string()
+});
+export type RunPickupPoint = z.infer<typeof RunPickupPointSchema>;
+export const RunDispatchProgressSchema = z.object({
+  orders: z.number().int(),
+  bags: z.number().int(),
+  pickupStops: z.number().int(),
+  pickupsDone: z.number().int(),
+  bagsCollected: z.number().int(),
+  dropStops: z.number().int(),
+  dropsDone: z.number().int(),
+  dropsFailed: z.number().int(),
+  bagsDelivered: z.number().int(),
+  unrouted: z.number().int()
+});
+export type RunDispatchProgress = z.infer<typeof RunDispatchProgressSchema>;
+export const RunOrderProgressSchema = z.object({
+  orders: z.number().int(),
+  pending: z.number().int(),
+  collected: z.number().int(),
+  outForDelivery: z.number().int(),
+  failed: z.number().int(),
+  delivered: z.number().int(),
+  returned: z.number().int(),
+  lastDeliveredAt: nullableString
+});
+export type RunOrderProgress = z.infer<typeof RunOrderProgressSchema>;
+export const RunDispatchStopSchema = z.object({
+  id: z.string(),
+  sequence: z.number().int(),
+  kind: z.enum(['PICKUP', 'DROPOFF']),
+  name: z.string(),
+  status: z.enum(['PENDING', 'ARRIVED', 'DONE', 'FAILED', 'RETRY', 'SKIPPED', 'REASSIGNED', 'CANCELLED']),
+  orderNumber: nullableString,
+  addressLine: nullableString,
+  handoverRequired: z.boolean(),
+  note: nullableString
+});
+export type RunDispatchStop = z.infer<typeof RunDispatchStopSchema>;
+export const RunDispatchRouteSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(['PLANNED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
+  driverId: nullableString,
+  vehicleId: nullableString,
+  blocked: z.boolean(),
+  packages: z.number().int(),
+  bagsCollected: z.number().int(),
+  bagsDelivered: z.number().int(),
+  pickupStops: z.number().int(),
+  pickupsDone: z.number().int(),
+  dropStops: z.number().int(),
+  dropsDone: z.number().int(),
+  dropsFailed: z.number().int(),
+  stops: z.array(RunDispatchStopSchema)
+});
+export type RunDispatchRoute = z.infer<typeof RunDispatchRouteSchema>;
+export const RunDispatchSchema = z.object({
+  runId: z.string(),
+  town: z.string(),
+  state: z.string(),
+  timeZone: z.string(),
+  serviceDate: z.string(),
+  windowStart: z.string(),
+  windowEnd: z.string(),
+  sellerPickupAt: nullableString,
+  dropMode: z.enum(['DOORSTEP', 'PICKUP_POINT']),
+  pickupPoint: RunPickupPointSchema.nullable(),
+  status: RunDispatchStatusSchema,
+  runStatus: RunLifecycleSchema.nullable(),
+  planError: nullableString,
+  plannedAt: nullableString,
+  progress: RunDispatchProgressSchema,
+  orders: RunOrderProgressSchema.nullable(),
+  routes: z.array(RunDispatchRouteSchema),
+  canManage: z.boolean()
+});
+export type RunDispatch = z.infer<typeof RunDispatchSchema>;
+export const RunDispatchListSchema = z.object({ items: z.array(RunDispatchSchema), canManage: z.boolean() });
+export type RunDispatchList = z.infer<typeof RunDispatchListSchema>;
+export type RunAdvanceStep = Exclude<(typeof RUN_LIFECYCLE)[number], 'CONFIRMED'>;
+export interface RunAdvanceRequest {
+  to: RunAdvanceStep;
+}
 export const StaffPickupWindowSchema = z.object({
   day: z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']),
   opens: z.string(),

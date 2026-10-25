@@ -42,6 +42,8 @@ type Services struct {
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
 	SellerShipFrom  app.SellerShipFromService
+	// SellerRunPickups gives sellers the delivery runs that collect from them, with a pick list (S264); registered when set.
+	SellerRunPickups app.SellerRunPickupsService
 	// SellerBusinessPage is the page settings (description, logo, brand colour).
 	SellerBusinessPage app.SellerBusinessPageService
 

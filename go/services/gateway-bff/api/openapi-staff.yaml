@@ -1538,6 +1538,86 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/dispatch/runs:
+    get:
+      tags: [Dispatch]
+      operationId: listStaffRuns
+      security: [{sessionCookie: []}]
+      summary: Delivery runs in dispatch, latest delivery day first (S264)
+      description: |
+        fulfilment `GET /v1/dispatch/runs` (delivery:dispatch or fulfilment:operate), with each run's lifecycle status from
+        delivery-runs when it can be read. A run appears when delivery-runs confirms it (a closed pre-order window's paid
+        orders). Needs VIEW on dispatch; `canManage` says whether the caller may plan or move a run.
+      parameters:
+        - {name: status, in: query, schema: {type: string, enum: [PENDING, PLANNED, CANCELLED]}, description: Dispatch status}
+      responses:
+        '200': {description: Runs, content: {application/json: {schema: {$ref: '#/components/schemas/RunDispatchList'}}}}
+        '422': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/dispatch/runs/{runId}:
+    get:
+      tags: [Dispatch]
+      operationId: getStaffRun
+      security: [{sessionCookie: []}]
+      summary: 'One run, its routes with every stop (seller pickups before drops) and how far it has got (S264)'
+      description: |
+        fulfilment `GET /v1/dispatch/runs/{runId}` plus delivery-runs `GET /v1/runs/{id}` and `/progress` (the run's
+        lifecycle status and its orders per stage, when readable). Needs VIEW on dispatch.
+      parameters: [{$ref: '#/components/parameters/RunId'}]
+      responses:
+        '200': {description: Run, content: {application/json: {schema: {$ref: '#/components/schemas/RunDispatch'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/dispatch/runs/{runId}/plan:
+    post:
+      tags: [Dispatch]
+      operationId: planStaffRun
+      security: [{sessionCookie: []}]
+      summary: Plan the run's routes (again) (S264)
+      description: |
+        fulfilment `POST /v1/dispatch/runs/{runId}/plan` (delivery:dispatch, EDIT on dispatch). Only shipments that are not
+        on a live route get new routes, so planning twice is harmless. Use it when planning could not finish (the run says
+        why in `planError`), after a route was cancelled, or for an order that arrived late.
+      parameters: [{$ref: '#/components/parameters/RunId'}]
+      responses:
+        '200': {description: Planned, content: {application/json: {schema: {$ref: '#/components/schemas/RunDispatch'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/dispatch/runs/{runId}/advance:
+    post:
+      tags: [Dispatch]
+      operationId: advanceStaffRun
+      security: [{sessionCookie: []}]
+      summary: Move a run to its next step by hand when the drivers' events did not arrive (S264)
+      description: |
+        delivery-runs `POST /v1/runs/{id}/start-collecting`, `/out-for-delivery` or `/complete` (delivery-runs:manage, EDIT
+        on dispatch). A run normally moves by itself from the drivers' shipment events (the first pickup, the last pickup,
+        the last delivery); this is the override for when those did not arrive. It never marks packages delivered: those
+        are delivered in the driver app or by staff in orders. 409 `CONFLICT` when the step does not follow the run's
+        status; 422 for a step other than COLLECTING, OUT_FOR_DELIVERY or COMPLETED.
+      parameters: [{$ref: '#/components/parameters/RunId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RunAdvanceRequest'}}}
+      responses:
+        '200': {description: Moved, content: {application/json: {schema: {$ref: '#/components/schemas/RunDispatch'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/ship-from-locations/{locationId}:
     get:
       tags: [Dispatch]
@@ -4649,6 +4729,7 @@ components:
     RecordId: {name: id, in: path, required: true, schema: {type: string, maxLength: 120}}
     ExportId: {name: exportId, in: path, required: true, schema: {type: string, maxLength: 64}}
     ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string, maxLength: 64}}
+    RunId: {name: runId, in: path, required: true, schema: {type: string, maxLength: 64}, description: Delivery run id (delivery-runs)}
     PreorderId: {name: preorderId, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}, description: Window id or code}
     DeliveryFeeMethod: {name: method, in: path, required: true, schema: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}}
     DeliveryFeeCurrency: {name: currency, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{3}$'}, description: 'ISO 4217 code, for example USD'}
@@ -4675,6 +4756,111 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    RunDispatchList:
+      type: object
+      required: [items, canManage]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/RunDispatch'}}
+        canManage: {type: boolean, description: The caller may plan a run and move it by hand}
+    RunDispatch:
+      type: object
+      description: A delivery run in dispatch (S264)
+      required: [runId, town, state, timeZone, serviceDate, windowStart, windowEnd, sellerPickupAt, dropMode, pickupPoint, status, runStatus, planError, plannedAt, progress, orders, routes, canManage]
+      properties:
+        runId: {type: string}
+        town: {type: string, example: Bastrop}
+        state: {type: string, example: TX}
+        timeZone: {type: string, example: America/Chicago}
+        serviceDate: {type: string, format: date}
+        windowStart: {type: string, format: date-time}
+        windowEnd: {type: string, format: date-time}
+        sellerPickupAt: {type: [string, 'null'], format: date-time, description: When the driver collects from the sellers}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        pickupPoint: {oneOf: [{$ref: '#/components/schemas/RunPickupPoint'}, {type: 'null'}]}
+        status: {type: string, enum: [PENDING, PLANNED, CANCELLED], description: 'Dispatch status: PENDING = not planned (see planError)'}
+        runStatus: {type: [string, 'null'], enum: [CONFIRMED, COLLECTING, OUT_FOR_DELIVERY, COMPLETED, CANCELLED, null], description: The run's lifecycle in delivery-runs; null when it could not be read}
+        planError: {type: [string, 'null'], description: Why the routes could not be planned}
+        plannedAt: {type: [string, 'null'], format: date-time}
+        progress: {$ref: '#/components/schemas/RunDispatchProgress'}
+        orders: {oneOf: [{$ref: '#/components/schemas/RunOrderProgress'}, {type: 'null'}], description: The run's orders per stage from the drivers' shipment events (detail only; null when delivery-runs could not be read)}
+        routes: {type: array, items: {$ref: '#/components/schemas/RunDispatchRoute'}}
+        canManage: {type: boolean}
+    RunPickupPoint:
+      type: object
+      required: [name, line1, city, state, postalCode, hours, notes]
+      properties:
+        name: {type: string}
+        line1: {type: string}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        hours: {type: string}
+        notes: {type: string}
+    RunDispatchProgress:
+      type: object
+      description: What has happened on the run's routes (bags are one seller's package of an order)
+      required: [orders, bags, pickupStops, pickupsDone, bagsCollected, dropStops, dropsDone, dropsFailed, bagsDelivered, unrouted]
+      properties:
+        orders: {type: integer}
+        bags: {type: integer}
+        pickupStops: {type: integer}
+        pickupsDone: {type: integer}
+        bagsCollected: {type: integer}
+        dropStops: {type: integer}
+        dropsDone: {type: integer}
+        dropsFailed: {type: integer}
+        bagsDelivered: {type: integer}
+        unrouted: {type: integer, description: Run shipments waiting for a route}
+    RunOrderProgress:
+      type: object
+      description: Orders on the run per stage (from orders-service shipment events)
+      required: [orders, pending, collected, outForDelivery, failed, delivered, returned, lastDeliveredAt]
+      properties:
+        orders: {type: integer}
+        pending: {type: integer}
+        collected: {type: integer}
+        outForDelivery: {type: integer}
+        failed: {type: integer}
+        delivered: {type: integer}
+        returned: {type: integer}
+        lastDeliveredAt: {type: [string, 'null'], format: date-time}
+    RunDispatchRoute:
+      type: object
+      required: [id, name, status, driverId, vehicleId, blocked, packages, bagsCollected, bagsDelivered, pickupStops, pickupsDone, dropStops, dropsDone, dropsFailed, stops]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        status: {type: string, enum: [PLANNED, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED]}
+        driverId: {type: [string, 'null']}
+        vehicleId: {type: [string, 'null']}
+        blocked: {type: boolean}
+        packages: {type: integer}
+        bagsCollected: {type: integer}
+        bagsDelivered: {type: integer}
+        pickupStops: {type: integer}
+        pickupsDone: {type: integer}
+        dropStops: {type: integer}
+        dropsDone: {type: integer}
+        dropsFailed: {type: integer}
+        stops: {type: array, items: {$ref: '#/components/schemas/RunDispatchStop'}, description: In visiting order; empty in the list of runs}
+    RunDispatchStop:
+      type: object
+      required: [id, sequence, kind, name, status, orderNumber, addressLine, handoverRequired, note]
+      properties:
+        id: {type: string}
+        sequence: {type: integer}
+        kind: {type: string, enum: [PICKUP, DROPOFF]}
+        name: {type: string}
+        status: {type: string, enum: [PENDING, ARRIVED, DONE, FAILED, RETRY, SKIPPED, REASSIGNED, CANCELLED]}
+        orderNumber: {type: [string, 'null']}
+        addressLine: {type: [string, 'null'], description: The pickup point of a pickup-point run}
+        handoverRequired: {type: boolean, description: The customer's code is needed}
+        note: {type: [string, 'null']}
+    RunAdvanceRequest:
+      type: object
+      required: [to]
+      properties:
+        to: {type: string, enum: [COLLECTING, OUT_FOR_DELIVERY, COMPLETED]}
     # ── Identity & access (S291) ────────────────────────────────────────────
     IdentityTokenInspectionRequest:
       type: object

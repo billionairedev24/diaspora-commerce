@@ -556,6 +556,39 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/run-pickups:
+    get:
+      tags: [Orders]
+      operationId: listSellerRunPickups
+      security: [{sessionCookie: []}]
+      summary: Delivery runs that collect from the organisation, with the pickup time and a pick list (S264)
+      description: |
+        delivery-runs `GET /v1/seller/run-pickups` for the active organisation (Orders view): the pre-order runs that are
+        confirmed, being collected or out for delivery, and those completed in the last two weeks, earliest pickup first.
+        Each carries when the driver comes (`pickupAt`), the units to pack per product and, per order, what goes into its
+        bag (the order number is written on it). Only the organisation's own lines; no customer details.
+      responses:
+        '200': {description: Runs, content: {application/json: {schema: {$ref: '#/components/schemas/SellerRunPickupList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/run-pickups/{runId}:
+    get:
+      tags: [Orders]
+      operationId: getSellerRunPickup
+      security: [{sessionCookie: []}]
+      summary: The organisation's pick list for one delivery run (S264)
+      description: delivery-runs `GET /v1/seller/run-pickups/{runId}` for the active organisation (Orders view). 404 when the run collects nothing from it.
+      parameters:
+        - {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Pick list, content: {application/json: {schema: {$ref: '#/components/schemas/SellerRunPickup'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/ship-from-addresses:
     get:
       tags: [Orders]
@@ -2423,6 +2456,45 @@ components:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
   schemas:
+    SellerRunPickupList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SellerRunPickup'}}
+    SellerRunPickup:
+      type: object
+      description: One delivery run's pick list for the organisation (S264)
+      required: [runId, town, state, timeZone, runStatus, windowStart, windowEnd, pickupAt, dropMode, orders, units, collectedOrders, items, bags]
+      properties:
+        runId: {type: string, format: uuid}
+        town: {type: string, example: Bastrop}
+        state: {type: string, example: TX}
+        timeZone: {type: string, example: America/Chicago}
+        runStatus: {type: string, enum: [CONFIRMED, COLLECTING, OUT_FOR_DELIVERY, COMPLETED], description: 'CONFIRMED: pack for the pickup; COLLECTING: the driver is collecting; OUT_FOR_DELIVERY and COMPLETED: everything left the sellers'}
+        windowStart: {type: string, format: date-time, description: The delivery window opens}
+        windowEnd: {type: string, format: date-time}
+        pickupAt: {type: [string, 'null'], format: date-time, description: When the driver collects from the sellers}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        orders: {type: integer, description: Run orders with lines of the organisation}
+        units: {type: integer, description: Units to pick in total}
+        collectedOrders: {type: integer, description: Orders the driver has already collected}
+        items: {type: array, items: {$ref: '#/components/schemas/RunPickItem'}, description: 'Units per product across all orders, most units first'}
+        bags: {type: array, items: {$ref: '#/components/schemas/RunOrderBag'}, description: 'One per order, by order number'}
+    RunPickItem:
+      type: object
+      required: [atin, name, units]
+      properties:
+        atin: {type: string}
+        name: {type: string}
+        units: {type: integer}
+    RunOrderBag:
+      type: object
+      required: [orderNumber, collected, units, lines]
+      properties:
+        orderNumber: {type: string, example: LBK-7-1001, description: Write it on the bag}
+        collected: {type: boolean, description: The driver has collected the bag}
+        units: {type: integer}
+        lines: {type: array, items: {$ref: '#/components/schemas/RunPickItem'}}
     Problem:
       type: object
       required: [type, title, status]

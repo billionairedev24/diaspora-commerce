@@ -27,6 +27,11 @@ class DeliveryRunsEventPublisher {
 
     void run(String type, Location location, Run run, RunStatus previous, Instant previousCutoff, String reason,
              List<RunOrder> orders) {
+        run(type, location, run, previous, previousCutoff, reason, orders, null);
+    }
+
+    void run(String type, Location location, Run run, RunStatus previous, Instant previousCutoff, String reason,
+             List<RunOrder> orders, List<RunEventPayload.SellerRef> sellers) {
         String content = type.substring(type.lastIndexOf('.') + 1);
         List<RunEventPayload.OrderRef> refs = orders == null ? null : orders.stream()
                 .map(o -> new RunEventPayload.OrderRef(o.orderId(), o.customerId(), o.packages(), o.status().name(),
@@ -41,7 +46,8 @@ class DeliveryRunsEventPublisher {
                 links.cutoffDisplay(location, run), t.feeMinor(), t.currency(),
                 RunLinks.money(t.feeMinor(), t.currency()), t.dropMode().name(), t.pickupPoint(), t.minOrders(),
                 run.reservedOrders(), t.capacity().maxOrders(), run.extensions(), reason, links.runUrl(location, run),
-                links.channelLinks(location, run, content), links.locationUrl(location), d.whatsappInviteUrl(), refs);
+                links.channelLinks(location, run, content), links.locationUrl(location), d.whatsappInviteUrl(), refs,
+                sellers);
         events.publish(type, DeliveryRunsEvents.AGGREGATE, run.id().toString(), payload);
     }
 

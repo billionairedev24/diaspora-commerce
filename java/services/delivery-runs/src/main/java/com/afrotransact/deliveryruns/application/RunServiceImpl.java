@@ -6,7 +6,12 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -20,6 +25,7 @@ import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.PickupPoint;
+import com.afrotransact.deliveryruns.domain.PreorderLine;
 import com.afrotransact.deliveryruns.domain.PreorderOrder;
 import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
@@ -31,6 +37,7 @@ import com.afrotransact.deliveryruns.domain.RunOrder;
 import com.afrotransact.deliveryruns.domain.RunOrderStatus;
 import com.afrotransact.deliveryruns.domain.RunStatus;
 import com.afrotransact.deliveryruns.domain.RunTerms;
+import com.afrotransact.deliveryruns.domain.SellerPickupSchedule;
 import com.afrotransact.deliveryruns.port.GeoGateway;
 import com.afrotransact.deliveryruns.port.GeoUnavailableException;
 import com.afrotransact.deliveryruns.port.LocationRepository;
@@ -193,7 +200,7 @@ class RunServiceImpl implements RunService {
         permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
         return lifecycle.moved(location(run.locationId()), run.startCollecting(Instant.now(clock)), run.status(),
-                null, false);
+                DeliveryRunsEvents.RUN_COLLECTING, false);
     }
 
     @Override
@@ -276,7 +283,8 @@ class RunServiceImpl implements RunService {
         DropMode mode = point != null ? DropMode.PICKUP_POINT : DropMode.DOORSTEP;
         long fee = w.doorFee(preorders.fees().current()).map(FeeSnapshot::amountMinor)
                 .orElse(location.details().defaultFeeMinor());
-        RunTerms terms = new RunTerms(new DeliveryWindow(start, end), cutoff, null, null, fee,
+        Instant sellerPickup = SellerPickupSchedule.at(cutoff, start, preorders.sellerPickupLead());
+        RunTerms terms = new RunTerms(new DeliveryWindow(start, end), cutoff, null, sellerPickup, fee,
                 w.details().currency(), 1, Capacity.UNLIMITED, mode, point, CutoffPolicy.CANCEL, 1);
         List<PreorderOrder> paid = new ArrayList<>();
         for (PreorderOrder o : preorders.orders().findByWindow(w.id())) {
@@ -294,9 +302,37 @@ class RunServiceImpl implements RunService {
                     now).confirm(code, now)));
         }
         preorders.events().run(DeliveryRunsEvents.RUN_CONFIRMED, location, run, null, null, "PREORDER " + w.code(),
-                slots);
+                slots, sellersOf(paid));
         LOG.info("Pre-order {} handed {} orders to run {} at {}", w.code(), slots.size(), run.id(), location.slug());
         return Optional.of(run);
+    }
+
+    /** The sellers a run collects from, with the orders and units each has to pack (largest first). */
+    static List<RunEventPayload.SellerRef> sellersOf(List<PreorderOrder> orders) {
+        Map<String, int[]> counts = new LinkedHashMap<>();
+        Map<String, String> names = new HashMap<>();
+        for (PreorderOrder o : orders) {
+            Set<String> seen = new HashSet<>();
+            for (PreorderLine l : o.lines()) {
+                if (l.sellerOrgId() == null || l.sellerOrgId().isBlank() || l.qty() < 1) {
+                    continue;
+                }
+                int[] c = counts.computeIfAbsent(l.sellerOrgId(), k -> new int[2]);
+                if (seen.add(l.sellerOrgId())) {
+                    c[0]++;
+                }
+                c[1] += l.qty();
+                if (l.sellerName() != null && !l.sellerName().isBlank()) {
+                    names.putIfAbsent(l.sellerOrgId(), l.sellerName());
+                }
+            }
+        }
+        return counts.entrySet().stream()
+                .map(e -> new RunEventPayload.SellerRef(e.getKey(), names.get(e.getKey()), e.getValue()[0],
+                        e.getValue()[1]))
+                .sorted(Comparator.comparingInt(RunEventPayload.SellerRef::units).reversed()
+                        .thenComparing(RunEventPayload.SellerRef::sellerOrgId))
+                .toList();
     }
 
     /** The window's location, else the active location named like its first target city in that state. */

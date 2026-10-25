@@ -261,6 +261,30 @@ class ShipmentTransitionPolicyTest {
     }
 
     @Test
+    void aRunsDriverMovesPreorderPickupShipmentsThroughTheTransitStepsButNoOtherPickupShipments() {
+        Shipment pickupDrop = Shipments.of(FulfilmentType.PREORDER, DeliveryMethod.PICKUP, CONFIRMED);
+        for (ShipmentStatus to : List.of(PICKED_UP, OUT, DELIVERED)) {
+            assertThat(POLICY.decide(pickupDrop, to, ActorKind.COURIER).kind())
+                    .isEqualTo(TransitionDecision.Kind.ALLOW);
+        }
+        // the driver never moves the prepare steps, and carriers have nothing to do with a pickup point
+        assertThatThrownBy(() -> POLICY.decide(pickupDrop, PACKED, ActorKind.COURIER))
+                .isInstanceOf(TransitionRefused.class);
+        assertThatThrownBy(() -> POLICY.decide(pickupDrop, PICKED_UP, ActorKind.CARRIER))
+                .isInstanceOf(TransitionRefused.class);
+        // a seller's own pickup order (not a pre-order run) is still handed over by the seller, not a courier
+        Shipment sellerPickup = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.PICKUP, READY);
+        assertThatThrownBy(() -> POLICY.decide(sellerPickup, DELIVERED, ActorKind.COURIER))
+                .isInstanceOf(TransitionRefused.class);
+        // forward only, and a delivered package stays delivered
+        Shipment delivered = Shipments.of(FulfilmentType.PREORDER, DeliveryMethod.PICKUP, DELIVERED);
+        assertThat(POLICY.decide(delivered, OUT, ActorKind.COURIER).kind()).isEqualTo(TransitionDecision.Kind.IGNORE);
+        Shipment placed = Shipments.of(FulfilmentType.PREORDER, DeliveryMethod.PICKUP, PLACED);
+        assertThatThrownBy(() -> POLICY.decide(placed, PICKED_UP, ActorKind.COURIER))
+                .isInstanceOf(TransitionRefused.class);
+    }
+
+    @Test
     void transitEventsNeverMoveBackwardsButFailedDeliveriesCanBeReattempted() {
         Shipment out = Shipments.of(FulfilmentType.SELLER_FULFILLED, DeliveryMethod.CARRIER, OUT);
         assertThat(POLICY.decide(out, IN_TRANSIT, ActorKind.CARRIER).kind()).isEqualTo(TransitionDecision.Kind.IGNORE);
