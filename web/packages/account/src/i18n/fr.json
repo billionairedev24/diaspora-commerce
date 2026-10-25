@@ -274,5 +274,7 @@
   "hub.crumb": "Fil d'Ariane",
   "hub.securityTitle": "Connexion et sécurité",
   "common.showAll": "Tout afficher ({n})",
-  "common.showFewer": "Afficher moins"
+  "common.showFewer": "Afficher moins",
+  "hub.deliveryAlerts": "Alertes de livraison",
+  "hub.deliveryAlertsSub": "Tournées de livraison et précommandes de votre région, par e-mail, SMS, application ou WhatsApp"
 }
