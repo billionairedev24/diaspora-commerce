@@ -22,6 +22,9 @@ public interface PreorderOrderRepository {
 
     Optional<PreorderOrder> findById(String orderId);
 
+    /** The projected orders among these order ids (unknown ids are absent), in no particular order. */
+    List<PreorderOrder> findByIds(Collection<String> orderIds);
+
     /** The order holding this pre-order package. */
     Optional<PreorderOrder> findByShipment(String shipmentId);
 

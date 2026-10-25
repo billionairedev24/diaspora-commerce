@@ -12,6 +12,7 @@ import com.afrotransact.deliveryruns.application.RunCommand;
 import com.afrotransact.deliveryruns.application.SlotReservation;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
 import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
 import com.afrotransact.deliveryruns.domain.Run;
@@ -134,11 +135,18 @@ final class RunDtos {
 
     @Schema(name = "RunOrder", description = "A run slot held by an order")
     record RunOrderResponse(UUID id, UUID runId, String orderId, String customerId, int packages, String status,
-                            String handoverCode, UUID requestedRunId, Instant reservedAt, Instant updatedAt) {
+                            String handoverCode, UUID requestedRunId, Instant reservedAt, Instant updatedAt,
+                            @Schema(description = "Where the order's package is on the run: PENDING, COLLECTED, "
+                                    + "OUT_FOR_DELIVERY, FAILED, DELIVERED or RETURNED (from orders-service shipment "
+                                    + "events)") String stage,
+                            Instant stageAt,
+                            @Schema(description = "When the package was handed over; the seller payout hold starts "
+                                    + "from it") Instant deliveredAt) {
 
         static RunOrderResponse of(RunOrder o) {
             return new RunOrderResponse(o.id(), o.runId(), o.orderId(), o.customerId(), o.packages(),
-                    o.status().name(), o.handoverCode(), o.requestedRunId(), o.reservedAt(), o.updatedAt());
+                    o.status().name(), o.handoverCode(), o.requestedRunId(), o.reservedAt(), o.updatedAt(),
+                    o.stage().name(), o.stageAt(), o.deliveredAt());
         }
     }
 
@@ -163,12 +171,14 @@ final class RunDtos {
 
     @Schema(name = "DispatchLocation")
     record DispatchLocation(UUID id, String slug, String name, String state, String timeZone, double centerLat,
-                            double centerLng) {
+                            double centerLng,
+                            @Schema(description = "Where the run leaves from (the hub); drops are ordered by road "
+                                    + "distance from it") double originLat, double originLng) {
 
-        static DispatchLocation of(Location l) {
+        static DispatchLocation of(Location l, GeoPoint origin) {
             return new DispatchLocation(l.id(), l.slug(), l.name(), l.details().state(),
                     l.details().timeZone().getId(), l.details().area().center().lat(),
-                    l.details().area().center().lng());
+                    l.details().area().center().lng(), origin.lat(), origin.lng());
         }
     }
 
@@ -178,7 +188,7 @@ final class RunDtos {
 
         static DispatchResponse of(DispatchList d) {
             RunTerms t = d.run().terms();
-            return new DispatchResponse(RunResponse.of(d.run()), DispatchLocation.of(d.location()), t.dropMode(),
+            return new DispatchResponse(RunResponse.of(d.run()), DispatchLocation.of(d.location(), d.origin()), t.dropMode(),
                     PickupPointBody.of(t.pickupPoint()), t.sellerPickupAt(),
                     d.orders().stream().map(RunOrderResponse::of).toList());
         }

@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.RunOrder;
+import com.afrotransact.deliveryruns.domain.RunOrderStage;
 import com.afrotransact.deliveryruns.domain.RunOrderStatus;
 import com.afrotransact.deliveryruns.port.ConcurrentUpdateException;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
@@ -56,11 +57,14 @@ class JdbcRunOrderRepository implements RunOrderRepository {
     public RunOrder update(RunOrder o) {
         int rows = jdbc.sql("""
                 update run_order set status = :status, handover_code = :code, updated_at = :updatedAt,
-                    version = version + 1
+                    stage = :stage, stage_at = :stageAt, delivered_at = :deliveredAt, version = version + 1
                 where id = :id and version = :version
                 """)
                 .param("status", o.status().name())
                 .param("code", o.handoverCode())
+                .param("stage", o.stage().name())
+                .param("stageAt", Sql.ts(o.stageAt()))
+                .param("deliveredAt", Sql.ts(o.deliveredAt()))
                 .param("updatedAt", Sql.ts(o.updatedAt()))
                 .param("id", o.id())
                 .param("version", o.version())
@@ -110,6 +114,7 @@ class JdbcRunOrderRepository implements RunOrderRepository {
                 rs.getString("order_id"), rs.getString("customer_id"), rs.getInt("packages"),
                 RunOrderStatus.valueOf(rs.getString("status")), rs.getString("handover_code"),
                 rs.getObject("requested_run_id", UUID.class), Sql.instant(rs, "reserved_at"),
-                Sql.instant(rs, "updated_at"), rs.getLong("version"));
+                Sql.instant(rs, "updated_at"), rs.getLong("version"), RunOrderStage.valueOf(rs.getString("stage")),
+                Sql.instant(rs, "stage_at"), Sql.instant(rs, "delivered_at"));
     }
 }
