@@ -36,6 +36,15 @@ public interface PreorderOrderRepository {
     Map<UUID, WindowTotals> totals(Collection<UUID> windowIds);
 
     /**
+     * Orders that count (paid and late adds) per creative token, from their tracking tag ({@code cr=<token>}): the
+     * orders an advertorial brought.
+     *
+     * @param creatives tokens such as {@code adv-<32 hex>}
+     * @return token → orders (tokens without orders are absent)
+     */
+    Map<String, Integer> attributedOrders(Collection<String> creatives);
+
+    /**
      * Records the refund progress orders-service reported for a cancelled order. A settled refund (REFUNDED / VOIDED)
      * is never moved back to PENDING or FAILED by a late event.
      *

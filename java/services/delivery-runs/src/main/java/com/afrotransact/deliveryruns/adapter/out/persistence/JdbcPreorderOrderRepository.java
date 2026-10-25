@@ -111,6 +111,25 @@ class JdbcPreorderOrderRepository implements PreorderOrderRepository {
     }
 
     @Override
+    public Map<String, Integer> attributedOrders(Collection<String> creatives) {
+        Map<String, Integer> out = new HashMap<>();
+        if (creatives.isEmpty()) {
+            return out;
+        }
+        jdbc.sql("""
+                select substring(tracking_tag from 'cr=([A-Za-z0-9_-]+)') as creative, count(*) as n
+                from preorder_order
+                where status <> 'CANCELLED' and tracking_tag like '%cr=%'
+                  and substring(tracking_tag from 'cr=([A-Za-z0-9_-]+)') in (:creatives)
+                group by 1
+                """).param("creatives", List.copyOf(creatives)).query((rs, n) -> {
+                    out.put(rs.getString("creative"), rs.getInt("n"));
+                    return null;
+                }).list();
+        return out;
+    }
+
+    @Override
     public boolean recordRefund(String orderId, RefundStatus status, Long amountMinor, String error, Instant at) {
         // A later report never moves a settled refund back to PENDING or FAILED (events can arrive out of order).
         return jdbc.sql("""

@@ -38,10 +38,12 @@ class PreorderEventPublisher {
     private final DeliveryRunsSettings settings;
     private final PreorderOptions options;
     private final FeeBook book;
+    private final AdvertorialLifecycle advertorials;
 
     PreorderEventPublisher(DomainEventPublisher events, DeliveryRunsSettings settings, PreorderOptions options,
-                           FeeBook book) {
+                           FeeBook book, AdvertorialLifecycle advertorials) {
         this.book = book;
+        this.advertorials = advertorials;
         this.events = events;
         this.settings = settings;
         this.options = options;
@@ -55,6 +57,7 @@ class PreorderEventPublisher {
     void window(String type, PreorderWindow w, PaymentSettings payment, Instant now, String actorId) {
         events.publish(type, DeliveryRunsEvents.AGGREGATE, w.id().toString(),
                 payload(w, payment, null, null, now, null, actorId, null));
+        advertorials.onWindow(type, w);
     }
 
     /**
@@ -69,6 +72,7 @@ class PreorderEventPublisher {
                 .toList();
         events.publish(type, DeliveryRunsEvents.AGGREGATE, w.id().toString(), payload(w, payment, null, null, now,
                 refs, WindowDecision.SYSTEM.equals(d.actor()) ? null : d.actor(), d));
+        advertorials.onWindow(type, w);
     }
 
     /** {@code orders} (paid) are attached to CLOSED. */
