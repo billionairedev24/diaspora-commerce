@@ -78,6 +78,14 @@ tags:
     description: Services marketplace (bookings) — search by ZIP, provider pages, booking with a deposit, my bookings
   - name: Lola
     description: Lola, the AI shopping assistant (ai-gateway SSE relayed)
+  - name: Delivery runs
+    description: |
+      Delivery runs by location (delivery-runs; S262, S263, ADR 0005). Shoppers see the locations and their pages
+      (upcoming runs, WhatsApp community, share links with UTM attribution), subscribe to a location's run alerts
+      per channel (email by link with double opt-in, or signed in from Account -> Delivery alerts with consent
+      recorded per channel; WhatsApp only from approved templates to opted-in shoppers) and get the location-targeted
+      advertorials with a live countdown (views and clicks are counted; orders are attributed with
+      `src=page&cr=adv-...`). Every message carries an unsubscribe link (`/delivery-runs/subscriptions/unsubscribe`).
   - name: Pre-orders
     description: |
       Pre-order windows by city (delivery-runs; S270–S275). The storefront resolves the window covering the
@@ -1079,6 +1087,270 @@ paths:
         '204': {description: Removed}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/locations:
+    get:
+      tags: [Delivery runs]
+      operationId: listRunLocations
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Locations with delivery runs (active ones)
+      description: delivery-runs `GET /v1/public/locations`. Public data, cached for a minute.
+      responses:
+        '200':
+          description: Locations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/RunLocation'}}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/locations/{slug}:
+    get:
+      tags: [Delivery runs]
+      operationId: getRunLocation
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Location page data (upcoming runs, WhatsApp community link, social and share links)
+      description: |
+        delivery-runs `GET /v1/public/locations/{slug}`. `shareLinks` and the run links carry UTM attribution
+        (`utm_source`, `utm_medium`, `utm_campaign`) so orders and sign-ups can be traced to the channel that shared them.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,79}$'}}
+      responses:
+        '200':
+          description: Location page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunLocationPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/subscriptions:
+    post:
+      tags: [Delivery runs]
+      operationId: subscribeRunAlerts
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Get run alerts for a location by email (double opt-in)
+      description: |
+        delivery-runs `POST /v1/public/subscriptions {locationId, email, source}`. Always 202 for a valid email (whether
+        or not it was known). Nothing else is sent until the link in the confirmation email is used
+        (`POST /v1/delivery-runs/subscriptions/confirm`); only the email channel is consented to this way. A signed-in
+        shopper chooses channels from the account screen instead (`POST /v1/account/run-subscriptions`). Rate limited
+        like other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locationId, email]
+              properties:
+                locationId: {type: string, format: uuid}
+                email: {type: string, format: email, maxLength: 254}
+                source: {type: string, maxLength: 80, description: 'Where the sign-up happened, kept on the consent record (default storefront)', examples: [location-page]}
+      responses:
+        '202':
+          description: Accepted; the confirmation link is on its way
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [CONFIRMATION_SENT]}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/subscriptions/confirm:
+    post:
+      tags: [Delivery runs]
+      operationId: confirmRunAlerts
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Confirm an email subscription (token of the confirmation link)
+      description: |
+        delivery-runs `POST /v1/public/subscriptions/confirm {token}`; the storefront page
+        `/delivery-runs/subscriptions/confirm?token=` calls it. Confirming twice is fine; an unknown token is a 422 on
+        `token`. Records the email consent. Rate limited like other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Confirmed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/subscriptions/unsubscribe:
+    post:
+      tags: [Delivery runs]
+      operationId: unsubscribeRunAlerts
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Unsubscribe from a message link (token), per channel or all
+      description: |
+        delivery-runs `POST /v1/public/subscriptions/unsubscribe {token, channels}`; the storefront page
+        `/delivery-runs/subscriptions/unsubscribe?token=` calls it, and every run alert carries such a link. No
+        channels withdraws all of them. Withdrawal is recorded with its time on the consent record. Rate limited like
+        other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: {type: string, minLength: 1, maxLength: 200}
+                channels: {type: array, items: {$ref: '#/components/schemas/RunChannel'}}
+      responses:
+        '200':
+          description: Withdrawn
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/run-subscriptions:
+    get:
+      tags: [Account, Delivery runs]
+      operationId: listMyRunSubscriptions
+      summary: My delivery alerts (per location and channel, with consent records)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Subscriptions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/RunSubscription'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Account, Delivery runs]
+      operationId: subscribeMyRunAlerts
+      summary: Turn on delivery alerts for a location and channels (consent recorded, active at once)
+      description: |
+        delivery-runs `POST /v1/me/run-subscriptions`. Adds the channels to an existing subscription. SMS and WhatsApp
+        also need a verified phone number on the account; WhatsApp messages are only sent from approved templates to
+        shoppers who opted in here.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [locationId, channels]
+              properties:
+                locationId: {type: string, format: uuid}
+                channels: {type: array, minItems: 1, items: {$ref: '#/components/schemas/RunChannel'}}
+                source: {type: string, maxLength: 80, examples: [account]}
+      responses:
+        '200':
+          description: Subscription
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/run-subscriptions/{locationId}:
+    delete:
+      tags: [Account, Delivery runs]
+      operationId: unsubscribeMyRunAlerts
+      summary: Turn off delivery alerts for a location (some channels, or all)
+      description: delivery-runs `DELETE /v1/me/run-subscriptions/{locationId}`. No `channel` withdraws all channels.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: locationId, in: path, required: true, schema: {type: string, format: uuid}}
+        - name: channel
+          in: query
+          schema: {type: array, items: {$ref: '#/components/schemas/RunChannel'}}
+          style: form
+          explode: true
+      responses:
+        '200':
+          description: Subscription with the withdrawals recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RunSubscription'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/advertorials:
+    get:
+      tags: [Delivery runs]
+      operationId: listRunAdvertorials
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Advertorials for the shopper's deliver-to place (windows and runs that take orders now)
+      description: |
+        delivery-runs `GET /v1/public/advertorials`. The place is the explicit `zip`, `lat`/`lng` or
+        `country`+`region`(+`city`) when given, else the session's delivery location; with no place at all the list is
+        empty. One variant per advertorial (the same `visitor` keeps theirs), higher priority first. Each carries the
+        countdown target (the close or cutoff) and a link with UTM and order attribution (`src=page&cr=adv-...`); the
+        storefront counts a `VIEW` once per visit and a `CLICK` on the button
+        (`POST /v1/delivery-runs/advertorials/{advertorialId}/events`) and expires the card at `expiresAt`.
+      parameters:
+        - {name: zip, in: query, schema: {type: string, pattern: '^[0-9]{5}$'}}
+        - {name: lat, in: query, schema: {type: number}}
+        - {name: lng, in: query, schema: {type: number}}
+        - {name: country, in: query, schema: {type: string, minLength: 2, maxLength: 2}}
+        - {name: region, in: query, schema: {type: string, maxLength: 3}}
+        - {name: city, in: query, schema: {type: string, maxLength: 80}}
+        - {name: visitor, in: query, schema: {type: string, pattern: '^[A-Za-z0-9_-]{1,64}$'}, description: An anonymous id the storefront keeps per browser, so A/B variants stay stable}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 10, default: 3}}
+      responses:
+        '200':
+          description: Advertorials
+          headers:
+            Cache-Control: {schema: {type: string}}
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/RunAdvertorial'}}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/advertorials/{advertorialId}/events:
+    post:
+      tags: [Delivery runs]
+      operationId: recordRunAdvertorialEvent
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Count a view or a click on an advertorial
+      description: |
+        delivery-runs `POST /v1/public/advertorials/{id}/events {type}`. Best effort: the storefront sends `VIEW` once
+        per visit and `CLICK` on the button, and ignores a failure. Rate limited like other lookups.
+      parameters:
+        - {name: advertorialId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type: {type: string, enum: [VIEW, CLICK]}
+      responses:
+        '204': {description: Counted}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/checkout/summary:
     get:
       tags: [Checkout]
@@ -2801,6 +3073,100 @@ components:
       properties:
         atin: {$ref: '#/components/schemas/Atin'}
         status: {type: string, enum: [subscribed]}
+    RunChannel:
+      type: string
+      enum: [EMAIL, SMS, PUSH, WHATSAPP]
+      description: A way to reach a subscriber; each is consented to separately (WhatsApp only from approved templates)
+    RunPickupPoint:
+      type: [object, 'null']
+      additionalProperties: true
+      description: Where orders are collected when the drop mode is PICKUP_POINT
+    RunLocation:
+      type: object
+      required: [id, slug, name, market, timeZone, defaultFeeMinor, currency, dropMode]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string, examples: [lubbock]}
+        name: {type: string, examples: [Lubbock]}
+        market: {type: string, examples: [US]}
+        state: {type: [string, 'null'], examples: [TX]}
+        timeZone: {type: string, examples: [America/Chicago]}
+        area: {type: object, additionalProperties: true, description: 'Coverage as delivery-runs keeps it (ZIP list, polygon or radius)'}
+        defaultFeeMinor: {type: integer, description: Delivery fee when the run sets none}
+        currency: {type: string, examples: [USD]}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        pickupPoint: {$ref: '#/components/schemas/RunPickupPoint'}
+        whatsappInviteUrl: {type: [string, 'null'], description: The location's WhatsApp community invite}
+        socialLinks: {type: object, additionalProperties: {type: string}}
+    RunPublic:
+      type: object
+      required: [runId, locationId, status, windowStart, windowEnd, cutoffAt, feeMinor, currency, acceptingOrders, full]
+      description: A delivery run as shoppers see it
+      properties:
+        runId: {type: string, format: uuid}
+        locationId: {type: string, format: uuid}
+        locationSlug: {type: string}
+        town: {type: string}
+        status: {type: string}
+        windowStart: {type: string, format: date-time}
+        windowEnd: {type: string, format: date-time}
+        cutoffAt: {type: string, format: date-time, description: Orders close at this time}
+        feeMinor: {type: integer}
+        currency: {type: string}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        pickupPoint: {$ref: '#/components/schemas/RunPickupPoint'}
+        acceptingOrders: {type: boolean}
+        ordersLeft: {type: [integer, 'null'], description: 'Orders left (null = not limited)'}
+        full: {type: boolean, description: No room left; checkout offers the next run}
+        runUrl: {type: string, description: Link to the run on the location page, with attribution}
+    RunLocationPage:
+      type: object
+      required: [location, runs, locationUrl]
+      properties:
+        location: {$ref: '#/components/schemas/RunLocation'}
+        runs: {type: array, items: {$ref: '#/components/schemas/RunPublic'}}
+        locationUrl: {type: string, description: The location page URL}
+        shareLinks: {type: object, additionalProperties: {type: string}, description: 'Share URLs per channel, each with UTM attribution'}
+    RunConsent:
+      type: object
+      required: [channel, granted]
+      description: Consent for one channel with its record
+      properties:
+        channel: {$ref: '#/components/schemas/RunChannel'}
+        granted: {type: boolean}
+        consentedAt: {type: [string, 'null'], format: date-time}
+        source: {type: [string, 'null'], description: Where the consent was given (location-page, account, ...)}
+        withdrawnAt: {type: [string, 'null'], format: date-time}
+    RunSubscription:
+      type: object
+      required: [id, locationId, status, consents]
+      properties:
+        id: {type: string, format: uuid}
+        locationId: {type: string, format: uuid}
+        status: {type: string, description: 'PENDING_CONFIRMATION, ACTIVE or UNSUBSCRIBED'}
+        consents: {type: array, items: {$ref: '#/components/schemas/RunConsent'}}
+        createdAt: {type: [string, 'null'], format: date-time}
+        confirmedAt: {type: [string, 'null'], format: date-time}
+    RunAdvertorial:
+      type: object
+      required: [id, source, sourceId, headline, ctaLabel, ctaUrl, expiresAt]
+      description: An advertorial served to the shopper's place, one variant
+      properties:
+        id: {type: string, format: uuid}
+        source: {type: string, enum: [WINDOW, RUN]}
+        sourceId: {type: string, description: The pre-order window or delivery run it promotes}
+        variant: {type: string, examples: [A]}
+        code: {type: [string, 'null'], description: Window code; null for runs}
+        place: {type: [string, 'null'], examples: ['Lubbock, TX']}
+        headline: {type: string}
+        body: {type: string}
+        ctaLabel: {type: string}
+        ctaUrl: {type: string, description: 'With UTM and order attribution (src=page&cr=adv-...)'}
+        imageUrl: {type: [string, 'null']}
+        countdownTarget: {type: [string, 'null'], format: date-time, description: The live countdown counts down to this}
+        expiresAt: {type: string, format: date-time}
+        deliveryDisplay: {type: [string, 'null']}
+        feeDisplay: {type: [string, 'null']}
     StockAlertItem:
       type: object
       required: [atin, productTitle, status, createdAt, notifiedAt]
