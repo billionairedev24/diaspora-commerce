@@ -183,6 +183,14 @@ type PreorderAudience interface {
 	Audience(ctx context.Context, windowID string, channel domain.Channel, segment, after string, limit int) (AudiencePage, error)
 }
 
+// LocationAudience pages through the subscribers of a delivery-runs location who consented to run alerts on a channel
+// (GET /v1/service/locations/{locationId}/audience?channel=&after=&limit=, scope delivery-runs:audience.read; chat is
+// WhatsApp). Members are the same shape as a window's. An unknown location returns domain.ErrRecipientNotFound; other
+// errors are transient.
+type LocationAudience interface {
+	LocationAudience(ctx context.Context, locationID string, channel domain.Channel, after string, limit int) (AudiencePage, error)
+}
+
 // ContactInvalidator drops a user's cached contact details when identity reports that they changed.
 type ContactInvalidator interface {
 	Forget(userID string)

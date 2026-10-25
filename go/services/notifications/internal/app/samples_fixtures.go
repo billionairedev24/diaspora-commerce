@@ -51,6 +51,17 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			"orderId": "6d3e9f20-4b5c-4d6e-9f70-8b9c0d1e2f32", "number": "LBK-L90", "customerId": "cust-1", "phone": "+15550001111",
 			"payment": "PAYMENT_LINK", "paymentUrl": "http://localhost:3000/orders/AT-2026-PAY001/pay?token=1.vbkms0.Fh2nQ8l5XyZr0aB3cD4eFg", "totalMinor": 4297, "currency": "USD",
 			"deliversOn": "2026-10-25", "expiresAt": "2026-10-23T05:00:00Z", "reason": "Customer called", "actor": "staff-4"}},
+		"delivery-runs.run.announced":        {sampleRun(l, "ANNOUNCED", "announced", nil)},
+		"delivery-runs.run.opened":           {sampleRun(l, "OPEN", "opened", nil)},
+		"delivery-runs.run.cutoff_reminder":  {sampleRun(l, "OPEN", "cutoff_reminder", nil)},
+		"delivery-runs.run.confirmed":        {sampleRun(l, "CONFIRMED", "confirmed", map[string]any{"orders": sampleRunOrders("CONFIRMED", nil)})},
+		"delivery-runs.run.cancelled":        {sampleRun(l, "CANCELLED", "cancelled", map[string]any{"reason": "MINIMUM_NOT_MET", "orders": sampleRunOrders("CANCELLED", nil)})},
+		"delivery-runs.run.out_for_delivery": {sampleRun(l, "OUT_FOR_DELIVERY", "out_for_delivery", map[string]any{"orders": sampleRunOrders("CONFIRMED", "482913")})},
+		"delivery-runs.subscription.created": {
+			sampleRunSubscription(l, "PENDING_CONFIRMATION", nil, "neighbour@example.com", []string{"EMAIL"}, "http://localhost:3000/delivery-runs/subscriptions/confirm?token=sample-confirm"),
+			sampleRunSubscription(l, "ACTIVE", "cust-1", nil, []string{"EMAIL", "SMS", "PUSH"}, nil),
+		},
+		"delivery-runs.subscription.confirmed": {sampleRunSubscription(l, "ACTIVE", nil, "neighbour@example.com", []string{"EMAIL"}, nil)},
 		"orders.order.cancelled": {{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
 			"customerId": "cust-1", "code": "orders.all-shipments-cancelled", "wasPlaced": true, "cancelledAt": "2026-10-10T10:00:00Z"}},
 		"orders.shipment.status_changed": {
@@ -155,7 +166,52 @@ func SampleData(l Links) map[string]map[string]any {
 	}
 }
 
-const samplePreorderWindowID = "7b1e2c3d-0000-4000-8000-000000000007"
+const (
+	samplePreorderWindowID = "7b1e2c3d-0000-4000-8000-000000000007"
+	sampleRunID            = "9d4a1c7e-0000-4000-8000-000000000009"
+	sampleLocationID       = "4b2f9d3a-0000-4000-8000-00000000000a"
+)
+
+// sampleRun is a delivery-runs run event for the Bastrop run (the display strings are in the location's time zone;
+// every channel link is the run link with its UTM).
+func sampleRun(l Links, status, content string, extra map[string]any) map[string]any {
+	locationURL := join(l.Storefront, "/delivery-runs/bastrop-tx")
+	runURL := locationURL + "?run=" + sampleRunID
+	link := func(channel string) string {
+		return runURL + "&utm_source=" + channel + "&utm_medium=" + channel +
+			"&utm_campaign=delivery-run-bastrop-tx-20261024&utm_content=" + content
+	}
+	e := map[string]any{"runId": sampleRunID, "status": status, "previousStatus": nil, "locationId": sampleLocationID,
+		"locationSlug": "bastrop-tx", "town": "Bastrop", "market": "US", "state": "TX", "timeZone": "America/Chicago",
+		"windowStart": "2026-10-24T15:00:00Z", "windowEnd": "2026-10-24T19:00:00Z", "cutoffAt": "2026-10-23T01:00:00Z",
+		"previousCutoffAt": nil, "sellerPickupAt": nil, "deliveryDay": "Saturday, October 24",
+		"windowDisplay": "10:00 AM – 2:00 PM", "cutoffDisplay": "Thu, Oct 22 · 8:00 PM CDT", "feeMinor": 799,
+		"currency": "USD", "feeDisplay": "$7.99", "dropMode": "DOORSTEP", "pickupPoint": nil, "minOrders": 10,
+		"reservedOrders": 4, "capacityOrders": 40, "extensions": 0, "reason": nil, "runUrl": runURL,
+		"links": map[string]any{"email": link("email"), "sms": link("sms"), "push": link("push"),
+			"whatsapp": link("whatsapp"), "social": link("share")},
+		"locationUrl": locationURL, "whatsappInviteUrl": "https://chat.whatsapp.com/BastropRuns"}
+	for k, v := range extra {
+		e[k] = v
+	}
+	return e
+}
+
+// sampleRunOrders are the orders on a run; code is a pickup-point handover code (nil at the door).
+func sampleRunOrders(status string, code any) []any {
+	return []any{map[string]any{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "customerId": "cust-1", "packages": 1,
+		"status": status, "handoverCode": code}}
+}
+
+// sampleRunSubscription is delivery-runs.subscription.created / .confirmed for the Bastrop alerts.
+func sampleRunSubscription(l Links, status string, userID, email any, channels []string, confirmURL any) map[string]any {
+	locationURL := join(l.Storefront, "/delivery-runs/bastrop-tx")
+	return map[string]any{"subscriptionId": "3e7a1c2b-0000-4000-8000-000000000003", "locationId": sampleLocationID,
+		"locationSlug": "bastrop-tx", "town": "Bastrop", "userId": userID, "email": email, "status": status,
+		"channels": channels, "changedChannels": channels, "source": "location-page", "confirmUrl": confirmURL,
+		"unsubscribeUrl": locationURL + "/subscriptions/unsubscribe?token=sample", "locationUrl": locationURL,
+		"whatsappInviteUrl": "https://chat.whatsapp.com/BastropRuns"}
+}
 
 // samplePreorderComms is delivery-runs' preorder.comms.due for the Lubbock window (fees from the payment settings;
 // display strings in the market's time zone). CLOSED and OUT_FOR_DELIVERY carry the window's buyers.

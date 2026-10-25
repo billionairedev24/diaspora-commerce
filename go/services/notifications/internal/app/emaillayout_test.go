@@ -218,8 +218,17 @@ func TestFullDocumentsAreSentAsIs(t *testing.T) {
 	}
 }
 
+// maxSmsSegments is one GSM-7 segment for every text, two for delivery run alerts: their link carries the UTM
+// attribution (source, medium, campaign, content) that makes every announcement visible in analytics.
+func maxSmsSegments(key string) int {
+	if strings.HasPrefix(key, "run.") {
+		return 2
+	}
+	return 1
+}
+
 // TestSmsTemplatesAreShortAndCompliant: every SMS starts with the brand, non-security texts carry STOP, and each
-// renders as one GSM-7 segment with its sample data.
+// renders as one GSM-7 segment (two for run alerts) with its sample data.
 func TestSmsTemplatesAreShortAndCompliant(t *testing.T) {
 	samples, _ := app.NewTemplateSamples(context.Background(), sampleLinks)
 	r := brandedRenderer()
@@ -239,7 +248,7 @@ func TestSmsTemplatesAreShortAndCompliant(t *testing.T) {
 		if tpl.Category != domain.CategorySecurity && !strings.Contains(out.Text, "STOP") {
 			t.Errorf("%s: no STOP: %q", tpl.Key, out.Text)
 		}
-		if seg := domain.CountSmsSegments(out.Text); seg.Encoding != domain.EncodingGSM7 || seg.Segments != 1 {
+		if seg := domain.CountSmsSegments(out.Text); seg.Encoding != domain.EncodingGSM7 || seg.Segments > maxSmsSegments(tpl.Key) {
 			t.Errorf("%s: %s, %d segments (%d units): %q", tpl.Key, seg.Encoding, seg.Segments, seg.Units, out.Text)
 		}
 	}

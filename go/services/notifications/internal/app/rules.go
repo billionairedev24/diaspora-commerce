@@ -97,6 +97,9 @@ const (
 	// RecipientAudience pages through a pre-order window's audience (Segment) on each of the rule's channels
 	// (IngestConfig.Audience, delivery-runs); the window id is in IDField.
 	RecipientAudience RecipientSource = "audience"
+	// RecipientLocation pages through the run-alert subscribers of a delivery-runs location (IngestConfig.Locations)
+	// on each of the rule's channels; the location id is in IDField (S262).
+	RecipientLocation RecipientSource = "location"
 	// RecipientCustomers resolves the distinct customerId of every object in the list IDField names (a window's
 	// orders[]).
 	RecipientCustomers RecipientSource = "customers"
@@ -220,6 +223,17 @@ var DefaultEventRules = map[string][]EventRule{
 	// ---- pre-orders (at.delivery-runs.events), S270–S275 ----
 	"preorder.comms.due":        preorderCommsRules,
 	"preorder.late_order.added": {preorderLatePaymentRule},
+
+	// ---- delivery runs (at.delivery-runs.events), S262: announcements, dispatch, cancellation, subscriptions ----
+	// WhatsApp is off here; main enables it with RunRulesWithWhatsApp when deliveryRuns.whatsapp.enabled is set.
+	"delivery-runs.run.announced":          runEventRules["delivery-runs.run.announced"],
+	"delivery-runs.run.opened":             runEventRules["delivery-runs.run.opened"],
+	"delivery-runs.run.cutoff_reminder":    runEventRules["delivery-runs.run.cutoff_reminder"],
+	"delivery-runs.run.out_for_delivery":   runEventRules["delivery-runs.run.out_for_delivery"],
+	"delivery-runs.run.confirmed":          runEventRules["delivery-runs.run.confirmed"],
+	"delivery-runs.run.cancelled":          runEventRules["delivery-runs.run.cancelled"],
+	"delivery-runs.subscription.created":   runEventRules["delivery-runs.subscription.created"],
+	"delivery-runs.subscription.confirmed": runEventRules["delivery-runs.subscription.confirmed"],
 	"orders.order.cancelled": {{Topic: TopicOrders, Template: "order.cancelled", Channels: chEmailPush,
 		Recipient: RecipientUser, IDField: "customerId",
 		When: func(d map[string]any) bool { return boolean(d, "wasPlaced") }, Enrich: enrichOrder}},
