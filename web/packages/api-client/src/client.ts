@@ -1,6 +1,7 @@
 import { type z } from 'zod';
 
 import { type AddressSearchOptions } from './address-lookup';
+import { deliveryRunMethods } from './delivery-runs';
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
@@ -108,6 +109,7 @@ export function createApiClient(options: ApiClientOptions) {
 
     /* Pre-orders (S273) */
     ...preorderMethods(request),
+    ...deliveryRunMethods(request),
 
     /* Auth: sign-in and sign-up run on identity's hosted pages (single sign-on), started with a full-page navigation to
        loginUrl(); the BFF keeps the tokens (OIDC authorization code + PKCE). */

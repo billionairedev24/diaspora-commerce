@@ -157,6 +157,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Careers:  app.NewCareersService(media, upstreams.NewServiceTokens(identityClient, clientCreds)),
 		Preorders: app.NewPreorderService(upstreams.NewPreorders(client("delivery-runs", base), cache, 0), location, "us",
 			app.WithPreorderCatalog(catalog)),
+		RunAlerts: app.NewRunAlertService(upstreams.NewRunAlerts(client("delivery-runs", base)), location, "us"),
 
 		SellerShell:        app.NewSellerShellService(sellerDeps),
 		SellerDashboard:    app.NewSellerDashboardService(sellerDeps),

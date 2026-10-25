@@ -26,7 +26,7 @@ describe('Settings', () => {
     const platform = await screen.findByRole('region', { name: 'Platform' });
     const labels = within(platform).getAllByRole('link').map((a) => a.querySelector('span span')?.textContent);
     expect(labels).toEqual(['General', 'Markets & locations', 'Notifications', 'Sign-in & integrations', 'Identity & access']);
-    expect(within(await screen.findByRole('region', { name: 'Money' })).getAllByRole('link')).toHaveLength(6);
+    expect(within(await screen.findByRole('region', { name: 'Money' })).getAllByRole('link')).toHaveLength(7);
     expect(screen.queryByRole('navigation', { name: 'Settings sections' })).not.toBeInTheDocument();
   });
 

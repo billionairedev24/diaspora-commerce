@@ -3,6 +3,7 @@ package com.afrotransact.deliveryruns.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -56,10 +57,15 @@ class GeoWindowDistances implements WindowDistances {
 
     /** The active location a window is planned for: the one it names, else the one matching its first city. */
     Optional<Location> locate(PreorderWindow w) {
-        if (w.details().locationId() != null) {
-            return locations.findById(w.details().locationId()).filter(Location::active);
+        return locate(w.details().locationId(), w.details().targets());
+    }
+
+    /** The active location named by {@code locationId}, else the one matching the first city of {@code targets}. */
+    Optional<Location> locate(UUID locationId, List<AreaKey> targets) {
+        if (locationId != null) {
+            return locations.findById(locationId).filter(Location::active);
         }
-        Optional<AreaKey> city = w.details().targets().stream().filter(AreaKey::isCity).findFirst();
+        Optional<AreaKey> city = targets.stream().filter(AreaKey::isCity).findFirst();
         if (city.isEmpty()) {
             return Optional.empty();
         }

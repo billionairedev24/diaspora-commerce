@@ -32,6 +32,8 @@ type Services struct {
 	Maintenance app.MaintenanceService
 	// Preorders serves the storefront's pre-order routes (S270–S275); registered when set.
 	Preorders app.PreorderService
+	// RunAlerts serves the delivery-run locations, location subscriptions and advertorials (S262, S263); registered when set.
+	RunAlerts app.RunAlertService
 	// Seller Center & Provider Hub (contracts/openapi/gateway-bff-seller.yaml); routes are registered when set.
 	SellerShell     app.SellerShellService
 	SellerDashboard app.SellerDashboardService
@@ -152,6 +154,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("PUT /v1/cart/preorder-fulfilment", h.setPreorderFulfilment)
 	// Pre-orders
 	h.registerPreorders(route, lookup)
+	h.registerRunAlerts(route, lookup)
 	// Auth
 	route("GET /v1/me", h.me)
 	route("GET /v1/auth/login", auth(h.login))

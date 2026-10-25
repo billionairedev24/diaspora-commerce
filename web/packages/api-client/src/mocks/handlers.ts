@@ -14,6 +14,7 @@ import { fromApiSearchParams } from '../search-params';
 import { mockAddressSuggestions, mockResolveAddress } from './addresses';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
+import { deliveryRunHandlers } from './delivery-run-handlers';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
@@ -264,6 +265,7 @@ export const handlers = [
   /* Addresses, payments, orders, returns, checkout, services & bookings, Lola */
   ...shopperHandlers,
   ...preorderHandlers,
+  ...deliveryRunHandlers,
   ...legalHandlers,
   ...helpHandlers
 ];

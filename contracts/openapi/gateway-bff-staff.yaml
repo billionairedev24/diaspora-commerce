@@ -88,6 +88,21 @@ tags:
       set on the pre-order itself wins), shows the rule that applies and its amount, and the order keeps a snapshot of it.
       Mirrors delivery-runs with the staff member's token; part of the `preorders` module (view to read, EDIT with
       `preorders:manage` to change). Every change needs a reason and is logged (who, when, why).
+  - name: Run economics
+    description: |
+      Run economics (S265, ADR 0005): the P&L of a delivery run before and after it, a pre-order window's orders, revenue,
+      delivery fees, estimated cost, contribution margin and break-even orders (shown beside the window's minimum while it is
+      created), a location's history (orders per run, subscriber growth) and the driver cost model all of it is calculated
+      from, which staff edit with a reason and an audit trail. A cancelled window or run reports the orders refunded, not
+      revenue. Mirrors delivery-runs with the staff member's token; part of the `preorders` module (view to read, EDIT with
+      `preorders:manage` to change).
+  - name: Advertorials
+    description: |
+      Location-targeted advertorials (S263): words for the visitors of the area a pre-order window or delivery run serves,
+      drafted from the window or run or written by staff, with A/B variants, a schedule and a priority. They are shown with
+      a live closing countdown while ordering is open and end when the window closes or is cancelled; results are views,
+      clicks and orders. Mirrors delivery-runs with the staff member's token; part of the `preorders` module (view to read,
+      EDIT with `preorders:manage` to change).
   - name: Markets
     description: |
       Settings → Markets & locations as one location tree (country → states → cities). Mirrors content's draft markets
@@ -2571,6 +2586,307 @@ paths:
         '412': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/economics-settings:
+    get:
+      tags: [Run economics]
+      operationId: getStaffEconomicsSettings
+      security: [{sessionCookie: []}]
+      summary: The driver cost model behind run economics
+      description: |
+        delivery-runs `GET /v1/economics-settings` (delivery-runs:read; module `preorders`, any level). Cost per driver hour
+        and per vehicle mile, the time a seller sweep, a doorstep stop, a pickup-point stop and a handover take, and whether
+        the drive back counts: the numbers every run and window P&L and break-even is calculated from. Version 0
+        (`source` CONFIG) means nobody saved yet and the environment's defaults apply. The ETag carries the version.
+      responses:
+        '200': {description: Cost model, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffEconomicsSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Run economics]
+      operationId: updateStaffEconomicsSettings
+      security: [{sessionCookie: []}]
+      summary: Change the driver cost model
+      description: |
+        delivery-runs `PUT /v1/economics-settings` (preorders:manage, EDIT; If-Match relayed: the version seen, `0` for the
+        environment's defaults). Makes the next version; a save that changes nothing makes no new version. Money is in minor
+        units (cost per hour 0 to 1000.00, per mile 0 to 100.00), times in minutes (0 to 1440). The `reason` is required
+        (422) and is logged with who and when. Runs and windows are priced with the new numbers from the next calculation.
+      parameters:
+        - {name: If-Match, in: header, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffEconomicsSettingsRequest'}}}
+      responses:
+        '200': {description: Saved, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffEconomicsSettings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/economics-settings/changes:
+    get:
+      tags: [Run economics]
+      operationId: listStaffEconomicsChanges
+      security: [{sessionCookie: []}]
+      summary: Audit trail of the driver cost model (who changed what, when and why)
+      description: |
+        delivery-runs `GET /v1/economics-settings/changes`, newest first: every save with the numbers before (the
+        environment's defaults for the first save) and after, the staff subject, the time and the reason.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Changes, content: {application/json: {schema: {$ref: '#/components/schemas/StaffEconomicsChanges'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/economics-preview:
+    post:
+      tags: [Run economics]
+      operationId: previewStaffWindowEconomics
+      security: [{sessionCookie: []}]
+      summary: Break-even for a window being created, beside its minimum order count
+      description: |
+        delivery-runs `POST /v1/preorders/economics-preview` (delivery-runs:read). The location is the one named, else the
+        active one matching the first city target. Gives the delivery fee per order the plan assumes (the window's own fee,
+        else the fee rule for the location's distance), the cost of the run that would deliver it, the orders needed to
+        break even and whether the minimum reaches them (`minimumCoversBreakEven`). `economics` is null when no active
+        location serves the targets or geo-service cannot measure the route.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffWindowPlanRequest'}}}
+      responses:
+        '200': {description: Plan, content: {application/json: {schema: {$ref: '#/components/schemas/StaffWindowPlan'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/{preorderId}/economics:
+    get:
+      tags: [Run economics]
+      operationId: getStaffPreorderEconomics
+      security: [{sessionCookie: []}]
+      summary: A window's orders, revenue, delivery fees, cost, margin and break-even
+      description: |
+        delivery-runs `GET /v1/preorders/{id}/economics` (delivery-runs:read). At the orders placed so far: what customers
+        paid, the delivery fees collected, the estimated cost of the run that delivers the window, the contribution margin
+        and the break-even orders. A cancelled window reports the orders refunded (`ordersRefunded`, `refundedMinor`,
+        `refundsSettled`) instead of revenue.
+      parameters: [{$ref: '#/components/parameters/PreorderId'}]
+      responses:
+        '200': {description: Economics, content: {application/json: {schema: {$ref: '#/components/schemas/StaffWindowEconomics'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/locations:
+    get:
+      tags: [Run economics]
+      operationId: listStaffRunLocations
+      security: [{sessionCookie: []}]
+      summary: The towns delivery runs serve
+      description: delivery-runs `GET /v1/locations` (delivery-runs:read).
+      responses:
+        '200': {description: Locations, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocations'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/locations/{locationId}/history:
+    get:
+      tags: [Run economics]
+      operationId: getStaffRunLocationHistory
+      security: [{sessionCookie: []}]
+      summary: A location's runs (orders per run), subscriber counts and subscriber growth
+      description: |
+        delivery-runs `GET /v1/locations/{id}/history` (delivery-runs:read): the latest runs with their orders and the
+        delivery fees they earn (a cancelled run: `ordersRefunded`, no fees), the subscribers (total, active, pending, per
+        channel) and 12 months of subscriber growth.
+      parameters: [{$ref: '#/components/parameters/LocationId'}]
+      responses:
+        '200': {description: History, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationHistory'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs:
+    get:
+      tags: [Run economics]
+      operationId: listStaffRuns
+      security: [{sessionCookie: []}]
+      summary: Delivery runs, newest window first
+      description: delivery-runs `GET /v1/runs` (delivery-runs:read).
+      parameters:
+        - {name: locationId, in: query, schema: {type: string, format: uuid}}
+        - {name: status, in: query, schema: {type: string}, description: 'One or more run statuses, comma separated (OPEN,CONFIRMED,CANCELLED…)'}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      responses:
+        '200': {description: Runs, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRuns'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/pnl:
+    get:
+      tags: [Run economics]
+      operationId: getStaffRunPnl
+      security: [{sessionCookie: []}]
+      summary: A run's P&L before and after it
+      description: |
+        delivery-runs `GET /v1/runs/{id}/pnl` (delivery-runs:read). `BEFORE`: the estimate at the orders reserved so far.
+        `AFTER`: the completed run at its orders. `CANCELLED`: nothing earned or spent; `ordersRefunded` and
+        `refundedFeesMinor` say what went back to customers. `commissionShareMinor` is the commission attributed to the run,
+        reported by analytics.
+      parameters:
+        - {$ref: '#/components/parameters/RunId'}
+        - {name: commissionShareMinor, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        '200': {description: P&L, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunPnl'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/economics-preview:
+    post:
+      tags: [Run economics]
+      operationId: previewStaffRunEconomics
+      security: [{sessionCookie: []}]
+      summary: Cost, break-even and P&L of a run being planned
+      description: |
+        delivery-runs `POST /v1/runs/economics-preview` (delivery-runs:read). Nulls take the location's defaults;
+        `expectedOrders` defaults to the minimum. 502 when geo-service cannot measure the route.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunPlanRequest'}}}
+      responses:
+        '200': {description: Economics, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunEconomics'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/advertorials:
+    get:
+      tags: [Advertorials]
+      operationId: listStaffAdvertorials
+      security: [{sessionCookie: []}]
+      summary: Location advertorials with views, clicks and orders
+      description: |
+        delivery-runs `GET /v1/advertorials` (delivery-runs:read), newest first. Each is words for the visitors of the area a
+        pre-order window or delivery run serves, shown with a live closing countdown while ordering is open and over when it
+        closes or is cancelled. `results` are its views, clicks and (windows) the orders whose tracking tag carries it.
+      parameters:
+        - {name: source, in: query, schema: {type: string, enum: [RUN, WINDOW]}}
+        - {name: sourceId, in: query, schema: {type: string}}
+        - {name: status, in: query, schema: {type: string, enum: [DRAFT, LIVE, PAUSED, ENDED]}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 100}}
+      responses:
+        '200': {description: Advertorials, content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorials'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Advertorials]
+      operationId: createStaffAdvertorial
+      security: [{sessionCookie: []}]
+      summary: Write an advertorial (a variant) for a window or run
+      description: |
+        delivery-runs `POST /v1/advertorials` (preorders:manage, EDIT). Created as a draft; publish it to make it live. Several
+        variants (A, B…) of one window or run share its visitors by weight. Variant defaults to the next free label.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorialRequest'}}}
+      responses:
+        '201': {description: Draft, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorial'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/advertorials/generate:
+    post:
+      tags: [Advertorials]
+      operationId: generateStaffAdvertorial
+      security: [{sessionCookie: []}]
+      summary: Draft the advertorial of a window or run from its data
+      description: |
+        delivery-runs `POST /v1/advertorials/generate` (preorders:manage, EDIT). Town, delivery day, closing time and fee
+        become the words, live at once. Asking again re-drafts the generated one (a variant staff edited is left alone). 404
+        for an unknown window or run; 409 for one that is over.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorialGenerateRequest'}}}
+      responses:
+        '200': {description: Advertorial, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorial'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/advertorials/{advertorialId}:
+    get:
+      tags: [Advertorials]
+      operationId: getStaffAdvertorial
+      security: [{sessionCookie: []}]
+      summary: One advertorial with its results
+      description: delivery-runs `GET /v1/advertorials/{id}` (delivery-runs:read). The ETag carries the version.
+      parameters: [{$ref: '#/components/parameters/AdvertorialId'}]
+      responses:
+        '200': {description: Advertorial, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorial'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Advertorials]
+      operationId: updateStaffAdvertorial
+      security: [{sessionCookie: []}]
+      summary: Edit an advertorial
+      description: |
+        delivery-runs `PUT /v1/advertorials/{id}` (preorders:manage, EDIT; If-Match relayed). Not an ended one. The words stop
+        following the window or run.
+      parameters:
+        - {$ref: '#/components/parameters/AdvertorialId'}
+        - {name: If-Match, in: header, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorialRequest'}}}
+      responses:
+        '200': {description: Saved, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorial'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/advertorials/{advertorialId}/{action}:
+    post:
+      tags: [Advertorials]
+      operationId: actStaffAdvertorial
+      security: [{sessionCookie: []}]
+      summary: Publish, pause or end an advertorial
+      description: |
+        delivery-runs `POST /v1/advertorials/{id}/publish|pause|end` (preorders:manage, EDIT; If-Match relayed). publish: draft
+        or paused to live; pause: live to paused; end: over for good (reason STAFF).
+      parameters:
+        - {$ref: '#/components/parameters/AdvertorialId'}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [publish, pause, end]}}
+        - {name: If-Match, in: header, schema: {type: string}}
+      responses:
+        '200': {description: Advertorial, headers: {ETag: {description: 'Optimistic-lock version ("<version>")', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffAdvertorial'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '412': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/customers/search:
     get:
       tags: [Pre-orders]
@@ -4731,6 +5047,9 @@ components:
     ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string, maxLength: 64}}
     RunId: {name: runId, in: path, required: true, schema: {type: string, maxLength: 64}, description: Delivery run id (delivery-runs)}
     PreorderId: {name: preorderId, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}, description: Window id or code}
+    LocationId: {name: locationId, in: path, required: true, schema: {type: string, format: uuid}}
+    RunId: {name: runId, in: path, required: true, schema: {type: string, format: uuid}}
+    AdvertorialId: {name: advertorialId, in: path, required: true, schema: {type: string, format: uuid}}
     DeliveryFeeMethod: {name: method, in: path, required: true, schema: {type: string, enum: [AFROTRANSACT_DELIVERY, CARRIER, PICKUP]}}
     DeliveryFeeCurrency: {name: currency, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{3}$'}, description: 'ISO 4217 code, for example USD'}
     CreativeSlot: {name: slot, in: path, required: true, schema: {type: string, enum: [HERO, PDP, STORY, FEED, EMAIL]}}
@@ -6943,6 +7262,315 @@ components:
                 source: {type: string, enum: [RULE, WINDOW_OVERRIDE, CARRIER_QUOTE, CARRIER_FALLBACK]}
                 band: {type: [string, 'null'], examples: ['10–40 mi']}
                 distanceMiles: {type: [number, 'null']}
+    StaffEconomicsNumbers:
+      type: object
+      required: [driverCostPerHourMinor, driverCostPerMileMinor, collectionMinutes, perStopMinutes, pickupPointStopMinutes, handoverMinutesPerOrder, roundTrip]
+      properties:
+        driverCostPerHourMinor: {type: integer, minimum: 0, maximum: 100000, description: 'Loaded driver cost per hour (wage, insurance), minor units'}
+        driverCostPerMileMinor: {type: integer, minimum: 0, maximum: 10000, description: 'Vehicle cost per mile (fuel, wear), minor units'}
+        collectionMinutes: {type: number, minimum: 0, maximum: 1440, description: Seller sweep and loading at the origin}
+        perStopMinutes: {type: number, minimum: 0, maximum: 1440, description: 'Time per doorstep drop, local driving included'}
+        pickupPointStopMinutes: {type: number, minimum: 0, maximum: 1440, description: Time at a community pickup point}
+        handoverMinutesPerOrder: {type: number, minimum: 0, maximum: 1440, description: Time per order handed over at a pickup point}
+        roundTrip: {type: boolean, description: Count the drive back to the origin}
+    StaffEconomicsSettings:
+      description: |
+        The driver cost model; the ETag carries the version for If-Match. Version 0 (`source` CONFIG): the environment's
+        defaults apply because nobody saved yet.
+      allOf:
+        - $ref: '#/components/schemas/StaffEconomicsNumbers'
+        - type: object
+          required: [version, source, can]
+          properties:
+            version: {type: integer}
+            source: {type: string, enum: [CONFIG, STAFF]}
+            updatedAt: {type: [string, 'null'], format: date-time}
+            updatedBy: {type: [string, 'null'], description: Staff subject of the last save}
+            reason: {type: [string, 'null'], description: Why the last save was made}
+            can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffEconomicsSettingsRequest:
+      description: The cost model's new numbers; the reason is required and is logged with who and when.
+      allOf:
+        - $ref: '#/components/schemas/StaffEconomicsNumbers'
+        - type: object
+          required: [reason]
+          properties:
+            reason: {type: string, minLength: 1, maxLength: 500, description: 'Why; logged with who and when'}
+    StaffEconomicsChanges:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [version, before, after, actor, reason, at]
+            properties:
+              id: {type: string}
+              version: {type: integer}
+              before: {$ref: '#/components/schemas/StaffEconomicsNumbers'}
+              after: {$ref: '#/components/schemas/StaffEconomicsNumbers'}
+              actor: {type: string, description: Staff subject}
+              reason: {type: string}
+              at: {type: string, format: date-time}
+    StaffRunRoute:
+      type: object
+      required: [roadMiles, driveMinutes]
+      properties:
+        roadMiles: {type: number, description: One-way road miles from the origin to the location}
+        driveMinutes: {type: number, description: One-way drive time}
+        method: {type: string, description: How geo measured it}
+    StaffRunCostModel:
+      type: object
+      required: [driveMiles, fixedMinutes, perOrderMinutes, fixedCostMinor, perOrderCostMinor]
+      description: 'cost(n) = fixedCostMinor + n x perOrderCostMinor'
+      properties:
+        driveMiles: {type: number}
+        fixedMinutes: {type: number}
+        perOrderMinutes: {type: number}
+        fixedCostMinor: {type: number}
+        perOrderCostMinor: {type: number}
+    StaffRunSnapshot:
+      type: object
+      required: [orders, feeRevenueMinor, revenueMinor, estimatedCostMinor, contributionMarginMinor]
+      description: P&L at a number of orders
+      properties:
+        orders: {type: integer}
+        feeRevenueMinor: {type: integer, description: Delivery fees collected}
+        commissionShareMinor: {type: [integer, 'null'], description: 'Commission attributed to the run, when reported'}
+        revenueMinor: {type: integer, description: Fees plus commission share}
+        estimatedCostMinor: {type: integer, description: Estimated driver and vehicle cost}
+        contributionMarginMinor: {type: integer, description: Revenue minus estimated cost}
+    StaffRunEconomics:
+      type: object
+      required: [route, cost, feeMinor, currency, atMinimum, atOrders]
+      properties:
+        route: {$ref: '#/components/schemas/StaffRunRoute'}
+        cost: {$ref: '#/components/schemas/StaffRunCostModel'}
+        feeMinor: {type: integer, description: Delivery fee per order}
+        currency: {type: string}
+        breakEvenOrders: {type: [integer, 'null'], description: 'Fewest orders whose fees cover the cost; null when a fee never covers a stop'}
+        atMinimum: {$ref: '#/components/schemas/StaffRunSnapshot'}
+        atCapacity: {oneOf: [{$ref: '#/components/schemas/StaffRunSnapshot'}, {type: 'null'}]}
+        atOrders: {$ref: '#/components/schemas/StaffRunSnapshot'}
+    StaffRunPlanRequest:
+      type: object
+      required: [locationId]
+      properties:
+        locationId: {type: string, format: uuid}
+        feeMinor: {type: [integer, 'null'], minimum: 0, maximum: 10000}
+        minOrders: {type: [integer, 'null'], minimum: 1}
+        capacityOrders: {type: [integer, 'null'], minimum: 1}
+        dropMode: {type: [string, 'null'], enum: [DOORSTEP, PICKUP_POINT, null]}
+        expectedOrders: {type: [integer, 'null'], minimum: 0}
+        commissionShareMinor: {type: [integer, 'null'], minimum: 0}
+    StaffRunPnl:
+      type: object
+      required: [economics, status, phase, ordersRefunded, refundedFeesMinor]
+      properties:
+        economics: {$ref: '#/components/schemas/StaffRunEconomics'}
+        status: {type: string, enum: [DRAFT, ANNOUNCED, OPEN, EXTENDED, CUT_OFF, CONFIRMED, COLLECTING, OUT_FOR_DELIVERY, COMPLETED, CANCELLED]}
+        phase: {type: string, enum: [BEFORE, AFTER, CANCELLED], description: 'BEFORE the run is driven, AFTER once completed, CANCELLED: nothing earned or spent'}
+        cancelReason: {type: [string, 'null']}
+        ordersRefunded: {type: integer, description: Orders of a cancelled run (each refunded in full)}
+        refundedFeesMinor: {type: integer, description: Delivery fees handed back}
+    StaffWindowPlanRequest:
+      type: object
+      properties:
+        locationId: {type: [string, 'null'], format: uuid, description: 'The location of the closing run (absent: matched by the first city)'}
+        targets: {type: array, maxItems: 50, items: {type: string, examples: ['US/TX/Bastrop']}}
+        door: {type: [boolean, 'null']}
+        pickup: {type: [boolean, 'null']}
+        doorFeeMinor: {type: [integer, 'null'], minimum: 0, maximum: 10000, description: The window's own door fee}
+        pickupFeeMinor: {type: [integer, 'null'], minimum: 0, maximum: 10000}
+        minOrders: {type: [integer, 'null'], minimum: 0, maximum: 100000, description: The minimum being weighed}
+        expectedOrders: {type: [integer, 'null'], minimum: 0, maximum: 100000, description: Orders to show a P&L for (default the minimum)}
+    StaffWindowPlan:
+      type: object
+      required: [currency, feeMinor, dropMode, minOrders, can]
+      properties:
+        locationId: {type: [string, 'null']}
+        locationName: {type: [string, 'null']}
+        currency: {type: string}
+        feeMinor: {type: integer}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        minOrders: {type: integer}
+        economics: {oneOf: [{$ref: '#/components/schemas/StaffRunEconomics'}, {type: 'null'}], description: 'Null when no location serves the targets or the route cannot be measured'}
+        minimumCoversBreakEven: {type: [boolean, 'null'], description: Whether the minimum reaches break-even (null without a break-even or a minimum)}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffWindowEconomics:
+      type: object
+      required: [windowId, status, cancelled, currency, minOrders, orders, revenueMinor, deliveryFeesMinor, ordersRefunded, refundsSettled, refundedMinor, can]
+      properties:
+        windowId: {type: string}
+        code: {type: string}
+        name: {type: string}
+        status: {type: string}
+        cancelled: {type: boolean}
+        locationId: {type: [string, 'null']}
+        locationName: {type: [string, 'null']}
+        currency: {type: string}
+        minOrders: {type: integer}
+        orders: {type: integer, description: Orders that count (paid and late adds); 0 for a cancelled window}
+        revenueMinor: {type: integer, description: 'What customers paid, delivery fees included; 0 for a cancelled window'}
+        deliveryFeesMinor: {type: integer}
+        ordersRefunded: {type: integer, description: Orders refunded in full by the cancellation}
+        refundsSettled: {type: integer, description: 'Of those, refunds or released authorisations already confirmed'}
+        refundedMinor: {type: integer, description: 'What customers got back, delivery fees included'}
+        economics: {oneOf: [{$ref: '#/components/schemas/StaffRunEconomics'}, {type: 'null'}], description: At the actual orders; null when no location serves the window}
+        minimumCoversBreakEven: {type: [boolean, 'null']}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffRunLocation:
+      type: object
+      additionalProperties: true
+      required: [id, slug, name]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string, examples: [bastrop-tx]}
+        name: {type: string, examples: [Bastrop]}
+        market: {type: string}
+        state: {type: [string, 'null']}
+        timeZone: {type: string}
+        currency: {type: string}
+        defaultFeeMinor: {type: integer}
+        defaultMinOrders: {type: integer}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        whatsappInviteUrl: {type: [string, 'null']}
+        active: {type: boolean}
+    StaffRunLocations:
+      type: object
+      required: [items, can]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffRunLocation'}}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffRun:
+      type: object
+      additionalProperties: true
+      required: [id, locationId, status, windowStart, cutoffAt, feeMinor, currency, minOrders, reservedOrders]
+      properties:
+        id: {type: string, format: uuid}
+        locationId: {type: string, format: uuid}
+        status: {type: string}
+        windowStart: {type: string, format: date-time}
+        windowEnd: {type: string, format: date-time}
+        cutoffAt: {type: string, format: date-time}
+        feeMinor: {type: integer}
+        currency: {type: string}
+        minOrders: {type: integer}
+        capacityOrders: {type: [integer, 'null']}
+        dropMode: {type: string}
+        reservedOrders: {type: integer}
+        minimumMet: {type: boolean}
+        cancelReason: {type: [string, 'null']}
+    StaffRuns:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffRun'}}
+    StaffRunLocationHistory:
+      type: object
+      required: [location, runs, subscribers, subscriberGrowth]
+      properties:
+        location: {$ref: '#/components/schemas/StaffRunLocation'}
+        runs:
+          type: array
+          items:
+            type: object
+            required: [id, status, windowStart, cutoffAt, orders, packages, feeMinor, feeRevenueMinor, ordersRefunded, minOrders, minimumMet]
+            properties:
+              id: {type: string, format: uuid}
+              status: {type: string}
+              windowStart: {type: string, format: date-time}
+              cutoffAt: {type: string, format: date-time}
+              orders: {type: integer}
+              packages: {type: integer}
+              feeMinor: {type: integer}
+              feeRevenueMinor: {type: integer, description: 'Delivery fees earned; 0 for a cancelled run'}
+              ordersRefunded: {type: integer, description: Orders refunded in full (cancelled runs)}
+              minOrders: {type: integer}
+              minimumMet: {type: boolean}
+        subscribers:
+          type: object
+          required: [total, active, pending, byChannel]
+          properties:
+            locationId: {type: string}
+            total: {type: integer}
+            active: {type: integer}
+            pending: {type: integer}
+            byChannel: {type: object, additionalProperties: {type: integer}, description: 'Active subscriptions with consent per channel (EMAIL, SMS, PUSH, WHATSAPP)'}
+        subscriberGrowth:
+          type: array
+          items:
+            type: object
+            required: [month, count]
+            properties:
+              month: {type: string, examples: ['2026-10']}
+              count: {type: integer}
+    StaffAdvertorialResults:
+      type: object
+      required: [views, clicks]
+      properties:
+        views: {type: integer}
+        clicks: {type: integer}
+        ctrPct: {type: [number, 'null'], description: clicks / views x 100}
+        orders: {type: [integer, 'null'], description: 'Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed)'}
+    StaffAdvertorial:
+      type: object
+      required: [id, source, sourceId, variant, weight, priority, generated, headline, body, ctaLabel, status, serving, results, version]
+      properties:
+        id: {type: string, format: uuid}
+        source: {type: string, enum: [RUN, WINDOW]}
+        sourceId: {type: string}
+        sourceName: {type: [string, 'null']}
+        sourceCode: {type: [string, 'null']}
+        sourceStatus: {type: [string, 'null']}
+        sourceCloses: {type: [string, 'null'], format: date-time}
+        locationId: {type: [string, 'null']}
+        locationName: {type: [string, 'null']}
+        variant: {type: string, examples: [A]}
+        weight: {type: integer, minimum: 1, maximum: 100}
+        priority: {type: integer, minimum: 0, maximum: 1000}
+        generated: {type: boolean, description: The words follow the window or run until staff edit them}
+        headline: {type: string}
+        body: {type: string}
+        ctaLabel: {type: string}
+        startsAt: {type: [string, 'null'], format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [DRAFT, LIVE, PAUSED, ENDED]}
+        ended: {type: [string, 'null'], enum: [SOURCE_CLOSED, CANCELLED, SCHEDULE, STAFF, null]}
+        serving: {type: boolean, description: Visitors can see it right now}
+        results: {$ref: '#/components/schemas/StaffAdvertorialResults'}
+        createdBy: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        version: {type: integer}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffAdvertorials:
+      type: object
+      required: [items, can]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffAdvertorial'}}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffAdvertorialGenerateRequest:
+      type: object
+      required: [source, sourceId]
+      properties:
+        source: {type: string, enum: [RUN, WINDOW]}
+        sourceId: {type: string, description: Window id or run id}
+    StaffAdvertorialRequest:
+      type: object
+      required: [headline, ctaLabel]
+      properties:
+        source: {type: string, enum: [RUN, WINDOW], description: Required to create; ignored on an edit}
+        sourceId: {type: string, description: Required to create; ignored on an edit}
+        variant: {type: [string, 'null'], maxLength: 8, examples: [B]}
+        weight: {type: [integer, 'null'], minimum: 1, maximum: 100}
+        priority: {type: [integer, 'null'], minimum: 0, maximum: 1000}
+        headline: {type: string, minLength: 1, maxLength: 140}
+        body: {type: [string, 'null'], maxLength: 400}
+        ctaLabel: {type: string, minLength: 1, maxLength: 40}
+        startsAt: {type: [string, 'null'], format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
     StaffPreorderObject:
       type: object
       additionalProperties: true

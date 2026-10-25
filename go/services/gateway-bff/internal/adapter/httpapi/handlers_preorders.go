@@ -113,6 +113,7 @@ func (h *handlersImpl) registerStaffPreorders(route func(pattern string, fn http
 	route("GET /v1/staff/delivery-fees/changes", h.staffDeliveryFeeChanges)
 	route("POST /v1/staff/delivery-fees/preview", h.staffPreviewDeliveryFee)
 	route("PUT /v1/staff/delivery-fees/{method}/{currency}", h.staffUpdateDeliveryFee)
+	h.registerStaffRuns(route)
 }
 
 func (h *handlersImpl) staffDeliveryFees(w http.ResponseWriter, r *http.Request) {

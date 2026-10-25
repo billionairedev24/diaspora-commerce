@@ -171,6 +171,11 @@ type Upstreams struct {
 	team          *teamState
 	// LastWaitlist is the last delivery-runs POST /v1/public/subscriptions body (pre-order waitlist).
 	LastWaitlist map[string]any
+	// Last delivery-runs bodies and queries of the run-alert routes (S262, S263) and the advertorial events counted.
+	LastRunUnsubscribe, LastRunSubscribeMine map[string]any
+	LastRunUnsubscribeMine                   []string
+	LastAdvertorialQuery                     url.Values
+	AdvertorialEvents                        []string
 	// LastConsent / LastConsentGPC are the last content POST /v1/consent/records body and Sec-GPC header.
 	LastConsent    map[string]any
 	LastConsentGPC string
@@ -844,14 +849,7 @@ func (u *Upstreams) preorderRoutes(mux *http.ServeMux) {
 			"deliversOn": "2026-10-25", "timeZone": "America/Chicago", "place": map[string]any{"country": "US", "region": "TX", "city": "Lubbock"},
 			"zip": "79401", "heroUrl": "https://img.example/hero.jpg", "doorFeeMinor": 799, "currency": "USD"}}})
 	})
-	mux.HandleFunc("POST /v1/public/subscriptions", func(w http.ResponseWriter, r *http.Request) {
-		var b map[string]any
-		_ = json.NewDecoder(r.Body).Decode(&b)
-		u.mu.Lock()
-		u.LastWaitlist = b
-		u.mu.Unlock()
-		writeJSON(w, 202, map[string]any{"status": "CONFIRMATION_SENT"})
-	})
+	u.runAlertRoutes(mux)
 	mux.HandleFunc("POST /v1/public/preorders/waitlist/unsubscribe", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)

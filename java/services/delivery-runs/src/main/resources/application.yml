@@ -84,6 +84,8 @@ at:
       - /v1/public/subscriptions/confirm
       - /v1/public/subscriptions/unsubscribe
       - /v1/public/preorders/waitlist/unsubscribe
+      # Views and clicks of location advertorials (S263).
+      - /v1/public/advertorials/*/events
   events:
     relay-enabled: true
   delivery-runs:

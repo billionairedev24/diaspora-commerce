@@ -19,10 +19,12 @@ class DeliveryRunsEventPublisher {
 
     private final DomainEventPublisher events;
     private final RunLinks links;
+    private final AdvertorialLifecycle advertorials;
 
-    DeliveryRunsEventPublisher(DomainEventPublisher events, RunLinks links) {
+    DeliveryRunsEventPublisher(DomainEventPublisher events, RunLinks links, AdvertorialLifecycle advertorials) {
         this.events = events;
         this.links = links;
+        this.advertorials = advertorials;
     }
 
     void run(String type, Location location, Run run, RunStatus previous, Instant previousCutoff, String reason,
@@ -49,6 +51,7 @@ class DeliveryRunsEventPublisher {
                 links.channelLinks(location, run, content), links.locationUrl(location), d.whatsappInviteUrl(), refs,
                 sellers);
         events.publish(type, DeliveryRunsEvents.AGGREGATE, run.id().toString(), payload);
+        advertorials.onRun(type, location, run);
     }
 
     void subscription(String type, Location location, Subscription s, Set<Channel> changed, String source,

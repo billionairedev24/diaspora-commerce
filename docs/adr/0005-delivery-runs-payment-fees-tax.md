@@ -70,6 +70,22 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
 - **Not built.** A dedicated permission for deciding (`preorders:manage` is used), a staff e-mail / chat recipient for
   `decision_needed`, and capture at order time (§1 says "charged at checkout").
 
+## Implementation notes (run economics, announcements and advertorials: S262, S263, S265)
+
+- **Run economics are staff-set, like fees.** The driver cost model (cost per hour and per mile, the minutes a sweep, a stop and
+  a handover take, round trip) is one versioned row in delivery-runs, edited in Settings, Money, Run economics with a required
+  reason and an append-only change log; the environment variables are only the defaults until the first save. Break-even is
+  shown beside the minimum order count while a window is created, a window's overview shows its orders, revenue, delivery fees,
+  estimated cost and margin, and a run has a P&L before and after it. A cancelled window or run reports the orders refunded in
+  full (delivery fee included), not revenue.
+- **Announcements** go through notifications from the delivery-runs events (window and run open, the cutoff reminder, dispatch,
+  confirmed and cancelled), per channel the shopper consented to. WhatsApp messages are behind
+  `DELIVERY_RUNS_WHATSAPP_ENABLED` (off) because they are sent only from templates Meta must approve; consent and the community
+  link work without it.
+- **Advertorials** live in delivery-runs because their audience, expiry (the close or cancellation) and attributed orders are all
+  this service's data. Not built: featured products in an advertorial, a mobile app screen, and reporting UTM parameters to an
+  analytics sink (the repository has none; UTM is kept on the sign-up source).
+
 ## Implementation notes (currency, §7)
 
 - **Where money is recorded.** Inventory lots keep the unit landed cost in the currency paid, the rate to USD used at receiving

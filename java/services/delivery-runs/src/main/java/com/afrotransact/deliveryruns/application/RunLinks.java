@@ -74,6 +74,20 @@ class RunLinks {
         return out;
     }
 
+    /** The storefront's pre-order page. */
+    String windowUrl() {
+        return settings.publicWebUrl() + "/pre-orders";
+    }
+
+    /**
+     * The pre-order page from an advertorial: {@code src=page&cr=<creative>&po=<window code>} is the order attribution
+     * the storefront keeps until checkout (so the advertorial is credited with the order), plus the UTM of the click.
+     */
+    String windowAdvertorialUrl(String windowCode, String creative) {
+        return windowUrl() + "?src=page&cr=" + encode(creative) + "&po=" + encode(windowCode) + "&"
+                + utm("storefront", "advertorial", "preorder-" + windowCode, creative);
+    }
+
     String confirmUrl(String token) {
         return settings.publicWebUrl() + settings.locationPath() + "/subscriptions/confirm?token=" + encode(token);
     }

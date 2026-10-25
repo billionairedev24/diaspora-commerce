@@ -189,9 +189,51 @@ time zone and market, and channels the user switched off in their account are dr
 | `trustops.seller.suspended` / `reinstated` | `orgId` owners | `seller.suspended` / `seller.reinstated` | email, sms / email |
 | `content.career-application.received` | payload `email` | `careers.application_received` | email |
 | `content.newsletter.confirmation_requested` | payload `email` | `newsletter.confirm` | email |
+| `delivery-runs.run.announced` (S262) | the location's subscribers per channel (`locationId`) | `run.announced` | email, push |
+| `delivery-runs.run.opened` / `.cutoff_reminder` (S262) | the location's subscribers per channel | `run.opened` / `run.cutoff_reminder` | email, sms, push (+ WhatsApp templates when enabled) |
+| `delivery-runs.run.out_for_delivery` (dispatch, S262) | the customers in `orders[]` (own `handoverCode` at a pickup point) | `run.out_for_delivery` | sms, push, email |
+| `delivery-runs.run.confirmed` (not a pre-order window's run) | the customers in `orders[]` | `run.confirmed` | email, push |
+| `delivery-runs.run.cancelled` (not a pre-order window's run) | the customers in `orders[]` | `run.cancelled` (refunded in full, delivery fee included) | email, sms, push |
+| `delivery-runs.subscription.created` (pending, with `confirmUrl`) | payload `email` (never looked up) | `run.subscription.confirm` (double opt-in) | email |
+| `delivery-runs.subscription.created` (active, signed in) / `.confirmed` | `userId` / payload `email` | `run.subscription.welcome` (+ WhatsApp community) | email |
 | `inventory.availability.changed` | stock alerts | `stock.back_in_stock` | email, push |
 | `notification.requested` (any topic) | payload `recipient` (+ identity) | `templateKey` | `channels` |
 | … from retail with `templateKey=retail.purchase_order.sent` | payload `recipient.email` (the supplier contact; never looked up) | `retail.purchase_order.sent` (PDF attached, link fallback) | email |
+
+### Delivery runs (S262, ADR 0005)
+
+delivery-runs announces a run to the people who asked to hear about its town and tells the customers on it what
+happens to their order.
+
+- **Audience.** `delivery-runs.run.announced`, `.opened` and `.cutoff_reminder` page through
+  `GET /v1/service/locations/{locationId}/audience?channel=EMAIL|SMS|PUSH|WHATSAPP` (scope
+  `delivery-runs:audience.read`, the same client as pre-orders) once per channel the rule sends on. delivery-runs returns
+  only members with consent on that channel, so an email-only subscriber gets email only and nobody is texted without
+  an SMS opt-in. Each member carries their one-click `unsubscribeUrl`; push tokens, phone numbers and the account's own
+  channel switches come from identity.
+- **Attribution.** Every link is the run link with UTM from the event (`links.<channel>`: `utm_source` and
+  `utm_medium` = the channel, `utm_campaign` = `delivery-run-<slug>-<yyyymmdd>`, `utm_content` = the event); the SMS link
+  is the location page with the same UTM (the run id is dropped to keep the text short, so a run SMS is two GSM-7
+  segments at most; every other SMS stays at one).
+- **Dispatch and cancellation.** `.out_for_delivery` (the run left) and `.confirmed` go to the customers in `orders[]`.
+  A run handed over from a pre-order window (`reason` "PREORDER <code>") is already covered by that window's own emails,
+  and a run cancelled with its window (`reason` "Pre-order <code> cancelled: …") by the cancelled pre-order email
+  orders-service sends per shipment, so neither is messaged twice. A run staff scheduled and then cancelled tells every
+  customer on it, in email, SMS and push, that the order is refunded in full, delivery fee included (a card hold is
+  released, nothing is charged).
+- **Subscriptions.** `subscription.created` for a pending email-only subscriber sends the double opt-in link
+  (`run.subscription.confirm`; nothing else is sent until it is used); a confirmed or signed-in subscriber gets the
+  welcome with the location's WhatsApp community link. Withdrawing consent sends nothing: delivery-runs stops listing
+  the member.
+- **WhatsApp.** Off by default (`deliveryRuns.whatsapp.enabled`, env `DELIVERY_RUNS_WHATSAPP_ENABLED`). WhatsApp only
+  allows business-initiated messages as **templates that Meta has approved**, which cannot be done from this repository.
+  Before switching it on, create and get approved (Meta Business Manager, language `en`, category utility or marketing)
+  `afrotransact_run_opened` and `afrotransact_run_cutoff_reminder`, each with five body parameters in this order: town,
+  delivery day, cutoff, delivery fee, link; set `WHATSAPP_TOKEN` and `whatsapp.phoneNumberId`. The names and the
+  parameter lines live in the seeded `chat` rows of `run.opened` and `run.cutoff_reminder` (migration `0019`), editable in
+  the staff console. Only members who opted in on WhatsApp (and have a verified phone in identity) receive them.
+- **Locales.** The run templates are seeded in `en`, like the rest of this service's templates; other locales fall back
+  to it.
 
 trust-ops also publishes `notification.requested` for `claim.opened`, `claim.decided` and `claim.withdrawn` (with the
 seller org id as `recipient.id`, which identity cannot resolve as a user). Those keys (`SupersededGenericTemplates`)

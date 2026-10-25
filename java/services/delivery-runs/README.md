@@ -30,7 +30,9 @@ parts of S261–S265 that belong to this service. The other services' parts are 
 | **Run** | Location, delivery window (≤ 24 h), order cutoff (before the window), optional `opensAt` (auto-open) and `sellerPickupAt` (sweep time), fee + currency, minimum orders, capacity, drop mode / pickup point, cutoff policy (`EXTEND` by N days once, or `CANCEL`), extensions, reserved orders / packages (counters kept on the row under a lock), route estimate (road miles, drive minutes, geo method), milestones per status, optimistic lock (`version` column). |
 | **RunOrder** (slot) | Run ↔ orders-service order id: customer id, packages, status `RESERVED → CONFIRMED` or `RELEASED` / `CANCELLED`, six-digit handover code (pickup-point runs, issued at confirmation), `requestedRunId` when the order was moved to the next run. One active slot per order (partial unique index). The order itself stays in orders-service. |
 | **Subscription** | Location + signed-in shopper (`userId`) **or** an email address. Per-channel consent (`EMAIL`, `SMS`, `PUSH`, `WHATSAPP`) with consent time, source and withdrawal time (`subscription_consent`), plus an append-only `consent_log` (`GRANTED`, `CONFIRMED`, `WITHDRAWN`). Email-only subscribers get email only and are `PENDING_CONFIRMATION` until the double opt-in link is used (token stored as SHA-256, 72 h). Every subscription has a one-click unsubscribe token. |
-| **Economics** | `cost(n) = (fixedMinutes / 60 × perHour + miles × perMile) + n × (perOrderMinutes / 60 × perHour)`; fixed minutes = drive both ways (geo road minutes) + seller collection (+ one pickup-point stop), per-order minutes = a doorstep stop or a handover. Revenue = fees (+ a commission share when one is reported; not computed here). Break-even = fewest orders whose fees cover the cost (none when the fee does not cover a stop). Settings `at.delivery-runs.economics.*`. |
+| **Economics** | `cost(n) = (fixedMinutes / 60 × perHour + miles × perMile) + n × (perOrderMinutes / 60 × perHour)`; fixed minutes = drive both ways (geo road minutes) + seller collection (+ one pickup-point stop), per-order minutes = a doorstep stop or a handover. Revenue = fees (+ a commission share when one is reported; not computed here). Break-even = fewest orders whose fees cover the cost (none when the fee does not cover a stop). The numbers are the **economics settings** below. |
+| **Economics settings** (S265) | One versioned row (the driver cost model: cost per hour and per mile, collection / per-stop / pickup-point / handover minutes, round trip) edited by staff with a **required reason**, optimistic lock (`If-Match`) and an append-only `economics_settings_change` log (before, after, who, reason, time). Until staff save, version 0 serves the `at.delivery-runs.economics.*` defaults from configuration. Every calculation reads the current row (5 s cache, dropped on save). |
+| **Local advertorial** (S263) | Words for the visitors of the place a pre-order window or a delivery run serves: variant (A, B...), weight, priority, headline / body / button label, optional schedule, status `DRAFT`, `LIVE`, `PAUSED`, `ENDED` (+ why: `SOURCE_CLOSED`, `CANCELLED`, `SCHEDULE`, `STAFF`), `generated` (the words follow the window or run until staff edit them) and per-day view and click counters. See *Advertorials*. |
 
 | **Pre-order window** | Name and code (`LBK-7`), targets (country / region / city), opening, closing and delivery dates, door / pickup with their fees, creatives and comms, **`minOrders`** (staff-set; new windows start with `PREORDERS_DEFAULT_MIN_ORDERS`, default 10; 0 = none) and an **outcome** (`AWAITING_DECISION`, `PROCEEDED`, `CANCELLED`; empty while the window simply follows its dates). Status is derived from the dates and the outcome: `DRAFT`, `PAUSED`, `UPCOMING`, `OPEN`, `CLOSED`, `DELIVERED`, `AWAITING_DECISION`, `CANCELLED`. |
 | **Delivery fee rule** | One row per method and currency (`AFROTRANSACT_DELIVERY`, `CARRIER`, `PICKUP`, `USD`...), versioned: distance bands (miles, contiguous from 0, at most 12 and 500 miles) or a pickup fee or the carrier handling / fallback / free-above numbers. Every change keeps a `delivery_fee_rule_change` row (before, after, who, reason, time). See *Delivery fees*. |
@@ -114,6 +116,28 @@ version, and a reason (at most 500 characters) is required.
 
 The staff BFF exposes them as `/v1/staff/delivery-fees` (screen: Settings, Money, Delivery fees in the staff console).
 
+### Advertorials (S263)
+
+Advertorials live in delivery-runs, not in content-service. They are generated from, shown for, counted against and
+ended by the pre-order windows and runs this service owns; keeping them here means the closing time that expires them,
+the orders that are attributed to them (a pre-order's tracking tag carries `cr=adv-<id>`) and the audience that sees
+them are all read from one database, with no copy that can outlive its window. (The storefront and the staff console
+reach them through the gateway-bff; content-service keeps the generic home placements.)
+
+- **Generated.** Publishing, opening or resuming a window, and announcing or opening a run, create variant A from the
+  window's or run's own details (town, delivery day, closing countdown, fee) as `LIVE`; changing the window or extending
+  the run re-writes the words of a generated variant that staff have not edited.
+- **Authored.** Staff write further variants (B, C...) with a weight (share of visitors), a priority and an optional
+  schedule; they stay `DRAFT` until published.
+- **Served.** `GET /v1/public/advertorials` matches the visitor's ZIP or coordinates against run areas (geo coverage)
+  and country / region / city against window targets, keeps only sources taking orders right now and inside the
+  advertorial's own schedule, and picks one variant per source by weight, stably per `visitor` id.
+- **Expired.** A window closing, being delivered or awaiting a decision ends its advertorials (`SOURCE_CLOSED`), a
+  cancelled window or run ends them (`CANCELLED`), a run confirmed or on its way ends its advertorials, and an `endsAt`
+  in the past ends one (`SCHEDULE`). An ended advertorial is never served again and cannot be edited.
+- **Results.** Views and clicks are counted per day; a window's orders are the pre-orders whose tracking tag carries the
+  advertorial's `cr=adv-<id>`. Runs' orders are not attributed.
+
 ### Lifecycle
 
 ```
@@ -194,6 +218,26 @@ Contract: [`contracts/openapi/delivery-runs.yaml`](../../../contracts/openapi/de
 | POST | `/v1/runs/economics-preview {locationId, feeMinor?, minOrders?, capacityOrders?, dropMode?, expectedOrders?, commissionShareMinor?}` | cost, break-even and P&L before creating a run (S265) |
 | GET | `/v1/runs/{id}/economics?commissionShareMinor=` | P&L at the run's reserved / confirmed orders (before and after the run) |
 | GET | `/v1/runs/{id}/orders?status=` | run slots |
+| GET | `/v1/runs/{id}/pnl?commissionShareMinor=` | P&L with its phase: `BEFORE` (estimate at the orders reserved so far), `AFTER` (completed), `CANCELLED` (nothing earned or spent; `ordersRefunded`, `refundedFeesMinor`, `cancelReason`) |
+
+#### Economics settings and window economics (S265; `delivery-runs:read`, writes `preorders:manage`)
+
+| Method | Path | |
+|---|---|---|
+| GET / PUT | `/v1/economics-settings` | the cost model; `ETag` is the version (`0` = configuration defaults). PUT takes the seven numbers and a **required `reason`**, `If-Match`; 412 `delivery-runs.version-mismatch`, 422 `delivery-runs.invalid-economics` per field |
+| GET | `/v1/economics-settings/changes?limit=` | the audit trail, newest first |
+| POST | `/v1/preorders/economics-preview {locationId?, targets?, door?, pickup?, doorFeeMinor?, pickupFeeMinor?, minOrders?, expectedOrders?}` | break-even for the window being created, beside its minimum (`minimumCoversBreakEven`); the location is the one given or the one serving the first city target |
+| GET | `/v1/preorders/{id}/economics` | a window's orders, revenue, delivery fees, estimated cost, contribution margin, break-even; for a cancelled window `ordersRefunded`, `refundsSettled`, `refundedMinor` and no revenue |
+
+#### Advertorials (S263; `delivery-runs:read`, writes `preorders:manage`)
+
+| Method | Path | |
+|---|---|---|
+| GET | `/v1/advertorials?source=&sourceId=&status=&limit=` | variants with their results (views, clicks, click rate, orders) and whether each is `serving` now |
+| GET / PUT | `/v1/advertorials/{id}` | get / edit (words, weight, priority, schedule); `If-Match`; not an ended one; editing stops it following the window |
+| POST | `/v1/advertorials/generate {source, sourceId}` | create the generated variant A from the window or run (or refresh its words); 409 for a cancelled source |
+| POST | `/v1/advertorials` | write a variant (a `DRAFT` until published) |
+| POST | `/v1/advertorials/{id}/publish`, `/pause`, `/end` | lifecycle, `If-Match` |
 
 ### Staff: pre-order windows (`delivery-runs:read` for reads, `preorders:manage` for writes)
 
@@ -217,6 +261,8 @@ Windows, creatives, orders, summary, exports, late adds, settings and coverage a
 | GET | `/v1/public/runs/available?zip=` or `?lat=&lng=` | open runs whose area covers the address (polygons via geo zone coverage, radii via geo distances), earliest cutoff first, with `ordersLeft`, `full`, `runUrl` |
 | GET | `/v1/public/locations`, `/v1/public/locations/{slug}` | location page data: upcoming runs, WhatsApp community link, social links, UTM share links (Facebook, X, WhatsApp) |
 | GET | `/v1/public/runs/{id}/advertorial` | advertorial data (S263): town, delivery date / day, window, cutoff, `countdownTarget`, `expiresAt` (= cutoff), fee and `feeDisplay`, drop mode, headline, CTA label, `ctaUrl` (`utm_medium=advertorial`), area targeting fields. 404 for drafts |
+| GET | `/v1/public/advertorials?zip=` or `?lat=&lng=` or `?country=&region=&city=` (+ `visitor`, `limit`) | the advertorials a visitor sees: only windows and runs that take orders now, one variant each (stable per `visitor`), higher priority first, each with `countdownTarget`, `expiresAt` and a `ctaUrl` carrying UTM and, for windows, order attribution `src=page&cr=adv-<id>&po=<code>` |
+| POST | `/v1/public/advertorials/{id}/events {type: VIEW\|CLICK}` | count a view or a click (204; best effort) |
 | POST | `/v1/public/subscriptions {locationId, email, source}` | email sign-up, double opt-in (always 202) |
 | POST | `/v1/public/subscriptions/confirm {token}` | confirm (repeat clicks are harmless) |
 | POST | `/v1/public/subscriptions/unsubscribe {token, channels?}` | one-click unsubscribe, per channel or all |
@@ -277,9 +323,9 @@ built)*.
 | **payments** (S261) | Orders' manual-capture intent is captured per shipment when the package leaves (existing flow); a cancel refunds a captured shipment in full or cancels the authorisation. Seller payout: the order's delivery starts the settlement hold (`settlement-hold`, 7 days) and the seller net is then transferred; the window's delivery fee stays with AfroTransact (ledger 4250). |
 | **fulfilment** (S264) | Consume `delivery-runs.run.confirmed` → `GET /v1/service/runs/{id}/dispatch` (scope `delivery-runs:read`): one route per run (split by capacity) with seller pickups at `sellerPickupAt` (sellers from the orders' lines) and FC load-out before drops; doorstep drops ordered by road distance (geo `POST /v1/distance/batch`), or one stop at the pickup point with per-order handover codes; proof of delivery as for regular deliveries. Advance the run with `POST /v1/runs/{id}/start-collecting`, `/out-for-delivery`, `/complete` (scope `delivery-runs:manage` until a narrower dispatch scope exists). Seller Center shows run pickup times and pick lists from fulfilment. |
 | **notifications** (S262) | Customers of a cancelled pre-order get the existing `shipment.cancelled` email / push, worded for pre-orders ("AfroTransact cancelled this pre-order. We're refunding the full …, delivery fee included" or "you haven't been charged"). Staff are told through `preorder.window.decision_needed` *(no staff e-mail or chat recipient exists in notifications yet; the console shows the tab and notice)*. Consume `at.delivery-runs.events`. `run.announced`, `run.opened`, `run.cutoff_reminder`, `run.out_for_delivery`: fan out to `GET /v1/service/locations/{locationId}/audience?channel=EMAIL|SMS|PUSH|WHATSAPP` (scope `delivery-runs:audience.read`), using `links.<channel>` and each member's `unsubscribeUrl`; WhatsApp only with approved templates to WHATSAPP-consented members. `run.confirmed` / `run.cancelled` / `run.out_for_delivery`: message the customers in `orders[]` (handover code for pickup-point runs). `subscription.created` with `confirmUrl`: double opt-in email; `subscription.confirmed`: welcome with `whatsappInviteUrl`; `subscription.cancelled`: stop those channels. Signed-in subscribers are resolved from `userId` (verified contacts in identity). |
-| **content** (S263) | On `run.announced` / `opened` / `extended`, create or refresh an auto-generated advertorial from `GET /v1/public/runs/{id}/advertorial` (town, date, live countdown to `countdownTarget`, fee, `ctaUrl`; featured products from content), targeted by deliver-to ZIP / town (match with `GET /v1/public/runs/available?zip=` or the targeting fields `areaKind`, `geoZoneId`, centre, `radiusMiles`); expire at `expiresAt` (the cutoff) and on `run.cancelled`; results from views, clicks (`utm_medium=advertorial`) and attributed orders. Staff-authored variants stay in content. |
-| **gateway-bff / storefront / apps** | Route `<API_BASE_URL>/delivery-runs`; screen APIs over the public endpoints (checkout run offer, location page `/delivery-runs/<slug>?run=<id>`, advertorial slot) and the shopper endpoints with token relay (`/v1/me/run-subscriptions`). Storefront pages `/delivery-runs/subscriptions/confirm?token=` and `/unsubscribe?token=` call `POST /v1/public/subscriptions/confirm` / `unsubscribe`. Rate-limit (and captcha) the anonymous `POST /v1/public/subscriptions` at the edge. |
-| **staff console** (S260, S265, S270) | Locations and runs screens (create, schedule, announce, open, extend, cancel, confirm), economics preview when creating a run (`breakEvenOrders`), run P&L (`/v1/runs/{id}/economics`), location history and subscriber counts. Pre-orders: minimum field in the wizard, *Needs a decision* tab, decision banner (cancel and refund everyone / go ahead), cancel and close-early with a required reason, decision log and refund progress per order. |
+| **content** (S263) | **Done inside delivery-runs** (see *Advertorials*): generation, targeting, expiry and results are here, so content-service needs nothing for them. Not built: featured products inside an advertorial (the card shows town, day, fee, countdown and the button). |
+| **gateway-bff / storefront / apps** (S262, S263) | **Done for the web.** gateway-bff `Delivery runs` operations (`/v1/delivery-runs/locations[/{slug}]`, `/subscriptions[/confirm|/unsubscribe]`, `/advertorials[/{id}/events]`, `/v1/account/run-subscriptions`) relay the public endpoints and the shopper's token for `/v1/me/run-subscriptions`; the anonymous POSTs share the BFF's lookup rate limit. Storefront: `/delivery-runs`, `/delivery-runs/<slug>` (UTM on the link is kept on the sign-up `source`, e.g. `location-page.wa`), `/delivery-runs/subscriptions/confirm?token=` and `/unsubscribe?token=` (ask first, then POST, so mail scanners change nothing), Account, Delivery alerts, and the advertorial card on the home page and location pages. **Not built:** the mobile customer app (it has no pre-order or alert screens to extend), and a captcha at the edge. |
+| **staff console** (S260, S263, S265, S270) | **Done for S263 and S265:** Settings, Money, *Run economics* (cost model with a reason and the change history, and what a draft changes for a location); the pre-order wizard shows the break-even beside the minimum order count; a window's overview shows its P&L (or the refunds when cancelled); Pre-orders, *Delivery runs* shows per location the orders of every run, subscriber counts by channel and monthly growth, and the P&L of a run before, after or cancelled; an *Advertorials* tab per window and a panel per run (generate, write, edit, publish, pause, end, results). Not part of this work: the screens that create and schedule locations and runs (S260), which is where the run economics preview (`POST /v1/runs/economics-preview`) would be shown. Pre-orders: minimum field in the wizard, *Needs a decision* tab, decision banner (cancel and refund everyone / go ahead), cancel and close-early with a required reason, decision log and refund progress per order. |
 | **geo** | Works today with zone type `SERVICE_AREA` (owner `delivery-runs:<slug>`). Recommended: a dedicated `RUN_AREA` zone type, then set `DELIVERY_RUNS_GEO_ZONE_TYPE=RUN_AREA`. |
 | **identity** | Permissions, roles and the `delivery-runs-service` client (see below). |
 | **analytics** (S265) | Report the commission share per run; staff pass it as `commissionShareMinor` to the economics endpoints. |
@@ -304,8 +350,8 @@ built)*.
 | `DELIVERY_RUNS_GEO_ZONE_TYPE` | `SERVICE_AREA` | zone type of run-area polygons |
 | `AUTH_TOKEN_URL`, `DELIVERY_RUNS_CLIENT_ID`, `DELIVERY_RUNS_CLIENT_SECRET` | `<AUTH_ISSUER_URL>/oauth2/token`, `delivery-runs-service`, — | client credentials for polygon registration |
 | `DELIVERY_RUNS_ORIGIN_LAT` / `_LNG` | Austin (30.2672, −97.7431) | default run origin |
-| `DRIVER_COST_PER_HOUR_MINOR`, `DRIVER_COST_PER_MILE_MINOR` | 2500, 70 | driver cost model |
-| `RUN_COLLECTION_MINUTES`, `RUN_PER_STOP_MINUTES`, `RUN_PICKUP_POINT_STOP_MINUTES`, `RUN_HANDOVER_MINUTES_PER_ORDER` | 45, 6, 30, 1 | time model |
+| `DRIVER_COST_PER_HOUR_MINOR`, `DRIVER_COST_PER_MILE_MINOR` | 2500, 70 | driver cost model: **defaults only**, used until staff save the cost model in Settings, Run economics (then the saved row wins) |
+| `RUN_COLLECTION_MINUTES`, `RUN_PER_STOP_MINUTES`, `RUN_PICKUP_POINT_STOP_MINUTES`, `RUN_HANDOVER_MINUTES_PER_ORDER` | 45, 6, 30, 1 | time model: the same defaults |
 | `DELIVERY_RUNS_REMINDER_LEAD`, `DELIVERY_RUNS_CONFIRMATION_TTL` | `24h`, `72h` | reminder lead, double opt-in link lifetime |
 | `at.delivery-runs.preorders.seller-pickup-lead` (`AT_DELIVERY_RUNS_PREORDERS_SELLER_PICKUP_LEAD`) | `PT24H` | how long before the window opens the driver collects from sellers (S264) |
 | `DELIVERY_RUNS_JOBS_ENABLED`, `DELIVERY_RUNS_JOBS_INTERVAL` | `true`, `60s` | cutoff job |
@@ -368,5 +414,12 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
 - The local stack does not create the `deliveryruns` database yet (`infra/local/postgres/init-databases.sh`).
 - Run ordering is not geographic inside the town (fulfilment orders drops); economics fold local driving into the
   per-stop minutes.
-- Settings for economics are configuration, not a staff-editable table.
+- **Economics.** The cost model is a staff-editable row (reason and audit); the commission share is still passed in by
+  the caller because analytics does not report it yet (revenue is then delivery fees only). A staff edit applies to
+  every later estimate, including runs already shown; nothing recalculates a stored result, because none is stored.
+- **WhatsApp.** The location page shows the community invite and consent is recorded per channel, but WhatsApp
+  *messages* are off until the templates are approved by Meta (notifications, `DELIVERY_RUNS_WHATSAPP_ENABLED`).
+- **Advertorial attribution.** Window orders are attributed through `cr=adv-<id>`; UTM parameters are kept on alert
+  sign-ups (`source`) but the storefront has no product-analytics sink to report them to (packages/telemetry is error
+  tracking only).
 - Rate limiting of anonymous sign-ups belongs to the edge / BFF.

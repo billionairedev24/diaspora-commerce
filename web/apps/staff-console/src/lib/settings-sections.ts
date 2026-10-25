@@ -26,6 +26,15 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { key: 'payments', label: 'Payments & payouts', description: 'How long money is held, the smallest payout, and which Stripe the platform uses.', module: 'payouts', group: 'money' },
   { key: 'fees', label: 'Fees & commissions', description: 'Fee schedule versions, commission by category and plan, connection fees, negotiated rates and delivery pricing.', module: 'fees', group: 'money' },
   { key: 'delivery-fees', label: 'Delivery fees', description: 'What customers pay for AfroTransact delivery by distance, carrier shipping beyond our coverage, and pickup, by currency, with a reason on every change.', module: 'preorders', group: 'money' },
+  {
+    key: 'run-economics',
+    label: 'Run economics',
+    description: 'The driver cost model every break-even and run profit is calculated from, with a reason on every change.',
+    labelKey: 'st.runs.settings.label',
+    descriptionKey: 'st.runs.settings.description',
+    module: 'preorders',
+    group: 'money'
+  },
   { key: 'tax', label: 'Sales tax', description: 'Who calculates sales tax, the state and local rates, and what each item is for tax.', module: 'fees', group: 'money' },
   {
     key: 'exchange-rates',

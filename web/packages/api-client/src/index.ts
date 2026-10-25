@@ -1,6 +1,7 @@
 export { type AddressLookup, addressLookup, type AddressLookupClient, type AddressSearchOptions, newAddressSessionToken, type ResolvableAddressSuggestion } from './address-lookup';
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
 export { CORRELATION_HEADER, newCorrelationId, withCorrelationHeaders } from './correlation';
+export * from './delivery-runs';
 export { ApiError, isApiError } from './errors';
 export * from './fee-rates';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
@@ -51,6 +52,7 @@ export {
 } from './staff-markets';
 export * from './staff-plans';
 export { createStaffPreordersApi, staffPreorderKeys, staffPreorderQueries, type StaffPreordersApi } from './staff-preorders';
+export * from './staff-runs';
 export { tableSearchParams } from './table-query';
 export { US_STATES } from './us-states';
 export { randomUuid } from './uuid';

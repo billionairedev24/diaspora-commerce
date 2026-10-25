@@ -907,6 +907,205 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/delivery-runs/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Locations with delivery runs (active ones)
+         * @description delivery-runs `GET /v1/public/locations`. Public data, cached for a minute.
+         */
+        get: operations["listRunLocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/locations/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Location page data (upcoming runs, WhatsApp community link, social and share links)
+         * @description delivery-runs `GET /v1/public/locations/{slug}`. `shareLinks` and the run links carry UTM attribution
+         *     (`utm_source`, `utm_medium`, `utm_campaign`) so orders and sign-ups can be traced to the channel that shared them.
+         */
+        get: operations["getRunLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get run alerts for a location by email (double opt-in)
+         * @description delivery-runs `POST /v1/public/subscriptions {locationId, email, source}`. Always 202 for a valid email (whether
+         *     or not it was known). Nothing else is sent until the link in the confirmation email is used
+         *     (`POST /v1/delivery-runs/subscriptions/confirm`); only the email channel is consented to this way. A signed-in
+         *     shopper chooses channels from the account screen instead (`POST /v1/account/run-subscriptions`). Rate limited
+         *     like other lookups.
+         */
+        post: operations["subscribeRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/subscriptions/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm an email subscription (token of the confirmation link)
+         * @description delivery-runs `POST /v1/public/subscriptions/confirm {token}`; the storefront page
+         *     `/delivery-runs/subscriptions/confirm?token=` calls it. Confirming twice is fine; an unknown token is a 422 on
+         *     `token`. Records the email consent. Rate limited like other lookups.
+         */
+        post: operations["confirmRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/subscriptions/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unsubscribe from a message link (token), per channel or all
+         * @description delivery-runs `POST /v1/public/subscriptions/unsubscribe {token, channels}`; the storefront page
+         *     `/delivery-runs/subscriptions/unsubscribe?token=` calls it, and every run alert carries such a link. No
+         *     channels withdraws all of them. Withdrawal is recorded with its time on the consent record. Rate limited like
+         *     other lookups.
+         */
+        post: operations["unsubscribeRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/run-subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My delivery alerts (per location and channel, with consent records) */
+        get: operations["listMyRunSubscriptions"];
+        put?: never;
+        /**
+         * Turn on delivery alerts for a location and channels (consent recorded, active at once)
+         * @description delivery-runs `POST /v1/me/run-subscriptions`. Adds the channels to an existing subscription. SMS and WhatsApp
+         *     also need a verified phone number on the account; WhatsApp messages are only sent from approved templates to
+         *     shoppers who opted in here.
+         */
+        post: operations["subscribeMyRunAlerts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/run-subscriptions/{locationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Turn off delivery alerts for a location (some channels, or all)
+         * @description delivery-runs `DELETE /v1/me/run-subscriptions/{locationId}`. No `channel` withdraws all channels.
+         */
+        delete: operations["unsubscribeMyRunAlerts"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/advertorials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Advertorials for the shopper's deliver-to place (windows and runs that take orders now)
+         * @description delivery-runs `GET /v1/public/advertorials`. The place is the explicit `zip`, `lat`/`lng` or
+         *     `country`+`region`(+`city`) when given, else the session's delivery location; with no place at all the list is
+         *     empty. One variant per advertorial (the same `visitor` keeps theirs), higher priority first. Each carries the
+         *     countdown target (the close or cutoff) and a link with UTM and order attribution (`src=page&cr=adv-...`); the
+         *     storefront counts a `VIEW` once per visit and a `CLICK` on the button
+         *     (`POST /v1/delivery-runs/advertorials/{advertorialId}/events`) and expires the card at `expiresAt`.
+         */
+        get: operations["listRunAdvertorials"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/delivery-runs/advertorials/{advertorialId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count a view or a click on an advertorial
+         * @description delivery-runs `POST /v1/public/advertorials/{id}/events {type}`. Best effort: the storefront sends `VIEW` once
+         *     per visit and `CLICK` on the button, and ignores a failure. Rate limited like other lookups.
+         */
+        post: operations["recordRunAdvertorialEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/checkout/summary": {
         parameters: {
             query?: never;
@@ -2289,6 +2488,140 @@ export interface components {
             atin: components["schemas"]["Atin"];
             /** @enum {string} */
             status: "subscribed";
+        };
+        /**
+         * @description A way to reach a subscriber; each is consented to separately (WhatsApp only from approved templates)
+         * @enum {string}
+         */
+        RunChannel: "EMAIL" | "SMS" | "PUSH" | "WHATSAPP";
+        /** @description Where orders are collected when the drop mode is PICKUP_POINT */
+        RunPickupPoint: {
+            [key: string]: unknown;
+        } | null;
+        RunLocation: {
+            /** Format: uuid */
+            id: string;
+            /** @example lubbock */
+            slug: string;
+            /** @example Lubbock */
+            name: string;
+            /** @example US */
+            market: string;
+            /** @example TX */
+            state?: string | null;
+            /** @example America/Chicago */
+            timeZone: string;
+            /** @description Coverage as delivery-runs keeps it (ZIP list, polygon or radius) */
+            area?: {
+                [key: string]: unknown;
+            };
+            /** @description Delivery fee when the run sets none */
+            defaultFeeMinor: number;
+            /** @example USD */
+            currency: string;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint?: components["schemas"]["RunPickupPoint"];
+            /** @description The location's WhatsApp community invite */
+            whatsappInviteUrl?: string | null;
+            socialLinks?: {
+                [key: string]: string;
+            };
+        };
+        /** @description A delivery run as shoppers see it */
+        RunPublic: {
+            /** Format: uuid */
+            runId: string;
+            /** Format: uuid */
+            locationId: string;
+            locationSlug?: string;
+            town?: string;
+            status: string;
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description Orders close at this time
+             */
+            cutoffAt: string;
+            feeMinor: number;
+            currency: string;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint?: components["schemas"]["RunPickupPoint"];
+            acceptingOrders: boolean;
+            /** @description Orders left (null = not limited) */
+            ordersLeft?: number | null;
+            /** @description No room left; checkout offers the next run */
+            full: boolean;
+            /** @description Link to the run on the location page */
+            runUrl?: string;
+        };
+        RunLocationPage: {
+            location: components["schemas"]["RunLocation"];
+            runs: components["schemas"]["RunPublic"][];
+            /** @description The location page URL */
+            locationUrl: string;
+            /** @description Share URLs per channel, each with UTM attribution */
+            shareLinks?: {
+                [key: string]: string;
+            };
+        };
+        /** @description Consent for one channel with its record */
+        RunConsent: {
+            channel: components["schemas"]["RunChannel"];
+            granted: boolean;
+            /** Format: date-time */
+            consentedAt?: string | null;
+            /** @description Where the consent was given (location-page */
+            source?: string | null;
+            /** Format: date-time */
+            withdrawnAt?: string | null;
+        };
+        RunSubscription: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            locationId: string;
+            /** @description PENDING_CONFIRMATION, ACTIVE or UNSUBSCRIBED */
+            status: string;
+            consents: components["schemas"]["RunConsent"][];
+            /** Format: date-time */
+            createdAt?: string | null;
+            /** Format: date-time */
+            confirmedAt?: string | null;
+        };
+        /** @description An advertorial served to the shopper's place, one variant */
+        RunAdvertorial: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            source: "WINDOW" | "RUN";
+            /** @description The pre-order window or delivery run it promotes */
+            sourceId: string;
+            /** @example A */
+            variant?: string;
+            /** @description Window code; null for runs */
+            code?: string | null;
+            /** @example Lubbock, TX */
+            place?: string | null;
+            headline: string;
+            body?: string;
+            ctaLabel: string;
+            /** @description With UTM and order attribution (src=page&cr=adv-...) */
+            ctaUrl: string;
+            imageUrl?: string | null;
+            /**
+             * Format: date-time
+             * @description The live countdown counts down to this
+             */
+            countdownTarget?: string | null;
+            /** Format: date-time */
+            expiresAt: string;
+            deliveryDisplay?: string | null;
+            feeDisplay?: string | null;
         };
         StockAlertItem: {
             atin: components["schemas"]["Atin"];
@@ -5335,6 +5668,303 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    listRunLocations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Locations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunLocation"][];
+                    };
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
+    getRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Location page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunLocationPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    subscribeRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    locationId: string;
+                    /** Format: email */
+                    email: string;
+                    /**
+                     * @description Where the sign-up happened, kept on the consent record (default storefront)
+                     * @example location-page
+                     */
+                    source?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted; the confirmation link is on its way */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "CONFIRMATION_SENT";
+                    };
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Confirmed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    unsubscribeRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                    channels?: components["schemas"]["RunChannel"][];
+                };
+            };
+        };
+        responses: {
+            /** @description Withdrawn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listMyRunSubscriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscriptions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunSubscription"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    subscribeMyRunAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    locationId: string;
+                    channels: components["schemas"]["RunChannel"][];
+                    /** @example account */
+                    source?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Subscription */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    unsubscribeMyRunAlerts: {
+        parameters: {
+            query?: {
+                channel?: components["schemas"]["RunChannel"][];
+            };
+            header?: never;
+            path: {
+                locationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Subscription with the withdrawals recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunSubscription"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listRunAdvertorials: {
+        parameters: {
+            query?: {
+                zip?: string;
+                lat?: number;
+                lng?: number;
+                country?: string;
+                region?: string;
+                city?: string;
+                /** @description An anonymous id the storefront keeps per browser */
+                visitor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorials */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["RunAdvertorial"][];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    recordRunAdvertorialEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                advertorialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    type: "VIEW" | "CLICK";
+                };
+            };
+        };
+        responses: {
+            /** @description Counted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
         };
     };
     getCheckoutSummary: {

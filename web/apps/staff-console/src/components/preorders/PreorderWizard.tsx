@@ -22,6 +22,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { BreakEvenPanel } from '@/components/runs/WindowEconomics';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
@@ -248,6 +249,17 @@ function Details({ f, set, payment, rules, currency }: { f: WizardForm; set: (p:
           </label>
         ) : null}
       </div>
+      <BreakEvenPanel
+        form={{
+          targets: f.targets.map((x) => x.key),
+          door: f.door,
+          pickup: f.pickup,
+          doorFeeMinor: parseAmount(f.doorFee),
+          pickupFeeMinor: parseAmount(f.pickupFee),
+          minOrders: minText === '' || minBad ? null : Number(minText),
+          defaultMinOrders: defaultMin
+        }}
+      />
     </>
   );
 }

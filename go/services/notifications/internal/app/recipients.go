@@ -69,16 +69,36 @@ func (h *ingestImpl) audience(ctx context.Context, rule EventRule, windowID stri
 	if segment == "" {
 		segment = port.AudienceSubscribers
 	}
+	return h.members(ctx, "window "+windowID, channels, func(ch domain.Channel, after string) (port.AudiencePage, error) {
+		return h.cfg.Audience.Audience(ctx, windowID, ch, segment, after, h.cfg.AudiencePageSize)
+	})
+}
+
+// locationAudience pages a location's run-alert subscribers on each channel, the same way: only members who gave
+// consent on that channel are returned by delivery-runs, WhatsApp included (chat).
+func (h *ingestImpl) locationAudience(ctx context.Context, rule EventRule, locationID string, channels []domain.Channel) ([]target, error) {
+	if h.cfg.Locations == nil || locationID == "" {
+		h.log.DebugContext(ctx, "no location audience source; rule skipped", "template", rule.Template)
+		return nil, nil
+	}
+	return h.members(ctx, "location "+locationID, channels, func(ch domain.Channel, after string) (port.AudiencePage, error) {
+		return h.cfg.Locations.LocationAudience(ctx, locationID, ch, after, h.cfg.AudiencePageSize)
+	})
+}
+
+// members turns audience pages into one target per member and channel. An unknown audience ends the paging quietly.
+func (h *ingestImpl) members(ctx context.Context, what string, channels []domain.Channel,
+	fetch func(ch domain.Channel, after string) (port.AudiencePage, error)) ([]target, error) {
 	var out []target
 	for _, ch := range channels {
 		after := ""
 		for range maxAudiencePages {
-			page, err := h.cfg.Audience.Audience(ctx, windowID, ch, segment, after, h.cfg.AudiencePageSize)
+			page, err := fetch(ch, after)
 			if errors.Is(err, domain.ErrRecipientNotFound) {
 				return out, nil
 			}
 			if err != nil {
-				return nil, fmt.Errorf("audience of %s on %s: %w", windowID, ch, err)
+				return nil, fmt.Errorf("audience of %s on %s: %w", what, ch, err)
 			}
 			for _, m := range page.Members {
 				r := domain.Recipient{ID: m.UserID}
