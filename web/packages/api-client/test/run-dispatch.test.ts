@@ -15,11 +15,9 @@ import {
 } from '../src';
 import { type components as SellerComponents } from '../src/generated/gateway-bff-seller';
 import { type components as StaffComponents } from '../src/generated/gateway-bff-staff';
-import { MOCK_ROLE_COOKIE, resetSellerDb, SELLER_ORG } from '../src/mocks/seller';
-import { MOCK_RUN_AMARILLO, MOCK_RUN_LUBBOCK } from '../src/mocks/seller/run-pickups';
+import { MOCK_ROLE_COOKIE, MOCK_RUN_AMARILLO, MOCK_RUN_LUBBOCK, resetSellerDb, SELLER_ORG } from '../src/mocks/seller';
 import { handleSellerMockRequest } from '../src/mocks/seller-runtime';
-import { MOCK_STAFF_ROLE_COOKIE, resetStaffDb } from '../src/mocks/staff';
-import { RUN_AMARILLO, RUN_LUBBOCK, RUN_ODESSA } from '../src/mocks/staff/dispatch';
+import { MOCK_STAFF_ROLE_COOKIE, resetStaffDb, RUN_AMARILLO, RUN_LUBBOCK, RUN_ODESSA } from '../src/mocks/staff';
 import { handleStaffMockRequest } from '../src/mocks/staff-runtime';
 
 /* Delivery runs (S264): the seller's pick list and the staff dispatch view, against the mocks that implement
