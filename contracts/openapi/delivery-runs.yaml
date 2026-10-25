@@ -23,6 +23,9 @@ tags:
 - name: Pre-orders
   description: 'Staff: pre-order windows, creatives, orders, analytics, exports and late adds (delivery-runs:read to view;
     preorders:manage, preorders:export, preorders:late-add)'
+- name: Economics
+  description: 'Staff: run and window P&L, break-even for a window being created, and the driver cost model behind them (delivery-runs:read
+    to view; preorders:manage to change the cost model)'
 - name: Delivery fees
   description: 'Staff: the delivery fee by delivery method (AfroTransact delivery by distance band, carrier shipping, pickup)
     and its audit trail (delivery-runs:read to view; preorders:manage to change)'
@@ -39,9 +42,274 @@ tags:
 - name: Pre-order settings
   description: 'Staff: master switch, fallback, placements, payment setup and coverage areas (delivery-runs:read to view;
     preorders:manage to change)'
+- name: Advertorials
+  description: 'Location-targeted advertorials per pre-order window or delivery run: staff generate or write them, visitors
+    in the area see them with a live closing countdown, and they report views, clicks and orders (S263). delivery-runs:read
+    to view; preorders:manage to change.'
 - name: Public pre-orders
   description: 'No sign-in: what the storefront shows for a delivery place; service: per-product eligibility for orders-service'
 paths:
+  /v1/advertorials:
+    get:
+      tags:
+      - Advertorials
+      summary: Advertorials, newest first, with views, clicks and orders (delivery-runs:read)
+      operationId: listAdvertorials
+      parameters:
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - RUN
+          - WINDOW
+      - name: sourceId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - LIVE
+          - PAUSED
+          - ENDED
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorials'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - Advertorials
+      summary: Write an advertorial for a window or run (preorders:manage)
+      description: Created as a draft; publish it to make it live. Several variants (A, B…) of one window or run share its
+        visitors by weight.
+      operationId: createAdvertorial
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalAdvertorialRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/advertorials/generate:
+    post:
+      tags:
+      - Advertorials
+      summary: Draft the advertorial of a window or run from its data (preorders:manage)
+      description: Town, delivery day, closing time and fee become the words, live at once. Asking again re-drafts the generated
+        one. 404 for an unknown window or run; 409 for one that is over.
+      operationId: generateAdvertorial
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateAdvertorialRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/advertorials/{id}:
+    get:
+      tags:
+      - Advertorials
+      summary: One advertorial with its results (delivery-runs:read)
+      operationId: getAdvertorial
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - Advertorials
+      summary: Edit an advertorial (preorders:manage)
+      description: Not an ended one. The words stop following the window or run. If-Match is the version seen (412 delivery-runs.version-mismatch
+        when it changed).
+      operationId: updateAdvertorial
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalAdvertorialRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/advertorials/{id}/end:
+    post:
+      tags:
+      - Advertorials
+      summary: End an advertorial for good (preorders:manage)
+      operationId: endAdvertorial
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/advertorials/{id}/pause:
+    post:
+      tags:
+      - Advertorials
+      summary: Live to paused (preorders:manage)
+      operationId: pauseAdvertorial
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/advertorials/{id}/publish:
+    post:
+      tags:
+      - Advertorials
+      summary: Draft or paused to live (preorders:manage)
+      operationId: publishAdvertorial
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalAdvertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/delivery-fees:
     get:
       tags:
@@ -177,6 +445,89 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/DeliveryFeeRule'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/economics-settings:
+    get:
+      tags:
+      - Economics
+      summary: The driver cost model behind run economics (delivery-runs:read)
+      description: Version 0 (source CONFIG) until staff save; then the saved numbers (source STAFF). The ETag carries the
+        version.
+      operationId: economicsSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EconomicsSettings'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - Economics
+      summary: Change the driver cost model (preorders:manage)
+      description: Makes the next version. A reason is required (422 delivery-runs.reason-required) and is logged with who
+        and when; numbers out of range are 422 delivery-runs.invalid-economics. If-Match is the version seen (0 for the defaults;
+        412 delivery-runs.version-mismatch when it changed). A save that changes nothing makes no new version. Runs and windows
+        are priced with the new numbers from the next calculation.
+      operationId: replaceEconomicsSettings
+      parameters:
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EconomicsSettingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EconomicsSettings'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/economics-settings/changes:
+    get:
+      tags:
+      - Economics
+      summary: Audit trail of the driver cost model, newest first (delivery-runs:read)
+      description: Every save with the numbers before and after, who changed them, when and why.
+      operationId: economicsSettingsChanges
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EconomicsSettingsChanges'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -872,6 +1223,33 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/preorders/economics-preview:
+    post:
+      tags:
+      - Economics
+      summary: Break-even for a window being created or edited (delivery-runs:read)
+      description: The cost of the run that would deliver it, the orders needed to break even, and whether the minimum reaches
+        them. economics is null when no active location serves the targets or geo-service cannot measure the route.
+      operationId: planWindow
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WindowPlanRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WindowPlan'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/preorders/{id}:
     get:
       tags:
@@ -1210,6 +1588,41 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PreorderDecisionLog'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/economics:
+    get:
+      tags:
+      - Economics
+      summary: A pre-order window's economics (delivery-runs:read)
+      description: Orders, revenue, delivery fees collected, the estimated cost of the run that delivers it, contribution
+        margin and break-even orders. A cancelled window reports the orders refunded (ordersRefunded, refundedMinor) instead
+        of revenue.
+      operationId: windowEconomics
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: commissionShareMinor
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WindowEconomics'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -1577,6 +1990,104 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/public/advertorials:
+    get:
+      tags:
+      - Advertorials
+      summary: The advertorials a visitor sees for their deliver-to place (no sign-in)
+      description: A ZIP or coordinates match delivery runs by coverage; country and region (and city) match pre-order windows.
+        Only windows and runs that take orders right now are served, one variant each (the same visitor keeps their variant),
+        higher priority first. Each carries the countdown target (the close or cutoff) and a link with UTM and order attribution.
+      operationId: servedAdvertorials
+      parameters:
+      - name: zip
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: lat
+        in: query
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: lng
+        in: query
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: country
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: region
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: city
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: visitor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 3
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ServedAdvertorials'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/advertorials/{id}/events:
+    post:
+      tags:
+      - Advertorials
+      summary: Count a view or a click (no sign-in)
+      description: 'Best effort: the shop front sends VIEW once per visit and CLICK on the button. 404 for an unknown advertorial.'
+      operationId: advertorialEvent
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdvertorialEventRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
   /v1/public/delivery-fees:
     get:
       tags:
@@ -2333,6 +2844,41 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/pnl:
+    get:
+      tags:
+      - Economics
+      summary: A run's P&L before and after it (delivery-runs:read)
+      description: 'BEFORE: estimate at the orders reserved so far. AFTER: the completed run at its orders. CANCELLED: nothing
+        earned or spent; ordersRefunded and refundedFeesMinor say what went back to customers. commissionShareMinor: commission
+        attributed to the run, reported by analytics.'
+      operationId: runPnl
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: commissionShareMinor
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunPnl'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -3678,6 +4224,96 @@ components:
         radiusMiles:
           type: number
           format: double
+    EconomicsSettingsRequest:
+      type: object
+      description: 'The new numbers (money in minor units, times in minutes). The reason is required and is logged with who
+
+        and when.'
+      properties:
+        driverCostPerHourMinor:
+          type: integer
+          format: int64
+          maximum: 100000
+          minimum: 0
+        driverCostPerMileMinor:
+          type: integer
+          format: int64
+          maximum: 10000
+          minimum: 0
+        collectionMinutes:
+          type: number
+          format: double
+          minimum: 0
+        perStopMinutes:
+          type: number
+          format: double
+          minimum: 0
+        pickupPointStopMinutes:
+          type: number
+          format: double
+          minimum: 0
+        handoverMinutesPerOrder:
+          type: number
+          format: double
+          minimum: 0
+        roundTrip:
+          type: boolean
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - collectionMinutes
+      - driverCostPerHourMinor
+      - driverCostPerMileMinor
+      - handoverMinutesPerOrder
+      - perStopMinutes
+      - pickupPointStopMinutes
+      - reason
+      - roundTrip
+    EconomicsSettings:
+      type: object
+      description: 'The driver cost model behind run economics: cost(n) = fixed (drive + sweep) + n x per-order time at the
+
+        driver cost per hour, plus the miles at the vehicle cost per mile. The ETag carries the version for
+
+        If-Match; version 0 means nobody has saved yet and the environment''s defaults apply.'
+      properties:
+        driverCostPerHourMinor:
+          type: integer
+          format: int64
+          description: Minor units
+        driverCostPerMileMinor:
+          type: integer
+          format: int64
+          description: Minor units
+        collectionMinutes:
+          type: number
+          format: double
+        perStopMinutes:
+          type: number
+          format: double
+        pickupPointStopMinutes:
+          type: number
+          format: double
+        handoverMinutesPerOrder:
+          type: number
+          format: double
+        roundTrip:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        source:
+          type: string
+          description: CONFIG while the environment's defaults apply, STAFF once saved
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+        reason:
+          type: string
     DeliveryFeeBand:
       type: object
       description: Addresses fromMiles (inclusive) up to toMiles (exclusive) from the hub pay feeMinor
@@ -3775,6 +4411,159 @@ components:
           type: string
         reason:
           type: string
+    LocalAdvertorialRequest:
+      type: object
+      description: 'The words, variant, share and schedule staff write. Variant, weight and priority default (the next free
+
+        label, 1, 0). On an edit source and sourceId are ignored.'
+      properties:
+        source:
+          type: string
+          enum:
+          - RUN
+          - WINDOW
+        sourceId:
+          type: string
+          format: uuid
+        variant:
+          type: string
+          maxLength: 8
+          minLength: 0
+        weight:
+          type: integer
+          format: int32
+          maximum: 100
+          minimum: 1
+        priority:
+          type: integer
+          format: int32
+          maximum: 1000
+          minimum: 0
+        headline:
+          type: string
+          maxLength: 140
+          minLength: 0
+        body:
+          type: string
+          maxLength: 400
+          minLength: 0
+        ctaLabel:
+          type: string
+          maxLength: 40
+          minLength: 0
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+      required:
+      - ctaLabel
+      - headline
+    AdvertorialResults:
+      type: object
+      description: What an advertorial brought
+      properties:
+        views:
+          type: integer
+          format: int64
+        clicks:
+          type: integer
+          format: int64
+        ctrPct:
+          type: number
+          format: double
+          description: clicks / views x 100; null without views
+        orders:
+          type: integer
+          format: int32
+          description: Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed)
+    LocalAdvertorial:
+      type: object
+      description: 'Words for the visitors of the area a pre-order window or run serves, shown with a live closing
+
+        countdown while it takes orders and over when it closes or is cancelled. The ETag carries the version
+
+        for If-Match.'
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - RUN
+          - WINDOW
+        sourceId:
+          type: string
+          format: uuid
+        sourceName:
+          type: string
+        sourceCode:
+          type: string
+        sourceStatus:
+          type: string
+        sourceCloses:
+          type: string
+          format: date-time
+        locationId:
+          type: string
+          format: uuid
+        locationName:
+          type: string
+        variant:
+          type: string
+        weight:
+          type: integer
+          format: int32
+        priority:
+          type: integer
+          format: int32
+        generated:
+          type: boolean
+          description: The words follow the window or run until staff edit them
+        headline:
+          type: string
+        body:
+          type: string
+        ctaLabel:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - LIVE
+          - PAUSED
+          - ENDED
+        ended:
+          type: string
+          enum:
+          - SOURCE_CLOSED
+          - CANCELLED
+          - SCHEDULE
+          - STAFF
+        serving:
+          type: boolean
+          description: Visitors can see it right now
+        results:
+          $ref: '#/components/schemas/AdvertorialResults'
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     ReserveSlotRequest:
       type: object
       properties:
@@ -4130,6 +4919,17 @@ components:
           minLength: 0
       required:
       - token
+    AdvertorialEventRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          description: 'VIEW: it was shown; CLICK: its button was clicked'
+          enum:
+          - VIEW
+          - CLICK
+      required:
+      - type
     PreorderItem:
       type: object
       properties:
@@ -4402,6 +5202,74 @@ components:
           minLength: 0
       required:
       - reason
+    WindowPlanRequest:
+      type: object
+      description: 'What the window wizard knows. The location is the one named, else the active one matching the first
+
+        city target. Nulls: the fee rules decide the fees; the expected orders default to the minimum.'
+      properties:
+        locationId:
+          type: string
+          format: uuid
+          description: Location of the closing run (null = matched by city)
+        targets:
+          type: array
+          description: country/region or country/region/city
+          example:
+          - US/TX/Bastrop
+          items:
+            type: string
+          maxItems: 50
+          minItems: 0
+        door:
+          type: boolean
+        pickup:
+          type: boolean
+        doorFeeMinor:
+          type: integer
+          format: int64
+          maximum: 10000
+          minimum: 0
+        pickupFeeMinor:
+          type: integer
+          format: int64
+          maximum: 10000
+          minimum: 0
+        minOrders:
+          type: integer
+          format: int32
+          maximum: 100000
+          minimum: 0
+        expectedOrders:
+          type: integer
+          format: int32
+          maximum: 100000
+          minimum: 0
+    WindowPlan:
+      type: object
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        locationName:
+          type: string
+        currency:
+          type: string
+        feeMinor:
+          type: integer
+          format: int64
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        minOrders:
+          type: integer
+          format: int32
+        economics:
+          $ref: '#/components/schemas/RunEconomics'
+        minimumCoversBreakEven:
+          type: boolean
     PreorderAreaRequest:
       type: object
       properties:
@@ -4536,6 +5404,20 @@ components:
       required:
       - currency
       - method
+    GenerateAdvertorialRequest:
+      type: object
+      properties:
+        source:
+          type: string
+          enum:
+          - RUN
+          - WINDOW
+        sourceId:
+          type: string
+          format: uuid
+      required:
+      - source
+      - sourceId
     PreorderBulkSwitchRequest:
       type: object
       description: Switch several windows on or off; each on its own
@@ -4915,6 +5797,38 @@ components:
         next:
           type: string
           format: uuid
+    RunPnl:
+      type: object
+      properties:
+        economics:
+          $ref: '#/components/schemas/RunEconomics'
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ANNOUNCED
+          - OPEN
+          - EXTENDED
+          - CUT_OFF
+          - CONFIRMED
+          - COLLECTING
+          - OUT_FOR_DELIVERY
+          - COMPLETED
+          - CANCELLED
+        phase:
+          type: string
+          enum:
+          - BEFORE
+          - AFTER
+          - CANCELLED
+        cancelReason:
+          type: string
+        ordersRefunded:
+          type: integer
+          format: int32
+        refundedFeesMinor:
+          type: integer
+          format: int64
     Advertorial:
       type: object
       properties:
@@ -5274,6 +6188,57 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeliveryFeeRule'
+    ServedAdvertorial:
+      type: object
+      description: An advertorial ready to show a visitor
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - RUN
+          - WINDOW
+        sourceId:
+          type: string
+          format: uuid
+        variant:
+          type: string
+        code:
+          type: string
+          description: Window code; null for runs
+        place:
+          type: string
+        headline:
+          type: string
+        body:
+          type: string
+        ctaLabel:
+          type: string
+        ctaUrl:
+          type: string
+          description: With UTM and, for windows, order attribution
+        imageUrl:
+          type: string
+        countdownTarget:
+          type: string
+          format: date-time
+          description: The live countdown counts down to this
+        expiresAt:
+          type: string
+          format: date-time
+        deliveryDisplay:
+          type: string
+        feeDisplay:
+          type: string
+    ServedAdvertorials:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServedAdvertorial'
     PreorderWindowPage:
       type: object
       properties:
@@ -5506,6 +6471,61 @@ components:
         size:
           type: integer
           format: int32
+    WindowEconomics:
+      type: object
+      properties:
+        windowId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+          - AWAITING_DECISION
+          - CANCELLED
+        cancelled:
+          type: boolean
+        locationId:
+          type: string
+          format: uuid
+        locationName:
+          type: string
+        currency:
+          type: string
+        minOrders:
+          type: integer
+          format: int32
+        orders:
+          type: integer
+          format: int32
+        revenueMinor:
+          type: integer
+          format: int64
+        deliveryFeesMinor:
+          type: integer
+          format: int64
+        ordersRefunded:
+          type: integer
+          format: int32
+        refundsSettled:
+          type: integer
+          format: int32
+        refundedMinor:
+          type: integer
+          format: int64
+        economics:
+          $ref: '#/components/schemas/RunEconomics'
+        minimumCoversBreakEven:
+          type: boolean
     PreorderDecision:
       type: object
       description: One entry of a window's decision log
@@ -5621,6 +6641,59 @@ components:
         count:
           type: integer
           format: int64
+    EconomicsSettingsChange:
+      type: object
+      description: 'One entry of the audit trail: the numbers before (the environment defaults for the first save) and after,
+        who, when and why'
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+        before:
+          $ref: '#/components/schemas/EconomicsSettingsNumbers'
+        after:
+          $ref: '#/components/schemas/EconomicsSettingsNumbers'
+        actor:
+          type: string
+        reason:
+          type: string
+        at:
+          type: string
+          format: date-time
+    EconomicsSettingsChanges:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EconomicsSettingsChange'
+    EconomicsSettingsNumbers:
+      type: object
+      description: The cost model of one side of a change
+      properties:
+        driverCostPerHourMinor:
+          type: integer
+          format: int64
+        driverCostPerMileMinor:
+          type: integer
+          format: int64
+        collectionMinutes:
+          type: number
+          format: double
+        perStopMinutes:
+          type: number
+          format: double
+        pickupPointStopMinutes:
+          type: number
+          format: double
+        handoverMinutesPerOrder:
+          type: number
+          format: double
+        roundTrip:
+          type: boolean
     DeliveryFeeChange:
       type: object
       description: 'One entry of the audit trail: the rule before and after, who, when and why'
@@ -5657,6 +6730,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeliveryFeeChange'
+    LocalAdvertorials:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalAdvertorial'
     Problem:
       type: object
       description: RFC 9457 problem details; `code` is a stable delivery-runs.* (or auth.*) code
