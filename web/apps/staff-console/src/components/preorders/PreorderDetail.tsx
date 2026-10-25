@@ -9,7 +9,10 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
+import { AdvertorialsPanel } from '@/components/runs/AdvertorialsPanel';
+import { WindowEconomicsCard } from '@/components/runs/WindowEconomics';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 
 import { CreativesPanel } from './CreativesPanel';
 import { type DecisionAction, DecisionBanner, DecisionButtons, DecisionDialog, DecisionLog, MinimumLine, RefundProgress } from './Decisions';
@@ -20,8 +23,8 @@ import { PreorderOrders } from './PreorderOrders';
 import { outlineButton, Pill, smallButton, usePreorderAccess,usePreordersApi } from './primitives';
 import { switchText, WindowSwitchToggle } from './WindowSwitch';
 
-type DetailTab = 'overview' | 'orders' | 'creatives' | 'analytics';
-const TABS: DetailTab[] = ['overview', 'orders', 'creatives', 'analytics'];
+type DetailTab = 'overview' | 'orders' | 'creatives' | 'advertorials' | 'analytics';
+const TABS: DetailTab[] = ['overview', 'orders', 'creatives', 'advertorials', 'analytics'];
 const DAY = 86_400_000;
 
 function Kpis({ s, w }: { s: PreorderSummary; w: PreorderWindow }) {
@@ -143,6 +146,7 @@ function SocialPreview({ w }: { w: PreorderWindow }) {
 
 /** One pre-order: header (status, where, dates, Pause/Resume, Edit, Late add, Export) and the four tabs. */
 export function PreorderDetail({ id }: { id: string }) {
+  const t = useT();
   const api = usePreordersApi();
   const access = usePreorderAccess();
   const qc = useQueryClient();
@@ -184,7 +188,7 @@ export function PreorderDetail({ id }: { id: string }) {
   const s = summary.data;
   const lateAddable = w.status === 'OPEN' || w.status === 'CLOSED';
   const tabHref = (t: DetailTab) => `${pathname}${t === 'overview' ? '' : `?tab=${t}`}`;
-  const labels: Record<DetailTab, string> = { overview: 'Overview', orders: `Orders (${s ? s.ordersTotal : '…'})`, creatives: 'Creatives', analytics: 'Analytics' };
+  const labels: Record<DetailTab, string> = { overview: 'Overview', orders: `Orders (${s ? s.ordersTotal : '…'})`, creatives: 'Creatives', advertorials: t('st.runs.adv.tab'), analytics: 'Analytics' };
   return (
     <div className="flex flex-col">
       <div className="flex flex-wrap items-start gap-3 border-b border-border p-5">
@@ -287,6 +291,7 @@ export function PreorderDetail({ id }: { id: string }) {
                 <>
                   <Kpis s={s} w={w} />
                   <MinimumLine w={w} />
+                  <WindowEconomicsCard id={w.id} />
                   <TimeProgress w={w} />
                   <RefundProgress w={w} />
                   <DecisionLog id={w.id} />
@@ -300,6 +305,7 @@ export function PreorderDetail({ id }: { id: string }) {
             </>
           )
         ) : null}
+        {tab === 'advertorials' ? <AdvertorialsPanel source="WINDOW" sourceId={w.id} /> : null}
         {tab === 'orders' ? <PreorderOrders key={ordersKey} w={w} canExport={access.canExport} /> : null}
         {tab === 'creatives' ? (
           <>

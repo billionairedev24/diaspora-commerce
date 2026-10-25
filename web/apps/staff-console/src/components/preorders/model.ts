@@ -99,7 +99,8 @@ export const href = {
   window: (id: string, tab?: string) => `/preorders/${encodeURIComponent(id)}${tab && tab !== 'overview' ? `?tab=${tab}` : ''}`,
   edit: (id: string) => `/preorders/${encodeURIComponent(id)}/edit`,
   create: () => '/preorders/new',
-  settings: () => '/preorders/settings'
+  settings: () => '/preorders/settings',
+  runs: () => '/preorders/runs'
 };
 
 /** The late-add pay-now option (settings and the late-add dialog): the SMS opens AfroTransact's own payment page,

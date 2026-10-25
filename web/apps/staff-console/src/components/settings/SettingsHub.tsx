@@ -15,6 +15,7 @@ import { ModuleView } from '@/components/module/ModuleView';
 import { NotificationsView } from '@/components/notifications/NotificationsView';
 import { SettingsPanel as PlanSettingsPanel } from '@/components/plans/SettingsPanel';
 import { ResourceTable } from '@/components/resources/ResourceTable';
+import { EconomicsSettingsView } from '@/components/runs/EconomicsSettingsView';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useT } from '@/i18n/t';
@@ -48,6 +49,8 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
       return <FeesView scope="fees" />;
     case 'delivery-fees':
       return <DeliveryFeesView />;
+    case 'run-economics':
+      return <EconomicsSettingsView />;
     case 'tax':
       return <FeesView scope="tax" />;
     case 'exchange-rates':
