@@ -111,7 +111,7 @@ test.describe('staff console · identity & access', () => {
     await settings.getByLabel('Shortest password (characters)').fill('14');
     await settings.getByRole('button', { name: 'Save settings' }).click();
     await expect(settings).toBeHidden();
-    await expect(page.getByText('Shortest password (characters)')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Settings' }).getByRole('cell', { name: '14', exact: true })).toBeVisible();
   });
 
   test('is not in the sidebar of staff without identity:admin', async ({ page, context, baseURL }) => {
@@ -121,6 +121,6 @@ test.describe('staff console · identity & access', () => {
     await expect(sections.getByRole('link', { name: /Sign-in & integrations/ })).toBeVisible();
     await expect(sections.getByRole('link', { name: /Identity & access/ })).toHaveCount(0);
     await page.goto('/identity');
-    await expect(page.getByText(/can.t open identity/i)).toBeVisible();
+    await expect(page.getByText(/don.t have access to this page/i)).toBeVisible();
   });
 });
