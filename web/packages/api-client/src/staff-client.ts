@@ -71,6 +71,7 @@ import { createStaffDeliveryFeesApi } from './staff-delivery-fees';
 import { createStaffMarketsApi } from './staff-markets';
 import { createStaffPlansApi } from './staff-plans';
 import { createStaffPreordersApi } from './staff-preorders';
+import { createStaffRunsApi } from './staff-runs';
 import { tableSearchParams } from './table-query';
 
 /** Server-driven table query: one search over every column, the sort (`<column>,asc|desc`), page or cursor, size. */
@@ -193,6 +194,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
     preorders: createStaffPreordersApi(request, options),
     /* Delivery fees (ADR 0005 §3): /v1/staff/delivery-fees/** mirrors delivery-runs' fee rules */
     deliveryFees: createStaffDeliveryFeesApi(request, options),
+    /* Run economics and advertorials (S263, S265): the cost model, P&L, break-even, location history, advertorials */
+    runs: createStaffRunsApi(request, options),
 
     /* Inventory hub and AfroTransact Retail (1P) (S281): /v1/staff/inventory/** and /v1/staff/retail/** */
     inventory: createInventoryHubApi(request, options)

@@ -54,6 +54,7 @@ import { type MockTemplateRow } from './notification-templates';
 import { planHandlers } from './plans';
 import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } from './preorders';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
+import { runHandlers } from './runs';
 import { staffSettingsHandlers } from './settings';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
@@ -1207,6 +1208,8 @@ export const staffHandlers = [
   ),
   /* ── pre-orders (S274): delivery-runs' staff API through the BFF ── */
   ...preorderHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Run economics and advertorials (S263, S265) */
+  ...runHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Plans & billing (S292–S297): the seller service's catalogue, trials, rewards and per-seller billing */

@@ -2156,6 +2156,305 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/economics-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The driver cost model behind run economics
+         * @description delivery-runs `GET /v1/economics-settings` (delivery-runs:read; module `preorders`, any level). Cost per driver hour
+         *     and per vehicle mile, the time a seller sweep, a doorstep stop, a pickup-point stop and a handover take, and whether
+         *     the drive back counts: the numbers every run and window P&L and break-even is calculated from. Version 0
+         *     (`source` CONFIG) means nobody saved yet and the environment's defaults apply. The ETag carries the version.
+         */
+        get: operations["getStaffEconomicsSettings"];
+        /**
+         * Change the driver cost model
+         * @description delivery-runs `PUT /v1/economics-settings` (preorders:manage, EDIT; If-Match relayed: the version seen, `0` for the
+         *     environment's defaults). Makes the next version; a save that changes nothing makes no new version. Money is in minor
+         *     units (cost per hour 0 to 1000.00, per mile 0 to 100.00), times in minutes (0 to 1440). The `reason` is required
+         *     (422) and is logged with who and when. Runs and windows are priced with the new numbers from the next calculation.
+         */
+        put: operations["updateStaffEconomicsSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/economics-settings/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit trail of the driver cost model (who changed what, when and why)
+         * @description delivery-runs `GET /v1/economics-settings/changes`, newest first: every save with the numbers before (the
+         *     environment's defaults for the first save) and after, the staff subject, the time and the reason.
+         */
+        get: operations["listStaffEconomicsChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/economics-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Break-even for a window being created, beside its minimum order count
+         * @description delivery-runs `POST /v1/preorders/economics-preview` (delivery-runs:read). The location is the one named, else the
+         *     active one matching the first city target. Gives the delivery fee per order the plan assumes (the window's own fee,
+         *     else the fee rule for the location's distance), the cost of the run that would deliver it, the orders needed to
+         *     break even and whether the minimum reaches them (`minimumCoversBreakEven`). `economics` is null when no active
+         *     location serves the targets or geo-service cannot measure the route.
+         */
+        post: operations["previewStaffWindowEconomics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/economics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A window's orders, revenue, delivery fees, cost, margin and break-even
+         * @description delivery-runs `GET /v1/preorders/{id}/economics` (delivery-runs:read). At the orders placed so far: what customers
+         *     paid, the delivery fees collected, the estimated cost of the run that delivers the window, the contribution margin
+         *     and the break-even orders. A cancelled window reports the orders refunded (`ordersRefunded`, `refundedMinor`,
+         *     `refundsSettled`) instead of revenue.
+         */
+        get: operations["getStaffPreorderEconomics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The towns delivery runs serve
+         * @description delivery-runs `GET /v1/locations` (delivery-runs:read).
+         */
+        get: operations["listStaffRunLocations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A location's runs (orders per run), subscriber counts and subscriber growth
+         * @description delivery-runs `GET /v1/locations/{id}/history` (delivery-runs:read): the latest runs with their orders and the
+         *     delivery fees they earn (a cancelled run: `ordersRefunded`, no fees), the subscribers (total, active, pending, per
+         *     channel) and 12 months of subscriber growth.
+         */
+        get: operations["getStaffRunLocationHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Delivery runs, newest window first
+         * @description delivery-runs `GET /v1/runs` (delivery-runs:read).
+         */
+        get: operations["listStaffRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/pnl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A run's P&L before and after it
+         * @description delivery-runs `GET /v1/runs/{id}/pnl` (delivery-runs:read). `BEFORE`: the estimate at the orders reserved so far.
+         *     `AFTER`: the completed run at its orders. `CANCELLED`: nothing earned or spent; `ordersRefunded` and
+         *     `refundedFeesMinor` say what went back to customers. `commissionShareMinor` is the commission attributed to the run,
+         *     reported by analytics.
+         */
+        get: operations["getStaffRunPnl"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/economics-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cost, break-even and P&L of a run being planned
+         * @description delivery-runs `POST /v1/runs/economics-preview` (delivery-runs:read). Nulls take the location's defaults;
+         *     `expectedOrders` defaults to the minimum. 502 when geo-service cannot measure the route.
+         */
+        post: operations["previewStaffRunEconomics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Location advertorials with views, clicks and orders
+         * @description delivery-runs `GET /v1/advertorials` (delivery-runs:read), newest first. Each is words for the visitors of the area a
+         *     pre-order window or delivery run serves, shown with a live closing countdown while ordering is open and over when it
+         *     closes or is cancelled. `results` are its views, clicks and (windows) the orders whose tracking tag carries it.
+         */
+        get: operations["listStaffAdvertorials"];
+        put?: never;
+        /**
+         * Write an advertorial (a variant) for a window or run
+         * @description delivery-runs `POST /v1/advertorials` (preorders:manage, EDIT). Created as a draft; publish it to make it live. Several
+         *     variants (A, B…) of one window or run share its visitors by weight. Variant defaults to the next free label.
+         */
+        post: operations["createStaffAdvertorial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draft the advertorial of a window or run from its data
+         * @description delivery-runs `POST /v1/advertorials/generate` (preorders:manage, EDIT). Town, delivery day, closing time and fee
+         *     become the words, live at once. Asking again re-drafts the generated one (a variant staff edited is left alone). 404
+         *     for an unknown window or run; 409 for one that is over.
+         */
+        post: operations["generateStaffAdvertorial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials/{advertorialId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One advertorial with its results
+         * @description delivery-runs `GET /v1/advertorials/{id}` (delivery-runs:read). The ETag carries the version.
+         */
+        get: operations["getStaffAdvertorial"];
+        /**
+         * Edit an advertorial
+         * @description delivery-runs `PUT /v1/advertorials/{id}` (preorders:manage, EDIT; If-Match relayed). Not an ended one. The words stop
+         *     following the window or run.
+         */
+        put: operations["updateStaffAdvertorial"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/advertorials/{advertorialId}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish, pause or end an advertorial
+         * @description delivery-runs `POST /v1/advertorials/{id}/publish|pause|end` (preorders:manage, EDIT; If-Match relayed). publish: draft
+         *     or paused to live; pause: live to paused; end: over for good (reason STAFF).
+         */
+        post: operations["actStaffAdvertorial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/customers/search": {
         parameters: {
             query?: never;
@@ -6166,6 +6465,346 @@ export interface components {
                 [key: string]: unknown;
             });
         };
+        StaffEconomicsNumbers: {
+            /** @description Loaded driver cost per hour (wage, insurance), minor units */
+            driverCostPerHourMinor: number;
+            /** @description Vehicle cost per mile (fuel, wear), minor units */
+            driverCostPerMileMinor: number;
+            /** @description Seller sweep and loading at the origin */
+            collectionMinutes: number;
+            /** @description Time per doorstep drop, local driving included */
+            perStopMinutes: number;
+            /** @description Time at a community pickup point */
+            pickupPointStopMinutes: number;
+            /** @description Time per order handed over at a pickup point */
+            handoverMinutesPerOrder: number;
+            /** @description Count the drive back to the origin */
+            roundTrip: boolean;
+        };
+        /**
+         * @description The driver cost model; the ETag carries the version for If-Match. Version 0 (`source` CONFIG): the environment's
+         *     defaults apply because nobody saved yet.
+         */
+        StaffEconomicsSettings: components["schemas"]["StaffEconomicsNumbers"] & {
+            version: number;
+            /** @enum {string} */
+            source: "CONFIG" | "STAFF";
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** @description Staff subject of the last save */
+            updatedBy?: string | null;
+            /** @description Why the last save was made */
+            reason?: string | null;
+            can: components["schemas"]["PreorderCan"];
+        };
+        /** @description The cost model's new numbers; the reason is required and is logged with who and when. */
+        StaffEconomicsSettingsRequest: components["schemas"]["StaffEconomicsNumbers"] & {
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffEconomicsChanges: {
+            items: {
+                id?: string;
+                version: number;
+                before: components["schemas"]["StaffEconomicsNumbers"];
+                after: components["schemas"]["StaffEconomicsNumbers"];
+                /** @description Staff subject */
+                actor: string;
+                reason: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+        };
+        StaffRunRoute: {
+            /** @description One-way road miles from the origin to the location */
+            roadMiles: number;
+            /** @description One-way drive time */
+            driveMinutes: number;
+            /** @description How geo measured it */
+            method?: string;
+        };
+        /** @description cost(n) = fixedCostMinor + n x perOrderCostMinor */
+        StaffRunCostModel: {
+            driveMiles: number;
+            fixedMinutes: number;
+            perOrderMinutes: number;
+            fixedCostMinor: number;
+            perOrderCostMinor: number;
+        };
+        /** @description P&L at a number of orders */
+        StaffRunSnapshot: {
+            orders: number;
+            /** @description Delivery fees collected */
+            feeRevenueMinor: number;
+            /** @description Commission attributed to the run, when reported */
+            commissionShareMinor?: number | null;
+            /** @description Fees plus commission share */
+            revenueMinor: number;
+            /** @description Estimated driver and vehicle cost */
+            estimatedCostMinor: number;
+            /** @description Revenue minus estimated cost */
+            contributionMarginMinor: number;
+        };
+        StaffRunEconomics: {
+            route: components["schemas"]["StaffRunRoute"];
+            cost: components["schemas"]["StaffRunCostModel"];
+            /** @description Delivery fee per order */
+            feeMinor: number;
+            currency: string;
+            /** @description Fewest orders whose fees cover the cost; null when a fee never covers a stop */
+            breakEvenOrders?: number | null;
+            atMinimum: components["schemas"]["StaffRunSnapshot"];
+            atCapacity?: components["schemas"]["StaffRunSnapshot"] | null;
+            atOrders: components["schemas"]["StaffRunSnapshot"];
+        };
+        StaffRunPlanRequest: {
+            /** Format: uuid */
+            locationId: string;
+            feeMinor?: number | null;
+            minOrders?: number | null;
+            capacityOrders?: number | null;
+            /** @enum {string|null} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT" | null;
+            expectedOrders?: number | null;
+            commissionShareMinor?: number | null;
+        };
+        StaffRunPnl: {
+            economics: components["schemas"]["StaffRunEconomics"];
+            /** @enum {string} */
+            status: "DRAFT" | "ANNOUNCED" | "OPEN" | "EXTENDED" | "CUT_OFF" | "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED" | "CANCELLED";
+            /**
+             * @description BEFORE the run is driven, AFTER once completed, CANCELLED: nothing earned or spent
+             * @enum {string}
+             */
+            phase: "BEFORE" | "AFTER" | "CANCELLED";
+            cancelReason?: string | null;
+            /** @description Orders of a cancelled run (each refunded in full) */
+            ordersRefunded: number;
+            /** @description Delivery fees handed back */
+            refundedFeesMinor: number;
+        };
+        StaffWindowPlanRequest: {
+            /**
+             * Format: uuid
+             * @description The location of the closing run (absent: matched by the first city)
+             */
+            locationId?: string | null;
+            targets?: string[];
+            door?: boolean | null;
+            pickup?: boolean | null;
+            /** @description The window's own door fee */
+            doorFeeMinor?: number | null;
+            pickupFeeMinor?: number | null;
+            /** @description The minimum being weighed */
+            minOrders?: number | null;
+            /** @description Orders to show a P&L for (default the minimum) */
+            expectedOrders?: number | null;
+        };
+        StaffWindowPlan: {
+            locationId?: string | null;
+            locationName?: string | null;
+            currency: string;
+            feeMinor: number;
+            /** @enum {string} */
+            dropMode: "DOORSTEP" | "PICKUP_POINT";
+            minOrders: number;
+            /** @description Null when no location serves the targets or the route cannot be measured */
+            economics?: components["schemas"]["StaffRunEconomics"] | null;
+            /** @description Whether the minimum reaches break-even (null without a break-even or a minimum) */
+            minimumCoversBreakEven?: boolean | null;
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffWindowEconomics: {
+            windowId: string;
+            code?: string;
+            name?: string;
+            status: string;
+            cancelled: boolean;
+            locationId?: string | null;
+            locationName?: string | null;
+            currency: string;
+            minOrders: number;
+            /** @description Orders that count (paid and late adds); 0 for a cancelled window */
+            orders: number;
+            /** @description What customers paid, delivery fees included; 0 for a cancelled window */
+            revenueMinor: number;
+            deliveryFeesMinor: number;
+            /** @description Orders refunded in full by the cancellation */
+            ordersRefunded: number;
+            /** @description Of those, refunds or released authorisations already confirmed */
+            refundsSettled: number;
+            /** @description What customers got back, delivery fees included */
+            refundedMinor: number;
+            /** @description At the actual orders; null when no location serves the window */
+            economics?: components["schemas"]["StaffRunEconomics"] | null;
+            minimumCoversBreakEven?: boolean | null;
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffRunLocation: {
+            /** Format: uuid */
+            id: string;
+            /** @example bastrop-tx */
+            slug: string;
+            /** @example Bastrop */
+            name: string;
+            market?: string;
+            state?: string | null;
+            timeZone?: string;
+            currency?: string;
+            defaultFeeMinor?: number;
+            defaultMinOrders?: number;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            whatsappInviteUrl?: string | null;
+            active?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffRunLocations: {
+            items: components["schemas"]["StaffRunLocation"][];
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffRun: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            locationId: string;
+            status: string;
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd?: string;
+            /** Format: date-time */
+            cutoffAt: string;
+            feeMinor: number;
+            currency: string;
+            minOrders: number;
+            capacityOrders?: number | null;
+            dropMode?: string;
+            reservedOrders: number;
+            minimumMet?: boolean;
+            cancelReason?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffRuns: {
+            items: components["schemas"]["StaffRun"][];
+        };
+        StaffRunLocationHistory: {
+            location: components["schemas"]["StaffRunLocation"];
+            runs: {
+                /** Format: uuid */
+                id: string;
+                status: string;
+                /** Format: date-time */
+                windowStart: string;
+                /** Format: date-time */
+                cutoffAt: string;
+                orders: number;
+                packages: number;
+                feeMinor: number;
+                /** @description Delivery fees earned; 0 for a cancelled run */
+                feeRevenueMinor: number;
+                /** @description Orders refunded in full (cancelled runs) */
+                ordersRefunded: number;
+                minOrders: number;
+                minimumMet: boolean;
+            }[];
+            subscribers: {
+                locationId?: string;
+                total: number;
+                active: number;
+                pending: number;
+                /** @description Active subscriptions with consent per channel (EMAIL, SMS, PUSH, WHATSAPP) */
+                byChannel: {
+                    [key: string]: number;
+                };
+            };
+            subscriberGrowth: {
+                /** @example 2026-10 */
+                month: string;
+                count: number;
+            }[];
+        };
+        StaffAdvertorialResults: {
+            views: number;
+            clicks: number;
+            /** @description clicks / views x 100 */
+            ctrPct?: number | null;
+            /** @description Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed) */
+            orders?: number | null;
+        };
+        StaffAdvertorial: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            source: "RUN" | "WINDOW";
+            sourceId: string;
+            sourceName?: string | null;
+            sourceCode?: string | null;
+            sourceStatus?: string | null;
+            /** Format: date-time */
+            sourceCloses?: string | null;
+            locationId?: string | null;
+            locationName?: string | null;
+            /** @example A */
+            variant: string;
+            weight: number;
+            priority: number;
+            /** @description The words follow the window or run until staff edit them */
+            generated: boolean;
+            headline: string;
+            body: string;
+            ctaLabel: string;
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+            /** @enum {string} */
+            status: "DRAFT" | "LIVE" | "PAUSED" | "ENDED";
+            /** @enum {string|null} */
+            ended?: "SOURCE_CLOSED" | "CANCELLED" | "SCHEDULE" | "STAFF" | null;
+            /** @description Visitors can see it right now */
+            serving: boolean;
+            results: components["schemas"]["StaffAdvertorialResults"];
+            createdBy?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            version: number;
+            can?: components["schemas"]["PreorderCan"];
+        };
+        StaffAdvertorials: {
+            items: components["schemas"]["StaffAdvertorial"][];
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffAdvertorialGenerateRequest: {
+            /** @enum {string} */
+            source: "RUN" | "WINDOW";
+            /** @description Window id or run id */
+            sourceId: string;
+        };
+        StaffAdvertorialRequest: {
+            /**
+             * @description Required to create; ignored on an edit
+             * @enum {string}
+             */
+            source?: "RUN" | "WINDOW";
+            /** @description Required to create; ignored on an edit */
+            sourceId?: string;
+            /** @example B */
+            variant?: string | null;
+            weight?: number | null;
+            priority?: number | null;
+            headline: string;
+            body?: string | null;
+            ctaLabel: string;
+            /** Format: date-time */
+            startsAt?: string | null;
+            /** Format: date-time */
+            endsAt?: string | null;
+        };
         StaffPreorderObject: {
             [key: string]: unknown;
         };
@@ -6797,6 +7436,9 @@ export interface components {
         ShipmentId: string;
         /** @description Window id or code */
         PreorderId: string;
+        LocationId: string;
+        RunId: string;
+        AdvertorialId: string;
         DeliveryFeeMethod: "AFROTRANSACT_DELIVERY" | "CARRIER" | "PICKUP";
         /** @description ISO 4217 code, for example USD */
         DeliveryFeeCurrency: string;
@@ -10361,6 +11003,474 @@ export interface operations {
             404: components["responses"]["Problem"];
             412: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffEconomicsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cost model */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffEconomicsSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffEconomicsSettings: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffEconomicsSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffEconomicsSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffEconomicsChanges: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Changes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffEconomicsChanges"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffWindowEconomics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffWindowPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffWindowPlan"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorderEconomics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Economics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffWindowEconomics"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffRunLocations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Locations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocations"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRunLocationHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description History */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationHistory"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffRuns: {
+        parameters: {
+            query?: {
+                locationId?: string;
+                /** @description One or more run statuses, comma separated (OPEN,CONFIRMED,CANCELLED…) */
+                status?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Runs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRuns"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRunPnl: {
+        parameters: {
+            query?: {
+                commissionShareMinor?: number;
+            };
+            header?: never;
+            path: {
+                runId: components["parameters"]["RunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description P&L */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunPnl"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewStaffRunEconomics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Economics */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunEconomics"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffAdvertorials: {
+        parameters: {
+            query?: {
+                source?: "RUN" | "WINDOW";
+                sourceId?: string;
+                status?: "DRAFT" | "LIVE" | "PAUSED" | "ENDED";
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorials */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorials"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAdvertorialRequest"];
+            };
+        };
+        responses: {
+            /** @description Draft */
+            201: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    generateStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAdvertorialGenerateRequest"];
+            };
+        };
+        responses: {
+            /** @description Advertorial */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                advertorialId: components["parameters"]["AdvertorialId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorial */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                advertorialId: components["parameters"]["AdvertorialId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffAdvertorialRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    actStaffAdvertorial: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                advertorialId: components["parameters"]["AdvertorialId"];
+                action: "publish" | "pause" | "end";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Advertorial */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffAdvertorial"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
