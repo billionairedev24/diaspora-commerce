@@ -46,6 +46,7 @@ type fakeDeliveryRuns struct {
 	mu       sync.Mutex
 	ifMatch  map[string]string
 	idemKeys map[string]string
+	queries  map[string]string
 	paths    []string
 }
 
@@ -85,6 +86,12 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.HasPrefix(p, "/v1/delivery-fees") {
 		f.deliveryFees(w, r)
+		return
+	}
+	if strings.HasPrefix(p, "/v1/economics-settings") || strings.HasPrefix(p, "/v1/locations") || strings.HasPrefix(p, "/v1/runs") ||
+		strings.HasPrefix(p, "/v1/advertorials") || p == "/v1/preorders/economics-preview" ||
+		strings.HasPrefix(p, "/v1/preorders/") && strings.HasSuffix(p, "/economics") {
+		f.runEconomics(w, r)
 		return
 	}
 	if !strings.HasPrefix(p, "/v1/preorder") && !strings.HasPrefix(p, "/v1/places/") {
@@ -185,7 +192,7 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func preorderStaffBFF(t *testing.T) (*fakeDeliveryRuns, func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder) {
 	t.Helper()
-	f := &fakeDeliveryRuns{fakePlatform: &fakePlatform{}, ifMatch: map[string]string{}, idemKeys: map[string]string{}}
+	f := &fakeDeliveryRuns{fakePlatform: &fakePlatform{}, ifMatch: map[string]string{}, idemKeys: map[string]string{}, queries: map[string]string{}}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	metrics := httpclient.NewMetrics(prometheus.NewRegistry())

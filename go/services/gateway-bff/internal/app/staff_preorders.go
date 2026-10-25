@@ -76,6 +76,35 @@ type StaffPreordersService interface {
 	DeliveryFeeChanges(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	// PreviewDeliveryFee answers what a customer would pay with the resolution checkout runs.
 	PreviewDeliveryFee(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// EconomicsSettings is the driver cost model behind run economics (S265); version 0 = the environment's defaults.
+	EconomicsSettings(ctx context.Context, c *domain.Caller) (any, error)
+	// UpdateEconomicsSettings saves the next version of the cost model ({numbers, reason} required, If-Match).
+	UpdateEconomicsSettings(ctx context.Context, c *domain.Caller, ifMatch string, body map[string]any) (any, error)
+	// EconomicsChanges is the cost model's audit trail, newest first (?limit=).
+	EconomicsChanges(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// WindowEconomics is a window's orders, revenue, fees, cost, margin and break-even (a cancelled one: orders refunded).
+	WindowEconomics(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// PlanWindow is the break-even shown beside a window's minimum while the window is created or edited.
+	PlanWindow(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// RunLocations lists the towns served by delivery runs.
+	RunLocations(ctx context.Context, c *domain.Caller) (any, error)
+	// RunLocationHistory is a location's runs (orders, fees, refunds), subscriber counts and subscriber growth.
+	RunLocationHistory(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// Runs lists runs (?locationId=&status=&limit=).
+	Runs(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// RunPnl is a run's P&L before it, after it, or the orders a cancelled run refunded.
+	RunPnl(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
+	// PlanRun is the planner for a run at a location: cost, break-even and P&L.
+	PlanRun(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// Advertorials lists location advertorials with views, clicks and orders (?source=&sourceId=&status=&limit=).
+	Advertorials(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	Advertorial(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// GenerateAdvertorial drafts the advertorial of a window or run from its data, live at once.
+	GenerateAdvertorial(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	CreateAdvertorial(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	UpdateAdvertorial(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// ActAdvertorial publishes, pauses or ends an advertorial (If-Match).
+	ActAdvertorial(ctx context.Context, c *domain.Caller, id, action, ifMatch string) (any, error)
 	// Customers is the late-add customer picker: identity's people search with each customer's saved addresses.
 	Customers(ctx context.Context, c *domain.Caller, q, windowID string) (domain.LateAddCustomers, error)
 }
