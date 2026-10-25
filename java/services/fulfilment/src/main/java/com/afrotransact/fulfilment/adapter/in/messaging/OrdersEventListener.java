@@ -57,7 +57,8 @@ class OrdersEventListener {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record LineMessage(String lineId, String variantAtin, String title, int quantity) {
+    record LineMessage(String lineId, String variantAtin, String title, int quantity, String sellerOrgId,
+                       String sellerName) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -104,7 +105,8 @@ class OrdersEventListener {
                 .map(s -> new PlacedOrder.PlacedShipment(s.shipmentId(), s.sellerOrgId(), s.sellerName(),
                         s.fulfilmentType(), s.deliveryMethod(), s.promisedBy(), s.handoverRequired(), s.perishable(),
                         s.nodeId(), s.lines() == null ? List.of() : s.lines().stream()
-                        .map(l -> new PlacedOrder.PlacedLine(l.lineId(), l.variantAtin(), l.title(), l.quantity()))
+                        .map(l -> new PlacedOrder.PlacedLine(l.lineId(), l.variantAtin(), l.title(), l.quantity(),
+                                l.sellerOrgId(), l.sellerName()))
                         .toList(), s.shipBy(), s.pickup() == null ? null
                         : new PlacedOrder.SellerPickup(s.pickup().locationId(), s.pickup().lat(), s.pickup().lng())))
                 .toList();

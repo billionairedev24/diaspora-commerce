@@ -99,6 +99,13 @@ at:
       candidates: ${NEAREST_DRIVER_CANDIDATES:20}
       # Service day of routes ("today") is taken in this time zone.
       zone: ${DISPATCH_ZONE:America/Chicago}
+    # S264: delivery runs (a closed pre-order window's orders). One route per run, or several when the run's bags do not
+    # fit one van; seller pickups first, then drops by road distance from the hub (or one drop per order at the pickup point).
+    runs:
+      depot-node: ${FULFILMENT_RUN_DEPOT_NODE:${FULFILMENT_DEFAULT_NODE:}}
+      route-capacity: ${RUN_ROUTE_CAPACITY:40}
+      # Seller organisations whose goods are already at the depot (AfroTransact Retail): loaded at the FC, not collected.
+      depot-sellers: ${RUN_DEPOT_SELLERS:}
     reattempt:
       wait: ${REATTEMPT_WAIT:5m}
       max-reattempts: ${MAX_REATTEMPTS:2}
@@ -109,15 +116,17 @@ at:
       token-path: /oauth2/token
       client-id: ${FULFILMENT_CLIENT_ID:fulfilment-service}
       client-secret: ${FULFILMENT_CLIENT_SECRET:}
-      scopes: ${FULFILMENT_CLIENT_SCOPES:orders:update-status inventory:reserve}
+      scopes: ${FULFILMENT_CLIENT_SCOPES:orders:update-status inventory:reserve delivery-runs:read}
     upstreams:
       timeout: ${UPSTREAM_TIMEOUT:5s}
       geo-timeout: ${GEO_TIMEOUT:2s}
       orders-url: ${ORDERS_URL:http://localhost:8104}
       inventory-url: ${INVENTORY_URL:http://localhost:8103}
       geo-url: ${GEO_URL:http://localhost:8205}
+      delivery-runs-url: ${DELIVERY_RUNS_URL:http://localhost:8115}
     consumers:
       orders-topic: at.order.events
+      delivery-runs-topic: at.delivery-runs.events
       identity-topic: at.identity.events
     jobs:
       enabled: ${FULFILMENT_JOBS_ENABLED:true}
