@@ -17,10 +17,11 @@ Flyway `V31__identity_admin_console.sql`, contracts `contracts/openapi/identity.
 
 - **A reason, always.** Every change (register, edit, disable/enable, rotate a secret, revoke, rotate a signing key,
   change a setting) needs a reason of 10 to 500 characters. Without one identity answers 422 on `reason`.
+- **The dangerous ones ask for your password again** ([Step-up](#step-up-the-dangerous-actions) below).
 - **Audited.** Each change appends to `access_change_log` (append-only; `actor_id`, `action`, `subject`, `detail`). `detail`
   holds `reason=…` and, for edits, `before=…; after=…`. Actions: `oauth-client.created|updated|disabled|enabled|secret-rotated`,
   `session.revoked`, `sessions.revoked-user|revoked-client`, `signing-key.rotated`, `auth-settings.updated`,
-  `token.inspected` (subject and key id only). Read it in People › a user, or `GET /v1/admin/access-log`.
+  `token.inspected` (subject and key id only), `step-up.verified` (who confirmed their password, never the password or the proof). Read it in People › a user, or `GET /v1/admin/access-log`.
 - **Secrets are shown once.** A new or rotated client secret is in the response of that one call (the sheet's `reveal`).
   Identity stores only a hash, never logs it, and cannot return it again; the BFF and the console keep it nowhere (it is
   kept out of the query cache and gone when the dialog closes). Tokens pasted into the inspector are handled the same way.
@@ -44,6 +45,26 @@ enabled, last secret rotation. Register (public or confidential), edit everythin
   client when its id does not exist; it never overwrites an existing one, so an edit or a rotation made here survives a
   deployment. To change an existing client, change it here (the YAML is now only the first-run default).
 - Token lifetimes are per client; the Settings ceilings (below) cap them.
+
+## Step-up: the dangerous actions
+
+Rotating the signing key, signing a user out everywhere, revoking all of a client's sign-ins, disabling a client and changing the
+authentication settings can lock people out or change how every token is trusted. They need **proof that it is still you**, on
+top of the staff sign-in (which already passed a second factor) and the reason:
+
+- the console form for each of them ends with **Your password**: type it (a blank field is accepted only if you signed in less than 5
+  minutes ago, see below). A wrong password is an error on that field and nothing happens;
+- identity checks it (`POST /v1/admin/identity/step-up`, BFF `stepUpPassword`) and issues a **proof** valid for 5 minutes, bound to you
+  (only its SHA-256 is stored, table `step_up_proof`); the dangerous call carries it as `X-Step-Up`. Through the API you can reuse one proof
+  for several actions within its 5 minutes;
+- **a fresh sign-in counts too**: the access token carries `auth_time` (when you signed in, kept across refreshes) and an action within
+  `at.identity.step-up.fresh-sign-in` (`IDENTITY_STEP_UP_FRESH_SIGN_IN`, default `PT5M`) of it needs no password. Without either, identity answers
+  403 `identity.step-up-required`;
+- wrong passwords are counted by the same lockout as sign-in (per account, never per IP: the BFF calls for everyone), so guessing the password
+  with a stolen token locks the account; an account with no password (passkey or social sign-in only) signs in again instead.
+
+Ordinary changes (register or edit a client, enable it, rotate a client secret, revoke one sign-in, the inspector) need only the reason. Rotating a client
+secret is not in the list because the old secret keeps working for 24 hours.
 
 ## Sessions & tokens
 
@@ -76,12 +97,21 @@ Routine rotation (quarterly, or when someone with access to the key leaves). No 
    example "Quarterly rotation, ticket SEC-123") and confirm.
 2. A new key is **Active**; the previous one is **Retiring**, with **Retires after** = now + the longest access token
    lifetime (the longest client lifetime, capped by the Settings ceiling) + 2 minutes of skew.
-3. Within about 5 seconds every identity replica signs with the new key. Verify: paste a fresh access token in the **Token
+3. The replica that took the request signs with the new key as soon as the rotation commits; the others re-read the table within about 5 seconds. Verify: paste a fresh access token in the **Token
    inspector** (it names the new `kid` and verifies), and check the JWKS under *Published documents* lists both keys.
 4. Resource servers cache the JWKS and refetch when they meet an unknown `kid`; nothing to do. Tokens signed by the old key
    verify until it retires; after **Retires after** the old key leaves the JWKS (the table moves it to *Retired* the next
    time the list is opened or the key is rotated) and its private half is already gone.
 5. Confirm in the access log: `signing-key.rotated` with your reason.
+
+**A rotation cannot be undone from the console**: the old key's private half is erased the moment it stops being active (that is the point
+of rotating), so it can never sign again; it only keeps verifying the tokens it already signed until it retires. If the new key
+misbehaves, rotate again. The break-glass way back to the configured key is in
+[identity-admin-dev-test.md](identity-admin-dev-test.md#rolling-back-a-bad-key-rotation).
+
+The private half of the active key is sealed with the data-protection key (`IDENTITY_DATA_KEY`). The data-key rotation
+(`POST /v1/admin/data-protection/rotate`, Users & roles) reseals it with the TOTP seeds and its status counts it, so a previous data key can be
+dropped from `IDENTITY_DATA_KEYS_PREVIOUS` only when nothing is left under it.
 
 If rotation fails midway (a unique-index error), nothing is half-applied: the old key was made *retiring* in the same
 transaction, which rolls back. Retry.
@@ -124,10 +154,13 @@ The idle timeout cannot exceed the absolute timeout. Saving a value equal to the
   edit, provisioning never overwrites), sessions (revoked refresh tokens stop working), key rotation with the old key
   published until it retires, the inspector never storing a token, settings read at runtime.
 - gateway-bff: `TestStaffIdentityAdminConformance` exercises every new operation against `gateway-bff-staff.yaml`.
-- Console: `test/identity-admin.test.tsx` (Vitest, MSW mocks); Playwright mock spec `staff-console.identity-admin.spec.ts`.
+- Console: `test/identity-admin.test.tsx` and `packages/api-client/test/staff-identity.test.ts` (Vitest, mock BFF); Playwright mock spec
+  `staff-console.identity-admin.spec.ts` (including the axe checks).
+- Step-up: `StepUpServiceImplTest`, `IdentityTokenCustomizerTest` (`auth_time`), `IdentityAdminIT` (proof required, wrong password,
+  expiry, audit), `StepUpFreshSignInIT` (a fresh sign-in needs no proof).
+- Developers testing on the dev / OVHcloud test environment follow [identity-admin-dev-test.md](identity-admin-dev-test.md).
 
 ## Not covered yet
 
-- **Step-up MFA** for these actions is not implemented (staff already pass a second factor at sign-in; the reason and the
-  audit trail are the controls today).
+- A **second factor** (code or passkey) at step-up: it is the password, or a sign-in from the last five minutes (which did pass the second factor).
 - Revoking an **access token** before it expires (a deny-list) is not offered; lifetimes are minutes.

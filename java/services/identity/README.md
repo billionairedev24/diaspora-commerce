@@ -411,6 +411,8 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `GET /v1/admin/access-log?userId=` | `access:read` | Append-only change log |
 | `GET /v1/admin/identity-providers`, `PUT /v1/admin/identity-providers/{id}` | read / admin | Identity provider switches |
 | `GET /v1/admin/data-protection`, `POST /v1/admin/data-protection/rotate` | STAFF + `platform.super_admin` | Encryption-key status, re-encrypt MFA secrets under the current key ([Data protection](#data-protection-s202)) |
+| `/v1/admin/identity/**` (clients, sessions, signing-keys, token-inspector, discovery, settings) | `identity:admin` | Identity admin console (S291): OAuth clients, sign-ins, JWKS key rotation, token inspector, auth settings; every change needs a reason and is audited ([guide](../../../docs/engineering/identity-admin.md)) |
+| `POST /v1/admin/identity/step-up` | `identity:admin` | Re-enter the staff member's password; returns a 5-minute proof for the `X-Step-Up` header that rotate-key, sign-out-everywhere, revoke-a-client, disable-a-client and change-settings need (or a sign-in younger than `at.identity.step-up.fresh-sign-in`, 5 min) |
 | `PUT /v1/orgs/{orgId}` | `orgs:manage` (seller service) | Mirror seller/provider orgs and approval status |
 | `GET /v1/orgs/{orgId}/roles` | team reader | S245: roles assignable in the organisation `{orgId, kind, roles: [{key, portal, name, description, permissions}]}` — seller roles for SELLER, provider roles for PROVIDER, both for BOTH (Seller Center role pickers and nav groups) |
 | `GET /v1/orgs/{orgId}/members` | team reader (below) | Member directory `{orgId, items: [{userId, firstName, lastName, name, email, roleKey, roleLabel, status ACTIVE/DISABLED, joinedAt}]}` |
