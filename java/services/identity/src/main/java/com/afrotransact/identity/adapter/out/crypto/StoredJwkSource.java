@@ -11,6 +11,7 @@ import com.afrotransact.identity.domain.SigningKey;
 import com.afrotransact.identity.domain.SigningKeyStatus;
 import com.afrotransact.identity.port.SecretCipher;
 import com.afrotransact.identity.port.SecretCipherException;
+import com.afrotransact.identity.port.SigningKeyCache;
 import com.afrotransact.identity.port.SigningKeyStore;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.KeySourceException;
@@ -31,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * previous public keys in the configuration stay published. The table is re-read every few seconds, so a rotation on
  * one replica reaches the others quickly; both signing and the JWKS come from the same snapshot.
  */
-public class StoredJwkSource implements JWKSource<SecurityContext> {
+public class StoredJwkSource implements JWKSource<SecurityContext>, SigningKeyCache {
 
     private static final Logger LOG = LoggerFactory.getLogger(StoredJwkSource.class);
     private static final Duration REFRESH = Duration.ofSeconds(5);
@@ -56,7 +57,8 @@ public class StoredJwkSource implements JWKSource<SecurityContext> {
     }
 
     /** Drops the snapshot so the next use reads the table (after a rotation on this replica). */
-    public void refresh() {
+    @Override
+    public void invalidate() {
         snapshot = null;
     }
 

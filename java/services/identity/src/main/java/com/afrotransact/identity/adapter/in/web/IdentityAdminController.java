@@ -17,6 +17,8 @@ import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.SessionRespons
 import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.SettingsResponse;
 import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.SettingsUpdate;
 import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.SigningKeyResponse;
+import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.StepUpRequest;
+import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.StepUpResponse;
 import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.TokenInspectionRequest;
 import com.afrotransact.identity.adapter.in.web.IdentityAdminDtos.TokenInspectionResponse;
 import com.afrotransact.identity.application.AuthSettingsService;
@@ -24,16 +26,21 @@ import com.afrotransact.identity.application.OAuthClientAdminService;
 import com.afrotransact.identity.application.ProtectedClients;
 import com.afrotransact.identity.application.SessionAdminService;
 import com.afrotransact.identity.application.SigningKeyAdminService;
+import com.afrotransact.identity.application.StepUpService;
 import com.afrotransact.identity.application.TokenInspectorService;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -47,24 +54,47 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 class IdentityAdminController {
 
+    private static final String STEP_UP = "X-Step-Up";
+    private static final String STEP_UP_HELP = "Step-up proof from POST /v1/admin/identity/step-up; not needed within "
+            + "five minutes of signing in";
+
     private final OAuthClientAdminService clients;
     private final SessionAdminService sessions;
     private final SigningKeyAdminService signingKeys;
     private final TokenInspectorService inspector;
     private final AuthSettingsService settings;
+    private final StepUpService stepUp;
     private final ProtectedClients platformClients;
     private final Clock clock;
 
     IdentityAdminController(OAuthClientAdminService clients, SessionAdminService sessions,
                             SigningKeyAdminService signingKeys, TokenInspectorService inspector,
-                            AuthSettingsService settings, ProtectedClients platformClients, Clock clock) {
+                            AuthSettingsService settings, StepUpService stepUp, ProtectedClients platformClients,
+                            Clock clock) {
         this.clients = clients;
         this.sessions = sessions;
         this.signingKeys = signingKeys;
         this.inspector = inspector;
         this.settings = settings;
+        this.stepUp = stepUp;
         this.platformClients = platformClients;
         this.clock = clock;
+    }
+
+    // ---------------------------------------------------------------- step-up
+
+    @Operation(summary = "Confirm your password for the dangerous actions; returns a proof for the X-Step-Up header",
+            description = "The proof is valid for five minutes and bound to the signed-in staff member. Wrong passwords "
+                    + "count towards the account's sign-in lockout. Signing in again also counts: the dangerous "
+                    + "actions accept an access token whose sign-in is less than five minutes old.")
+    @PostMapping("/v1/admin/identity/step-up")
+    StepUpResponse confirmPassword(@RequestBody StepUpRequest body) {
+        return StepUpResponse.of(stepUp.verify(body.password()));
+    }
+
+    /** The dangerous actions need a step-up proof or a sign-in from the last five minutes (403 otherwise). */
+    private void requireStepUp(String proof, Jwt jwt) {
+        stepUp.require(proof, jwt == null ? null : jwt.getClaimAsInstant("auth_time"));
     }
 
     // ---------------------------------------------------------------- clients
@@ -107,7 +137,10 @@ class IdentityAdminController {
 
     @Operation(summary = "Disable a client: the token endpoint refuses it and its refresh tokens stop working")
     @PostMapping("/v1/admin/identity/clients/{clientId}/disable")
-    ClientResponse disableAdminClient(@PathVariable String clientId, @RequestBody ReasonBody body) {
+    ClientResponse disableAdminClient(@PathVariable String clientId, @RequestBody ReasonBody body,
+                                      @Parameter(description = STEP_UP_HELP) @RequestHeader(value = STEP_UP, required = false) String proof,
+                                      @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
+        requireStepUp(proof, jwt);
         return ClientResponse.of(clients.setEnabled(clientId, false, body.reason()),
                 platformClients.contains(clientId), Instant.now(clock));
     }
@@ -155,13 +188,19 @@ class IdentityAdminController {
 
     @Operation(summary = "Sign a user out everywhere: every sign-in and single sign-on browser session")
     @PostMapping("/v1/admin/identity/users/{userId}/sessions/revoke")
-    RevokedResponse revokeAdminUserSessions(@PathVariable UUID userId, @RequestBody ReasonBody body) {
+    RevokedResponse revokeAdminUserSessions(@PathVariable UUID userId, @RequestBody ReasonBody body,
+                                            @Parameter(description = STEP_UP_HELP) @RequestHeader(value = STEP_UP, required = false) String proof,
+                                            @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
+        requireStepUp(proof, jwt);
         return RevokedResponse.of(sessions.revokeAllOfUser(userId, body.reason()));
     }
 
     @Operation(summary = "Revoke every sign-in of a client")
     @PostMapping("/v1/admin/identity/clients/{clientId}/sessions/revoke")
-    RevokedResponse revokeAdminClientSessions(@PathVariable String clientId, @RequestBody ReasonBody body) {
+    RevokedResponse revokeAdminClientSessions(@PathVariable String clientId, @RequestBody ReasonBody body,
+                                              @Parameter(description = STEP_UP_HELP) @RequestHeader(value = STEP_UP, required = false) String proof,
+                                              @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
+        requireStepUp(proof, jwt);
         return RevokedResponse.of(sessions.revokeAllOfClient(clientId, body.reason()));
     }
 
@@ -178,7 +217,10 @@ class IdentityAdminController {
             + "longest access token has expired")
     @PostMapping("/v1/admin/identity/signing-keys/rotate")
     @ResponseStatus(HttpStatus.CREATED)
-    SigningKeyResponse rotateAdminSigningKey(@RequestBody ReasonBody body) {
+    SigningKeyResponse rotateAdminSigningKey(@RequestBody ReasonBody body,
+                                             @Parameter(description = STEP_UP_HELP) @RequestHeader(value = STEP_UP, required = false) String proof,
+                                             @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
+        requireStepUp(proof, jwt);
         return SigningKeyResponse.of(signingKeys.rotate(body.reason()), Instant.now(clock));
     }
 
@@ -205,7 +247,10 @@ class IdentityAdminController {
     @Operation(summary = "Replace the stored authentication settings",
             description = "Validated, needs a reason, written to the access change log with before and after.")
     @PutMapping("/v1/admin/identity/settings")
-    SettingsResponse updateAdminAuthSettings(@RequestBody SettingsUpdate body) {
+    SettingsResponse updateAdminAuthSettings(@RequestBody SettingsUpdate body,
+                                             @Parameter(description = STEP_UP_HELP) @RequestHeader(value = STEP_UP, required = false) String proof,
+                                             @Parameter(hidden = true) @AuthenticationPrincipal Jwt jwt) {
+        requireStepUp(proof, jwt);
         return SettingsResponse.of(settings.update(body.toDomain(), body.reason()));
     }
 }

@@ -3,6 +3,7 @@ package com.afrotransact.identity.adapter.in.security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
+import java.util.Date;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -14,6 +15,8 @@ import com.afrotransact.identity.domain.PrincipalType;
 import com.afrotransact.identity.domain.UserAccount;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.oidc.endpoint.OidcParameterNames;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
@@ -33,13 +36,18 @@ class IdentityTokenCustomizerTest {
     }
 
     private static Map<String, Object> issue(UserAccount u, OAuth2TokenType type, Set<String> scopes) {
+        return issue(u, type, scopes, Set.of());
+    }
+
+    private static Map<String, Object> issue(UserAccount u, OAuth2TokenType type, Set<String> scopes,
+                                             Set<GrantedAuthority> authorities) {
         EffectiveAccess access = new EffectiveAccess(PrincipalType.SELLER_MEMBER, Optional.of(ORG),
                 Set.of("seller.owner"), Set.of("catalog:write"), false);
         IdentityTokenCustomizer customizer = new IdentityTokenCustomizer(
                 subject -> Optional.of(new TokenClaims(u.id(), u, access)));
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject(u.id().toString());
         JwtEncodingContext context = JwtEncodingContext.with(JwsHeader.with(SignatureAlgorithm.RS256), claims)
-                .principal(UsernamePasswordAuthenticationToken.authenticated(u.id().toString(), null, Set.of()))
+                .principal(UsernamePasswordAuthenticationToken.authenticated(u.id().toString(), null, authorities))
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizedScopes(scopes)
                 .tokenType(type)
@@ -60,6 +68,23 @@ class IdentityTokenCustomizerTest {
                 .containsEntry("org", ORG)
                 .containsEntry("pt", "SELLER_MEMBER");
         assertThat(c.get("perms").toString()).contains("catalog:write");
+    }
+
+    @Test
+    void accessTokensCarryTheLatestSignInTimeAsAuthTimeForStepUp() {
+        Instant password = Instant.parse("2026-10-01T09:58:00Z");
+        Instant secondFactor = Instant.parse("2026-10-01T09:59:30Z");
+        Set<GrantedAuthority> factors = Set.of(
+                FactorGrantedAuthority.withAuthority(FactorGrantedAuthority.PASSWORD_AUTHORITY).issuedAt(password)
+                        .build(),
+                FactorGrantedAuthority.withAuthority(FactorGrantedAuthority.WEBAUTHN_AUTHORITY)
+                        .issuedAt(secondFactor).build());
+        UserAccount u = user(UUID.randomUUID(), null, true);
+
+        assertThat(issue(u, OAuth2TokenType.ACCESS_TOKEN, Set.of("openid"), factors))
+                .containsEntry("auth_time", Date.from(secondFactor));
+        // no recorded sign-in: no claim, so a step-up proof is needed
+        assertThat(issue(u, OAuth2TokenType.ACCESS_TOKEN, Set.of("openid"))).doesNotContainKey("auth_time");
     }
 
     @Test

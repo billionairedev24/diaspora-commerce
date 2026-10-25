@@ -18,6 +18,7 @@ import com.afrotransact.identity.domain.SigningKeyStatus;
 import com.afrotransact.identity.port.AccessChangeLog;
 import com.afrotransact.identity.port.OAuthClientAdminStore;
 import com.afrotransact.identity.port.SecretCipher;
+import com.afrotransact.identity.port.SigningKeyCache;
 import com.afrotransact.identity.port.SigningKeyGenerator;
 import com.afrotransact.identity.port.SigningKeyStore;
 import com.afrotransact.platform.security.Actor;
@@ -26,6 +27,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 class SigningKeyAdminServiceImpl implements SigningKeyAdminService {
@@ -37,6 +40,7 @@ class SigningKeyAdminServiceImpl implements SigningKeyAdminService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final SigningKeyStore keys;
+    private final SigningKeyCache cache;
     private final SigningKeyGenerator generator;
     private final SecretCipher cipher;
     private final OAuthClientAdminStore clients;
@@ -45,10 +49,11 @@ class SigningKeyAdminServiceImpl implements SigningKeyAdminService {
     private final AccessChangeLog changeLog;
     private final Clock clock;
 
-    SigningKeyAdminServiceImpl(SigningKeyStore keys, SigningKeyGenerator generator, SecretCipher cipher,
-                               OAuthClientAdminStore clients, AuthSettingsService settings,
+    SigningKeyAdminServiceImpl(SigningKeyStore keys, SigningKeyCache cache, SigningKeyGenerator generator,
+                               SecretCipher cipher, OAuthClientAdminStore clients, AuthSettingsService settings,
                                PermissionChecker permissions, AccessChangeLog changeLog, Clock clock) {
         this.keys = keys;
+        this.cache = cache;
         this.generator = generator;
         this.cipher = cipher;
         this.clients = clients;
@@ -87,6 +92,7 @@ class SigningKeyAdminServiceImpl implements SigningKeyAdminService {
         changeLog.append(actor.subject(), "signing-key.rotated", null, null, kid,
                 "reason=" + why + "; previous=" + active.map(SigningKey::kid).orElse("none")
                         + active.map(k -> " retires after " + retireAfter).orElse(""));
+        invalidateWhenCommitted();
         LOG.info("Signing key rotated by {}: {} is active, {} retires after {}", actor.subject(), kid,
                 active.map(SigningKey::kid).orElse("(none)"), retireAfter);
         return key;
@@ -104,6 +110,20 @@ class SigningKeyAdminServiceImpl implements SigningKeyAdminService {
         if (keys.insertActive(key, sealed.envelope(), sealed.keyId(), "system")) {
             LOG.info("Configured signing key {} stored as the active key", kid);
         }
+    }
+
+    /** This replica signs with the new key as soon as the rotation is committed (others re-read within seconds). */
+    private void invalidateWhenCommitted() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            cache.invalidate();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                cache.invalidate();
+            }
+        });
     }
 
     private void retireExpired(Instant now) {

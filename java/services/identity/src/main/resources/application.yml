@@ -107,6 +107,10 @@ at:
       key-id: ${SIGNING_KEY_ID:identity-1}
       private-key-pem: ${SIGNING_KEY_PEM:}
       generate-if-missing: false
+    # S291: the dangerous identity admin actions (rotate the signing key, sign a user or a client out, disable a client,
+    # change the settings) need the staff member's password again, unless they signed in this recently.
+    step-up:
+      fresh-sign-in: ${IDENTITY_STEP_UP_FRESH_SIGN_IN:PT5M}
     verification:
       sender: outbox
     mfa:

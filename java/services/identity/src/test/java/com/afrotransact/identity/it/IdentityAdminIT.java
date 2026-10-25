@@ -6,6 +6,7 @@ import java.net.http.HttpResponse;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -38,7 +39,9 @@ import tools.jackson.databind.JsonNode;
     "at.events.relay-enabled=false",
     "at.consumers.enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
-    "at.identity.verification.sender=outbox"})
+    "at.identity.verification.sender=outbox",
+    // no sign-in is "fresh": the dangerous actions need a step-up proof here (StepUpFreshSignInIT covers the other way)
+    "at.identity.step-up.fresh-sign-in=PT0S"})
 @ActiveProfiles("local")
 @Testcontainers
 class IdentityAdminIT {
@@ -79,6 +82,19 @@ class IdentityAdminIT {
         return new BrowserSession(base());
     }
 
+    /** Re-enters the admin's password and returns the proof the dangerous actions need. */
+    private String proof(BrowserSession s, String admin) {
+        HttpResponse<String> r = s.api("POST", "/v1/admin/identity/step-up", admin,
+                "{\"password\":\"" + ADMIN_PASSWORD + "\"}");
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
+        return BrowserSession.json(r.body()).get("proof").asString();
+    }
+
+    /** A dangerous action with a fresh step-up proof. */
+    private HttpResponse<String> sure(BrowserSession s, String method, String path, String admin, String body) {
+        return s.api(method, path, admin, body, Map.of("X-Step-Up", proof(s, admin)));
+    }
+
     private static String reason() {
         return "{\"reason\":\"" + REASON + "\"}";
     }
@@ -100,6 +116,88 @@ class IdentityAdminIT {
         assertThat(s.api("POST", "/v1/admin/identity/token-inspector", customer, "{\"token\":\"a.b.c\"}").statusCode())
                 .isEqualTo(403);
         assertThat(s.api("GET", "/v1/admin/identity/clients", null, null).statusCode()).isEqualTo(401);
+    }
+
+    @Test
+    void theDangerousActionsNeedAStepUpProofOfThePasswordAndNothingHappensWithoutOne() {
+        BrowserSession s = http();
+        String admin = adminToken();
+        String id = "it-stepup-" + UUID.randomUUID().toString().substring(0, 8);
+        HttpResponse<String> created = s.api("POST", "/v1/admin/identity/clients", admin, """
+                {"clientId":"%s","type":"confidential","name":"Step-up","grantTypes":["client_credentials"],
+                 "scopes":["it.read"],"reason":"%s"}""".formatted(id, REASON));
+        assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+        String secret = BrowserSession.json(created.body()).get("secret").asString();
+        long keysBefore = jdbc.sql("select count(*) from signing_key").query(Long.class).single();
+
+        // the access token carries when the person signed in; the zero window of this class makes it stale
+        JsonNode claims = BrowserSession.json(new String(Base64.getUrlDecoder().decode(admin.split("\\.")[1])));
+        assertThat(claims.get("auth_time").asLong()).isPositive();
+
+        // without a proof: 403 identity.step-up-required, and nothing changed
+        Map<String, String> none = Map.of();
+        for (String[] call : new String[][] {
+            {"POST", "/v1/admin/identity/clients/" + id + "/disable"},
+            {"POST", "/v1/admin/identity/clients/" + id + "/sessions/revoke"},
+            {"POST", "/v1/admin/identity/users/" + UUID.randomUUID() + "/sessions/revoke"},
+            {"POST", "/v1/admin/identity/signing-keys/rotate"}}) {
+            HttpResponse<String> r = s.api(call[0], call[1], admin, reason(), none);
+            assertThat(r.statusCode()).as(call[1] + " " + r.body()).isEqualTo(403);
+            assertThat(r.body()).contains("identity.step-up-required");
+        }
+        HttpResponse<String> settings = s.api("PUT", "/v1/admin/identity/settings", admin,
+                "{\"overrides\":{\"passwordMinLength\":20},\"reason\":\"" + REASON + "\"}", none);
+        assertThat(settings.statusCode()).isEqualTo(403);
+        assertThat(s.clientCredentials(id, secret, "it.read").status()).as("still enabled").isEqualTo(200);
+        assertThat(jdbc.sql("select count(*) from signing_key").query(Long.class).single()).isEqualTo(keysBefore);
+        assertThat(BrowserSession.json(s.api("GET", "/v1/admin/identity/settings", admin, null).body())
+                .get("overrides").get("passwordMinLength").isNull()).isTrue();
+
+        // a made-up proof is refused too
+        assertThat(s.api("POST", "/v1/admin/identity/clients/" + id + "/disable", admin, reason(),
+                Map.of("X-Step-Up", "not-a-proof")).statusCode()).isEqualTo(403);
+
+        // a wrong password issues nothing; the correct one issues a proof that works until it expires
+        HttpResponse<String> wrong = s.api("POST", "/v1/admin/identity/step-up", admin,
+                "{\"password\":\"Not-The-Password-1\"}");
+        assertThat(wrong.statusCode()).isEqualTo(422);
+        assertThat(wrong.body()).contains("identity.step-up-failed").doesNotContain("Not-The-Password-1");
+        assertThat(s.api("POST", "/v1/admin/identity/step-up", admin, "{}").statusCode()).isEqualTo(422);
+        String proof = proof(s, admin);
+        assertThat(jdbc.sql("select count(*) from step_up_proof where token_hash = :p").param("p", proof)
+                .query(Long.class).single()).as("only the hash is stored").isZero();
+        Map<String, String> withProof = Map.of("X-Step-Up", proof);
+        HttpResponse<String> disabled = s.api("POST", "/v1/admin/identity/clients/" + id + "/disable", admin,
+                reason(), withProof);
+        assertThat(disabled.statusCode()).as(disabled.body()).isEqualTo(200);
+        assertThat(s.clientCredentials(id, secret, "it.read").status()).isEqualTo(401);
+
+        // the proof is good for several actions within its five minutes, and not after
+        assertThat(s.api("POST", "/v1/admin/identity/clients/" + id + "/sessions/revoke", admin, reason(), withProof)
+                .statusCode()).isEqualTo(200);
+        jdbc.sql("update step_up_proof set expires_at = now() - interval '1 second'").update();
+        assertThat(s.api("POST", "/v1/admin/identity/clients/" + id + "/sessions/revoke", admin, reason(), withProof)
+                .statusCode()).as("expired proof").isEqualTo(403);
+
+        // audited without the password or the proof; failures are counted by the sign-in protection
+        assertThat(jdbc.sql("select count(*) from access_change_log where action = 'step-up.verified'")
+                .query(Long.class).single()).isGreaterThanOrEqualTo(1);
+        assertThat(jdbc.sql("select count(*) from access_change_log where detail like :p or detail like :q")
+                .param("p", "%" + ADMIN_PASSWORD + "%").param("q", "%" + proof + "%").query(Long.class).single())
+                .isZero();
+        assertThat(jdbc.sql("select count(*) from sign_in_audit where method = 'STEP_UP' and outcome <> 'SUCCEEDED'")
+                .query(Long.class).single()).isGreaterThanOrEqualTo(1);
+
+        // only identity:admin can ask for a proof or use one
+        BrowserSession c = http();
+        String email = "stepup." + UUID.randomUUID() + "@example.com";
+        registerAndVerify(c, email);
+        String customer = c.exchangePublic(STOREFRONT, STOREFRONT_REDIRECT,
+                c.signIn(STOREFRONT, STOREFRONT_REDIRECT, email, PASSWORD)).accessToken();
+        assertThat(c.api("POST", "/v1/admin/identity/step-up", customer, "{\"password\":\"" + PASSWORD + "\"}")
+                .statusCode()).isEqualTo(403);
+        assertThat(c.api("POST", "/v1/admin/identity/signing-keys/rotate", customer, reason(), withProof)
+                .statusCode()).isEqualTo(403);
     }
 
     @Test
@@ -154,13 +252,13 @@ class IdentityAdminIT {
         assertThat(s.clientCredentials(id, fresh, "it.read").status()).isEqualTo(200);
 
         // disable: refused at once; enable: works again; the platform's own client cannot be disabled
-        assertThat(s.api("POST", "/v1/admin/identity/clients/" + id + "/disable", admin, reason()).statusCode())
+        assertThat(sure(s, "POST", "/v1/admin/identity/clients/" + id + "/disable", admin, reason()).statusCode())
                 .isEqualTo(200);
         assertThat(s.clientCredentials(id, fresh, "it.read").status()).isEqualTo(401);
         assertThat(s.api("POST", "/v1/admin/identity/clients/" + id + "/enable", admin, reason()).statusCode())
                 .isEqualTo(200);
         assertThat(s.clientCredentials(id, fresh, "it.read").status()).isEqualTo(200);
-        assertThat(s.api("POST", "/v1/admin/identity/clients/gateway-bff/disable", admin, reason()).statusCode())
+        assertThat(sure(s, "POST", "/v1/admin/identity/clients/gateway-bff/disable", admin, reason()).statusCode())
                 .isEqualTo(422);
 
         // edit, and a restart's provisioning leaves the edit alone
@@ -227,7 +325,7 @@ class IdentityAdminIT {
 
         // sign out everywhere
         Tokens third = signInCustomer(email);
-        HttpResponse<String> all = s.api("POST", "/v1/admin/identity/users/" + userId + "/sessions/revoke", admin,
+        HttpResponse<String> all = sure(s, "POST", "/v1/admin/identity/users/" + userId + "/sessions/revoke", admin,
                 reason());
         assertThat(all.statusCode()).as(all.body()).isEqualTo(200);
         assertThat(BrowserSession.json(all.body()).get("sessions").asInt()).isGreaterThanOrEqualTo(1);
@@ -237,7 +335,7 @@ class IdentityAdminIT {
 
         // all of a client's
         Tokens fourth = signInCustomer(email);
-        HttpResponse<String> byClient = s.api("POST", "/v1/admin/identity/clients/" + STOREFRONT
+        HttpResponse<String> byClient = sure(s, "POST", "/v1/admin/identity/clients/" + STOREFRONT
                 + "/sessions/revoke", admin, reason());
         assertThat(byClient.statusCode()).isEqualTo(200);
         assertThat(s.refreshPublic(STOREFRONT, fourth.refreshToken()).status()).isEqualTo(400);
@@ -256,10 +354,10 @@ class IdentityAdminIT {
         assertThat(before).hasSize(1);
         assertThat(before.get(0).get("status").asString()).isEqualTo("ACTIVE");
         assertThat(before.get(0).get("kid").asString()).isEqualTo(oldKid);
-        assertThat(s.api("POST", "/v1/admin/identity/signing-keys/rotate", admin, "{\"reason\":\"\"}").statusCode())
+        assertThat(sure(s, "POST", "/v1/admin/identity/signing-keys/rotate", admin, "{\"reason\":\"\"}").statusCode())
                 .isEqualTo(422);
 
-        HttpResponse<String> rotation = s.api("POST", "/v1/admin/identity/signing-keys/rotate", admin, reason());
+        HttpResponse<String> rotation = sure(s, "POST", "/v1/admin/identity/signing-keys/rotate", admin, reason());
         assertThat(rotation.statusCode()).as(rotation.body()).isEqualTo(201);
         String newKid = BrowserSession.json(rotation.body()).get("kid").asString();
         assertThat(newKid).isNotEqualTo(oldKid);
@@ -270,13 +368,10 @@ class IdentityAdminIT {
         assertThat(statusOf(after, newKid)).isEqualTo("ACTIVE");
         assertThat(find(after, oldKid, "kid").get("retireAfter").isNull()).isFalse();
 
-        // the table is re-read every few seconds: then new tokens carry the new kid and both keys are published
-        String freshToken = await(() -> {
-            String t = adminToken();
-            String kid = BrowserSession.json(new String(Base64.getUrlDecoder()
-                    .decode(t.split("\\.")[0]))).get("kid").asString();
-            return newKid.equals(kid) ? t : null;
-        });
+        // this replica signs with the new key as soon as the rotation commits (others re-read the table within seconds)
+        String freshToken = adminToken();
+        assertThat(BrowserSession.json(new String(Base64.getUrlDecoder().decode(freshToken.split("\\.")[0])))
+                .get("kid").asString()).isEqualTo(newKid);
         assertThat(publishedKids(s)).containsExactlyInAnyOrder(oldKid, newKid);
 
         // the token signed by the old key still validates while it is published; a private key is never shown
@@ -328,16 +423,16 @@ class IdentityAdminIT {
         assertThat(view.get("defaults").get("passwordMinLength").asInt()).isEqualTo(12);
         assertThat(view.get("overrides").get("passwordMinLength").isNull()).isTrue();
 
-        HttpResponse<String> invalid = s.api("PUT", "/v1/admin/identity/settings", admin,
+        HttpResponse<String> invalid = sure(s, "PUT", "/v1/admin/identity/settings", admin,
                 "{\"overrides\":{\"passwordMinLength\":3,\"sessionIdleTimeoutMinutes\":2},\"reason\":\"" + REASON
                         + "\"}");
         assertThat(invalid.statusCode()).isEqualTo(422);
         assertThat(invalid.body()).contains("passwordMinLength").contains("sessionIdleTimeoutMinutes");
-        assertThat(s.api("PUT", "/v1/admin/identity/settings", admin, "{\"overrides\":{},\"reason\":\"no\"}")
+        assertThat(sure(s, "PUT", "/v1/admin/identity/settings", admin, "{\"overrides\":{},\"reason\":\"no\"}")
                 .statusCode()).isEqualTo(422);
 
         try {
-            HttpResponse<String> saved = s.api("PUT", "/v1/admin/identity/settings", admin, """
+            HttpResponse<String> saved = sure(s, "PUT", "/v1/admin/identity/settings", admin, """
                     {"overrides":{"passwordMinLength":20,"sessionIdleTimeoutMinutes":15,"accessTokenTtlCapMinutes":1},
                      "reason":"%s"}""".formatted(REASON));
             assertThat(saved.statusCode()).as(saved.body()).isEqualTo(200);
@@ -366,7 +461,7 @@ class IdentityAdminIT {
                     + "order by id desc limit 1").query(String.class).single())
                     .contains("reason=" + REASON, "before=passwordMin=12", "after=passwordMin=20");
         } finally {
-            s.api("PUT", "/v1/admin/identity/settings", admin, "{\"overrides\":{},\"reason\":\"" + REASON + "\"}");
+            sure(s, "PUT", "/v1/admin/identity/settings", admin, "{\"overrides\":{},\"reason\":\"" + REASON + "\"}");
         }
     }
 

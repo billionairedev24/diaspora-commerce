@@ -105,8 +105,8 @@ class AuthorizationServerConfiguration {
 
     /** Signing and the JWKS come from the stored keys (rotatable in the staff console), see {@link StoredJwkSource}. */
     @Bean
-    JWKSource<SecurityContext> jwkSource(SigningKeyStore keys, SecretCipher cipher, ConfiguredSigningKeys configured,
-                                         Clock clock) {
+    StoredJwkSource jwkSource(SigningKeyStore keys, SecretCipher cipher, ConfiguredSigningKeys configured,
+                              Clock clock) {
         return new StoredJwkSource(keys, cipher, configured.keys(), clock);
     }
 

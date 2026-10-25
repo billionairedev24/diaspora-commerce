@@ -10,6 +10,7 @@ import com.afrotransact.identity.application.OAuthClientAdminService.ClientDraft
 import com.afrotransact.identity.application.OAuthClientAdminService.ClientWithSecret;
 import com.afrotransact.identity.application.PageView;
 import com.afrotransact.identity.application.SessionAdminService.Revoked;
+import com.afrotransact.identity.application.StepUpService.StepUpProof;
 import com.afrotransact.identity.application.TokenInspectorService.Documents;
 import com.afrotransact.identity.domain.AdminSession;
 import com.afrotransact.identity.domain.AuthSettings;
@@ -30,6 +31,32 @@ final class IdentityAdminDtos {
 
     @Schema(name = "ReasonBody", description = "Why: 10 to 500 characters, kept in the access log")
     record ReasonBody(String reason) {
+    }
+
+    @Schema(name = "StepUpRequest", description = "The signed-in staff member's own password, to confirm a dangerous "
+            + "action. It is checked and never stored or logged.")
+    record StepUpRequest(@Schema(format = "password") String password) {
+
+        /** Never prints the password. */
+        @Override
+        public String toString() {
+            return "StepUpRequest[password=<hidden>]";
+        }
+    }
+
+    @Schema(name = "StepUpProof", description = "Send the proof as the X-Step-Up header on the dangerous actions "
+            + "within five minutes. Shown once; only its hash is stored.")
+    record StepUpResponse(String proof, Instant expiresAt) {
+
+        static StepUpResponse of(StepUpProof p) {
+            return new StepUpResponse(p.proof(), p.expiresAt());
+        }
+
+        /** Never prints the proof. */
+        @Override
+        public String toString() {
+            return "StepUpResponse[proof=<hidden>, expiresAt=" + expiresAt + "]";
+        }
     }
 
     @Schema(name = "OAuthClientRequest")

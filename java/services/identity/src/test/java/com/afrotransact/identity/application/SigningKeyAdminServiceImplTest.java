@@ -28,6 +28,7 @@ import com.afrotransact.identity.port.AccessChangeLog;
 import com.afrotransact.identity.port.OAuthClientAdminStore;
 import com.afrotransact.identity.port.SecretCipher;
 import com.afrotransact.identity.port.SecretCipherException;
+import com.afrotransact.identity.port.SigningKeyCache;
 import com.afrotransact.identity.port.SigningKeyGenerator;
 import com.afrotransact.identity.port.SigningKeyStore;
 import com.afrotransact.platform.security.Actor;
@@ -48,8 +49,9 @@ class SigningKeyAdminServiceImplTest {
     private final AuthSettingsService settings = mock(AuthSettingsService.class);
     private final PermissionChecker permissions = mock(PermissionChecker.class);
     private final AccessChangeLog changeLog = mock(AccessChangeLog.class);
-    private final SigningKeyAdminServiceImpl service = new SigningKeyAdminServiceImpl(keys, generator, cipher, clients,
-            settings, permissions, changeLog, Clock.fixed(NOW, ZoneOffset.UTC));
+    private final SigningKeyCache cache = mock(SigningKeyCache.class);
+    private final SigningKeyAdminServiceImpl service = new SigningKeyAdminServiceImpl(keys, cache, generator, cipher,
+            clients, settings, permissions, changeLog, Clock.fixed(NOW, ZoneOffset.UTC));
 
     SigningKeyAdminServiceImplTest() {
         when(permissions.require(IdentityPermissions.IDENTITY_ADMIN)).thenReturn(new Actor("admin-1",
@@ -89,6 +91,8 @@ class SigningKeyAdminServiceImplTest {
         verify(changeLog).append(eq("admin-1"), eq("signing-key.rotated"), eq(null), eq(null), eq(created.kid()),
                 detail.capture());
         assertThat(detail.getValue()).contains(REASON, "previous=old").doesNotContain("PRIVATE-PEM");
+        // this replica signs with the new key at once, without waiting for its periodic re-read
+        verify(cache).invalidate();
     }
 
     @Test
@@ -130,8 +134,8 @@ class SigningKeyAdminServiceImplTest {
 
         SigningKeyStore other = mock(SigningKeyStore.class);
         when(other.all()).thenReturn(List.of(key("k", SigningKeyStatus.ACTIVE, null)));
-        new SigningKeyAdminServiceImpl(other, generator, cipher, clients, settings, permissions, changeLog,
-                Clock.fixed(NOW, ZoneOffset.UTC)).seedIfEmpty("identity-1", "PUB", "PRIV");
+        new SigningKeyAdminServiceImpl(other, cache, generator, cipher, clients, settings, permissions,
+                changeLog, Clock.fixed(NOW, ZoneOffset.UTC)).seedIfEmpty("identity-1", "PUB", "PRIV");
         verify(other, never()).insertActive(any(), any(), any(), any());
     }
 }

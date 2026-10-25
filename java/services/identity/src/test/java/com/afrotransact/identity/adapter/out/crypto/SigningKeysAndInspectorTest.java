@@ -134,7 +134,7 @@ class SigningKeysAndInspectorTest {
         store.keys.replaceAll(k -> k.kid().equals("old")
                 ? new SigningKey("old", "RS256", SigningKeyStatus.RETIRING, k.publicKeyPem(), k.createdAt(), null,
                         NOW.minusSeconds(1), null) : k);
-        source.refresh();
+        source.invalidate();
         TokenInspection gone = new NimbusJwtInspector(source).inspect(token, ISSUER, NOW);
         assertThat(gone.signatureValid()).isFalse();
         assertThat(gone.problems()).anyMatch(p -> p.contains("No published key has the id old"));

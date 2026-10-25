@@ -227,6 +227,31 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/IdentityProviderAdmin'
+  /v1/admin/identity/step-up:
+    post:
+      tags:
+      - Identity admin
+      summary: Confirm your password for the dangerous actions; returns a proof for the X-Step-Up header
+      description: The proof is valid for five minutes and bound to the signed-in staff member. Wrong passwords count towards
+        the account's sign-in lockout (429 identity.sign-in-locked). Signing in again also counts, the dangerous actions accept
+        an access token whose sign-in (auth_time) is less than five minutes old. Dangerous actions are rotating the signing
+        key, signing a user or a client out, disabling a client and changing the authentication settings.
+      operationId: confirmPassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StepUpRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StepUpProof'
+        '422':
+          description: The password is wrong (identity.step-up-failed) or the account has no password (identity.step-up-no-password)
   /v1/admin/identity/clients:
     get:
       tags:
@@ -317,6 +342,13 @@ paths:
         required: true
         schema:
           type: string
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -391,6 +423,13 @@ paths:
       - name: clientId
         in: path
         required: true
+        schema:
+          type: string
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
         schema:
           type: string
       requestBody:
@@ -504,6 +543,13 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -539,6 +585,14 @@ paths:
       summary: 'Rotate the signing key: a new key signs new tokens, the old one stays published until the longest access
         token has expired'
       operationId: rotateAdminSigningKey
+      parameters:
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -603,6 +657,14 @@ paths:
       summary: Replace the stored authentication settings
       description: Validated, needs a reason, written to the access change log with before and after.
       operationId: updateAdminAuthSettings
+      parameters:
+      - name: X-Step-Up
+        in: header
+        description: Step-up proof from POST /v1/admin/identity/step-up; not needed within five minutes of signing in. Without
+          either the call is refused with 403 identity.step-up-required.
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -3896,6 +3958,24 @@ components:
           minLength: 0
       required:
       - token
+    StepUpRequest:
+      type: object
+      description: The signed-in staff member's own password, to confirm a dangerous action. It is checked and never stored
+        or logged.
+      properties:
+        password:
+          type: string
+          format: password
+    StepUpProof:
+      type: object
+      description: Send the proof as the X-Step-Up header on the dangerous actions within five minutes. Shown once; only its
+        hash is stored.
+      properties:
+        proof:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
     ReasonBody:
       type: object
       description: 'Why: 10 to 500 characters, kept in the access log'
