@@ -17,6 +17,7 @@ import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.PickupPoint;
 import com.afrotransact.deliveryruns.domain.Run;
 import com.afrotransact.deliveryruns.domain.RunArea;
+import com.afrotransact.deliveryruns.domain.RunStatus;
 import com.afrotransact.deliveryruns.port.SubscriberCounts;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -133,14 +134,19 @@ final class LocationDtos {
         }
     }
 
-    @Schema(name = "LocationRunSummary")
+    @Schema(name = "LocationRunSummary", description = """
+            One run of a location: the orders it carries, the delivery fees it earns and whether it reached its minimum.
+            A cancelled run earns nothing: feeRevenueMinor is 0 and ordersRefunded says how many orders were refunded
+            in full.""")
     record RunSummary(UUID id, String status, Instant windowStart, Instant cutoffAt, int orders, int packages,
-                      long feeMinor, long feeRevenueMinor, int minOrders, boolean minimumMet) {
+                      long feeMinor, long feeRevenueMinor, int ordersRefunded, int minOrders, boolean minimumMet) {
 
         static RunSummary of(Run r) {
+            boolean cancelled = r.status() == RunStatus.CANCELLED;
             return new RunSummary(r.id(), r.status().name(), r.terms().window().start(), r.terms().cutoffAt(),
                     r.reservedOrders(), r.reservedPackages(), r.terms().feeMinor(),
-                    r.reservedOrders() * r.terms().feeMinor(), r.terms().minOrders(), r.minimumMet());
+                    cancelled ? 0 : r.reservedOrders() * r.terms().feeMinor(), cancelled ? r.reservedOrders() : 0,
+                    r.terms().minOrders(), r.minimumMet());
         }
     }
 

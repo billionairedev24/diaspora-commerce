@@ -6603,6 +6603,11 @@ components:
             $ref: '#/components/schemas/MonthlyCount'
     LocationRunSummary:
       type: object
+      description: 'One run of a location: the orders it carries, the delivery fees it earns and whether it reached its minimum.
+
+        A cancelled run earns nothing: feeRevenueMinor is 0 and ordersRefunded says how many orders were refunded
+
+        in full.'
       properties:
         id:
           type: string
@@ -6627,6 +6632,9 @@ components:
         feeRevenueMinor:
           type: integer
           format: int64
+        ordersRefunded:
+          type: integer
+          format: int32
         minOrders:
           type: integer
           format: int32

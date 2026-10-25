@@ -242,6 +242,9 @@ class EconomicsIT {
         assertThat(e.path("minimumCoversBreakEven").asBoolean()).as("a minimum of 2 is below break-even").isFalse();
         assertThat(e.path("ordersRefunded").asInt()).isZero();
 
+        // The window closes and hands its three orders to a run; then it is cancelled with the run.
+        clock.set(f.closes.plusSeconds(60));
+        assertThat(scheduler.process(f.window.id())).isPositive();
         decisions.cancel(f.window.id(), "Seller stock fell through", null);
         Res cancelled = call(HttpMethod.GET, "/v1/preorders/" + id + "/economics", null, null);
         JsonNode c = cancelled.body();
@@ -253,6 +256,19 @@ class EconomicsIT {
         assertThat(c.path("orders").asInt()).isZero();
         assertThat(c.path("economics").isNull()).isTrue();
         assertThat(c.path("refundsSettled").asInt()).isZero();
+
+        // The location's history shows the run it was handed to as cancelled: orders refunded, no fees earned.
+        JsonNode history = call(HttpMethod.GET, "/v1/locations/" + c.path("locationId").asString() + "/history", null,
+                null).body();
+        JsonNode cancelledRun = null;
+        for (JsonNode run : history.path("runs")) {
+            if (run.path("status").asString().equals("CANCELLED") && run.path("ordersRefunded").asInt() == 3) {
+                cancelledRun = run;
+            }
+        }
+        assertThat(cancelledRun).as("the cancelled run is in the location's history").isNotNull();
+        assertThat(cancelledRun.path("feeRevenueMinor").asLong()).isZero();
+        assertThat(cancelledRun.path("orders").asInt()).isEqualTo(3);
 
         projection.onRefund(UUID.randomUUID(), f.orderIds.get(0), RefundStatus.REFUNDED, 2799L, null, clock.instant());
         assertThat(call(HttpMethod.GET, "/v1/preorders/" + id + "/economics", null, null).body()
@@ -300,7 +316,7 @@ class EconomicsIT {
 
     // ---- helpers -------------------------------------------------------------------------------------------------
 
-    private record Fixture(PreorderWindow window, List<String> orderIds) {
+    private record Fixture(PreorderWindow window, Instant closes, List<String> orderIds) {
     }
 
     /** An open Bastrop window with {@code orders} projected orders and a location. */
@@ -316,7 +332,7 @@ class EconomicsIT {
             ids.add(order);
             projection.onOrderPlaced(UUID.randomUUID(), placed(order, w.id(), now));
         }
-        return new Fixture(windowRepository.findById(w.id()).orElseThrow(), List.copyOf(ids));
+        return new Fixture(windowRepository.findById(w.id()).orElseThrow(), now.plus(Duration.ofDays(3)), List.copyOf(ids));
     }
 
     private PreorderWindow publish(String name, String target, Instant opens, Instant closes, int minOrders) {

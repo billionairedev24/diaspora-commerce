@@ -314,15 +314,22 @@ class AdvertorialIT {
         assertThat(a.path("headline").asString()).startsWith("AfroTransact delivery run to Bastrop");
         assertThat(a.path("results").path("orders").isNull()).as("run orders are not attributed").isTrue();
 
-        Res inside = call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&visitor=v1", null, null);
-        JsonNode s = inside.body().path("items").get(0);
+        Res inside = call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&visitor=v1&limit=10", null, null);
+        JsonNode s = null;
+        for (JsonNode item : inside.body().path("items")) {
+            if (item.path("sourceId").asString().equals(run.id().toString())) {
+                s = item;
+            }
+        }
+        assertThat(s).as("the run's advertorial is served in its area").isNotNull();
         assertThat(s.path("source").asString()).isEqualTo("RUN");
         assertThat(s.path("place").asString()).isEqualTo("Bastrop");
         assertThat(Instant.parse(s.path("countdownTarget").asString())).isEqualTo(run.terms().cutoffAt());
         assertThat(s.path("ctaUrl").asString()).contains("/delivery-runs/").contains("utm_medium=advertorial")
                 .contains("utm_content=adv-");
-        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78701", null, null).body().path("items"))
-                .as("Austin is outside the run's area").isEmpty();
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78701&limit=10", null, null).body().path("items"))
+                .as("Austin is outside the run's area").extracting(i -> i.path("sourceId").asString())
+                .doesNotContain(run.id().toString());
 
         runs.extend(run.id(), new ExtendCommand(run.terms().cutoffAt().plus(Duration.ofDays(1)), null, null, null,
                 "More time"));
@@ -335,8 +342,8 @@ class AdvertorialIT {
                 .path("items").get(0);
         assertThat(ended.path("status").asString()).isEqualTo("ENDED");
         assertThat(ended.path("ended").asString()).isEqualTo("CANCELLED");
-        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78602", null, null).body().path("items"))
-                .isEmpty();
+        assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&limit=10", null, null).body().path("items"))
+                .extracting(i -> i.path("sourceId").asString()).doesNotContain(run.id().toString());
     }
 
     // ---- helpers -------------------------------------------------------------------------------------------------
