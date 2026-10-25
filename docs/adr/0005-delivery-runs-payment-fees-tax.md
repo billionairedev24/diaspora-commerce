@@ -49,7 +49,10 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
   per shipment; orders reports `orders.preorder.refund_settled` / `refund_failed` and staff see the progress per order.
 - **Payout (§5).** Settlement is not window specific: delivering a package starts payments' settlement hold (7 days by
   default), then the seller net is transferred; the delivery fee stays with AfroTransact (ledger 4250). Packages are
-  marked delivered by the driver app, fulfilment or staff in orders-service; a run's `completed` does not do it.
+  marked delivered by the driver app, fulfilment or staff in orders-service; a run's `completed` does not do it. Since S264 the
+  link is closed end to end: the driver delivers (with the customer's code at a pickup point too), orders records
+  `deliveredAt` and calls payments' settlement, and the same `orders.shipment.delivered` event completes the run once every
+  order is delivered or returned.
 - **Delivery fee rules (§3).** `delivery_fee_rule` holds one versioned rule per method (`AFROTRANSACT_DELIVERY` bands by
   distance, `CARRIER` handling / fallback / free-above, `PICKUP` fee) and currency; `delivery_fee_rule_change` is the audit
   trail with a required reason. Windows, runs and checkout resolve a fee through one code path (`DeliveryFees`), a window may
@@ -57,6 +60,13 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
   snapshot (`shipment.delivery_fee_rule`), so edits never change past orders. Staff manage all of it on one screen
   (Settings, Money, Delivery fees). See the delivery-runs README. Not built: carrier-gateway live quotes in orders (the
   fallback fee applies), express on rules, and a dedicated permission (`preorders:manage` is used).
+- **Batched seller pickups and dispatch (S264).** The run's confirmed event starts fulfilment's planning: one route per
+  capacity chunk, a pickup stop per seller before the drops, bags per seller, pickup-point drops on the same handover code and
+  proof of delivery. Sellers get the pickup time and a per-product and per-order pick list (Seller Center, Orders), staff a
+  Delivery runs tab in Dispatch. Orders' shipment events move the run (collecting, out for delivery, completed) idempotently.
+  Orders gained a per-line seller and lets the run's courier act on PREORDER pickup-point shipments. See the delivery-runs and
+  fulfilment READMEs. Not built: printable bag labels for sellers, coordinates for seller pickup stops and pickup points, a
+  dedicated pick-list permission and an audit trail for the manual run override.
 - **Not built.** A dedicated permission for deciding (`preorders:manage` is used), a staff e-mail / chat recipient for
   `decision_needed`, and capture at order time (§1 says "charged at checkout").
 

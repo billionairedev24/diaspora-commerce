@@ -137,6 +137,32 @@ CONFIRMED ─start-collecting─▶ COLLECTING ─out-for-delivery─▶ OUT_FOR
   409 instead. Capacity can never be lowered below what is reserved.
 - Edits: `DRAFT` / `ANNOUNCED` runs change freely; `OPEN` / `EXTENDED` runs keep fee, currency, cutoff and drop mode.
 
+### Seller pick lists and run progress (S264)
+
+When a window closes into a run (`fromWindow`), the run gets a **seller pickup time** (`sellerPickupAt`): the cutoff plus the
+packing time (2 h) at the earliest, `at.delivery-runs.preorders.seller-pickup-lead` (default `PT24H`) before the window opens
+otherwise, and never later than an hour before the window (`SellerPickupSchedule`). `delivery-runs.run.confirmed` carries
+`sellers[]` (organisation id and name) so notifications can tell each seller.
+
+- **Pick list.** `GET /v1/seller/run-pickups?orgId=` and `/{runId}` return, for one organisation, the run's town and
+  window, the pickup time, the total units **per product** across all orders (`items`) and **one bag per order**
+  (`bags[]`, by order number, with the lines of that seller only and the bag's stage). Staff (`delivery-runs:read`) and
+  service tokens pass `orgId`; a seller needs `orders:read` on the organisation (`ResourceAccessChecker`), the same check as
+  the rest of Seller Center. `GET /v1/runs/{id}/pick-lists` gives staff every seller's list, and `GET /v1/runs/{id}/progress`
+  the orders per stage. A dedicated permission would need an identity change and is a follow-up.
+- **Progress from real events.** `RunProgressService` consumes orders' `orders.shipment.status_changed` and
+  `orders.shipment.delivered` for PREORDER shipments (consumer `delivery-runs-progress`, deduplicated by event id, forward
+  only) and moves each run order through `PENDING → COLLECTED → OUT_FOR_DELIVERY → DELIVERED` (or `FAILED` / `RETURNED`):
+  `picked_up` collects, `out_for_delivery` puts it on the road, `delivery_failed` and `returned` are recorded, `delivered`
+  stores `deliveredAt`. A cancelled shipment frees its slot. The run then follows by itself:
+  first collection → `COLLECTING` (event `delivery-runs.run.collecting`), every order collected → `OUT_FOR_DELIVERY`,
+  every order delivered or returned → `COMPLETED`. Replays and late events change nothing.
+- **Delivered starts the payout hold.** The `delivered` event is orders' own: orders-service records it, then calls
+  payments' `POST /v1/settlements/{order}/delivered` with `deliveredAt`, which starts the existing seller hold window. A
+  run's `completed` never marks packages delivered; it is the result of them being delivered.
+- **Staff override.** The `start-collecting`, `out-for-delivery` and `complete` transitions stay for the case where the
+  drivers' events did not arrive (the dispatch console offers them with a confirmation).
+
 ### Cutoff job
 
 `RunScheduleJob` (every `at.delivery-runs.jobs.interval`, 60 s): auto-open (`opensAt`), the cutoff reminder
@@ -205,6 +231,8 @@ Windows, creatives, orders, summary, exports, late adds, settings and coverage a
 | DELETE | `/v1/service/runs/{runId}/reservations/{orderId}` | `delivery-runs:reserve` | release (idempotent; refused once out for delivery) |
 | GET | `/v1/service/runs/{runId}/dispatch` | `delivery-runs:read` | confirmed orders with handover codes, pickup point, seller pickup time |
 | GET | `/v1/service/runs/dispatchable` | `delivery-runs:read` | runs `CONFIRMED` / `COLLECTING`, earliest window first |
+| GET | `/v1/seller/run-pickups[/{runId}]?orgId=` | `delivery-runs:read`, or `orders:read` on the organisation | the organisation's pick lists (S264) |
+| GET | `/v1/runs/{id}/pick-lists`, `/v1/runs/{id}/progress` | `delivery-runs:read` | every seller's pick list; orders per stage (S264) |
 | GET | `/v1/service/locations/{id}/audience?channel=&after=&limit=` | `delivery-runs:audience.read` | opted-in subscribers on a channel (user id or email + unsubscribe URL), keyset-paged |
 
 ## Events (transactional outbox → `at.delivery-runs.events`)
@@ -217,10 +245,11 @@ Key = run id or subscription id; headers `event-id`, `event-type`, `occurred-at`
 | `delivery-runs.run.announced` | staff announce | |
 | `delivery-runs.run.opened` | staff open, or `opensAt` | |
 | `delivery-runs.run.cutoff_reminder` | `reminderLead` (24 h) before the cutoff, once per cutoff | |
-| `delivery-runs.run.confirmed` | minimum met at cutoff, or staff | `orders[]` with handover codes |
+| `delivery-runs.run.confirmed` | minimum met at cutoff, or staff | `orders[]` with handover codes, `sellers[]` (organisation id and name) |
 | `delivery-runs.run.extended` | policy (once) or staff | `previousCutoffAt`, `reason` |
 | `delivery-runs.run.cancelled` | policy or staff | `orders[]` (order and customer ids), `reason`; orders-service refunds every order in full |
-| `delivery-runs.run.out_for_delivery` / `.completed` | staff (later fulfilment) | `orders[]` |
+| `delivery-runs.run.collecting` | first order collected, or staff | `sellers[]`, `orders[]` |
+| `delivery-runs.run.out_for_delivery` / `.completed` | every order collected / delivered or returned (from orders' shipment events), or staff | `orders[]` |
 | `preorder.window.decision_needed` | the window closed below its minimum (scheduler) | notifies staff; `decision` {AWAITING, orders, minimum}, `minOrders` |
 | `preorder.window.decided` | staff proceeded, cancelled or closed early | `decision` {kind, reason, actor, at, orders, minimum} (audit) |
 | `preorder.window.cancelled` | the window was cancelled | `orders[]` (every order to refund), `decision` |
@@ -278,6 +307,7 @@ built)*.
 | `DRIVER_COST_PER_HOUR_MINOR`, `DRIVER_COST_PER_MILE_MINOR` | 2500, 70 | driver cost model |
 | `RUN_COLLECTION_MINUTES`, `RUN_PER_STOP_MINUTES`, `RUN_PICKUP_POINT_STOP_MINUTES`, `RUN_HANDOVER_MINUTES_PER_ORDER` | 45, 6, 30, 1 | time model |
 | `DELIVERY_RUNS_REMINDER_LEAD`, `DELIVERY_RUNS_CONFIRMATION_TTL` | `24h`, `72h` | reminder lead, double opt-in link lifetime |
+| `at.delivery-runs.preorders.seller-pickup-lead` (`AT_DELIVERY_RUNS_PREORDERS_SELLER_PICKUP_LEAD`) | `PT24H` | how long before the window opens the driver collects from sellers (S264) |
 | `DELIVERY_RUNS_JOBS_ENABLED`, `DELIVERY_RUNS_JOBS_INTERVAL` | `true`, `60s` | cutoff job |
 | `PREORDERS_DEFAULT_MIN_ORDERS` | `10` | minimum order count a new pre-order window starts with (staff change it per window; 0 = none) |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP` | local stack | secrets in `afrotransact/<env>/delivery-runs` |
@@ -326,8 +356,14 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
 - **Staff notification.** `preorder.window.decision_needed` is published, but notifications has no staff recipient list yet;
   staff see the *Needs a decision* tab and notice in the console.
 - **Proceed is eventual.** After PROCEED the window reads `CLOSED` at once and the run appears on the scheduler's next tick.
-- **Delivery status.** A run's `out_for_delivery` / `completed` do not mark orders delivered; each package is delivered
-  by the driver app / fulfilment (or staff) in orders-service, which is what starts the seller's settlement hold.
+- **Delivery status (closed, S264).** Orders' shipment events drive the run (see *Seller pick lists and run progress*);
+  a run's `completed` still does not mark packages delivered, it follows them. Remaining: the override transitions are not
+  audited with a reason or actor, and the progress follows PREORDER shipments only.
+- **Seller pick lists.** Sellers cannot print bag labels; a seller's
+  pickup has no coordinates, so there is no proof-of-delivery distance check at the seller's door, and the pickup point of a
+  pickup-point run has no latitude and longitude either (no 150 m check there). Reading a pick list reuses `orders:read`;
+  a dedicated permission needs identity. Seller notification rules (pickup time reminder) belong to notifications; the
+  `run.confirmed` event carries the sellers for them.
 
 - The local stack does not create the `deliveryruns` database yet (`infra/local/postgres/init-databases.sh`).
 - Run ordering is not geographic inside the town (fulfilment orders drops); economics fold local driving into the
