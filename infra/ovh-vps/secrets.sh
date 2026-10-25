@@ -124,9 +124,13 @@ service_keys() {
   printf '%s\n' "${out[@]}" | awk -F= '{k=$1; v=substr($0,length(k)+2); a[k]=v; if(!(k in s)){s[k]=++n; o[n]=k}} END{for(i=1;i<=n;i++) print o[i] "=" a[o[i]]}'
 }
 
-signing_key() { # an EC P-256 PKCS#8 key, kept so tokens survive re-runs
+signing_key() { # an RSA 3072 PKCS#8 key (identity signs RS256 and refuses any other key type), kept so tokens survive re-runs
   local f="$STATE_DIR/identity-signing-key.pem"
-  [[ -f "$f" ]] || { install -d -m 700 "$STATE_DIR"; openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$f"; chmod 600 "$f"; }
+  # An earlier version of this script generated an EC key, which identity cannot load (it fails at start-up): replace it.
+  if [[ -f "$f" ]] && ! openssl pkey -in "$f" -noout -text 2>/dev/null | grep -q '^modulus:'; then
+    mv "$f" "$f.not-rsa.$(date +%s)"
+  fi
+  [[ -f "$f" ]] || { install -d -m 700 "$STATE_DIR"; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "$f"; chmod 600 "$f"; }
   cat "$f"
 }
 
