@@ -30,7 +30,7 @@ func staffResources() map[string]*staffResource {
 	)
 	out := make(map[string]*staffResource, len(all))
 	for _, r := range all {
-		out[r.key] = r
+		out[r.key] = r.withNames()
 	}
 	return out
 }
@@ -74,9 +74,10 @@ func usersResource() *staffResource {
 				return nil
 			}
 			out := []domain.ActivityEntry{}
+			nameAll(ctx, sc, objs(page, "items"), personRef("actorId", "Actor"))
 			for _, e := range objs(page, "items") {
 				text := strings.TrimSpace(domain.Humanize(jstr(e, "action")) + " " + firstNonEmpty(jstr(e, "targetRole"), jstr(e, "subject")) + " " + jstr(e, "detail"))
-				out = append(out, domain.ActivityEntry{At: timeOf(e, "at"), Actor: jstr(e, "actorId"), Text: text})
+				out = append(out, domain.ActivityEntry{At: timeOf(e, "at"), Actor: jstr(e, "actorName"), Text: text})
 			}
 			return out
 		},
@@ -313,6 +314,7 @@ func applicationsResource() *staffResource {
 		facets: domain.StaffFacets("PENDING_REVIEW", "FLAGGED", "AWAITING_FINAL_APPROVAL", "INFO_REQUESTED", "APPROVED", "REJECTED"),
 		list:   listPaged("/v1/applications", upSeller, nil),
 		get:    getByPath("/v1/applications/", upSeller),
+		names:  []nameRef{personRef("reviewerId", "Reviewer"), personRef("finalApproverId", "Final approver"), orgRef("orgId")},
 		cells: func(o jobj) map[string]any {
 			return map[string]any{"displayName": cellValue(firstNonEmpty(jstr(o, "displayName"), jstr(o, "business.storeName"), jstr(o, "businessDetails.legalName")))}
 		},
@@ -364,14 +366,15 @@ func applicationsResource() *staffResource {
 func supportCasesResource() *staffResource {
 	return &staffResource{
 		key: "support-cases", module: "support", title: "Support cases", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("reference", "Case", "mono", 12), col("customerId", "Customer", "mono", 18), col("reason", "Reason", "text", 22),
-			col("assignee", "Assignee", "text", 16), col("openedAt", "Opened", "datetime", 16), col("status", "Status", "status", 16)},
+		columns: []domain.Column{col("reference", "Case", "mono", 12), col("customerName", "Customer", "text", 18), col("reason", "Reason", "text", 22),
+			col("assigneeName", "Assignee", "text", 16), col("openedAt", "Opened", "datetime", 16), col("status", "Status", "status", 16)},
 		facets:  domain.StaffFacets("OPEN", "IN_PROGRESS", "RESOLVED"),
 		list:    listPaged("/v1/support-cases", upTrustOps, nil),
 		get:     getByPath("/v1/support-cases/", upTrustOps),
+		names:   []nameRef{customerRef("customerId"), personRef("assignee", "Assignee")},
 		titleOf: func(o jobj) string { return strings.TrimSpace(jstr(o, "reference") + " · " + jstr(o, "reason")) },
 		subtitleOf: func(o jobj) string {
-			return "Customer " + jstr(o, "customerId") + " · " + domain.Humanize(jstr(o, "source"))
+			return "Customer " + jstr(o, "customerName") + " · " + domain.Humanize(jstr(o, "source"))
 		},
 		links: func(o jobj) []domain.RecordLink {
 			return []domain.RecordLink{{Label: "Open customer 360", Href: "/support?customer=" + url.QueryEscape(jstr(o, "customerId")) + "&case=" + url.QueryEscape(jstr(o, "id"))}}
@@ -397,9 +400,11 @@ func supportCasesResource() *staffResource {
 func auditResource() *staffResource {
 	return &staffResource{
 		key: "audit", module: "audit", title: "Audit log", exportable: true, searchPlaceholder: "Entity id",
-		columns: []domain.Column{col("seq", "#", "number", 8), col("occurredAt", "When", "datetime", 16), col("actorId", "Actor", "strong", 16),
+		columns: []domain.Column{col("seq", "#", "number", 8), col("occurredAt", "When", "datetime", 16), col("actorName", "Actor", "strong", 16),
 			col("action", "Action", "mono", 18), col("entityType", "Entity", "text", 12), col("summary", "Summary", "text", 30)},
-		idOf: func(o jobj) string { return jstr(o, "seq") },
+		idOf:   func(o jobj) string { return jstr(o, "seq") },
+		names:  []nameRef{personRef("actorId", "Actor"), sellerRef("orgId")},
+		search: []string{"entityId"},
 		list: listPaged("/v1/audit/entries", upTrustOps, func(q staffQuery, v url.Values) {
 			v.Del("status")
 			if q.Q != "" {
@@ -409,7 +414,7 @@ func auditResource() *staffResource {
 		get:     getByPath("/v1/audit/entries/", upTrustOps),
 		titleOf: func(o jobj) string { return jstr(o, "action") + " #" + jstr(o, "seq") },
 		subtitleOf: func(o jobj) string {
-			return jstr(o, "actorId") + " · " + jstr(o, "entityType") + " " + jstr(o, "entityId")
+			return jstr(o, "actorName") + " · " + domain.Humanize(jstr(o, "entityType"))
 		},
 	}
 }

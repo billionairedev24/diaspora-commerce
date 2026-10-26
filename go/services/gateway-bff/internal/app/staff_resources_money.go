@@ -34,11 +34,12 @@ func claimsResource() *staffResource {
 	}
 	return &staffResource{
 		key: "claims", module: "disputes", title: "A-to-z claims", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("reference", "Claim", "mono", 13), col("type", "Type", "text", 18), col("orderNumber", "Order", "mono", 13), col("sellerOrgId", "Seller", "text", 16),
+		columns: []domain.Column{col("reference", "Claim", "mono", 13), col("type", "Type", "text", 18), col("orderNumber", "Order", "mono", 13), col("sellerOrgName", "Seller", "text", 16),
 			col("amountMinor", "Amount", "money", 11), col("sla.dueAt", "Due", "datetime", 14), col("status", "Status", "status", 15)},
 		facets:     domain.StaffFacets("AWAITING_SELLER", "UNDER_REVIEW", "ESCALATED", "RESOLVED_REFUND", "RESOLVED_DENIED", "WITHDRAWN"),
 		list:       listPaged("/v1/claims", upTrustOps, nil),
 		get:        getByPath("/v1/claims/", upTrustOps),
+		names:      []nameRef{sellerRef("sellerOrgId"), customerRef("customerId"), personRef("decidedBy", "Decided by")},
 		titleOf:    func(o jobj) string { return "Claim " + jstr(o, "reference") },
 		subtitleOf: func(o jobj) string { return domain.Humanize(jstr(o, "type")) + " · order " + jstr(o, "orderNumber") },
 		sections:   func(o jobj) []domain.DetailSection { return autoSections(o, "status", "evidence") },
@@ -51,6 +52,7 @@ func claimsResource() *staffResource {
 				return nil
 			}
 			out := []domain.ActivityEntry{}
+			nameAll(ctx, sc, hist, personRef("actorId", "Actor"))
 			for _, h := range hist {
 				text := domain.Humanize(jstr(h, "action"))
 				if to := jstr(h, "toStatus"); to != "" {
@@ -59,7 +61,7 @@ func claimsResource() *staffResource {
 				if n := jstr(h, "note"); n != "" {
 					text += " — " + n
 				}
-				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "actorId"), Text: text})
+				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "actorName"), Text: text})
 			}
 			return out
 		},
@@ -95,6 +97,7 @@ func returnsResource() *staffResource {
 		facets:  domain.StaffFacets("REQUESTED", "APPROVED", "IN_TRANSIT", "RECEIVED", "INSPECTED", "REFUNDED", "REJECTED", "CANCELLED"),
 		list:    listLimited("/v1/returns", upTaxReturns),
 		get:     getByPath("/v1/returns/", upTaxReturns),
+		names:   []nameRef{customerRef("customerId"), sellerRef("sellerOrgId"), personRef("dropOffBy", "Dropped off by")},
 		titleOf: func(o jobj) string { return "Return " + jstr(o, "number") },
 		subtitleOf: func(o jobj) string {
 			return "Order " + jstr(o, "orderNumber") + " · " + domain.Humanize(jstr(o, "method"))
@@ -129,16 +132,12 @@ func payoutsResource() *staffResource {
 	list := listLimited("/v1/payouts/requests", upPayments)
 	return &staffResource{
 		key: "payouts", module: "payouts", title: "Payout requests", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("id", "Request", "mono", 14), col("sellerName", "Seller", "strong", 24), col("amountMinor", "Amount", "money", 14),
+		columns: []domain.Column{col("sellerName", "Seller", "strong", 24), col("requestedByName", "Requested by", "text", 18), col("amountMinor", "Amount", "money", 14),
 			col("requestedAt", "Requested", "date", 14), col("holdReason", "Hold reason", "text", 22), col("status", "Status", "status", 14)},
 		facets: domain.StaffFacets("REQUESTED", "ON_HOLD", "APPROVED", "IN_TRANSIT", "PAID", "FAILED"),
-		list: func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error) {
-			page, err := list(ctx, sc, q)
-			if err == nil {
-				addSellerNames(ctx, sc, page.items)
-			}
-			return page, err
-		},
+		list:   list,
+		names: []nameRef{sellerRef("orgId").named("sellerName"), personRef("requestedBy", "Requested by"), personRef("decidedBy", "Decided by"),
+			orderRef("orderId").inList("transfers"), orderRef("orderId").inList("balance.onHold")},
 		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
 			o, err := getByPath("/v1/payouts/requests/", upPayments)(ctx, sc, id)
 			if err != nil {
@@ -147,11 +146,8 @@ func payoutsResource() *staffResource {
 			enrichPayout(ctx, sc, o)
 			return o, nil
 		},
-		cells: func(o jobj) map[string]any {
-			return map[string]any{"sellerName": cellValue(firstNonEmpty(jstr(o, "sellerName"), jstr(o, "orgId")))}
-		},
-		titleOf:    func(o jobj) string { return "Payout to " + firstNonEmpty(jstr(o, "sellerName"), jstr(o, "orgId")) },
-		subtitleOf: func(o jobj) string { return jstr(o, "id") },
+		titleOf:    func(o jobj) string { return "Payout to " + jstr(o, "sellerName") },
+		subtitleOf: func(o jobj) string { return strings.TrimSpace("Requested by " + jstr(o, "requestedByName")) },
 		sections:   payoutSections,
 		tables:     payoutTables,
 		links: func(o jobj) []domain.RecordLink {
@@ -210,6 +206,7 @@ func feeSchedulesResource() *staffResource {
 			return map[string]any{"defaultCommissionBps": pct(o, "defaultCommissionBps"), "cardPctBps": pct(o, "cardPctBps")}
 		},
 		list: list, get: findIn(list, "id"),
+		names:      []nameRef{personRef("createdBy", "Created by"), personRef("cancelledBy", "Cancelled by"), sellerRef("orgId").inList("overrides")},
 		titleOf:    func(o jobj) string { return "Fee schedule v" + jstr(o, "version") },
 		subtitleOf: func(o jobj) string { return jstr(o, "note") },
 		sections: func(o jobj) []domain.DetailSection {
@@ -229,7 +226,7 @@ func feeSchedulesResource() *staffResource {
 			return append(secs, cat)
 		},
 		tables: func(o jobj) []domain.DetailTable {
-			return []domain.DetailTable{tableOf("Seller overrides", objs(o, "overrides"), []domain.Column{col("orgId", "Organisation", "mono", 40), col("category", "Category", "text", 30), col("commissionBps", "Commission (bps)", "number", 30)}, "orgId")}
+			return []domain.DetailTable{tableOf("Seller overrides", objs(o, "overrides"), []domain.Column{col("orgName", "Organisation", "text", 40), col("category", "Category", "text", 30), col("commissionBps", "Commission (bps)", "number", 30)}, "orgId")}
 		},
 	}
 }

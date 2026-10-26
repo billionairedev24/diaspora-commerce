@@ -21,29 +21,13 @@ func ledgerResources() []*staffResource {
 
 // ---------------------------------------------------------------- names instead of ids
 
-// whoIs turns an identity subject into a name ("Ada Obi"), remembering answers for the request; the id when unknown.
-type whoIs struct {
-	sc    staffCtx
-	known map[string]string
-}
+// whoIs turns an identity subject into a name ("Ada Obi") through the shared resolver (staff_names.go): "Unknown user"
+// when nobody can name it, never the id.
+type whoIs struct{ sc staffCtx }
 
-func newWhoIs(sc staffCtx) *whoIs { return &whoIs{sc: sc, known: map[string]string{}} }
+func newWhoIs(sc staffCtx) *whoIs { return &whoIs{sc: sc} }
 
-func (w *whoIs) name(ctx context.Context, id string) string {
-	if id == "" || id == "system" {
-		return id
-	}
-	if n, ok := w.known[id]; ok {
-		return n
-	}
-	name := id
-	var u jobj
-	if w.sc.get(ctx, w.sc.up.Identity, "/v1/admin/users/"+url.PathEscape(id), nil, &u) == nil {
-		name = firstNonEmpty(jstr(u, "name"), jstr(u, "email"), id)
-	}
-	w.known[id] = name
-	return name
-}
+func (w *whoIs) name(ctx context.Context, id string) string { return whoName(ctx, w.sc, id) }
 
 func (w *whoIs) set(ctx context.Context, o jobj, idKey, nameKey string) {
 	if id := jstr(o, idKey); id != "" {
@@ -169,13 +153,9 @@ func reconciliationResource() *staffResource {
 			item["stripe"] = d["stripe"]
 			item["journals"] = d["journals"]
 			item["adjustments"] = d["adjustments"]
-			w := newWhoIs(sc)
-			w.set(ctx, item, "resolvedBy", "resolvedByName")
-			for _, a := range objs(item, "adjustments") {
-				w.set(ctx, a, "proposedBy", "proposedByName")
-			}
 			return item, nil
 		},
+		names:      []nameRef{personRef("resolvedBy", "Handled by"), personRef("proposedBy", "Proposed by").inList("adjustments")},
 		idOf:       func(o jobj) string { return jstr(o, "id") },
 		titleOf:    func(o jobj) string { return "Difference on " + jstr(o, "stripeRef") },
 		subtitleOf: func(o jobj) string { return domain.Humanize(jstr(o, "status")) },
@@ -202,7 +182,7 @@ func reconciliationResource() *staffResource {
 			return append(secs, domain.DetailSection{Title: "Review", Fields: []domain.DetailField{
 				fieldOf("Status", jstr(o, "status"), "status"),
 				fieldOf("Explanation", jstr(o, "note"), "text"),
-				fieldOf("Handled by", firstNonEmpty(jstr(o, "resolvedByName"), jstr(o, "resolvedBy")), "text"),
+				fieldOf("Handled by", jstr(o, "resolvedByName"), "text"),
 				fieldOf("Handled at", jstr(o, "resolvedAt"), "datetime"),
 			}})
 		},
@@ -381,17 +361,12 @@ func ledgerAdjustmentsResource() *staffResource {
 		if err := sc.get(ctx, sc.up.Payments, "/v1/ledger/adjustments", v, &raw); err != nil {
 			return nil, err
 		}
-		rows := adjustmentRows(jpage(raw).items)
-		w := newWhoIs(sc)
-		for _, r := range rows {
-			w.set(ctx, r, "proposedBy", "proposedByName")
-			w.set(ctx, r, "decidedBy", "decidedByName")
-		}
-		return rows, nil
+		return adjustmentRows(jpage(raw).items), nil
 	}
 	list := listAll(load)
 	return &staffResource{
-		key: "ledger-adjustments", module: "payouts", title: "Ledger adjustments", statusKey: "status", exportable: true,
+		key:   "ledger-adjustments",
+		names: []nameRef{personRef("proposedBy", "Proposed by"), personRef("decidedBy", "Decided by"), sellerRef("orgId").inList("lines")}, module: "payouts", title: "Ledger adjustments", statusKey: "status", exportable: true,
 		columns: []domain.Column{col("reason", "Why", "text", 34), col("amountMinor", "Amount", "money", 12), col("stripeRef", "Stripe object", "mono", 16),
 			col("proposedByName", "Proposed by", "text", 14), col("decidedByName", "Decided by", "text", 14), col("status", "Status", "status", 10)},
 		facets: domain.StaffFacets("PROPOSED", "POSTED", "REJECTED"),
@@ -402,9 +377,6 @@ func ledgerAdjustmentsResource() *staffResource {
 				return nil, err
 			}
 			adjustmentRows([]jobj{a})
-			w := newWhoIs(sc)
-			w.set(ctx, a, "proposedBy", "proposedByName")
-			w.set(ctx, a, "decidedBy", "decidedByName")
 			return a, nil
 		},
 		titleOf:    func(o jobj) string { return "Adjustment of " + moneyText(num(o, "amountMinor")) },
@@ -419,9 +391,9 @@ func ledgerAdjustmentsResource() *staffResource {
 					fieldOf("Ledger journal", jstr(o, "journalId"), "mono"),
 				}},
 				{Title: "Who decided", Fields: []domain.DetailField{
-					fieldOf("Proposed by", firstNonEmpty(jstr(o, "proposedByName"), jstr(o, "proposedBy")), "text"),
+					fieldOf("Proposed by", jstr(o, "proposedByName"), "text"),
 					fieldOf("Proposed at", jstr(o, "proposedAt"), "datetime"),
-					fieldOf("Decided by", firstNonEmpty(jstr(o, "decidedByName"), jstr(o, "decidedBy")), "text"),
+					fieldOf("Decided by", jstr(o, "decidedByName"), "text"),
 					fieldOf("Decided at", jstr(o, "decidedAt"), "datetime"),
 					fieldOf("Decision note", jstr(o, "decisionNote"), "text"),
 				}},
@@ -434,10 +406,10 @@ func ledgerAdjustmentsResource() *staffResource {
 				if strings.EqualFold(jstr(l, "side"), "CREDIT") {
 					side = "Credit"
 				}
-				rows = append(rows, jobj{"account": jstr(l, "account") + " · " + jstr(l, "title"), "side": side, "amountMinor": num(l, "amountMinor"), "orgId": jstr(l, "orgId")})
+				rows = append(rows, jobj{"account": jstr(l, "account") + " · " + jstr(l, "title"), "side": side, "amountMinor": num(l, "amountMinor"), "orgName": jstr(l, "orgName")})
 			}
 			return []domain.DetailTable{tableOf("Journal lines", rows, []domain.Column{col("account", "Account", "text", 46), col("side", "Debit or credit", "text", 16),
-				col("amountMinor", "Amount", "money", 16), col("orgId", "Seller", "mono", 22)}, "account")}
+				col("amountMinor", "Amount", "money", 16), col("orgName", "Seller", "text", 22)}, "account")}
 		},
 		links: func(o jobj) []domain.RecordLink {
 			if jstr(o, "itemId") == "" {

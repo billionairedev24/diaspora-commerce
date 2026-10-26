@@ -61,12 +61,12 @@ func organisationsResource() *staffResource {
 		key: "organisations", module: "orgs", title: "Organisations", statusKey: "status", exportable: true,
 		searchPlaceholder: "Organisation name or id",
 		columns: []domain.Column{
-			col("displayName", "Name", "strong", 24), col("orgId", "Organisation id", "mono", 22),
+			col("displayName", "Name", "strong", 28),
 			col("kind", "Kind", "text", 10), col("offering", "Offering", "text", 12), col("country", "Country", "text", 8),
 			col("status", "Status", "status", 14),
 		},
 		facets: domain.StaffFacets("APPROVED", "SUSPENDED", "DRAFT", "PENDING_REVIEW"),
-		list: list,
+		list:   list,
 		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
 			var o jobj
 			if err := sc.get(ctx, sc.up.Seller, "/v1/orgs/"+url.PathEscape(id)+"/mirror", nil, &o); err != nil {
@@ -79,11 +79,9 @@ func organisationsResource() *staffResource {
 			return map[string]any{"displayName": cellValue(firstNonEmpty(jstr(o, "displayName"), jstr(o, "legalName")))}
 		},
 		titleOf: func(o jobj) string {
-			return firstNonEmpty(jstr(o, "displayName"), jstr(o, "legalName"), jstr(o, "orgId"))
+			return firstNonEmpty(jstr(o, "displayName"), jstr(o, "legalName"), "Unnamed organisation")
 		},
-		subtitleOf: func(o jobj) string {
-			return strings.TrimSpace(jstr(o, "orgId") + " · " + domain.Humanize(jstr(o, "kind")))
-		},
+		subtitleOf: func(o jobj) string { return domain.Humanize(jstr(o, "kind")) },
 		links: func(o jobj) []domain.RecordLink {
 			id := jstr(o, "orgId")
 			if id == "" {
@@ -128,22 +126,24 @@ func connectAccountsResource() *staffResource {
 		key: "connect-accounts", module: "orgs", title: "Stripe Connect", statusKey: "status", exportable: true,
 		searchPlaceholder: "Organisation, name or acct_…",
 		columns: []domain.Column{
-			col("orgName", "Organisation", "strong", 22), col("accountId", "Stripe account", "mono", 18),
-			col("orgId", "Organisation id", "mono", 20), col("status", "Status", "status", 16),
+			col("orgName", "Organisation", "strong", 26), col("accountId", "Stripe account", "mono", 20),
+			col("status", "Status", "status", 16),
 			col("payoutsPaused", "Payouts paused", "text", 12), col("listingsHidden", "Listings hidden", "text", 12),
 		},
 		facets: domain.StaffFacets("VERIFIED", "ACTION_NEEDED", "RESTRICTED", "REJECTED", "PENDING"),
 		list:   list,
 		get:    getByPath("/v1/compliance/accounts/", upSeller),
 		idOf:   func(o jobj) string { return jstr(o, "accountId") },
+		names:  []nameRef{orgRef("orgId")},
+		search: []string{"orgId"},
 		cells: func(o jobj) map[string]any {
 			return map[string]any{
 				"payoutsPaused":  cellValue(displayBool(boolean(o, "payoutsPaused"))),
 				"listingsHidden": cellValue(displayBool(boolean(o, "listingsHidden"))),
 			}
 		},
-		titleOf:    func(o jobj) string { return firstNonEmpty(jstr(o, "orgName"), jstr(o, "accountId")) },
-		subtitleOf: func(o jobj) string { return jstr(o, "accountId") },
+		titleOf:    func(o jobj) string { return firstNonEmpty(jstr(o, "orgName"), "Unknown organisation") },
+		subtitleOf: func(o jobj) string { return "Stripe account " + jstr(o, "accountId") },
 		actions: []staffAction{
 			{key: "remind", label: "Send reminder", tone: "neutral", permission: "compliance:remind",
 				confirm: "Send a compliance reminder now (email, SMS and in-app)?",

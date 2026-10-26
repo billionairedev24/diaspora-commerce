@@ -73,6 +73,10 @@ type staffCtx struct {
 	up     port.StaffUpstreams
 	now    time.Time
 	maint  MaintenanceService
+	// names turns ids into display names (nil in unit tests: ids are then named "Unknown …").
+	names *staffNames
+	// nameWho names the people and organisations in every document relayed as-is (pass-through screens set it).
+	nameWho bool
 	// idem is the request's Idempotency-Key (relayed to upstreams that accept one).
 	idem string
 	// reveal collects a secret an action or creation wants to show once (see showOnce); nil elsewhere.
@@ -95,6 +99,9 @@ func (s staffCtx) call(ctx context.Context, up port.StaffUpstream, c port.StaffC
 	if err := up.Call(ctx, s.bearer, c, out); err != nil {
 		return mapErr(up.Name(), err)
 	}
+	if doc, ok := out.(*any); ok && s.nameWho && *doc != nil {
+		s.names.nameWho(ctx, s, *doc)
+	}
 	return nil
 }
 
@@ -108,12 +115,13 @@ func (s staffCtx) post(ctx context.Context, up port.StaffUpstream, path string, 
 
 // staffResolver resolves the staff member for every staff route.
 type staffResolver struct {
-	d StaffDeps
+	d     StaffDeps
+	names *staffNames
 }
 
 func newStaffResolver(d StaffDeps) *staffResolver {
 	d.defaults()
-	return &staffResolver{d: d}
+	return &staffResolver{d: d, names: newStaffNames(d.Clock, d.RetailOrgID)}
 }
 
 // matrix reads identity's PLATFORM matrix; staff without access:read (403) and an unavailable identity fall back to
@@ -152,7 +160,7 @@ func (r *staffResolver) resolve(ctx context.Context, c *domain.Caller) (staffCtx
 	if err := requireCustomer(c); err != nil {
 		return staffCtx{}, err
 	}
-	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock(), maint: r.d.Maintenance}
+	sc := staffCtx{bearer: c.BearerToken, up: r.d.Up, now: r.d.Clock(), maint: r.d.Maintenance, names: r.names}
 	if err := sc.get(ctx, r.d.Up.Identity, "/v1/me", nil, &sc.me); err != nil {
 		return staffCtx{}, err
 	}

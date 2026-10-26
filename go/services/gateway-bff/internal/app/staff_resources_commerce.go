@@ -28,13 +28,14 @@ func ordersResource() *staffResource {
 	}
 	return &staffResource{
 		key: "orders", module: "orders", title: "Orders", statusKey: "status", exportable: true, searchPlaceholder: "Order number (AT-…)",
-		columns: []domain.Column{col("orderNumber", "Order", "mono", 13), col("customer", "Customer", "strong", 18), col("sellers", "Sellers", "text", 20),
+		columns: []domain.Column{col("orderNumber", "Order", "mono", 13), col("customerName", "Customer", "strong", 18), col("sellers", "Sellers", "text", 20),
 			col("totalMinor", "Total", "money", 11), col("placedAt", "Placed", "datetime", 16), col("shipTo", "Ship to", "text", 12), col("status", "Status", "status", 10)},
 		facets: domain.StaffFacets("PENDING_PAYMENT", "PLACED", "PARTIALLY_SHIPPED", "COMPLETED", "CANCELLED"),
 		cells: func(o jobj) map[string]any {
-			return map[string]any{"customer": cellValue(firstNonEmpty(jstr(o, "shippingAddress.fullName"), jstr(o, "customerId"))), "sellers": cellValue(sellers(o))}
+			return map[string]any{"sellers": cellValue(sellers(o))}
 		},
-		idOf: func(o jobj) string { return jstr(o, "orderNumber") },
+		names: []nameRef{customerRef("customerId").orFrom("shippingAddress.fullName"), sellerRef("sellerOrgId").inList("shipments").named("sellerName")},
+		idOf:  func(o jobj) string { return jstr(o, "orderNumber") },
 		list: func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error) {
 			v := url.Values{"limit": {strconv.Itoa(q.Size)}}
 			if q.Status != "" {
@@ -62,7 +63,7 @@ func ordersResource() *staffResource {
 		},
 		titleOf: func(o jobj) string { return "Order " + jstr(o, "orderNumber") },
 		subtitleOf: func(o jobj) string {
-			return strings.Trim(firstNonEmpty(jstr(o, "shippingAddress.fullName"), jstr(o, "customerId"))+" · "+jstr(o, "shipTo"), " ·")
+			return strings.Trim(jstr(o, "customerName")+" · "+jstr(o, "shipTo"), " ·")
 		},
 		sections: func(o jobj) []domain.DetailSection {
 			return append(autoSections(o, "status", "shipments"), proofSections(o)...)
@@ -263,7 +264,7 @@ func productsResource() *staffResource {
 	}
 	return &staffResource{
 		key: "products", module: "catalog", title: "Products", statusKey: "status", exportable: true, searchPlaceholder: "Title or ATIN",
-		columns: []domain.Column{col("atin", "ATIN", "mono", 15), col("title", "Product", "strong", 30), col("ownerOrgId", "Seller", "text", 20),
+		columns: []domain.Column{col("atin", "ATIN", "mono", 15), col("title", "Product", "strong", 30), col("ownerOrgName", "Seller", "text", 20),
 			col("productType", "Type", "text", 15), col("status", "Status", "status", 20)},
 		facets: domain.StaffFacets("IN_REVIEW", "PENDING_CATEGORY_APPROVAL", "LIVE", "PAUSED", "REJECTED", "TAKEN_DOWN"),
 		list: listPaged("/v1/products", upCatalog, func(q staffQuery, v url.Values) {
@@ -272,8 +273,9 @@ func productsResource() *staffResource {
 			}
 		}),
 		get:        getByPath("/v1/products/", upCatalog),
+		names:      []nameRef{sellerRef("ownerOrgId")},
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
-		subtitleOf: func(o jobj) string { return jstr(o, "atin") + " · " + jstr(o, "ownerOrgId") },
+		subtitleOf: func(o jobj) string { return jstr(o, "atin") + " · " + jstr(o, "ownerOrgName") },
 		sections: func(o jobj) []domain.DetailSection {
 			secs := autoSections(o, "status", "variants", "images")
 			// What the shopper sees first: the listing's photos (reviewers cannot judge a listing without them).
@@ -319,11 +321,12 @@ func moderationResource() *staffResource {
 	}
 	return &staffResource{
 		key: "moderation", module: "catalog", title: "Moderation queue", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("title", "Listing", "strong", 28), col("sellerOrgId", "Seller", "text", 16), col("type", "Type", "text", 14),
-			col("priority", "Priority", "text", 10), col("sla.dueAt", "Due", "datetime", 14), col("assignee", "Assignee", "text", 8), col("status", "Status", "status", 10)},
+		columns: []domain.Column{col("title", "Listing", "strong", 28), col("sellerOrgName", "Seller", "text", 16), col("type", "Type", "text", 14),
+			col("priority", "Priority", "text", 10), col("sla.dueAt", "Due", "datetime", 14), col("assigneeName", "Assignee", "text", 12), col("status", "Status", "status", 10)},
 		facets:     domain.StaffFacets("PENDING", "ESCALATED", "APPROVED", "REJECTED", "CLOSED"),
 		list:       listPaged("/v1/moderation/items", upTrustOps, nil),
 		get:        getByPath("/v1/moderation/items/", upTrustOps),
+		names:      []nameRef{sellerRef("sellerOrgId"), personRef("assignee", "Assignee"), personRef("decidedBy", "Decided by")},
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
 		subtitleOf: func(o jobj) string { return domain.Humanize(jstr(o, "type")) + " · " + jstr(o, "atin") },
 		actions: []staffAction{
@@ -409,6 +412,7 @@ func purchaseOrdersResource() *staffResource {
 		facets:     domain.StaffFacets("DRAFT", "PENDING_APPROVAL", "APPROVED", "SENT", "CONFIRMED", "RECEIVED", "CLOSED", "CANCELLED"),
 		list:       listPaged("/v1/purchase-orders", upRetail, nil),
 		get:        getByPath("/v1/purchase-orders/", upRetail),
+		names:      []nameRef{personRef("createdBy", "Created by"), personRef("approvedBy", "Approved by"), personRef("by", "By").inList("history")},
 		titleOf:    func(o jobj) string { return jstr(o, "number") + " · " + jstr(o, "supplierCode") },
 		subtitleOf: func(o jobj) string { return jstr(o, "incoterm") + " → " + jstr(o, "destinationNodeId") },
 		version:    func(o jobj) string { return jstr(o, "version") },
@@ -424,7 +428,7 @@ func purchaseOrdersResource() *staffResource {
 				if n := jstr(h, "note"); n != "" {
 					text += " — " + n
 				}
-				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "by"), Text: text})
+				out = append(out, domain.ActivityEntry{At: timeOf(h, "at"), Actor: jstr(h, "byName"), Text: text})
 			}
 			return out
 		},
@@ -442,12 +446,13 @@ func purchaseOrdersResource() *staffResource {
 func routesResource() *staffResource {
 	return &staffResource{
 		key: "routes", module: "dispatch", title: "Routes", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("name", "Route", "mono", 16), col("zone", "Zone", "text", 14), col("window", "Window", "text", 12), col("driverId", "Driver", "strong", 16),
+		columns: []domain.Column{col("name", "Route", "mono", 16), col("zone", "Zone", "text", 14), col("window", "Window", "text", 12), col("driverName", "Driver", "strong", 16),
 			col("stopCount", "Stops", "number", 8), col("serviceDate", "Date", "date", 12), col("status", "Status", "status", 22)},
 		cells:      func(o jobj) map[string]any { return map[string]any{"stopCount": float64(len(objs(o, "stops")))} },
 		facets:     domain.StaffFacets("PLANNED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"),
 		list:       listLimited("/v1/dispatch/routes", upFulfilment),
 		get:        getByPath("/v1/dispatch/routes/", upFulfilment),
+		names:      []nameRef{driverRef("driverId")},
 		create:     buildRoutesCreate(),
 		titleOf:    func(o jobj) string { return "Route " + firstNonEmpty(jstr(o, "name"), jstr(o, "id")) },
 		subtitleOf: func(o jobj) string { return jstr(o, "zone") + " · " + jstr(o, "window") },

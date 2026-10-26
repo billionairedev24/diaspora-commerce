@@ -109,8 +109,9 @@ func siteSettingsResource() *staffResource {
 			return staffList{items: []jobj{o}, total: &one}, nil
 		},
 		get:        get,
+		names:      []nameRef{personRef("updatedBy", "Updated by")},
 		titleOf:    func(jobj) string { return "Contacts & social links" },
-		subtitleOf: func(o jobj) string { return "Revision " + jstr(o, "revision") + " · " + jstr(o, "updatedBy") },
+		subtitleOf: func(o jobj) string { return "Revision " + jstr(o, "revision") + " · " + jstr(o, "updatedByName") },
 		sections: func(o jobj) []domain.DetailSection {
 			links := domain.DetailSection{Title: "Social links", Fields: []domain.DetailField{}}
 			for _, s := range objs(o, "socials") {
@@ -338,6 +339,7 @@ func placementsResource(key string) *staffResource {
 			return jpage(raw).items, nil
 		}),
 		get:     getByPath("/v1/placements/", upContent),
+		names:   []nameRef{personRef("createdBy", "Created by"), personRef("submittedBy", "Submitted by"), personRef("approvedBy", "Approved by")},
 		titleOf: func(o jobj) string { return jstr(o, "name") },
 		subtitleOf: func(o jobj) string {
 			s := jstr(o, "slot")
@@ -423,7 +425,8 @@ func identityProvidersResource() *staffResource {
 	}
 	return &staffResource{
 		key: "identity-providers", module: "dev", title: "Identity providers", status: status,
-		columns: []domain.Column{col("displayName", "Provider", "strong", 30), col("configured", "Configured", "text", 20), col("updatedBy", "Changed by", "text", 25), col("status", "Sign-in button", "status", 25)},
+		columns: []domain.Column{col("displayName", "Provider", "strong", 30), col("configured", "Configured", "text", 20), col("updatedByName", "Changed by", "text", 25), col("status", "Sign-in button", "status", 25)},
+		names:   []nameRef{personRef("updatedBy", "Changed by")},
 		cells:   func(o jobj) map[string]any { return map[string]any{"status": status(o)} },
 		list:    list, get: findIn(list, "id"),
 		titleOf: func(o jobj) string { return jstr(o, "displayName") },
@@ -489,6 +492,7 @@ func privacyRequestsResource() *staffResource {
 		idOf:    func(o jobj) string { return jstr(o, "reference") },
 		list:    listAll(load),
 		get:     getByPath("/v1/privacy/requests/", upContent),
+		names:   []nameRef{personRef("resolvedBy", "Resolved by")},
 		titleOf: func(o jobj) string { return jstr(o, "reference") + " · " + domain.Humanize(jstr(o, "type")) },
 		subtitleOf: func(o jobj) string {
 			return jstr(o, "email") + " · " + jstr(o, "state") + " · due " + jstr(o, "dueAt")

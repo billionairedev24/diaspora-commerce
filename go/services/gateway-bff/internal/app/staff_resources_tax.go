@@ -184,6 +184,7 @@ func taxReviewResource() *staffResource {
 		facets: domain.StaffFacets("OPEN", "REVIEWED"),
 		idOf:   func(o jobj) string { return jstr(o, "rowId") },
 		list:   list, get: findIn(list, "rowId"),
+		names: []nameRef{personRef("reviewedBy", "Reviewed by")},
 		titleOf: func(o jobj) string {
 			return strings.TrimSpace(jstr(o, "productType") + " " + jstr(o, "answer"))
 		},
@@ -194,7 +195,7 @@ func taxReviewResource() *staffResource {
 			return []domain.DetailSection{{Title: "Item", Fields: []domain.DetailField{
 				{Label: "Product type", Value: jstr(o, "productType"), Kind: "text"}, {Label: "Seller's answer", Value: firstNonEmpty(jstr(o, "answer"), "not answered"), Kind: "text"},
 				{Label: "Example item (ATIN)", Value: jstr(o, "sampleAtin"), Kind: "text"}, {Label: "Order lines seen", Value: jstr(o, "count"), Kind: "text"},
-				{Label: "Reviewed by", Value: firstNonEmpty(jstr(o, "reviewedBy"), "—"), Kind: "text"}, {Label: "Note", Value: firstNonEmpty(jstr(o, "reviewNote"), "—"), Kind: "text"}}}}
+				{Label: "Reviewed by", Value: firstNonEmpty(jstr(o, "reviewedByName"), "—"), Kind: "text"}, {Label: "Note", Value: firstNonEmpty(jstr(o, "reviewNote"), "—"), Kind: "text"}}}}
 		},
 		actions: []staffAction{
 			{key: "reviewed", label: "Mark reviewed", tone: "primary", permission: "tax:configure", form: noteForm("Mark as reviewed", "Mark reviewed", false), when: inState("OPEN"),

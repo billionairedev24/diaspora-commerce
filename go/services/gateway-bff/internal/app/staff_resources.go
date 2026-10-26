@@ -68,21 +68,26 @@ type staffCreate struct {
 type staffResource struct {
 	key, module, title string
 	columns            []domain.Column
-	facets             []domain.Facet
-	statusKey          string
-	searchPlaceholder  string
-	exportable         bool
-	list               func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error)
-	get                func(ctx context.Context, sc staffCtx, id string) (jobj, error)
-	idOf               func(o jobj) string
-	cells              func(o jobj) map[string]any
-	titleOf            func(o jobj) string
-	subtitleOf         func(o jobj) string
-	status             func(o jobj) string
-	sections           func(o jobj) []domain.DetailSection
-	tables             func(o jobj) []domain.DetailTable
-	activity           func(ctx context.Context, sc staffCtx, o jobj) []domain.ActivityEntry
-	links              func(o jobj) []domain.RecordLink
+	// names marks the id fields of the record that people must see as names (see staff_names.go): the framework
+	// resolves them for every page it reads and puts the name under each ref's nameKey, which the columns show.
+	names []nameRef
+	// search lists fields the table does not show but its search box finds (an audit entry's entity id).
+	search            []string
+	facets            []domain.Facet
+	statusKey         string
+	searchPlaceholder string
+	exportable        bool
+	list              func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error)
+	get               func(ctx context.Context, sc staffCtx, id string) (jobj, error)
+	idOf              func(o jobj) string
+	cells             func(o jobj) map[string]any
+	titleOf           func(o jobj) string
+	subtitleOf        func(o jobj) string
+	status            func(o jobj) string
+	sections          func(o jobj) []domain.DetailSection
+	tables            func(o jobj) []domain.DetailTable
+	activity          func(ctx context.Context, sc staffCtx, o jobj) []domain.ActivityEntry
+	links             func(o jobj) []domain.RecordLink
 	// file returns the URL of one file attached to the record (an application's uploaded document); the BFF sends the
 	// reviewer there (GET /v1/staff/resources/{resource}/{id}/files/{fileId}).
 	file    func(ctx context.Context, sc staffCtx, id, fileID string) (string, error)
@@ -165,6 +170,9 @@ func boolean(o jobj, path string) bool {
 }
 
 func objs(o jobj, path string) []jobj {
+	if direct, ok := at(o, path).([]jobj); ok {
+		return direct
+	}
 	list, _ := at(o, path).([]any)
 	out := make([]jobj, 0, len(list))
 	for _, it := range list {
@@ -269,8 +277,8 @@ func autoSections(o jobj, statusKey string, skip ...string) []domain.DetailSecti
 	details := domain.DetailSection{Title: "Details", Fields: []domain.DetailField{}}
 	var nested []domain.DetailSection
 	for _, k := range keys {
-		if slices.Contains(skip, k) {
-			continue
+		if slices.Contains(skip, k) || (k == "orderId" && jstr(o, "orderNumber") != "") {
+			continue // the order number says which order; the internal id is no use to a person
 		}
 		switch v := o[k].(type) {
 		case map[string]any:

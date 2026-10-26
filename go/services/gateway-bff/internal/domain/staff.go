@@ -307,6 +307,8 @@ type Row struct {
 	ID    string         `json:"id"`
 	Cells map[string]any `json:"cells"`
 	Tone  *string        `json:"tone"`
+	// Search holds text the table does not show but its search box must still find (the ids behind the names).
+	Search []string `json:"-"`
 }
 
 // FieldOption is one choice of a select field.

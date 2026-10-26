@@ -169,7 +169,7 @@ func rowOf(r *staffResource, o jobj) domain.Row {
 			cells[c.Key] = cellValue(at(o, c.Key))
 		}
 	}
-	return domain.Row{ID: r.id(o), Cells: cells, Tone: domain.StatusTone(r.statusOf(o))}
+	return domain.Row{ID: r.id(o), Cells: cells, Tone: domain.StatusTone(r.statusOf(o)), Search: r.searchIDs(o)}
 }
 
 func (s *staffRecordsImpl) Get(ctx context.Context, c *domain.Caller, name, id string) (domain.RecordDetail, error) {
@@ -213,8 +213,9 @@ func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staf
 	if r.sections != nil {
 		d.Sections = r.sections(o)
 	} else {
-		d.Sections = autoSections(o, r.statusKey)
+		d.Sections = autoSections(o, r.statusKey, r.nameSkips()...)
 	}
+	d.Sections = r.nameSections(o, d.Sections)
 	if r.tables != nil {
 		d.Tables = r.tables(o)
 	}

@@ -21,21 +21,6 @@ func sellerOf(ctx context.Context, sc staffCtx, orgID string) jobj {
 	return m
 }
 
-// addSellerNames puts the seller's name on every row of the list (one lookup per organisation).
-func addSellerNames(ctx context.Context, sc staffCtx, rows []jobj) {
-	names := map[string]string{}
-	for _, r := range rows {
-		org := jstr(r, "orgId")
-		name, seen := names[org]
-		if !seen {
-			m := sellerOf(ctx, sc, org)
-			name = firstNonEmpty(jstr(m, "displayName"), jstr(m, "legalName"))
-			names[org] = name
-		}
-		r["sellerName"] = firstNonEmpty(name, org)
-	}
-}
-
 // enrichPayout adds the seller, requester, Stripe account and balance to one payout request.
 func enrichPayout(ctx context.Context, sc staffCtx, o jobj) {
 	org := jstr(o, "orgId")
@@ -139,7 +124,7 @@ func payoutSections(o jobj) []domain.DetailSection {
 		fieldOf("Status", jstr(o, "status"), "status"),
 		fieldOf("Requested", jstr(o, "requestedAt"), "datetime"),
 		fieldOf("Decided", jstr(o, "decidedAt"), "datetime"),
-		fieldOf("Decided by", jstr(o, "decidedBy"), "mono"),
+		fieldOf("Decided by", jstr(o, "decidedByName"), "text"),
 		fieldOf("Hold reason", jstr(o, "holdReason"), "text"),
 		fieldOf("Failure", jstr(o, "failureMessage"), "text"),
 		fieldOf("Stripe payout", jstr(o, "stripePayoutId"), "mono"),
@@ -151,8 +136,7 @@ func payoutSections(o jobj) []domain.DetailSection {
 		fieldOf("Type", jstr(o, "sellerKind"), "text"),
 		fieldOf("Country", jstr(o, "sellerCountry"), "text"),
 		fieldOf("Account status", domain.Humanize(jstr(o, "sellerStatus")), "text"),
-		fieldOf("Organisation id", jstr(o, "orgId"), "mono"),
-		fieldOf("Requested by", firstNonEmpty(jstr(o, "requestedByName"), jstr(o, "requestedBy")), "text"),
+		fieldOf("Requested by", jstr(o, "requestedByName"), "text"),
 		fieldOf("Requester email", jstr(o, "requestedByEmail"), "text"),
 	}})
 	secs = append(secs, domain.DetailSection{Title: "Before you approve", Fields: payoutChecks(o)})
@@ -190,13 +174,13 @@ func payoutTables(o jobj) []domain.DetailTable {
 	}
 	if rows := objs(o, "transfers"); len(rows) > 0 {
 		tables = append(tables, tableOf("Money sent to this seller's Stripe account (transfers)", rows, []domain.Column{
-			col("orderId", "Order", "mono", 30), col("stripeTransferId", "Stripe transfer id", "mono", 30), col("amountMinor", "Amount", "money", 14), col("reversedMinor", "Reversed", "money", 12), col("createdAt", "Sent", "date", 14),
+			col("orderNumber", "Order", "mono", 30), col("stripeTransferId", "Stripe transfer id", "mono", 30), col("amountMinor", "Amount", "money", 14), col("reversedMinor", "Reversed", "money", 12), col("createdAt", "Sent", "date", 14),
 		}, "id"))
 	}
 	if b, ok := o["balance"].(map[string]any); ok {
 		if held := objs(b, "onHold"); len(held) > 0 {
 			tables = append(tables, tableOf("Orders still on hold", held, []domain.Column{
-				col("orderId", "Order", "mono", 50), col("amountMinor", "Amount", "money", 25), col("releaseAt", "Releases", "date", 25),
+				col("orderNumber", "Order", "mono", 50), col("amountMinor", "Amount", "money", 25), col("releaseAt", "Releases", "date", 25),
 			}, "orderId"))
 		}
 	}

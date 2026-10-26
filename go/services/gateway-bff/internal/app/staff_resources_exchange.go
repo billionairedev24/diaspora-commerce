@@ -55,9 +55,10 @@ func exchangeRatesResource() *staffResource {
 	return &staffResource{
 		key: "exchange-rates", module: "inventory", title: "Exchange rates", searchPlaceholder: "Currency, e.g. MXN",
 		columns: []domain.Column{col("currency", "Currency", "mono", 12), col("rateDate", "Day", "date", 16), col("rateToUsd", "USD per unit", "number", 18),
-			col("note", "Source", "text", 24), col("updatedBy", "Set by", "text", 16), col("updatedAt", "Updated", "datetime", 14)},
-		idOf: rateID,
-		list: list,
+			col("note", "Source", "text", 24), col("updatedByName", "Set by", "text", 16), col("updatedAt", "Updated", "datetime", 14)},
+		idOf:  rateID,
+		names: []nameRef{personRef("updatedBy", "Set by")},
+		list:  list,
 		get: func(ctx context.Context, sc staffCtx, id string) (jobj, error) {
 			cur, day, ok := rateKey(id)
 			if !ok {
@@ -83,7 +84,7 @@ func exchangeRatesResource() *staffResource {
 				{Label: "Day", Value: jstr(o, "rateDate"), Kind: "date"},
 				{Label: "USD per unit", Value: jstr(o, "rateToUsd"), Kind: "text"},
 				{Label: "Source", Value: displayValue(at(o, "note")), Kind: "text"},
-				{Label: "Set by", Value: jstr(o, "updatedBy"), Kind: "text"},
+				{Label: "Set by", Value: jstr(o, "updatedByName"), Kind: "text"},
 				{Label: "Updated", Value: jstr(o, "updatedAt"), Kind: "datetime"}}}}
 		},
 		activity: func(ctx context.Context, sc staffCtx, o jobj) []domain.ActivityEntry {
@@ -92,7 +93,9 @@ func exchangeRatesResource() *staffResource {
 				return nil
 			}
 			out := []domain.ActivityEntry{}
-			for _, c := range jpage(raw).items {
+			changes := jpage(raw).items
+			nameAll(ctx, sc, changes, personRef("actor", "Actor").named("actorName"))
+			for _, c := range changes {
 				if jstr(c, "rateDate") != jstr(o, "rateDate") {
 					continue
 				}
@@ -100,7 +103,7 @@ func exchangeRatesResource() *staffResource {
 				if old := jstr(c, "oldRate"); old != "" {
 					text = "Changed from " + old + " to " + jstr(c, "newRate")
 				}
-				out = append(out, domain.ActivityEntry{At: timeOf(c, "occurredAt"), Actor: jstr(c, "actor"), Text: text + ": " + jstr(c, "reason")})
+				out = append(out, domain.ActivityEntry{At: timeOf(c, "occurredAt"), Actor: jstr(c, "actorName"), Text: text + ": " + jstr(c, "reason")})
 			}
 			return out
 		},
