@@ -55,6 +55,9 @@ func (f *fakeDeliveryRuns) runEconomics(w http.ResponseWriter, r *http.Request) 
 	f.queries[key] = r.URL.RawQuery
 	f.mu.Unlock()
 	p := r.URL.Path
+	if f.runLifecycle(w, r, body) {
+		return
+	}
 	switch {
 	case p == "/v1/economics-settings" && r.Method == http.MethodGet:
 		out := econNumbers(2500, 70)

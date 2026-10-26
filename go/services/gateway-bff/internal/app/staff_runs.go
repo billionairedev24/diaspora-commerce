@@ -170,6 +170,7 @@ func (s *staffPreordersImpl) Runs(ctx context.Context, c *domain.Caller, q url.V
 	if err := sc.get(ctx, sc.up.DeliveryRuns, runsPath, pq, &out); err != nil {
 		return nil, err
 	}
+	s.nameRuns(ctx, sc, out)
 	return items(out), nil
 }
 

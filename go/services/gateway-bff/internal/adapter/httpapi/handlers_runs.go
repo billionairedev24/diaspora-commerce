@@ -16,6 +16,17 @@ func (h *handlersImpl) registerStaffRuns(route func(pattern string, fn http.Hand
 	route("GET /v1/staff/delivery-runs/locations", h.staffRunLocations)
 	route("GET /v1/staff/delivery-runs/locations/{id}/history", h.staffRunLocationHistory)
 	route("GET /v1/staff/delivery-runs/runs", h.staffPreorderRuns)
+	route("POST /v1/staff/delivery-runs/runs", h.staffCreateRun)
+	route("GET /v1/staff/delivery-runs/runs/{id}", h.staffDeliveryRun)
+	route("PUT /v1/staff/delivery-runs/runs/{id}", h.staffUpdateRun)
+	route("DELETE /v1/staff/delivery-runs/runs/{id}", h.staffDeleteRun)
+	route("POST /v1/staff/delivery-runs/runs/{id}/announce", h.staffAnnounceRun)
+	route("POST /v1/staff/delivery-runs/runs/{id}/open", h.staffOpenRun)
+	route("POST /v1/staff/delivery-runs/runs/{id}/extend", h.staffExtendRun)
+	route("POST /v1/staff/delivery-runs/runs/{id}/confirm", h.staffConfirmRun)
+	route("POST /v1/staff/delivery-runs/runs/{id}/cancel", h.staffCancelRun)
+	route("GET /v1/staff/delivery-runs/runs/{id}/log", h.staffRunLog)
+	route("GET /v1/staff/delivery-runs/runs/{id}/orders", h.staffRunOrders)
 	route("GET /v1/staff/delivery-runs/runs/{id}/pnl", h.staffRunPnl)
 	route("POST /v1/staff/delivery-runs/economics-preview", h.staffPreorderPlanRun)
 	route("GET /v1/staff/advertorials", h.staffAdvertorials)
@@ -75,6 +86,86 @@ func (h *handlersImpl) staffRunLocationHistory(w http.ResponseWriter, r *http.Re
 
 func (h *handlersImpl) staffPreorderRuns(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Preorders.Runs(r.Context(), callerFrom(r.Context()), r.URL.Query())
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffDeliveryRun(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.Run(r.Context(), callerFrom(r.Context()), r.PathValue("id"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffCreateRun(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.CreateRun(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) staffUpdateRun(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.UpdateRun(r.Context(), callerFrom(r.Context()), r.PathValue("id"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffDeleteRun(w http.ResponseWriter, r *http.Request) {
+	h.reply(w, r, http.StatusNoContent, nil, h.s.Staff.Preorders.DeleteRun(r.Context(), callerFrom(r.Context()), r.PathValue("id")))
+}
+
+func (h *handlersImpl) staffAnnounceRun(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.ActRun(r.Context(), callerFrom(r.Context()), r.PathValue("id"), "announce")
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffOpenRun(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.ActRun(r.Context(), callerFrom(r.Context()), r.PathValue("id"), "open")
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffExtendRun(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.ExtendRun(r.Context(), callerFrom(r.Context()), r.PathValue("id"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffConfirmRun(w http.ResponseWriter, r *http.Request) {
+	// The body is optional: a run at its minimum needs no reason.
+	b := map[string]any{}
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.ConfirmRun(r.Context(), callerFrom(r.Context()), r.PathValue("id"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffCancelRun(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.CancelRun(r.Context(), callerFrom(r.Context()), r.PathValue("id"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffRunLog(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.RunLog(r.Context(), callerFrom(r.Context()), r.PathValue("id"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffRunOrders(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.RunOrders(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.URL.Query())
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

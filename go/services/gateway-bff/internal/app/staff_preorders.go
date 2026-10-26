@@ -105,6 +105,24 @@ type StaffPreordersService interface {
 	UpdateAdvertorial(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
 	// ActAdvertorial publishes, pauses or ends an advertorial (If-Match).
 	ActAdvertorial(ctx context.Context, c *domain.Caller, id, action, ifMatch string) (any, error)
+	// Run is one delivery run with its location (name and area), break-even and what staff may do with it (S260).
+	Run(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// CreateRun schedules a run (a draft) for a location; UpdateRun changes it before it opens; DeleteRun removes a draft.
+	CreateRun(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	UpdateRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	DeleteRun(ctx context.Context, c *domain.Caller, id string) error
+	// ActRun announces (a draft) or opens (a draft or announced run).
+	ActRun(ctx context.Context, c *domain.Caller, id, action string) (any, error)
+	// ExtendRun moves the cutoff later ({cutoffAt, reason, ...}); the reason is required and logged.
+	ExtendRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// ConfirmRun confirms a run now; below its minimum a {reason} is required and the override is logged.
+	ConfirmRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// CancelRun cancels a run and refunds every order in full ({reason}, required and logged).
+	CancelRun(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// RunLog is what was decided about a run: who extended, confirmed or cancelled it, when and why.
+	RunLog(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// RunOrders are the orders on a run.
+	RunOrders(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
 	// Customers is the late-add customer picker: identity's people search with each customer's saved addresses.
 	Customers(ctx context.Context, c *domain.Caller, q, windowID string) (domain.LateAddCustomers, error)
 }

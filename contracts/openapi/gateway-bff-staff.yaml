@@ -96,6 +96,14 @@ tags:
       from, which staff edit with a reason and an audit trail. A cancelled window or run reports the orders refunded, not
       revenue. Mirrors delivery-runs with the staff member's token; part of the `preorders` module (view to read, EDIT with
       `preorders:manage` to change).
+  - name: Run lifecycle
+    description: |
+      Delivery runs from the staff console (S260, ADR 0005): schedule a run for a location (its area comes from the
+      location: a geo-service polygon or a radius around the town), change it before it opens, announce and open it, move
+      its cutoff, confirm it (below its minimum only with a reason) and cancel it (every order is refunded in full, stock
+      is released and customers are told). Every extension, confirmation and cancellation is logged with who, when and
+      why, and the log is readable. Mirrors delivery-runs with the staff member's token; part of the `preorders` module
+      (view to read, EDIT with `preorders:manage` to change; read-only for everyone else).
   - name: Advertorials
     description: |
       Location-targeted advertorials (S263): words for the visitors of the area a pre-order window or delivery run serves,
@@ -2724,6 +2732,223 @@ paths:
         '200': {description: Runs, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRuns'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Run lifecycle]
+      operationId: createStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Schedule a delivery run (a draft) for a location
+      description: |
+        delivery-runs `POST /v1/runs` (preorders:manage, EDIT; delivery-runs:manage upstream). The run goes to a location,
+        and its area comes from that location: a polygon registered as a zone in geo-service, or a radius around the town.
+        Give the delivery window, the order cutoff (before the window), the minimum orders and capacity (blank: the
+        location's defaults) and a note. `feeMinor` absent or null means the delivery fee rule for the location's distance
+        prices the run (ADR 0005 §3); a number is a custom fee. The answer is a `DRAFT` with the route estimate and the
+        break-even orders; announce or open it when it is ready. Field problems (the cutoff must be before the window, a
+        window is at most 24 hours, capacity cannot be below the minimum) are answered per field (422).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunRequest'}}}
+      responses:
+        '201': {description: Scheduled, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}:
+    get:
+      tags: [Run lifecycle]
+      operationId: getStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: A run with its location, break-even and what staff may do with it now
+      description: |
+        delivery-runs `GET /v1/runs/{id}` plus the run's location (`GET /v1/locations/{id}`, for its name and area).
+        `allowed` says which actions the run's status permits; `can.manage` says whether this staff member may act at all
+        (EDIT or FULL on `preorders` with `preorders:manage`): the console shows the actions only when both are true and
+        keeps the run read-only for everyone else. Needs VIEW on `preorders`.
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      responses:
+        '200': {description: Run, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Run lifecycle]
+      operationId: updateStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Change a run before it opens (an open run keeps its fee, cutoff and drop mode)
+      description: |
+        delivery-runs `PUT /v1/runs/{id}` (preorders:manage, EDIT). A `DRAFT` or `ANNOUNCED` run changes freely. An `OPEN` or
+        `EXTENDED` run keeps its fee, currency, cutoff and drop mode (customers already ordered on it: extend moves the
+        cutoff) and its capacity can never drop below the orders it holds (422). A run cannot move to another location.
+        Anything later is read-only (409 or 422).
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunRequest'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Run lifecycle]
+      operationId: deleteStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Delete a draft run
+      description: delivery-runs `DELETE /v1/runs/{id}` (preorders:manage, EDIT). Only a `DRAFT` can be deleted; any other run is cancelled instead (422).
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      responses:
+        '204': {description: Deleted}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/announce:
+    post:
+      tags: [Run lifecycle]
+      operationId: announceStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Announce a draft run to the location's subscribers
+      description: delivery-runs `POST /v1/runs/{id}/announce` (preorders:manage, EDIT). `DRAFT` to `ANNOUNCED`; it opens by itself at `opensAt` when one is set. 409 from any other status.
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      responses:
+        '200': {description: Announced, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/open:
+    post:
+      tags: [Run lifecycle]
+      operationId: openStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Open a run for orders
+      description: delivery-runs `POST /v1/runs/{id}/open` (preorders:manage, EDIT). `DRAFT` or `ANNOUNCED` to `OPEN`; 422 once the cutoff has passed (extend or reschedule first).
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      responses:
+        '200': {description: Open, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/extend:
+    post:
+      tags: [Run lifecycle]
+      operationId: extendStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Move a run's order cutoff later
+      description: |
+        delivery-runs `POST /v1/runs/{id}/extend` (preorders:manage, EDIT). An `OPEN`, `EXTENDED` or `CUT_OFF` run becomes
+        `EXTENDED` and takes orders until the new cutoff, which must be in the future and later than the current one. Without a
+        new window the window and the seller pickup move by as much as the cutoff. The run's cutoff policy extends a run that
+        misses its minimum once by itself; staff may extend by hand. The reason is required and is logged with who and when
+        (see the run's log); subscribers are told the new cutoff.
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunExtendRequest'}}}
+      responses:
+        '200': {description: Extended, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/confirm:
+    post:
+      tags: [Run lifecycle]
+      operationId: confirmStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Confirm a run now (below its minimum, staff override with a reason)
+      description: |
+        delivery-runs `POST /v1/runs/{id}/confirm` (preorders:manage, EDIT). Closes ordering if the run is still taking
+        orders and confirms it: every order on it is confirmed, handover codes are issued for a pickup-point run and the
+        driver's planning starts. A run that has not reached its minimum is confirmed only with a `reason` (422 `reason`
+        otherwise); that override is logged with who, when and why. A run at its minimum needs no reason.
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunConfirmRequest'}}}
+      responses:
+        '200': {description: Confirmed, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/cancel:
+    post:
+      tags: [Run lifecycle]
+      operationId: cancelStaffDeliveryRun
+      security: [{sessionCookie: []}]
+      summary: Cancel a run and refund every order on it in full
+      description: |
+        delivery-runs `POST /v1/runs/{id}/cancel` (preorders:manage, EDIT). Any run up to `CONFIRMED`: it becomes `CANCELLED`
+        and `delivery-runs.run.cancelled` lists its orders and customers; orders-service then cancels each order's package
+        (the captured payment is refunded in full, delivery fee included, or the authorisation is released), releases the
+        stock held for it, and customers are told. 409 once the run is collecting or on the road. The reason is required and
+        logged with who and when; it is shown to the customers.
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderReason'}}}
+      responses:
+        '200': {description: Cancelled, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/log:
+    get:
+      tags: [Run lifecycle]
+      operationId: listStaffDeliveryRunLog
+      security: [{sessionCookie: []}]
+      summary: 'What was decided about a run: who extended, confirmed or cancelled it, when and why'
+      description: |
+        delivery-runs `GET /v1/runs/{id}/log`, oldest first. Each entry has the staff member's name (or `System` for the
+        cutoff job, which extends once, confirms at the minimum or cancels), the orders and the minimum at that moment and,
+        for an extension, the cutoff before and after. Needs VIEW on `preorders`.
+      parameters: [{$ref: '#/components/parameters/PreorderRunId'}]
+      responses:
+        '200': {description: Log, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLog'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/runs/{runId}/orders:
+    get:
+      tags: [Run lifecycle]
+      operationId: listStaffDeliveryRunOrders
+      security: [{sessionCookie: []}]
+      summary: The orders on a run (order numbers and customer names, never ids)
+      description: |
+        delivery-runs `GET /v1/runs/{id}/orders?status=`: one row per slot (a reserved or confirmed order, or one released
+        or cancelled), with the order number and the customer's name and, once the run is out, where the package is.
+      parameters:
+        - {$ref: '#/components/parameters/PreorderRunId'}
+        - {name: status, in: query, schema: {type: string, enum: [RESERVED, CONFIRMED, RELEASED, CANCELLED]}}
+      responses:
+        '200': {description: Orders, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunOrders'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/delivery-runs/runs/{runId}/pnl:
@@ -7443,6 +7668,12 @@ components:
         dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
         whatsappInviteUrl: {type: [string, 'null']}
         active: {type: boolean}
+        area: {$ref: '#/components/schemas/StaffRunArea'}
+        defaultCapacityOrders: {type: [integer, 'null']}
+        defaultCapacityPackages: {type: [integer, 'null']}
+        defaultCutoffPolicy: {type: string, enum: [EXTEND, CANCEL]}
+        defaultExtendDays: {type: integer}
+        pickupPoint: {type: [object, 'null'], additionalProperties: true}
     StaffRunLocations:
       type: object
       required: [items, can]
@@ -7468,11 +7699,150 @@ components:
         reservedOrders: {type: integer}
         minimumMet: {type: boolean}
         cancelReason: {type: [string, 'null']}
+        locationName: {type: [string, 'null'], description: 'The town (resolved by the BFF; never show the id)'}
+        notes: {type: [string, 'null']}
+        extensions: {type: integer}
     StaffRuns:
       type: object
       required: [items]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/StaffRun'}}
+    StaffRunArea:
+      type: object
+      description: 'Where a location delivers: a polygon registered as a zone in geo-service, or a radius around the town'
+      additionalProperties: true
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [POLYGON, RADIUS]}
+        geoZoneId: {type: [string, 'null'], description: 'POLYGON: the geo-service zone'}
+        centerLat: {type: number}
+        centerLng: {type: number}
+        radiusMiles: {type: [number, 'null'], description: 'RADIUS: miles around the centre'}
+    StaffRunRequest:
+      type: object
+      required: [locationId, windowStart, windowEnd, cutoffAt]
+      properties:
+        locationId: {type: string, format: uuid, description: 'The location the run goes to; its area is the run''s area. A run cannot move to another location.'}
+        windowStart: {type: string, format: date-time, description: Delivery window start}
+        windowEnd: {type: string, format: date-time, description: 'Delivery window end (at most 24 hours after the start)'}
+        cutoffAt: {type: string, format: date-time, description: Last moment to order; before the window starts}
+        opensAt: {type: [string, 'null'], format: date-time, description: 'An announced run opens for orders by itself at this time'}
+        sellerPickupAt: {type: [string, 'null'], format: date-time, description: 'When the driver collects from sellers (between the cutoff and the end of the window)'}
+        feeMinor: {type: [integer, 'null'], minimum: 0, maximum: 10000, description: 'null or absent: the delivery fee rule for the location''s distance prices the run. A number is a custom fee (minor units).'}
+        minOrders: {type: [integer, 'null'], minimum: 1, maximum: 10000, description: 'null or absent: the location''s default'}
+        capacityOrders: {type: [integer, 'null'], minimum: 1, maximum: 10000, description: 'At least the minimum; null or absent: the location''s default'}
+        capacityPackages: {type: [integer, 'null'], minimum: 1, maximum: 100000}
+        dropMode: {type: [string, 'null'], enum: [DOORSTEP, PICKUP_POINT, null]}
+        cutoffPolicy: {type: [string, 'null'], enum: [EXTEND, CANCEL, null], description: 'What happens at the cutoff when the minimum is not met: extend once, or cancel and refund'}
+        extendDays: {type: [integer, 'null'], minimum: 1, maximum: 30}
+        notes: {type: [string, 'null'], maxLength: 500, description: A note for staff and the driver}
+    StaffRunExtendRequest:
+      type: object
+      required: [cutoffAt, reason]
+      properties:
+        cutoffAt: {type: string, format: date-time, description: The new cutoff; in the future and later than the current one}
+        windowStart: {type: [string, 'null'], format: date-time}
+        windowEnd: {type: [string, 'null'], format: date-time}
+        sellerPickupAt: {type: [string, 'null'], format: date-time}
+        reason: {type: string, minLength: 1, maxLength: 500, description: 'Why; logged with who and when'}
+    StaffRunConfirmRequest:
+      type: object
+      properties:
+        reason: {type: [string, 'null'], maxLength: 500, description: 'Required to confirm a run that has not reached its minimum; logged with who and when'}
+    StaffRunAllowed:
+      type: object
+      description: What the run's status permits (the staff member's own access is `can.manage`)
+      required: [edit, delete, announce, open, extend, confirm, cancel]
+      properties:
+        edit: {type: boolean, description: 'DRAFT, ANNOUNCED, OPEN or EXTENDED (an open run keeps its fee, cutoff and drop mode)'}
+        delete: {type: boolean, description: Only a DRAFT}
+        announce: {type: boolean}
+        open: {type: boolean}
+        extend: {type: boolean}
+        confirm: {type: boolean}
+        cancel: {type: boolean, description: 'Up to CONFIRMED; refunds every order'}
+    StaffRunDetail:
+      type: object
+      additionalProperties: true
+      required: [id, locationId, status, windowStart, windowEnd, cutoffAt, feeMinor, currency, minOrders, reservedOrders, minimumMet, allowed, can]
+      properties:
+        id: {type: string, format: uuid}
+        locationId: {type: string, format: uuid}
+        locationName: {type: [string, 'null']}
+        location: {oneOf: [{$ref: '#/components/schemas/StaffRunLocation'}, {type: 'null'}]}
+        status: {type: string, enum: [DRAFT, ANNOUNCED, OPEN, EXTENDED, CUT_OFF, CONFIRMED, COLLECTING, OUT_FOR_DELIVERY, COMPLETED, CANCELLED]}
+        windowStart: {type: string, format: date-time}
+        windowEnd: {type: string, format: date-time}
+        cutoffAt: {type: string, format: date-time}
+        originalCutoffAt: {type: string, format: date-time}
+        opensAt: {type: [string, 'null'], format: date-time}
+        sellerPickupAt: {type: [string, 'null'], format: date-time}
+        feeMinor: {type: integer}
+        currency: {type: string}
+        minOrders: {type: integer}
+        capacityOrders: {type: [integer, 'null']}
+        capacityPackages: {type: [integer, 'null']}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        pickupPoint: {type: [object, 'null'], additionalProperties: true}
+        cutoffPolicy: {type: string, enum: [EXTEND, CANCEL]}
+        extendDays: {type: integer}
+        notes: {type: [string, 'null']}
+        extensions: {type: integer, description: How many times the cutoff was moved}
+        reservedOrders: {type: integer}
+        reservedPackages: {type: integer}
+        ordersLeft: {type: [integer, 'null'], description: 'Room left (null: no capacity limit)'}
+        minimumMet: {type: boolean}
+        cancelReason: {type: [string, 'null']}
+        breakEvenOrders: {type: [integer, 'null'], description: 'Fewest orders covering the estimated cost (null: the fee never covers a stop, or geo cannot measure the route)'}
+        estimate: {type: [object, 'null'], additionalProperties: true}
+        milestones: {type: object, additionalProperties: true}
+        version: {type: integer}
+        allowed: {$ref: '#/components/schemas/StaffRunAllowed'}
+        can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffRunLogEntry:
+      type: object
+      additionalProperties: true
+      required: [id, runId, kind, actor, fromStatus, toStatus, orders, minimum, at]
+      properties:
+        id: {type: string, format: uuid}
+        runId: {type: string, format: uuid}
+        kind: {type: string, enum: [EXTEND, CONFIRM, CONFIRM_OVERRIDE, CANCEL]}
+        reason: {type: [string, 'null'], description: 'Why; CANCEL and CONFIRM_OVERRIDE always have one'}
+        actor: {type: string, description: 'The staff member''s name, or System for the cutoff job'}
+        fromStatus: {type: string}
+        toStatus: {type: string}
+        orders: {type: integer, description: Orders on the run at that moment}
+        minimum: {type: integer}
+        fromCutoff: {type: [string, 'null'], format: date-time}
+        toCutoff: {type: [string, 'null'], format: date-time}
+        at: {type: string, format: date-time}
+    StaffRunLog:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffRunLogEntry'}}
+    StaffRunOrder:
+      type: object
+      additionalProperties: true
+      required: [id, runId, orderId, status]
+      properties:
+        id: {type: string, format: uuid}
+        runId: {type: string, format: uuid}
+        orderId: {type: string}
+        orderNumber: {type: string, description: 'What staff and customers call the order (AT-000123)'}
+        customerId: {type: string}
+        customerName: {type: string, description: The customer's name}
+        packages: {type: integer}
+        status: {type: string, enum: [RESERVED, CONFIRMED, RELEASED, CANCELLED]}
+        stage: {type: string, description: 'Where the package is: PENDING, COLLECTED, OUT_FOR_DELIVERY, FAILED, DELIVERED or RETURNED'}
+        reservedAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        deliveredAt: {type: [string, 'null'], format: date-time}
+    StaffRunOrders:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/StaffRunOrder'}}
     StaffRunLocationHistory:
       type: object
       required: [location, runs, subscribers, subscriberGrowth]
