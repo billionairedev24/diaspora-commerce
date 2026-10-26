@@ -44,12 +44,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /**
@@ -61,12 +60,26 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "at.delivery-runs.jobs.initial-delay=1h"})
 @ActiveProfiles("local")
 @Import(ItSupport.class)
-@Testcontainers
 class RunFlowIT {
 
-    @Container
-    @ServiceConnection
+    /** Set {@code AT_IT_POSTGRES_URL} (jdbc:postgresql://…) to run without Docker. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
+
+    static {
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
+    }
+
+    @DynamicPropertySource
+    static void datasource(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
+    }
 
     private final LocationService locations;
     private final RunService runs;
@@ -277,7 +290,9 @@ class RunFlowIT {
         assertThat(geo.registered()).contains("delivery-runs:" + elgin.slug());
         geo.zone(zoneId, new FakeGeo.Box(30.30, 30.40, -97.42, -97.32));
         Run open = runs.open(runs.create(Fixtures.run(elgin.id(), clock.instant(), Duration.ofDays(5))).id());
-        assertThat(open.terms().feeMinor()).isEqualTo(899);
+        // A run without a named fee is priced by the delivery fee rule (V6 seeds 7.99 for AfroTransact delivery), not by
+        // the location's own default (8.99).
+        assertThat(open.terms().feeMinor()).isEqualTo(799);
 
         assertThat(publicRuns.available("78621", null, null)).extracting(a -> a.run().id()).contains(open.id());
         assertThat(publicRuns.available("78701", null, null)).extracting(a -> a.run().id())

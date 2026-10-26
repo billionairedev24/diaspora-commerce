@@ -27,7 +27,7 @@ parts of S261–S265 that belong to this service. The other services' parts are 
 | Aggregate | What it holds |
 |---|---|
 | **Location** | Town / area name, slug (`bastrop-tx`), market, state, IANA time zone. **Area**: `POLYGON` (a geo-service zone id; GeoJSON sent on create is registered in geo as zone owner `delivery-runs:<slug>`) or `RADIUS` (centre + miles). The centre is always set: it is the circle centre and the drive destination for economics. Optional run **origin** (FC / hub; default `at.delivery-runs.origin`). Defaults for new runs: fee (minor units, 799), currency, minimum orders, capacity (orders and/or packages), drop mode (`DOORSTEP` or `PICKUP_POINT` with an address and hours), cutoff policy and extend days. WhatsApp community invite link, social links, `active`. Locations are deactivated, never deleted. |
-| **Run** | Location, delivery window (≤ 24 h), order cutoff (before the window), optional `opensAt` (auto-open) and `sellerPickupAt` (sweep time), fee + currency, minimum orders, capacity, drop mode / pickup point, cutoff policy (`EXTEND` by N days once, or `CANCEL`), extensions, reserved orders / packages (counters kept on the row under a lock), route estimate (road miles, drive minutes, geo method), milestones per status, optimistic lock (`version` column). |
+| **Run** | Location, delivery window (≤ 24 h), order cutoff (before the window), optional `opensAt` (auto-open) and `sellerPickupAt` (sweep time), fee + currency, minimum orders, capacity, drop mode / pickup point, cutoff policy (`EXTEND` by N days once, or `CANCEL`), extensions, reserved orders / packages (counters kept on the row under a lock), a staff note (`notes`, at most 500 characters), route estimate (road miles, drive minutes, geo method), milestones per status, optimistic lock (`version` column). |
 | **RunOrder** (slot) | Run ↔ orders-service order id: customer id, packages, status `RESERVED → CONFIRMED` or `RELEASED` / `CANCELLED`, six-digit handover code (pickup-point runs, issued at confirmation), `requestedRunId` when the order was moved to the next run. One active slot per order (partial unique index). The order itself stays in orders-service. |
 | **Subscription** | Location + signed-in shopper (`userId`) **or** an email address. Per-channel consent (`EMAIL`, `SMS`, `PUSH`, `WHATSAPP`) with consent time, source and withdrawal time (`subscription_consent`), plus an append-only `consent_log` (`GRANTED`, `CONFIRMED`, `WITHDRAWN`). Email-only subscribers get email only and are `PENDING_CONFIRMATION` until the double opt-in link is used (token stored as SHA-256, 72 h). Every subscription has a one-click unsubscribe token. |
 | **Economics** | `cost(n) = (fixedMinutes / 60 × perHour + miles × perMile) + n × (perOrderMinutes / 60 × perHour)`; fixed minutes = drive both ways (geo road minutes) + seller collection (+ one pickup-point stop), per-order minutes = a doorstep stop or a handover. Revenue = fees (+ a commission share when one is reported; not computed here). Break-even = fewest orders whose fees cover the cost (none when the fee does not cover a stop). The numbers are the **economics settings** below. |
@@ -153,9 +153,14 @@ CONFIRMED ─start-collecting─▶ COLLECTING ─out-for-delivery─▶ OUT_FOR
   issued); otherwise the run's policy: `EXTEND` moves cutoff, window and seller pickup by `extendDays` **once** (a run
   already extended by staff or policy, or one whose extended cutoff would already be past, is cancelled); `CANCEL`
   cancels with reason `MINIMUM_NOT_MET`.
-- Staff can confirm early (closes ordering, overrides the minimum) and cancel anything up to `CONFIRMED` with a reason.
-  Cancelling a run publishes `delivery-runs.run.cancelled`; orders-service then refunds every order on it in full
-  (delivery fee included) and releases stock, and customers are told.
+- Staff can confirm early (closes ordering) and cancel anything up to `CONFIRMED` with a reason. **Confirming a run
+  below its minimum is an override and needs a reason** (422 `delivery-runs.reason-required`); at the minimum no reason
+  is needed. Cancelling a run publishes `delivery-runs.run.cancelled`; orders-service then refunds every order on it in
+  full (delivery fee included) and releases stock, and customers are told.
+- **Every decision is logged** (S260): extend, confirm (`CONFIRM`, or `CONFIRM_OVERRIDE` below the minimum) and cancel
+  append to `run_action_log` with the actor (the staff subject, or `system` for the cutoff job and for the cancellation a
+  cancelled pre-order window causes), the time, the reason, the statuses before and after, the orders and the minimum at
+  that moment and, for an extension, the cutoff before and after. `GET /v1/runs/{id}/log` serves it, oldest first.
 - **Capacity**: a reservation that does not fit (orders or packages) or arrives after the cutoff goes to the
   location's next open run with room (up to 5 later runs, earliest cutoff first); `allowNextRun=false` refuses with
   409 instead. Capacity can never be lowered below what is reserved.
@@ -214,7 +219,8 @@ Contract: [`contracts/openapi/delivery-runs.yaml`](../../../contracts/openapi/de
 | GET | `/v1/locations/{id}/subscribers/counts`, `/v1/subscribers/counts` | total, active, pending, active per channel |
 | POST / GET | `/v1/runs`, `/v1/runs?locationId=&status=&limit=` | schedule (DRAFT; response has the route estimate and `breakEvenOrders`) / list |
 | GET / PUT / DELETE | `/v1/runs/{id}` | get (with `breakEvenOrders`) / reschedule / delete a DRAFT |
-| POST | `/v1/runs/{id}/announce`, `/open`, `/extend {cutoffAt, windowStart?, windowEnd?, sellerPickupAt?, reason?}`, `/cancel {reason}`, `/confirm`, `/start-collecting`, `/out-for-delivery`, `/complete` | transitions |
+| POST | `/v1/runs/{id}/announce`, `/open`, `/extend {cutoffAt, windowStart?, windowEnd?, sellerPickupAt?, reason?}`, `/cancel {reason}`, `/confirm {reason?}` (reason required below the minimum), `/start-collecting`, `/out-for-delivery`, `/complete` | transitions |
+| GET | `/v1/runs/{id}/log` | who extended, confirmed or cancelled the run, when and why (S260) |
 | POST | `/v1/runs/economics-preview {locationId, feeMinor?, minOrders?, capacityOrders?, dropMode?, expectedOrders?, commissionShareMinor?}` | cost, break-even and P&L before creating a run (S265) |
 | GET | `/v1/runs/{id}/economics?commissionShareMinor=` | P&L at the run's reserved / confirmed orders (before and after the run) |
 | GET | `/v1/runs/{id}/orders?status=` | run slots |
@@ -325,7 +331,7 @@ built)*.
 | **notifications** (S262) | Customers of a cancelled pre-order get the existing `shipment.cancelled` email / push, worded for pre-orders ("AfroTransact cancelled this pre-order. We're refunding the full …, delivery fee included" or "you haven't been charged"). Staff are told through `preorder.window.decision_needed` *(no staff e-mail or chat recipient exists in notifications yet; the console shows the tab and notice)*. Consume `at.delivery-runs.events`. `run.announced`, `run.opened`, `run.cutoff_reminder`, `run.out_for_delivery`: fan out to `GET /v1/service/locations/{locationId}/audience?channel=EMAIL|SMS|PUSH|WHATSAPP` (scope `delivery-runs:audience.read`), using `links.<channel>` and each member's `unsubscribeUrl`; WhatsApp only with approved templates to WHATSAPP-consented members. `run.confirmed` / `run.cancelled` / `run.out_for_delivery`: message the customers in `orders[]` (handover code for pickup-point runs). `subscription.created` with `confirmUrl`: double opt-in email; `subscription.confirmed`: welcome with `whatsappInviteUrl`; `subscription.cancelled`: stop those channels. Signed-in subscribers are resolved from `userId` (verified contacts in identity). |
 | **content** (S263) | **Done inside delivery-runs** (see *Advertorials*): generation, targeting, expiry and results are here, so content-service needs nothing for them. Not built: featured products inside an advertorial (the card shows town, day, fee, countdown and the button). |
 | **gateway-bff / storefront / apps** (S262, S263) | **Done for the web.** gateway-bff `Delivery runs` operations (`/v1/delivery-runs/locations[/{slug}]`, `/subscriptions[/confirm|/unsubscribe]`, `/advertorials[/{id}/events]`, `/v1/account/run-subscriptions`) relay the public endpoints and the shopper's token for `/v1/me/run-subscriptions`; the anonymous POSTs share the BFF's lookup rate limit. Storefront: `/delivery-runs`, `/delivery-runs/<slug>` (UTM on the link is kept on the sign-up `source`, e.g. `location-page.wa`), `/delivery-runs/subscriptions/confirm?token=` and `/unsubscribe?token=` (ask first, then POST, so mail scanners change nothing), Account, Delivery alerts, and the advertorial card on the home page and location pages. **Not built:** the mobile customer app (it has no pre-order or alert screens to extend), and a captcha at the edge. |
-| **staff console** (S260, S263, S265, S270) | **Done for S263 and S265:** Settings, Money, *Run economics* (cost model with a reason and the change history, and what a draft changes for a location); the pre-order wizard shows the break-even beside the minimum order count; a window's overview shows its P&L (or the refunds when cancelled); Pre-orders, *Delivery runs* shows per location the orders of every run, subscriber counts by channel and monthly growth, and the P&L of a run before, after or cancelled; an *Advertorials* tab per window and a panel per run (generate, write, edit, publish, pause, end, results). Not part of this work: the screens that create and schedule locations and runs (S260), which is where the run economics preview (`POST /v1/runs/economics-preview`) would be shown. Pre-orders: minimum field in the wizard, *Needs a decision* tab, decision banner (cancel and refund everyone / go ahead), cancel and close-early with a required reason, decision log and refund progress per order. |
+| **staff console** (S260, S263, S265, S270) | **Done for S263 and S265:** Settings, Money, *Run economics* (cost model with a reason and the change history, and what a draft changes for a location); the pre-order wizard shows the break-even beside the minimum order count; a window's overview shows its P&L (or the refunds when cancelled); Pre-orders, *Delivery runs* shows per location the orders of every run, subscriber counts by channel and monthly growth, and the P&L of a run before, after or cancelled; an *Advertorials* tab per window and a panel per run (generate, write, edit, publish, pause, end, results). **S260:** Pre-orders, *Delivery runs* schedules a run (*New run* sheet: location with its area from geo, delivery window, cutoff, minimum with the break-even beside it, capacity, the delivery fee rule or a custom fee, notes), lists a location's runs by stage, shows the runs that need a decision across locations, and opens a run on the right (status timeline, orders against minimum and capacity, decisions log, orders, P&L) with edit, announce, open, extend (reason), confirm (reason below the minimum) and cancel (reason) for `preorders:manage`, read-only for everyone else. Not built: screens to create and edit *locations* (a location and its area are still created through the API). Pre-orders: minimum field in the wizard, *Needs a decision* tab, decision banner (cancel and refund everyone / go ahead), cancel and close-early with a required reason, decision log and refund progress per order. |
 | **geo** | Works today with zone type `SERVICE_AREA` (owner `delivery-runs:<slug>`). Recommended: a dedicated `RUN_AREA` zone type, then set `DELIVERY_RUNS_GEO_ZONE_TYPE=RUN_AREA`. |
 | **identity** | Permissions, roles and the `delivery-runs-service` client (see below). |
 | **analytics** (S265) | Report the commission share per run; staff pass it as `commissionShareMinor` to the economics endpoints. |
@@ -376,8 +382,13 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
   closing below it waits and publishes the staff event, proceed / cancel with a required, logged reason, cancel with its
   run, early close, refund progress per order; also runs without Docker against `AT_IT_POSTGRES_URL=jdbc:postgresql://…`),
   `PreorderIT` (the scheduler, hand-over to a run, projection).
-- ITs (local `imresamu/postgis:17-3.5.4-alpine3.22` and `apache/kafka:4.1.0` images): `RunFlowIT` (slots, roll-over, cutoff job
-  confirm / extend / cancel, concurrent replicas, outbox payloads), `SubscriptionIT` (double opt-in, consent log,
+- Run lifecycle for the staff console (S260): `RunActionTest` (the log's rules, notes), `RunStaffActionsIT` (through the HTTP
+  API: schedule with notes and the fee rule, edit before open, announce, open, extend with a reason, confirm below the
+  minimum needs a reason, cancel needs one and lists every order and customer in the event, the cutoff job enforces the
+  minimum and logs as `system`, capacity at reservation and after the cutoff, permissions; runs without Docker against
+  `AT_IT_POSTGRES_URL`), and `RunFlowIT` (also without Docker: slots, roll-over, cutoff job, concurrent replicas, a polygon
+  location registered in geo and matched by zone coverage).
+- ITs (local `imresamu/postgis:17-3.5.4-alpine3.22` and `apache/kafka:4.1.0` images): `SubscriptionIT` (double opt-in, consent log,
   counts, audience), `HttpApiIT` (HTTP API and problems), `OutboxRelayIT` (events on `at.delivery-runs.events`).
 
 ## Known gaps
@@ -403,8 +414,18 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
   staff see the *Needs a decision* tab and notice in the console.
 - **Proceed is eventual.** After PROCEED the window reads `CLOSED` at once and the run appears on the scheduler's next tick.
 - **Delivery status (closed, S264).** Orders' shipment events drive the run (see *Seller pick lists and run progress*);
-  a run's `completed` still does not mark packages delivered, it follows them. Remaining: the override transitions are not
-  audited with a reason or actor, and the progress follows PREORDER shipments only.
+  a run's `completed` still does not mark packages delivered, it follows them. The progress follows PREORDER shipments
+  only, and the by-hand moves `start-collecting`, `out-for-delivery` and `complete` are still not logged with a reason
+  (extend, confirm and cancel are, since S260).
+- **A run staff schedule is not fed by checkout (S260).** Customers order into pre-order windows; when a window closes it
+  hands its paid orders to a run it creates itself (`fromWindow`). Nothing in orders-service calls the slot reservation API
+  (`POST /v1/service/runs/{runId}/reservations`), so a run scheduled in the console takes no customer orders until something
+  reserves slots (a service client, or `fromWindow` adopting a matching scheduled run: a follow-up). Its minimum, capacity,
+  extend, confirm and cancel behave as specified (see `RunStaffActionsIT`, `RunFlowIT`), but the refund of its orders can
+  only happen for runs that hold slots.
+- **Who may act.** The console gates run changes on `preorders:manage` (EDIT on the module). delivery-runs requires
+  `delivery-runs:manage` for them: Operations and Dispatch have both, Marketing has only the first and gets a 403 from
+  delivery-runs. A dedicated permission is a follow-up.
 - **Seller pick lists.** Sellers cannot print bag labels; a seller's
   pickup has no coordinates, so there is no proof-of-delivery distance check at the seller's door, and the pickup point of a
   pickup-point run has no latitude and longitude either (no 150 m check there). Reading a pick list reuses `orders:read`;

@@ -100,3 +100,20 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
   only prefills the receiving form; the receiver can enter another rate.
 - **Not built.** Components in more than one currency on a single lot (freight paid in dollars on pesos goods is entered in the lot's
   currency at the same rate), automatic rate feeds, and re-valuing stock when a rate changes (by design, a lot keeps its receiving rate).
+
+## Implementation notes (run lifecycle in the staff console: S260)
+
+- **Staff schedule and decide on runs.** Pre-orders, Delivery runs creates a run for a location (its area, a geo polygon or a
+  radius around the town, comes from the location), changes it before it opens, announces and opens it, moves its cutoff,
+  confirms it and cancels it. Extending and cancelling need a reason; confirming a run below its minimum is an override and
+  needs one too (§4 applies to runs staff schedule as it does to windows). Each decision is logged in delivery-runs with who
+  (the cutoff job is `system`), when, why, the orders and the minimum at that moment.
+- **Cancelling refunds everyone (§1).** `delivery-runs.run.cancelled` lists every order and customer on the run; orders-service
+  cancels their PREORDER packages through the customer-cancellation path (refund in full with the delivery fee, or release the
+  authorisation, and release stock where inventory holds any) and customers are told. A run cancelled along with its window
+  keeps the window's reason and the customers get one message, not two.
+- **Fee choice.** A run's fee is the delivery fee rule for its location's distance unless staff set a custom fee (§3); an
+  open run keeps the fee its customers were quoted.
+- **Not built.** A run staff schedule receives no customer orders until a service reserves slots on it (checkout orders into
+  windows, and a closing window creates its own run); a dedicated permission (`preorders:manage` is checked in the console,
+  `delivery-runs:manage` by delivery-runs); creating and editing locations in the console.
