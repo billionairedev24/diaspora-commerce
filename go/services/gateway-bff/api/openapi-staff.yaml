@@ -7763,7 +7763,6 @@ components:
         cancel: {type: boolean, description: 'Up to CONFIRMED; refunds every order'}
     StaffRunDetail:
       type: object
-      additionalProperties: true
       required: [id, locationId, status, windowStart, windowEnd, cutoffAt, feeMinor, currency, minOrders, reservedOrders, minimumMet, allowed, can]
       properties:
         id: {type: string, format: uuid}
@@ -7801,7 +7800,6 @@ components:
         can: {$ref: '#/components/schemas/PreorderCan'}
     StaffRunLogEntry:
       type: object
-      additionalProperties: true
       required: [id, runId, kind, actor, fromStatus, toStatus, orders, minimum, at]
       properties:
         id: {type: string, format: uuid}
@@ -7823,7 +7821,6 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/StaffRunLogEntry'}}
     StaffRunOrder:
       type: object
-      additionalProperties: true
       required: [id, runId, orderId, status]
       properties:
         id: {type: string, format: uuid}

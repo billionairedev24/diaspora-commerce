@@ -2398,6 +2398,204 @@ export interface paths {
          */
         get: operations["listStaffPreorderRuns"];
         put?: never;
+        /**
+         * Schedule a delivery run (a draft) for a location
+         * @description delivery-runs `POST /v1/runs` (preorders:manage, EDIT; delivery-runs:manage upstream). The run goes to a location,
+         *     and its area comes from that location: a polygon registered as a zone in geo-service, or a radius around the town.
+         *     Give the delivery window, the order cutoff (before the window), the minimum orders and capacity (blank: the
+         *     location's defaults) and a note. `feeMinor` absent or null means the delivery fee rule for the location's distance
+         *     prices the run (ADR 0005 §3); a number is a custom fee. The answer is a `DRAFT` with the route estimate and the
+         *     break-even orders; announce or open it when it is ready. Field problems (the cutoff must be before the window, a
+         *     window is at most 24 hours, capacity cannot be below the minimum) are answered per field (422).
+         */
+        post: operations["createStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A run with its location, break-even and what staff may do with it now
+         * @description delivery-runs `GET /v1/runs/{id}` plus the run's location (`GET /v1/locations/{id}`, for its name and area).
+         *     `allowed` says which actions the run's status permits; `can.manage` says whether this staff member may act at all
+         *     (EDIT or FULL on `preorders` with `preorders:manage`): the console shows the actions only when both are true and
+         *     keeps the run read-only for everyone else. Needs VIEW on `preorders`.
+         */
+        get: operations["getStaffDeliveryRun"];
+        /**
+         * Change a run before it opens (an open run keeps its fee, cutoff and drop mode)
+         * @description delivery-runs `PUT /v1/runs/{id}` (preorders:manage, EDIT). A `DRAFT` or `ANNOUNCED` run changes freely. An `OPEN` or
+         *     `EXTENDED` run keeps its fee, currency, cutoff and drop mode (customers already ordered on it: extend moves the
+         *     cutoff) and its capacity can never drop below the orders it holds (422). A run cannot move to another location.
+         *     Anything later is read-only (409 or 422).
+         */
+        put: operations["updateStaffDeliveryRun"];
+        post?: never;
+        /**
+         * Delete a draft run
+         * @description delivery-runs `DELETE /v1/runs/{id}` (preorders:manage, EDIT). Only a `DRAFT` can be deleted; any other run is cancelled instead (422).
+         */
+        delete: operations["deleteStaffDeliveryRun"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/announce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Announce a draft run to the location's subscribers
+         * @description delivery-runs `POST /v1/runs/{id}/announce` (preorders:manage, EDIT). `DRAFT` to `ANNOUNCED`; it opens by itself at `opensAt` when one is set. 409 from any other status.
+         */
+        post: operations["announceStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open a run for orders
+         * @description delivery-runs `POST /v1/runs/{id}/open` (preorders:manage, EDIT). `DRAFT` or `ANNOUNCED` to `OPEN`; 422 once the cutoff has passed (extend or reschedule first).
+         */
+        post: operations["openStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move a run's order cutoff later
+         * @description delivery-runs `POST /v1/runs/{id}/extend` (preorders:manage, EDIT). An `OPEN`, `EXTENDED` or `CUT_OFF` run becomes
+         *     `EXTENDED` and takes orders until the new cutoff, which must be in the future and later than the current one. Without a
+         *     new window the window and the seller pickup move by as much as the cutoff. The run's cutoff policy extends a run that
+         *     misses its minimum once by itself; staff may extend by hand. The reason is required and is logged with who and when
+         *     (see the run's log); subscribers are told the new cutoff.
+         */
+        post: operations["extendStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm a run now (below its minimum, staff override with a reason)
+         * @description delivery-runs `POST /v1/runs/{id}/confirm` (preorders:manage, EDIT). Closes ordering if the run is still taking
+         *     orders and confirms it: every order on it is confirmed, handover codes are issued for a pickup-point run and the
+         *     driver's planning starts. A run that has not reached its minimum is confirmed only with a `reason` (422 `reason`
+         *     otherwise); that override is logged with who, when and why. A run at its minimum needs no reason.
+         */
+        post: operations["confirmStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a run and refund every order on it in full
+         * @description delivery-runs `POST /v1/runs/{id}/cancel` (preorders:manage, EDIT). Any run up to `CONFIRMED`: it becomes `CANCELLED`
+         *     and `delivery-runs.run.cancelled` lists its orders and customers; orders-service then cancels each order's package
+         *     (the captured payment is refunded in full, delivery fee included, or the authorisation is released), releases the
+         *     stock held for it, and customers are told. 409 once the run is collecting or on the road. The reason is required and
+         *     logged with who and when; it is shown to the customers.
+         */
+        post: operations["cancelStaffDeliveryRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What was decided about a run: who extended, confirmed or cancelled it, when and why
+         * @description delivery-runs `GET /v1/runs/{id}/log`, oldest first. Each entry has the staff member's name (or `System` for the
+         *     cutoff job, which extends once, confirms at the minimum or cancels), the orders and the minimum at that moment and,
+         *     for an extension, the cutoff before and after. Needs VIEW on `preorders`.
+         */
+        get: operations["listStaffDeliveryRunLog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/runs/{runId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The orders on a run (order numbers and customer names, never ids)
+         * @description delivery-runs `GET /v1/runs/{id}/orders?status=`: one row per slot (a reserved or confirmed order, or one released
+         *     or cancelled), with the order number and the customer's name and, once the run is out, where the package is.
+         */
+        get: operations["listStaffDeliveryRunOrders"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -6876,6 +7074,15 @@ export interface components {
             dropMode?: "DOORSTEP" | "PICKUP_POINT";
             whatsappInviteUrl?: string | null;
             active?: boolean;
+            area?: components["schemas"]["StaffRunArea"];
+            defaultCapacityOrders?: number | null;
+            defaultCapacityPackages?: number | null;
+            /** @enum {string} */
+            defaultCutoffPolicy?: "EXTEND" | "CANCEL";
+            defaultExtendDays?: number;
+            pickupPoint?: {
+                [key: string]: unknown;
+            } | null;
         } & {
             [key: string]: unknown;
         };
@@ -6903,11 +7110,216 @@ export interface components {
             reservedOrders: number;
             minimumMet?: boolean;
             cancelReason?: string | null;
+            /** @description The town (resolved by the BFF; never show the id) */
+            locationName?: string | null;
+            notes?: string | null;
+            extensions?: number;
         } & {
             [key: string]: unknown;
         };
         StaffRuns: {
             items: components["schemas"]["StaffRun"][];
+        };
+        /** @description Where a location delivers: a polygon registered as a zone in geo-service, or a radius around the town */
+        StaffRunArea: {
+            /** @enum {string} */
+            kind: "POLYGON" | "RADIUS";
+            /** @description POLYGON: the geo-service zone */
+            geoZoneId?: string | null;
+            centerLat?: number;
+            centerLng?: number;
+            /** @description RADIUS: miles around the centre */
+            radiusMiles?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffRunRequest: {
+            /**
+             * Format: uuid
+             * @description The location the run goes to; its area is the run's area. A run cannot move to another location.
+             */
+            locationId: string;
+            /**
+             * Format: date-time
+             * @description Delivery window start
+             */
+            windowStart: string;
+            /**
+             * Format: date-time
+             * @description Delivery window end (at most 24 hours after the start)
+             */
+            windowEnd: string;
+            /**
+             * Format: date-time
+             * @description Last moment to order; before the window starts
+             */
+            cutoffAt: string;
+            /**
+             * Format: date-time
+             * @description An announced run opens for orders by itself at this time
+             */
+            opensAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the driver collects from sellers (between the cutoff and the end of the window)
+             */
+            sellerPickupAt?: string | null;
+            /** @description null or absent: the delivery fee rule for the location's distance prices the run. A number is a custom fee (minor units). */
+            feeMinor?: number | null;
+            /** @description null or absent: the location's default */
+            minOrders?: number | null;
+            /** @description At least the minimum; null or absent: the location's default */
+            capacityOrders?: number | null;
+            capacityPackages?: number | null;
+            /** @enum {string|null} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT" | null;
+            /**
+             * @description What happens at the cutoff when the minimum is not met: extend once, or cancel and refund
+             * @enum {string|null}
+             */
+            cutoffPolicy?: "EXTEND" | "CANCEL" | null;
+            extendDays?: number | null;
+            /** @description A note for staff and the driver */
+            notes?: string | null;
+        };
+        StaffRunExtendRequest: {
+            /**
+             * Format: date-time
+             * @description The new cutoff; in the future and later than the current one
+             */
+            cutoffAt: string;
+            /** Format: date-time */
+            windowStart?: string | null;
+            /** Format: date-time */
+            windowEnd?: string | null;
+            /** Format: date-time */
+            sellerPickupAt?: string | null;
+            /** @description Why; logged with who and when */
+            reason: string;
+        };
+        StaffRunConfirmRequest: {
+            /** @description Required to confirm a run that has not reached its minimum; logged with who and when */
+            reason?: string | null;
+        };
+        /** @description What the run's status permits (the staff member's own access is `can.manage`) */
+        StaffRunAllowed: {
+            /** @description DRAFT, ANNOUNCED, OPEN or EXTENDED (an open run keeps its fee, cutoff and drop mode) */
+            edit: boolean;
+            /** @description Only a DRAFT */
+            delete: boolean;
+            announce: boolean;
+            open: boolean;
+            extend: boolean;
+            confirm: boolean;
+            /** @description Up to CONFIRMED; refunds every order */
+            cancel: boolean;
+        };
+        StaffRunDetail: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            locationId: string;
+            locationName?: string | null;
+            location?: components["schemas"]["StaffRunLocation"] | null;
+            /** @enum {string} */
+            status: "DRAFT" | "ANNOUNCED" | "OPEN" | "EXTENDED" | "CUT_OFF" | "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED" | "CANCELLED";
+            /** Format: date-time */
+            windowStart: string;
+            /** Format: date-time */
+            windowEnd: string;
+            /** Format: date-time */
+            cutoffAt: string;
+            /** Format: date-time */
+            originalCutoffAt?: string;
+            /** Format: date-time */
+            opensAt?: string | null;
+            /** Format: date-time */
+            sellerPickupAt?: string | null;
+            feeMinor: number;
+            currency: string;
+            minOrders: number;
+            capacityOrders?: number | null;
+            capacityPackages?: number | null;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            pickupPoint?: {
+                [key: string]: unknown;
+            } | null;
+            /** @enum {string} */
+            cutoffPolicy?: "EXTEND" | "CANCEL";
+            extendDays?: number;
+            notes?: string | null;
+            /** @description How many times the cutoff was moved */
+            extensions?: number;
+            reservedOrders: number;
+            reservedPackages?: number;
+            /** @description Room left (null: no capacity limit) */
+            ordersLeft?: number | null;
+            minimumMet: boolean;
+            cancelReason?: string | null;
+            /** @description Fewest orders covering the estimated cost (null: the fee never covers a stop, or geo cannot measure the route) */
+            breakEvenOrders?: number | null;
+            estimate?: {
+                [key: string]: unknown;
+            } | null;
+            milestones?: {
+                [key: string]: unknown;
+            };
+            version?: number;
+            allowed: components["schemas"]["StaffRunAllowed"];
+            can: components["schemas"]["PreorderCan"];
+        };
+        StaffRunLogEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            /** @enum {string} */
+            kind: "EXTEND" | "CONFIRM" | "CONFIRM_OVERRIDE" | "CANCEL";
+            /** @description Why; CANCEL and CONFIRM_OVERRIDE always have one */
+            reason?: string | null;
+            /** @description The staff member's name, or System for the cutoff job */
+            actor: string;
+            fromStatus: string;
+            toStatus: string;
+            /** @description Orders on the run at that moment */
+            orders: number;
+            minimum: number;
+            /** Format: date-time */
+            fromCutoff?: string | null;
+            /** Format: date-time */
+            toCutoff?: string | null;
+            /** Format: date-time */
+            at: string;
+        };
+        StaffRunLog: {
+            items: components["schemas"]["StaffRunLogEntry"][];
+        };
+        StaffRunOrder: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            orderId: string;
+            /** @description What staff and customers call the order (AT-000123) */
+            orderNumber?: string;
+            customerId?: string;
+            /** @description The customer's name */
+            customerName?: string;
+            packages?: number;
+            /** @enum {string} */
+            status: "RESERVED" | "CONFIRMED" | "RELEASED" | "CANCELLED";
+            /** @description Where the package is: PENDING, COLLECTED, OUT_FOR_DELIVERY, FAILED, DELIVERED or RETURNED */
+            stage?: string;
+            /** Format: date-time */
+            reservedAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+            /** Format: date-time */
+            deliveredAt?: string | null;
+        };
+        StaffRunOrders: {
+            items: components["schemas"]["StaffRunOrder"][];
         };
         StaffRunLocationHistory: {
             location: components["schemas"]["StaffRunLocation"];
@@ -11559,6 +11971,326 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Scheduled */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    announceStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Announced */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    openStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Open */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    extendStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunExtendRequest"];
+            };
+        };
+        responses: {
+            /** @description Extended */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffRunConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description Confirmed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelStaffDeliveryRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderReason"];
+            };
+        };
+        responses: {
+            /** @description Cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryRunLog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Log */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLog"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffDeliveryRunOrders: {
+        parameters: {
+            query?: {
+                status?: "RESERVED" | "CONFIRMED" | "RELEASED" | "CANCELLED";
+            };
+            header?: never;
+            path: {
+                runId: components["parameters"]["PreorderRunId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Orders */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunOrders"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };

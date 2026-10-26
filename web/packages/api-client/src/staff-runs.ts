@@ -1,4 +1,4 @@
-/* Back office run economics and advertorials (S263, S265, ADR 0005): the staff BFF routes that mirror delivery-runs'
+/* Back office delivery runs, run economics and advertorials (S260, S263, S265, ADR 0005): the staff BFF routes that mirror delivery-runs'
    economics settings (the driver cost model, staff-editable with a reason and an audit trail), the P&L of a run
    before and after it, the break-even shown while a pre-order window is created, a location's history (orders per
    run, subscriber growth) and the location-targeted advertorials. Money is in minor units, distances in miles. */
@@ -259,6 +259,19 @@ export function runSnapshot(orders: number, feeMinor: number, commissionShareMin
 
 /* ── Locations and runs ────────────────────────────────── */
 
+/** Where a location delivers: a polygon registered as a zone in geo-service, or a radius around the town. */
+export const RunAreaSchema = z.looseObject({
+  kind: z.enum(['POLYGON', 'RADIUS']),
+  geoZoneId: z.string().nullish(),
+  centerLat: z.number().optional(),
+  centerLng: z.number().optional(),
+  radiusMiles: z.number().nullish()
+});
+export type RunArea = z.infer<typeof RunAreaSchema>;
+
+export const RunCutoffPolicySchema = z.enum(['EXTEND', 'CANCEL']);
+export type RunCutoffPolicy = z.infer<typeof RunCutoffPolicySchema>;
+
 export const StaffRunLocationSchema = z.looseObject({
   id: z.string(),
   slug: z.string(),
@@ -269,8 +282,14 @@ export const StaffRunLocationSchema = z.looseObject({
   currency: z.string().optional(),
   defaultFeeMinor: z.number().int().optional(),
   defaultMinOrders: z.number().int().optional(),
+  defaultCapacityOrders: z.number().int().nullish(),
+  defaultCapacityPackages: z.number().int().nullish(),
+  defaultCutoffPolicy: RunCutoffPolicySchema.optional(),
+  defaultExtendDays: z.number().int().optional(),
   dropMode: RunDropModeSchema.optional(),
+  pickupPoint: z.looseObject({ name: z.string().optional(), line1: z.string().optional(), city: z.string().optional() }).nullish(),
   whatsappInviteUrl: z.string().nullable().optional(),
+  area: RunAreaSchema.optional(),
   active: z.boolean().optional()
 });
 export type StaffRunLocation = z.infer<typeof StaffRunLocationSchema>;
@@ -291,7 +310,11 @@ export const StaffRunSchema = z.looseObject({
   dropMode: z.string().optional(),
   reservedOrders: z.number().int(),
   minimumMet: z.boolean().optional(),
-  cancelReason: z.string().nullable().optional()
+  cancelReason: z.string().nullable().optional(),
+  /** The town (resolved by the BFF; never show the location id). */
+  locationName: z.string().nullish(),
+  notes: z.string().nullish(),
+  extensions: z.number().int().optional()
 });
 export type StaffRun = z.infer<typeof StaffRunSchema>;
 export const StaffRunsSchema = z.object({ items: z.array(StaffRunSchema) });
@@ -330,6 +353,214 @@ export const StaffRunLocationHistorySchema = z.object({
   subscriberGrowth: z.array(z.object({ month: z.string(), count: z.number().int() }))
 });
 export type StaffRunLocationHistory = z.infer<typeof StaffRunLocationHistorySchema>;
+
+/* ── Run lifecycle (S260) ──────────────────────────────── */
+
+/** What a run's status permits. The staff member's own access is `can.manage`: both must hold to show an action. */
+export const RunAllowedSchema = z.object({
+  edit: z.boolean(),
+  delete: z.boolean(),
+  announce: z.boolean(),
+  open: z.boolean(),
+  extend: z.boolean(),
+  confirm: z.boolean(),
+  cancel: z.boolean()
+});
+export type RunAllowed = z.infer<typeof RunAllowedSchema>;
+
+/** When each step of the run's life happened (null until it did). */
+export const RunMilestonesSchema = z.looseObject({
+  announcedAt: z.string().nullish(),
+  openedAt: z.string().nullish(),
+  cutOffAt: z.string().nullish(),
+  confirmedAt: z.string().nullish(),
+  collectingAt: z.string().nullish(),
+  outForDeliveryAt: z.string().nullish(),
+  completedAt: z.string().nullish(),
+  cancelledAt: z.string().nullish()
+});
+export type RunMilestones = z.infer<typeof RunMilestonesSchema>;
+
+/** One run with its location (name and area), the break-even and what staff may do with it. */
+export const StaffRunDetailSchema = StaffRunSchema.extend({
+  windowEnd: z.string(),
+  minimumMet: z.boolean(),
+  originalCutoffAt: z.string().optional(),
+  opensAt: z.string().nullish(),
+  sellerPickupAt: z.string().nullish(),
+  capacityPackages: z.number().int().nullish(),
+  pickupPoint: z.looseObject({ name: z.string().optional(), line1: z.string().optional(), city: z.string().optional() }).nullish(),
+  cutoffPolicy: RunCutoffPolicySchema.optional(),
+  extendDays: z.number().int().optional(),
+  reservedPackages: z.number().int().optional(),
+  ordersLeft: z.number().int().nullish(),
+  /** Fewest orders covering the estimated cost; null when the fee never covers a stop or the route cannot be measured. */
+  breakEvenOrders: z.number().int().nullish(),
+  milestones: RunMilestonesSchema.optional(),
+  version: z.number().int().optional(),
+  location: StaffRunLocationSchema.nullish(),
+  allowed: RunAllowedSchema,
+  can: RunCanSchema
+});
+export type StaffRunDetail = z.infer<typeof StaffRunDetailSchema>;
+
+export const RUN_ACTION_KINDS = ['EXTEND', 'CONFIRM', 'CONFIRM_OVERRIDE', 'CANCEL'] as const;
+export type RunActionKind = (typeof RUN_ACTION_KINDS)[number];
+
+/** One decision about a run: who, when and why. The cutoff job is "System". */
+export const RunLogEntrySchema = z.looseObject({
+  id: z.string(),
+  runId: z.string().optional(),
+  kind: z.enum(RUN_ACTION_KINDS),
+  reason: z.string().nullish(),
+  /** The staff member's name (never their id), or "System". */
+  actor: z.string(),
+  bySystem: z.boolean().default(false),
+  fromStatus: z.string(),
+  toStatus: z.string(),
+  /** Orders on the run when it was decided. */
+  orders: z.number().int(),
+  minimum: z.number().int(),
+  fromCutoff: z.string().nullish(),
+  toCutoff: z.string().nullish(),
+  at: z.string()
+});
+export type RunLogEntry = z.infer<typeof RunLogEntrySchema>;
+export const RunLogSchema = z.object({ items: z.array(RunLogEntrySchema) });
+
+export const RUN_ORDER_STATUSES = ['RESERVED', 'CONFIRMED', 'RELEASED', 'CANCELLED'] as const;
+export type RunOrderStatus = (typeof RUN_ORDER_STATUSES)[number];
+
+/** An order on a run: its number and the customer's name. */
+export const StaffRunOrderSchema = z.looseObject({
+  id: z.string(),
+  orderId: z.string(),
+  orderNumber: z.string().nullish(),
+  customerName: z.string().nullish(),
+  packages: z.number().int().optional(),
+  status: z.enum(RUN_ORDER_STATUSES),
+  stage: z.string().optional(),
+  reservedAt: z.string().optional(),
+  deliveredAt: z.string().nullish()
+});
+export type StaffRunOrder = z.infer<typeof StaffRunOrderSchema>;
+export const StaffRunOrdersSchema = z.object({ items: z.array(StaffRunOrderSchema) });
+
+/** Body of POST /v1/staff/delivery-runs/runs and PUT /v1/staff/delivery-runs/runs/{id}. Times are instants (ISO 8601). */
+export interface RunScheduleInput {
+  locationId: string;
+  windowStart: string;
+  windowEnd: string;
+  cutoffAt: string;
+  /** An announced run opens for orders by itself at this time. */
+  opensAt?: string | null;
+  sellerPickupAt?: string | null;
+  /** null: the delivery fee rule for the location's distance prices the run; a number is a custom fee. */
+  feeMinor?: number | null;
+  minOrders?: number | null;
+  capacityOrders?: number | null;
+  capacityPackages?: number | null;
+  dropMode?: RunDropMode | null;
+  cutoffPolicy?: RunCutoffPolicy | null;
+  extendDays?: number | null;
+  notes?: string | null;
+}
+
+/** Body of POST /v1/staff/delivery-runs/runs/{id}/extend. */
+export interface RunExtendInput {
+  cutoffAt: string;
+  windowStart?: string | null;
+  windowEnd?: string | null;
+  sellerPickupAt?: string | null;
+  reason: string;
+}
+
+export const RUN_LIMITS = { orders: 10_000, packages: 100_000, notes: 500, reason: 500, feeMinor: 10_000, extendDays: 30, windowHours: 24 } as const;
+
+export type RunScheduleProblem = 'required' | 'order' | 'tooLong' | 'range' | 'whole';
+
+/**
+ * The problems of a run as it is sent (keyed by field), the same ones the BFF's 422 reports: the window ends after it
+ * starts and lasts at most 24 hours, orders close before it starts, the run opens before its cutoff, sellers are collected
+ * between cutoff and end, capacity is not below the minimum.
+ */
+export function runScheduleProblems(input: Partial<RunScheduleInput>, creating: boolean): Partial<Record<keyof RunScheduleInput, RunScheduleProblem>> {
+  const out: Partial<Record<keyof RunScheduleInput, RunScheduleProblem>> = {};
+  const ms = (v: string | null | undefined): number => (v ? Date.parse(v) : Number.NaN);
+  if (creating && !input.locationId) out.locationId = 'required';
+  (['windowStart', 'windowEnd', 'cutoffAt'] as const).forEach((k) => {
+    if (!input[k] || Number.isNaN(ms(input[k]))) out[k] = 'required';
+  });
+  const [start, end, cutoff] = [ms(input.windowStart), ms(input.windowEnd), ms(input.cutoffAt)];
+  if (!Number.isNaN(start) && !Number.isNaN(end) && (end <= start || end - start > RUN_LIMITS.windowHours * 3_600_000)) out.windowEnd = 'order';
+  if (!Number.isNaN(start) && !Number.isNaN(cutoff) && cutoff >= start) out.cutoffAt = 'order';
+  if (input.opensAt && !Number.isNaN(cutoff) && ms(input.opensAt) >= cutoff) out.opensAt = 'order';
+  if (input.sellerPickupAt && !Number.isNaN(cutoff) && !Number.isNaN(end) && (ms(input.sellerPickupAt) < cutoff || ms(input.sellerPickupAt) > end)) out.sellerPickupAt = 'order';
+  const whole = (k: 'minOrders' | 'capacityOrders' | 'capacityPackages', hi: number) => {
+    const v = input[k];
+    if (v === null || v === undefined) return;
+    if (!Number.isInteger(v)) out[k] = 'whole';
+    else if (v < 1 || v > hi) out[k] = 'range';
+  };
+  whole('minOrders', RUN_LIMITS.orders);
+  whole('capacityOrders', RUN_LIMITS.orders);
+  whole('capacityPackages', RUN_LIMITS.packages);
+  if (!out.minOrders && !out.capacityOrders && input.minOrders && input.capacityOrders && input.capacityOrders < input.minOrders) out.capacityOrders = 'order';
+  if (input.feeMinor !== null && input.feeMinor !== undefined && (!Number.isInteger(input.feeMinor) || input.feeMinor < 0 || input.feeMinor > RUN_LIMITS.feeMinor)) out.feeMinor = 'range';
+  if (Array.from(input.notes ?? '').length > RUN_LIMITS.notes) out.notes = 'tooLong';
+  return out;
+}
+
+/** What the cutoff job will do with an open run, as delivery-runs decides it. */
+export type RunCutoffOutcome = 'CONFIRM' | 'EXTEND' | 'CANCEL';
+
+/**
+ * What happens at the cutoff: at or above the minimum the run is confirmed; below it, a run whose policy is EXTEND and that
+ * was not extended yet moves its cutoff once, otherwise it is cancelled and every order refunded.
+ */
+export function runCutoffOutcome(run: { minimumMet: boolean; cutoffPolicy?: RunCutoffPolicy; extensions?: number }): RunCutoffOutcome {
+  if (run.minimumMet) return 'CONFIRM';
+  return run.cutoffPolicy === 'EXTEND' && (run.extensions ?? 0) === 0 ? 'EXTEND' : 'CANCEL';
+}
+
+/**
+ * Where an order-taking run stands, for the banner staff read first. `DECIDING`: the cutoff has passed and the job is
+ * deciding right now (it runs every minute). `AT_RISK`: below the minimum and the cutoff is within two days: the run needs a
+ * decision, because at the cutoff it will extend once or cancel and refund everyone. `ON_TRACK`: the minimum is met.
+ * `FILLING`: below the minimum with time to go. Runs that do not take orders have no outlook.
+ */
+export type RunOutlookKind = 'DECIDING' | 'AT_RISK' | 'FILLING' | 'ON_TRACK';
+
+export const RUN_ATTENTION_WINDOW_MS = 2 * 86_400_000;
+
+export interface RunOutlook {
+  kind: RunOutlookKind;
+  /** Orders still missing to reach the minimum (0 when met). */
+  short: number;
+  /** Milliseconds to the cutoff (negative once passed). */
+  msToCutoff: number;
+  /** What the job will do at the cutoff. */
+  outcome: RunCutoffOutcome;
+  /** Room left, null without a capacity limit. */
+  ordersLeft: number | null;
+}
+
+type OutlookRun = Pick<StaffRunDetail, 'status' | 'cutoffAt' | 'minOrders' | 'reservedOrders' | 'cutoffPolicy' | 'extensions'> & { minimumMet?: boolean; ordersLeft?: number | null };
+
+export function runOutlook(run: OutlookRun, nowMs: number): RunOutlook | null {
+  if (run.status !== 'OPEN' && run.status !== 'EXTENDED') return null;
+  const msToCutoff = Date.parse(run.cutoffAt) - nowMs;
+  const minimumMet = run.minimumMet ?? run.reservedOrders >= run.minOrders;
+  const outcome = runCutoffOutcome({ minimumMet, cutoffPolicy: run.cutoffPolicy, extensions: run.extensions });
+  const kind: RunOutlookKind = msToCutoff <= 0 ? 'DECIDING' : minimumMet ? 'ON_TRACK' : msToCutoff <= RUN_ATTENTION_WINDOW_MS ? 'AT_RISK' : 'FILLING';
+  return { kind, short: Math.max(0, run.minOrders - run.reservedOrders), msToCutoff, outcome, ordersLeft: run.ordersLeft ?? null };
+}
+
+/** Runs the list shows under "Needs attention": order-taking, below the minimum, cutoff within two days or just passed. */
+export const runNeedsAttention = (run: OutlookRun, nowMs: number): boolean => {
+  const o = runOutlook(run, nowMs);
+  return o !== null && o.short > 0 && (o.kind === 'AT_RISK' || o.kind === 'DECIDING');
+};
 
 /* ── Advertorials ──────────────────────────────────────── */
 
@@ -476,6 +707,28 @@ export function createStaffRunsApi(request: Requester, _options: ApiClientOption
     runs: (q: RunListQuery = {}, signal?: AbortSignal): Promise<StaffRun[]> =>
       request('/v1/staff/delivery-runs/runs', StaffRunsSchema, { query: { locationId: q.locationId, status: q.status?.join(','), limit: str(q.limit) }, signal }).then((r) => r.items),
 
+    /* Run lifecycle (S260) */
+    run: (runId: string, signal?: AbortSignal): Promise<StaffRunDetail> => request(`/v1/staff/delivery-runs/runs/${enc(runId)}`, StaffRunDetailSchema, { signal }),
+    /** Schedules a draft run for a location; its area is the location's. */
+    createRun: (body: RunScheduleInput): Promise<StaffRunDetail> => request('/v1/staff/delivery-runs/runs', StaffRunDetailSchema, { method: 'POST', body }),
+    /** Changes a run before it opens (an open run keeps its fee, cutoff and drop mode). */
+    updateRun: (runId: string, body: RunScheduleInput): Promise<StaffRunDetail> => request(`/v1/staff/delivery-runs/runs/${enc(runId)}`, StaffRunDetailSchema, { method: 'PUT', body }),
+    deleteRun: (runId: string): Promise<void> => request(`/v1/staff/delivery-runs/runs/${enc(runId)}`, z.undefined(), { method: 'DELETE' }),
+    announceRun: (runId: string): Promise<StaffRunDetail> => request(`/v1/staff/delivery-runs/runs/${enc(runId)}/announce`, StaffRunDetailSchema, { method: 'POST' }),
+    openRun: (runId: string): Promise<StaffRunDetail> => request(`/v1/staff/delivery-runs/runs/${enc(runId)}/open`, StaffRunDetailSchema, { method: 'POST' }),
+    /** Moves the cutoff later; the reason is required and logged with who and when. */
+    extendRun: (runId: string, body: RunExtendInput): Promise<StaffRunDetail> => request(`/v1/staff/delivery-runs/runs/${enc(runId)}/extend`, StaffRunDetailSchema, { method: 'POST', body }),
+    /** Confirms now; a run below its minimum needs a reason (the override is logged). */
+    confirmRun: (runId: string, reason?: string): Promise<StaffRunDetail> =>
+      request(`/v1/staff/delivery-runs/runs/${enc(runId)}/confirm`, StaffRunDetailSchema, { method: 'POST', body: reason ? { reason } : {} }),
+    /** Cancels and refunds every order in full; the reason is required, logged and shown to the customers. */
+    cancelRun: (runId: string, reason: string): Promise<StaffRunDetail> =>
+      request(`/v1/staff/delivery-runs/runs/${enc(runId)}/cancel`, StaffRunDetailSchema, { method: 'POST', body: { reason } }),
+    runLog: (runId: string, signal?: AbortSignal): Promise<RunLogEntry[]> =>
+      request(`/v1/staff/delivery-runs/runs/${enc(runId)}/log`, RunLogSchema, { signal }).then((r) => r.items),
+    runOrders: (runId: string, status?: RunOrderStatus, signal?: AbortSignal): Promise<StaffRunOrder[]> =>
+      request(`/v1/staff/delivery-runs/runs/${enc(runId)}/orders`, StaffRunOrdersSchema, { query: { status }, signal }).then((r) => r.items),
+
     /* Advertorials */
     advertorials: (q: AdvertorialListQuery = {}, signal?: AbortSignal): Promise<StaffAdvertorials> =>
       request('/v1/staff/advertorials', StaffAdvertorialsSchema, { query: { source: q.source, sourceId: q.sourceId, status: q.status, limit: str(q.limit) }, signal }),
@@ -505,6 +758,9 @@ export const staffRunKeys = {
   locations: () => [...staffRunKeys.all, 'locations'] as const,
   history: (locationId: string) => [...staffRunKeys.all, 'history', locationId] as const,
   runs: (q: RunListQuery) => [...staffRunKeys.all, 'list', q] as const,
+  run: (runId: string) => [...staffRunKeys.all, 'run', runId] as const,
+  runLog: (runId: string) => [...staffRunKeys.all, 'run-log', runId] as const,
+  runOrders: (runId: string, status?: RunOrderStatus) => [...staffRunKeys.all, 'run-orders', runId, status ?? 'all'] as const,
   advertorials: (q: AdvertorialListQuery) => [...staffRunKeys.all, 'advertorials', q] as const,
   advertorial: (id: string) => [...staffRunKeys.all, 'advertorial', id] as const
 };
@@ -519,5 +775,9 @@ export const staffRunQueries = {
   locations: (api: StaffRunsApi) => queryOptions({ queryKey: staffRunKeys.locations(), queryFn: ({ signal }) => api.locations(signal), staleTime: 30_000 }),
   history: (api: StaffRunsApi, locationId: string) => queryOptions({ queryKey: staffRunKeys.history(locationId), queryFn: ({ signal }) => api.locationHistory(locationId, signal), staleTime: 15_000 }),
   runs: (api: StaffRunsApi, q: RunListQuery = {}) => queryOptions({ queryKey: staffRunKeys.runs(q), queryFn: ({ signal }) => api.runs(q, signal), staleTime: 10_000 }),
+  run: (api: StaffRunsApi, runId: string) => queryOptions({ queryKey: staffRunKeys.run(runId), queryFn: ({ signal }) => api.run(runId, signal), staleTime: 5_000 }),
+  runLog: (api: StaffRunsApi, runId: string) => queryOptions({ queryKey: staffRunKeys.runLog(runId), queryFn: ({ signal }) => api.runLog(runId, signal), staleTime: 5_000 }),
+  runOrders: (api: StaffRunsApi, runId: string, status?: RunOrderStatus) =>
+    queryOptions({ queryKey: staffRunKeys.runOrders(runId, status), queryFn: ({ signal }) => api.runOrders(runId, status, signal), staleTime: 10_000 }),
   advertorials: (api: StaffRunsApi, q: AdvertorialListQuery = {}) => queryOptions({ queryKey: staffRunKeys.advertorials(q), queryFn: ({ signal }) => api.advertorials(q, signal), staleTime: 5_000 })
 };

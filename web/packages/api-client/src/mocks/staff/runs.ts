@@ -18,15 +18,25 @@ import {
   type EconomicsSettings,
   runBreakEven,
   runCostModel,
+  type RunAllowed,
+  type RunArea,
+  type RunCutoffPolicy,
   type RunDropMode,
   type RunEconomics,
   type RunHistoryRow,
+  type RunLogEntry,
+  type RunMilestones,
+  type RunOrderStatus,
   type RunPnl,
+  runScheduleProblems,
+  type RunScheduleInput,
   runSnapshot,
   type RunStatus,
   type StaffAdvertorial,
   type StaffRun,
+  type StaffRunDetail,
   type StaffRunLocation,
+  type StaffRunOrder,
   type WindowEconomics,
   type WindowPlan
 } from '../../staff-runs';
@@ -52,6 +62,8 @@ interface Place {
   slug: string;
   name: string;
   key: string;
+  /** Where the location delivers: a radius around the town, or a polygon registered as a zone in geo. */
+  area: RunArea;
   roadMiles: number;
   driveMinutes: number;
   growth: [string, number][];
@@ -60,21 +72,33 @@ interface Place {
 
 /* One location per seeded pre-order city: an origin hub sweeps the sellers and drives out. */
 const PLACES: Place[] = [
-  { id: '4b2f9d3a-0000-4000-8000-00000000000a', slug: 'lubbock-tx', name: 'Lubbock', key: 'US/TX/Lubbock', roadMiles: 148, driveMinutes: 165, growth: [['2026-05', 12], ['2026-06', 29], ['2026-07', 51], ['2026-08', 88], ['2026-09', 131], ['2026-10', 164]], channels: { EMAIL: 118, SMS: 61, PUSH: 24, WHATSAPP: 33 } },
-  { id: '4b2f9d3a-0000-4000-8000-00000000000b', slug: 'amarillo-tx', name: 'Amarillo', key: 'US/TX/Amarillo', roadMiles: 241, driveMinutes: 262, growth: [['2026-07', 6], ['2026-08', 17], ['2026-09', 38], ['2026-10', 55]], channels: { EMAIL: 41, SMS: 18, PUSH: 7, WHATSAPP: 9 } },
-  { id: '4b2f9d3a-0000-4000-8000-00000000000c', slug: 'midland-tx', name: 'Midland', key: 'US/TX/Midland', roadMiles: 112, driveMinutes: 128, growth: [['2026-08', 9], ['2026-09', 21], ['2026-10', 34]], channels: { EMAIL: 26, SMS: 12, PUSH: 4, WHATSAPP: 5 } }
+  { id: '4b2f9d3a-0000-4000-8000-00000000000a', slug: 'lubbock-tx', name: 'Lubbock', key: 'US/TX/Lubbock', area: { kind: 'RADIUS', geoZoneId: null, centerLat: 33.5779, centerLng: -101.8552, radiusMiles: 15 }, roadMiles: 148, driveMinutes: 165, growth: [['2026-05', 12], ['2026-06', 29], ['2026-07', 51], ['2026-08', 88], ['2026-09', 131], ['2026-10', 164]], channels: { EMAIL: 118, SMS: 61, PUSH: 24, WHATSAPP: 33 } },
+  { id: '4b2f9d3a-0000-4000-8000-00000000000b', slug: 'amarillo-tx', name: 'Amarillo', key: 'US/TX/Amarillo', area: { kind: 'POLYGON', geoZoneId: 'zone-amarillo-3f9a', centerLat: 35.222, centerLng: -101.8313, radiusMiles: null }, roadMiles: 241, driveMinutes: 262, growth: [['2026-07', 6], ['2026-08', 17], ['2026-09', 38], ['2026-10', 55]], channels: { EMAIL: 41, SMS: 18, PUSH: 7, WHATSAPP: 9 } },
+  { id: '4b2f9d3a-0000-4000-8000-00000000000c', slug: 'midland-tx', name: 'Midland', key: 'US/TX/Midland', area: { kind: 'RADIUS', geoZoneId: null, centerLat: 31.9973, centerLng: -102.0779, radiusMiles: 12 }, roadMiles: 112, driveMinutes: 128, growth: [['2026-08', 9], ['2026-09', 21], ['2026-10', 34]], channels: { EMAIL: 26, SMS: 12, PUSH: 4, WHATSAPP: 5 } }
 ];
 
 interface MockRun extends StaffRun {
   orders: number;
   packages: number;
   completed: boolean;
+  notes: string | null;
+  extensions: number;
+  opensAt: string | null;
+  sellerPickupAt: string | null;
+  cutoffPolicy: RunCutoffPolicy;
+  extendDays: number;
+  capacityPackages: number | null;
+  originalCutoffAt: string;
+  milestones: RunMilestones;
+  version: number;
 }
 
 interface RunsState {
   settings: EconomicsSettings;
   changes: EconomicsChange[];
   runs: MockRun[];
+  /** What was decided about each run (extend, confirm, cancel), oldest first. */
+  logs: Map<string, RunLogEntry[]>;
   advertorials: StaffAdvertorial[];
   seq: number;
 }
@@ -102,18 +126,31 @@ function seed(db: MockStaffDb): RunsState {
     orders,
     packages: Math.round(orders * 1.4),
     completed: status === 'COMPLETED',
+    notes: null,
+    extensions: 0,
+    opensAt: null,
+    sellerPickupAt: at(days - 2, 13),
+    cutoffPolicy: 'EXTEND',
+    extendDays: 7,
+    capacityPackages: null,
+    originalCutoffAt: at(days - 3, 23),
+    milestones: { openedAt: status === 'DRAFT' ? null : at(days - 12), cancelledAt: status === 'CANCELLED' ? at(days - 3, 23) : null, completedAt: status === 'COMPLETED' ? at(days, 19) : null },
+    version: 1,
     ...extra
   });
   const [lbk, ama, mid] = PLACES as [Place, Place, Place];
   const runs = [
     run(1, lbk, 'COMPLETED', -42, 31),
     run(2, lbk, 'COMPLETED', -28, 38),
-    run(3, lbk, 'CANCELLED', -14, 7, 12, 799, { cancelReason: 'Below the minimum: not enough orders to cover the drive' }),
+    run(3, lbk, 'CANCELLED', -14, 7, 12, 799, { cancelReason: 'MINIMUM_NOT_MET', extensions: 1 }),
     run(4, lbk, 'OPEN', 6, 19),
     run(5, ama, 'COMPLETED', -21, 14, 12),
     run(6, ama, 'OPEN', 9, 9, 12),
     run(7, mid, 'COMPLETED', -10, 16, 10),
-    run(8, mid, 'ANNOUNCED', 15, 0, 10)
+    run(8, mid, 'ANNOUNCED', 15, 0, 10),
+    /* Short of its minimum with the cutoff about a day away: it needs a decision before the job makes one. */
+    run(9, ama, 'OPEN', 3, 5, 12, 799, { cutoffAt: at(1, 5), originalCutoffAt: at(1, 5), notes: 'Two sellers deliver to the hub on Thursday evening' }),
+    run(10, mid, 'DRAFT', 20, 0, 10)
   ];
   const adv = (n: number, extra: Partial<StaffAdvertorial>): StaffAdvertorial => ({
     id: `5c3a0e4b-0000-4000-8000-${String(n).padStart(12, '0')}`,
@@ -149,7 +186,16 @@ function seed(db: MockStaffDb): RunsState {
     adv(2, { variant: 'B', generated: false, headline: 'Last days: Lubbock jollof and spice box', body: 'Pre-order closes Thursday. Free pickup, door delivery from the run fee.', ctaLabel: 'Reserve yours', results: { views: 1792, clicks: 274, ctrPct: 15.3, orders: 52 } }),
     adv(3, { source: 'RUN', sourceId: run(4, lbk, 'OPEN', 6, 19).id, sourceName: 'Lubbock run', sourceCode: null, sourceStatus: 'OPEN', variant: 'A', headline: 'Our Lubbock delivery run is open', ctaLabel: 'See the run', results: { views: 420, clicks: 38, ctrPct: 9, orders: null } })
   ];
-  return { settings: { ...DEFAULT_ECONOMICS, version: 0, source: 'CONFIG', updatedAt: null, updatedBy: null, reason: null, can: { manage: true } }, changes: [], runs, advertorials, seq: 100 };
+  const logs = new Map<string, RunLogEntry[]>([
+    [
+      runs[2]?.id ?? '',
+      [
+        { id: 'rl-1', kind: 'EXTEND', reason: 'MINIMUM_NOT_MET', actor: 'System', bySystem: true, fromStatus: 'OPEN', toStatus: 'EXTENDED', orders: 5, minimum: 12, fromCutoff: at(-24, 23), toCutoff: at(-17, 23), at: at(-24, 23) },
+        { id: 'rl-2', kind: 'CANCEL', reason: 'MINIMUM_NOT_MET', actor: 'System', bySystem: true, fromStatus: 'EXTENDED', toStatus: 'CANCELLED', orders: 7, minimum: 12, fromCutoff: null, toCutoff: null, at: at(-17, 23) }
+      ]
+    ]
+  ]);
+  return { settings: { ...DEFAULT_ECONOMICS, version: 0, source: 'CONFIG', updatedAt: null, updatedBy: null, reason: null, can: { manage: true } }, changes: [], runs, logs, advertorials, seq: 100 };
 }
 
 /** The mock database's clock (seeded "now" plus elapsed real time), like the pre-order mock's. */
@@ -206,6 +252,30 @@ const AdvertorialBody = z.object({
   endsAt: z.string().nullish()
 });
 const GenerateBody = z.object({ source: z.enum(['WINDOW', 'RUN']), sourceId: z.string() });
+const RunScheduleBody = z.object({
+  locationId: z.string().optional(),
+  windowStart: z.string().optional(),
+  windowEnd: z.string().optional(),
+  cutoffAt: z.string().optional(),
+  opensAt: z.string().nullish(),
+  sellerPickupAt: z.string().nullish(),
+  feeMinor: z.number().nullish(),
+  minOrders: z.number().nullish(),
+  capacityOrders: z.number().nullish(),
+  capacityPackages: z.number().nullish(),
+  dropMode: z.enum(['DOORSTEP', 'PICKUP_POINT']).nullish(),
+  cutoffPolicy: z.enum(['EXTEND', 'CANCEL']).nullish(),
+  extendDays: z.number().nullish(),
+  notes: z.string().nullish()
+});
+const RunExtendBody = z.object({
+  cutoffAt: z.string().optional(),
+  windowStart: z.string().nullish(),
+  windowEnd: z.string().nullish(),
+  sellerPickupAt: z.string().nullish(),
+  reason: z.string().nullish()
+});
+const ReasonBody = z.object({ reason: z.string().nullish() });
 
 const RANK = { VIEW: 1, EDIT: 2, APPROVE: 3, FULL: 4 } as const;
 
@@ -224,7 +294,11 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
     if (!canManage(ctx)) throw problem(403, 'FORBIDDEN', 'Forbidden', 'Only pre-order managers can change the cost model and advertorials.');
   };
   const can = (ctx: PreorderCtx) => ({ manage: canManage(ctx) });
-  const st = (ctx: PreorderCtx) => stateOf(ctx.db);
+  const st = (ctx: PreorderCtx) => {
+    const state = stateOf(ctx.db);
+    settle(ctx.db, state);
+    return state;
+  };
   const audit = (ctx: PreorderCtx, action: string, entityId: string, summary: string) => ctx.db.audit.unshift({ at: ctx.now.toISOString(), actor: ctx.action.actor, action, summary, entityId });
   const ifMatch = (ctx: PreorderCtx, version: number) => {
     const raw = ctx.request.headers.get('if-match');
@@ -244,8 +318,8 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
     return PLACES.find((p) => areaFromKey(p.key).city?.toLowerCase() === a.city?.toLowerCase() && !!a.city);
   };
   const locationRow = (p: Place): StaffRunLocation => ({
-    id: p.id, slug: p.slug, name: p.name, market: 'US', state: 'TX', timeZone: 'America/Chicago', currency: 'USD', defaultFeeMinor: 799, defaultMinOrders: 12, dropMode: 'DOORSTEP',
-    whatsappInviteUrl: `https://chat.example/join/${p.slug}`, active: true
+    id: p.id, slug: p.slug, name: p.name, market: 'US', state: 'TX', timeZone: 'America/Chicago', currency: 'USD', defaultFeeMinor: 799, defaultMinOrders: 12, defaultCapacityOrders: 40,
+    defaultCutoffPolicy: 'EXTEND', defaultExtendDays: 7, dropMode: 'DOORSTEP', whatsappInviteUrl: `https://chat.example/join/${p.slug}`, area: p.area, active: true
   });
   const evaluate = (ctx: PreorderCtx, p: Place, dropMode: RunDropMode, feeMinor: number, minOrders: number, capacity: number | null, orders: number, commission: number | null): RunEconomics => {
     const cost = runCostModel(st(ctx).settings, p, dropMode);
@@ -304,6 +378,122 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
   const save = (ctx: PreorderCtx, a: StaffAdvertorial, patch: Partial<StaffAdvertorial>) => {
     Object.assign(a, patch, { version: a.version + 1, updatedAt: ctx.now.toISOString() });
     return decorate(ctx, a);
+  };
+
+  /* ── run lifecycle (S260) ── */
+  const RUN_FEE_RULE_MINOR = 799;
+  const allowedFor = (status: string): RunAllowed => ({
+    edit: ['DRAFT', 'ANNOUNCED', 'OPEN', 'EXTENDED'].includes(status),
+    delete: status === 'DRAFT',
+    announce: status === 'DRAFT',
+    open: status === 'DRAFT' || status === 'ANNOUNCED',
+    extend: ['OPEN', 'EXTENDED', 'CUT_OFF'].includes(status),
+    confirm: ['OPEN', 'EXTENDED', 'CUT_OFF'].includes(status),
+    cancel: ['DRAFT', 'ANNOUNCED', 'OPEN', 'EXTENDED', 'CUT_OFF', 'CONFIRMED'].includes(status)
+  });
+  const logOf = (s: RunsState, runId: string): RunLogEntry[] => {
+    let l = s.logs.get(runId);
+    if (!l) {
+      l = [];
+      s.logs.set(runId, l);
+    }
+    return l;
+  };
+  const record = (s: RunsState, r: MockRun, kind: RunLogEntry['kind'], actor: string, bySystem: boolean, reason: string | null, from: string, at: string, cutoffs?: [string, string]) => {
+    s.seq += 1;
+    logOf(s, r.id).push({
+      id: `rl-${s.seq}`, runId: r.id, kind, reason, actor, bySystem, fromStatus: from, toStatus: r.status, orders: r.reservedOrders, minimum: r.minOrders,
+      fromCutoff: cutoffs?.[0] ?? null, toCutoff: cutoffs?.[1] ?? null, at
+    });
+  };
+  const place = (r: MockRun): Place | undefined => placeOf(r.locationId);
+  /** The cutoff job (every minute in delivery-runs): confirms a run at its minimum, extends a short one once, else cancels it. */
+  const settle = (db: MockStaffDb, s: RunsState) => {
+    const now = clockOf(db);
+    for (const r of s.runs) {
+      if ((r.status !== 'OPEN' && r.status !== 'EXTENDED') || Date.parse(r.cutoffAt) > now) continue;
+      const from = r.status;
+      const at = new Date(Date.parse(r.cutoffAt)).toISOString();
+      if (r.reservedOrders >= r.minOrders) {
+        r.status = 'CONFIRMED';
+        r.milestones = { ...r.milestones, cutOffAt: at, confirmedAt: at };
+        record(s, r, 'CONFIRM', 'System', true, null, from, at);
+      } else if (r.cutoffPolicy === 'EXTEND' && r.extensions === 0) {
+        const before = r.cutoffAt;
+        const by = r.extendDays * DAY;
+        Object.assign(r, { status: 'EXTENDED', extensions: 1, cutoffAt: new Date(Date.parse(r.cutoffAt) + by).toISOString(), windowStart: new Date(Date.parse(r.windowStart) + by).toISOString(), windowEnd: new Date(Date.parse(r.windowEnd ?? r.windowStart) + by).toISOString() });
+        record(s, r, 'EXTEND', 'System', true, 'MINIMUM_NOT_MET', from, at, [before, r.cutoffAt]);
+      } else {
+        r.status = 'CANCELLED';
+        r.cancelReason = 'MINIMUM_NOT_MET';
+        r.milestones = { ...r.milestones, cutOffAt: at, cancelledAt: at };
+        record(s, r, 'CANCEL', 'System', true, 'MINIMUM_NOT_MET', from, at);
+      }
+      r.minimumMet = r.reservedOrders >= r.minOrders;
+      r.version += 1;
+    }
+  };
+  const INTERNAL_RUN_FIELDS = new Set(['orders', 'packages', 'completed']);
+  const detail = (ctx: PreorderCtx, r: MockRun): StaffRunDetail => {
+    const p = place(r);
+    const dropMode = (r.dropMode as RunDropMode | undefined) ?? 'DOORSTEP';
+    const economics = p ? evaluate(ctx, p, dropMode, r.feeMinor, r.minOrders, r.capacityOrders ?? null, r.reservedOrders, null) : null;
+    const base = Object.fromEntries(Object.entries(r).filter(([k]) => !INTERNAL_RUN_FIELDS.has(k))) as StaffRun;
+    return {
+      ...base,
+      windowEnd: r.windowEnd ?? r.windowStart,
+      minimumMet: r.reservedOrders >= r.minOrders,
+      reservedPackages: r.packages,
+      ordersLeft: r.capacityOrders == null ? null : Math.max(0, r.capacityOrders - r.reservedOrders),
+      breakEvenOrders: economics?.breakEvenOrders ?? null,
+      locationName: p?.name ?? null,
+      location: p ? locationRow(p) : null,
+      allowed: allowedFor(r.status),
+      can: can(ctx)
+    };
+  };
+  const NAMES = ['Amara Nwosu', 'Tunde Bello', 'Efe Okoro', 'Grace Adjei', 'Musa Bello', 'Ifeoma Okafor', 'Sara Tesfaye', 'Kofi Mensah', 'Zainab Yusuf', 'Chidi Eze', 'Ngozi Obi', 'Yaw Boateng'];
+  const orderRows = (r: MockRun, status?: RunOrderStatus | null): StaffRunOrder[] => {
+    const slotStatus: RunOrderStatus = r.status === 'CANCELLED' ? 'CANCELLED' : ['CONFIRMED', 'COLLECTING', 'OUT_FOR_DELIVERY', 'COMPLETED'].includes(r.status) ? 'CONFIRMED' : 'RESERVED';
+    const rows = Array.from({ length: Math.min(r.orders, 80) }, (_, i): StaffRunOrder => ({
+      id: `${r.id.slice(0, 24)}${String(i + 1).padStart(12, '0')}`,
+      orderId: `ord-${r.id.slice(-4)}-${i + 1}`,
+      orderNumber: `AT-${String(200000 + (r.id.charCodeAt(r.id.length - 1) % 9) * 1000 + i)}`,
+      customerName: NAMES[i % NAMES.length] ?? 'Customer',
+      packages: i % 3 === 0 ? 2 : 1,
+      status: slotStatus,
+      stage: r.status === 'COMPLETED' ? 'DELIVERED' : 'PENDING',
+      reservedAt: r.milestones.openedAt ?? r.windowStart,
+      deliveredAt: r.status === 'COMPLETED' ? (r.milestones.completedAt ?? null) : null
+    }));
+    return status ? rows.filter((o) => o.status === status) : rows;
+  };
+  const runWords = { required: 'This is required', order: 'Check the dates and numbers', tooLong: 'Too long', range: 'Outside the allowed range', whole: 'Enter a whole number' } as const;
+  const fieldWords: Record<string, string> = {
+    locationId: 'Choose the location the run goes to',
+    windowStart: 'Choose a date and time',
+    windowEnd: 'The delivery window has to end after it starts, within 24 hours',
+    cutoffAt: 'Orders have to close before the delivery window starts',
+    opensAt: 'The run has to open before its cutoff',
+    sellerPickupAt: 'Sellers are collected between the cutoff and the end of the delivery window',
+    capacityOrders: 'Capacity cannot be below the minimum orders',
+    feeMinor: 'Enter an amount between 0 and 100.00 (0 is free)',
+    notes: 'At most 500 characters'
+  };
+  const scheduleErrors = (b: Partial<RunScheduleInput>, creating: boolean): Record<string, string> =>
+    Object.fromEntries(Object.entries(runScheduleProblems(b, creating)).map(([k, v]) => [k, fieldWords[k] ?? runWords[v]]));
+  const reasonOf = (body: { reason?: string | null }, missing: string): string => {
+    const reason = (body.reason ?? '').trim();
+    if (!reason) throw validation({ reason: missing });
+    if (reason.length > 500) throw validation({ reason: 'At most 500 characters' });
+    return reason;
+  };
+  const invalidMove = (r: MockRun, to: string) => problem(409, 'delivery-runs.invalid-transition', 'Not possible now', `Cannot move from ${r.status} to ${to}`);
+  const bump = (ctx: PreorderCtx, r: MockRun) => {
+    r.version += 1;
+    r.minimumMet = r.reservedOrders >= r.minOrders;
+    r.milestones = { ...r.milestones };
+    return detail(ctx, r);
   };
 
   return [
@@ -450,8 +640,195 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const q = new URL(ctx.request.url).searchParams;
       const status = q.get('status')?.split(',') ?? null;
       const limit = Math.min(Math.max(Number(q.get('limit') ?? 100) || 100, 1), 500);
-      return { items: st(ctx).runs.filter((r) => (!q.get('locationId') || r.locationId === q.get('locationId')) && (!status || status.includes(r.status))).slice(0, limit) };
+      const items = st(ctx).runs
+        .filter((r) => (!q.get('locationId') || r.locationId === q.get('locationId')) && (!status || status.includes(r.status)))
+        .slice(0, limit)
+        .map((r) => ({ ...detail(ctx, r), location: undefined, allowed: undefined, can: undefined }));
+      return { items };
     })),
+    /* ── run lifecycle (S260) ── */
+    http.post(`${W}/delivery-runs/runs`, route(async (ctx) => {
+      manage(ctx);
+      const b = await json(ctx.request, RunScheduleBody);
+      const errors = scheduleErrors(b, true);
+      const p = placeOf(b.locationId);
+      if (b.locationId && !p) errors.locationId = 'Choose one of the locations';
+      if (!errors.cutoffAt && b.cutoffAt && Date.parse(b.cutoffAt) <= clockOf(ctx.db)) errors.cutoffAt = 'The cutoff must be in the future';
+      if (Object.keys(errors).length || !p) throw validation(errors);
+      const s = st(ctx);
+      s.seq += 1;
+      const orders = 0;
+      const run: MockRun = {
+        id: `7e5c2a6d-0000-4000-8000-${String(s.seq).padStart(12, '0')}`,
+        locationId: p.id,
+        status: 'DRAFT',
+        windowStart: new Date(b.windowStart as string).toISOString(),
+        windowEnd: new Date(b.windowEnd as string).toISOString(),
+        cutoffAt: new Date(b.cutoffAt as string).toISOString(),
+        originalCutoffAt: new Date(b.cutoffAt as string).toISOString(),
+        opensAt: b.opensAt ? new Date(b.opensAt).toISOString() : null,
+        sellerPickupAt: b.sellerPickupAt ? new Date(b.sellerPickupAt).toISOString() : null,
+        feeMinor: b.feeMinor ?? RUN_FEE_RULE_MINOR,
+        currency: 'USD',
+        minOrders: b.minOrders ?? 12,
+        capacityOrders: b.capacityOrders ?? 40,
+        capacityPackages: b.capacityPackages ?? null,
+        dropMode: b.dropMode ?? 'DOORSTEP',
+        cutoffPolicy: b.cutoffPolicy ?? 'EXTEND',
+        extendDays: b.extendDays ?? 7,
+        notes: b.notes?.trim() ? b.notes.trim() : null,
+        extensions: 0,
+        reservedOrders: orders,
+        minimumMet: false,
+        cancelReason: null,
+        orders,
+        packages: 0,
+        completed: false,
+        milestones: {},
+        version: 0
+      };
+      s.runs.unshift(run);
+      audit(ctx, 'run.created', run.id, `Scheduled a run for ${p.name}`);
+      return detail(ctx, run);
+    }, 201)),
+    http.get(`${W}/delivery-runs/runs/:id`, route((ctx, params) => {
+      view(ctx);
+      return detail(ctx, runOf(ctx, params.id));
+    })),
+    http.put(`${W}/delivery-runs/runs/:id`, route(async (ctx, params) => {
+      manage(ctx);
+      const r = runOf(ctx, params.id);
+      const b = await json(ctx.request, RunScheduleBody);
+      const errors = scheduleErrors(b, false);
+      if (b.locationId && b.locationId !== r.locationId) errors.locationId = 'A run cannot move to another location';
+      if (!['DRAFT', 'ANNOUNCED', 'OPEN', 'EXTENDED'].includes(r.status)) throw problem(422, 'delivery-runs.run-not-editable', 'Not editable', `A ${r.status} run cannot be edited`);
+      if (Object.keys(errors).length) throw validation(errors);
+      const open = r.status === 'OPEN' || r.status === 'EXTENDED';
+      const cutoff = new Date(b.cutoffAt as string).toISOString();
+      const fee = b.feeMinor ?? RUN_FEE_RULE_MINOR;
+      if (open && (fee !== r.feeMinor || cutoff !== r.cutoffAt || (b.dropMode ?? r.dropMode) !== r.dropMode)) {
+        throw problem(422, 'delivery-runs.run-not-editable', 'Not editable', 'Fee, currency, cutoff and drop mode are fixed once a run is open (extend to move the cutoff)');
+      }
+      const capacity = b.capacityOrders ?? r.capacityOrders ?? null;
+      if (capacity !== null && capacity < r.reservedOrders) throw validation({ capacityOrders: 'Capacity cannot drop below the orders already on the run' });
+      Object.assign(r, {
+        windowStart: new Date(b.windowStart as string).toISOString(),
+        windowEnd: new Date(b.windowEnd as string).toISOString(),
+        cutoffAt: cutoff,
+        originalCutoffAt: open ? r.originalCutoffAt : cutoff,
+        opensAt: b.opensAt ? new Date(b.opensAt).toISOString() : null,
+        sellerPickupAt: b.sellerPickupAt ? new Date(b.sellerPickupAt).toISOString() : null,
+        feeMinor: fee,
+        minOrders: b.minOrders ?? r.minOrders,
+        capacityOrders: capacity,
+        capacityPackages: b.capacityPackages ?? r.capacityPackages,
+        dropMode: b.dropMode ?? r.dropMode,
+        cutoffPolicy: b.cutoffPolicy ?? r.cutoffPolicy,
+        extendDays: b.extendDays ?? r.extendDays,
+        notes: b.notes?.trim() ? b.notes.trim() : null
+      });
+      audit(ctx, 'run.updated', r.id, `Changed the run of ${place(r)?.name ?? 'a location'}`);
+      return bump(ctx, r);
+    })),
+    http.delete(`${W}/delivery-runs/runs/:id`, route((ctx, params) => {
+      manage(ctx);
+      const r = runOf(ctx, params.id);
+      if (r.status !== 'DRAFT') throw problem(422, 'delivery-runs.run-not-draft', 'Not a draft', 'Only draft runs can be deleted; cancel instead');
+      const s = st(ctx);
+      s.runs = s.runs.filter((x) => x.id !== r.id);
+      audit(ctx, 'run.deleted', r.id, `Deleted a draft run of ${place(r)?.name ?? 'a location'}`);
+      return new HttpResponse(null, { status: 204 });
+    })),
+    http.post(`${W}/delivery-runs/runs/:id/announce`, route((ctx, params) => {
+      manage(ctx);
+      const r = runOf(ctx, params.id);
+      if (r.status !== 'DRAFT') throw invalidMove(r, 'ANNOUNCED');
+      r.status = 'ANNOUNCED';
+      r.milestones = { ...r.milestones, announcedAt: ctx.now.toISOString() };
+      audit(ctx, 'run.announced', r.id, `Announced the run of ${place(r)?.name ?? 'a location'}`);
+      return bump(ctx, r);
+    })),
+    http.post(`${W}/delivery-runs/runs/:id/open`, route((ctx, params) => {
+      manage(ctx);
+      const r = runOf(ctx, params.id);
+      if (r.status !== 'DRAFT' && r.status !== 'ANNOUNCED') throw invalidMove(r, 'OPEN');
+      if (Date.parse(r.cutoffAt) <= clockOf(ctx.db)) throw problem(422, 'delivery-runs.cutoff-passed', 'Cutoff passed', 'The cutoff has passed; extend the run instead');
+      r.status = 'OPEN';
+      r.milestones = { ...r.milestones, announcedAt: r.milestones.announcedAt ?? ctx.now.toISOString(), openedAt: ctx.now.toISOString() };
+      audit(ctx, 'run.opened', r.id, `Opened the run of ${place(r)?.name ?? 'a location'} for orders`);
+      return bump(ctx, r);
+    })),
+    http.post(`${W}/delivery-runs/runs/:id/extend`, route(async (ctx, params) => {
+      manage(ctx);
+      const r = runOf(ctx, params.id);
+      const b = await json(ctx.request, RunExtendBody);
+      const errors: Record<string, string> = {};
+      const cutoff = b.cutoffAt ? Date.parse(b.cutoffAt) : Number.NaN;
+      if (Number.isNaN(cutoff)) errors.cutoffAt = 'Choose a date and time';
+      const reason = (b.reason ?? '').trim();
+      if (!reason) errors.reason = 'Say why: the reason is logged with your name';
+      else if (reason.length > 500) errors.reason = 'At most 500 characters';
+      if (Object.keys(errors).length) throw validation(errors);
+      if (!allowedFor(r.status).extend) throw invalidMove(r, 'EXTENDED');
+      if (cutoff <= clockOf(ctx.db) || cutoff <= Date.parse(r.cutoffAt)) throw problem(422, 'delivery-runs.invalid-extension', 'Not possible', 'The new cutoff must be in the future and later than the current one');
+      const by = cutoff - Date.parse(r.cutoffAt);
+      const before = r.cutoffAt;
+      const from = r.status;
+      Object.assign(r, {
+        status: 'EXTENDED',
+        extensions: r.extensions + 1,
+        cutoffAt: new Date(cutoff).toISOString(),
+        windowStart: b.windowStart && b.windowEnd ? new Date(b.windowStart).toISOString() : new Date(Date.parse(r.windowStart) + by).toISOString(),
+        windowEnd: b.windowStart && b.windowEnd ? new Date(b.windowEnd).toISOString() : new Date(Date.parse(r.windowEnd ?? r.windowStart) + by).toISOString(),
+        sellerPickupAt: b.sellerPickupAt ? new Date(b.sellerPickupAt).toISOString() : r.sellerPickupAt ? new Date(Date.parse(r.sellerPickupAt) + by).toISOString() : null
+      });
+      record(st(ctx), r, 'EXTEND', ctx.action.actor, false, reason, from, ctx.now.toISOString(), [before, r.cutoffAt]);
+      audit(ctx, 'run.extended', r.id, `Moved the cutoff of the run of ${place(r)?.name ?? 'a location'}: ${reason}`);
+      return bump(ctx, r);
+    })),
+    http.post(`${W}/delivery-runs/runs/:id/confirm`, route(async (ctx, params) => {
+      manage(ctx);
+      const r = runOf(ctx, params.id);
+      const b = await json(ctx.request, ReasonBody);
+      if (!allowedFor(r.status).confirm) throw invalidMove(r, 'CONFIRMED');
+      const below = r.reservedOrders < r.minOrders;
+      const reason = (b.reason ?? '').trim();
+      if (below && !reason) throw problem(422, 'delivery-runs.reason-required', 'A reason is required', 'Confirming a run below its minimum needs a reason');
+      if (reason.length > 500) throw validation({ reason: 'At most 500 characters' });
+      const from = r.status;
+      r.status = 'CONFIRMED';
+      r.milestones = { ...r.milestones, cutOffAt: ctx.now.toISOString(), confirmedAt: ctx.now.toISOString() };
+      record(st(ctx), r, below ? 'CONFIRM_OVERRIDE' : 'CONFIRM', ctx.action.actor, false, reason || null, from, ctx.now.toISOString());
+      audit(ctx, 'run.confirmed', r.id, `Confirmed the run of ${place(r)?.name ?? 'a location'}${below ? ` below its minimum: ${reason}` : ''}`);
+      return bump(ctx, r);
+    })),
+    http.post(`${W}/delivery-runs/runs/:id/cancel`, route(async (ctx, params) => {
+      manage(ctx);
+      const r = runOf(ctx, params.id);
+      const b = await json(ctx.request, ReasonBody);
+      const reason = reasonOf(b, 'Say why: the reason is logged with your name and shown to the customers');
+      if (!allowedFor(r.status).cancel) throw invalidMove(r, 'CANCELLED');
+      const from = r.status;
+      r.status = 'CANCELLED';
+      r.cancelReason = reason;
+      r.milestones = { ...r.milestones, cancelledAt: ctx.now.toISOString() };
+      record(st(ctx), r, 'CANCEL', ctx.action.actor, false, reason, from, ctx.now.toISOString());
+      audit(ctx, 'run.cancelled', r.id, `Cancelled the run of ${place(r)?.name ?? 'a location'} and refunded ${r.orders} orders: ${reason}`);
+      return bump(ctx, r);
+    })),
+    http.get(`${W}/delivery-runs/runs/:id/log`, route((ctx, params) => {
+      view(ctx);
+      const r = runOf(ctx, params.id);
+      return { items: logOf(st(ctx), r.id) };
+    })),
+    http.get(`${W}/delivery-runs/runs/:id/orders`, route((ctx, params) => {
+      view(ctx);
+      const r = runOf(ctx, params.id);
+      const status = new URL(ctx.request.url).searchParams.get('status');
+      if (status && !['RESERVED', 'CONFIRMED', 'RELEASED', 'CANCELLED'].includes(status)) throw validation({ status: 'Use RESERVED, CONFIRMED, RELEASED or CANCELLED' });
+      return { items: orderRows(r, status as RunOrderStatus | null) };
+    })),
+
 
     /* ── advertorials ── */
     http.get(`${W}/advertorials`, route((ctx) => {

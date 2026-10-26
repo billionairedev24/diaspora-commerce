@@ -27,6 +27,8 @@ import {
   quoteTariff,
   type RecordDetail,
   type ResourceKey,
+  type RunExtendInput,
+  type RunScheduleInput,
   type ResourcePage,
   type ShipFromLocation,
   type StaffBillingGrantPage,
@@ -78,6 +80,8 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<FeesOverview>().toExtend<S['FeesOverview']>();
     expectTypeOf<FeeScheduleView>().toExtend<S['FeeScheduleView']>();
     expectTypeOf<FeeOrgSearch>().toExtend<S['FeeOrgSearch']>();
+    expectTypeOf<RunScheduleInput>().toExtend<S['StaffRunRequest']>();
+    expectTypeOf<RunExtendInput>().toExtend<S['StaffRunExtendRequest']>();
     expectTypeOf<DeliveryQuote>().toExtend<S['DeliveryQuote']>();
     expectTypeOf<PickupList>().toExtend<S['PickupList']>();
     expectTypeOf<DriverSuggestions>().toExtend<S['DriverSuggestions']>();
