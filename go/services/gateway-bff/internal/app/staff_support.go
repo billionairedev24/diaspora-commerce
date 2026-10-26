@@ -152,8 +152,10 @@ func (s *staffSupportImpl) Customer(ctx context.Context, c *domain.Caller, id st
 			miss("audit log")
 			return
 		}
-		for _, e := range objs(page, "items") {
-			out.Audit = append(out.Audit, domain.AuditLine{At: timeOf(e, "occurredAt"), Actor: jstr(e, "actorId"), Action: jstr(e, "action"), Summary: jstr(e, "summary")})
+		entries := objs(page, "items")
+		nameAll(ctx, sc, entries, personRef("actorId", "Actor"))
+		for _, e := range entries {
+			out.Audit = append(out.Audit, domain.AuditLine{At: timeOf(e, "occurredAt"), Actor: jstr(e, "actorName"), Action: jstr(e, "action"), Summary: jstr(e, "summary")})
 		}
 	})
 	wg.Wait()

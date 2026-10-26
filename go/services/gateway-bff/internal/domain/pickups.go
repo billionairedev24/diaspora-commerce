@@ -38,6 +38,7 @@ type PickupList struct {
 // DriverSuggestion is an available driver for a pickup, nearest first.
 type DriverSuggestion struct {
 	DriverID          string     `json:"driverId"`
+	DriverName        string     `json:"driverName"`
 	RouteID           string     `json:"routeId"`
 	RouteName         string     `json:"routeName"`
 	Zone              string     `json:"zone"`
@@ -70,6 +71,7 @@ type PickupAssignResult struct {
 	RouteID    string  `json:"routeId"`
 	RouteName  *string `json:"routeName"`
 	DriverID   *string `json:"driverId"`
+	DriverName *string `json:"driverName"`
 	Status     string  `json:"status"`
 }
 
@@ -78,7 +80,9 @@ type PickupAssignment struct {
 	ID              string     `json:"id"`
 	ShipmentID      string     `json:"shipmentId"`
 	RouteID         string     `json:"routeId"`
+	RouteName       *string    `json:"routeName"`
 	DriverID        *string    `json:"driverId"`
+	DriverName      *string    `json:"driverName"`
 	Mode            string     `json:"mode"`
 	Reason          *string    `json:"reason"`
 	PreviousRouteID *string    `json:"previousRouteId"`

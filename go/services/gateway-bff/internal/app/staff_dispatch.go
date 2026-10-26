@@ -94,12 +94,13 @@ func (s *staffDispatchImpl) Pickups(ctx context.Context, c *domain.Caller, nodeI
 		return domain.PickupList{}, err
 	}
 	out := domain.PickupList{Items: []domain.PickupRow{}, CanAssign: canAssignPickups(sc.access)}
+	nameAll(ctx, sc, pool, sellerRef("sellerOrgId").named("sellerName"))
 	for _, p := range pool {
 		if !strings.EqualFold(jstr(p, "origin"), "SELLER") {
 			continue
 		}
 		row := domain.PickupRow{ShipmentID: jstr(p, "shipmentId"), OrderNumber: jstr(p, "orderNumber"), SellerOrgID: jstr(p, "sellerOrgId"),
-			SellerName: firstNonEmpty(jstr(p, "sellerName"), jstr(p, "sellerOrgId")), City: jstr(p, "city"), State: jstr(p, "state"),
+			SellerName: jstr(p, "sellerName"), City: jstr(p, "city"), State: jstr(p, "state"),
 			PostalCode: jstr(p, "postalCode"), Status: strings.ToUpper(firstNonEmpty(jstr(p, "status"), "AWAITING_ROUTE")), RouteID: strPtr(jstr(p, "routeId")),
 			Perishable: boolean(p, "perishable"), Units: int(num(p, "units")), PromisedBy: strPtr(jstr(p, "promisedBy")), CreatedAt: optTime(jstr(p, "createdAt"))}
 		if row.ShipmentID != "" {
@@ -133,12 +134,14 @@ func (s *staffDispatchImpl) Suggestions(ctx context.Context, c *domain.Caller, s
 	}
 	out := domain.DriverSuggestions{ShipmentID: firstNonEmpty(jstr(up, "shipmentId"), shipmentID), Drivers: []domain.DriverSuggestion{},
 		CanAssign: canAssignPickups(sc.access)}
-	for _, d := range objs(up, "drivers") {
-		if len(out.Drivers) == 5 {
-			break
-		}
-		out.Drivers = append(out.Drivers, domain.DriverSuggestion{DriverID: jstr(d, "driverId"), RouteID: jstr(d, "routeId"),
-			RouteName: firstNonEmpty(jstr(d, "routeName"), jstr(d, "routeId")), Zone: jstr(d, "zone"), RouteStatus: strings.ToUpper(jstr(d, "routeStatus")),
+	drivers := objs(up, "drivers")
+	if len(drivers) > 5 {
+		drivers = drivers[:5]
+	}
+	nameAll(ctx, sc, drivers, driverRef("driverId"), routeRef("routeId"))
+	for _, d := range drivers {
+		out.Drivers = append(out.Drivers, domain.DriverSuggestion{DriverID: jstr(d, "driverId"), DriverName: jstr(d, "driverName"), RouteID: jstr(d, "routeId"),
+			RouteName: firstNonEmpty(jstr(d, "routeName"), "Unknown route"), Zone: jstr(d, "zone"), RouteStatus: strings.ToUpper(jstr(d, "routeStatus")),
 			StraightLineMiles: num(d, "straightLineMiles"), RoadMiles: optNum(d, "roadMiles"), DurationMinutes: optNum(d, "durationMinutes"),
 			DistanceMethod: strings.ToUpper(firstNonEmpty(jstr(d, "distanceMethod"), "STRAIGHT_LINE")), PositionAt: optTime(jstr(d, "positionAt")),
 			PackagesOnRoute: int(num(d, "packagesOnRoute")), CapacityLeft: int(num(d, "capacityLeft"))})
@@ -176,8 +179,9 @@ func (s *staffDispatchImpl) Assign(ctx context.Context, c *domain.Caller, shipme
 		}
 		return domain.PickupAssignResult{}, err
 	}
+	nameAll(ctx, sc, []jobj{up}, driverRef("driverId"))
 	return domain.PickupAssignResult{ShipmentID: shipmentID, RouteID: firstNonEmpty(jstr(up, "id"), jstr(up, "routeId"), route),
-		RouteName: strPtr(firstNonEmpty(jstr(up, "name"), jstr(up, "routeName"))), DriverID: strPtr(jstr(up, "driverId")),
+		RouteName: strPtr(firstNonEmpty(jstr(up, "name"), jstr(up, "routeName"))), DriverID: strPtr(jstr(up, "driverId")), DriverName: strPtr(jstr(up, "driverName")),
 		Status: strings.ToUpper(firstNonEmpty(jstr(up, "status"), "ASSIGNED"))}, nil
 }
 
@@ -194,15 +198,16 @@ func (s *staffDispatchImpl) Assignments(ctx context.Context, c *domain.Caller, s
 		return domain.PickupAssignmentList{}, err
 	}
 	out := domain.PickupAssignmentList{Items: []domain.PickupAssignment{}}
+	nameAll(ctx, sc, up, driverRef("driverId"), routeRef("routeId"), personRef("actor", "Assigned by"))
 	for _, a := range up {
 		mode := strings.ToUpper(jstr(a, "mode"))
 		if mode != "DISPATCH_OVERRIDE" {
 			mode = "AUTO_NEAREST"
 		}
 		out.Items = append(out.Items, domain.PickupAssignment{ID: jstr(a, "id"), ShipmentID: firstNonEmpty(jstr(a, "shipmentId"), shipmentID),
-			RouteID: jstr(a, "routeId"), DriverID: strPtr(jstr(a, "driverId")), Mode: mode, Reason: strPtr(jstr(a, "reason")),
+			RouteID: jstr(a, "routeId"), RouteName: strPtr(jstr(a, "routeName")), DriverID: strPtr(jstr(a, "driverId")), DriverName: strPtr(jstr(a, "driverName")), Mode: mode, Reason: strPtr(jstr(a, "reason")),
 			PreviousRouteID: strPtr(jstr(a, "previousRouteId")), StraightMiles: optNum(a, "straightMiles"), RoadMiles: optNum(a, "roadMiles"),
-			DistanceMethod: strPtr(jstr(a, "distanceMethod")), Actor: strPtr(jstr(a, "actor")), CreatedAt: optTime(jstr(a, "createdAt"))})
+			DistanceMethod: strPtr(jstr(a, "distanceMethod")), Actor: strPtr(jstr(a, "actorName")), CreatedAt: optTime(jstr(a, "createdAt"))})
 	}
 	sort.SliceStable(out.Items, func(i, j int) bool {
 		a, b := out.Items[i].CreatedAt, out.Items[j].CreatedAt

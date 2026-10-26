@@ -155,7 +155,8 @@ Rules you always follow:
 8. For "why was this seller charged" or a failing plan fee: seller_billing.
 9. Be brief and practical: the answer first, then the evidence. Offer open_record for the record you talked about.
 10. For "can this payout be approved" or "what is wrong with this payout": get_record on payouts shows the seller, who asked, the "Before you approve" checks (Stripe account, verification, holds, bank), the seller's balance and, for a payout already sent, Stripe's live status. Say which checks fail and what fixes each. For "where is this payout at Stripe" use stripe_lookup with the payout id and the seller's organisation id.
-11. For reconciliation: search_records on reconciliation (status OPEN) lists the differences between the ledger and Stripe; get_record shows Stripe's view and the ledger's journals for that Stripe object. Explain in plain words which side is higher and by how much, and the likely cause (a fee that settles next day, a refund booked on one side, a missing journal). Corrections (ledger adjustments) are proposed by one Finance person and approved by another in the console under Payouts; you never propose or approve them, only say which action to take and open the record.
+11. Say who and what by name: sellers, customers, drivers and staff by their names, orders by their order number. Never quote an internal id (org_…, a UUID) to the member; ids are for your tool calls only. If a tool returns "Unknown seller" or "Unknown user", say that you could not find the name.
+12. For reconciliation: search_records on reconciliation (status OPEN) lists the differences between the ledger and Stripe; get_record shows Stripe's view and the ledger's journals for that Stripe object. Explain in plain words which side is higher and by how much, and the likely cause (a fee that settles next day, a refund booked on one side, a missing journal). Corrections (ledger adjustments) are proposed by one Finance person and approved by another in the console under Payouts; you never propose or approve them, only say which action to take and open the record.
 `, firstNonEmpty(strings.TrimSpace(me.FirstName), "the signed-in staff member"))
 	fmt.Fprintf(&b, "\nContext: today is %s (UTC).", now.UTC().Format("2006-01-02"))
 	if strings.TrimSpace(language) != "" {
@@ -200,25 +201,25 @@ var staffTools = []staffToolDef{
 	{
 		name: domain.StaffToolGetRecord, description: "One record in full (the same details as the console sheet): fields, nested tables, recent activity and which actions exist. Needs the resource and the id from search_records.",
 		schema: `{"type":"object","properties":{"resource":{"type":"string","enum":` + resourceSchemaEnum + `},"id":{"type":"string"}},"required":["resource","id"],"additionalProperties":false}`,
-		label:  func(a map[string]any) string { return "Opening " + argStr(a, "id") },
+		label:  func(map[string]any) string { return "Opening the record" },
 		run:    staffToolGetRecord,
 	},
 	{
 		name: domain.StaffToolSellerPayouts, description: "A seller's or provider's payout balance: available now, held orders with the date each is released (7 days after delivery), in transit, paid, and whether payouts are paused and why. Needs the organisation id.",
 		schema: `{"type":"object","properties":{"orgId":{"type":"string"}},"required":["orgId"],"additionalProperties":false}`,
-		label:  func(a map[string]any) string { return "Checking payouts of " + argStr(a, "orgId") },
+		label:  func(map[string]any) string { return "Checking the seller's payouts" },
 		run:    staffToolSellerPayouts,
 	},
 	{
 		name: domain.StaffToolAccountHealth, description: "What Stripe and AfroTransact still need from a seller or provider (Connect account): requirements, deadlines, and whether charges or payouts are off. Needs the organisation id.",
 		schema: `{"type":"object","properties":{"orgId":{"type":"string"}},"required":["orgId"],"additionalProperties":false}`,
-		label:  func(a map[string]any) string { return "Checking account health of " + argStr(a, "orgId") },
+		label:  func(map[string]any) string { return "Checking the seller's account health" },
 		run:    staffToolAccountHealth,
 	},
 	{
 		name: domain.StaffToolSellerBilling, description: "A seller's or provider's plan billing as staff see it: plan, trial or free months, platform credit, charging condition, invoices (paid, unpaid, declined and why) and recent adjustments. Needs the organisation id. Use it for 'why was this seller charged' or 'is their plan fee failing'.",
 		schema: `{"type":"object","properties":{"orgId":{"type":"string"}},"required":["orgId"],"additionalProperties":false}`,
-		label:  func(a map[string]any) string { return "Checking plan billing of " + argStr(a, "orgId") },
+		label:  func(map[string]any) string { return "Checking the seller's plan billing" },
 		run:    staffToolSellerBilling,
 	},
 	{
@@ -230,9 +231,21 @@ var staffTools = []staffToolDef{
 	{
 		name: domain.StaffToolOpenRecord, description: "Offer the member a button that opens a record in the console. Use it for the record you talked about. Nothing is changed.",
 		schema: `{"type":"object","properties":{"resource":{"type":"string","enum":` + resourceSchemaEnum + `},"id":{"type":"string"},"label":{"type":"string","maxLength":80}},"required":["resource","id"],"additionalProperties":false}`,
-		label:  func(a map[string]any) string { return "Preparing a link to " + argStr(a, "id") },
+		label:  func(map[string]any) string { return "Preparing a link to the record" },
 		run:    staffToolOpen,
 	},
+}
+
+// org is a seller's display name ("Unknown seller" when nobody can name it), never its id.
+func (r *staffRun) org(ctx context.Context, id string) string {
+	return r.sc.names.name(ctx, r.sc, sellerRef("orgId"), id)
+}
+
+// relabel makes the step the member sees say which record it is about, by name.
+func (r *staffRun) relabel(label string) {
+	if n := len(r.steps); n > 0 {
+		r.steps[n-1].Label = label
+	}
 }
 
 func (r *staffRun) specs() []port.AssistantTool {
@@ -352,6 +365,7 @@ func staffToolGetRecord(ctx context.Context, r *staffRun, a map[string]any) (any
 	if err != nil {
 		return nil, err
 	}
+	r.relabel("Opening " + d.Title)
 	sections := []map[string]any{}
 	for _, s := range d.Sections {
 		fields := map[string]any{}
@@ -419,13 +433,23 @@ func staffToolSellerPayouts(ctx context.Context, r *staffRun, a map[string]any) 
 	if err := r.sc.get(ctx, r.sc.up.Payments, "/v1/payouts/balance", url.Values{"orgId": {org}}, &bal); err != nil {
 		return nil, mapErr("payments", err)
 	}
+	name := r.org(ctx, org)
+	r.relabel("Checking payouts of " + name)
 	now := r.s.a.Now().UTC()
 	held := []map[string]any{}
+	heldOrders := make([]string, 0, len(bal.OnHold))
 	for i, h := range bal.OnHold {
 		if i >= 10 {
 			break
 		}
-		row := map[string]any{"order": h.OrderID, "amount": moneyLabel(h.AmountMinor)}
+		heldOrders = append(heldOrders, h.OrderID)
+	}
+	orderNumbers := r.sc.names.labels(ctx, r.sc, orderRef("orderId"), heldOrders...)
+	for i, h := range bal.OnHold {
+		if i >= 10 {
+			break
+		}
+		row := map[string]any{"order": orderNumbers[h.OrderID], "amount": moneyLabel(h.AmountMinor)}
 		if t, err := time.Parse(time.RFC3339, h.ReleaseAt); err == nil && h.ReleaseAt != "" {
 			row["releasedOn"] = t.UTC().Format("2006-01-02")
 			row["daysLeft"] = max(0, int(t.Sub(now).Hours()/24+0.999))
@@ -434,7 +458,7 @@ func staffToolSellerPayouts(ctx context.Context, r *staffRun, a map[string]any) 
 		}
 		held = append(held, row)
 	}
-	out := map[string]any{"organisation": org, "available": moneyLabel(bal.AvailableMinor), "onHold": moneyLabel(bal.OnHoldMinor),
+	out := map[string]any{"organisation": name, "available": moneyLabel(bal.AvailableMinor), "onHold": moneyLabel(bal.OnHoldMinor),
 		"inTransit": moneyLabel(bal.RequestedOrInTransitMinor), "paid": moneyLabel(bal.PaidMinor), "minimumPayout": moneyLabel(bal.MinimumPayoutMinor),
 		"heldOrders": held, "heldOrdersTotal": len(bal.OnHold),
 		"rules": "Money is held 7 days after delivery, then becomes available; the seller then requests a payout."}
@@ -462,7 +486,8 @@ func staffToolAccountHealth(ctx context.Context, r *staffRun, a map[string]any) 
 			}
 		}
 	}
-	out := map[string]any{"organisation": org, "title": d.Title, "details": fields}
+	r.relabel("Checking account health of " + d.Title)
+	out := map[string]any{"organisation": r.org(ctx, org), "title": d.Title, "details": fields}
 	if d.Status != nil {
 		out["status"] = *d.Status
 	}
@@ -482,6 +507,8 @@ func staffToolSellerBilling(ctx context.Context, r *staffRun, a map[string]any) 
 	if err := r.sc.get(ctx, r.sc.up.Seller, "/v1/orgs/"+url.PathEscape(org)+"/billing/panel", nil, &panel); err != nil {
 		return nil, mapErr("seller", err)
 	}
+	r.relabel("Checking plan billing of " + r.org(ctx, org))
+	r.sc.names.nameWho(ctx, r.sc, panel)
 	return trimBilling(panel), nil
 }
 
@@ -541,7 +568,7 @@ func staffToolOpen(_ context.Context, r *staffRun, a map[string]any) (any, error
 	if id == "" {
 		return nil, domain.ValidationProblem(map[string]string{"id": "Which record?"})
 	}
-	label := firstNonEmpty(argStr(a, "label"), "Open "+id)
+	label := firstNonEmpty(argStr(a, "label"), "Open the record")
 	if len([]rune(label)) > 80 {
 		label = string([]rune(label)[:80])
 	}

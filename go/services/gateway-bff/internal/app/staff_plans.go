@@ -186,7 +186,21 @@ func (s *staffPlansImpl) Do(ctx context.Context, c *domain.Caller, name string, 
 	if len(out) == 0 {
 		out = json.RawMessage("{}")
 	}
-	return out, nil
+	return s.named(ctx, sc, out), nil
+}
+
+// named puts the names of the people and organisations next to their ids in a relayed document (grants log, billing
+// panel); a document that is not JSON is relayed untouched.
+func (s *staffPlansImpl) named(ctx context.Context, sc staffCtx, raw json.RawMessage) json.RawMessage {
+	var doc any
+	if json.Unmarshal(raw, &doc) != nil {
+		return raw
+	}
+	sc.names.nameWho(ctx, sc, doc)
+	if named, err := json.Marshal(doc); err == nil {
+		return named
+	}
+	return raw
 }
 
 // pageParams checks the grants log's paging (page ≥ 0, 1 ≤ size ≤ 200).

@@ -89,6 +89,17 @@ func (s *staffNotificationsImpl) list(ctx context.Context, sc staffCtx, key stri
 	if err := sc.get(ctx, sc.up.Notifications, "/v1/templates", q, &page); err != nil {
 		return nil, err
 	}
+	// Staff see who saved a version by name, not by identity id.
+	ids := make([]string, 0, len(page.Items))
+	for _, t := range page.Items {
+		ids = append(ids, t.CreatedBy)
+	}
+	who := sc.names.labels(ctx, sc, personRef("createdBy", "Created by"), ids...)
+	for i, t := range page.Items {
+		if n := who[strings.TrimSpace(t.CreatedBy)]; n != "" {
+			page.Items[i].CreatedBy = n
+		}
+	}
 	return page.Items, nil
 }
 
@@ -427,9 +438,7 @@ func (s *staffNotificationsImpl) CreateVersion(ctx context.Context, c *domain.Ca
 	if created.CreatedAt == "" {
 		created.CreatedAt = sc.now.UTC().Format(time.RFC3339)
 	}
-	if created.CreatedBy == "" {
-		created.CreatedBy = sc.me.ID
-	}
+	created.CreatedBy = whoName(ctx, sc, firstNonEmpty(created.CreatedBy, sc.me.ID))
 	return created.version(), nil
 }
 

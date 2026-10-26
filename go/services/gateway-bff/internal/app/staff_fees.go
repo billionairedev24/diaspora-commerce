@@ -224,7 +224,7 @@ func (s *staffFeesImpl) view(p paymentsSchedule, t feeTimeline, now time.Time, l
 	v := domain.FeeScheduleView{ID: p.ID, Version: p.Version, Status: status, EffectiveFrom: p.EffectiveFrom, Currency: firstNonEmpty(p.Currency, domain.Currency),
 		DefaultCommissionBps: p.DefaultCommissionBps, CategoryRates: []domain.FeeCategoryRate{}, Overrides: []domain.FeeOverride{}, CardPctBps: p.CardPctBps,
 		CardFixedMinor: p.CardFixedMinor, FbaPerUnitMinor: p.FbaPerUnitMinor, ReverseCommissionOnRefund: p.ReverseCommissionOnRefund, Note: strPtr(p.Note),
-		CreatedBy: p.CreatedBy, CreatedAt: p.CreatedAt, CancelledAt: p.CancelledAt, CancelledBy: strPtr(p.CancelledBy), CancelReason: strPtr(p.CancelReason),
+		CreatedBy: firstNonEmpty(person(names, p.CreatedBy), p.CreatedBy), CreatedAt: p.CreatedAt, CancelledAt: p.CancelledAt, CancelledBy: strPtr(person(names, p.CancelledBy)), CancelReason: strPtr(p.CancelReason),
 		Cancellable: canConfigure && status == domain.FeeStatusScheduled, PlanRates: domain.PlanRatesOf(p.PlanBps, label), PlanFba: domain.PlanFbaOf(p.PlanFbaMinor)}
 	if cf := p.ConnectionFee; cf != nil {
 		section := &domain.FeeConnectionFee{DefaultBps: cf.DefaultBps, CategoryRates: []domain.FeeRate{}, PlanRates: domain.PlanRatesOf(cf.PlanBps, label)}
@@ -364,39 +364,43 @@ func (s *staffFeesImpl) directory(ctx context.Context, sc staffCtx, stop func([]
 	return out, nil
 }
 
-// orgNames names the organisations that have overrides (best effort: ids stay visible when seller is unavailable).
+// orgNames names the organisations that have overrides, and (under "user:<id>") the people who created or cancelled
+// the versions. An organisation nobody can name reads "Unknown seller", never its id; the bool says every one was named.
 func (s *staffFeesImpl) orgNames(ctx context.Context, sc staffCtx, all []paymentsSchedule) (map[string]string, bool) {
-	want := map[string]bool{}
+	var orgs, people []string
 	for _, p := range all {
 		for _, o := range p.Overrides {
-			want[o.OrgID] = true
+			orgs = append(orgs, o.OrgID)
 		}
 		if p.DeliveryPricing != nil {
 			for _, o := range p.DeliveryPricing.SellerOverrides {
-				want[o.OrgID] = true
+				orgs = append(orgs, o.OrgID)
 			}
 		}
+		people = append(people, p.CreatedBy, p.CancelledBy)
 	}
-	names := map[string]string{}
-	if len(want) == 0 {
-		return names, true
-	}
-	found := func(items []jobj) bool {
-		n := 0
-		for _, it := range items {
-			if want[jstr(it, "id")] {
-				n++
-			}
-		}
-		return n >= len(want)
-	}
-	items, err := s.directory(ctx, sc, found)
-	for _, it := range items {
-		if id := jstr(it, "id"); want[id] {
-			names[id] = firstNonEmpty(jstr(it, "displayName"), id)
+	names := sc.names.labels(ctx, sc, sellerRef("orgId"), orgs...)
+	ok := true
+	for _, n := range names {
+		if n == sellerRef("orgId").unknown {
+			ok = false
 		}
 	}
-	return names, err == nil
+	for id, n := range sc.names.labels(ctx, sc, personRef("createdBy", "Created by"), people...) {
+		names["user:"+id] = n
+	}
+	return names, ok
+}
+
+// person is the display name of a user id the names map holds ("" for none).
+func person(names map[string]string, id string) string { return names["user:"+id] }
+
+// personPtr is person for an optional id.
+func personPtr(names map[string]string, id *string) *string {
+	if id == nil {
+		return nil
+	}
+	return strPtr(firstNonEmpty(person(names, *id), *id))
 }
 
 func (s *staffFeesImpl) SearchOrgs(ctx context.Context, c *domain.Caller, q string) (domain.FeeOrgSearch, error) {

@@ -829,6 +829,43 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("stripe lookup id = %v", made["id"])
 	}
 	do("admin", "GET", "/v1/staff/resources/nope", nil, 404)
+
+	// Names, not ids: the Seller of a product is the organisation's name, search finds the name and the id, and the
+	// sheet keeps the id as a secondary ID field.
+	prods := do("admin", "GET", "/v1/staff/resources/products", nil, 200)
+	sellerKey := ""
+	for _, c := range prods["columns"].([]any) {
+		if c.(map[string]any)["label"] == "Seller" {
+			sellerKey = c.(map[string]any)["key"].(string)
+		}
+	}
+	if sellerKey == "" || sellerKey == "ownerOrgId" || prods["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any)[sellerKey] != "Kente Naturals" {
+		t.Fatalf("products table = %v", prods)
+	}
+	for _, q := range []string{"kente", "org-1"} {
+		if found := do("admin", "GET", "/v1/staff/resources/products?q="+q, nil, 200)["rows"].([]any); len(found) != 1 {
+			t.Fatalf("search %q found %d products, want 1", q, len(found))
+		}
+	}
+	psheet := do("admin", "GET", "/v1/staff/resources/products/prd-1", nil, 200)
+	if !strings.Contains(psheet["subtitle"].(string), "Kente Naturals") || strings.Contains(psheet["subtitle"].(string), "org-1") {
+		t.Fatalf("product subtitle = %v", psheet["subtitle"])
+	}
+	idsShown := false
+	for _, sec := range psheet["sections"].([]any) {
+		for _, f := range sec.(map[string]any)["fields"].([]any) {
+			fm := f.(map[string]any)
+			if fm["value"] == "org-1" {
+				idsShown = sec.(map[string]any)["title"] == "IDs" && fm["label"] == "Seller ID" && fm["kind"] == "mono"
+				if !idsShown {
+					t.Fatalf("the raw id appears outside the IDs section: %v", fm)
+				}
+			}
+		}
+	}
+	if !idsShown {
+		t.Fatalf("no Seller ID field in %v", psheet["sections"])
+	}
 	do("admin", "GET", "/v1/staff/resources/claims?status=NOPE", nil, 422)
 	do("support", "GET", "/v1/staff/resources/users", nil, 403)
 
@@ -1167,7 +1204,7 @@ func TestStaffContractConformance(t *testing.T) {
 	// Notifications → Templates (S268): list, detail with sample, previews, new versions, test-send; edits need templates:write.
 	tl := do("admin", "GET", "/v1/staff/notifications/templates", nil, 200)
 	if items := tl["items"].([]any); len(items) != 2 || tl["canEdit"] != true || items[1].(map[string]any)["key"] != "order.confirmed" ||
-		items[1].(map[string]any)["latestVersion"] != float64(2) || items[1].(map[string]any)["updatedBy"] != "stf-1" ||
+		items[1].(map[string]any)["latestVersion"] != float64(2) || items[1].(map[string]any)["updatedBy"] != "Amara Nwosu" ||
 		fmt.Sprint(items[1].(map[string]any)["channels"]) != "[email sms]" {
 		t.Fatalf("templates = %v", tl)
 	}
@@ -1216,7 +1253,7 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("email needs subject and html = %v", e)
 	}
 	tplCreated := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/versions", tplDraft, 201)
-	if tplCreated["version"] != float64(3) || tplCreated["channel"] != "email" || tplCreated["createdBy"] != "stf-1" {
+	if tplCreated["version"] != float64(3) || tplCreated["channel"] != "email" || tplCreated["createdBy"] != "Amara Nwosu" {
 		t.Fatalf("created = %v", tplCreated)
 	}
 	if b := f.bodies["POST /v1/templates"]; b["key"] != "order.confirmed" || b["subject"] != "Order {{.orderNumber}} is in" {

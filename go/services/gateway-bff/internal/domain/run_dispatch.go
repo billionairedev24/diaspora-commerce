@@ -63,6 +63,7 @@ type RunDispatchRoute struct {
 	Name          string            `json:"name"`
 	Status        string            `json:"status"`
 	DriverID      *string           `json:"driverId"`
+	DriverName    *string           `json:"driverName"`
 	VehicleID     *string           `json:"vehicleId"`
 	Blocked       bool              `json:"blocked"`
 	Packages      int               `json:"packages"`

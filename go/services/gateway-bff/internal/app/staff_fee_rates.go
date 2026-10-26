@@ -114,45 +114,44 @@ func serviceCategories(all []paymentsSchedule) []domain.FeeCategory {
 
 func (s *staffFeesImpl) negotiatedView(n port.NegotiatedRateResponse, names map[string]string, canConfigure bool) domain.NegotiatedRateView {
 	v := domain.NegotiatedRateView{ID: n.ID, OrgID: n.OrgID, Type: n.Type, Category: n.Category, CategoryLabel: domain.FeeCategoryLabel(n.Category),
-		RateBps: n.RateBps, AmountMinor: n.AmountMinor, StartsAt: n.StartsAt, EndsAt: n.EndsAt, Status: n.Status, Reason: n.Reason, NegotiatedBy: n.NegotiatedBy,
-		Reference: n.Reference, CreatedBy: n.CreatedBy, CreatedAt: n.CreatedAt, EndedAt: n.EndedAt, EndedBy: n.EndedBy, EndReason: n.EndReason,
+		RateBps: n.RateBps, AmountMinor: n.AmountMinor, StartsAt: n.StartsAt, EndsAt: n.EndsAt, Status: n.Status, Reason: n.Reason, NegotiatedBy: firstNonEmpty(person(names, n.NegotiatedBy), n.NegotiatedBy),
+		Reference: n.Reference, CreatedBy: firstNonEmpty(person(names, n.CreatedBy), n.CreatedBy), CreatedAt: n.CreatedAt, EndedAt: n.EndedAt, EndedBy: personPtr(names, n.EndedBy), EndReason: n.EndReason,
 		ExpiredAt: n.ExpiredAt, Audit: []domain.NegotiatedRateAuditEntry{},
 		CanEnd: canConfigure && (n.Status == "ACTIVE" || n.Status == "SCHEDULED")}
 	if name, ok := names[n.OrgID]; ok {
 		v.OrgName = &name
 	}
 	for _, a := range n.Audit {
-		v.Audit = append(v.Audit, domain.NegotiatedRateAuditEntry{Action: a.Action, Actor: a.Actor, Reason: a.Reason, At: a.At})
+		v.Audit = append(v.Audit, domain.NegotiatedRateAuditEntry{Action: a.Action, Actor: firstNonEmpty(person(names, a.Actor), a.Actor), Reason: a.Reason, At: a.At})
 	}
 	return v
 }
 
-// namesOf names organisations from seller's directory (best effort: ids stay visible).
+// namesOf names organisations (the shared resolver: "Unknown seller" for one nobody can name, never the id).
 func (s *staffFeesImpl) namesOf(ctx context.Context, sc staffCtx, ids []string) map[string]string {
-	want := map[string]bool{}
-	for _, id := range ids {
-		want[id] = true
-	}
-	names := map[string]string{}
-	if len(want) == 0 {
-		return names
-	}
-	if s.retail != "" && want[s.retail] {
-		names[s.retail] = PlatformSellerName
-	}
-	items, _ := s.directory(ctx, sc, func(items []jobj) bool {
-		n := 0
-		for _, it := range items {
-			if want[jstr(it, "id")] {
-				n++
-			}
+	names := sc.names.labels(ctx, sc, sellerRef("orgId"), ids...)
+	if s.retail != "" {
+		if _, ok := names[s.retail]; ok {
+			names[s.retail] = PlatformSellerName
 		}
-		return n >= len(want)
-	})
-	for _, it := range items {
-		if id := jstr(it, "id"); want[id] {
-			names[id] = firstNonEmpty(jstr(it, "displayName"), id)
+	}
+	return names
+}
+
+// rateNames names the organisations of negotiated rates and, under "user:<id>", the people who agreed, created or ended
+// them.
+func (s *staffFeesImpl) rateNames(ctx context.Context, sc staffCtx, rates []port.NegotiatedRateResponse) map[string]string {
+	var orgs, people []string
+	for _, n := range rates {
+		orgs = append(orgs, n.OrgID)
+		people = append(people, n.NegotiatedBy, n.CreatedBy, deref(n.EndedBy, ""))
+		for _, a := range n.Audit {
+			people = append(people, a.Actor)
 		}
+	}
+	names := s.namesOf(ctx, sc, orgs)
+	for id, n := range sc.names.labels(ctx, sc, personRef("createdBy", "Created by"), people...) {
+		names["user:"+id] = n
 	}
 	return names
 }
@@ -195,11 +194,7 @@ func (s *staffFeesImpl) NegotiatedRates(ctx context.Context, c *domain.Caller, q
 	if err := sc.get(ctx, sc.up.Payments, "/v1/negotiated-rates", query, &list); err != nil {
 		return domain.NegotiatedRatePage{}, err
 	}
-	ids := []string{}
-	for _, n := range list {
-		ids = append(ids, n.OrgID)
-	}
-	names := s.namesOf(ctx, sc, ids)
+	names := s.rateNames(ctx, sc, list)
 	canConfigure := canConfigureFees(sc.access)
 	needle := strings.ToLower(strings.TrimSpace(q.Q))
 	rows := []domain.NegotiatedRateView{}
@@ -252,7 +247,7 @@ func (s *staffFeesImpl) CreateNegotiatedRate(ctx context.Context, c *domain.Call
 	if err := sc.post(ctx, sc.up.Payments, "/v1/negotiated-rates", body, &created); err != nil {
 		return domain.NegotiatedRateView{}, err
 	}
-	return s.negotiatedView(created, s.namesOf(ctx, sc, []string{created.OrgID}), true), nil
+	return s.negotiatedView(created, s.rateNames(ctx, sc, []port.NegotiatedRateResponse{created}), true), nil
 }
 
 func (s *staffFeesImpl) EndNegotiatedRate(ctx context.Context, c *domain.Caller, id, reason string) (domain.NegotiatedRateView, error) {
@@ -271,7 +266,7 @@ func (s *staffFeesImpl) EndNegotiatedRate(ctx context.Context, c *domain.Caller,
 	if err := sc.post(ctx, sc.up.Payments, "/v1/negotiated-rates/"+url.PathEscape(id)+"/end", jobj{"reason": reason}, &ended); err != nil {
 		return domain.NegotiatedRateView{}, err
 	}
-	return s.negotiatedView(ended, s.namesOf(ctx, sc, []string{ended.OrgID}), true), nil
+	return s.negotiatedView(ended, s.rateNames(ctx, sc, []port.NegotiatedRateResponse{ended}), true), nil
 }
 
 // ---------------------------------------------------------------- rate calculator

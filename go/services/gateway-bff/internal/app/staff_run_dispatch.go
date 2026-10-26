@@ -16,11 +16,11 @@ import (
 // moving it by hand need EDIT and delivery:dispatch (and delivery-runs:manage upstream for the move).
 
 const (
-	dispatchRunsPath       = "/v1/dispatch/runs"
-	runsLimit      = "50"
-	deliveryRuns   = "/v1/runs/"
-	runListStates  = "CONFIRMED,COLLECTING,OUT_FOR_DELIVERY,COMPLETED,CANCELLED"
-	runIDMaxLength = 64
+	dispatchRunsPath = "/v1/dispatch/runs"
+	runsLimit        = "50"
+	deliveryRuns     = "/v1/runs/"
+	runListStates    = "CONFIRMED,COLLECTING,OUT_FOR_DELIVERY,COMPLETED,CANCELLED"
+	runIDMaxLength   = 64
 )
 
 // runAdvanceSteps maps the step staff may force to delivery-runs' transition.
@@ -53,6 +53,7 @@ func (s *staffDispatchImpl) Runs(ctx context.Context, c *domain.Caller, status s
 	if err := sc.get(ctx, sc.up.Fulfilment, dispatchRunsPath, q, &up); err != nil {
 		return domain.RunDispatchList{}, err
 	}
+	nameRunDrivers(ctx, sc, up...)
 	states := s.runStates(ctx, sc)
 	can := canManageRuns(sc.access)
 	out := domain.RunDispatchList{Items: []domain.RunDispatch{}, CanManage: can}
@@ -92,6 +93,7 @@ func (s *staffDispatchImpl) PlanRun(ctx context.Context, c *domain.Caller, runID
 	if err := sc.post(ctx, sc.up.Fulfilment, dispatchRunsPath+"/"+url.PathEscape(runID)+"/plan", nil, &up); err != nil {
 		return domain.RunDispatch{}, err
 	}
+	nameRunDrivers(ctx, sc, up)
 	return s.withLifecycle(ctx, sc, runDispatchOf(up, true), runID), nil
 }
 
@@ -130,6 +132,7 @@ func (s *staffDispatchImpl) runDetail(ctx context.Context, sc staffCtx, runID st
 	if err := sc.get(ctx, sc.up.Fulfilment, dispatchRunsPath+"/"+url.PathEscape(runID), nil, &up); err != nil {
 		return domain.RunDispatch{}, err
 	}
+	nameRunDrivers(ctx, sc, up)
 	return s.withLifecycle(ctx, sc, runDispatchOf(up, canManageRuns(sc.access)), runID), nil
 }
 
@@ -177,6 +180,15 @@ func canManageRuns(a domain.StaffAccess) bool {
 }
 
 // runDispatchOf maps fulfilment's run (stops are present on the detail only).
+// nameRunDrivers puts the driver's name on every route of the runs (one lookup per distinct driver).
+func nameRunDrivers(ctx context.Context, sc staffCtx, runs ...jobj) {
+	var routes []jobj
+	for _, r := range runs {
+		routes = append(routes, objs(r, "routes")...)
+	}
+	nameAll(ctx, sc, routes, driverRef("driverId"))
+}
+
 func runDispatchOf(o jobj, canManage bool) domain.RunDispatch {
 	run := domain.RunDispatch{RunID: jstr(o, "runId"), Town: jstr(o, "town"), State: jstr(o, "state"), TimeZone: jstr(o, "timeZone"),
 		ServiceDate: jstr(o, "serviceDate"), WindowStart: timeOf(o, "windowStart"), WindowEnd: timeOf(o, "windowEnd"),
@@ -194,7 +206,7 @@ func runDispatchOf(o jobj, canManage bool) domain.RunDispatch {
 	}
 	for _, r := range objs(o, "routes") {
 		route := domain.RunDispatchRoute{ID: jstr(r, "id"), Name: jstr(r, "name"), Status: strings.ToUpper(jstr(r, "status")),
-			DriverID: strPtr(jstr(r, "driverId")), VehicleID: strPtr(jstr(r, "vehicleId")), Blocked: boolean(r, "blocked"),
+			DriverID: strPtr(jstr(r, "driverId")), DriverName: strPtr(jstr(r, "driverName")), VehicleID: strPtr(jstr(r, "vehicleId")), Blocked: boolean(r, "blocked"),
 			Packages: int(num(r, "packages")), BagsCollected: int(num(r, "bagsCollected")), BagsDelivered: int(num(r, "bagsDelivered")),
 			PickupStops: int(num(r, "pickupStops")), PickupsDone: int(num(r, "pickupsDone")), DropStops: int(num(r, "dropStops")),
 			DropsDone: int(num(r, "dropsDone")), DropsFailed: int(num(r, "dropsFailed")), Stops: []domain.RunDispatchStop{}}

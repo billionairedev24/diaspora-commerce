@@ -5145,12 +5145,13 @@ components:
         lastDeliveredAt: {type: [string, 'null'], format: date-time}
     RunDispatchRoute:
       type: object
-      required: [id, name, status, driverId, vehicleId, blocked, packages, bagsCollected, bagsDelivered, pickupStops, pickupsDone, dropStops, dropsDone, dropsFailed, stops]
+      required: [id, name, status, driverId, driverName, vehicleId, blocked, packages, bagsCollected, bagsDelivered, pickupStops, pickupsDone, dropStops, dropsDone, dropsFailed, stops]
       properties:
         id: {type: string}
         name: {type: string}
         status: {type: string, enum: [PLANNED, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED]}
         driverId: {type: [string, 'null']}
+        driverName: {type: [string, 'null'], description: 'The driver''s name (Unknown driver when identity cannot name them); null without a driver'}
         vehicleId: {type: [string, 'null']}
         blocked: {type: boolean}
         packages: {type: integer}
@@ -6952,9 +6953,10 @@ components:
         canAssign: {type: boolean, description: delivery:dispatch and EDIT on dispatch}
     DriverSuggestion:
       type: object
-      required: [driverId, routeId, routeName, zone, routeStatus, straightLineMiles, roadMiles, durationMinutes, distanceMethod, positionAt, packagesOnRoute, capacityLeft]
+      required: [driverId, driverName, routeId, routeName, zone, routeStatus, straightLineMiles, roadMiles, durationMinutes, distanceMethod, positionAt, packagesOnRoute, capacityLeft]
       properties:
         driverId: {type: string}
+        driverName: {type: string, description: 'The driver''s name (Unknown driver when identity cannot name them)'}
         routeId: {type: string}
         routeName: {type: string}
         zone: {type: string}
@@ -6981,28 +6983,31 @@ components:
         reason: {type: string, minLength: 5, maxLength: 500}
     PickupAssignResult:
       type: object
-      required: [shipmentId, routeId, routeName, driverId, status]
+      required: [shipmentId, routeId, routeName, driverId, driverName, status]
       properties:
         shipmentId: {type: string}
         routeId: {type: string}
         routeName: {type: [string, 'null']}
         driverId: {type: [string, 'null']}
+        driverName: {type: [string, 'null']}
         status: {type: string, description: The route's status}
     PickupAssignment:
       type: object
-      required: [id, shipmentId, routeId, driverId, mode, reason, previousRouteId, straightMiles, roadMiles, distanceMethod, actor, createdAt]
+      required: [id, shipmentId, routeId, routeName, driverId, driverName, mode, reason, previousRouteId, straightMiles, roadMiles, distanceMethod, actor, createdAt]
       properties:
         id: {type: string}
         shipmentId: {type: string}
         routeId: {type: string}
+        routeName: {type: [string, 'null']}
         driverId: {type: [string, 'null']}
+        driverName: {type: [string, 'null']}
         mode: {type: string, enum: [AUTO_NEAREST, DISPATCH_OVERRIDE]}
         reason: {type: [string, 'null']}
         previousRouteId: {type: [string, 'null']}
         straightMiles: {type: [number, 'null']}
         roadMiles: {type: [number, 'null']}
         distanceMethod: {type: [string, 'null']}
-        actor: {type: [string, 'null']}
+        actor: {type: [string, 'null'], description: 'Who assigned it, by name (System for the automatic assignment)'}
         createdAt: {type: [string, 'null'], format: date-time}
     PickupAssignmentList:
       type: object

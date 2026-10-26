@@ -141,6 +141,7 @@ func (s *staffPreordersImpl) need(ctx context.Context, c *domain.Caller, ability
 		return sc, domain.PreorderCan{}, err
 	}
 	can := domain.PreorderPermissions(sc.access)
+	sc.nameWho = true
 	switch ability {
 	case poManage:
 		if !can.Manage {

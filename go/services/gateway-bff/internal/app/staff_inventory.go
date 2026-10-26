@@ -239,6 +239,7 @@ func (s *staffInventoryImpl) prepare(ctx context.Context, c *domain.Caller, r Op
 	if err != nil {
 		return sc, rt, port.StaffCall{}, nil, err
 	}
+	sc.nameWho = true
 	up := sc.up.Inventory
 	if r.Area == areaRetail {
 		up = sc.up.Retail
