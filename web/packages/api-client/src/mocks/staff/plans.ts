@@ -182,8 +182,8 @@ export function seedPlans(now: Date): MockPlansState {
       conditionLabel: 'less than $1,000 in sales in the first 30 days of the subscription', createdBy: 'Amaka Eze', createdAt: iso(-20), updatedBy: null, updatedAt: null, version: 0
     }],
     grants: [{
-      id: 'gr_seed1', orgId: 'org-ades-kitchen', source: 'RULE', ruleId: 'rr_sales', type: 'FREE_DAYS', creditCents: null, freeDays: 30, freeMonths: null, percentOff: null, durationInvoices: null, remainingInvoices: null, gateMode: null,
-      invoiceId: null, status: 'APPLIED', reasonCode: null, note: null, summary: '30 days free', actorId: 'system', metric: 'GROSS_SALES', metricValue: 104500,
+      id: 'gr_seed1', orgId: 'org-ades-kitchen', orgName: "Ade's Kitchen", source: 'RULE', ruleId: 'rr_sales', type: 'FREE_DAYS', creditCents: null, freeDays: 30, freeMonths: null, percentOff: null, durationInvoices: null, remainingInvoices: null, gateMode: null,
+      invoiceId: null, status: 'APPLIED', reasonCode: null, note: null, summary: '30 days free', actorId: 'system', actorName: 'System', metric: 'GROSS_SALES', metricValue: 104500,
       reference: null, previousTrialEnd: null, newTrialEnd: iso(50),
       attempts: 1, lastError: null, createdAt: iso(-3), appliedAt: iso(-3)
     }],
@@ -195,7 +195,7 @@ export function seedPlans(now: Date): MockPlansState {
       org('org-mama-put', 'Mama Put', 'SELLER', 'seller_growth', 'trialing', facts(32000, 6, 5, 0, 18), [])
     ],
     keys: {},
-    settings: { earningsCollectionEnabled: true, planFeeCollectionDefault: 'CARD', updatedBy: 'system', updatedAt: iso(-60) },
+    settings: { earningsCollectionEnabled: true, planFeeCollectionDefault: 'CARD', updatedBy: 'System', updatedAt: iso(-60) },
     seq: 1
   };
 }
@@ -306,7 +306,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
     const day = new Date(o.trialEndsAt ?? o.periodEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     return {
       orgId: o.orgId, available: on, mode: o.planFeeCollection, effective: on ? o.planFeeCollection : 'CARD', source: o.planFeeSource,
-      changedAt: o.planFeeHistory[0]?.createdAt ?? null, changedBy: o.planFeeHistory[0]?.actorId ?? null, platformDefault: st(ctx).settings.planFeeCollectionDefault,
+      changedAt: o.planFeeHistory[0]?.createdAt ?? null, changedBy: o.planFeeHistory[0]?.actorName ?? null, platformDefault: st(ctx).settings.planFeeCollectionDefault,
       appliesFromInvoiceAt: o.trialEndsAt ?? o.periodEnd, appliesFromLabel: `Applies from your next invoice, on ${day}`, inProgressInvoiceId: null, history: o.planFeeHistory
     };
   };
@@ -322,8 +322,8 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
     if (b.reasonCode === 'OTHER' && !b.note?.trim()) throw invalid({ note: 'Say why when the reason is Other' });
     apply();
     const g: StaffBillingGrant = {
-      id: id(ctx, 'gr'), orgId: o.orgId, source: 'MANUAL', ruleId: null, type, creditCents: null, freeDays: null, freeMonths: null, percentOff: null, durationInvoices: null, remainingInvoices: null, gateMode: null, invoiceId: null,
-      status: 'APPLIED', reasonCode: b.reasonCode, note: b.note ?? null, summary, actorId: ctx.action.actorId, metric: null, metricValue: null,
+      id: id(ctx, 'gr'), orgId: o.orgId, orgName: o.name, source: 'MANUAL', ruleId: null, type, creditCents: null, freeDays: null, freeMonths: null, percentOff: null, durationInvoices: null, remainingInvoices: null, gateMode: null, invoiceId: null,
+      status: 'APPLIED', reasonCode: b.reasonCode, note: b.note ?? null, summary, actorId: ctx.action.actorId, actorName: ctx.action.actor, metric: null, metricValue: null,
       reference: null, previousTrialEnd: null, newTrialEnd: null, attempts: 1, lastError: null,
       createdAt: ctx.now.toISOString(), appliedAt: ctx.now.toISOString(), ...extra
     };
@@ -453,7 +453,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       const b = await json(ctx.request, CampaignBody);
       if (b.expectedVersion != null && b.expectedVersion !== c.version) throw problem(409, 'CONFLICT', 'Changed by someone else', 'Refresh to see the latest.');
       Object.assign(c, { name: b.name, promoCode: b.promoCode?.trim().toUpperCase() || null, trialDays: b.trialDays, signupFrom: b.signupFrom ?? null, signupTo: b.signupTo ?? null,
-        kind: b.kind ?? null, eligiblePlans: b.eligiblePlans, maxRedemptions: b.maxRedemptions ?? null, updatedBy: ctx.action.actorId, updatedAt: ctx.now.toISOString(), version: c.version + 1 });
+        kind: b.kind ?? null, eligiblePlans: b.eligiblePlans, maxRedemptions: b.maxRedemptions ?? null, updatedBy: ctx.action.actor, updatedAt: ctx.now.toISOString(), version: c.version + 1 });
       return c;
     })),
     http.post(`${B}/trial-campaigns/:id/status`, route(async (ctx, p) => {
@@ -610,7 +610,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
       if (!st(ctx).settings.earningsCollectionEnabled) {
         throw problem(409, 'seller.earnings-collection-off', 'Paying plans from sales is off', 'Paying plans from sales is switched off on this platform; plan fees are charged to the card.');
       }
-      o.planFeeHistory.unshift({ id: id(ctx, 'pfc'), previous: o.planFeeCollection, mode: b.mode, source: 'STAFF', actorId: ctx.action.actorId, reasonCode: b.reasonCode,
+      o.planFeeHistory.unshift({ id: id(ctx, 'pfc'), previous: o.planFeeCollection, mode: b.mode, source: 'STAFF', actorId: ctx.action.actorId, actorName: ctx.action.actor, reasonCode: b.reasonCode,
         note: b.note?.trim() || null, appliesFrom: o.trialEndsAt ?? o.periodEnd, createdAt: ctx.now.toISOString() });
       Object.assign(o, { planFeeCollection: b.mode, planFeeSource: 'STAFF' });
       audit(ctx, 'billing.plan-fee-collection', o.orgId, `${o.name}: plan fees ${b.mode === 'CARD' ? 'charged to the card' : 'paid from sales first'} (${b.reasonCode})`);
@@ -620,7 +620,7 @@ export function planHandlers(W: string, deps: PreorderHandlerDeps) {
     http.put(`${B}/settings`, route(async (ctx) => {
       need(ctx, 'plans:manage');
       const b = await json(ctx.request.clone(), z.object({ planFeeCollectionDefault: z.enum(['EARNINGS_FIRST', 'CARD'], 'EARNINGS_FIRST or CARD') }));
-      Object.assign(st(ctx).settings, { planFeeCollectionDefault: b.planFeeCollectionDefault, updatedBy: ctx.action.actorId, updatedAt: ctx.now.toISOString() });
+      Object.assign(st(ctx).settings, { planFeeCollectionDefault: b.planFeeCollectionDefault, updatedBy: ctx.action.actor, updatedAt: ctx.now.toISOString() });
       audit(ctx, 'billing.settings', 'plan-fee-collection-default', `New sellers: plan fees ${b.planFeeCollectionDefault === 'CARD' ? 'charged to the card' : 'paid from sales first'}`);
       return st(ctx).settings;
     }))

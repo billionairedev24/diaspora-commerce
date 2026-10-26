@@ -21,11 +21,11 @@ describe('Lola in the staff console', () => {
     const user = userEvent.setup();
     await renderScreen(<StaffLolaSheet open onOpenChange={() => undefined} />);
     expect(await screen.findByText(/messages left today/)).toBeInTheDocument();
-    await user.type(screen.getByLabelText('Ask Lola about the platform…'), 'Why has org-9 not been paid?');
+    await user.type(screen.getByLabelText('Ask Lola about the platform…'), 'Why has Kente Naturals not been paid?');
     await user.click(screen.getByRole('button', { name: 'Send' }));
     expect(await screen.findByText(/Payouts are paused: Stripe needs overdue information/)).toBeInTheDocument();
-    expect(screen.getByText(/Checking payouts of org-9/)).toBeInTheDocument();
-    const open = screen.getByRole('link', { name: 'Open org-9 Stripe account' });
+    expect(screen.getByText(/Checking payouts of Kente Naturals/)).toBeInTheDocument();
+    const open = screen.getByRole('link', { name: 'Open Kente Naturals Stripe account' });
     expect(open.getAttribute('href')).toContain('open=org-9');
     await waitFor(() => expect(screen.getByTestId('lola-remaining')).toHaveTextContent('199 of 200'));
   });

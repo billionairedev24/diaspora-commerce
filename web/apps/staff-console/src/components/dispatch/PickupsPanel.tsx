@@ -15,6 +15,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, shortDate } from '@/lib/format';
+import { driverName, routeName } from '@/lib/names';
 import { exportDataset } from '@/lib/table-export';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold text-muted';
@@ -91,11 +92,11 @@ function Suggestions({ shipmentId, onAssigned }: { shipmentId: string; onAssigne
                         checked={routeId === d.routeId}
                         disabled={!sug.data.canAssign}
                         onChange={() => setRouteId(d.routeId)}
-                        aria-label={t('st.pickups.chooseRoute', { route: d.routeName, driver: d.driverId })}
+                        aria-label={t('st.pickups.chooseRoute', { route: d.routeName, driver: driverName(t, d.driverName) })}
                       />
                     </td>
                     <td className={`${td} font-semibold`}>{i + 1}</td>
-                    <td className={td}>{d.driverId}</td>
+                    <td className={td}>{driverName(t, d.driverName)}</td>
                     <td className={td}>
                       {d.routeName}
                       <span className="block text-xs text-muted">
@@ -152,11 +153,11 @@ function Suggestions({ shipmentId, onAssigned }: { shipmentId: string; onAssigne
               {history.data.items.map((a: PickupAssignment) => (
                 <li key={a.id} className="rounded-md border border-border p-3 text-sm" data-testid="pickup-assignment">
                   <StatusPill tone={a.mode === 'AUTO_NEAREST' ? 'info' : 'warn'}>{a.mode === 'AUTO_NEAREST' ? t('st.pickups.auto') : t('st.pickups.override')}</StatusPill>{' '}
-                  <strong>{a.routeId}</strong> {a.driverId ? `· ${a.driverId}` : ''}
+                  <strong>{routeName(t, a.routeName)}</strong> {a.driverId ? `· ${driverName(t, a.driverName)}` : ''}
                   {a.roadMiles !== null || a.straightMiles !== null ? (
                     <span className="text-muted"> · {distance(t, { roadMiles: a.roadMiles, straightLineMiles: a.straightMiles ?? 0, durationMinutes: null })}</span>
                   ) : null}
-                  {a.previousRouteId ? <span className="text-muted"> · {t('st.pickups.previous', { route: a.previousRouteId })}</span> : null}
+                  {a.previousRouteId ? <span className="text-muted"> · {t('st.pickups.previous', { route: routeName(t, a.previousRouteName) })}</span> : null}
                   {a.reason ? <span className="block">{t('st.pickups.because', { reason: a.reason })}</span> : null}
                   <span className="block text-xs text-muted">
                     {a.actor ?? '—'} · {dateTime(a.createdAt)}
@@ -192,7 +193,6 @@ export function PickupsPanel() {
         cell: ({ row }) => (
           <span className="font-semibold">
             {row.original.orderNumber}
-            <span className="block text-xs font-normal text-muted">{row.original.shipmentId}</span>
           </span>
         )
       },

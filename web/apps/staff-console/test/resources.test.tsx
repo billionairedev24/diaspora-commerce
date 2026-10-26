@@ -24,7 +24,8 @@ describe('server-driven tables and detail sheets', () => {
     await renderScreen(<ResourceTable resource="payouts" />);
     const table = await screen.findByRole('table', { name: 'Payout requests' });
     // A row click opens the sheet (the checkbox never does).
-    await user.click(await within(table).findByText('pay-700'));
+    // The first request is by Ada Obi; the table shows who asked, not the request's internal id.
+    await user.click((await within(table).findAllByText('Ada Obi'))[0]!);
     expect(nav.search).toBe('open=pay-700');
     const approve = await screen.findByRole('button', { name: 'Approve & pay' });
     await user.click(approve);
@@ -95,5 +96,37 @@ describe('tables that share a tab and ?open=', () => {
     expect(sheet).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument());
     expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+});
+
+describe('names instead of ids', () => {
+  beforeEach(() => {
+    resetStaffDb(new Date());
+    asRoles('platform.operations_manager');
+  });
+
+  it('shows the driver and route of an SOS alert by name, never by id', async () => {
+    nav.set('/dispatch');
+    await renderScreen(<ResourceTable resource="sos-alerts" />);
+    const table = await screen.findByRole('table', { name: 'SOS alerts' });
+    expect(await within(table).findByText('Tunde Adeyemi')).toBeInTheDocument();
+    expect(within(table).getByText('HOU West AM')).toBeInTheDocument();
+    expect(table).not.toHaveTextContent('drv-1');
+    expect(table).not.toHaveTextContent('rte-1000');
+  });
+
+  it('keeps the ids in the sheet as copyable ID fields', async () => {
+    const user = userEvent.setup();
+    nav.set('/dispatch?open=sos-1');
+    await renderScreen(<ResourceTable resource="sos-alerts" />);
+    const ids = await screen.findByRole('region', { name: 'IDs' });
+    expect(within(ids).getByText('Driver ID')).toBeInTheDocument();
+    expect(within(ids).getByText('drv-1')).toBeInTheDocument();
+    // Nothing outside the IDs section shows the raw id.
+    const sheet = ids.closest('[role="dialog"]') ?? document.body;
+    expect(within(sheet as HTMLElement).getAllByText('drv-1')).toHaveLength(1);
+    await user.click(within(ids).getByRole('button', { name: 'Copy Driver ID' }));
+    expect(await navigator.clipboard.readText()).toBe('drv-1');
+    expect(within(ids).getByRole('button', { name: 'Copied' })).toBeInTheDocument();
   });
 });

@@ -125,6 +125,7 @@ function seed(now: Date): MockStaffDb {
         status,
         reviewStep: status === 'AWAITING_FINAL_APPROVAL' ? 2 : 1,
         reviewerId: status === 'AWAITING_FINAL_APPROVAL' ? 'stf-2' : null,
+        reviewerName: status === 'AWAITING_FINAL_APPROVAL' ? 'Sara Tesfaye' : null,
         failedChecks: status === 'FLAGGED' ? 'TIN_MISMATCH' : null,
         taxIdMasked: `***-**-${String(1000 + i * 37).slice(-4)}`,
         contactEmail: `owner${i}@example.com`,
@@ -239,7 +240,7 @@ function seed(now: Date): MockStaffDb {
       currency: 'USD',
       status: (['REQUESTED', 'REQUESTED', 'ON_HOLD', 'APPROVED', 'PAID', 'PAID', 'PAID', 'FAILED', 'REQUESTED', 'PAID'] as const)[i] ?? 'PAID',
       holdReason: i === 2 ? 'Stripe requirement past due' : null,
-      requestedBy: 'Owner',
+      requestedBy: ['Ada Obi', 'Kofi Mensah', 'Zainab Bello'][i % 3] ?? 'Ada Obi',
       requestedAt: ago(i * 2)
     })
   );
@@ -314,15 +315,15 @@ function seed(now: Date): MockStaffDb {
     })
   );
   const sosAlerts = [
-    rec('sos-1', { kind: 'Breakdown', driverId: 'drv-1', routeId: 'rte-1000', where: '29.70510, -95.55120', note: 'Flat tyre on Bellaire Blvd', raisedAt: ago(0, 1), status: 'ALERT' }),
-    rec('sos-2', { kind: 'Unsafe', driverId: 'drv-2', routeId: 'rte-1001', where: '29.61980, -95.63540', note: 'Aggressive dog at stop 4', raisedAt: ago(0, 3), status: 'ACKNOWLEDGED' })
+    rec('sos-1', { kind: 'Breakdown', driverId: 'drv-1', driverName: 'Tunde Adeyemi', routeId: 'rte-1000', routeName: 'HOU West AM', where: '29.70510, -95.55120', note: 'Flat tyre on Bellaire Blvd', raisedAt: ago(0, 1), status: 'ALERT' }),
+    rec('sos-2', { kind: 'Unsafe', driverId: 'drv-2', driverName: 'Chinedu Okafor', routeId: 'rte-1001', routeName: 'HOU Southwest PM', where: '29.61980, -95.63540', note: 'Aggressive dog at stop 4', raisedAt: ago(0, 3), status: 'ACKNOWLEDGED' })
   ];
   const vehicleDefects = [
-    rec('def-1', { vehicleId: 'VAN-12', driverId: 'drv-2', routeId: 'rte-1002', failed: 'Brakes', note: 'Soft brake pedal at pre-trip', reportedAt: ago(0, 2), status: 'BLOCKED' }),
-    rec('def-2', { vehicleId: 'VAN-14', driverId: 'drv-1', routeId: 'rte-1003', failed: 'Wipers', note: 'Passenger wiper torn', reportedAt: ago(1), status: 'OPEN' })
+    rec('def-1', { vehicleId: 'VAN-12', driverId: 'drv-2', driverName: 'Chinedu Okafor', routeId: 'rte-1002', routeName: 'HOU Central AM', failed: 'Brakes', note: 'Soft brake pedal at pre-trip', reportedAt: ago(0, 2), status: 'BLOCKED' }),
+    rec('def-2', { vehicleId: 'VAN-14', driverId: 'drv-1', driverName: 'Tunde Adeyemi', routeId: 'rte-1003', routeName: 'HOU North PM', failed: 'Wipers', note: 'Passenger wiper torn', reportedAt: ago(1), status: 'OPEN' })
   ];
   const driverEvents = ['session signed in', 'inspection submitted', 'loadout completed', 'route started', 'stop arrived', 'delivery completed', 'delivery problem', 'pickup confirmed'].map((type, i) =>
-    rec(`ev-${100 + i}`, { capturedAt: ago(0, 8 - i), type: type.charAt(0).toUpperCase() + type.slice(1), driverId: i % 2 ? 'drv-2' : 'drv-1', routeId: `rte-${1000 + (i % 2)}`, stopId: i > 3 ? `st-${i}` : null, message: type === 'delivery problem' ? 'Customer not home: left a card' : null, outcome: type === 'delivery problem' ? 'REJECTED' : 'APPLIED' })
+    rec(`ev-${100 + i}`, { capturedAt: ago(0, 8 - i), type: type.charAt(0).toUpperCase() + type.slice(1), driverId: i % 2 ? 'drv-2' : 'drv-1', driverName: i % 2 ? 'Chinedu Okafor' : 'Tunde Adeyemi', routeId: `rte-${1000 + (i % 2)}`, routeName: i % 2 ? 'HOU Southwest PM' : 'HOU West AM', stopId: i > 3 ? `st-${i}` : null, stopName: i > 3 ? `Stop ${i} · Bellaire Blvd` : null, message: type === 'delivery problem' ? 'Customer not home: left a card' : null, outcome: type === 'delivery problem' ? 'REJECTED' : 'APPLIED' })
   );
 
   const supportCases = Array.from({ length: 6 }, (_, i) => {

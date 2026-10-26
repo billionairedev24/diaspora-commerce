@@ -85,7 +85,7 @@ export function LotSheet({ id, onClose }: { id: string | null; onClose: () => vo
               ['SKU', lot.sku],
               ['Batch / lot', lot.lotNo],
               ['Fulfilment centre · bin', `${lot.nodeId} · ${lot.bin ?? '—'}`],
-              ['Owner', lot.ownerOrg ?? '—'],
+              ['Owner', lot.ownerOrgName ?? '—'],
               ['On hand · reserved · available', `${lot.qtyOnHand} · ${lot.qtyReserved} · ${lot.qtyAvailable}`],
               ['Made', shortDate(lot.mfgDate)],
               ['Expires', shortDate(lot.expDate)],
@@ -181,7 +181,7 @@ export function LotSheet({ id, onClose }: { id: string | null; onClose: () => vo
               <h3 className="m-0 text-sm font-bold">Orders holding or shipped from this lot</h3>
               {trace.data.orders.map((o) => (
                 <span key={o.orderId}>
-                  {o.orderId} · {o.qty ?? ''} units · {o.status ?? ''}
+                  {o.orderNumber ?? ''} · {o.qty ?? ''} units · {o.status ?? ''}
                 </span>
               ))}
             </section>

@@ -74,7 +74,7 @@ export function formFrom(base: FeeScheduleView | null, overview: Pick<FeesOvervi
     immediate: false,
     defaultCommission: bpsToPercentText(base?.defaultCommissionBps ?? 1000),
     categories: (base?.categoryRates ?? []).map((c) => ({ rowId: rowId(), category: c.category, rate: bpsToPercentText(c.commissionBps) })),
-    overrides: (base?.overrides ?? []).map((o) => ({ rowId: rowId(), orgId: o.orgId, orgName: o.orgName ?? o.orgId, category: o.category ?? '', rate: bpsToPercentText(o.commissionBps) })),
+    overrides: (base?.overrides ?? []).map((o) => ({ rowId: rowId(), orgId: o.orgId, orgName: o.orgName ?? '', category: o.category ?? '', rate: bpsToPercentText(o.commissionBps) })),
     cardPct: bpsToPercentText(base?.cardPctBps ?? 290),
     cardFixed: dollarsText(base?.cardFixedMinor ?? 30),
     fbaPerUnit: dollarsText(base?.fbaPerUnitMinor ?? 325),

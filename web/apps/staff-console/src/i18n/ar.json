@@ -1282,5 +1282,11 @@
   "st.runs.adv.problem.required": "هذا الحقل مطلوب.",
   "st.runs.adv.problem.tooLong": "بحد أقصى {max} حرفًا.",
   "st.runs.adv.problem.range": "خارج النطاق المسموح.",
-  "st.runs.adv.problem.order": "يجب أن تكون النهاية بعد البداية."
+  "st.runs.adv.problem.order": "يجب أن تكون النهاية بعد البداية.",
+  "st.names.unknownSeller": "بائع غير معروف",
+  "st.names.unknownUser": "مستخدم غير معروف",
+  "st.names.unknownDriver": "سائق غير معروف",
+  "st.sheet.copyId": "نسخ {label}",
+  "st.sheet.copied": "تم النسخ",
+  "st.names.unknownRoute": "مسار غير معروف"
 }

@@ -1275,5 +1275,11 @@
   "st.runs.adv.problem.required": "This is required.",
   "st.runs.adv.problem.tooLong": "Keep it to {max} characters or fewer.",
   "st.runs.adv.problem.range": "This is outside the allowed range.",
-  "st.runs.adv.problem.order": "The end must be after the start."
+  "st.runs.adv.problem.order": "The end must be after the start.",
+  "st.names.unknownSeller": "Unknown seller",
+  "st.names.unknownUser": "Unknown user",
+  "st.names.unknownDriver": "Unknown driver",
+  "st.sheet.copyId": "Copy {label}",
+  "st.sheet.copied": "Copied",
+  "st.names.unknownRoute": "Unknown route"
 }

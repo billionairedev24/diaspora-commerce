@@ -14,6 +14,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, humanize, money } from '@/lib/format';
+import { sellerName } from '@/lib/names';
 
 import { centsOf, dollarsOf, errorsOf, intOf, plansApi, STATUS_TONE, type T, usePlanRights } from './kit';
 
@@ -298,7 +299,7 @@ function MigrationDialog({ plan, onClose, t }: { plan: StaffPlan | null; onClose
               <thead><tr className="text-left text-xs text-muted"><th>{t('st.plans.col.org')}</th><th>{t('st.plans.col.version')}</th><th>{t('st.plans.col.from')}</th><th>{t('st.plans.col.to')}</th><th>{t('st.plans.col.effective')}</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.orgId}><td>{r.orgName ?? r.orgId}</td><td>v{r.fromVersion}</td><td>{money(r.fromCents)}</td><td>{money(r.toCents)}</td><td>{dateTime(r.effectiveAt)}</td></tr>
+                  <tr key={r.orgId}><td>{sellerName(t, r.orgName)}</td><td>v{r.fromVersion}</td><td>{money(r.fromCents)}</td><td>{money(r.toCents)}</td><td>{dateTime(r.effectiveAt)}</td></tr>
                 ))}
               </tbody>
             </table>

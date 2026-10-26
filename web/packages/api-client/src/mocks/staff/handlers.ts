@@ -198,7 +198,9 @@ const display = (v: Scalar): string => (v === null ? '—' : typeof v === 'boole
 const rowOf = (resource: ResourceKey, r: MockRecord) => ({
   id: r.id,
   record: r,
-  cells: Object.fromEntries(RESOURCES[resource].columns.map((c) => [c.key, c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null)]))
+  cells: Object.fromEntries(RESOURCES[resource].columns.map((c) => [c.key, c.key === 'id' ? r.id : cellOf(r.fields[c.key] ?? null)])),
+  // The ids behind the names stay searchable though the table does not show them.
+  search: Object.keys(RESOURCES[resource].ids ?? {}).flatMap((k) => (r.fields[k] ? [String(r.fields[k])] : []))
 });
 
 /** One search over every column the table shows, then the sort (or the resource's default order), as the BFF does. */
@@ -229,13 +231,19 @@ function actionView(ctx: Ctx, resource: ResourceKey, r: MockRecord, a: MockActio
 function detail(ctx: Ctx, resource: ResourceKey, r: MockRecord): RecordDetail {
   const def = RESOURCES[resource];
   const keys = Object.keys(r.fields);
-  const grouped = def.sections ?? [['Details', keys]];
+  // Ids of people and organisations are not part of the sheet's body: the name is, and the id sits apart under "IDs".
+  const idLabels = def.ids ?? {};
+  const grouped = def.sections ?? [['Details', keys.filter((k) => !(k in idLabels))]];
   const used = new Set(grouped.flatMap(([, ks]) => ks));
-  const rest = keys.filter((k) => !used.has(k));
+  const rest = keys.filter((k) => !used.has(k) && !(k in idLabels));
   const sections = [...grouped, ...(def.sections && rest.length ? ([['More', rest]] as [string, string[]][]) : [])].map(([title, ks]) => ({
     title,
     fields: ks.filter((k) => k in r.fields).map((k) => ({ label: humanize(k), value: display(r.fields[k] ?? null), kind: detailKind(k, def.statusKey) }))
   }));
+  const idFields = Object.entries(idLabels)
+    .filter(([k]) => r.fields[k])
+    .map(([k, label]) => ({ label: `${label} ID`, value: String(r.fields[k]), kind: 'mono' as const }));
+  if (idFields.length) sections.push({ title: 'IDs', fields: idFields });
   const status = def.statusKey ? (r.fields[def.statusKey] as string | null) ?? null : null;
   const canEdit = !!def.edit && ctx.permissions.includes(def.edit.permission) && allows(ctx.roles, RESOURCE_MODULE[resource], 'EDIT');
   return {
@@ -566,7 +574,7 @@ function createTemplateVersion(ctx: Ctx, key: string, b: z.infer<typeof VersionB
   }
   const version = Math.max(0, ...templateRows(ctx, key).filter((x) => x.locale === b.locale && x.channel === b.channel).map((x) => x.version)) + 1;
   const row: MockTemplateRow = { key, locale: b.locale, channel: b.channel, version, category: b.category, subject: b.subject, bodyHtml: b.bodyHtml,
-    bodyText: b.bodyText, createdBy: ctx.db.user.id, createdAt: ctx.now.toISOString() };
+    bodyText: b.bodyText, createdBy: ctx.action.actor, createdAt: ctx.now.toISOString() };
   ctx.db.templates.rows.push(row);
   audit(ctx, 'notifications.template.version_created', key, `Created ${key} ${b.channel} ${b.locale} v${version}`);
   const { key: _key, ...out } = row;
@@ -699,9 +707,9 @@ export const staffHandlers = [
       const status = assistantStatus(ctx, used);
       if (text.includes('paid') || text.includes('payout')) {
         return {
-          answer: 'Org-9 has $780.00 on hold. AT-2026-000777 ($700.00) is released on 2030-01-05; AT-2026-000778 ($80.00) is not delivered yet. Payouts are paused: Stripe needs overdue information.',
-          steps: [{ tool: 'seller_payouts', label: 'Checking payouts of org-9' }, { tool: 'seller_account_health', label: 'Checking account health of org-9' }],
-          links: [{ label: 'Open org-9 Stripe account', resource: 'connect-accounts', id: 'org-9' }],
+          answer: 'Kente Naturals has $780.00 on hold. AT-2026-000777 ($700.00) is released on 2030-01-05; AT-2026-000778 ($80.00) is not delivered yet. Payouts are paused: Stripe needs overdue information.',
+          steps: [{ tool: 'seller_payouts', label: 'Checking payouts of Kente Naturals' }, { tool: 'seller_account_health', label: 'Checking account health of Kente Naturals' }],
+          links: [{ label: 'Open Kente Naturals Stripe account', resource: 'connect-accounts', id: 'org-9' }],
           status
         };
       }
@@ -1142,12 +1150,12 @@ export const staffHandlers = [
       pickup.routeId = b.routeId;
       pickup.status = 'ROUTED';
       d.assignments.push({
-        id: `pa-${ctx.db.seq++}`, shipmentId: pickup.shipmentId, routeId: b.routeId, driverId: driver?.driverId ?? null, mode: 'DISPATCH_OVERRIDE', reason: b.reason,
-        previousRouteId: previous, straightMiles: driver?.straightLineMiles ?? null, roadMiles: driver?.roadMiles ?? null, distanceMethod: driver?.distanceMethod ?? null,
+        id: `pa-${ctx.db.seq++}`, shipmentId: pickup.shipmentId, routeId: b.routeId, routeName: driver?.routeName ?? null, driverId: driver?.driverId ?? null, driverName: driver?.driverName ?? null, mode: 'DISPATCH_OVERRIDE', reason: b.reason,
+        previousRouteId: previous, previousRouteName: Object.values(d.suggestions).flat().find((x) => x.routeId === previous)?.routeName ?? null, straightMiles: driver?.straightLineMiles ?? null, roadMiles: driver?.roadMiles ?? null, distanceMethod: driver?.distanceMethod ?? null,
         actor: ctx.action.actor, createdAt: ctx.now.toISOString()
       });
       audit(ctx, 'pickup.dispatch_assigned', pickup.shipmentId, `Assigned ${pickup.orderNumber} pickup to ${b.routeId}: ${b.reason}`);
-      return { shipmentId: pickup.shipmentId, routeId: b.routeId, routeName: driver?.routeName ?? null, driverId: driver?.driverId ?? null, status: 'ASSIGNED' };
+      return { shipmentId: pickup.shipmentId, routeId: b.routeId, routeName: driver?.routeName ?? null, driverId: driver?.driverId ?? null, driverName: driver?.driverName ?? null, status: 'ASSIGNED' };
     })
   ),
   http.get(

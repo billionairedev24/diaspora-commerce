@@ -60,6 +60,12 @@ export interface MockResource {
   exportable: boolean;
   titleOf: (r: MockRecord) => string;
   subtitleOf: (r: MockRecord) => string;
+  /**
+   * Fields that hold an internal id of a person or organisation, with the label of the person or thing ("customerId" →
+   * "Customer"). The table shows the name instead, search still finds the id, and the sheet lists the id apart under
+   * "IDs" (the BFF's nameRef).
+   */
+  ids?: Record<string, string>;
   sections?: [string, string[]][];
   linesTitle?: string;
   lineColumns?: ResourceColumn[];
@@ -199,13 +205,14 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     exportable: true,
     titleOf: (r) => str(r.fields.displayName),
     subtitleOf: (r) => `${str(r.fields.reference)} · ${humanize(str(r.fields.kind))}`,
+    ids: { reviewerId: 'Reviewer' },
     sections: [
       ['Business', ['displayName', 'legalName', 'kind', 'entityType', 'state', 'planCode', 'contactEmail']],
-      ['Review', ['status', 'reviewStep', 'reviewerId', 'failedChecks', 'taxIdMasked', 'submittedAt']]
+      ['Review', ['status', 'reviewStep', 'reviewerName', 'failedChecks', 'taxIdMasked', 'submittedAt']]
     ],
     actions: [
-      { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
-      { key: 'review-flag', label: 'Flag for senior review', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag for senior review', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.reviewerId = ctx.actorId; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
+      { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewerName = ctx.actor; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
+      { key: 'review-flag', label: 'Flag for senior review', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag for senior review', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), already: decidedIn('APPROVED', 'REJECTED'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.reviewerId = ctx.actorId; r.fields.reviewerName = ctx.actor; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
       { key: 'review-request-info', label: 'Return to applicant', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Return to the applicant', 'Return to applicant', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' }), field('note', 'Message to the applicant', 'textarea', true)]), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('INFO_REQUESTED', 'Returned to the applicant') },
       { key: 'final-request-info', label: 'Return to applicant (step 2)', tone: 'neutral', permission: 'applications:approve', level: 'APPROVE', form: () => form('Return to the applicant', 'Return to applicant', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' }), field('note', 'Message to the applicant', 'textarea', true)]), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('INFO_REQUESTED', 'Returned to the applicant') },
       { key: 'final-approve', label: 'Final approval', tone: 'primary', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Give final approval', 'Approve', false), when: finalStep, already: decidedIn('APPROVED', 'REJECTED'), apply: setStatus('APPROVED', 'Final approval — organisation approved') },
@@ -222,6 +229,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     searchPlaceholder: 'Order number (AT-…)',
     cursor: true,
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `Order ${r.id}`,
     subtitleOf: (r) => `${str(r.fields.customer)} · ${str(r.fields.shipTo)}`,
     sections: [
@@ -294,6 +302,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     statusKey: 'status',
     facets: facets('AWAITING_SELLER', 'UNDER_REVIEW', 'ESCALATED', 'RESOLVED_REFUND', 'RESOLVED_DENIED'),
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `Claim ${str(r.fields.reference)}`,
     subtitleOf: (r) => `${humanize(str(r.fields.type))} · order ${str(r.fields.orderNumber)}`,
     links: (r) => [{ label: `Order ${str(r.fields.orderNumber)}`, href: `/orders?open=${encodeURIComponent(str(r.fields.orderNumber))}` }, { label: 'Customer 360', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
@@ -314,6 +323,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     facets: facets('REQUESTED', 'APPROVED', 'IN_TRANSIT', 'RECEIVED', 'REFUNDED', 'REJECTED'),
     cursor: true,
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `Return ${str(r.fields.number)}`,
     subtitleOf: (r) => `Order ${str(r.fields.orderNumber)}`,
     links: (r) => [{ label: 'Customer 360', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
@@ -325,13 +335,13 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   payouts: {
     title: 'Payout requests',
-    columns: [col('id', 'Request', 'mono', 14), col('org', 'Organisation', 'strong', 26), col('amountMinor', 'Amount', 'money', 14), col('requestedAt', 'Requested', 'date', 14), col('holdReason', 'Hold reason', 'text', 18), col('status', 'Status', 'status', 14)],
+    columns: [col('org', 'Organisation', 'strong', 22), col('requestedBy', 'Requested by', 'text', 16), col('amountMinor', 'Amount', 'money', 14), col('requestedAt', 'Requested', 'date', 14), col('holdReason', 'Hold reason', 'text', 18), col('status', 'Status', 'status', 14)],
     statusKey: 'status',
     facets: facets('REQUESTED', 'ON_HOLD', 'APPROVED', 'PAID', 'FAILED'),
     cursor: true,
     exportable: true,
     titleOf: (r) => `Payout to ${str(r.fields.org)}`,
-    subtitleOf: (r) => r.id,
+    subtitleOf: (r) => `Requested by ${str(r.fields.requestedBy)}`,
     actions: [
       { key: 'approve', label: 'Approve & pay', tone: 'primary', permission: 'payouts:approve', level: 'APPROVE', confirm: 'Create the Stripe payout now?', when: (r) => stateReason(r, 'REQUESTED'), apply: setStatus('APPROVED', 'Approved — Stripe payout created') },
       { key: 'hold', label: 'Hold', tone: 'danger', permission: 'payouts:approve', level: 'APPROVE', form: reasonForm('Put the payout on hold', 'Hold'), when: (r) => stateReason(r, 'REQUESTED'), apply: (r, v, ctx) => { r.fields.status = 'ON_HOLD'; r.fields.holdReason = str(v.reason); log(r, ctx, `Held — ${str(v.reason)}`); } },
@@ -426,40 +436,43 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'sos-alerts': {
     title: 'SOS alerts',
-    columns: [col('kind', 'Emergency', 'strong', 14), col('driverId', 'Driver', 'mono', 16), col('routeId', 'Route', 'mono', 16), col('where', 'Where (GPS)', 'mono', 18), col('note', 'Note', 'text', 22), col('raisedAt', 'Raised', 'datetime', 14), col('status', 'Status', 'status', 10)],
+    columns: [col('kind', 'Emergency', 'strong', 14), col('driverName', 'Driver', 'text', 16), col('routeName', 'Route', 'text', 16), col('where', 'Where (GPS)', 'mono', 18), col('note', 'Note', 'text', 22), col('raisedAt', 'Raised', 'datetime', 14), col('status', 'Status', 'status', 10)],
     statusKey: 'status',
     facets: [],
     cursor: true,
     exportable: true,
     titleOf: (r) => `SOS: ${str(r.fields.kind)}`,
-    subtitleOf: (r) => `Driver ${str(r.fields.driverId)} · route ${str(r.fields.routeId)}`,
+    ids: { driverId: 'Driver', routeId: 'Route' },
+    subtitleOf: (r) => `Driver ${str(r.fields.driverName)} · route ${str(r.fields.routeName)}`,
     actions: [
       { key: 'acknowledge', label: 'Acknowledge', tone: 'primary', permission: 'delivery:dispatch', confirm: 'Acknowledge this SOS? The driver sees that dispatch is on it.', when: (r) => stateReason(r, 'ALERT'), apply: setStatus('ACKNOWLEDGED', 'SOS acknowledged') }
     ]
   },
   'vehicle-defects': {
     title: 'Vehicle defects',
-    columns: [col('vehicleId', 'Vehicle', 'mono', 12), col('driverId', 'Driver', 'mono', 14), col('routeId', 'Route', 'mono', 14), col('failed', 'Failed checks', 'text', 20), col('note', 'Note', 'text', 20), col('reportedAt', 'Reported', 'datetime', 12), col('status', 'Status', 'status', 10)],
+    columns: [col('vehicleId', 'Vehicle', 'mono', 12), col('driverName', 'Driver', 'text', 14), col('routeName', 'Route', 'text', 14), col('failed', 'Failed checks', 'text', 20), col('note', 'Note', 'text', 20), col('reportedAt', 'Reported', 'datetime', 12), col('status', 'Status', 'status', 10)],
     statusKey: 'status',
     facets: [],
     cursor: true,
     exportable: true,
     titleOf: (r) => `Defect on ${str(r.fields.vehicleId)}`,
-    subtitleOf: (r) => `Route ${str(r.fields.routeId)} · driver ${str(r.fields.driverId)}`,
+    ids: { driverId: 'Driver', routeId: 'Route' },
+    subtitleOf: (r) => `Route ${str(r.fields.routeName)} · driver ${str(r.fields.driverName)}`,
     actions: [
       { key: 'resolve', label: 'Resolve and unblock the route', tone: 'primary', permission: 'delivery:dispatch', form: noteForm('Resolve the defect (the driver re-inspects before starting)', 'Resolve', false), when: (r) => stateReason(r, 'OPEN', 'BLOCKED'), apply: setStatus('RESOLVED', 'Defect resolved, route unblocked') }
     ]
   },
   'driver-events': {
     title: 'Driver events',
-    columns: [col('capturedAt', 'When', 'datetime', 14), col('type', 'Event', 'strong', 18), col('driverId', 'Driver', 'mono', 14), col('routeId', 'Route', 'mono', 14), col('stopId', 'Stop', 'mono', 12), col('message', 'Detail', 'text', 18), col('outcome', 'Outcome', 'status', 10)],
+    columns: [col('capturedAt', 'When', 'datetime', 14), col('type', 'Event', 'strong', 18), col('driverName', 'Driver', 'text', 14), col('routeName', 'Route', 'text', 14), col('stopName', 'Stop', 'text', 14), col('message', 'Detail', 'text', 18), col('outcome', 'Outcome', 'status', 10)],
     statusKey: 'outcome',
     facets: facets('APPLIED', 'DUPLICATE', 'REJECTED'),
-    search: ['type', 'driverId', 'routeId'],
+    search: ['type'],
     cursor: true,
     exportable: true,
     titleOf: (r) => str(r.fields.type),
-    subtitleOf: (r) => `Driver ${str(r.fields.driverId)} · ${str(r.fields.capturedAt)}`,
+    ids: { driverId: 'Driver', routeId: 'Route', stopId: 'Stop' },
+    subtitleOf: (r) => `Driver ${str(r.fields.driverName)} · ${str(r.fields.capturedAt)}`,
     actions: []
   },
   'support-cases': {
@@ -468,6 +481,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     statusKey: 'status',
     facets: facets('OPEN', 'IN_PROGRESS', 'RESOLVED'),
     exportable: true,
+    ids: { customerId: 'Customer' },
     titleOf: (r) => `${str(r.fields.reference)} · ${str(r.fields.reason)}`,
     subtitleOf: (r) => str(r.fields.customer),
     sections: [['Case', ['reference', 'source', 'status', 'assignee', 'slaState', 'openedAt']], ['Lola hand-off', ['customer', 'orderNumber', 'reason', 'summary']]],

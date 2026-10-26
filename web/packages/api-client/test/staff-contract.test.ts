@@ -397,7 +397,7 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     const created = await editor.createNotificationTemplateVersion('order.confirmed', {
       locale: 'en', channel: 'sms', category: 'transactional', bodyText: 'AfroTransact: order {{.orderNumber}} ({{.total}}) is confirmed. Reply STOP to opt out.'
     });
-    expect(created).toMatchObject({ version: 3, channel: 'sms', createdBy: 'stf-1' });
+    expect(created).toMatchObject({ version: 3, channel: 'sms', createdBy: 'Ifeoma Okafor' });
     expect((await editor.getNotificationTemplate('order.confirmed')).variants.find((v) => v.channel === 'sms')?.latestVersion).toBe(3);
 
     expect(await editor.testSendNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data })).toMatchObject({ to: 'ifeoma@afrotransact.com', channel: 'email' });

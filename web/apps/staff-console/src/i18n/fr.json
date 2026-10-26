@@ -1282,5 +1282,11 @@
   "st.runs.adv.problem.required": "Ce champ est obligatoire.",
   "st.runs.adv.problem.tooLong": "Pas plus de {max} caractères.",
   "st.runs.adv.problem.range": "Valeur hors de la plage autorisée.",
-  "st.runs.adv.problem.order": "La fin doit être après le début."
+  "st.runs.adv.problem.order": "La fin doit être après le début.",
+  "st.names.unknownSeller": "Vendeur inconnu",
+  "st.names.unknownUser": "Utilisateur inconnu",
+  "st.names.unknownDriver": "Chauffeur inconnu",
+  "st.sheet.copyId": "Copier {label}",
+  "st.sheet.copied": "Copié",
+  "st.names.unknownRoute": "Itinéraire inconnu"
 }

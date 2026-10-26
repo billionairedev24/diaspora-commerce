@@ -123,7 +123,7 @@ export function OrgSearch({
               }}
             >
               <strong className="font-semibold">{h.name}</strong>
-              <span className="text-xs text-muted">{h.retail ? (h.reason ?? overview.retail.note) : `${h.kind.toLowerCase()} · ${taken(h.orgId) ? takenNote : h.orgId}`}</span>
+              <span className="text-xs text-muted">{h.retail ? (h.reason ?? overview.retail.note) : `${h.kind.toLowerCase()}${taken(h.orgId) ? ` · ${takenNote}` : ''}`}</span>
             </li>
           ))}
         </ul>

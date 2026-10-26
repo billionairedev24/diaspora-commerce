@@ -2,7 +2,7 @@
 
 import { definitiveFailure, type FieldValue, isApiError, type OneTimeSecret, type RecordAction, type RecordDetail, type ResourceKey, type StaffForm, staffKeys, staffQueries } from '@afrotransact/api-client';
 import { Button, Dialog, Sheet, SheetTableScroll, useToast } from '@afrotransact/ui';
-import { LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
+import { Check, Copy, LockSimple, PencilSimple } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -23,6 +23,35 @@ type Pending = { kind: 'action'; action: RecordAction; key: string } | { kind: '
 
 /** The BFF's answer when what the action would do already happened (e.g. an application already approved). */
 const isAlreadyDone = (e: unknown): boolean => isApiError(e) && e.status === 409 && e.code === 'ALREADY_DONE';
+
+/**
+ * Copies one identifier (an ID field of the sheet). People read names; the id is there for the rare time one is quoted
+ * to a developer or pasted into a ticket, so it is one tap away and never the headline.
+ */
+function CopyId({ value, label }: { value: string; label: string }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setCopied(false); // the value stays selectable next to the button
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="ml-1.5 inline-flex size-6 items-center justify-center rounded-sm align-middle text-muted hover:bg-surface-hover"
+      aria-label={copied ? t('st.sheet.copied') : t('st.sheet.copyId', { label })}
+      title={copied ? t('st.sheet.copied') : t('st.sheet.copyId', { label })}
+      onClick={() => void copy()}
+    >
+      {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+    </button>
+  );
+}
 
 function Details({ record }: { record: RecordDetail }) {
   return (
@@ -53,7 +82,10 @@ function Details({ record }: { record: RecordDetail }) {
                       {f.value}
                     </a>
                   ) : (
-                    <span className={f.kind === 'mono' ? 'font-mono text-xs' : undefined}>{fieldText(f.kind, f.value)}</span>
+                    <>
+                      <span className={f.kind === 'mono' ? 'font-mono text-xs' : undefined}>{fieldText(f.kind, f.value)}</span>
+                      {s.title === 'IDs' && f.kind === 'mono' && f.value !== '—' ? <CopyId value={f.value} label={f.label} /> : null}
+                    </>
                   )}
                 </dd>
               </div>

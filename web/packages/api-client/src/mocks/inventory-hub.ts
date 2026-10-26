@@ -204,7 +204,23 @@ const notFound = (what: string) => new HubProblem(404, 'NOT_FOUND', 'Not found',
 const invalid = (detail: string, errors: Record<string, string>) => new HubProblem(422, 'VALIDATION_FAILED', 'Validation failed', detail, errors);
 const conflict = (detail: string) => new HubProblem(409, 'CONFLICT', 'Conflict', detail);
 
+/** Organisation names by id: the BFF puts the name next to every ownerOrg of a relayed document (ownerOrgName). */
+const ORG_NAMES: Record<string, string> = { [RETAIL_ORG]: 'AfroTransact Retail', org_mamatees_pantry: "Mama Tee's Pantry" };
+
+function nameOwners(v: unknown): void {
+  if (Array.isArray(v)) {
+    v.forEach(nameOwners);
+  } else if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.ownerOrg === 'string' && o.ownerOrg && o.ownerOrgName === undefined) o.ownerOrgName = ORG_NAMES[o.ownerOrg] ?? 'Unknown seller';
+    // The mock's order ids are order numbers already; the BFF resolves real ids to the number.
+    if (typeof o.orderId === 'string' && o.orderNumber === undefined && o.orderId.startsWith('AT-')) o.orderNumber = o.orderId;
+    Object.values(o).forEach(nameOwners);
+  }
+}
+
 export type HubLevel = 'VIEW' | 'EDIT' | 'APPROVE';
+
 /** The caller's access (throws a problem Response-able error) and, for sellers, the organisation lists are limited to. */
 export type HubGate = (request: Request, area: 'inventory' | 'retail' | 'fba', level: HubLevel) => { ownerOrg: string | null; actor: string } | { status: number; code: string; title: string; detail: string };
 
@@ -223,7 +239,9 @@ function handler(gate: HubGate, area: 'inventory' | 'retail' | 'fba', level: Hub
     try {
       const out = await fn({ db: getHubDb(), ownerOrg: g.ownerOrg, actor: g.actor, request, now: new Date(), url: new URL(request.url) }, { id: flat.id ?? '', action: flat.action ?? '' });
       if (out instanceof Response) return out;
-      const res = HttpResponse.json(out as JsonBodyType, { status });
+      const named = structuredClone(out);
+      nameOwners(named);
+      const res = HttpResponse.json(named as JsonBodyType, { status });
       const version = (out as { version?: number } | null)?.version;
       if (typeof version === 'number') res.headers.set('ETag', `"${version}"`);
       return res;

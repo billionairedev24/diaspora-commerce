@@ -26,6 +26,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, money, shortDate } from '@/lib/format';
+import { sellerName } from '@/lib/names';
 
 import { parseDollars } from './money-input';
 import { OrgSearch } from './OrgSearch';
@@ -77,7 +78,7 @@ export function NegotiateRateDialog({ open, onClose, org, t }: { open: boolean; 
       return feeRatesApi().createNegotiatedRate(body);
     },
     onSuccess: (r) => {
-      toast.show(t('st.rates.negotiated', { org: r.orgName ?? r.orgId, rate: r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor) }));
+      toast.show(t('st.rates.negotiated', { org: sellerName(t, r.orgName), rate: r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor) }));
       void qc.invalidateQueries({ queryKey: staffFeeRateKeys.all });
       onClose();
     },
@@ -133,7 +134,7 @@ function EndRateDialog({ rate, onClose, t }: { rate: NegotiatedRate | null; onCl
   const end = useMutation({
     mutationFn: (r: NegotiatedRate) => feeRatesApi().endNegotiatedRate(r.id, reason.trim()),
     onSuccess: (r) => {
-      toast.show(t('st.rates.ended', { org: r.orgName ?? r.orgId }));
+      toast.show(t('st.rates.ended', { org: sellerName(t, r.orgName) }));
       void qc.invalidateQueries({ queryKey: staffFeeRateKeys.all });
       setReason('');
       onClose();
@@ -141,7 +142,7 @@ function EndRateDialog({ rate, onClose, t }: { rate: NegotiatedRate | null; onCl
     onError: (e) => setError(errorsOf(e).reason ?? problemMessage(e))
   });
   return (
-    <Dialog open={rate !== null} onOpenChange={(o) => !o && onClose()} title={t('st.rates.endTitle')} description={rate ? t('st.rates.endHelp', { org: rate.orgName ?? rate.orgId }) : ''} width={480} closeLabel={t('st.rates.close')}>
+    <Dialog open={rate !== null} onOpenChange={(o) => !o && onClose()} title={t('st.rates.endTitle')} description={rate ? t('st.rates.endHelp', { org: sellerName(t, rate.orgName) }) : ''} width={480} closeLabel={t('st.rates.close')}>
       <form noValidate className="flex flex-col gap-2" onSubmit={(e) => {
         e.preventDefault();
         if (reason.trim().length < 3) {
@@ -173,7 +174,7 @@ export function NegotiatedRatesPanel({ org }: { org?: { orgId: string; name: str
   const rates = useQuery(staffFeeRateQueries.negotiated(feeRatesApi(), query));
   const canConfigure = rates.data?.canConfigure ?? false;
   const columns = useMemo<ColumnDef<NegotiatedRate>[]>(() => [
-    ...(org ? [] : [{ id: 'org', accessorFn: (r: NegotiatedRate) => r.orgName ?? r.orgId, header: t('st.rates.col.org'), size: 180, meta: { kind: 'strong' as const } }]),
+    ...(org ? [] : [{ id: 'org', accessorFn: (r: NegotiatedRate) => sellerName(t, r.orgName), header: t('st.rates.col.org'), size: 180, meta: { kind: 'strong' as const } }]),
     { id: 'type', accessorFn: (r) => r.type, header: t('st.rates.col.type'), size: 130, cell: ({ row }) => t(`st.rates.type.${row.original.type}`) },
     { id: 'category', accessorFn: (r) => r.categoryLabel, header: t('st.rates.col.category'), size: 140 },
     { id: 'rateBps', accessorFn: (r) => r.rateBps, header: t('st.rates.col.rate'), size: 90, meta: { align: 'end' }, cell: ({ row }) => (row.original.amountMinor === null ? formatBps(row.original.rateBps) : `${money(row.original.amountMinor)} / unit`) },
@@ -197,7 +198,7 @@ export function NegotiatedRatesPanel({ org }: { org?: { orgId: string; name: str
   return (
     <>
       <DataTable<NegotiatedRate> id={org ? 'staff.fees.org-negotiated-rates' : 'staff.fees.negotiated-rates'} label={t('st.rates.negotiatedTitle')} columns={columns}
-        data={rates.data?.items ?? []} getRowId={(r) => r.id} rowLabel={(r) => `${r.orgName ?? r.orgId} ${r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor)}`} state={state} mode="server" paging="pages"
+        data={rates.data?.items ?? []} getRowId={(r) => r.id} rowLabel={(r) => `${sellerName(t, r.orgName)} ${r.amountMinor === null ? formatBps(r.rateBps) : money(r.amountMinor)}`} state={state} mode="server" paging="pages"
         total={rates.data?.total ?? null} loading={rates.isPending} fetching={rates.isFetching}
         error={rates.isError ? <ErrorState error={rates.error} onRetry={() => void rates.refetch()} /> : undefined}
         searchPlaceholder={t('st.rates.search')} empty={t('st.rates.none')}

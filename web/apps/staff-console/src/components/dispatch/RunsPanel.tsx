@@ -25,6 +25,7 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, shortDate } from '@/lib/format';
+import { driverName } from '@/lib/names';
 import { exportDataset } from '@/lib/table-export';
 
 /* Delivery runs in dispatch (S264): a closed pre-order window's paid orders delivered in one trip. fulfilment plans the
@@ -216,7 +217,7 @@ function RunDetail({ runId }: { runId: string }) {
             }
           >
             <p className="m-0 text-sm text-muted">
-              {r.driverId ? t('st.runs.driver', { driver: r.driverId }) : t('st.runs.noDriver')}
+              {r.driverId ? t('st.runs.driver', { driver: driverName(t, r.driverName) }) : t('st.runs.noDriver')}
               {' · '}
               {t('st.runs.routeCounts', { pickups: `${r.pickupsDone}/${r.pickupStops}`, drops: `${r.dropsDone}/${r.dropStops}`, packages: r.packages })}
             </p>

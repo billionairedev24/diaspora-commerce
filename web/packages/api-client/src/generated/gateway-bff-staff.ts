@@ -4449,6 +4449,8 @@ export interface components {
             /** @enum {string} */
             status: "PLANNED" | "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
             driverId: string | null;
+            /** @description The driver's name (Unknown driver when identity cannot name them); null without a driver */
+            driverName: string | null;
             vehicleId: string | null;
             blocked: boolean;
             packages: number;
@@ -6353,6 +6355,8 @@ export interface components {
         };
         DriverSuggestion: {
             driverId: string;
+            /** @description The driver's name (Unknown driver when identity cannot name them) */
+            driverName: string;
             routeId: string;
             routeName: string;
             zone: string;
@@ -6382,6 +6386,7 @@ export interface components {
             routeId: string;
             routeName: string | null;
             driverId: string | null;
+            driverName: string | null;
             /** @description The route's status */
             status: string;
         };
@@ -6389,14 +6394,18 @@ export interface components {
             id: string;
             shipmentId: string;
             routeId: string;
+            routeName: string | null;
             driverId: string | null;
+            driverName: string | null;
             /** @enum {string} */
             mode: "AUTO_NEAREST" | "DISPATCH_OVERRIDE";
             reason: string | null;
             previousRouteId: string | null;
+            previousRouteName: string | null;
             straightMiles: number | null;
             roadMiles: number | null;
             distanceMethod: string | null;
+            /** @description Who assigned it, by name (System for the automatic assignment) */
             actor: string | null;
             /** Format: date-time */
             createdAt: string | null;

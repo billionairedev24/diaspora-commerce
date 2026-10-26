@@ -27,6 +27,7 @@ import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { dateTime, humanize, idempotencyKey, money, shortDate } from '@/lib/format';
+import { personName, sellerName } from '@/lib/names';
 
 import { allowsOf } from './CataloguePanel';
 import { grantColumns } from './GrantsPanel';
@@ -180,7 +181,7 @@ function PlanFeeSummary({ v, adjust, onChange, t }: { v: StaffPlanFeeCollection;
         <ul aria-label={t('st.plans.planFee.history')} className="m-0 flex list-none flex-col gap-1 p-0 text-xs text-muted">
           {v.history.map((h) => (
             <li key={h.id}>
-              {t('st.plans.planFee.historyLine', { date: dateTime(h.createdAt), mode: t(`st.plans.planFee.${h.mode}`), who: h.actorId })}
+              {t('st.plans.planFee.historyLine', { date: dateTime(h.createdAt), mode: t(`st.plans.planFee.${h.mode}`), who: personName(t, h.actorName) })}
               {h.reasonCode ? ` · ${humanize(h.reasonCode)}` : ''}{h.note ? ` — ${h.note}` : ''}
             </li>
           ))}
@@ -243,7 +244,7 @@ function OrgFinder({ onPick, t }: { onPick: (orgId: string) => void; t: T }) {
               <li key={h.orgId}>
                 <button type="button" className="flex w-full flex-wrap items-center gap-2 rounded-sm px-3 py-2 text-left hover:bg-surface-hover" onClick={() => { onPick(h.orgId); setText(''); setQ(''); }}>
                   <strong className="font-semibold">{h.name}</strong>
-                  <span className="text-xs text-muted">{h.kind.toLowerCase()} · {h.orgId}</span>
+                  <span className="text-xs text-muted">{h.kind.toLowerCase()}</span>
                 </button>
               </li>
             ))}
@@ -311,7 +312,7 @@ export function SellerBillingPanel() {
       <OrgFinder onPick={setOrgId} t={t} />
       {!orgId ? <p className="m-0 text-sm text-muted">{t('st.plans.pickOrg')}</p> : panel.isPending ? <Spinner /> : panel.isError ? <ErrorState error={panel.error} onRetry={() => void panel.refetch()} /> : p ? (
         <>
-          <Card title={p.orgName ?? p.orgId} actions={(adjust && b) || manage ? (
+          <Card title={sellerName(t, p.orgName)} actions={(adjust && b) || manage ? (
             <div className="flex flex-wrap gap-2">
               {manage ? <Button size="sm" variant="neutral" onClick={() => setPlanDealOpen(true)}>{t('st.rates.negotiatePlan')}</Button> : null}
               {adjust && b ? <Button size="sm" variant="neutral" onClick={() => open({ kind: 'credit' })}>{t('st.plans.addCredit')}</Button> : null}
@@ -344,7 +345,7 @@ export function SellerBillingPanel() {
             </Card>
           ) : null}
           <h3 className="m-0 text-md font-semibold">{t('st.rates.negotiatedForOrg')}</h3>
-          <NegotiatedRatesPanel org={{ orgId: p.orgId, name: p.orgName ?? p.orgId }} />
+          <NegotiatedRatesPanel org={{ orgId: p.orgId, name: sellerName(t, p.orgName) }} />
           <h3 className="m-0 text-md font-semibold">{t('st.plans.invoices')}</h3>
           <DataTable<StaffBillingInvoice> id="staff.plans.seller-invoices" label={t('st.plans.invoices')} columns={invoiceColumns} data={p.invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number ?? i.id}
             state={invoiceState} mode="client" fetching={panel.isFetching} empty={t('st.plans.noInvoices')} />
@@ -358,11 +359,11 @@ export function SellerBillingPanel() {
         </>
       ) : null}
       {p && planDealOpen ? (
-        <NegotiatePlanDialog orgId={p.orgId} orgName={p.orgName ?? p.orgId} kind={p.kind} open={planDealOpen} onClose={() => setPlanDealOpen(false)} t={t} />
+        <NegotiatePlanDialog orgId={p.orgId} orgName={sellerName(t, p.orgName)} kind={p.kind} open={planDealOpen} onClose={() => setPlanDealOpen(false)} t={t} />
       ) : null}
       <AdjustDialog key={actionSeq} orgId={orgId} action={action} onClose={() => setAction(null)} t={t} />
       {p?.planFeeCollection && planFeeOpen ? (
-        <PlanFeeDialog orgId={orgId} orgName={p.orgName ?? p.orgId} current={p.planFeeCollection} open={planFeeOpen} onClose={() => setPlanFeeOpen(false)} t={t} />
+        <PlanFeeDialog orgId={orgId} orgName={sellerName(t, p.orgName)} current={p.planFeeCollection} open={planFeeOpen} onClose={() => setPlanFeeOpen(false)} t={t} />
       ) : null}
     </div>
   );

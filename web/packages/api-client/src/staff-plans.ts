@@ -335,6 +335,8 @@ export type StaffRewardPreview = z.infer<typeof StaffRewardPreviewSchema>;
 export const StaffBillingGrantSchema = z.object({
   id: z.string(),
   orgId: z.string(),
+  /** The organisation's name (the BFF names every id; "Unknown seller" when it cannot). */
+  orgName: nullableString.default(null),
   source: z.enum(['RULE', 'MANUAL']),
   ruleId: nullableString.default(null),
   type: GrantTypeSchema,
@@ -351,6 +353,8 @@ export const StaffBillingGrantSchema = z.object({
   note: nullableString.default(null),
   summary: z.string(),
   actorId: z.string(),
+  /** Who made it, by name ("System" for a rule). */
+  actorName: nullableString.default(null),
   metric: nullableString.default(null),
   metricValue: nullableInt.default(null),
   reference: nullableString.default(null),
@@ -503,6 +507,7 @@ export const StaffPlanFeeCollectionChangeSchema = z.object({
   mode: StaffPlanFeeModeSchema,
   source: z.enum(['ONBOARDING', 'SELLER', 'STAFF']),
   actorId: z.string(),
+  actorName: nullableString.default(null),
   reasonCode: nullableString.default(null),
   note: nullableString.default(null),
   appliesFrom: nullableString.default(null),

@@ -87,7 +87,7 @@ export function deliveryFormFrom(base: FeeScheduleView | null): DeliveryForm {
     radius: milesText(p.maxRadiusMiles),
     customer: tariffForm(p.customerCharge),
     seller: tariffForm(p.sellerFee),
-    overrides: p.sellerOverrides.map((o) => ({ rowId: rowId(), orgId: o.orgId, orgName: o.orgName ?? o.orgId, tariff: tariffForm(o.sellerFee) }))
+    overrides: p.sellerOverrides.map((o) => ({ rowId: rowId(), orgId: o.orgId, orgName: o.orgName ?? '', tariff: tariffForm(o.sellerFee) }))
   };
 }
 

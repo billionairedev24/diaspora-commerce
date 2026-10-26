@@ -218,7 +218,7 @@ export function ShipmentSheet({ id, onClose }: { id: string | null; onClose: () 
           <Timeline shipment={s} />
           <dl className="m-0 grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3 gap-y-1 text-sm">
             {[
-              ['Stock owner', s.ownerOrg ?? '—'],
+              ['Stock owner', s.ownerOrgName ?? '—'],
               ['Fulfilment centre', `${s.nodeId}${s.assignmentReason ? ` · ${s.assignmentReason}` : ''}`],
               ['Carrier · tracking', s.carrier ? `${s.carrier} · ${s.trackingNumber ?? ''}` : '—'],
               ['Expected arrival', shortDate(s.expectedArrival)],
@@ -340,7 +340,7 @@ export function InboundPanel() {
     () => [
       { id: 'number', accessorFn: (s) => s.number, header: 'Shipment', size: 170, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs font-semibold">{row.original.number}</span> },
       { id: 'source', accessorFn: (s) => (s.source === 'RETAIL_ASN' ? 'Retail ASN' : 'FBA'), header: 'Type', size: 100 },
-      { id: 'ownerOrg', accessorFn: (s) => s.ownerOrg ?? '', header: 'Owner', size: 190 },
+      { id: 'ownerOrg', accessorFn: (s) => s.ownerOrgName ?? '', header: 'Owner', size: 190 },
       { id: 'nodeId', accessorFn: (s) => s.nodeId, header: 'FC', size: 90 },
       { id: 'skus', accessorFn: (s) => s.lines.map((l) => l.sku).join(', '), header: 'SKUs', size: 200, cell: ({ row }) => <span className="block truncate font-mono text-xs">{row.original.lines.map((l) => l.sku).join(', ')}</span> },
       { id: 'expectedUnits', accessorFn: (s) => s.expectedUnits, header: 'Units', size: 80, meta: { kind: 'number', align: 'end' } },

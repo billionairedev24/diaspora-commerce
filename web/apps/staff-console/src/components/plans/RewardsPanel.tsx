@@ -22,6 +22,7 @@ import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { type MessageKey, useT } from '@/i18n/t';
 import { dollars, humanize, money, shortDate } from '@/lib/format';
+import { sellerName } from '@/lib/names';
 
 import { centsOf, dollarsOf, errorsOf, intOf, plansApi, STATUS_TONE, type T, usePlanRights } from './kit';
 import { PlanPicker } from './TrialsPanel';
@@ -117,7 +118,7 @@ function Preview({ input, t }: { input: StaffRewardRuleInput; t: T }) {
   const columns = useMemo<ColumnDef<StaffRewardPreviewRow>[]>(() => {
     const fmt = (v: number) => (gross ? money(v) : String(v));
     return [
-      { id: 'org', accessorFn: (r) => r.orgName ?? r.orgId, header: t('st.plans.col.org'), size: 200 },
+      { id: 'org', accessorFn: (r) => sellerName(t, r.orgName), header: t('st.plans.col.org'), size: 200 },
       { id: 'plan', accessorFn: (r) => r.planCode ?? '', header: t('st.plans.col.plan'), size: 140 },
       { id: 'value', accessorFn: (r) => r.value, header: less ? t('st.plans.col.soFar') : t('st.plans.col.progress'), size: 200,
         // A "less than" rule has no progress to show: the value so far against the line it must stay under.

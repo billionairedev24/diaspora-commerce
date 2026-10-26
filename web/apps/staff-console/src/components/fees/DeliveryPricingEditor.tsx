@@ -12,6 +12,7 @@ import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { money } from '@/lib/format';
+import { sellerName } from '@/lib/names';
 
 import { type DeliveryForm, previewQuote, type QuotePreview, type TariffForm, toDeliveryDraft } from './delivery-model';
 import { parseMiles, rowId } from './money-input';
@@ -162,8 +163,8 @@ function QuotePreviewCard({ overview, form }: { overview: FeesOverview; form: De
   }, [form, overview.base, t]);
   const current = overview.current?.deliveryPricing ?? null;
   const orgs = new Map<string, string>([['', t('st.delivery.quote.anySeller')], [overview.retail.orgId, overview.retail.name]]);
-  form.overrides.forEach((o) => orgs.set(o.orgId, o.orgName));
-  current?.sellerOverrides.forEach((o) => orgs.set(o.orgId, o.orgName ?? o.orgId));
+  form.overrides.forEach((o) => orgs.set(o.orgId, sellerName(t, o.orgName)));
+  current?.sellerOverrides.forEach((o) => orgs.set(o.orgId, sellerName(t, o.orgName)));
   const liveQuote = useQuery({
     ...staffQueries.deliveryQuote(staffApi(), orgId || 'quote-preview', miles ?? 0, packages ?? 1),
     enabled: live && miles !== null && packages !== null
@@ -249,14 +250,14 @@ export function DeliveryPricingEditor({ overview, form, onChange, errors }: { ov
                 {form.overrides.map((o, i) => (
                   <li key={o.rowId} className="flex flex-col gap-2">
                     <div className="flex flex-wrap items-center gap-2" id={deliveryFieldId(`deliveryPricing.sellerOverrides.${i}.orgId`)} tabIndex={-1}>
-                      <strong>{o.orgName}</strong>
+                      <strong>{sellerName(t, o.orgName)}</strong>
                       {errors[`deliveryPricing.sellerOverrides.${i}.orgId`] ? <span className="text-xs text-danger">{errors[`deliveryPricing.sellerOverrides.${i}.orgId`]}</span> : null}
-                      <Button variant="neutral" size="sm" aria-label={t('st.delivery.removeOverride', { seller: o.orgName })} onClick={() => set('overrides', form.overrides.filter((x) => x.rowId !== o.rowId))}>
+                      <Button variant="neutral" size="sm" aria-label={t('st.delivery.removeOverride', { seller: sellerName(t, o.orgName) })} onClick={() => set('overrides', form.overrides.filter((x) => x.rowId !== o.rowId))}>
                         <Trash size={16} aria-hidden />
                       </Button>
                     </div>
                     <TariffEditor
-                      name={t('st.delivery.overrideFee', { seller: o.orgName })}
+                      name={t('st.delivery.overrideFee', { seller: sellerName(t, o.orgName) })}
                       prefix={`deliveryPricing.sellerOverrides.${i}.sellerFee`}
                       value={o.tariff}
                       errors={errors}

@@ -62,6 +62,7 @@ export const InboundShipmentSchema = z.object({
   source: z.enum(['FBA', 'RETAIL_ASN']).default('FBA'),
   externalRef: str,
   ownerOrg: str,
+  ownerOrgName: str,
   nodeId: z.string(),
   assignmentReason: str,
   name: str,
@@ -105,6 +106,7 @@ export const LotSchema = z.object({
   lotNo: z.string(),
   nodeId: z.string(),
   ownerOrg: str,
+  ownerOrgName: str,
   bin: str,
   qtyOnHand: int,
   qtyReserved: int.default(0),
@@ -140,6 +142,7 @@ export const MovementSchema = z.object({
   sku: z.string(),
   nodeId: z.string(),
   ownerOrg: str,
+  ownerOrgName: str,
   lotId: str,
   lotNo: str,
   qty: int,
@@ -154,7 +157,7 @@ export const LotTraceSchema = z.object({
   lot: LotSchema,
   movements: z.array(MovementSchema).default([]),
   relatedLots: z.array(LotSchema).default([]),
-  orders: z.array(z.object({ orderId: z.string(), qty: int.nullish(), status: str, at: str }).loose()).default([])
+  orders: z.array(z.object({ orderId: z.string(), orderNumber: str, qty: int.nullish(), status: str, at: str }).loose()).default([])
 });
 export type LotTrace = z.infer<typeof LotTraceSchema>;
 
@@ -200,6 +203,7 @@ export const CycleCountSchema = z.object({
   sku: str,
   binPrefix: str,
   ownerOrg: str,
+  ownerOrgName: str,
   blind: z.boolean().default(false),
   status: z.enum(['OPEN', 'COUNTED', 'POSTED', 'CANCELLED']),
   note: str,

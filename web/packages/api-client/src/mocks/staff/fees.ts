@@ -169,7 +169,7 @@ export function seedFeeSchedules(now: Date): MockFeeSchedule[] {
     planBps: structuredClone(SEED_PLAN_BPS), planFbaMinor: {}, connectionFee: structuredClone(SEED_CONNECTION_FEE) };
   return [
     { ...base, id: 'fee-1', version: 1, effectiveFrom: '2020-01-01T00:00:00Z', categoryBps: { ...LAUNCH }, defaultCommissionBps: 1000, overrides: [], fbaPerUnitMinor: 325,
-      deliveryPricing: null, note: 'Launch defaults', createdBy: 'system:seed', createdAt: '2020-01-01T00:00:00Z' },
+      deliveryPricing: null, note: 'Launch defaults', createdBy: 'System', createdAt: '2020-01-01T00:00:00Z' },
     { ...base, id: 'fee-2', version: 2, effectiveFrom: ago(60), categoryBps: { ...LAUNCH, fashion: 1150 }, defaultCommissionBps: 1000, fbaPerUnitMinor: 325,
       deliveryPricing: structuredClone(LAUNCH_DELIVERY),
       overrides: [{ orgId: 'org-kente', category: 'beauty', commissionBps: 800 }, { orgId: 'org-ade', category: ALL_CATEGORIES, commissionBps: 900 }],

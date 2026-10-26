@@ -1282,5 +1282,11 @@
   "st.runs.adv.problem.required": "Èyí jẹ́ dandan.",
   "st.runs.adv.problem.tooLong": "Má ju àmì {max} lọ.",
   "st.runs.adv.problem.range": "Èyí kọjá ààlà tí a gbà láàyè.",
-  "st.runs.adv.problem.order": "Ìparí gbọdọ̀ jẹ́ lẹ́yìn ìbẹ̀rẹ̀."
+  "st.runs.adv.problem.order": "Ìparí gbọdọ̀ jẹ́ lẹ́yìn ìbẹ̀rẹ̀.",
+  "st.names.unknownSeller": "Olùtà tí a kò mọ̀",
+  "st.names.unknownUser": "Olùmúlò tí a kò mọ̀",
+  "st.names.unknownDriver": "Awakọ̀ tí a kò mọ̀",
+  "st.sheet.copyId": "Daakọ {label}",
+  "st.sheet.copied": "A ti daakọ",
+  "st.names.unknownRoute": "Ọ̀nà tí a kò mọ̀"
 }

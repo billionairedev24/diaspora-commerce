@@ -540,6 +540,7 @@ export const PickupListSchema = z.object({ items: z.array(PickupRowSchema), canA
 export type PickupList = z.infer<typeof PickupListSchema>;
 export const DriverSuggestionSchema = z.object({
   driverId: z.string(),
+  driverName: z.string(),
   routeId: z.string(),
   routeName: z.string(),
   zone: z.string(),
@@ -564,6 +565,7 @@ export const PickupAssignResultSchema = z.object({
   routeId: z.string(),
   routeName: nullableString,
   driverId: nullableString,
+  driverName: nullableString,
   status: z.string()
 });
 export type PickupAssignResult = z.infer<typeof PickupAssignResultSchema>;
@@ -571,10 +573,13 @@ export const PickupAssignmentSchema = z.object({
   id: z.string(),
   shipmentId: z.string(),
   routeId: z.string(),
+  routeName: nullableString,
   driverId: nullableString,
+  driverName: nullableString,
   mode: z.enum(['AUTO_NEAREST', 'DISPATCH_OVERRIDE']),
   reason: nullableString,
   previousRouteId: nullableString,
+  previousRouteName: nullableString,
   straightMiles: z.number().nullable(),
   roadMiles: z.number().nullable(),
   distanceMethod: nullableString,
@@ -645,6 +650,7 @@ export const RunDispatchRouteSchema = z.object({
   name: z.string(),
   status: z.enum(['PLANNED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']),
   driverId: nullableString,
+  driverName: nullableString,
   vehicleId: nullableString,
   blocked: z.boolean(),
   packages: z.number().int(),

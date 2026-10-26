@@ -12,6 +12,7 @@ import { ErrorState } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { useT } from '@/i18n/t';
 import { dateTime, humanize } from '@/lib/format';
+import { personName, sellerName } from '@/lib/names';
 
 import { plansApi, STATUS_TONE, type T } from './kit';
 
@@ -19,12 +20,12 @@ const TYPES: GrantType[] = ['FREE_DAYS', 'FREE_MONTHS', 'CREDIT', 'PERCENT_OFF',
 
 export const grantColumns = (t: T, withOrg = true): ColumnDef<StaffBillingGrant>[] => [
   { id: 'createdAt', accessorFn: (g) => g.createdAt, header: t('st.plans.col.date'), size: 160, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.createdAt) },
-  ...(withOrg ? [{ id: 'orgId', accessorFn: (g: StaffBillingGrant) => g.orgId, header: t('st.plans.col.org'), size: 180, meta: { kind: 'mono' as const } }] : []),
+  ...(withOrg ? [{ id: 'orgName', accessorFn: (g: StaffBillingGrant) => sellerName(t, g.orgName), header: t('st.plans.col.org'), size: 180, meta: { kind: 'strong' as const } }] : []),
   { id: 'summary', accessorFn: (g) => g.summary, header: t('st.plans.col.grant'), size: 180, meta: { kind: 'strong' } },
   { id: 'source', accessorFn: (g) => g.source, header: t('st.plans.col.source'), size: 110, cell: ({ row }) => t(`st.plans.source.${row.original.source}`) },
   { id: 'reason', accessorFn: (g) => g.reasonCode ?? g.metric ?? '', header: t('st.plans.col.why'), size: 220,
     cell: ({ row }) => [row.original.reasonCode ? humanize(row.original.reasonCode) : row.original.metric ? humanize(row.original.metric) : '', row.original.note].filter(Boolean).join(' · ') },
-  { id: 'actorId', accessorFn: (g) => g.actorId, header: t('st.plans.col.by'), size: 140 },
+  { id: 'actorName', accessorFn: (g) => personName(t, g.actorName), header: t('st.plans.col.by'), size: 140 },
   { id: 'status', accessorFn: (g) => g.status, header: t('st.plans.col.status'), size: 110, meta: { kind: 'status' },
     cell: ({ row }) => <StatusPill tone={STATUS_TONE[row.original.status] ?? 'info'}>{humanize(row.original.status)}</StatusPill> },
   { id: 'effect', accessorFn: (g) => g.reference ?? g.invoiceId ?? g.newTrialEnd ?? '', header: t('st.plans.col.effect'), size: 200, meta: { kind: 'mono' },

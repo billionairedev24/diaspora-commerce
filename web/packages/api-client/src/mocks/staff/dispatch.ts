@@ -24,16 +24,16 @@ export interface MockDispatch {
 export function seedDispatch(now: Date): MockDispatch {
   const at = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
   const day = (d: number) => new Date(now.getTime() + d * 86_400_000).toISOString().slice(0, 10);
-  const driver = (driverId: string, routeId: string, routeName: string, straight: number, road: number | null, minutes: number | null, onRoute: number, left: number): DriverSuggestion => ({
-    driverId, routeId, routeName, zone: 'Houston Metro', routeStatus: 'IN_PROGRESS', straightLineMiles: straight, roadMiles: road, durationMinutes: minutes,
+  const driver = (driverId: string, driverName: string, routeId: string, routeName: string, straight: number, road: number | null, minutes: number | null, onRoute: number, left: number): DriverSuggestion => ({
+    driverId, driverName, routeId, routeName, zone: 'Houston Metro', routeStatus: 'IN_PROGRESS', straightLineMiles: straight, roadMiles: road, durationMinutes: minutes,
     distanceMethod: road === null ? 'STRAIGHT_LINE' : 'ROAD_OSRM', positionAt: at(3), packagesOnRoute: onRoute, capacityLeft: left
   });
   const drivers = [
-    driver('drv-tunde', 'R-HOU-W-14', 'HOU West · Tunde', 1.8, 2.6, 8, 14, 26),
-    driver('drv-ngozi', 'R-HOU-SW-07', 'HOU Southwest · Ngozi', 3.1, 4.4, 12, 22, 18),
-    driver('drv-kwame', 'R-HOU-C-03', 'HOU Central · Kwame', 4.9, 6.8, 17, 30, 10),
-    driver('drv-fatou', 'R-HOU-N-11', 'HOU North · Fatou', 7.2, 9.9, 21, 9, 31),
-    driver('drv-yaw', 'R-HOU-E-02', 'HOU East · Yaw', 9.6, null, null, 36, 4)
+    driver('drv-tunde', 'Tunde Adeyemi', 'R-HOU-W-14', 'HOU West · Tunde', 1.8, 2.6, 8, 14, 26),
+    driver('drv-ngozi', 'Ngozi Eze', 'R-HOU-SW-07', 'HOU Southwest · Ngozi', 3.1, 4.4, 12, 22, 18),
+    driver('drv-kwame', 'Kwame Boateng', 'R-HOU-C-03', 'HOU Central · Kwame', 4.9, 6.8, 17, 30, 10),
+    driver('drv-fatou', 'Fatou Diallo', 'R-HOU-N-11', 'HOU North · Fatou', 7.2, 9.9, 21, 9, 31),
+    driver('drv-yaw', 'Yaw Mensah', 'R-HOU-E-02', 'HOU East · Yaw', 9.6, null, null, 36, 4)
   ];
   return {
     pickups: [
@@ -46,8 +46,8 @@ export function seedDispatch(now: Date): MockDispatch {
     ],
     suggestions: { 'shp-pk-1001': drivers, 'shp-pk-1002': drivers.slice(1), 'shp-pk-1003': [] },
     assignments: [
-      { id: 'pa-1', shipmentId: 'shp-pk-1002', routeId: 'R-HOU-N-11', driverId: 'drv-fatou', mode: 'AUTO_NEAREST', reason: null, previousRouteId: null,
-        straightMiles: 7.2, roadMiles: 9.9, distanceMethod: 'ROAD_OSRM', actor: 'system', createdAt: at(38) }
+      { id: 'pa-1', shipmentId: 'shp-pk-1002', routeId: 'R-HOU-N-11', routeName: 'HOU North · Fatou', driverId: 'drv-fatou', driverName: 'Fatou Diallo', mode: 'AUTO_NEAREST', reason: null, previousRouteId: null, previousRouteName: null,
+        straightMiles: 7.2, roadMiles: 9.9, distanceMethod: 'ROAD_OSRM', actor: 'System', createdAt: at(38) }
     ],
     runs: seedRuns(now),
     locations: [
@@ -78,7 +78,7 @@ function seedRuns(now: Date): RunDispatch[] {
     stop('st-l4', 4, 'DROPOFF', 'Bola Ade', 'PENDING', 'LBK-1002', '88 Quaker Ave, Lubbock, TX 79416', true)
   ];
   const lubbockRoute: RunDispatchRoute = {
-    id: 'rte-lbk-1', name: 'LBK-7 route 1', status: 'ASSIGNED', driverId: 'drv-tunde', vehicleId: null, blocked: false, packages: 4, bagsCollected: 2, bagsDelivered: 0,
+    id: 'rte-lbk-1', name: 'LBK-7 route 1', status: 'ASSIGNED', driverId: 'drv-tunde', driverName: 'Tunde Adeyemi', vehicleId: null, blocked: false, packages: 4, bagsCollected: 2, bagsDelivered: 0,
     pickupStops: 2, pickupsDone: 1, dropStops: 2, dropsDone: 0, dropsFailed: 0, stops: lubbockStops
   };
   return [
@@ -130,7 +130,7 @@ export function planRun(run: RunDispatch): RunDispatch {
   ];
   return {
     ...run, status: 'PLANNED', planError: null, plannedAt: new Date().toISOString(), progress: { ...run.progress, pickupStops: 1, dropStops: drops, unrouted: 0 },
-    routes: [{ id: `rte-${run.runId}-1`, name: `${run.town} route 1`, status: 'PLANNED', driverId: null, vehicleId: null, blocked: false, packages: run.progress.bags, bagsCollected: 0, bagsDelivered: 0,
+    routes: [{ id: `rte-${run.runId}-1`, name: `${run.town} route 1`, status: 'PLANNED', driverId: null, driverName: null, vehicleId: null, blocked: false, packages: run.progress.bags, bagsCollected: 0, bagsDelivered: 0,
       pickupStops: 1, pickupsDone: 0, dropStops: drops, dropsDone: 0, dropsFailed: 0, stops }]
   };
 }

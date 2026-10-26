@@ -147,7 +147,7 @@ function InboundReceiving({ shipment }: { shipment: InboundShipment }) {
         <strong>{s.number}</strong>
         <StatusPill tone={toneOf(s.status)}>{s.status === 'SHIPPED' ? 'Arriving' : 'Receiving'}</StatusPill>
         <span className="text-sm text-muted">
-          {s.ownerOrg} → {s.nodeId} · {s.receivedUnits} of {s.expectedUnits} received
+          {s.ownerOrgName ?? ''} → {s.nodeId} · {s.receivedUnits} of {s.expectedUnits} received
         </span>
       </div>
       <Timeline shipment={s} />

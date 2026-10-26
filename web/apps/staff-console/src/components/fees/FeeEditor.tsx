@@ -13,6 +13,7 @@ import { problemMessage } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, idempotencyKey, money } from '@/lib/format';
+import { sellerName } from '@/lib/names';
 
 import { previewQuote } from './delivery-model';
 import { deliveryFieldId, DeliveryPricingEditor } from './DeliveryPricingEditor';
@@ -38,8 +39,8 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
   const [draft, setDraft] = useState<FeeScheduleDraft | null>(null);
   const [confirmImmediate, setConfirmImmediate] = useState(false);
   const key = useRef(idempotencyKey());
-  const names = useRef(new Map(overview.base?.overrides.map((o) => [o.orgId, o.orgName ?? o.orgId]) ?? []));
-  const orgName = (id: string) => names.current.get(id) ?? id;
+  const names = useRef(new Map(overview.base?.overrides.map((o) => [o.orgId, o.orgName ?? '']) ?? []));
+  const orgName = (id: string) => names.current.get(id) || sellerName(t, null);
   const cats = overview.categories;
   const set = <K extends keyof FeeForm>(k: K, v: FeeForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -362,13 +363,13 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
               {form.overrides.map((o, i) => (
                 <tr key={o.rowId} className="border-b border-border">
                   <td className={td} id={`fee-ovr-${o.rowId}`} tabIndex={-1}>
-                    <strong>{o.orgName}</strong>
+                    <strong>{sellerName(t, o.orgName)}</strong>
                     {errors[`overrides.${i}.orgId`] ? <p className="m-0 text-xs text-danger">{errors[`overrides.${i}.orgId`]}</p> : null}
                   </td>
                   <td className={td}>
                     <Select
                       id={`fee-ovr-cat-${o.rowId}`}
-                      label={<span className="at-visually-hidden">Category for {o.orgName}</span>}
+                      label={<span className="at-visually-hidden">Category for {sellerName(t, o.orgName)}</span>}
                       value={o.category}
                       options={categoryOptions}
                       error={errors[`overrides.${i}.category`]}
@@ -382,7 +383,7 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
                     <TextField
                       id={`fee-ovr-rate-${o.rowId}`}
                       inputMode="decimal"
-                      label={<span className="at-visually-hidden">Commission for {o.orgName} (%)</span>}
+                      label={<span className="at-visually-hidden">Commission for {sellerName(t, o.orgName)} (%)</span>}
                       value={o.rate}
                       error={errors[`overrides.${i}.commissionBps`]}
                       onChange={(e) => {
@@ -392,7 +393,7 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
                     />
                   </td>
                   <td className={td}>
-                    <Button variant="neutral" size="sm" aria-label={`Remove the override for ${o.orgName}`} onClick={() => set('overrides', form.overrides.filter((x) => x.rowId !== o.rowId))}>
+                    <Button variant="neutral" size="sm" aria-label={`Remove the override for ${sellerName(t, o.orgName)}`} onClick={() => set('overrides', form.overrides.filter((x) => x.rowId !== o.rowId))}>
                       <Trash size={16} aria-hidden />
                     </Button>
                   </td>
