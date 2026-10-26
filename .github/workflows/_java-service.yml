@@ -57,6 +57,8 @@ jobs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
       - uses: actions/checkout@v7
+      - name: No duplicate Flyway versions
+        run: tools/dev/check_migrations.sh
       - id: check
         run: |
           if [[ -f "$SERVICE_DIR/pom.xml" ]]; then
