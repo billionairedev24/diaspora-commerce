@@ -40,7 +40,7 @@ public final class ImportTemplates {
         List<String> paths = categories.stream().map(ImportCategory::path).toList();
         List<ImportColumn> columns = ImportColumns.forType(type, paths);
         return new TemplateSpec(type.label(), "afrotransact-products-" + type.code(), shown(columns), INSTRUCTIONS,
-                examples(columns, type));
+                examples(shown(columns), type));
     }
 
     /** The generic template: any category, attributes and options as "name: value" pairs. */
@@ -48,7 +48,7 @@ public final class ImportTemplates {
         List<String> paths = categories.stream().map(ImportCategory::path).toList();
         List<ImportColumn> columns = ImportColumns.generic(paths);
         return new TemplateSpec("All categories", "afrotransact-products", shown(columns), INSTRUCTIONS,
-                examples(columns, null));
+                examples(shown(columns), null));
     }
 
     /** The template shows the dedicated image columns; the combined image_urls column is still read when present. */

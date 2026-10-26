@@ -16,7 +16,7 @@
     <description>Spring Authorization Server (OAuth 2.1 / OIDC), accounts, RBAC, MFA, passkeys and social login.</description>
 
     <properties>
-        <libphonenumber.version>9.0.41</libphonenumber.version>
+        <libphonenumber.version>9.0.42</libphonenumber.version>
     </properties>
 
     <dependencies>

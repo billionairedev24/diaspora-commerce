@@ -78,7 +78,8 @@ class SpreadsheetFilesTest {
             products.getRow(0).forEach(c -> header.add(c.getStringCellValue()));
             assertThat(header).startsWith("Parent SKU", "SKU *", "Category *", "Title *", "Brand *")
                     .contains("Price (USD) *", "Quantity *", "Net weight", "Allergens *", "Shelf life *",
-                            "Shelf life unit", "Pre-order eligible", "Image URLs *");
+                            "Shelf life unit", "Pre-order eligible", "Main image URL", "Other image URL 1", "Swatch image URL")
+                    .doesNotContain("Image URLs *");
             Cell sku = products.getRow(0).getCell(1);
             assertThat(sku.getCellComment().getString().getString()).contains("Your unique code", "Required.");
             assertThat(products.getPaneInformation().isFreezePane()).isTrue();
@@ -126,7 +127,8 @@ class SpreadsheetFilesTest {
         }
         ParsedSheet sheet = reader.read(filled, SpreadsheetFormat.XLSX);
         assertThat(sheet.rows()).hasSize(2);
-        assertThat(sheet.rows().getFirst().cell(spec.columns().stream().map(c -> c.key()).toList().indexOf("gtin")))
+        // The reader folds the image columns into one image_urls column, so look the barcode up in the sheet's own header.
+        assertThat(sheet.rows().getFirst().cell(sheet.header().indexOf("Barcode (GTIN/UPC/EAN)")))
                 .isEqualTo("4006381333931");
         ValidationResult result = ImportValidator.validate(sheet, new ImportContext(ImportMode.CREATE, GROCERY,
                 Map.of("grocery", GROCERY), CATEGORIES, Set.of(), Set.of(),
@@ -149,7 +151,7 @@ class SpreadsheetFilesTest {
         assertThat(sheet.rows()).singleElement().satisfies(r -> {
             assertThat(r.cell(0)).isEqualTo("SUYA-1");
             assertThat(r.cell(3)).isEqualTo("Suya, the spice");
-            assertThat(r.rowNumber()).isEqualTo(7);
+            assertThat(r.rowNumber()).isEqualTo(8);
         });
     }
 

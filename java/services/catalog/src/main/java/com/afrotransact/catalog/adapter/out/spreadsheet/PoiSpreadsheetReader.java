@@ -10,6 +10,7 @@ import java.util.List;
 
 import javax.xml.parsers.ParserConfigurationException;
 
+import com.afrotransact.catalog.domain.imports.ImageColumns;
 import com.afrotransact.catalog.domain.imports.ImportLimits;
 import com.afrotransact.catalog.domain.imports.ParsedSheet;
 import com.afrotransact.catalog.domain.imports.SheetRow;
@@ -59,7 +60,8 @@ class PoiSpreadsheetReader implements SpreadsheetReader {
             throw new SpreadsheetRejected("The file is larger than 10 MB; split it into several files");
         }
         List<SheetRow> raw = format == SpreadsheetFormat.XLSX ? readXlsx(content) : readCsv(content);
-        return toSheet(raw);
+        // The template's image columns (main, other 1-8, swatch) become the one image list the import reads.
+        return ImageColumns.fold(toSheet(raw));
     }
 
     private static List<SheetRow> readCsv(byte[] content) {
