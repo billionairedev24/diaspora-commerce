@@ -1,8 +1,9 @@
 'use client';
 
-import { type RunHistoryRow, type RunPnl, staffRunQueries } from '@afrotransact/api-client';
+import { type RunHistoryRow, staffRunQueries } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Select, TextField } from '@afrotransact/ui';
+import { Button, Select } from '@afrotransact/ui';
+import { Plus } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -12,75 +13,11 @@ import { EmptyState, ErrorState, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 
 import { AdvertorialsPanel } from './AdvertorialsPanel';
-import { breakEvenText, CARD, EconomicsTable, useRunsApi } from './shared';
-
-const STATUS_PILL: Record<string, string> = {
-  OPEN: 'bg-green-50 text-green-800',
-  EXTENDED: 'bg-green-50 text-green-800',
-  ANNOUNCED: 'bg-ink-100 text-ink-800',
-  DRAFT: 'bg-ink-50 text-ink-600',
-  CUT_OFF: 'bg-gold-100 text-gold-900',
-  CONFIRMED: 'bg-gold-100 text-gold-900',
-  COLLECTING: 'bg-gold-100 text-gold-900',
-  OUT_FOR_DELIVERY: 'bg-gold-100 text-gold-900',
-  COMPLETED: 'bg-ink-100 text-ink-600',
-  CANCELLED: 'bg-red-50 text-red-700'
-};
-
-const statusLabel = (t: ReturnType<typeof useT>, status: string): string => {
-  const key = `st.runs.status.${status}` as MessageKey;
-  const label = t(key);
-  return label === key ? status : label;
-};
-
-/** The P&L of one run: the estimate before it, the result after it, or what went back to customers when it was cancelled. */
-export function RunPnlPanel({ runId }: { runId: string }) {
-  const t = useT();
-  const fmt = useFormatters();
-  const api = useRunsApi();
-  const [commission, setCommission] = useState('');
-  const parsed = commission.trim() === '' ? undefined : /^\d{1,7}$/.test(commission.trim()) ? Number(commission.trim()) * 100 : Number.NaN;
-  const bad = parsed !== undefined && Number.isNaN(parsed);
-  const q = useQuery({ ...staffRunQueries.runPnl(api, runId, bad ? undefined : parsed) });
-  if (q.isPending) return <Spinner />;
-  if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
-  const p: RunPnl = q.data;
-  const e = p.economics;
-  return (
-    <section aria-labelledby={`pnl-title-${runId}`} className={CARD} data-testid="run-pnl">
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 id={`pnl-title-${runId}`} className="m-0 text-md font-bold">
-          {t('st.runs.runs.pnl.title')}
-        </h3>
-        <Pill className={STATUS_PILL[p.status] ?? 'bg-ink-50 text-ink-600'}>{statusLabel(t, p.status)}</Pill>
-        <span className="text-xs text-muted" data-testid="run-pnl-phase">
-          {t(`st.runs.phase.${p.phase}`)}
-        </span>
-      </div>
-      {p.phase === 'CANCELLED' ? (
-        <div className="flex flex-col gap-1 text-sm" data-testid="run-pnl-cancelled">
-          <p className="m-0">{t('st.runs.runs.pnl.cancelledHelp')}</p>
-          {p.cancelReason ? <p className="m-0 text-muted">{t('st.runs.runs.pnl.reason', { reason: p.cancelReason })}</p> : null}
-          <p className="m-0 font-semibold">{t('st.runs.runs.pnl.refunded', { orders: p.ordersRefunded, fees: fmt.money(p.refundedFeesMinor, e.currency) })}</p>
-        </div>
-      ) : (
-        <>
-          <p className="m-0 text-sm font-semibold">{breakEvenText(t, e)}</p>
-          <EconomicsTable e={e} labelOrders={t(p.phase === 'AFTER' ? 'st.runs.pnl.atActual' : 'st.runs.pnl.soFar')} />
-          <TextField
-            label={t('st.runs.runs.pnl.commission')}
-            help={t('st.runs.runs.pnl.commissionHelp')}
-            inputMode="decimal"
-            value={commission}
-            error={bad ? t('st.runs.settings.problem.notAmount') : null}
-            onChange={(ev) => setCommission(ev.currentTarget.value)}
-            className="max-w-xs"
-          />
-        </>
-      )}
-    </section>
-  );
-}
+import { RunFormSheet } from './RunForm';
+import { RunList, RunsNeedingDecision } from './RunList';
+import { RunPnlPanel } from './RunPnlPanel';
+import { RunSheet } from './RunSheet';
+import { RUN_STATUS_PILL, runStatusLabel, useCanManageRuns, useRunsApi } from './shared';
 
 function HistoryTable({ rows, currency, selected, onSelect }: { rows: RunHistoryRow[]; currency: string; selected: string | null; onSelect: (id: string) => void }) {
   const t = useT();
@@ -122,7 +59,7 @@ function HistoryTable({ rows, currency, selected, onSelect }: { rows: RunHistory
                 </button>
               </td>
               <td className="px-3 py-2">
-                <Pill className={STATUS_PILL[r.status] ?? 'bg-ink-50 text-ink-600'}>{statusLabel(t, r.status)}</Pill>
+                <Pill className={RUN_STATUS_PILL[r.status] ?? 'bg-ink-50 text-ink-600'}>{runStatusLabel(t, r.status)}</Pill>
               </td>
               <td className="px-3 py-2 text-right">{fmt.number(r.orders)}</td>
               <td className="px-3 py-2 text-right">{fmt.number(r.packages)}</td>
@@ -182,28 +119,56 @@ function LocationHistory({ locationId, currency }: { locationId: string; currenc
 }
 
 /**
- * Pre-orders › Delivery runs (S265): per location, the orders of every run, the P&L of a run before and after it (or
- * the refunds when it was cancelled), subscriber counts and growth, and the location-targeted advertorials of a run.
+ * Pre-orders › Delivery runs (S260, S265): schedule a run (New run), see the runs of a location by stage with their orders
+ * against the minimum, open one for its timeline, decisions and actions (announce, open, extend, confirm, cancel), and see
+ * the runs that need a decision across every location. Below: the orders of every run of the location, the P&L of a run
+ * before, after or when cancelled, subscriber counts and growth, and the location-targeted advertorials of a run.
  */
 export function RunsView() {
   const t = useT();
   const api = useRunsApi();
+  const manage = useCanManageRuns();
   const locations = useQuery(staffRunQueries.locations(api));
   const [chosen, setChosen] = useState('');
+  const [sheet, setSheet] = useState<{ kind: 'view'; id: string } | { kind: 'form'; id: string | null } | null>(null);
   if (locations.isPending) return <Spinner />;
   if (locations.isError) return <ErrorState error={locations.error} onRetry={() => void locations.refetch()} />;
   const items = locations.data.items;
   if (items.length === 0) return <EmptyState title={t('st.runs.runs.empty.title')}>{t('st.runs.runs.empty.help')}</EmptyState>;
   const location = items.find((l) => l.id === chosen) ?? items[0];
   if (!location) return null;
+  const canManage = locations.data.can.manage && manage;
+  const view = (id: string) => setSheet({ kind: 'view', id });
   return (
     <div className="flex flex-col gap-4 p-5" data-testid="runs-view">
-      <div className="flex flex-col gap-1">
-        <h2 className="m-0 text-xl font-black">{t('st.runs.runs.title')}</h2>
-        <p className="m-0 max-w-[80ch] text-sm text-muted">{t('st.runs.runs.intro')}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 className="m-0 text-xl font-black">{t('st.runs.runs.title')}</h2>
+          <p className="m-0 max-w-[80ch] text-sm text-muted">{t('st.runs.runs.intro')}</p>
+        </div>
+        <Button icon={<Plus aria-hidden size={18} />} disabled={!canManage} title={canManage ? undefined : t('st.runs.lc.newNoAccess')} onClick={() => setSheet({ kind: 'form', id: null })}>
+          {t('st.runs.lc.new')}
+        </Button>
       </div>
+      <RunsNeedingDecision onOpen={view} />
       <Select label={t('st.runs.runs.location')} value={location.id} onChange={(e) => setChosen(e.currentTarget.value)} options={items.map((l) => ({ value: l.id, label: l.name }))} className="max-w-xs" />
+      <RunList location={location} onOpen={view} />
       <LocationHistory key={location.id} locationId={location.id} currency={location.currency ?? 'USD'} />
+      <RunSheet
+        runId={sheet?.kind === 'view' ? sheet.id : null}
+        onClose={() => setSheet(null)}
+        onEdit={(run) => setSheet({ kind: 'form', id: run.id })}
+      />
+      <RunFormSheet
+        open={sheet?.kind === 'form'}
+        runId={sheet?.kind === 'form' ? sheet.id : null}
+        defaultLocationId={location.id}
+        onClose={() => setSheet((s) => (s?.kind === 'form' && s.id ? { kind: 'view', id: s.id } : null))}
+        onSaved={(run) => {
+          setChosen(run.locationId);
+          setSheet({ kind: 'view', id: run.id });
+        }}
+      />
     </div>
   );
 }

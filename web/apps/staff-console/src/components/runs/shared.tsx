@@ -6,7 +6,7 @@ import { Button, cx, Dialog, TextField } from '@afrotransact/ui';
 import { type FormEvent, useEffect, useState } from 'react';
 
 import { problemMessage } from '@/components/ui/States';
-import { useT } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { useStaff } from '@/lib/session';
 
@@ -23,6 +23,40 @@ export function useCanManageRuns(): boolean {
   const lv = level('preorders');
   return (lv === 'FULL' || lv === 'EDIT') && hasPermission('preorders:manage');
 }
+
+/** The time now, refreshed every minute (the cutoff job runs every minute, so a minute is as fresh as a run's outlook gets). */
+export function useNow(everyMs = 60_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), everyMs);
+    return () => clearInterval(id);
+  }, [everyMs]);
+  return now;
+}
+
+/** Status pill colours of a run (design tokens only). */
+export const RUN_STATUS_PILL: Record<string, string> = {
+  OPEN: 'bg-green-50 text-green-800',
+  EXTENDED: 'bg-green-50 text-green-800',
+  ANNOUNCED: 'bg-ink-100 text-ink-800',
+  DRAFT: 'bg-ink-50 text-ink-600',
+  CUT_OFF: 'bg-gold-100 text-gold-900',
+  CONFIRMED: 'bg-gold-100 text-gold-900',
+  COLLECTING: 'bg-gold-100 text-gold-900',
+  OUT_FOR_DELIVERY: 'bg-gold-100 text-gold-900',
+  COMPLETED: 'bg-ink-100 text-ink-600',
+  CANCELLED: 'bg-red-50 text-red-700'
+};
+
+/** The words for a run's status. */
+export const runStatusLabel = (t: ReturnType<typeof useT>, status: string): string => {
+  const key = `st.runs.status.${status}` as MessageKey;
+  const label = t(key);
+  return label === key ? status : label;
+};
+
+/** A reason in words: the cutoff job writes MINIMUM_NOT_MET (a code, not something to show people). */
+export const reasonText = (t: ReturnType<typeof useT>, reason: string): string => (reason === 'MINIMUM_NOT_MET' ? t('st.runs.lc.log.minimumNotMet') : reason);
 
 /** A value that follows `value` after it has stopped changing for `ms` (so a form does not call the BFF per keystroke). */
 export function useDebounced<T>(value: T, ms = 400): T {
