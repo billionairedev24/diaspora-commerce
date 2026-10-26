@@ -38,11 +38,14 @@ func isOrgKey(k string) bool {
 // nameWho names the people and organisations of an upstream document the BFF only relays: a person's id in a who-field
 // that is itself a label (updatedBy, actor…) is replaced by their name ("Unknown user" when nobody can name them); in a
 // field that is an id (actorId) the name goes in the sibling field (actorName), like an organisation's name
-// (sellerOrgId → sellerOrgName). Only identity user ids (UUIDs) are looked up, so "system" and names a person typed stay
+// (sellerOrgId → sellerOrgName) and an order's number (orderId → orderNumber). Only identity user ids (UUIDs) are looked up, so "system" and names a person typed stay
 // as they are.
 func (n *staffNames) nameWho(ctx context.Context, sc staffCtx, doc any) {
-	var people, orgs []string
+	var people, orgs, orders []string
 	walkDoc(doc, func(m map[string]any) {
+		if s, ok := m["orderId"].(string); ok && s != "" {
+			orders = append(orders, s)
+		}
 		for _, k := range whoKeys {
 			if s, ok := m[k].(string); ok && uuidLike(s) {
 				people = append(people, s)
@@ -54,12 +57,18 @@ func (n *staffNames) nameWho(ctx context.Context, sc staffCtx, doc any) {
 			}
 		}
 	})
-	if len(people) == 0 && len(orgs) == 0 {
+	if len(people) == 0 && len(orgs) == 0 && len(orders) == 0 {
 		return
 	}
 	who := n.labels(ctx, sc, personRef("actorId", "Person"), people...)
 	seller := n.labels(ctx, sc, sellerRef("orgId"), orgs...)
+	numbers := n.labels(ctx, sc, orderRef("orderId"), orders...)
 	walkDoc(doc, func(m map[string]any) {
+		if s, ok := m["orderId"].(string); ok && numbers[s] != "" {
+			if _, has := m["orderNumber"]; !has {
+				m["orderNumber"] = numbers[s]
+			}
+		}
 		for _, k := range whoKeys {
 			s, ok := m[k].(string)
 			if !ok || who[s] == "" {

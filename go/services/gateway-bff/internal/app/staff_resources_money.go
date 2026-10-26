@@ -132,8 +132,8 @@ func payoutsResource() *staffResource {
 	list := listLimited("/v1/payouts/requests", upPayments)
 	return &staffResource{
 		key: "payouts", module: "payouts", title: "Payout requests", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("sellerName", "Seller", "strong", 24), col("requestedByName", "Requested by", "text", 18), col("amountMinor", "Amount", "money", 14),
-			col("requestedAt", "Requested", "date", 14), col("holdReason", "Hold reason", "text", 22), col("status", "Status", "status", 14)},
+		columns: []domain.Column{col("sellerName", "Seller", "strong", 22), col("requestedByName", "Requested by", "text", 16), col("amountMinor", "Amount", "money", 12),
+			col("requestedAt", "Requested", "date", 12), col("holdReason", "Hold reason", "text", 20), col("status", "Status", "status", 14)},
 		facets: domain.StaffFacets("REQUESTED", "ON_HOLD", "APPROVED", "IN_TRANSIT", "PAID", "FAILED"),
 		list:   list,
 		names: []nameRef{sellerRef("orgId").named("sellerName"), personRef("requestedBy", "Requested by"), personRef("decidedBy", "Decided by"),

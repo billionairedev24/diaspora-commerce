@@ -6993,7 +6993,7 @@ components:
         status: {type: string, description: The route's status}
     PickupAssignment:
       type: object
-      required: [id, shipmentId, routeId, routeName, driverId, driverName, mode, reason, previousRouteId, straightMiles, roadMiles, distanceMethod, actor, createdAt]
+      required: [id, shipmentId, routeId, routeName, driverId, driverName, mode, reason, previousRouteId, previousRouteName, straightMiles, roadMiles, distanceMethod, actor, createdAt]
       properties:
         id: {type: string}
         shipmentId: {type: string}
@@ -7004,6 +7004,7 @@ components:
         mode: {type: string, enum: [AUTO_NEAREST, DISPATCH_OVERRIDE]}
         reason: {type: [string, 'null']}
         previousRouteId: {type: [string, 'null']}
+        previousRouteName: {type: [string, 'null']}
         straightMiles: {type: [number, 'null']}
         roadMiles: {type: [number, 'null']}
         distanceMethod: {type: [string, 'null']}

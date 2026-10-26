@@ -198,7 +198,7 @@ func (s *staffDispatchImpl) Assignments(ctx context.Context, c *domain.Caller, s
 		return domain.PickupAssignmentList{}, err
 	}
 	out := domain.PickupAssignmentList{Items: []domain.PickupAssignment{}}
-	nameAll(ctx, sc, up, driverRef("driverId"), routeRef("routeId"), personRef("actor", "Assigned by"))
+	nameAll(ctx, sc, up, driverRef("driverId"), routeRef("routeId"), routeRef("previousRouteId"), personRef("actor", "Assigned by"))
 	for _, a := range up {
 		mode := strings.ToUpper(jstr(a, "mode"))
 		if mode != "DISPATCH_OVERRIDE" {
@@ -206,7 +206,7 @@ func (s *staffDispatchImpl) Assignments(ctx context.Context, c *domain.Caller, s
 		}
 		out.Items = append(out.Items, domain.PickupAssignment{ID: jstr(a, "id"), ShipmentID: firstNonEmpty(jstr(a, "shipmentId"), shipmentID),
 			RouteID: jstr(a, "routeId"), RouteName: strPtr(jstr(a, "routeName")), DriverID: strPtr(jstr(a, "driverId")), DriverName: strPtr(jstr(a, "driverName")), Mode: mode, Reason: strPtr(jstr(a, "reason")),
-			PreviousRouteID: strPtr(jstr(a, "previousRouteId")), StraightMiles: optNum(a, "straightMiles"), RoadMiles: optNum(a, "roadMiles"),
+			PreviousRouteID: strPtr(jstr(a, "previousRouteId")), PreviousRouteName: strPtr(jstr(a, "previousRouteName")), StraightMiles: optNum(a, "straightMiles"), RoadMiles: optNum(a, "roadMiles"),
 			DistanceMethod: strPtr(jstr(a, "distanceMethod")), Actor: strPtr(jstr(a, "actorName")), CreatedAt: optTime(jstr(a, "createdAt"))})
 	}
 	sort.SliceStable(out.Items, func(i, j int) bool {
