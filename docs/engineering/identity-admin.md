@@ -107,7 +107,7 @@ Routine rotation (quarterly, or when someone with access to the key leaves). No 
 **A rotation cannot be undone from the console**: the old key's private half is erased the moment it stops being active (that is the point
 of rotating), so it can never sign again; it only keeps verifying the tokens it already signed until it retires. If the new key
 misbehaves, rotate again. The break-glass way back to the configured key is in
-[identity-admin-dev-test.md](identity-admin-dev-test.md#rolling-back-a-bad-key-rotation).
+[identity-admin-dev-test.md](identity-admin-dev-test.md#9-rolling-back-a-bad-key-rotation).
 
 The private half of the active key is sealed with the data-protection key (`IDENTITY_DATA_KEY`). The data-key rotation
 (`POST /v1/admin/data-protection/rotate`, Users & roles) reseals it with the TOTP seeds and its status counts it, so a previous data key can be
