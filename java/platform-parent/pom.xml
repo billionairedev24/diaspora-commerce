@@ -8,7 +8,7 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <!-- Target is 4.1.4; pinned to the latest GA on Maven Central until 4.1.4 ships. -->
-        <version>4.1.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
 
@@ -24,7 +24,7 @@
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <spring-ai.version>2.0.1</spring-ai.version>
+        <spring-ai.version>2.0.2</spring-ai.version>
         <springdoc.version>3.1.1</springdoc.version>
         <archunit.version>1.5.1</archunit.version>
         <stripe.version>34.0.0</stripe.version>
