@@ -20,6 +20,7 @@ acceptance criteria are met and verified.
 | Go | 1.27.2 toolchain (`go 1.27.1` directive + `toolchain go1.27.2` in every `go.mod` and `go/go.work`; Dockerfiles `golang:1.27.2`, CI `GO_VERSION`) |
 | Node | 22 LTS, pnpm 10 |
 | Next.js | 16, React 19, TanStack Query 5 / Table, Zod 4, Tailwind 4 |
+| TypeScript | 7.0.2 everywhere (`tsc`, Next.js). Tools that need the compiler's JS API (typescript-eslint, openapi-typescript) run on the TS 6 API through the root `typescript` alias `@typescript/typescript6`; both are pinned in the root `package.json` |
 | Mobile | Expo / React Native |
 | Search | Elasticsearch 9 (default) or Meilisearch 1.12: `SEARCH_PROVIDER`, `docs/engineering/search-providers.md` |
 | Data | PostgreSQL 17 (one database per service), Redis/Valkey 8, Kafka (KRaft), Temporal |

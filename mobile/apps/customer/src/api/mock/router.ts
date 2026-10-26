@@ -54,7 +54,7 @@ function search(q: string, page: number, size: number): SearchPage {
   const hits = PRODUCTS.filter((p) => words.every((w) => `${p.title} ${p.sellerName} ${p.department}`.toLowerCase().includes(w)));
   const slice = hits.slice(page * size, page * size + size).map(summaryOf);
   const facet = { department: [], community: [], fulfilment: [], sellerKind: [], rating: [], price: [], delivery: [] };
-  return { hits: slice, total: hits.length, page, size, pageCount: Math.ceil(hits.length / size), facets: facet, deliverToLabel: 'Houston 77032', tookMs: 3 };
+  return { hits: slice, total: hits.length, page, size, pageCount: Math.ceil(hits.length / size), facets: facet, deliverToLabel: 'Houston 77032', tookMs: 3, services: [] };
 }
 
 function packageKey(p: FixtureProduct) {

@@ -4464,7 +4464,7 @@ components:
       properties:
         id: {type: string}
         source: {type: string, enum: [RULE, MANUAL]}
-        type: {type: string, enum: [FREE_DAYS, CREDIT, PERCENT_OFF, WAIVE_INVOICE, TRIAL_END]}
+        type: {type: string, enum: [FREE_DAYS, FREE_MONTHS, CREDIT, PERCENT_OFF, WAIVE_INVOICE, TRIAL_END, CHARGE_GATE]}
         summary: {type: string}
         reason: {type: [string, 'null'], description: The reward rule's name}
         status: {type: string, enum: [PENDING, APPLIED, FAILED]}

@@ -4413,7 +4413,7 @@ export interface components {
             /** @enum {string} */
             source: "RULE" | "MANUAL";
             /** @enum {string} */
-            type: "FREE_DAYS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END";
+            type: "FREE_DAYS" | "FREE_MONTHS" | "CREDIT" | "PERCENT_OFF" | "WAIVE_INVOICE" | "TRIAL_END" | "CHARGE_GATE";
             summary: string;
             /** @description The reward rule's name */
             reason?: string | null;
