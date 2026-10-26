@@ -19,6 +19,7 @@ import com.afrotransact.seller.domain.OrgMember;
 import com.afrotransact.seller.domain.OrgStatus;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.ReasonCode;
+import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.domain.TimelineEntry;
@@ -270,9 +271,23 @@ class ReviewServiceImpl implements ReviewService {
             throw new SellerRuleViolation("seller.reason-code-required", "Pick a reason code",
                     Map.of("reasonCode", "Required"));
         }
-        return reasons.find(cmd.reasonCode().trim()).orElseThrow(() -> new SellerRuleViolation(
+        ReasonCode found = reasons.find(cmd.reasonCode().trim()).orElseThrow(() -> new SellerRuleViolation(
                 "seller.unknown-reason-code", "Unknown reason code " + cmd.reasonCode(),
                 Map.of("reasonCode", "Unknown")));
+        if (!appliesTo(found.appliesTo(), cmd.action())) {
+            throw new SellerRuleViolation("seller.reason-code-not-applicable",
+                    "That reason does not fit this decision", Map.of("reasonCode", "Choose a reason that fits"));
+        }
+        return found;
+    }
+
+    /** A reason seeded for APPROVE fits approvals only, one for REJECT fits rejections only, ANY fits every decision. */
+    private static boolean appliesTo(String appliesTo, ReviewAction action) {
+        if (appliesTo == null || "ANY".equals(appliesTo)) {
+            return true;
+        }
+        boolean approval = action == ReviewAction.APPROVE || action == ReviewAction.FINAL_APPROVE;
+        return "APPROVE".equals(appliesTo) ? approval : action == ReviewAction.REJECT;
     }
 
     private void publish(String type, Application app, TimelineEntry entry) {

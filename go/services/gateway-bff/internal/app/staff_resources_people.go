@@ -212,16 +212,32 @@ func rolesResource() *staffResource {
 const staffBFFPath = "/api/bff"
 
 func applicationsResource() *staffResource {
-	reasonOptions := func(ctx context.Context, sc staffCtx) []domain.FieldOption {
+	// A reason fits some decisions only: seller seeds each code for APPROVE, REJECT or ANY, so Approve offers "checks
+	// passed", Reject adds sanctions and duplicates, and the rest offer what can go wrong.
+	fits := func(appliesTo, action string) bool {
+		approval := action == "APPROVE" || action == "FINAL_APPROVE"
+		switch appliesTo {
+		case "APPROVE":
+			return approval
+		case "REJECT":
+			return action == "REJECT"
+		default:
+			return !approval || appliesTo == ""
+		}
+	}
+	reasonOptions := func(ctx context.Context, sc staffCtx, action string) []domain.FieldOption {
 		var codes []jobj
 		opts := []domain.FieldOption{}
 		if sc.get(ctx, sc.up.Seller, "/v1/review-reason-codes", nil, &codes) == nil {
 			for _, c := range codes {
+				if !fits(jstr(c, "appliesTo"), action) {
+					continue
+				}
 				opts = append(opts, domain.FieldOption{Value: jstr(c, "code"), Label: firstNonEmpty(jstr(c, "label"), domain.Humanize(jstr(c, "code")))})
 			}
 		}
 		if len(opts) == 0 {
-			opts = domain.StaffOptions("DOCUMENTS_VERIFIED", "TIN_MISMATCH", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "OTHER")
+			opts = domain.StaffOptions("ALL_CHECKS_PASSED", "TIN_MISMATCH", "DOCUMENT_UNREADABLE", "PROHIBITED_CATEGORY", "OTHER")
 		}
 		return opts
 	}
@@ -231,7 +247,11 @@ func applicationsResource() *staffResource {
 			noteLabel = "Message to the applicant"
 		}
 		form := func(ctx context.Context, sc staffCtx, _ jobj) *domain.Form {
-			fields := []domain.FormField{withOptions(ff("reasonCode", "Reason", "select", true), reasonOptions(ctx, sc))}
+			reason := withOptions(ff("reasonCode", "Reason", "select", true), reasonOptions(ctx, sc, action))
+			if len(reason.Options) == 1 {
+				reason.Value = reason.Options[0].Value // Approve has one reason: it is already chosen
+			}
+			fields := []domain.FormField{reason}
 			fields = append(fields, extra...)
 			fields = append(fields, withMax(ff("note", noteLabel, "textarea", noteRequired), 2000))
 			return &domain.Form{Title: title, SubmitLabel: submit, Intro: intro, Fields: fields}
