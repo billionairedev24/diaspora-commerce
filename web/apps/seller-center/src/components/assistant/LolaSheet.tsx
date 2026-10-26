@@ -115,7 +115,7 @@ export function LolaSheet({ open, onOpenChange }: { open: boolean; onOpenChange:
   const s = status.data;
   const spent = s ? s.remaining <= 0 : false;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title={t('sc.lola.title')} description={t('sc.lola.description')} width={460}>
+    <Sheet open={open} onOpenChange={onOpenChange} title={t('sc.lola.title')} description={t('sc.lola.description')} persistent>
       <div className="flex h-full min-h-0 flex-col gap-3">
         {s ? <Tier status={s} /> : null}
         <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto" aria-live="polite" data-testid="lola-messages">

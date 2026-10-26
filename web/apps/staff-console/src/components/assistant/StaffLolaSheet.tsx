@@ -65,7 +65,7 @@ export function StaffLolaSheet({ open, onOpenChange }: { open: boolean; onOpenCh
   const s = status.data;
   const spent = s ? s.remaining <= 0 : false;
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} title={t('st.lola.title')} description={t('st.lola.description')} width={460}>
+    <Sheet open={open} onOpenChange={onOpenChange} title={t('st.lola.title')} description={t('st.lola.description')} persistent>
       <div className="flex h-full min-h-0 flex-col gap-3">
         {s ? (
           <div className="rounded-md bg-surface-muted px-3 py-2 text-xs" data-testid="lola-remaining">

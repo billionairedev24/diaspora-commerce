@@ -203,13 +203,13 @@ describe('ImagePlaceholder', () => {
   });
 });
 
-function PageWithSheet({ side }: { side?: 'left' | 'right' }) {
+function PageWithSheet({ side, persistent }: { side?: 'left' | 'right'; persistent?: boolean }) {
   const [open, setOpen] = useState(true);
   const [clicks, setClicks] = useState(0);
   return (
     <>
       <button type="button" onClick={() => setClicks((c) => c + 1)}>Page action {clicks}</button>
-      <Sheet open={open} onOpenChange={setOpen} title="Record" side={side}>
+      <Sheet open={open} onOpenChange={setOpen} title="Record" side={side} persistent={persistent}>
         <p>Details</p>
       </Sheet>
     </>
@@ -217,12 +217,18 @@ function PageWithSheet({ side }: { side?: 'left' | 'right' }) {
 }
 
 describe('Sheet', () => {
-  it('right sheets leave the page usable: no overlay, page clicks work and do not close the sheet', async () => {
+  it('right sheets have no overlay and close when anything outside them is clicked', async () => {
     render(<PageWithSheet />);
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
     expect(document.querySelector('[data-state="open"][class*="overlay"]')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Page action 0' }));
     expect(screen.getByRole('button', { name: 'Page action 1' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('a persistent sheet (the assistant) stays open while the page is used, until Close', async () => {
+    render(<PageWithSheet persistent />);
+    await userEvent.click(screen.getByRole('button', { name: 'Page action 0' }));
     expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

@@ -67,18 +67,21 @@ export interface SheetProps extends Omit<DialogProps, 'width'> {
   header?: ReactNode;
   /**
    * Modal sheets dim and block the page (focus trap, outside click closes). Default: only left sheets (the mobile
-   * navigation menu) are modal. Right sheets (record details, Lola) sit below the sticky header without an overlay and
-   * leave the page usable: rows, filters and buttons behind them keep working; Esc or the close button closes them.
+   * navigation menu) are modal. Right sheets (record details, forms) sit below the sticky header without an overlay and
+   * leave the page usable, but a click anywhere outside them closes them, so a sheet is never left open behind
+   * another action. Esc or the close button closes them too.
    */
   modal?: boolean;
-  /** Width in px on wide screens (default 440); never wider than the viewport. */
+  /** An assistant that stays beside the page while it is used (Lola): a click outside does not close it. */
+  persistent?: boolean;
+  /** Ignored for right sheets: every right sheet has the same width (820px, never wider than the viewport). */
   width?: number;
 }
 
 const keepOpen = (e: Event) => e.preventDefault();
 
 /** Side sheet / drawer (record details, Lola, mobile navigation). */
-export function Sheet({ open, onOpenChange, title, description, header, children, side = 'right', modal = side === 'left', closeLabel = 'Close', className, width }: SheetProps) {
+export function Sheet({ open, onOpenChange, title, description, header, children, side = 'right', modal = side === 'left', persistent = false, closeLabel = 'Close', className, width }: SheetProps) {
   const returnFocus = useReturnFocus(open);
   return (
     <Root open={open} onOpenChange={onOpenChange} modal={modal}>
@@ -87,8 +90,10 @@ export function Sheet({ open, onOpenChange, title, description, header, children
         <Content
           className={cx(styles.sheet, styles[side], !modal && styles.docked, className)}
           onCloseAutoFocus={returnFocus}
-          onInteractOutside={modal ? undefined : keepOpen}
-          style={width ? ({ '--sheet-width': `${width}px` } as CSSProperties) : undefined}
+          onInteractOutside={modal || !persistent ? undefined : keepOpen}
+          // Only a click outside closes a docked sheet; focus moving elsewhere (a dialog closing, a menu) does not.
+          onFocusOutside={modal ? undefined : keepOpen}
+          style={side === 'left' && width ? ({ '--sheet-width': `${width}px` } as CSSProperties) : undefined}
         >
           <div className={styles.sheetHead}>
             {header}

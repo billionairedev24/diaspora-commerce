@@ -69,7 +69,7 @@ export function LotSheet({ id, onClose }: { id: string | null; onClose: () => vo
   const rank = siblings.data ? pickRanks(siblings.data.items.filter((l) => l.nodeId === lot?.nodeId)).get(lot?.id ?? '') : undefined;
   const days = daysToExpiry(lot?.expDate, todayIso());
   return (
-    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={lot ? `Lot ${lot.lotNo}` : 'Lot'} className="w-[min(100vw,640px)]">
+    <Sheet open={id !== null} onOpenChange={(o) => !o && onClose()} title={lot ? `Lot ${lot.lotNo}` : 'Lot'}>
       {trace.isPending ? <Spinner /> : null}
       {trace.isError ? <ErrorState error={trace.error} onRetry={() => void trace.refetch()} /> : null}
       {lot && trace.data ? (

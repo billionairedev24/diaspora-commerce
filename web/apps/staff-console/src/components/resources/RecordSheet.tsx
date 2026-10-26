@@ -209,7 +209,7 @@ export function RecordSheet({ resource, id, onClose, sharedOpen = false }: { res
   const pendingForm = pending?.kind === 'edit' ? pending.form : pending?.kind === 'action' ? pending.action.form : null;
 
   return (
-    <Sheet open={id !== null && !notHere} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle} className="w-[min(720px,100vw)]">
+    <Sheet open={id !== null && !notHere} onOpenChange={(o) => !o && onClose()} title={record?.title ?? 'Details'} description={record?.subtitle}>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {record ? (
