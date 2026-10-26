@@ -7700,6 +7700,7 @@ components:
         minimumMet: {type: boolean}
         cancelReason: {type: [string, 'null']}
         locationName: {type: [string, 'null'], description: 'The town (resolved by the BFF; never show the id)'}
+        locationTimeZone: {type: [string, 'null'], description: 'The town''s IANA time zone: the run''s times read in it'}
         notes: {type: [string, 'null']}
         extensions: {type: integer}
     StaffRuns:
@@ -7768,6 +7769,7 @@ components:
         id: {type: string, format: uuid}
         locationId: {type: string, format: uuid}
         locationName: {type: [string, 'null']}
+        locationTimeZone: {type: [string, 'null']}
         location: {oneOf: [{$ref: '#/components/schemas/StaffRunLocation'}, {type: 'null'}]}
         status: {type: string, enum: [DRAFT, ANNOUNCED, OPEN, EXTENDED, CUT_OFF, CONFIRMED, COLLECTING, OUT_FOR_DELIVERY, COMPLETED, CANCELLED]}
         windowStart: {type: string, format: date-time}

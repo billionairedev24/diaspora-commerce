@@ -7112,6 +7112,8 @@ export interface components {
             cancelReason?: string | null;
             /** @description The town (resolved by the BFF; never show the id) */
             locationName?: string | null;
+            /** @description The town's IANA time zone: the run's times read in it */
+            locationTimeZone?: string | null;
             notes?: string | null;
             extensions?: number;
         } & {
@@ -7220,6 +7222,7 @@ export interface components {
             /** Format: uuid */
             locationId: string;
             locationName?: string | null;
+            locationTimeZone?: string | null;
             location?: components["schemas"]["StaffRunLocation"] | null;
             /** @enum {string} */
             status: "DRAFT" | "ANNOUNCED" | "OPEN" | "EXTENDED" | "CUT_OFF" | "CONFIRMED" | "COLLECTING" | "OUT_FOR_DELIVERY" | "COMPLETED" | "CANCELLED";

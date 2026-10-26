@@ -41,6 +41,7 @@ func (s *staffPreordersImpl) runDetail(ctx context.Context, sc staffCtx, can dom
 	if l := s.runLocation(ctx, sc, jstr(run, "locationId")); l != nil {
 		run["location"] = l
 		run["locationName"] = jstr(l, "name")
+		run["locationTimeZone"] = jstr(l, "timeZone")
 	}
 	return run
 }
@@ -275,7 +276,7 @@ func (s *staffPreordersImpl) RunOrders(ctx context.Context, c *domain.Caller, id
 	return items(out), nil
 }
 
-// nameRuns puts the town on every run of a list (a run knows its location by id only).
+// nameRuns puts the town and its time zone on every run of a list (a run knows its location by id only).
 func (s *staffPreordersImpl) nameRuns(ctx context.Context, sc staffCtx, out any) {
 	list, _ := out.([]any)
 	if len(list) == 0 {
@@ -285,17 +286,19 @@ func (s *staffPreordersImpl) nameRuns(ctx context.Context, sc staffCtx, out any)
 	if err := sc.get(ctx, sc.up.DeliveryRuns, locationsPath, nil, &locs); err != nil {
 		return
 	}
-	names := map[string]string{}
+	type place struct{ name, zone string }
+	places := map[string]place{}
 	all, _ := locs.([]any)
 	for _, e := range all {
 		if l, ok := e.(map[string]any); ok {
-			names[jstr(l, "id")] = jstr(l, "name")
+			places[jstr(l, "id")] = place{name: jstr(l, "name"), zone: jstr(l, "timeZone")}
 		}
 	}
 	for _, e := range list {
 		if run, ok := e.(map[string]any); ok {
-			if name := names[jstr(run, "locationId")]; name != "" {
-				run["locationName"] = name
+			if p, found := places[jstr(run, "locationId")]; found && p.name != "" {
+				run["locationName"] = p.name
+				run["locationTimeZone"] = p.zone
 			}
 		}
 	}

@@ -313,6 +313,8 @@ export const StaffRunSchema = z.looseObject({
   cancelReason: z.string().nullable().optional(),
   /** The town (resolved by the BFF; never show the location id). */
   locationName: z.string().nullish(),
+  /** The town's IANA time zone: the run's times read in it. */
+  locationTimeZone: z.string().nullish(),
   notes: z.string().nullish(),
   extensions: z.number().int().optional()
 });
@@ -753,6 +755,7 @@ export const staffRunKeys = {
   settings: () => [...staffRunKeys.all, 'settings'] as const,
   settingChanges: (limit?: number) => [...staffRunKeys.all, 'setting-changes', limit ?? 'all'] as const,
   windowPlan: (body: WindowPlanInput) => [...staffRunKeys.all, 'window-plan', body] as const,
+  runPlan: (body: RunPlanInput) => [...staffRunKeys.all, 'run-plan', body] as const,
   windowEconomics: (windowId: string) => [...staffRunKeys.all, 'window-economics', windowId] as const,
   runPnl: (runId: string, commissionShareMinor?: number) => [...staffRunKeys.all, 'pnl', runId, commissionShareMinor ?? null] as const,
   locations: () => [...staffRunKeys.all, 'locations'] as const,
@@ -769,6 +772,7 @@ export const staffRunQueries = {
   settings: (api: StaffRunsApi) => queryOptions({ queryKey: staffRunKeys.settings(), queryFn: ({ signal }) => api.settings(signal), staleTime: 15_000 }),
   settingChanges: (api: StaffRunsApi, limit?: number) => queryOptions({ queryKey: staffRunKeys.settingChanges(limit), queryFn: ({ signal }) => api.settingChanges(limit, signal), staleTime: 5_000 }),
   windowPlan: (api: StaffRunsApi, body: WindowPlanInput) => queryOptions({ queryKey: staffRunKeys.windowPlan(body), queryFn: ({ signal }) => api.previewWindow(body, signal), staleTime: 10_000 }),
+  runPlan: (api: StaffRunsApi, body: RunPlanInput) => queryOptions({ queryKey: staffRunKeys.runPlan(body), queryFn: ({ signal }) => api.previewRun(body, signal), staleTime: 10_000 }),
   windowEconomics: (api: StaffRunsApi, windowId: string) => queryOptions({ queryKey: staffRunKeys.windowEconomics(windowId), queryFn: ({ signal }) => api.windowEconomics(windowId, signal), staleTime: 10_000 }),
   runPnl: (api: StaffRunsApi, runId: string, commissionShareMinor?: number) =>
     queryOptions({ queryKey: staffRunKeys.runPnl(runId, commissionShareMinor), queryFn: ({ signal }) => api.runPnl(runId, commissionShareMinor, signal), staleTime: 10_000 }),
