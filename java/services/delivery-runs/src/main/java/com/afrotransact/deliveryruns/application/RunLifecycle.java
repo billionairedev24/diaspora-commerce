@@ -7,16 +7,19 @@ import java.util.List;
 import com.afrotransact.deliveryruns.domain.DropMode;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.RunAction;
+import com.afrotransact.deliveryruns.domain.RunActionKind;
 import com.afrotransact.deliveryruns.domain.RunOrder;
 import com.afrotransact.deliveryruns.domain.RunStatus;
 import com.afrotransact.deliveryruns.port.HandoverCodes;
+import com.afrotransact.deliveryruns.port.RunActionLog;
 import com.afrotransact.deliveryruns.port.RunOrderRepository;
 import com.afrotransact.deliveryruns.port.RunRepository;
 import org.springframework.stereotype.Component;
 
 /**
- * Persists run transitions together with their slot changes and events (one transaction, the caller's), so staff
- * actions and the cutoff job behave the same.
+ * Persists run transitions together with their slot changes, events and action log entry (one transaction, the
+ * caller's), so staff actions and the cutoff job behave the same.
  */
 @Component
 class RunLifecycle {
@@ -25,42 +28,53 @@ class RunLifecycle {
     private final RunOrderRepository runOrders;
     private final HandoverCodes codes;
     private final DeliveryRunsEventPublisher events;
+    private final RunActionLog log;
 
     RunLifecycle(RunRepository runs, RunOrderRepository runOrders, HandoverCodes codes,
-                 DeliveryRunsEventPublisher events) {
+                 DeliveryRunsEventPublisher events, RunActionLog log) {
         this.runs = runs;
         this.runOrders = runOrders;
         this.codes = codes;
         this.events = events;
+        this.log = log;
     }
 
-    /** CUT_OFF → CONFIRMED: active slots are confirmed (pickup-point runs get handover codes). */
-    Run confirm(Location location, Run cutOff, RunStatus previous, Instant now) {
+    /**
+     * CUT_OFF → CONFIRMED: active slots are confirmed (pickup-point runs get handover codes). A confirmation with
+     * fewer orders than the minimum is a staff override and is logged as such.
+     */
+    Run confirm(Location location, Run cutOff, RunStatus previous, Instant now, RunDecision by) {
+        boolean override = !cutOff.minimumMet();
         Run confirmed = runs.update(cutOff.confirm(now));
         List<RunOrder> orders = new ArrayList<>();
         for (RunOrder o : runOrders.findActiveByRun(confirmed.id())) {
             String code = confirmed.terms().dropMode() == DropMode.PICKUP_POINT ? codes.next() : null;
             orders.add(runOrders.update(o.confirm(code, now)));
         }
+        log.append(RunAction.of(override ? RunActionKind.CONFIRM_OVERRIDE : RunActionKind.CONFIRM, by.reason(),
+                by.actor(), previous, confirmed, null, now));
         events.run(DeliveryRunsEvents.RUN_CONFIRMED, location, confirmed, previous, null, null, orders);
         return confirmed;
     }
 
     /** Cancels the run and every active slot (orders release stock and payment holds on the event). */
-    Run cancel(Location location, Run run, String reason, Instant now) {
+    Run cancel(Location location, Run run, RunDecision by, Instant now) {
         RunStatus previous = run.status();
-        Run cancelled = runs.update(run.cancel(reason, now));
+        Run cancelled = runs.update(run.cancel(by.reason(), now));
         List<RunOrder> orders = new ArrayList<>();
         for (RunOrder o : runOrders.findActiveByRun(cancelled.id())) {
             orders.add(runOrders.update(o.cancel(now)));
         }
-        events.run(DeliveryRunsEvents.RUN_CANCELLED, location, cancelled, previous, null, reason, orders);
+        log.append(RunAction.of(RunActionKind.CANCEL, by.reason(), by.actor(), previous, cancelled, null, now));
+        events.run(DeliveryRunsEvents.RUN_CANCELLED, location, cancelled, previous, null, by.reason(), orders);
         return cancelled;
     }
 
-    Run extended(Location location, Run extended, RunStatus previous, Instant previousCutoff, String reason) {
+    Run extended(Location location, Run extended, RunStatus previous, Instant previousCutoff, RunDecision by,
+                 Instant now) {
         Run saved = runs.update(extended);
-        events.run(DeliveryRunsEvents.RUN_EXTENDED, location, saved, previous, previousCutoff, reason, null);
+        log.append(RunAction.of(RunActionKind.EXTEND, by.reason(), by.actor(), previous, saved, previousCutoff, now));
+        events.run(DeliveryRunsEvents.RUN_EXTENDED, location, saved, previous, previousCutoff, by.reason(), null);
         return saved;
     }
 

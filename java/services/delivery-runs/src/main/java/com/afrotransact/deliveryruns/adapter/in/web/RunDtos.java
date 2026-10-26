@@ -16,6 +16,7 @@ import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
 import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.RunAction;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunMilestones;
 import com.afrotransact.deliveryruns.domain.RunOrder;
@@ -50,12 +51,13 @@ final class RunDtos {
                       @Min(1) @Max(10_000) Integer capacityOrders,
                       @Min(1) @Max(100_000) Integer capacityPackages,
                       DropMode dropMode, @Valid PickupPointBody pickupPoint, CutoffPolicy cutoffPolicy,
-                      @Min(1) @Max(30) Integer extendDays) {
+                      @Min(1) @Max(30) Integer extendDays,
+                      @Size(max = 500) @Schema(description = "A note for staff and the driver") String notes) {
 
         RunCommand toCommand() {
             return new RunCommand(locationId, windowStart, windowEnd, cutoffAt, opensAt, sellerPickupAt, feeMinor,
                     currency, minOrders, capacityOrders, capacityPackages, dropMode,
-                    pickupPoint == null ? null : pickupPoint.toDomain(), cutoffPolicy, extendDays);
+                    pickupPoint == null ? null : pickupPoint.toDomain(), cutoffPolicy, extendDays, notes);
         }
     }
 
@@ -70,6 +72,25 @@ final class RunDtos {
 
     @Schema(name = "CancelRunRequest")
     record CancelRequest(@NotBlank @Size(max = 500) @Schema(example = "Weather: tropical storm warning") String reason) {
+    }
+
+    @Schema(name = "ConfirmRunRequest", description = "Optional while the run has reached its minimum; required to "
+            + "confirm below it (the override is logged with who and why)")
+    record ConfirmRequest(@Size(max = 500) @Schema(example = "Two sellers are delivering to the hub in person") String reason) {
+    }
+
+    @Schema(name = "RunAction", description = "One entry of the run's log: who decided what, when and why")
+    record RunActionResponse(UUID id, UUID runId,
+                             @Schema(allowableValues = {"EXTEND", "CONFIRM", "CONFIRM_OVERRIDE", "CANCEL"}) String kind,
+                             String reason, @Schema(description = "Staff subject, or system for the cutoff job")
+                             String actor, String fromStatus, String toStatus, int orders, int minimum,
+                             Instant fromCutoff, Instant toCutoff, Instant at) {
+
+        static RunActionResponse of(RunAction a) {
+            return new RunActionResponse(a.id(), a.runId(), a.kind().name(), a.reason(), a.actor(),
+                    a.fromStatus().name(), a.toStatus().name(), a.orders(), a.minimum(), a.fromCutoff(),
+                    a.toCutoff(), a.at());
+        }
     }
 
     @Schema(name = "EconomicsPreviewRequest", description = "Nulls take the location's defaults")
@@ -109,7 +130,7 @@ final class RunDtos {
                        Instant cutoffAt, Instant originalCutoffAt, Instant opensAt, Instant sellerPickupAt,
                        long feeMinor, String currency, int minOrders, Integer capacityOrders,
                        Integer capacityPackages, DropMode dropMode, PickupPointBody pickupPoint,
-                       CutoffPolicy cutoffPolicy, int extendDays, int extensions, int reservedOrders,
+                       CutoffPolicy cutoffPolicy, int extendDays, String notes, int extensions, int reservedOrders,
                        int reservedPackages, Integer ordersLeft, boolean minimumMet, String cancelReason,
                        RouteResponse estimate,
                        @Schema(description = "Fewest orders covering the estimated cost (create / get only)")
@@ -125,7 +146,7 @@ final class RunDtos {
             return new RunResponse(r.id(), r.locationId(), r.status().name(), t.window().start(), t.window().end(),
                     t.cutoffAt(), r.originalCutoffAt(), t.opensAt(), t.sellerPickupAt(), t.feeMinor(), t.currency(),
                     t.minOrders(), t.capacity().maxOrders(), t.capacity().maxPackages(), t.dropMode(),
-                    PickupPointBody.of(t.pickupPoint()), t.cutoffPolicy(), t.extendDays(), r.extensions(),
+                    PickupPointBody.of(t.pickupPoint()), t.cutoffPolicy(), t.extendDays(), t.notes(), r.extensions(),
                     r.reservedOrders(), r.reservedPackages(), t.capacity().ordersLeft(r.reservedOrders()),
                     r.minimumMet(), r.cancelReason(), RouteResponse.of(r.estimate()),
                     economics == null ? null : economics.breakEvenOrders(), MilestonesResponse.of(r.milestones()),

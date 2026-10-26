@@ -2172,6 +2172,8 @@ paths:
       tags:
       - Runs
       summary: Confirm now whatever the minimum (closes ordering if still open; delivery-runs.run.confirmed)
+      description: Below the minimum the body's reason is required (422 delivery-runs.reason-required) and the override is
+        logged with who and why.
       operationId: confirm
       parameters:
       - name: id
@@ -2180,6 +2182,11 @@ paths:
         schema:
           type: string
           format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmRunRequest'
       responses:
         '200':
           description: OK
@@ -2252,6 +2259,35 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/log:
+    get:
+      tags:
+      - Runs
+      summary: 'What was decided about the run: extensions, confirmations, cancellation (delivery-runs:read)'
+      description: Oldest first; each entry has who, when and why (system for the cutoff job).
+      operationId: log
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunAction'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -3449,6 +3485,11 @@ components:
           format: int32
           maximum: 30
           minimum: 1
+        notes:
+          type: string
+          description: A note for staff and the driver
+          maxLength: 500
+          minLength: 0
       required:
       - cutoffAt
       - windowEnd
@@ -3522,6 +3563,8 @@ components:
         extendDays:
           type: integer
           format: int32
+        notes:
+          type: string
         extensions:
           type: integer
           format: int32
@@ -3555,6 +3598,47 @@ components:
         version:
           type: integer
           format: int64
+    RunAction:
+      type: object
+      description: 'One entry of the run''s log: who decided what, when and why'
+      properties:
+        id:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum:
+          - EXTEND
+          - CONFIRM
+          - CONFIRM_OVERRIDE
+          - CANCEL
+        reason:
+          type: string
+        actor:
+          type: string
+          description: Staff subject, or system for the cutoff job
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        orders:
+          type: integer
+          format: int32
+        minimum:
+          type: integer
+          format: int32
+        fromCutoff:
+          type: string
+          format: date-time
+        toCutoff:
+          type: string
+          format: date-time
+        at:
+          type: string
+          format: date-time
     RunMilestones:
       type: object
       properties:
@@ -4577,6 +4661,16 @@ components:
           minLength: 0
       required:
       - cutoffAt
+    ConfirmRunRequest:
+      type: object
+      description: Optional while the run has reached its minimum; required to confirm below it (the override is logged with
+        who and why)
+      properties:
+        reason:
+          type: string
+          example: Two sellers are delivering to the hub in person
+          maxLength: 500
+          minLength: 0
     CancelRunRequest:
       type: object
       properties:

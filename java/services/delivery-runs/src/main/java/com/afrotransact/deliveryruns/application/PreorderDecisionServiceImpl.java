@@ -104,7 +104,7 @@ class PreorderDecisionServiceImpl implements PreorderDecisionService {
         WindowDecision decision = WindowDecision.byStaff(w.id(), DecisionKind.CANCEL, reason, actor.subject(), count,
                 w.details().minOrders(), now);
         PreorderWindow cancelled = w.cancel(now);
-        cancelRun(w, decision.reason(), now);
+        cancelRun(w, decision.reason(), actor.subject(), now);
         PreorderWindow saved = windows.update(cancelled);
         decisions.append(decision);
         for (PreorderOrder o : all) {
@@ -120,7 +120,7 @@ class PreorderDecisionServiceImpl implements PreorderDecisionService {
     }
 
     /** The run the window's orders were handed to is cancelled with it (refused once it is on the road). */
-    private void cancelRun(PreorderWindow w, String reason, Instant now) {
+    private void cancelRun(PreorderWindow w, String reason, String actor, Instant now) {
         if (w.runId() == null) {
             return;
         }
@@ -133,7 +133,7 @@ class PreorderDecisionServiceImpl implements PreorderDecisionService {
             throw new InvalidTransitionException(run.status().name(), RunStatus.CANCELLED.name());
         }
         Location location = locations.findById(run.locationId()).orElseThrow();
-        lifecycle.cancel(location, run, "Pre-order " + w.code() + " cancelled: " + reason, now);
+        lifecycle.cancel(location, run, new RunDecision(actor, "Pre-order " + w.code() + " cancelled: " + reason), now);
     }
 
     @Override

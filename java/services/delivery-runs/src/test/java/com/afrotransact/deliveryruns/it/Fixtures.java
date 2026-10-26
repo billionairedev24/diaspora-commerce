@@ -58,6 +58,6 @@ final class Fixtures {
         Instant cutoff = now.plus(cutoffIn);
         Instant start = cutoff.plus(Duration.ofDays(2));
         return new RunCommand(locationId, start, start.plus(Duration.ofHours(4)), cutoff, null,
-                cutoff.plus(Duration.ofHours(12)), null, null, minOrders, null, null, null, null, null, null);
+                cutoff.plus(Duration.ofHours(12)), null, null, minOrders, null, null, null, null, null, null, null);
     }
 }

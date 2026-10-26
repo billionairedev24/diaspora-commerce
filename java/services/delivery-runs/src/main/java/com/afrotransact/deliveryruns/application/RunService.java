@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.RunAction;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunOrder;
 import com.afrotransact.deliveryruns.domain.RunOrderStatus;
@@ -34,8 +35,14 @@ public interface RunService {
 
     Run cancel(UUID id, String reason);
 
-    /** Closes ordering if still open and confirms, whatever the minimum (staff override). */
-    Run confirm(UUID id);
+    /**
+     * Closes ordering if still open and confirms, whatever the minimum (staff override). Confirming below the minimum
+     * needs a reason (422 {@code delivery-runs.reason-required}); it is logged with who and when.
+     */
+    Run confirm(UUID id, String reason);
+
+    /** What was decided about the run (extensions, confirmations, cancellation), oldest first (who, when, why). */
+    List<RunAction> actions(UUID id);
 
     Run startCollecting(UUID id);
 

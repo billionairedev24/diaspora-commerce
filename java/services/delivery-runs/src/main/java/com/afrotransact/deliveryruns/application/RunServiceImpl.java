@@ -31,6 +31,7 @@ import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.RunAction;
 import com.afrotransact.deliveryruns.domain.RunEconomics;
 import com.afrotransact.deliveryruns.domain.RunEconomicsCalculator;
 import com.afrotransact.deliveryruns.domain.RunOrder;
@@ -41,8 +42,10 @@ import com.afrotransact.deliveryruns.domain.SellerPickupSchedule;
 import com.afrotransact.deliveryruns.port.GeoGateway;
 import com.afrotransact.deliveryruns.port.GeoUnavailableException;
 import com.afrotransact.deliveryruns.port.LocationRepository;
+import com.afrotransact.deliveryruns.port.RunActionLog;
 import com.afrotransact.deliveryruns.port.RunOrderRepository;
 import com.afrotransact.deliveryruns.port.RunRepository;
+import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.slf4j.Logger;
@@ -65,10 +68,12 @@ class RunServiceImpl implements RunService {
     private final PermissionChecker permissions;
     private final Clock clock;
     private final PreorderHandover preorders;
+    private final RunActionLog actionLog;
 
     RunServiceImpl(RunRepository runs, RunOrderRepository runOrders, LocationRepository locations, GeoGateway geo,
                    RunEconomicsCalculator economics, RunLifecycle lifecycle, DeliveryRunsSettings settings,
-                   PermissionChecker permissions, Clock clock, PreorderHandover preorders) {
+                   PermissionChecker permissions, Clock clock, PreorderHandover preorders, RunActionLog actionLog) {
+        this.actionLog = actionLog;
         this.runs = runs;
         this.runOrders = runOrders;
         this.locations = locations;
@@ -159,7 +164,7 @@ class RunServiceImpl implements RunService {
     @Override
     @Transactional
     public Run extend(UUID id, ExtendCommand command) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
         Instant now = Instant.now(clock);
         if (command.cutoffAt() == null) {
@@ -173,25 +178,40 @@ class RunServiceImpl implements RunService {
                 : run.terms().sellerPickupAt() == null ? null : run.terms().sellerPickupAt().plus(shift);
         Run extended = run.extend(command.cutoffAt(), window, pickup, now);
         String reason = command.reason() == null || command.reason().isBlank() ? "STAFF" : command.reason().trim();
-        return lifecycle.extended(location(run.locationId()), extended, run.status(), run.terms().cutoffAt(), reason);
+        return lifecycle.extended(location(run.locationId()), extended, run.status(), run.terms().cutoffAt(),
+                new RunDecision(actor.subject(), reason), now);
     }
 
     @Override
     @Transactional
     public Run cancel(UUID id, String reason) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
-        return lifecycle.cancel(location(run.locationId()), run, reason, Instant.now(clock));
+        return lifecycle.cancel(location(run.locationId()), run, new RunDecision(actor.subject(), reason),
+                Instant.now(clock));
     }
 
     @Override
     @Transactional
-    public Run confirm(UUID id) {
-        permissions.require(DeliveryRunsPermissions.MANAGE);
+    public Run confirm(UUID id, String reason) {
+        Actor actor = permissions.require(DeliveryRunsPermissions.MANAGE);
         Run run = lock(id);
+        if (!run.minimumMet() && (reason == null || reason.isBlank())) {
+            throw new RuleViolation("delivery-runs.reason-required",
+                    "Confirming a run below its minimum needs a reason");
+        }
         Instant now = Instant.now(clock);
         Run cutOff = run.status().takesOrders() ? run.cutOff(now) : run;
-        return lifecycle.confirm(location(run.locationId()), cutOff, run.status(), now);
+        return lifecycle.confirm(location(run.locationId()), cutOff, run.status(), now,
+                new RunDecision(actor.subject(), reason));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RunAction> actions(UUID id) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        find(id);
+        return actionLog.findByRun(id);
     }
 
     @Override
@@ -356,7 +376,7 @@ class RunServiceImpl implements RunService {
                 c.currency() == null ? d.currency() : c.currency(),
                 c.minOrders() == null ? d.defaultMinOrders() : c.minOrders(), capacity, mode, point,
                 c.cutoffPolicy() == null ? d.defaultCutoffPolicy() : c.cutoffPolicy(),
-                c.extendDays() == null ? d.defaultExtendDays() : c.extendDays());
+                c.extendDays() == null ? d.defaultExtendDays() : c.extendDays(), c.notes());
     }
 
     /**
