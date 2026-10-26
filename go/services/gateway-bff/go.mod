@@ -7,7 +7,7 @@ toolchain go1.27.2
 require (
 	codeberg.org/go-pdf/fpdf v0.12.0
 	github.com/billionairedev24/diaspora-commerce/go/pkg v0.0.0
-	github.com/getkin/kin-openapi v0.151.0
+	github.com/getkin/kin-openapi v0.152.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/prometheus/client_golang v1.25.0
 	github.com/redis/go-redis/v9 v9.23.0
