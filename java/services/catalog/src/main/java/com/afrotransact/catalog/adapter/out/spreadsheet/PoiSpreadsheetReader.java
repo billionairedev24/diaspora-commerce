@@ -21,6 +21,7 @@ import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.openxml4j.exceptions.OpenXML4JException;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.openxml4j.util.ZipSecureFile;
+import org.apache.poi.ss.usermodel.Comment;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.util.CellReference;
 import org.apache.poi.util.XMLHelper;
@@ -28,7 +29,6 @@ import org.apache.poi.xssf.eventusermodel.ReadOnlySharedStringsTable;
 import org.apache.poi.xssf.eventusermodel.XSSFReader;
 import org.apache.poi.xssf.eventusermodel.XSSFSheetXMLHandler;
 import org.apache.poi.xssf.model.StylesTable;
-import org.apache.poi.xssf.usermodel.XSSFComment;
 import org.springframework.stereotype.Component;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
@@ -224,7 +224,7 @@ class PoiSpreadsheetReader implements SpreadsheetReader {
         }
 
         @Override
-        public void cell(String cellReference, String formattedValue, XSSFComment comment) {
+        public void cell(String cellReference, String formattedValue, Comment comment) {
             int col = cellReference == null ? current.size() : new CellReference(cellReference).getCol();
             if (col >= ImportLimits.MAX_COLUMNS + 50) {
                 return;
