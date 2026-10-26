@@ -1,67 +1,115 @@
-# Production readiness review
+# Production readiness checklist
 
-Reviewed 2026-10-23 on `main`. This separates what was **run and passed** from what **could not be checked here** and what is
-**not built or not decided**. It is not a sign-off: a go-live needs the "Before go-live" items closed by the people named.
+Work through this before the first real customer and again before every major release. Each line is something you can check
+and tick; "who" is the role that signs it off. Anything marked **blocker** must be done before launch.
 
-## Checked today (run, passing)
+## 1. Environment and configuration
 
-| Area | Result |
-|---|---|
-| Java, 16 modules | unit tests + checkstyle + ArchUnit pass (`./mvnw verify` with integration tests skipped) |
-| Go, 10 modules | `go vet` + tests pass (gateway-bff includes OpenAPI conformance tests for the seller and staff contracts) |
-| Web (storefront, seller center, staff console, packages) | `tsc` clean except one existing type error in `packages/api-client/test/seller-contract.test.ts`; ESLint clean; all unit tests pass |
-| Database migrations | every service's Flyway chain (15 services, 130+ files) applies cleanly to an empty PostgreSQL 16; new payments V19, tax-returns V7 and identity V30 also ran their queries (adjustment journal passes the double-entry trigger) |
-| Contracts | Redocly lint 0 errors (793 warnings), generated clients and the merged AsyncAPI are up to date |
-| Environment guards | `make env-check`: no hard-coded hosts, every service has its profiles and sizing |
-| Secrets in tracked files | gitleaks clean (two false positives annotated; one hit is in the git-ignored `build/` folder) |
-| SLO alert rules | regenerated and current |
+- [ ] **blocker** `APP_ENV=prod` on every service and every web app (the Helm library chart sets it for services; check the web
+  apps). The web apps turn the mock backend off when it is `prod`, `production` or `uat`.
+- [ ] **blocker** `API_MOCKS` and `NEXT_PUBLIC_API_MOCKS` are not set anywhere in production.
+- [ ] **blocker** Spring profile `prod` (Java) and `APP_ENV=prod` config files (Go) are the ones loaded; no `local` profile.
+- [ ] **blocker** Security is on: no service runs with the local "security off" mode or the `local-dev` actor.
+- [ ] **blocker** The payments service's local test stand-in for Stripe is off (it is allowed on the `local` profile only).
+- [ ] Image tags are pinned (never `latest`); Helm templates render no `latest` tag.
+- [ ] `tools/dev/secrets_check.py --check` passes (undocumented keys are listed and documented).
+- [ ] `tools/dev/check_migrations.sh` passes: no Flyway version is used twice in a service.
 
-Fixed during this review: identity's copy of `tokens.css` was out of date (a CI test fails on that), 25 ESLint errors, a duplicate
-OpenAPI `operationId`, two tests that depended on today's date, a Spinner colour-contrast failure on dark grounds.
+## 2. Data
 
-## Could not be checked here (run these before go-live)
+- [ ] **blocker** No demo data: the production databases contain no rows from `tools/seed` (demo sellers, products, orders,
+  test users such as `customer.houston`, `driver@afrotransact.test`, `seller.owner`). The seeder refuses `APP_ENV=prod|uat` and
+  remote targets, but check the data too: search for the `src=demo-seed` order attribution and `*.test` email addresses.
+- [ ] **blocker** Reference data is present and reviewed: product taxonomy, plans, review reason codes, markets, fee schedule,
+  sales tax rate tables and tax codes, legal documents, cookie banner config.
+- [ ] Markets, states and cities for launch are switched on in Settings → Markets & locations (nothing outside them is offered a
+  run); pre-order areas match.
+- [ ] Super Admin and first staff accounts exist; every staff role has only the permissions it needs (Users & roles).
+- [ ] Retail (AfroTransact Retail) organisation, suppliers and warehouse centres are configured; exchange rates for the currencies
+  you source in are entered (Settings → Exchange rates).
 
-* **Java integration tests** (Testcontainers needs Docker): every repository, controller and flow test. CI runs them; read the last
-  green run for `main` before tagging. The new reconciliation, adjustment, tax-method, transfer and settings code has unit tests and
-  its SQL was run by hand, but has **no integration test yet**.
-* **Helm charts and OpenTofu** (`make helm-lint`, `make tf-check`): the chart and registry downloads are blocked here.
-* **Promtool rule check** (needs Docker) and Trivy / Semgrep / govulncheck scans (`make security`).
-* **A real Stripe account**: payouts, transfers, Connect onboarding, webhooks, Stripe Tax, the Stripe lookup and the reconciliation
-  against Stripe's balance transactions have only run against the local stand-in and mocks, apart from one test-mode payout.
-* **Browser checks** of the newest screens (Settings, Payouts reconciliation, payout sheet) and phone widths.
-* **Mobile apps** (Expo builds, store submission) and **carrier sandboxes** (S204).
-* **The OVH single-server kit** has never run against a real OVHcloud/GitHub account.
+## 3. Secrets and identity
 
-## Not built, or not decided (go-live blockers or conscious deferrals)
+- [ ] **blocker** Every secret comes from the secret store, none from a file in the repo or an image. Rotate anything that was ever
+  used in a test environment.
+- [ ] **blocker** Identity signing key is **RSA** (3072); `SIGNING_KEY_PEM` is set; the identity data key (`IDENTITY_DATA_KEY`) is set
+  and backed up separately from the database.
+- [ ] Client secrets for every first-party service client are set (`*_CLIENT_SECRET`), and the BFF client redirect URIs are the
+  production origins only.
+- [ ] Identity admin console works for a Super Admin and is hidden for others (see `docs/engineering/identity-admin-dev-test.md`).
+- [ ] OpenFGA: store and model deployed by authz-sync; service-client tuples seeded; services run `FGA_ENFORCE=true` after the
+  shadow period shows no `FGA shadow:` warnings (see `docs/engineering/authorisation.md`).
+- [ ] Staff MFA is required at sign-in.
 
-Money and tax
-* Tax collected is not yet *remitted*: no filing/remittance record, nexus tracker or seller tax statement screen; Stripe Tax
-  transactions and refunds are not recorded. Tax rates, the code map and the seller wording need a **CPA and legal review**
-  (`docs/engineering/tax-classification-design.md`).
-* Ledger adjustments are four-eyes by *permission*: give `ledger:adjust` and `ledger:approve` to different people, or one person
-  holding both can still not approve their own but the control is weaker.
-* Valkey, Kafka and Temporal data are not backed up (Postgres and secrets are, on the single-server kit).
-* Payments settings (hold days, minimum payout) are deployment configuration, read-only in Settings.
+## 4. Security
 
-Security and access
-* Open security stories: S201 (scanning), S246 (findings), S268 (remaining HIGH findings + Semgrep triage), S248/S266 (relationship
-  checks and service tuples), S250 (media links), S016 (passkeys).
-* Seed/demo switches must be off in uat/prod (`provisioning-enabled`, local profile). `make env-check` covers hosts and profiles,
-  not this; confirm in the prod values.
+- [ ] **blocker** Zero known vulnerabilities in what you ship: CI `security` workflow green on `main` (CodeQL, Trivy repo and image,
+  Semgrep, govulncheck, osv-scanner, gitleaks); `pnpm audit` clean apart from documented exceptions.
+- [ ] Documented exceptions are reviewed: the `node-forge` advisory in the Expo dev tool (no upstream fix; dev tooling only).
+- [ ] Images are built reproducibly, signed, and carry an SBOM; the cluster admits signed images only.
+- [ ] TLS everywhere; HSTS on; Cloudflare in front with Authenticated Origin Pulls; the origin is not reachable directly.
+- [ ] CORS, cookies (`Secure`, `HttpOnly`, `SameSite`) and CSP checked on the three web apps.
+- [ ] Rate limits and the WAF ruleset are on for sign-in, checkout and the public APIs.
+- [ ] Penetration test or an equivalent review done for sign-in, payments, uploads and the staff console.
 
-Platform and process
-* **S249: no real cloud `plan`/`apply` has been run for any environment.** Production infrastructure does not exist yet.
-* Error tracking in the web and mobile apps (S178), full translations (S193/S253: the new Settings and finance screens are
-  English only), exports service (S196), dashboards data feeds (S195).
-* 46 of 316 backlog stories are not Done (29 in progress, 17 to do): `make backlog`.
+## 5. Payments and money
 
-## Before go-live (suggested order)
+- [ ] **blocker** Stripe is in **live** mode with live keys and the live webhook secret; the webhook endpoint is registered and
+  verified; Connect is enabled with the right payout schedule and the platform's branding.
+- [ ] **blocker** A real small payment (and a refund) was made end to end on production, including seller payout after the
+  complaint hold window.
+- [ ] Payment methods enabled in Stripe match what checkout shows (cards, wallets, bank, BNPL).
+- [ ] Reconciliation runs daily and has no unexplained differences (Payouts & ledger → Reconciliation); maker-checker is on for
+  ledger adjustments.
+- [ ] Delivery fee rules (Settings → Delivery fees) and fee schedule (Fees & commissions) are final; run economics settings
+  reviewed.
+- [ ] Refund-on-cancel for pre-order windows was exercised: cancel a test window, every order refunded, stock released, customers
+  notified.
 
-1. Green CI on `main`, including integration tests, `make helm-lint`, `make tf-check`, `make security`.
-2. First real `plan`/`apply` of dev then uat (S249); smoke tests; restore drill of the database backups.
-3. Stripe live checklist: Connect settings, webhook endpoints and secrets, Stripe Tax registrations if used, payout schedule;
-   rehearse one order → delivery → transfer → payout → reconciliation in test mode and compare with the Stripe dashboard.
-4. CPA and legal sign-off: tax code map and rates, seller terms (accuracy of tax-relevant listing information).
-5. Close S246/S268 and re-scan; rotate and set every production secret; confirm demo switches are off.
-6. Load test the checkout path (`make perf-k6-smoke`), confirm SLO alerts route to a person, name the on-call.
-7. Pick the launch scope: the 17 To Do stories and the open ones above are either launched without or finished first.
+## 6. Tax
+
+- [ ] **blocker** Sales tax method chosen (our own rules or Stripe Tax) and rates loaded for every state you ship to.
+- [ ] Nexus tracker reviewed; registrations in states over the threshold are filed.
+- [ ] Remittance record and filings screens are accessible only to roles with the tax permissions.
+
+## 7. Delivery, inventory and operations
+
+- [ ] Hubs, delivery zones, pickup points and carrier accounts are real (carrier sandbox credentials replaced with production
+  credentials; labels print).
+- [ ] A pre-order window ran end to end: orders → minimum met or staff decision → run → pick lists → route → delivery proof →
+  payout hold started.
+- [ ] Inventory: opening stock received with the right currency and exchange rate; expiry dates and lots correct.
+- [ ] Staff on call know the maintenance-mode runbook (`docs/runbooks/maintenance-mode.md`) and where to turn it on.
+
+## 8. Observability and incident response
+
+- [ ] Metrics, logs and traces reach Grafana Cloud (or your stack); dashboards for checkout, payments, orders and delivery exist.
+- [ ] Alerts are routed to a real person/channel, and every alert has a runbook (`docs/runbooks/`).
+- [ ] Error tracking is on for the web apps and mobile apps.
+- [ ] Health, readiness and `/actuator/prometheus` or `/metrics` endpoints are reachable by monitoring and **not** by the public.
+- [ ] Status page / maintenance page text reviewed.
+
+## 9. Backups and recovery
+
+- [ ] **blocker** Postgres backups run daily and a **restore was tested** into a scratch database this month; point-in-time
+  recovery is configured if the provider supports it.
+- [ ] Valkey, Meilisearch/Elasticsearch and object-storage (R2 and the KYC bucket) backups or rebuild procedures are known.
+- [ ] Kafka retention covers the events authz-sync and other consumers need to rebuild state.
+- [ ] Rollback is rehearsed: previous image tags are kept, Flyway migrations are backward compatible for one release.
+
+## 10. Legal, support and launch
+
+- [ ] Terms, privacy notice, cookie banner and marketplace-facilitator tax disclosures are published and accurate.
+- [ ] Support inbox, customer support console and escalation contacts are staffed for launch week.
+- [ ] Seller onboarding (applications → two-person review → approval) tested with a real test application, including the
+  "return to applicant" path.
+- [ ] Emails and SMS send from the production sender domain (SPF, DKIM, DMARC set); templates reviewed in every language you ship.
+  Machine-translated strings were reviewed by a native speaker.
+- [ ] Mobile apps are built with production endpoints, signed, and submitted; the in-app sign-in works against production identity.
+
+## 11. Launch day
+
+- [ ] Freeze merges; tag the release; deploy through Argo CD in order: data stores → identity → platform services → BFF → web.
+- [ ] Run the smoke tests (`tools/smoke`) against production.
+- [ ] Watch error rate, latency, checkout success and payment webhook lag for the first hours; keep maintenance mode ready.
+- [ ] Confirm a real first order, payment, delivery and payout.
