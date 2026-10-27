@@ -468,6 +468,69 @@ export interface RunScheduleInput {
   notes?: string | null;
 }
 
+/** Body of POST /v1/staff/delivery-runs/locations and PUT /v1/staff/delivery-runs/locations/{id} (S262). */
+export interface RunLocationInput {
+  name: string;
+  /** Made from the name and state when absent. */
+  slug?: string;
+  market: string;
+  state?: string | null;
+  timeZone?: string;
+  /** RADIUS: miles around the centre; POLYGON: a saved area (`geoZoneId`) or a drawn outline (`polygonGeoJson`). */
+  areaKind: RunArea['kind'];
+  radiusMiles?: number | null;
+  geoZoneId?: string | null;
+  polygonGeoJson?: string | null;
+  centerLat: number;
+  centerLng: number;
+  defaultFeeMinor?: number | null;
+  currency?: string;
+  defaultMinOrders?: number | null;
+  defaultCapacityOrders?: number | null;
+  defaultCapacityPackages?: number | null;
+  dropMode?: RunDropMode | null;
+  defaultCutoffPolicy?: RunCutoffPolicy | null;
+  defaultExtendDays?: number | null;
+  /** The community (WhatsApp) link; blank or null clears it. */
+  whatsappInviteUrl?: string | null;
+  /** Create only; a new location is on unless this is false. */
+  active?: boolean;
+}
+
+export type RunLocationProblem = 'required' | 'range' | 'whole' | 'order' | 'tooLong' | 'link' | 'zone';
+
+/** The problems of a location as it is sent (keyed by field), the same ones the BFF's 422 reports. */
+export function runLocationProblems(input: Partial<RunLocationInput>): Partial<Record<keyof RunLocationInput, RunLocationProblem>> {
+  const out: Partial<Record<keyof RunLocationInput, RunLocationProblem>> = {};
+  if (!input.name?.trim()) out.name = 'required';
+  else if (Array.from(input.name.trim()).length > 120) out.name = 'tooLong';
+  if (!input.market?.trim()) out.market = 'required';
+  const inRange = (v: number | null | undefined, lo: number, hi: number) => typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+  if (!inRange(input.centerLat, -90, 90)) out.centerLat = 'range';
+  if (!inRange(input.centerLng, -180, 180)) out.centerLng = 'range';
+  if (input.areaKind === 'RADIUS') {
+    if (!inRange(input.radiusMiles, 0, 100) || input.radiusMiles === 0) out.radiusMiles = 'range';
+  } else if (input.areaKind === 'POLYGON') {
+    if (!input.geoZoneId?.trim() && !input.polygonGeoJson?.trim()) out.polygonGeoJson = 'zone';
+  } else out.areaKind = 'required';
+  const whole = (k: 'defaultMinOrders' | 'defaultCapacityOrders' | 'defaultCapacityPackages' | 'defaultExtendDays', hi: number) => {
+    const v = input[k];
+    if (v === null || v === undefined) return;
+    if (!Number.isInteger(v)) out[k] = 'whole';
+    else if (v < 1 || v > hi) out[k] = 'range';
+  };
+  whole('defaultMinOrders', RUN_LIMITS.orders);
+  whole('defaultCapacityOrders', RUN_LIMITS.orders);
+  whole('defaultCapacityPackages', RUN_LIMITS.packages);
+  whole('defaultExtendDays', RUN_LIMITS.extendDays);
+  if (!out.defaultMinOrders && !out.defaultCapacityOrders && input.defaultMinOrders && input.defaultCapacityOrders && input.defaultCapacityOrders < input.defaultMinOrders) out.defaultCapacityOrders = 'order';
+  const fee = input.defaultFeeMinor;
+  if (fee !== null && fee !== undefined && (!Number.isInteger(fee) || fee < 0 || fee > RUN_LIMITS.feeMinor)) out.defaultFeeMinor = 'range';
+  const link = input.whatsappInviteUrl?.trim();
+  if (link && !/^https?:\/\/[^\s/]+\S*$/i.test(link)) out.whatsappInviteUrl = 'link';
+  return out;
+}
+
 /** Body of POST /v1/staff/delivery-runs/runs/{id}/extend. */
 export interface RunExtendInput {
   cutoffAt: string;
@@ -706,6 +769,16 @@ export function createStaffRunsApi(request: Requester, _options: ApiClientOption
     locations: (signal?: AbortSignal): Promise<StaffRunLocations> => request('/v1/staff/delivery-runs/locations', StaffRunLocationsSchema, { signal }),
     locationHistory: (locationId: string, signal?: AbortSignal): Promise<StaffRunLocationHistory> =>
       request(`/v1/staff/delivery-runs/locations/${enc(locationId)}/history`, StaffRunLocationHistorySchema, { signal }),
+    /** Adds a town (a radius around its centre or a drawn area, defaults for new runs, time zone, community link). */
+    createLocation: (body: RunLocationInput): Promise<StaffRunLocation> => request('/v1/staff/delivery-runs/locations', StaffRunLocationSchema, { method: 'POST', body }),
+    /** Replaces a town's details; it never switches the town on or off. */
+    updateLocation: (locationId: string, body: RunLocationInput): Promise<StaffRunLocation> =>
+      request(`/v1/staff/delivery-runs/locations/${enc(locationId)}`, StaffRunLocationSchema, { method: 'PUT', body }),
+    /** Switches a town off; the reason is required and audited with who and when; refused while one of its runs is live. */
+    deactivateLocation: (locationId: string, reason: string): Promise<StaffRunLocation> =>
+      request(`/v1/staff/delivery-runs/locations/${enc(locationId)}/deactivate`, StaffRunLocationSchema, { method: 'POST', body: { reason } }),
+    activateLocation: (locationId: string, reason?: string): Promise<StaffRunLocation> =>
+      request(`/v1/staff/delivery-runs/locations/${enc(locationId)}/activate`, StaffRunLocationSchema, { method: 'POST', body: reason ? { reason } : {} }),
     runs: (q: RunListQuery = {}, signal?: AbortSignal): Promise<StaffRun[]> =>
       request('/v1/staff/delivery-runs/runs', StaffRunsSchema, { query: { locationId: q.locationId, status: q.status?.join(','), limit: str(q.limit) }, signal }).then((r) => r.items),
 
