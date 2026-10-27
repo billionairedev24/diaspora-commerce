@@ -1308,5 +1308,6 @@
   "runs.unsubscribe.doneTitle": "Alerts stopped",
   "runs.unsubscribe.doneBody": "You will not get delivery run alerts for this place any more.",
   "runs.unsubscribe.invalidTitle": "This link is not valid",
-  "runs.unsubscribe.invalidBody": "It may be old. You can turn alerts off in your account under Delivery alerts."
+  "runs.unsubscribe.invalidBody": "It may be old. You can turn alerts off in your account under Delivery alerts.",
+  "runs.adv.featured": "Featured in this run"
 }

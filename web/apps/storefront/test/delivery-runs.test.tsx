@@ -1,14 +1,15 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { useSearchParams } from 'next/navigation';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DeliveryAlertsView } from '@/components/runs/DeliveryAlerts';
 import { LocationPageView, LocationsIndex } from '@/components/runs/LocationPage';
 import { RunAdvertorials } from '@/components/runs/RunAdvertorials';
 import { SubscriptionLink } from '@/components/runs/SubscriptionLink';
 import { tEn } from '@/i18n/t';
-import { shareEntries, subscriptionSource } from '@/lib/runs/source';
-import { firstView, resetVisit, visitorId } from '@/lib/runs/visitor';
+import { shareEntries, subscriptionSource, utmTags } from '@/lib/runs/source';
+import { firstView, firstVisit, resetVisit, visitorId } from '@/lib/runs/visitor';
 
 import { installMockBff, sent, signInDemo } from './mockBff';
 import { renderWithProviders } from './render';
@@ -16,6 +17,8 @@ import { renderWithProviders } from './render';
 installMockBff();
 
 beforeEach(() => resetVisit());
+afterEach(() => vi.mocked(useSearchParams).mockImplementation(() => new URLSearchParams() as ReturnType<typeof useSearchParams>));
+const landOn = (query: string) => vi.mocked(useSearchParams).mockImplementation(() => new URLSearchParams(query) as ReturnType<typeof useSearchParams>);
 
 const bodyOf = async (req: Request) => JSON.parse(await req.clone().text()) as Record<string, unknown>;
 const requests = (method: string, pathPart: string) => sent.filter((r) => r.method === method && new URL(r.url).pathname.includes(pathPart));
@@ -27,6 +30,25 @@ describe('delivery run helpers', () => {
     expect(subscriptionSource('location-page', new URLSearchParams())).toBe('location-page');
     expect(subscriptionSource('location-page', null)).toBe('location-page');
     expect(subscriptionSource('account', new URLSearchParams(`utm_source=${'x'.repeat(100)}`)).length).toBeLessThanOrEqual(80);
+  });
+
+  it('keeps only the three UTM tags, cleaned to short lower-case tokens', () => {
+    expect(utmTags(new URLSearchParams('utm_source=WhatsApp&utm_medium=Social Share&utm_campaign=delivery-run-bastrop-tx-20261024&utm_content=x&fbclid=abc'))).toEqual({
+      utmSource: 'whatsapp',
+      utmMedium: 'socialshare',
+      utmCampaign: 'delivery-run-bastrop-tx-20261024'
+    });
+    expect(utmTags(new URLSearchParams('utm_source=%3Cscript%3E'))).toEqual({ utmSource: 'script' });
+    expect(utmTags(new URLSearchParams('ref=friend'))).toBeNull();
+    expect(utmTags(null)).toBeNull();
+    expect(utmTags(new URLSearchParams(`utm_source=${'x'.repeat(200)}`))?.utmSource).toHaveLength(80);
+  });
+
+  it('counts a visit once per session', () => {
+    expect(firstVisit('a')).toBe(true);
+    expect(firstVisit('a')).toBe(false);
+    resetVisit();
+    expect(firstVisit('a')).toBe(true);
   });
 
   it('keeps only secure share links', () => {
@@ -76,6 +98,42 @@ describe('location pages', () => {
     expect(screen.getByTestId('location-subscribe')).toHaveTextContent('ada@example.com');
     const post = requests('POST', '/v1/delivery-runs/subscriptions')[0];
     expect(await bodyOf(post as Request)).toEqual({ locationId: '4b2f9d3a-0000-4000-8000-00000000000a', email: 'ada@example.com', source: 'location-page' });
+  });
+
+  it('counts a visit that arrived with UTM tags once, with the tags only, and sends them with the sign-up', async () => {
+    const user = userEvent.setup();
+    landOn('utm_source=whatsapp&utm_medium=social&utm_campaign=delivery-run-lubbock-tx-20261024&run=9d4a1c7e-0000-4000-8000-0000000000d1');
+    const { unmount } = renderWithProviders(<LocationPageView slug="lubbock-tx" />);
+    await screen.findByTestId('location-run');
+    await waitFor(() => expect(requests('POST', '/visits')).toHaveLength(1));
+    expect(new URL((requests('POST', '/visits')[0] as Request).url).pathname).toBe('/api/bff/v1/delivery-runs/locations/lubbock-tx/visits');
+    expect(await bodyOf(requests('POST', '/visits')[0] as Request)).toEqual({
+      utmSource: 'whatsapp',
+      utmMedium: 'social',
+      utmCampaign: 'delivery-run-lubbock-tx-20261024',
+      runId: '9d4a1c7e-0000-4000-8000-0000000000d1'
+    });
+    // Coming back to the page in the same session does not count it again.
+    unmount();
+    renderWithProviders(<LocationPageView slug="lubbock-tx" />);
+    await screen.findByTestId('location-run');
+    expect(requests('POST', '/visits')).toHaveLength(1);
+    const form = await screen.findByTestId('location-subscribe');
+    await user.type(within(form).getByRole('textbox', { name: 'Email address' }), 'ada@example.com');
+    await user.click(within(form).getByRole('button', { name: 'Get alerts' }));
+    await waitFor(() => expect(screen.getByTestId('location-subscribe')).toHaveAttribute('data-state', 'sent'));
+    expect(await bodyOf(requests('POST', '/v1/delivery-runs/subscriptions')[0] as Request)).toMatchObject({
+      source: 'location-page.whatsapp',
+      utmSource: 'whatsapp',
+      utmMedium: 'social',
+      utmCampaign: 'delivery-run-lubbock-tx-20261024'
+    });
+  });
+
+  it('does not count a visit without UTM tags', async () => {
+    renderWithProviders(<LocationPageView slug="lubbock-tx" />);
+    await screen.findByTestId('location-run');
+    expect(requests('POST', '/visits')).toHaveLength(0);
   });
 
   it('explains an unknown place', async () => {
@@ -172,6 +230,20 @@ describe('location advertorials', () => {
     expect(query.get('visitor')).toMatch(/^[0-9a-f]{24}$/);
     cta.addEventListener('click', (e) => e.preventDefault());
     await user.click(cta);
+    await waitFor(() => expect(requests('POST', '/events')).toHaveLength(2));
+    expect(await bodyOf(requests('POST', '/events')[1] as Request)).toEqual({ type: 'CLICK' });
+  });
+
+  it('features up to four products on the card, each linking to its product page, and counts a click on one', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RunAdvertorials place={{ zip: '79401' }} />);
+    const products = await screen.findByTestId('run-advertorial-products');
+    const links = within(products).getAllByRole('link');
+    expect(links.map((l) => l.textContent)).toEqual(['Shea butter', 'Garri']);
+    expect(links.map((l) => l.getAttribute('href'))).toEqual(['/p/ATSHEA0001', '/p/ATGARI0001']);
+    await waitFor(() => expect(requests('POST', '/events')).toHaveLength(1));
+    links[0]?.addEventListener('click', (e) => e.preventDefault());
+    await user.click(links[0] as HTMLElement);
     await waitFor(() => expect(requests('POST', '/events')).toHaveLength(2));
     expect(await bodyOf(requests('POST', '/events')[1] as Request)).toEqual({ type: 'CLICK' });
   });

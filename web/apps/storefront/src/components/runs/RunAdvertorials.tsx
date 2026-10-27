@@ -2,6 +2,7 @@
 
 import { deliveryRunKeys, deliveryRunQueries, type RunAdvertorial, type RunAdvertorialQuery } from '@afrotransact/api-client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Countdown } from '@/components/preorder/Countdown';
@@ -33,6 +34,18 @@ function AdvertorialCard({ ad, onElapsed }: { ad: RunAdvertorial; onElapsed: () 
         <p className={styles.advFacts}>
           {[ad.deliveryDisplay ? t('runs.adv.delivers', { when: ad.deliveryDisplay }) : null, ad.feeDisplay ? t('runs.adv.fee', { fee: ad.feeDisplay }) : null].filter(Boolean).join(' · ')}
         </p>
+      ) : null}
+      {ad.featuredProducts.length > 0 ? (
+        <ul className={styles.advProducts} aria-label={t('runs.adv.featured')} data-testid="run-advertorial-products">
+          {ad.featuredProducts.map((p) => (
+            <li key={p.atin}>
+              <Link href={`/p/${encodeURIComponent(p.atin)}`} className={styles.advProduct} onClick={() => record(ad.id, 'CLICK')}>
+                {p.imageUrl ? <span role="img" aria-label="" className={styles.advProductImage} style={{ backgroundImage: `url("${p.imageUrl}")` }} /> : null}
+                <span>{p.title}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       ) : null}
       {ad.countdownTarget ? <Countdown variant="inline" to={ad.countdownTarget} label={t('runs.adv.closesIn')} className={styles.advCountdown} onElapsed={onElapsed} /> : null}
       <a className={styles.advCta} href={ad.ctaUrl} onClick={() => record(ad.id, 'CLICK')}>

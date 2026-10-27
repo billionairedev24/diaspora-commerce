@@ -4,6 +4,7 @@
 
 const VISITOR_KEY = 'at.visitor.v1';
 const VIEWED_KEY = 'at.adv.viewed.v1';
+const COUNTED_KEY = 'at.visit.counted.v1';
 
 let memory: string | null = null;
 
@@ -42,13 +43,31 @@ export function firstView(advertorialId: string): boolean {
   return true;
 }
 
+const counted = new Set<string>();
+
+/** True the first time a visit with these tags lands on a location in this browser session (so it is counted once). */
+export function firstVisit(key: string): boolean {
+  if (counted.has(key)) return false;
+  counted.add(key);
+  try {
+    const seen: string[] = JSON.parse(sessionStorage.getItem(COUNTED_KEY) ?? '[]');
+    if (seen.includes(key)) return false;
+    sessionStorage.setItem(COUNTED_KEY, JSON.stringify([...seen, key].slice(-20)));
+  } catch {
+    // Storage is unavailable: the in-memory set still keeps it to one per page load.
+  }
+  return true;
+}
+
 /** Test hook: forgets what this visit has seen. */
 export function resetVisit(): void {
   viewed.clear();
+  counted.clear();
   memory = null;
   try {
     sessionStorage.removeItem(VISITOR_KEY);
     sessionStorage.removeItem(VIEWED_KEY);
+    sessionStorage.removeItem(COUNTED_KEY);
   } catch {
     // nothing to clear
   }

@@ -6,14 +6,15 @@ import { TextField } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 
 import accountStyles from '@/components/account/Pages.module.css';
 import { Countdown } from '@/components/preorder/Countdown';
 import preorderStyles from '@/components/preorder/Preorder.module.css';
 import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
-import { shareEntries, subscriptionSource } from '@/lib/runs/source';
+import { shareEntries, subscriptionSource, utmTags } from '@/lib/runs/source';
+import { firstVisit } from '@/lib/runs/visitor';
 
 import { ChannelToggles } from './ChannelToggles';
 import { RunAdvertorials } from './RunAdvertorials';
@@ -59,7 +60,7 @@ function Subscribe({ page }: { page: RunLocationPage }) {
   const [email, setEmail] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const join = useMutation({
-    mutationFn: (e: string) => api.subscribeRunAlerts({ locationId: page.location.id, email: e, source }),
+    mutationFn: (e: string) => api.subscribeRunAlerts({ locationId: page.location.id, email: e, source, ...utmTags(params) }),
     onError: (e) => setProblem(isApiError(e) ? (e.fieldErrors.email ?? Object.values(e.fieldErrors)[0] ?? e.message) : t('runs.error.generic'))
   });
   if (me.isPending) return null;
@@ -151,7 +152,18 @@ function Share({ links }: { links: Record<string, string> }) {
 export function LocationPageView({ slug }: { slug: string }) {
   const t = useT();
   const api = browserApi();
+  const params = useSearchParams();
   const q = useQuery(deliveryRunQueries.location(api, slug));
+  // A visit that arrived with UTM tags is counted once, with the tags only (no cookie, address or visitor id).
+  const tags = utmTags(params);
+  const run = params.get('run') ?? undefined;
+  const tagKey = tags ? `${slug}|${JSON.stringify(tags)}|${run ?? ''}` : null;
+  useEffect(() => {
+    if (!tags || !tagKey || !q.isSuccess || !firstVisit(tagKey)) return;
+    void api.countRunVisit(slug, { ...tags, ...(run && /^[0-9a-f-]{36}$/i.test(run) ? { runId: run } : {}) }).catch(() => undefined);
+    // The tags are read from the address once the location has loaded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tagKey, q.isSuccess]);
   const zip = (q.data?.location.area?.zips as string[] | undefined)?.[0];
   const place = useMemo(() => (zip ? { zip } : undefined), [zip]);
   if (q.isPending) return <p className={accountStyles.muted}>{t('runs.loading')}</p>;

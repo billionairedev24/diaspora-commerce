@@ -1315,5 +1315,6 @@
   "runs.unsubscribe.doneTitle": "تم إيقاف التنبيهات",
   "runs.unsubscribe.doneBody": "لن تتلقى بعد الآن تنبيهات الجولات لهذا المكان.",
   "runs.unsubscribe.invalidTitle": "هذا الرابط غير صالح",
-  "runs.unsubscribe.invalidBody": "قد يكون قديمًا. يمكنك إيقاف التنبيهات في حسابك ضمن تنبيهات التوصيل."
+  "runs.unsubscribe.invalidBody": "قد يكون قديمًا. يمكنك إيقاف التنبيهات في حسابك ضمن تنبيهات التوصيل.",
+  "runs.adv.featured": "Featured in this run"
 }
