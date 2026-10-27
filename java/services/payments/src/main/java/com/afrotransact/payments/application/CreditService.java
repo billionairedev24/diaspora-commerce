@@ -71,8 +71,8 @@ public interface CreditService {
 
     /**
      * Credit and gift card liabilities. {@code flowsMinor} sums the ledger by KIND/SOURCE (grants by source, spends,
-     * refunds). {@code ledger*} are the general ledger accounts 2600 and 2650: credit held on open orders is the
-     * difference between the customer balances and 2600 (spent, not yet shipped).
+     * refunds). {@code ledger*} are the general ledger accounts 2600 and 2650: credit held on open orders is 2600
+     * minus the customer balances (spent by the customer, not yet shipped, so not yet revenue).
      */
     record Liabilities(String currency, long creditOutstandingMinor, long accountsWithCredit,
                        Map<String, Long> flowsMinor, long giftCardsOutstandingMinor, long giftCardsOutstandingCount,

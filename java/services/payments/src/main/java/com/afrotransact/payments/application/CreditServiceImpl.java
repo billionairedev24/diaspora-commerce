@@ -164,7 +164,7 @@ class CreditServiceImpl implements CreditService {
         return new Liabilities(settings.currency(), totals.outstandingMinor(), totals.accountsWithBalance(),
                 totals.flowsMinor(), cards.get(GiftCard.Status.ACTIVE)[1], cards.get(GiftCard.Status.ACTIVE)[0],
                 cards.get(GiftCard.Status.REDEEMED)[1], cards.get(GiftCard.Status.VOID)[1], ledgerCredit,
-                ledgerGiftCards, totals.outstandingMinor() - ledgerCredit);
+                ledgerGiftCards, ledgerCredit - totals.outstandingMinor());
     }
 
     /** The audit event of a posted adjustment (key = customer id). */

@@ -532,6 +532,10 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
         assertThat(report.path("flowsMinor").path("GRANT/REFERRAL").asLong()).isGreaterThanOrEqualTo(1200);
         assertThat(report.has("giftCardsOutstandingMinor")).isTrue();
         assertThat(report.has("ledgerCreditMinor")).isTrue();
+        // 2600 holds the balances plus what customers spent on orders that have not shipped yet (never less).
+        assertThat(report.path("creditOnOpenOrdersMinor").asLong())
+                .isEqualTo(report.path("ledgerCreditMinor").asLong() - report.path("creditOutstandingMinor").asLong())
+                .isGreaterThanOrEqualTo(0);
         TestSupport.as(TestSupport.customer(customer));
         problem(send("GET", "/v1/credit/liabilities", null, null), 403, "auth.missing-permission");
     }

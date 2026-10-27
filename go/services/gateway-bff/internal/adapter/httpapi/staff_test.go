@@ -228,6 +228,18 @@ func (f *fakePlatform) called(call string) bool {
 	return false
 }
 
+// giftCardFake is payments' staff view of a gift card.
+func giftCardFake(now string) map[string]any {
+	return map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000c1", "status": "ACTIVE", "origin": "PURCHASE", "amountMinor": 5000, "currency": "USD", "codeLast4": "K3M9",
+		"purchaserId": "cus-1", "senderName": "Kofi", "recipientEmail": "ama@example.com", "recipientName": "Ama", "message": "Happy birthday", "locale": "en", "sendAt": now,
+		"deliveryStatus": "SENT", "deliveryCount": 1, "sentAt": now, "refundedToCard": false, "createdAt": now}
+}
+
+func moneySettingsFake(now string) map[string]any {
+	return map[string]any{"giftCardMinMinor": 1000, "giftCardMaxMinor": 50000, "giftCardPresets": []any{2500, 5000, 10000}, "giftCardTerms": map[string]any{"en": "Gift cards never expire."},
+		"creditApprovalLimitMinor": 10000, "updatedBy": "stf-1", "updatedAt": now, "version": 3}
+}
+
 func writeJ(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -438,6 +450,45 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/ledger/adjustments/"):
 		writeJ(w, 200, map[string]any{"id": "adj-1", "stripeRef": "ch_123456", "currency": "USD", "reason": "Stripe fee booked twice for the charge", "status": "PROPOSED",
 			"proposedBy": "u-1", "proposedAt": now, "lines": []any{map[string]any{"account": "1000", "title": "Stripe clearing", "side": "CREDIT", "amountMinor": 250}, map[string]any{"account": "5000", "title": "Stripe processing fees", "side": "DEBIT", "amountMinor": 250}}})
+	// payments: AfroTransact credit, gift cards and their limits (S320, S321)
+	case p == "/v1/credit/adjustments" && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a1", "customerId": "cus-1", "amountMinor": 25000, "currency": "USD", "source": "STAFF",
+			"reason": "Goodwill for a late order", "status": "PROPOSED", "proposedBy": "stf-2", "proposedAt": now},
+			map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a2", "customerId": "cus-1", "amountMinor": -1250, "currency": "USD", "source": "STAFF",
+				"reason": "Credited twice by mistake", "status": "POSTED", "proposedBy": "stf-1", "proposedAt": now, "decidedBy": "stf-1", "decidedAt": now}})
+	case p == "/v1/credit/adjustments" && r.Method == http.MethodPost:
+		writeJ(w, 201, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a2", "customerId": "cus-1", "amountMinor": body["amountMinor"], "currency": "USD", "source": body["source"],
+			"reason": body["reason"], "status": "PROPOSED", "proposedBy": "stf-1", "proposedAt": now})
+	case strings.HasPrefix(p, "/v1/credit/adjustments/"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000a1", "customerId": "cus-1", "amountMinor": 25000, "currency": "USD", "source": "STAFF",
+			"reason": "Goodwill for a late order", "status": "POSTED", "proposedBy": "stf-2", "proposedAt": now, "decidedBy": "stf-1", "decidedAt": now})
+	case strings.HasPrefix(p, "/v1/credit/customers/"):
+		writeJ(w, 200, map[string]any{"balance": map[string]any{"customerId": "cus-1", "balanceMinor": 2500, "currency": "USD"}, "adjustments": []any{},
+			"entries": []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000e1", "customerId": "cus-1", "kind": "GRANT", "amountMinor": 2500, "currency": "USD", "source": "REFERRAL",
+				"reason": "Referral reward", "actor": "service", "balanceAfterMinor": 2500, "createdAt": now}}})
+	case p == "/v1/credit/liabilities":
+		writeJ(w, 200, map[string]any{"currency": "USD", "creditOutstandingMinor": 12500, "accountsWithCredit": 4, "flowsMinor": map[string]any{"GRANT/REFERRAL": 20000, "SPEND/ORDER": -7500},
+			"giftCardsOutstandingMinor": 10000, "giftCardsOutstandingCount": 2, "giftCardsRedeemedMinor": 5000, "giftCardsVoidedMinor": 2500, "ledgerCreditMinor": 15000,
+			"ledgerGiftCardsMinor": 10000, "creditOnOpenOrdersMinor": 2500})
+	case p == "/v1/gift-cards" && r.Method == http.MethodGet:
+		writeJ(w, 200, []any{giftCardFake(now)})
+	case p == "/v1/gift-cards" && r.Method == http.MethodPost:
+		card := giftCardFake(now)
+		card["origin"], card["amountMinor"], card["recipientEmail"], card["issueReason"] = "STAFF", body["amountMinor"], body["recipientEmail"], body["reason"]
+		writeJ(w, 201, card)
+	case strings.HasPrefix(p, "/v1/gift-cards/"):
+		card := giftCardFake(now)
+		if strings.HasSuffix(p, "/void") {
+			card["status"], card["voidReason"] = "VOID", body["reason"]
+		}
+		writeJ(w, 200, card)
+	case p == "/v1/money/settings" && r.Method == http.MethodGet:
+		writeJ(w, 200, moneySettingsFake(now))
+	case p == "/v1/money/settings" && r.Method == http.MethodPut:
+		writeJ(w, 200, moneySettingsFake(now))
+	case p == "/v1/money/settings/history":
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000b1", "changedBy": "stf-1", "changedAt": now, "reason": "Raise the gift card ceiling for the holidays",
+			"before": "{}", "after": "{}"}})
 	case p == "/v1/settings/summary":
 		writeJ(w, 200, []any{map[string]any{"key": "settlement.hold", "label": "Hold before a seller can be paid", "value": "7 days after delivery", "help": "Protects against returns.", "source": "SETTLEMENT_HOLD"},
 			map[string]any{"key": "payout.minimum", "label": "Smallest payout a seller can request", "value": "$25.00", "help": "Requests below it are refused.", "source": "PAYOUT_MINIMUM_MINOR"}})
@@ -824,6 +875,43 @@ func TestStaffContractConformance(t *testing.T) {
 		id := rows[0].(map[string]any)["id"].(string)
 		do("admin", "GET", "/v1/staff/resources/"+res+"/"+id, nil, 200)
 	}
+	// AfroTransact credit and gift cards (S320, S321): names, not ids; the reason travels; nothing pays credit out.
+	adj := do("admin", "GET", "/v1/staff/resources/credit-adjustments/0f0f0f0f-0000-4000-8000-0000000000a1", nil, 200)
+	if adj["title"] != "Credit added for Amara Nwosu" {
+		t.Fatalf("credit adjustment sheet = %v", adj["title"])
+	}
+	do("admin", "POST", "/v1/staff/resources/credit-adjustments/0f0f0f0f-0000-4000-8000-0000000000a1/actions/approve", nil, 200)
+	do("support", "POST", "/v1/staff/resources/credit-adjustments", map[string]any{"values": map[string]any{"customerEmail": "amara@example.com", "change": "ADD", "amount": 5, "source": "STAFF", "reason": "Goodwill for a late order"}}, 403)
+	do("admin", "POST", "/v1/staff/resources/credit-adjustments", map[string]any{"values": map[string]any{"customerEmail": "nobody@example.com", "change": "ADD", "amount": 5, "source": "STAFF", "reason": "Goodwill for a late order"}}, 422)
+	do("admin", "POST", "/v1/staff/resources/credit-adjustments", map[string]any{"values": map[string]any{"customerEmail": "amara@example.com", "change": "TAKE_BACK", "amount": 12.5, "source": "STAFF", "reason": "Credited twice by mistake"}}, 201)
+	if sent := f.bodies["POST /v1/credit/adjustments"]; sent["customerId"] != "cus-1" || sent["amountMinor"] != float64(-1250) || sent["reason"] != "Credited twice by mistake" || sent["source"] != "STAFF" {
+		t.Fatalf("payments credit adjustment body = %v", sent)
+	}
+	card := do("admin", "GET", "/v1/staff/resources/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1", nil, 200)
+	if card["title"] != "Gift card •••• K3M9" {
+		t.Fatalf("gift card sheet = %v", card["title"])
+	}
+	do("admin", "POST", "/v1/staff/resources/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1/actions/void", map[string]any{"values": map[string]any{"reason": "Bought by mistake, buyer asked"}}, 200)
+	if sent := f.bodies["POST /v1/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1/void"]; sent["reason"] != "Bought by mistake, buyer asked" {
+		t.Fatalf("void body = %v", sent)
+	}
+	do("support", "POST", "/v1/staff/resources/gift-cards/0f0f0f0f-0000-4000-8000-0000000000c1/actions/void", map[string]any{"values": map[string]any{"reason": "Bought by mistake, buyer asked"}}, 403)
+	do("admin", "POST", "/v1/staff/resources/gift-cards", map[string]any{"values": map[string]any{"amount": 25, "recipientEmail": "ama@example.com", "locale": "en", "sendAt": "2026-12-01", "reason": "Goodwill after a lost parcel"}}, 201)
+	if sent := f.bodies["POST /v1/gift-cards"]; sent["amountMinor"] != float64(2500) || sent["sendAt"] != "2026-12-01T09:00:00Z" || sent["reason"] != "Goodwill after a lost parcel" {
+		t.Fatalf("issue body = %v", sent)
+	}
+	liab := do("admin", "GET", "/v1/staff/resources/credit-liabilities", nil, 200)
+	if len(liab["rows"].([]any)) != 9 {
+		t.Fatalf("liability rows = %v", liab["rows"])
+	}
+	do("admin", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "25, 50, 100", "creditApprovalLimit": 150,
+		"terms.en": "Gift cards never expire.", "reason": "Raise the ceiling for the holidays"}}, 200)
+	if sent := f.bodies["PUT /v1/money/settings"]; sent["giftCardMaxMinor"] != float64(60000) || sent["creditApprovalLimitMinor"] != float64(15000) || sent["version"] != float64(3) ||
+		sent["reason"] != "Raise the ceiling for the holidays" || len(sent["giftCardPresets"].([]any)) != 3 {
+		t.Fatalf("money settings body = %v", sent)
+	}
+	do("admin", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "lots", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 422)
+	do("support", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "25", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 403)
 	made := do("admin", "POST", "/v1/staff/resources/stripe-lookup", map[string]any{"values": map[string]any{"ref": "po_123456", "orgId": "org-1"}}, 201)
 	if made["id"] != "po_123456 org-1" {
 		t.Fatalf("stripe lookup id = %v", made["id"])
