@@ -30,7 +30,7 @@ test.describe('seller center · shell navigation by role', () => {
     await expect(nav).toBeVisible();
     await expect(nav).toContainText('Owner');
     await expandAllGroups(page);
-    for (const label of ['Home', 'Orders', 'Listings', 'Inventory & FBA', 'Storefront & theme', 'Payouts', 'Fees & commission', 'Plan & billing', 'Account health', 'Team & roles']) {
+    for (const label of ['Home', 'Orders', 'Listings', 'Inventory & FBA', 'Payouts', 'Fees & commission', 'Plan & billing', 'Account health', 'Team & roles']) {
       await expect(navLink(page, label)).toBeVisible();
     }
     await navLink(page, 'Orders').click();
@@ -50,7 +50,7 @@ test.describe('seller center · shell navigation by role', () => {
     await expect(nav).toContainText('Fulfilment');
     await expandAllGroups(page);
     for (const label of ['Orders', 'Inventory & FBA']) await expect(navLink(page, label)).toBeVisible();
-    for (const label of ['Payouts', 'Plan & billing', 'Team & roles', 'Storefront & theme', 'Account health']) {
+    for (const label of ['Payouts', 'Plan & billing', 'Team & roles', 'Account health']) {
       await expect(navLink(page, label)).toHaveCount(0);
     }
     // Deep link into a module the role cannot open → access notice, not the page.
@@ -75,7 +75,7 @@ test.describe('seller center · shell navigation by role', () => {
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller home' });
   });
 
-  for (const path of ['/orders', '/listings', '/listings/new', '/inventory', '/storefront', '/payouts', '/fees', '/billing', '/account-health', '/team', '/onboarding']) {
+  for (const path of ['/orders', '/listings', '/listings/new', '/inventory', '/payouts', '/fees', '/billing', '/account-health', '/team', '/onboarding']) {
     test(`seller ${path} has no serious axe violations @a11y`, async ({ page }, testInfo) => {
       await page.goto(path);
       await expect(sidebar(page)).toBeVisible();
@@ -119,7 +119,7 @@ test.describe('provider hub · calendar', () => {
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'provider calendar' });
   });
 
-  for (const path of ['/requests', '/hours', '/services', '/policy', '/public-page', '/earnings']) {
+  for (const path of ['/requests', '/hours', '/services', '/policy', '/earnings']) {
     test(`provider ${path} has no serious axe violations @a11y`, async ({ page }, testInfo) => {
       await page.goto(path);
       await expect(sidebar(page)).toBeVisible();

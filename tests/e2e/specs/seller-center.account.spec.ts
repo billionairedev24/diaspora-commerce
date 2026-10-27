@@ -18,7 +18,7 @@ test.describe('seller center · my account', () => {
   test('account menu opens My account inside Seller Center, not the storefront', async ({ page }) => {
     await page.goto('/');
     await page.getByRole('button', { name: /Account menu for/ }).click();
-    await expect(page.getByRole('menuitem', { name: 'Open the storefront' })).toHaveAttribute('target', '_blank');
+    await expect(page.getByRole('menuitem', { name: 'Open AfroTransact' })).toHaveAttribute('target', '_blank');
     await page.getByRole('menuitem', { name: 'My account' }).click();
     await expect(page).toHaveURL(/\/account$/);
     await expect(page.getByRole('heading', { level: 1, name: 'My account' })).toBeVisible();
