@@ -5,6 +5,7 @@ import {
 type Cart,  cartKeys,
   checkoutKeys,
   type CheckoutPackage,
+  creditSplit,
   definitiveFailure,
   type DeliverySelection,
   isApiError,
@@ -31,7 +32,7 @@ import { type Choice, feeOf, initialChoice, PackageCard } from './PackageCard';
 import { newMethodName, PaymentStep } from './PaymentStep';
 
 /** How the order is paid: saved card or new details via the Payment Element. */
-type PaySpec = { paymentMethodId: string } | { newPaymentMethod: true; savePaymentMethod: boolean };
+type PaySpec = { paymentMethodId: string } | { newPaymentMethod: true; savePaymentMethod: boolean } | Record<string, never>;
 
 /** Where Stripe sends the shopper back after a redirect (3-D Secure page, Cash App, Affirm, bank): checks the payment. */
 export const checkoutReturnUrl = (orderNumber: string) => `${window.location.origin}/checkout/complete?order=${encodeURIComponent(orderNumber)}`;
@@ -84,6 +85,8 @@ export function CheckoutView() {
   const [save, setSave] = useState(false);
   const [newMethod, setNewMethod] = useState<PaymentElementChange>({ complete: false, empty: true, type: null });
   const payEl = useRef<PaymentElementHandle>(null);
+  /** Pay with AfroTransact credit first (S320); off until the shopper chooses it, so credit is never spent by surprise. */
+  const [useCredit, setUseCredit] = useState(false);
   const [couponDraft, setCouponDraft] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState('');
   /** Sent to the BFF so shipping, tax and coupons match the selected delivery option per package. */
@@ -147,6 +150,9 @@ export function CheckoutView() {
     const ship = Math.max(0, selectedShipping - (s.shippingDiscountMinor ?? 0));
     return s.subtotalMinor - (s.discountMinor ?? 0) + ship + s.taxMinor;
   }, [s, selectedShipping]);
+  // Credit first, never more than the balance, at least 0.50 left for the card (the rule payments applies).
+  const split = useMemo(() => (s?.credit && useCredit ? creditSplit(s.credit.availableMinor, total) : { appliedMinor: 0, cardDueMinor: total }), [s, useCredit, total]);
+  const creditPaysAll = split.appliedMinor > 0 && split.cardDueMinor === 0;
   const itemCount = s?.packages.reduce((n, p) => n + p.itemCount, 0) ?? 0;
   const busy = placing >= 0;
   // A pre-order package whose window is not open (upcoming or closed) blocks the order (S273, 422 orders.preorder-not-open).
@@ -156,7 +162,7 @@ export function CheckoutView() {
   // Pre-order windows may restrict payment methods; the PaymentIntent and the Elements must use the same list.
   const allowedByWindow = (s?.packages ?? []).flatMap((p) => (p.preorder ? [p.preorder.allowedMethods.join(',')] : [])).join('|');
   const methodTypes = useMemo(() => (allowedByWindow ? stripePaymentMethodTypes(allowedByWindow.split('|').map((w) => w.split(','))) : undefined), [allowedByWindow]);
-  const paymentChosen = payWith === 'new' || (payWith === 'saved' && !!pm);
+  const paymentChosen = creditPaysAll || payWith === 'new' || (payWith === 'saved' && !!pm);
   // AfroTransact Delivery the chosen address can't be served by blocks the order until removed or picked up instead (S255).
   const undeliverable = (s?.packages ?? []).some((p) => p.localDelivery?.available === false && (choices[p.packageId]?.option ?? initialChoice(p).option) !== 'pickup');
   const blocked = undeliverable || preLocked;
@@ -261,7 +267,10 @@ export function CheckoutView() {
       // Last-touch channel (?src=&cr=&po= or the pre-order placement clicked) is stored on the order.
       const attribution = readAttribution() ?? undefined;
       const couponCode = s?.coupon?.applicable ? s.coupon.code : undefined;
-      const conf = await api.placeOrder({ addressId: address.id, ...pay, deliverySelections: selections(), attribution, couponCode }, keyRef.current);
+      const conf = await api.placeOrder(
+        { addressId: address.id, ...pay, useCredit: split.appliedMinor > 0 ? true : undefined, deliverySelections: selections(), attribution, couponCode },
+        keyRef.current
+      );
       orderRef.current = conf.orderNumber;
       return conf;
     } catch (e) {
@@ -284,6 +293,14 @@ export function CheckoutView() {
     } catch (e) {
       await fail(e);
     }
+  };
+
+  /** Credit pays the whole order: no payment method, no Stripe confirmation. */
+  const placeWithCredit = async () => {
+    if (!begin()) return;
+    const conf = await place({});
+    if (!conf) return;
+    await finish(conf, { ok: true });
   };
 
   const placeWithSaved = async () => {
@@ -445,6 +462,7 @@ export function CheckoutView() {
             onNewMethod={onNewMethod}
             payEl={payEl}
             methodTypes={methodTypes}
+            credit={s.credit && s.credit.availableMinor > 0 ? { ...s.credit, ...split, use: useCredit, setUse: setUseCredit } : null}
           />
         </Section>
 
@@ -476,6 +494,7 @@ export function CheckoutView() {
         itemCount={itemCount}
         taxNote={taxNote}
         paymentChosen={paymentChosen}
+        creditMinor={split.appliedMinor}
         pmLabel={payWith === 'saved' ? pm?.label : newMethodName(newMethod.type)}
         addressOk={!!address}
         blocked={blocked}
@@ -487,7 +506,7 @@ export function CheckoutView() {
         busy={busy}
         placing={placing}
         error={error}
-        onPlace={() => void (payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
+        onPlace={() => void (creditPaysAll ? placeWithCredit() : payWith === 'new' || !pm ? placeWithElement() : placeWithSaved())}
         couponDraft={couponDraft}
         setCouponDraft={setCouponDraft}
         onApplyCoupon={() => {

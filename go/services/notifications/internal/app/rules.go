@@ -328,6 +328,10 @@ var DefaultEventRules = map[string][]EventRule{
 	"payments.intent.action_required": {{Topic: TopicPayments, Template: "payment.authentication_required",
 		Channels: chEmailPush, Recipient: RecipientUser, IDField: "customerId", Enrich: enrichActionRequired}},
 
+	// ---- gift cards (at.payment.events), S321: payments emails the recipient on the send date, in the buyer's language ----
+	"payments.gift_card.deliver": {{Topic: TopicPayments, Template: "payment.gift_card.delivered", Channels: chEmail,
+		Recipient: RecipientPayload, Enrich: enrichGiftCard}},
+
 	// ---- trust & safety (at.trustops.events), S230 ----
 	"trustops.claim.opened": {
 		{Topic: TopicTrustOps, Template: "claim.opened", Channels: chEmailPush, Recipient: RecipientUser,
@@ -579,6 +583,14 @@ func enrichGrant(d map[string]any, l Links) {
 		d["creditLine"] = "Your next invoices use the credit first."
 	}
 	d["actionUrl"] = join(l.SellerCenter, "/billing")
+}
+
+// enrichGiftCard formats the amount and points the button at the credit page, where the code is redeemed. The buyer's
+// name, the recipient's name and the message are free text: they reach the template as plain strings (escaped there).
+func enrichGiftCard(d map[string]any, l Links) {
+	d["amount"] = moneyField(d, "amountMinor")
+	nullable(d, "recipientName", "senderName", "message", "code")
+	d["redeemUrl"] = join(l.Storefront, "/account/credit")
 }
 
 func enrichPayout(d map[string]any, l Links) {

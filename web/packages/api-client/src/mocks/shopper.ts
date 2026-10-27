@@ -3,6 +3,7 @@
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
+import { creditSplit } from '../credit-split';
 import { type PaymentMethod } from '../schemas/account';
 import { type CartPackage } from '../schemas/cart';
 import { type DeliveryOption } from '../schemas/cart';
@@ -27,6 +28,7 @@ import {
   type ShipmentDetail,
   StartReturnRequestSchema
 } from '../schemas/shopper';
+import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
 import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf } from './delivery';
 import { PICKUP_POINTS } from './fixtures/geo';
@@ -252,12 +254,13 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     totalMinor: subtotal - discountMinor + netShipping + taxMinor,
     currency: 'USD',
     sellerCount: new Set(packages.map((p) => p.seller.id)).size,
-    publishableKey: publishableKey(ctx)
+    publishableKey: publishableKey(ctx),
+    credit: checkoutCredit(creditState(a, requireUser(ctx).id), subtotal - discountMinor + netShipping + taxMinor)
   };
 }
 
-function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
-  return { orderNumber: c.orderNumber, status: c.status, paymentClientSecret: c.clientSecret, totalMinor: c.totalMinor, currency: 'USD',
+function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string | null; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
+  return { orderNumber: c.orderNumber, status: c.status, paymentClientSecret: c.clientSecret, creditMinor: c.order.creditMinor ?? 0, totalMinor: c.totalMinor, currency: 'USD',
     shipments: c.order.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, eta: s.promisedBy ?? '', deliveryCode: s.deliveryCode })), preorder: c.preorder ?? null };
 }
 
@@ -311,7 +314,8 @@ function orderPayment(a: AccountState, o: MockOrder) {
   }));
   const refundedMinor = [...refunded.values()].reduce((n, x) => n + x, 0);
   const capturedMinor = o.shipments.filter((s) => s.status === 'delivered').reduce((n, s) => n + s.lines.reduce((m, l) => m + l.itemsMinor, 0), 0);
-  return { shipments, payment: { status: capturedMinor ? 'captured' : 'authorized', capturedMinor, refundedMinor, refundableMinor: Math.max(0, capturedMinor - refundedMinor), shippingTaxMinor: 0 } };
+  return { shipments, payment: { status: capturedMinor ? 'captured' : 'authorized', capturedMinor, refundedMinor, refundableMinor: Math.max(0, capturedMinor - refundedMinor), shippingTaxMinor: 0,
+    creditMinor: o.creditMinor ?? 0, cardRefundsAsCredit: o.cardRefundsAsCredit ?? false } };
 }
 
 /* ── Services ──────────────────────────────────────────────────── */
@@ -627,7 +631,10 @@ export const shopperHandlers = [
     const addr = a.addresses.find((x) => x.id === req.addressId);
     if (!addr) errors.addressId = 'Choose a delivery address';
     const sources = [!!req.paymentMethodId, !!req.wallet, !!req.newPaymentMethod].filter(Boolean).length;
-    if (!sources) errors.paymentMethodId = 'Choose a payment method';
+    const userId = requireUser(ctx).id;
+    const wallet = creditState(a, userId);
+    const creditPaysAll = !!req.useCredit && wallet.balanceMinor > 0 && summary(ctx, req.addressId).credit?.cardDueMinor === 0;
+    if (!sources && !creditPaysAll) errors.paymentMethodId = 'Choose a payment method';
     else if (sources > 1) errors.paymentMethodId = 'Pay with one of a saved method, a wallet or a new payment method';
     if (req.savePaymentMethod && !req.newPaymentMethod) errors.savePaymentMethod = 'Only a new payment method can be saved';
     if (req.paymentMethodId && !a.paymentMethods.some((x) => x.id === req.paymentMethodId)) errors.paymentMethodId = 'Unknown payment method';
@@ -682,7 +689,11 @@ export const shopperHandlers = [
       shippingAddress: addr ? { name: addr.name, line1: addr.line1, line2: addr.line2, city: addr.city, state: addr.state, zip: addr.zip } : null, shipments,
       perishable: new Set(s.packages.flatMap((p) => p.lines.filter((l) => l.perishable).map((l) => l.lineId))) };
     const pre = s.packages.find((p) => p.preorder)?.preorder;
-    const pending = { orderNumber, clientSecret: `pi_mock_${n}_secret_mock`, totalMinor: order.totalMinor, status: 'awaiting_payment' as const, order,
+    // Credit is spent when the order is placed (payments: once per order); full credit needs no card and places at once.
+    const spent = req.useCredit ? spendCredit(wallet, order.totalMinor, ctx.now) : 0;
+    if (spent > 0) order.creditMinor = spent;
+    const byCredit = spent > 0 && creditSplit(spent, order.totalMinor).cardDueMinor === 0 && spent === order.totalMinor;
+    const pending = { orderNumber, clientSecret: byCredit ? null : `pi_mock_${n}_secret_mock`, totalMinor: order.totalMinor, status: (byCredit ? 'placed' : 'awaiting_payment') as 'placed' | 'awaiting_payment', order,
       lineIds: s.packages.flatMap((p) => p.lines.map((l) => l.lineId)),
       attribution: req.attribution ?? null,
       preorder: pre
@@ -690,6 +701,10 @@ export const shopperHandlers = [
             otherItemCount: s.packages.filter((p) => !p.preorder).reduce((a, p) => a + p.itemCount, 0) }
         : null };
     a.checkouts.set(key, pending);
+    if (byCredit) {
+      a.orders.unshift(order);
+      ctx.session.lines = ctx.session.lines.filter((l) => !pending.lineIds.includes(l.lineId));
+    }
     return json(confirmation(pending), 201);
   })),
   http.get('*/v1/checkout/orders/:orderNumber', route((ctx, p) => {

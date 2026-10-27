@@ -61,6 +61,8 @@ abstract class PaymentsIntegrationTest {
 
     static final String WEBHOOK_SECRET = "whsec_integration_test_secret";
     static final String RETAIL = "org_afrotransact_retail";
+    /** {@code AT_IT_POSTGRES_URL=jdbc:postgresql://…} runs the tests on that PostgreSQL instead of a container. */
+    static final String EXTERNAL_DB = System.getenv("AT_IT_POSTGRES_URL");
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
     static final WireMockServer WIREMOCK = new WireMockServer(WireMockConfiguration.options().dynamicPort());
     static final StripeStubs STRIPE = new StripeStubs(WIREMOCK);
@@ -68,15 +70,19 @@ abstract class PaymentsIntegrationTest {
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     static {
-        POSTGRES.start();
+        if (EXTERNAL_DB == null) {
+            POSTGRES.start();
+        }
         WIREMOCK.start();
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("spring.datasource.url", () -> EXTERNAL_DB != null ? EXTERNAL_DB : POSTGRES.getJdbcUrl());
+        registry.add("spring.datasource.username", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_USER", "postgres") : POSTGRES.getUsername());
+        registry.add("spring.datasource.password", () -> EXTERNAL_DB != null
+                ? System.getenv().getOrDefault("AT_IT_POSTGRES_PASSWORD", "") : POSTGRES.getPassword());
         registry.add("at.payments.stripe.api-base", WIREMOCK::baseUrl);
         // The seller service's billing API (plan fallback) is WireMock too: unstubbed organisations answer 404 = no
         // plan, so they pay category rates.
@@ -107,12 +113,18 @@ abstract class PaymentsIntegrationTest {
     // ------------------------------------------------------------------ HTTP
 
     HttpResponse<String> send(String method, String path, Object body, String idempotencyKey) {
+        return send(method, path, body, idempotencyKey, Map.of());
+    }
+
+    HttpResponse<String> send(String method, String path, Object body, String idempotencyKey,
+                              Map<String, String> headers) {
         try {
             HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                     .timeout(Duration.ofSeconds(60)).header("Content-Type", "application/json");
             if (idempotencyKey != null) {
                 b.header("Idempotency-Key", idempotencyKey);
             }
+            headers.forEach(b::header);
             String json = body == null ? "" : body instanceof String s ? s : JSON.writeValueAsString(body);
             b.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
                     : HttpRequest.BodyPublishers.ofString(json));

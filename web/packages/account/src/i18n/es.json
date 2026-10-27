@@ -276,5 +276,7 @@
   "common.showAll": "Mostrar todo ({n})",
   "common.showFewer": "Mostrar menos",
   "hub.deliveryAlerts": "Avisos de entrega",
-  "hub.deliveryAlertsSub": "Rutas de entrega y pedidos anticipados de tu zona, por correo, texto, aplicación o WhatsApp"
+  "hub.deliveryAlertsSub": "Rutas de entrega y pedidos anticipados de tu zona, por correo, texto, aplicación o WhatsApp",
+  "hub.credit": "Crédito AfroTransact",
+  "hub.creditSub": "Saldo, historial y tarjetas de regalo"
 }

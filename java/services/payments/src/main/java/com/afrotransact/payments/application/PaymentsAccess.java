@@ -247,6 +247,27 @@ class PaymentsAccess {
         return actor;
     }
 
+    /** Programs that grant credit (referral, membership): SERVICE principals with payments:credit.grant. */
+    Actor creditGranter() {
+        Actor actor = actors.current();
+        if (actor.permissions().contains("*")
+                || actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.CREDIT_GRANT)) {
+            return actor;
+        }
+        throw new ForbiddenActionException("payments.service-only", "Credit is granted by the referral and "
+                + "membership programs (payments:credit.grant), not by " + actor.type());
+    }
+
+    /** A customer's credit balance: the calling services (checkout) and staff who read payments. */
+    Actor creditReader() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && (actor.can(PaymentsPermissions.SERVICE)
+                || actor.can(PaymentsPermissions.CREDIT_GRANT))) {
+            return actor;
+        }
+        return reader();
+    }
+
     Actor current() {
         return actors.current();
     }

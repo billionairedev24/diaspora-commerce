@@ -480,6 +480,29 @@ function seed(now: Date): MockStaffDb {
     rec('adj-2', { reason: 'Reclass a mis-booked chargeback fee to chargeback losses', amountMinor: 1_500, stripeRef: 'dp_1Q7cD9', proposedByName: 'Finance Lead', decidedByName: 'Platform Admin', status: 'POSTED', proposedAt: ago(3, 0), decidedAt: ago(2, 6), decisionNote: 'Checked against the Stripe dispute', journalId: 'a1b2c3d4' })
   ];
   const stripeLookup: MockRecord[] = [];
+  const creditAdjustments = [
+    rec('cadj-1', { customerId: customers[0]?.id ?? 'cus-1000', customerName: customers[0]?.name ?? 'Amara Nwosu', amountMinor: 25_000, source: 'STAFF', reason: 'Goodwill for a parcel that arrived a week late', proposedByName: 'Finance Lead', decidedByName: null, status: 'PROPOSED', proposedAt: ago(0, 3), decidedAt: null, decisionNote: null, balanceMinor: 2_500 }),
+    rec('cadj-2', { customerId: customers[1]?.id ?? 'cus-1001', customerName: customers[1]?.name ?? 'Kofi Mensah', amountMinor: 1_500, source: 'PROMO', reason: 'Apology for a delayed pre-order delivery', proposedByName: 'Finance Lead', decidedByName: 'Finance Lead', status: 'POSTED', proposedAt: ago(4, 0), decidedAt: ago(4, 0), decisionNote: null, balanceMinor: 1_500 })
+  ];
+  const giftCards = [
+    rec('gc-1', { code: '•••• K3M9', codeLast4: 'K3M9', amountMinor: 5_000, status: 'ACTIVE', origin: 'PURCHASE', purchaserId: customers[0]?.id ?? 'cus-1000', purchaserName: customers[0]?.name ?? 'Amara Nwosu', recipient: 'Ama Boateng', recipientName: 'Ama Boateng', recipientEmail: 'ama@example.com', senderName: 'Amara', message: 'Happy birthday!', locale: 'en', sendAt: ago(2, 0), deliveryStatus: 'SENT', deliveryCount: 1, sentAt: ago(2, 0), issueReason: null, issuedByName: null, redeemedByName: null, redeemedAt: null, voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ago(3, 0) }),
+    rec('gc-2', { code: '•••• P7QX', codeLast4: 'P7QX', amountMinor: 2_500, status: 'REDEEMED', origin: 'STAFF', purchaserId: null, purchaserName: null, recipient: 'kwame@example.com', recipientName: null, recipientEmail: 'kwame@example.com', senderName: null, message: null, locale: 'en', sendAt: ago(9, 0), deliveryStatus: 'SENT', deliveryCount: 1, sentAt: ago(9, 0), issueReason: 'Goodwill after a lost parcel', issuedByName: 'Finance Lead', redeemedByName: customers[2]?.name ?? 'Kwame Asante', redeemedAt: ago(8, 0), voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ago(10, 0) }),
+    rec('gc-3', { code: '•••• D2ZR', codeLast4: 'D2ZR', amountMinor: 10_000, status: 'ACTIVE', origin: 'PURCHASE', purchaserId: customers[1]?.id ?? 'cus-1001', purchaserName: customers[1]?.name ?? 'Kofi Mensah', recipient: 'Efua Owusu', recipientName: 'Efua Owusu', recipientEmail: 'efua@example.com', senderName: 'Kofi', message: 'Congratulations!', locale: 'en', sendAt: ahead(14), deliveryStatus: 'SCHEDULED', deliveryCount: 0, sentAt: null, issueReason: null, issuedByName: null, redeemedByName: null, redeemedAt: null, voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ago(1, 0) })
+  ];
+  const creditLiabilities = [
+    rec('credit-outstanding', { item: 'Credit owed to customers', amountMinor: 12_500, count: 4, account: '2600', note: 'Customer balances today. Credit never expires and cannot be paid out.' }),
+    rec('credit-open-orders', { item: 'Credit spent on orders not shipped yet', amountMinor: 2_500, count: null, account: '2600', note: 'Held in 2600 until each order ships, then it becomes revenue.' }),
+    rec('giftcards-outstanding', { item: 'Gift cards sold or issued, not yet redeemed', amountMinor: 15_000, count: 2, account: '2650', note: 'Owed until the recipient redeems the card into credit.' }),
+    rec('giftcards-redeemed', { item: 'Gift cards redeemed (all time)', amountMinor: 2_500, count: null, account: '', note: "Moved into customers' credit." }),
+    rec('giftcards-voided', { item: 'Gift cards voided (all time)', amountMinor: 0, count: null, account: '', note: 'Ended by staff; purchased cards were refunded to the buyer\'s card.' }),
+    rec('ledger-2600', { item: 'Ledger: customer credit', amountMinor: 15_000, count: null, account: '2600', note: 'Customer balances plus credit spent on orders not shipped yet.' }),
+    rec('ledger-2650', { item: 'Ledger: gift card liability', amountMinor: 15_000, count: null, account: '2650', note: 'Should equal the gift cards not yet redeemed.' })
+  ];
+  const moneySettings = [
+    rec('money', { giftCardMinMinor: 1_000, giftCardMaxMinor: 50_000, creditApprovalLimitMinor: 10_000, presetsText: '$25.00, $50.00, $100.00, $200.00', updatedByName: 'Platform Admin', updatedAt: ago(20, 0), version: 3, termsEn: 'Gift cards never expire.', termsFr: '', termsEs: '', termsAr: '', termsYo: '' }, [], [
+      { id: 'mh-1', changedAt: ago(20, 0), changedByName: 'Platform Admin', reason: 'Launch limits: $10 to $500' }
+    ])
+  ];
   const paymentSettings = [
     rec('stripe.mode', { label: 'Stripe', value: 'Test (Stripe test mode)', source: 'STRIPE_SECRET_KEY', help: 'Which Stripe account money moves through. Test mode never moves real money.' }),
     rec('settlement.hold', { label: 'Hold before a seller can be paid', value: '7 days after delivery', source: 'SETTLEMENT_HOLD', help: "A seller's net for an order is held until this long after it is delivered, then transferred to their Stripe account." }),
@@ -525,7 +548,7 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,
       'pickup-locations': pickupLocations, 'exchange-rates': seedExchangeRates(now),
       ...seedIdentityAdmin(now)

@@ -746,6 +746,149 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       build: (v, id, ctx) => ({ id, fields: { reason: str(v.reason), amountMinor: Math.round(num(v.amount) * 100), stripeRef: str(v.stripeRef) || null, proposedByName: ctx.actor, decidedByName: null, status: 'PROPOSED', proposedAt: ctx.now.toISOString(), decidedAt: null, decisionNote: null, journalId: null }, activity: [] })
     }
   },
+  'credit-adjustments': {
+    title: 'Credit adjustments',
+    columns: [col('customerName', 'Customer', 'strong', 18), col('reason', 'Why', 'text', 30), col('amountMinor', 'Amount', 'money', 11), col('source', 'Kind', 'text', 12), col('proposedByName', 'Proposed by', 'text', 13), col('decidedByName', 'Decided by', 'text', 13), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('PROPOSED', 'POSTED', 'REJECTED'),
+    exportable: true,
+    ids: { customerId: 'Customer' },
+    titleOf: (r) => `${num(r.fields.amountMinor) < 0 ? 'Credit taken back from' : 'Credit added for'} ${str(r.fields.customerName)}`,
+    subtitleOf: (r) => str(r.fields.reason),
+    sections: [
+      ['The change', ['customerName', 'amountMinor', 'source', 'reason', 'status', 'balanceMinor']],
+      ['Who decided', ['proposedByName', 'proposedAt', 'decidedByName', 'decidedAt', 'decisionNote']]
+    ],
+    actions: [
+      {
+        key: 'approve', label: 'Approve and post', tone: 'primary', permission: 'ledger:approve', confirm: "Post this change to the customer's credit now? It cannot be edited afterwards.",
+        when: (r, ctx) => stateReason(r, 'PROPOSED') ?? (str(r.fields.proposedByName) === ctx.actor ? 'You proposed this, so a different person must approve it.' : null),
+        apply: (r, _v, ctx) => { r.fields.status = 'POSTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.balanceMinor = Math.max(0, num(r.fields.balanceMinor) + num(r.fields.amountMinor)); log(r, ctx, 'Approved and posted'); }
+      },
+      {
+        key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:approve', when: (r) => stateReason(r, 'PROPOSED'),
+        form: () => form('Why is it rejected?', 'Reject', [field('note', 'Explanation (at least 10 characters)', 'textarea', true, { maxLength: 2000 })], 'The proposer sees this reason. The customer\'s credit does not change.'),
+        apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); r.fields.decisionNote = str(v.note); log(r, ctx, `Rejected — ${str(v.note)}`); }
+      }
+    ],
+    create: {
+      permission: 'ledger:adjust',
+      form: form('Adjust a customer\'s credit', 'Continue', [
+        field('customerEmail', "Customer's email address", 'email', true, { maxLength: 254 }),
+        field('change', 'What to do', 'select', true, { options: [{ value: 'ADD', label: 'Add credit' }, { value: 'TAKE_BACK', label: 'Take credit back' }], value: 'ADD' }),
+        field('amount', 'Amount in dollars', 'number', true, { min: 0, max: 100_000 }),
+        field('source', 'Kind', 'select', true, { options: [{ value: 'STAFF', label: 'Goodwill or correction' }, { value: 'PROMO', label: 'Promotion' }], value: 'STAFF' }),
+        field('reason', 'Why (at least 15 characters; the customer is not shown it)', 'textarea', true, { maxLength: 500 })
+      ], 'Adds to a customer\'s AfroTransact credit, or takes some back after a mistake (never below zero). Credit only buys products and services: it cannot be paid out or refunded to a card. Up to $100.00 is posted at once; more needs a different person to approve it.'),
+      build: (v, id, ctx) => {
+        const cents = Math.round(num(v.amount) * 100) * (str(v.change) === 'TAKE_BACK' ? -1 : 1);
+        const local = str(v.customerEmail).split('@')[0] ?? 'customer';
+        const posted = Math.abs(cents) <= 10_000;
+        return {
+          id,
+          fields: { customerId: `cus-${local}`, customerName: local.charAt(0).toUpperCase() + local.slice(1), amountMinor: cents, source: str(v.source) || 'STAFF', reason: str(v.reason), proposedByName: ctx.actor, decidedByName: posted ? ctx.actor : null, status: posted ? 'POSTED' : 'PROPOSED', proposedAt: ctx.now.toISOString(), decidedAt: posted ? ctx.now.toISOString() : null, decisionNote: null, balanceMinor: Math.max(0, cents) },
+          activity: []
+        };
+      }
+    }
+  },
+  'gift-cards': {
+    title: 'Gift cards',
+    columns: [col('code', 'Code', 'mono', 10), col('amountMinor', 'Amount', 'money', 10), col('recipient', 'Recipient', 'text', 20), col('origin', 'Origin', 'text', 10), col('purchaserName', 'Bought by', 'text', 16), col('sendAt', 'Emailed on', 'date', 11), col('createdAt', 'Created', 'datetime', 12), col('status', 'Status', 'status', 11)],
+    statusKey: 'status',
+    facets: facets('ACTIVE', 'REDEEMED', 'VOID', 'PENDING_PAYMENT', 'PAYMENT_FAILED'),
+    search: ['codeLast4', 'recipientEmail', 'recipientName', 'senderName', 'purchaserName'],
+    searchPlaceholder: "Last four of the code, recipient, sender or buyer's email",
+    exportable: true,
+    ids: { purchaserId: 'Buyer' },
+    titleOf: (r) => `Gift card ${str(r.fields.code)}`,
+    subtitleOf: (r) => `$${(num(r.fields.amountMinor) / 100).toFixed(2)} · ${humanize(str(r.fields.status))}`,
+    sections: [
+      ['The card', ['amountMinor', 'status', 'codeLast4', 'origin', 'createdAt']],
+      ['Recipient and delivery', ['recipientName', 'recipientEmail', 'senderName', 'message', 'locale', 'sendAt', 'deliveryStatus', 'deliveryCount', 'sentAt']],
+      ['Who did what', ['purchaserName', 'issuedByName', 'issueReason', 'redeemedByName', 'redeemedAt', 'voidedByName', 'voidedAt', 'voidReason', 'refundedToCard']]
+    ],
+    actions: [
+      {
+        key: 'void', label: 'Void this gift card', tone: 'danger', permission: 'ledger:adjust', when: (r) => stateReason(r, 'ACTIVE', 'PENDING_PAYMENT', 'PAYMENT_FAILED'),
+        confirm: 'Void this gift card? Its code stops working. A card a customer bought is refunded to their card; one staff issued just ends. A redeemed card is credit and cannot be voided.',
+        form: () => form('Why is it voided?', 'Void', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The reason is kept on the card and in the audit log.'),
+        apply: (r, v, ctx) => { r.fields.status = 'VOID'; r.fields.voidedByName = ctx.actor; r.fields.voidedAt = ctx.now.toISOString(); r.fields.voidReason = str(v.reason); r.fields.refundedToCard = str(r.fields.origin) === 'PURCHASE' ? 'Yes' : 'No'; log(r, ctx, `Voided — ${str(v.reason)}`); }
+      },
+      {
+        key: 'resend', label: 'Email it again with a new code', tone: 'neutral', permission: 'ledger:adjust', when: (r) => stateReason(r, 'ACTIVE'),
+        form: () => form('Why is it sent again?', 'Send again', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The old code stops working and the recipient gets a new one by email.'),
+        apply: (r, v, ctx) => { r.fields.deliveryCount = num(r.fields.deliveryCount) + 1; r.fields.deliveryStatus = 'SENT'; r.fields.sentAt = ctx.now.toISOString(); log(r, ctx, `Sent again — ${str(v.reason)}`); }
+      }
+    ],
+    create: {
+      permission: 'ledger:adjust',
+      form: form('Issue a gift card', 'Issue', [
+        field('amount', 'Amount in dollars', 'number', true, { min: 0, max: 100_000 }),
+        field('recipientEmail', "Recipient's email address", 'email', true, { maxLength: 254 }),
+        field('recipientName', "Recipient's name", 'text', false, { maxLength: 120 }),
+        field('message', 'Message', 'textarea', false, { maxLength: 500 }),
+        field('sendAt', 'Email it on (empty = now)', 'date', false),
+        field('locale', 'Language of the email', 'select', true, { options: [{ value: 'en', label: 'English' }, { value: 'fr', label: 'French' }, { value: 'es', label: 'Spanish' }, { value: 'ar', label: 'Arabic' }, { value: 'yo', label: 'Yoruba' }], value: 'en' }),
+        field('reason', 'Why it is issued (at least 15 characters)', 'textarea', true, { maxLength: 500 })
+      ], 'Goodwill or a promotion. The card is a liability from the moment it is issued and is emailed to the recipient on the day you choose. Amounts from $10.00 to $500.00 (Settings, Money).'),
+      build: (v, id, ctx) => ({
+        id,
+        fields: { code: `•••• ${id.slice(-4).toUpperCase()}`, codeLast4: id.slice(-4).toUpperCase(), amountMinor: Math.round(num(v.amount) * 100), status: 'ACTIVE', origin: 'STAFF', purchaserId: null, purchaserName: null, recipient: str(v.recipientName) || str(v.recipientEmail), recipientName: str(v.recipientName) || null, recipientEmail: str(v.recipientEmail), senderName: null, message: str(v.message) || null, locale: str(v.locale) || 'en', sendAt: str(v.sendAt) ? `${str(v.sendAt)}T09:00:00Z` : ctx.now.toISOString(), deliveryStatus: str(v.sendAt) ? 'SCHEDULED' : 'SENT', deliveryCount: str(v.sendAt) ? 0 : 1, sentAt: str(v.sendAt) ? null : ctx.now.toISOString(), issueReason: str(v.reason), issuedByName: ctx.actor, redeemedByName: null, redeemedAt: null, voidedByName: null, voidedAt: null, voidReason: null, refundedToCard: 'No', createdAt: ctx.now.toISOString() },
+        activity: []
+      })
+    }
+  },
+  'credit-liabilities': {
+    title: 'Credit & gift card liability',
+    columns: [col('item', 'What', 'strong', 38), col('amountMinor', 'Amount', 'money', 16), col('count', 'Count', 'number', 10), col('account', 'Ledger account', 'mono', 14), col('note', 'What it means', 'text', 22)],
+    facets: [],
+    exportable: true,
+    titleOf: (r) => str(r.fields.item),
+    subtitleOf: (r) => `$${(num(r.fields.amountMinor) / 100).toFixed(2)}`,
+    sections: [['This line', ['item', 'amountMinor', 'count', 'account', 'note']]],
+    actions: []
+  },
+  'money-settings': {
+    title: 'Credit & gift card limits',
+    columns: [col('giftCardMinMinor', 'Smallest gift card', 'money', 18), col('giftCardMaxMinor', 'Largest gift card', 'money', 18), col('creditApprovalLimitMinor', 'Second approver above', 'money', 20), col('updatedByName', 'Last changed by', 'text', 24), col('updatedAt', 'Changed', 'datetime', 20)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Credit and gift card limits',
+    subtitleOf: (r) => `Version ${str(r.fields.version)} · ${str(r.fields.updatedByName)}`,
+    sections: [
+      ['Gift cards', ['giftCardMinMinor', 'giftCardMaxMinor', 'presetsText']],
+      ['Credit granted by staff', ['creditApprovalLimitMinor']],
+      ['Gift card terms (shown on the buy page)', ['termsEn', 'termsFr', 'termsEs', 'termsAr', 'termsYo']],
+      ['Last change', ['updatedByName', 'updatedAt']]
+    ],
+    linesTitle: 'Who changed it and why',
+    lineColumns: [col('changedAt', 'When', 'datetime', 20), col('changedByName', 'Who', 'text', 24), col('reason', 'Why', 'text', 56)],
+    actions: [],
+    edit: {
+      permission: 'payments:configure',
+      form: (r) => form('Change the credit and gift card limits', 'Save', [
+        field('giftCardMin', 'Smallest gift card (dollars)', 'number', true, { min: 0, max: 100_000, value: num(r.fields.giftCardMinMinor) / 100 }),
+        field('giftCardMax', 'Largest gift card (dollars)', 'number', true, { min: 0, max: 100_000, value: num(r.fields.giftCardMaxMinor) / 100 }),
+        field('presets', 'Amounts offered on the buy page (dollars, separated by commas; up to 8)', 'text', true, { maxLength: 120, pattern: '^\\s*\\d+(\\.\\d{1,2})?(\\s*,\\s*\\d+(\\.\\d{1,2})?){0,7}\\s*$', help: 'For example 25, 50, 100, 200', value: str(r.fields.presetsText).replace(/\$/g, '') }),
+        field('creditApprovalLimit', 'A second approver is needed for staff credit above (dollars)', 'number', true, { min: 0, max: 100_000, value: num(r.fields.creditApprovalLimitMinor) / 100 }),
+        ...(['en', 'fr', 'es', 'ar', 'yo'] as const).map((l) => field(`terms.${l}`, `Gift card terms · ${l.toUpperCase()} (empty = built-in terms)`, 'textarea', false, { maxLength: 4000, value: str(r.fields[`terms${l.charAt(0).toUpperCase()}${l.slice(1)}`]) })),
+        field('reason', 'Why it changes (at least 15 characters)', 'textarea', true, { maxLength: 500, value: '' })
+      ], 'Takes effect at once for new gift cards and staff credit. Every change is kept with who made it and why.', ['giftCardMin', 'giftCardMax', 'presets', 'creditApprovalLimit', 'terms.en', 'terms.fr', 'terms.es', 'terms.ar', 'terms.yo']),
+      apply: (r, v, ctx) => {
+        const presets = str(v.presets).split(',').map((p) => p.trim()).filter(Boolean);
+        r.fields.giftCardMinMinor = Math.round(num(v.giftCardMin) * 100);
+        r.fields.giftCardMaxMinor = Math.round(num(v.giftCardMax) * 100);
+        r.fields.creditApprovalLimitMinor = Math.round(num(v.creditApprovalLimit) * 100);
+        r.fields.presetsText = presets.map((p) => `$${Number(p).toFixed(2)}`).join(', ');
+        for (const l of ['en', 'fr', 'es', 'ar', 'yo']) r.fields[`terms${l.charAt(0).toUpperCase()}${l.slice(1)}`] = str(v[`terms.${l}`]);
+        r.fields.version = num(r.fields.version) + 1;
+        r.fields.updatedByName = ctx?.actor ?? 'Platform Admin';
+        r.fields.updatedAt = (ctx?.now ?? new Date()).toISOString();
+        r.lines = [{ id: `mh-${num(r.fields.version)}`, changedAt: str(r.fields.updatedAt), changedByName: str(r.fields.updatedByName), reason: str(v.reason) }, ...(r.lines ?? [])];
+      }
+    }
+  },
   'stripe-lookup': {
     title: 'Stripe lookup',
     columns: [col('ref', 'Stripe id', 'mono', 30), col('kind', 'What it is', 'text', 20), col('stripeStatus', 'Status at Stripe', 'status', 20), col('amountMinor', 'Amount', 'money', 14), col('created', 'Created', 'datetime', 16)],

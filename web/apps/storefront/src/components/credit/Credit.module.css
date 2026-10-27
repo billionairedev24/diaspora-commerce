@@ -1,0 +1,26 @@
+/* AfroTransact credit and gift cards (S320, S321). Design tokens only. */
+.balanceCard { display: flex; flex-wrap: wrap; gap: var(--at-space-4); align-items: center; justify-content: space-between; }
+.balanceLabel { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.balance { margin: 0; font-family: var(--at-font-heading); font-size: var(--at-text-3xl); font-weight: var(--at-weight-bold); line-height: 1.1; }
+.note { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.redeemRow { display: flex; flex-wrap: wrap; gap: var(--at-space-3); align-items: flex-start; }
+.redeemRow > :first-child { flex: 1 1 16rem; min-width: 0; }
+.code { font-family: var(--at-font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-1) var(--at-space-3); align-items: baseline; padding: var(--at-space-3) 0; border-top: 1px solid var(--at-color-border); }
+.entry:first-child { border-top: 0; }
+.entryTitle { font-weight: var(--at-weight-semibold); }
+.entryDate, .entryAfter { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.entryAmount { justify-self: end; font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
+.plus { color: var(--at-color-success); }
+.entryAfter { justify-self: end; }
+.presets { display: flex; flex-wrap: wrap; gap: var(--at-space-2); margin: 0; padding: 0; border: 0; }
+.preset { display: inline-flex; align-items: center; justify-content: center; min-height: var(--at-size-touch); padding: 0 var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-pill); background: var(--at-color-surface); font-weight: var(--at-weight-semibold); cursor: pointer; }
+.preset[aria-pressed='true'] { border-color: var(--at-color-action-secondary); background: var(--at-color-surface-muted); }
+.legend { padding: 0; margin-bottom: var(--at-space-2); font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); }
+.textarea { width: 100%; min-height: 5.5rem; padding: var(--at-space-2) var(--at-space-3); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); font: inherit; resize: vertical; }
+.fine { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.done { display: flex; flex-direction: column; gap: var(--at-space-3); align-items: flex-start; }
+.status { display: inline-flex; padding: 2px var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); white-space: nowrap; }
+.giftRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-1) var(--at-space-3); align-items: baseline; padding: var(--at-space-3) 0; border-top: 1px solid var(--at-color-border); }
+.giftRow:first-child { border-top: 0; }
+.more { align-self: flex-start; }

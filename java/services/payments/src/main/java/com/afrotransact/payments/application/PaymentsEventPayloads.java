@@ -161,4 +161,30 @@ public final class PaymentsEventPayloads {
     /** Part of a disputed amount borne by a recipient. */
     public record Allocation(String recipientId, long amountMinor) {
     }
+
+    /** Email address of a gift card recipient (notifications' recipient block). */
+    public record GiftCardRecipient(String email) {
+    }
+
+    /**
+     * payments.gift_card.deliver: the email that carries the code. The code appears here and nowhere else at rest (the
+     * database keeps only its hash); a resend makes a new one.
+     */
+    public record GiftCardDeliveryPayload(GiftCardRecipient recipient, String locale, String giftCardId,
+                                          String recipientName, String senderName, String message, long amountMinor,
+                                          String currency, String code) {
+    }
+
+    /**
+     * payments.gift_card.issued / .redeemed / .voided / .resent and payments.credit.adjusted: the audit trail of staff
+     * actions and redemptions (no code). {@code actor} is the staff member or customer.
+     */
+    public record GiftCardAuditPayload(String giftCardId, String action, String actor, String reason,
+                                       long amountMinor, String currency, String status) {
+    }
+
+    /** payments.credit.adjusted: a staff grant or correction of credit posted to a customer. */
+    public record CreditAdjustedPayload(String adjustmentId, String customerId, long amountMinor, String currency,
+                                        String source, String reason, String proposedBy, String decidedBy) {
+    }
 }

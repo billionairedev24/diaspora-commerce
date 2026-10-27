@@ -109,6 +109,26 @@ final class Upstreams {
                 "{\"id\":\"" + paymentId + "\",\"status\":\"CANCELED\"}");
     }
 
+    /**
+     * S320: the payment of a checkout that asked to use credit ({@code useCredit: true}). {@code creditMinor} of it is
+     * paid with credit; when that is the whole order ({@code fullCredit}) payments answers AUTHORIZED with no
+     * PaymentIntent and no client secret.
+     */
+    void paymentWithCredit(String customerId, String paymentId, long creditMinor, boolean fullCredit) {
+        String body = fullCredit
+                ? "{\"id\":\"" + paymentId + "\",\"status\":\"AUTHORIZED\",\"amountMinor\":" + creditMinor
+                + ",\"creditMinor\":" + creditMinor + "}"
+                : "{\"id\":\"" + paymentId + "\",\"status\":\"REQUIRES_PAYMENT_METHOD\",\"clientSecret\":\"pi_"
+                + paymentId + "_secret\",\"amountMinor\":99999,\"creditMinor\":" + creditMinor + "}";
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments"))
+                .withRequestBody(WireMock.matchingJsonPath("$.metadata.customer_id", WireMock.equalTo(customerId)))
+                .withRequestBody(WireMock.matchingJsonPath("$.useCredit", WireMock.equalTo("true"))), 200, body);
+        json(WireMock.get(WireMock.urlPathEqualTo("/v1/payments/" + paymentId)), 200,
+                body.replace("REQUIRES_PAYMENT_METHOD", "AUTHORIZED"));
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payments/" + paymentId + "/cancel")), 200,
+                "{\"id\":\"" + paymentId + "\",\"status\":\"CANCELED\"}");
+    }
+
     /** {@code GET /v1/payments/{id}} (with or without refresh) answers this status. */
     void paymentStatus(String paymentId, String status) {
         json(WireMock.get(WireMock.urlPathEqualTo("/v1/payments/" + paymentId)), 200,

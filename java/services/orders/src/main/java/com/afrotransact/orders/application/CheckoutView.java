@@ -10,11 +10,21 @@ import java.util.List;
  *
  * @param status             awaiting_payment | placed | processing
  * @param paymentClientSecret same as clientSecret (gateway-bff field name)
+ * @param creditMinor        the part of the total paid with AfroTransact credit (S320); the card pays the rest. An
+ *                           order that credit pays in full has no clientSecret and needs no card (null until known)
  */
 public record CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
                            String paymentClientSecret, Long totalMinor, String currency,
                            Long itemsMinor, Long shippingMinor, Long taxMinor, Long discountMinor,
-                           List<Shipment> shipments, Preorder preorder) {
+                           List<Shipment> shipments, Preorder preorder, Long creditMinor) {
+
+    public CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
+                        String paymentClientSecret, Long totalMinor, String currency,
+                        Long itemsMinor, Long shippingMinor, Long taxMinor, Long discountMinor,
+                        List<Shipment> shipments, Preorder preorder) {
+        this(orderId, orderNumber, status, clientSecret, paymentClientSecret, totalMinor, currency, itemsMinor,
+                shippingMinor, taxMinor, discountMinor, shipments, preorder, null);
+    }
 
     public CheckoutView(String orderId, String orderNumber, String status, String clientSecret,
                         String paymentClientSecret, Long totalMinor, String currency, List<Shipment> shipments) {

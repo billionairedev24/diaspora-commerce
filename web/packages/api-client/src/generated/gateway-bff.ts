@@ -1129,6 +1129,138 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My credit balance and history, newest first
+         * @description payments `GET /v1/credit/me` and `/v1/credit/me/entries` with the shopper's token. The balance is the sum of the
+         *     ledger. Each entry has a `kind` (GRANT, SPEND, REFUND, ADJUSTMENT) and a `source` (REFERRAL, GIFT_CARD, MEMBERSHIP,
+         *     REFUND, STAFF, PROMO, ORDER); the storefront words them in the shopper's language. Page backwards with
+         *     `before` = the previous page's `nextBefore`.
+         */
+        get: operations["getAccountCredit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/orders/{orderNumber}/credit-refunds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take the card part of my order's refunds as credit (one way)
+         * @description A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
+         *     with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
+         *     way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
+         *     409 `NO_CARD_PORTION` when the order was paid with credit only.
+         */
+        post: operations["chooseCreditRefunds"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gift-cards/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gift card amount limits, preset amounts and terms (staff settings)
+         * @description Default limits are 10.00 to 500.00; gift cards never expire. Staff change them without a release.
+         */
+        get: operations["getGiftCardConfig"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/gift-cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The gift cards I bought, newest first (never with the code) */
+        get: operations["listMyGiftCards"];
+        put?: never;
+        /**
+         * Start buying a gift card; confirm the card payment with the client secret
+         * @description Requires `Idempotency-Key`. payments creates the card (PENDING_PAYMENT) and a PaymentIntent for it: confirm
+         *     `clientSecret` with Stripe Elements (a card; credit cannot pay for a gift card), then
+         *     `POST /v1/account/gift-cards/{giftCardId}/confirm`. The code is generated and emailed on `sendAt` (now when
+         *     omitted). 422 `errors.amountMinor` when the amount is outside the staff-set limits.
+         */
+        post: operations["buyGiftCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/gift-cards/{giftCardId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * After the payment was confirmed, capture it and issue the card
+         * @description Idempotent; the payments webhook does the same, so either order works.
+         */
+        post: operations["confirmGiftCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/gift-cards/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a gift card code into my credit, once
+         * @description 404 `GIFT_CARD_INVALID` for a wrong code; 409 `GIFT_CARD_REDEEMED` when it was redeemed already. Wrong codes
+         *     are counted per shopper and per network address: over the limit the answer is 429 `RATE_LIMITED` with
+         *     `Retry-After`, even for a right code.
+         */
+        post: operations["redeemGiftCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/checkout/summary": {
         parameters: {
             query?: never;
@@ -3441,6 +3573,8 @@ export interface components {
             publishableKey?: string;
             /** @description Optional checkout_cross_sell placement from content (product rail) */
             crossSell?: components["schemas"]["Rail"];
+            /** @description What my AfroTransact credit would pay of this order (S320); absent when I have no credit */
+            credit?: components["schemas"]["CheckoutCredit"];
         };
         /**
          * @description AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the
@@ -3649,6 +3783,13 @@ export interface components {
             /** @description With newPaymentMethod, save the method on the shopper's Stripe Customer for future purchases (the order's PaymentIntent gets setup_future_usage=off_session, so the Payment Element is created with setupFutureUsage off_session) */
             savePaymentMethod?: boolean;
             gift?: boolean;
+            /**
+             * @description Pay with my AfroTransact credit first (S320). Credit is spent, up to the order total, when the order is placed
+             *     (once per order, never more than the balance); the card pays only the rest. When credit pays everything
+             *     (`summary.credit.cardDueMinor` is 0) no payment method is needed: send none, the answer has no
+             *     `paymentClientSecret`, and the order is placed without a card (then `POST …/confirm` returns `placed`).
+             */
+            useCredit?: boolean;
             /** @description Coupon validated and redeemed by orders with the offers service (released if the order fails or is cancelled); 422 with errors.couponCode when it does not apply */
             couponCode?: string;
             deliverySelections: {
@@ -3666,6 +3807,139 @@ export interface components {
                 };
             }[];
         };
+        /** @description One line of the credit history; the balance is the sum of the lines. The storefront words it from kind and source. */
+        CreditEntry: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "GRANT" | "SPEND" | "REFUND" | "ADJUSTMENT";
+            /** @enum {string} */
+            source: "REFERRAL" | "GIFT_CARD" | "MEMBERSHIP" | "REFUND" | "STAFF" | "PROMO" | "ORDER";
+            /**
+             * Format: int64
+             * @description Signed: credit added is positive, credit spent negative
+             */
+            amountMinor: number;
+            currency: string;
+            /** Format: int64 */
+            balanceAfterMinor: number;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreditAccount: {
+            /** Format: int64 */
+            balanceMinor: number;
+            currency: string;
+            entries: components["schemas"]["CreditEntry"][];
+            /** @description Pass as `before` for older entries; null on the last page */
+            nextBefore: string | null;
+        };
+        /** @description What the shopper's credit would pay of this order if used (payments decides when the order is placed) */
+        CheckoutCredit: {
+            /** Format: int64 */
+            availableMinor: number;
+            /**
+             * Format: int64
+             * @description The balance up to the total
+             */
+            appliedMinor: number;
+            /**
+             * Format: int64
+             * @description What the card pays then; 0 means no payment method is needed
+             */
+            cardDueMinor: number;
+        };
+        CreditRefundChoice: {
+            orderNumber: string;
+            cardRefundsAsCredit: boolean;
+            /**
+             * Format: int64
+             * @description What the card paid for the order
+             */
+            cardPartMinor: number;
+            currency: string;
+        };
+        GiftCardConfig: {
+            /** Format: int64 */
+            minMinor: number;
+            /** Format: int64 */
+            maxMinor: number;
+            currency: string;
+            /** @description The Stripe publishable key the buy page creates its Payment Element with (cards only) */
+            publishableKey: string;
+            presetsMinor: number[];
+            /** @description Staff-written terms by language (en, fr, es, ar, yo); empty means the page shows its built-in terms */
+            terms: {
+                [key: string]: string;
+            };
+        };
+        /** @description A gift card as its buyer sees it. The code is never returned; the recipient gets it by email on the send date. */
+        GiftCard: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "PENDING_PAYMENT" | "ACTIVE" | "REDEEMED" | "VOID" | "PAYMENT_FAILED";
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            recipientEmail: string;
+            recipientName?: string | null;
+            senderName?: string | null;
+            message?: string | null;
+            /** Format: date-time */
+            sendAt: string;
+            /** @enum {string} */
+            deliveryStatus: "SCHEDULED" | "SENT";
+            /** Format: date-time */
+            sentAt?: string | null;
+            redeemed: boolean;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        GiftCardPage: {
+            items: components["schemas"]["GiftCard"][];
+            nextCursor: string | null;
+        };
+        GiftCardPurchase: components["schemas"]["GiftCard"] & {
+            /** @description Confirm the payment with Stripe Elements; null when it was already paid */
+            clientSecret: string | null;
+            publishableKey: string;
+        };
+        GiftCardPurchaseRequest: {
+            /**
+             * Format: int64
+             * @description Within the staff-set limits (default 10.00 to 500.00)
+             */
+            amountMinor: number;
+            recipientEmail: string;
+            recipientName?: string;
+            senderName?: string;
+            message?: string;
+            /**
+             * Format: date-time
+             * @description When to email the card; omit to send it now (at most a year ahead)
+             */
+            sendAt?: string;
+            /**
+             * @description Language of the email
+             * @enum {string}
+             */
+            locale?: "en" | "fr" | "es" | "ar" | "yo";
+        };
+        GiftCardRedeemRequest: {
+            /** @example ABCD-EFGH-JKLM-2345 */
+            code: string;
+        };
+        GiftCardRedemption: {
+            /** Format: int64 */
+            redeemedMinor: number;
+            /**
+             * Format: int64
+             * @description The credit balance after redeeming
+             */
+            balanceMinor: number;
+            currency: string;
+        };
         OrderConfirmation: {
             orderNumber: string;
             /**
@@ -3677,6 +3951,11 @@ export interface components {
             paymentClientSecret?: string | null;
             totalMinor: number;
             currency: string;
+            /**
+             * Format: int64
+             * @description The part of the total paid with AfroTransact credit (S320); the card pays the rest
+             */
+            creditMinor?: number;
             /** @description The "You're in" facts when the order holds a pre-order package (relayed from orders) */
             preorder?: {
                 /** @example LBK-1042 */
@@ -3792,6 +4071,13 @@ export interface components {
             refundedMinor: number;
             refundableMinor: number;
             shippingTaxMinor: number;
+            /**
+             * Format: int64
+             * @description The part of the order paid with AfroTransact credit (S320); the card paid the rest
+             */
+            creditMinor: number;
+            /** @description The card part of this order's refunds comes back as credit (the shopper's one-way choice) */
+            cardRefundsAsCredit: boolean;
         };
         OrderDetail: {
             orderNumber: string;
@@ -6065,6 +6351,189 @@ export interface operations {
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountCredit: {
+        parameters: {
+            query?: {
+                /** @description Entries older than this */
+                before?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Balance and a page of history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    chooseCreditRefunds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Chosen */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreditRefundChoice"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getGiftCardConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Limits and terms */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardConfig"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listMyGiftCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description My gift cards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    buyGiftCard: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GiftCardPurchaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Card created, payment pending */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardPurchase"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            402: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmGiftCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                giftCardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card (ACTIVE once paid) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCard"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    redeemGiftCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GiftCardRedeemRequest"];
+            };
+        };
+        responses: {
+            /** @description Redeemed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GiftCardRedemption"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

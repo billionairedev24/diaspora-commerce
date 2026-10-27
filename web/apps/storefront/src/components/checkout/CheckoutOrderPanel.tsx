@@ -24,6 +24,8 @@ type Props = {
   itemCount: number;
   taxNote: string | null;
   paymentChosen: boolean;
+  /** AfroTransact credit applied to the total and what the card pays then (S320); 0 without credit. */
+  creditMinor?: number;
   /** The chosen method ("Visa ending in 4242"), shown under Place order. */
   pmLabel?: string | null;
   addressOk: boolean;
@@ -57,6 +59,7 @@ export function CheckoutOrderPanel(props: Props) {
     itemCount,
     taxNote,
     paymentChosen,
+    creditMinor = 0,
     pmLabel,
     addressOk,
     blocked,
@@ -130,7 +133,8 @@ export function CheckoutOrderPanel(props: Props) {
               ))}
             </ol>
           )}
-          {pmLabel ? <p className={styles.payingWith}>{t('co.payingWith', { method: pmLabel })}</p> : null}
+          {creditMinor > 0 && total - creditMinor === 0 ? <p className={styles.payingWith}>{t('co.credit.payingAll')}</p> : null}
+          {pmLabel && !(creditMinor > 0 && total - creditMinor === 0) ? <p className={styles.payingWith}>{t('co.payingWith', { method: pmLabel })}</p> : null}
         </div>
 
         <details className={styles.itemsDetails}>
@@ -230,6 +234,12 @@ export function CheckoutOrderPanel(props: Props) {
             <dd>{s.taxMinor ? fmt.money(s.taxMinor) : '—'}</dd>
             {taxNote && <dd className={styles.rowNote}>{taxNote}</dd>}
           </div>
+          {creditMinor > 0 && (
+            <div className={styles.row} data-testid="checkout-credit-row">
+              <dt>{t('co.credit.row')}</dt>
+              <dd className={styles.creditRow}>−{fmt.money(creditMinor)}</dd>
+            </div>
+          )}
         </dl>
 
         <div className={styles.legalBlock}>

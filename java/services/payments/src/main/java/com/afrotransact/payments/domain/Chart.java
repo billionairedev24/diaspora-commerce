@@ -41,6 +41,14 @@ public enum Chart {
      * payable, never transferred or paid out through Stripe Connect.
      */
     SUPPLIER_PAYABLE("2500", "AfroTransact Retail supplier payables", AccountType.LIABILITY, Scope.SUPPLIER),
+    /**
+     * AfroTransact credit (S320): stored value customers hold, owed in goods and services only, never in cash. Credited
+     * when credit is granted, redeemed from a gift card or returned by a refund; debited when a captured order is
+     * paid with it (the credit becomes revenue then, like a card payment) or a staff correction takes it back.
+     */
+    CUSTOMER_CREDIT("2600", "Customer credit (store value, never cash)", AccountType.LIABILITY, Scope.NONE),
+    /** Sold or issued gift cards not redeemed yet (S321): a liability, not revenue, until redeemed into credit. */
+    GIFT_CARD_LIABILITY("2650", "Gift cards outstanding (unredeemed)", AccountType.LIABILITY, Scope.NONE),
     COMMISSION_REVENUE("4000", "Commission revenue", AccountType.REVENUE, Scope.NONE),
     /**
      * Connection fees providers pay on service bookings: a configurable percentage of the booking's service amount,
@@ -70,7 +78,9 @@ public enum Chart {
      */
     PLAN_FEE_REVENUE("4600", "Seller plan fees collected from earnings", AccountType.REVENUE, Scope.NONE),
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
-    CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE);
+    CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE),
+    /** Credit and gift cards AfroTransact gives away (staff, promotions, referral, membership): the program's cost. */
+    CREDIT_GRANTED_EXPENSE("5200", "Credit and gift cards granted (program cost)", AccountType.EXPENSE, Scope.NONE);
 
     /** Whether the account has one sub-account per organisation or jurisdiction. */
     public enum Scope { NONE, ORG, JURISDICTION, SUPPLIER }

@@ -64,7 +64,7 @@ export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
   'site-settings': 'siteCfg', 'legal-documents': 'siteCfg', 'help-articles': 'siteCfg', 'privacy-requests': 'siteCfg', announcements: 'marketing', placements: 'marketing', 'identity-providers': 'dev',
   'fee-schedules': 'fees', 'tax-rates': 'fees', 'tax-codes': 'fees', 'tax-rules': 'fees', 'tax-review': 'fees', 'dispatch-shipments': 'dispatch', 'sos-alerts': 'dispatch', 'vehicle-defects': 'dispatch', 'driver-events': 'dispatch', 'pickup-locations': 'dispatch',
   coupons: 'marketing', organisations: 'orgs', 'connect-accounts': 'orgs',
-  reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', 'stripe-lookup': 'payouts',
+  reconciliation: 'payouts', 'reconciliation-runs': 'payouts', 'ledger-adjustments': 'payouts', 'credit-adjustments': 'payouts', 'gift-cards': 'payouts', 'credit-liabilities': 'payouts', 'money-settings': 'payouts', 'stripe-lookup': 'payouts',
   'payment-settings': 'payouts', 'tax-settings': 'fees', maintenance: 'siteCfg', 'tax-filings': 'fees', 'tax-nexus': 'fees',
   'oauth-clients': 'identity', 'identity-sessions': 'identity', 'signing-keys': 'identity', 'auth-settings': 'identity',
   'exchange-rates': 'inventory'
@@ -109,6 +109,10 @@ PENDING_PERMISSIONS['platform.super_admin']?.push('plans:manage', 'billing:adjus
 
 /* Identity admin console (identity migration V31, S291): Super Admin only. */
 PENDING_PERMISSIONS['platform.super_admin']?.push('identity:admin');
+
+/* Ledger adjustments, credit corrections and gift card issue/void (identity migration V30): Super Admin and Finance. */
+PENDING_PERMISSIONS['platform.super_admin']?.push('ledger:adjust', 'ledger:approve');
+PENDING_PERMISSIONS['platform.finance']?.push('ledger:adjust', 'ledger:approve');
 PENDING_PERMISSIONS['platform.finance']?.push('plans:manage', 'billing:adjust', 'seller:billing');
 PENDING_PERMISSIONS['platform.product_owner']?.push('seller:billing');
 PENDING_PERMISSIONS['platform.auditor']?.push('seller:billing');

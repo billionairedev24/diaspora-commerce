@@ -156,7 +156,7 @@ func hasOption(p domain.CheckoutPackage, key string) bool {
 // Summary is the checkout page: the selected cart (checkout service) plus, per package, pickup points
 // (carrier-gateway), AfroTransact Delivery where a delivery zone of the package's origin covers the address (geo),
 // and promise dates for every option (promise). Each fact is best effort: without it the cart's estimate stays.
-func (s *checkoutPaymentServiceImpl) Summary(ctx context.Context, c *domain.Caller, addressID string,
+func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Caller, addressID string,
 	packageDelivery map[string]string, couponCode string) (domain.CheckoutSummary, error) {
 	sum, err := s.d.Checkout.Summary(ctx, c, addressID)
 	if err != nil {

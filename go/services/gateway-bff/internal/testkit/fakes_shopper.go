@@ -151,12 +151,14 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		w.WriteHeader(204)
 	}))
 
+	u.creditRoutes(mux)
+
 	mux.HandleFunc("GET /v1/payments", authed(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("orderId") != ShopperOrderID {
 			problem(w, 404, "payments.not-found", "No payment for this order", nil)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"status": "CAPTURED", "amountMinor": 2706, "capturedMinor": 2706, "refundedMinor": 1353, "currency": "USD",
+		writeJSON(w, 200, map[string]any{"status": "CAPTURED", "amountMinor": 2706, "capturedMinor": 2706, "refundedMinor": 1353, "currency": "USD", "creditMinor": 500, "cardRefundsAsCredit": false,
 			"lines": []map[string]any{{"lineId": ShopperLineID, "itemsMinor": 2500, "shippingMinor": 0, "taxMinor": 206, "shippingTaxMinor": 0,
 				"refundedMinor": 1353, "refundableMinor": 1353}}})
 	}))
@@ -181,11 +183,16 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		writeJSON(w, 200, map[string]any{"items": []any{order("delivered", false)}, "nextCursor": ""})
 	}))
 	mux.HandleFunc("GET /v1/orders/{number}", authed(func(w http.ResponseWriter, r *http.Request) {
-		if r.PathValue("number") != ShopperOrderNumber {
+		switch r.PathValue("number") {
+		case ShopperOrderNumber:
+			writeJSON(w, 200, order("delivered", false))
+		case CreditOnlyOrderNumber: // paid with credit only
+			o := order("delivered", false)
+			o["id"], o["orderNumber"] = CreditOnlyOrderID, CreditOnlyOrderNumber
+			writeJSON(w, 200, o)
+		default:
 			problem(w, 404, "orders.not-found", "No such order", nil)
-			return
 		}
-		writeJSON(w, 200, order("delivered", false))
 	}))
 	mux.HandleFunc("POST /v1/orders/{number}/shipments/{id}/cancel", customerOnly("orders.customer-only", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("number") != ShopperOrderNumber {
@@ -214,7 +221,11 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 			st.checkouts[key] = n
 		}
 		st.mu.Unlock()
-		writeJSON(w, 201, checkoutView(n, "awaiting_payment"))
+		view := checkoutView(n, "awaiting_payment")
+		if body["useCredit"] == true { // S320: credit pays the whole order, so there is no card to confirm
+			view["clientSecret"], view["paymentClientSecret"], view["creditMinor"] = nil, nil, 1250
+		}
+		writeJSON(w, 201, view)
 	}))
 	mux.HandleFunc("GET /v1/checkout/{number}", authed(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, checkoutView(r.PathValue("number"), "awaiting_payment"))

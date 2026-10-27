@@ -31,6 +31,12 @@ public final class PaymentsPermissions {
     /** Finance staff: approve or reject a proposed ledger adjustment (never their own). */
     public static final String LEDGER_APPROVE = "ledger:approve";
 
+    /**
+     * Programs that grant credit (referral, membership, promotions; SERVICE principals): add credit to a customer's
+     * balance through the ledger, idempotent per key. Grants nothing else; there is no permission to spend or take it.
+     */
+    public static final String CREDIT_GRANT = "payments:credit.grant";
+
     private PaymentsPermissions() {
     }
 }

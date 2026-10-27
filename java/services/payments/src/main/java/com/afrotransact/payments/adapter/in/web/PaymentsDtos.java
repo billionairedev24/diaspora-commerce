@@ -100,7 +100,11 @@ final class PaymentsDtos {
                     + "default saved card (shopperId required); the response status is AUTHORIZED, REQUIRES_ACTION "
                     + "(the customer must authenticate) or FAILED. A late add paid with a pay-now link is an "
                     + "ordinary intent: the customer confirms it on AfroTransact's pay page with Stripe Elements; "
-                    + "payments never creates a hosted Stripe page") Boolean offSession) {
+                    + "payments never creates a hosted Stripe page") Boolean offSession,
+            @Schema(description = "S320: pay with the shopper's AfroTransact credit first (shopperId required). The "
+                    + "PaymentIntent is for amountMinor minus the credit applied, and there is none when credit "
+                    + "pays everything (the payment is AUTHORIZED at once). Credit leaves at least 0.50 for the card "
+                    + "or pays the whole order") Boolean useCredit) {
     }
 
     @Schema(description = "One order line: who sells it and what the shopper pays for it")
@@ -151,14 +155,19 @@ final class PaymentsDtos {
                            @Schema(description = "The PaymentIntent allows one partial capture per shipment (Stripe "
                                    + "multicapture). False = single capture; an order (metadata "
                                    + "capture_plan=per_shipment) is then captured whole with its first shipment")
-                           boolean multicapture, boolean replayed, List<LineResponse> lines) {
+                           boolean multicapture, boolean replayed, List<LineResponse> lines,
+                           @Schema(description = "The part of amountMinor paid with AfroTransact credit; the card "
+                                   + "pays amountMinor minus this (no PaymentIntent when it is all of it)")
+                           long creditMinor,
+                           @Schema(description = "The shopper or staff chose credit for the card part of this "
+                                   + "order's refunds (one way)") boolean cardRefundsAsCredit) {
 
         static PaymentResponse of(Payment p, boolean replayed) {
             return new PaymentResponse(p.id(), p.orderId(), p.status().name(), p.stripePaymentIntentId(),
                     p.clientSecret(), p.amount().minor(), p.captured().minor(), p.refunded().minor(),
                     p.released().minor(), p.currency(), p.feeScheduleId(), p.placedAt(), p.authorizedAt(),
                     p.failureMessage(), p.parentPaymentId(), p.isOffSession(), p.multicapture(), replayed,
-                    p.lines().stream().map(LineResponse::of).toList());
+                    p.lines().stream().map(LineResponse::of).toList(), p.credit().minor(), p.cardRefundsAsCredit());
         }
     }
 
@@ -250,7 +259,14 @@ final class PaymentsDtos {
                          @Size(max = 500) String reason,
                          @Schema(description = "Who caused the refund, for AfroTransact Delivery lines: SELLER "
                                  + "(default) keeps the seller's delivery fee; CUSTOMER returns it pro rata and the "
-                                 + "delivery charge is not refundable") RefundFault fault) {
+                                 + "delivery charge is not refundable") RefundFault fault,
+                         @Schema(description = "S320: take the part that was paid with the card as AfroTransact "
+                                 + "credit instead of a card refund. One way: credit never goes back to a card or "
+                                 + "to cash. The credit part of an order always comes back as credit")
+                         Boolean cardAsCredit,
+                         @Size(max = 120) @Schema(description = "Who chose credit (the customer, or the staff "
+                                 + "member who did so for them with a reason); kept on the credit entry")
+                         String chosenBy) {
     }
 
     record RefundLineRequest(@NotBlank String lineId, @PositiveOrZero Long itemsMinor,
@@ -264,13 +280,21 @@ final class PaymentsDtos {
             @Schema(description = "Total to refund; omit to refund everything still refundable on the lines")
             @Positive Long amountMinor,
             @Size(max = 500) String reason,
-            @Schema(description = "SELLER (default) or CUSTOMER; see POST /v1/payments/{id}/refunds") RefundFault fault) {
+            @Schema(description = "SELLER (default) or CUSTOMER; see POST /v1/payments/{id}/refunds") RefundFault fault,
+            @Schema(description = "Take the card part as credit; see POST /v1/payments/{id}/refunds")
+            Boolean cardAsCredit,
+            @Size(max = 120) String chosenBy) {
     }
 
     record RefundResponse(UUID id, UUID paymentId, String orderId, String stripeRefundId, long amountMinor,
                           String currency, String status, String reason, List<RefundLineResponse> lines,
                           List<RefundResult.Reversal> transferReversals, Instant createdAt, Instant settledAt,
-                          boolean replayed) {
+                          boolean replayed,
+                          @Schema(description = "S320: the part returned as AfroTransact credit (the credit the "
+                                  + "order used, plus the card part when the shopper or staff chose credit)")
+                          long creditMinor,
+                          @Schema(description = "The part that goes back to the card through Stripe")
+                          long cardMinor) {
 
         static RefundResponse of(Refund r, List<RefundResult.Reversal> reversals, boolean replayed) {
             return new RefundResponse(r.id(), r.paymentId(), r.orderId(), r.stripeRefundId(), r.amount().minor(),
@@ -278,7 +302,8 @@ final class PaymentsDtos {
                     .map(l -> new RefundLineResponse(l.lineId(), l.sellerOrg(), l.items().minor(),
                             l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor(),
                             l.deliveryFeeReversed().minor(), l.connectionFee())).toList(),
-                    reversals, r.createdAt(), r.settledAt(), replayed);
+                    reversals, r.createdAt(), r.settledAt(), replayed, r.creditReturned().minor(),
+                    r.stripeAmount().minor());
         }
     }
 

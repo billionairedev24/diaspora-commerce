@@ -31,6 +31,8 @@ type ShopperServices struct {
 	PayLinks app.PayLinkService
 	// BusinessPages serves a business's plain public page (optional; public, read-only).
 	BusinessPages app.BusinessPageService
+	// Credit is AfroTransact credit and gift cards (S320, S321; optional).
+	Credit app.CreditService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -55,6 +57,9 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	route("POST /v1/account/returns/{rmaId}/cancel", h.cancelReturn)
 	if h.s.Shopper.BusinessPages != nil {
 		route("GET /v1/business-pages/{slug}", h.businessPage)
+	}
+	if h.s.Shopper.Credit != nil {
+		h.registerCredit(route)
 	}
 	// Pay-now page of late pre-order adds (no session: the signed token is the credential; rate-limited per IP)
 	if h.s.Shopper.PayLinks != nil {

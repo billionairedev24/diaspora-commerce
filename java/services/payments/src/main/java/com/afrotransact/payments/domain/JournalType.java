@@ -26,5 +26,17 @@ public enum JournalType {
     /** A released supplier payment paid from the operating bank account. */
     SUPPLIER_PAYMENT,
     /** A correcting journal proposed and approved by Finance staff (ledger adjustment). */
-    ADJUSTMENT
+    ADJUSTMENT,
+    /** Credit granted by staff, promotion, referral or membership: Dr 5200 / Cr 2600 (S320). */
+    CREDIT_GRANT,
+    /** A staff correction that takes credit back: Dr 2600 / Cr 5200. */
+    CREDIT_ADJUSTMENT,
+    /** A gift card bought with a card: Dr 1000, Dr 5000 / Cr 2650 (S321). */
+    GIFT_CARD_SOLD,
+    /** A gift card issued by staff: Dr 5200 / Cr 2650. */
+    GIFT_CARD_ISSUED,
+    /** A gift card redeemed into credit: Dr 2650 / Cr 2600. */
+    GIFT_CARD_REDEEMED,
+    /** An unredeemed gift card voided: Dr 2650 / Cr 1000 (bought, refunded to the card) or Cr 5200 (issued). */
+    GIFT_CARD_VOIDED
 }

@@ -72,6 +72,12 @@ tags:
     description: Addresses, payment methods, orders and returns
   - name: Checkout
     description: Checkout summary and order placement
+  - name: Credit
+    description: |
+      AfroTransact credit and gift cards (S320, S321, ADR 0006). Credit is a balance the shopper spends at checkout
+      before the card and gets from refunds, gift cards, referrals and staff. It only buys products and services:
+      nothing in this API pays it out, refunds it to a card or transfers it. A gift card is bought with the normal
+      card payment (Stripe Elements), emailed on a chosen date and redeemed once into the recipient's credit.
   - name: Careers
     description: Open roles and applications
   - name: Services
@@ -1380,6 +1386,157 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/credit:
+    get:
+      tags: [Credit]
+      operationId: getAccountCredit
+      summary: My credit balance and history, newest first
+      description: |
+        payments `GET /v1/credit/me` and `/v1/credit/me/entries` with the shopper's token. The balance is the sum of the
+        ledger. Each entry has a `kind` (GRANT, SPEND, REFUND, ADJUSTMENT) and a `source` (REFERRAL, GIFT_CARD, MEMBERSHIP,
+        REFUND, STAFF, PROMO, ORDER); the storefront words them in the shopper's language. Page backwards with
+        `before` = the previous page's `nextBefore`.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: before, in: query, schema: {type: string, format: date-time}, description: Entries older than this}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200':
+          description: Balance and a page of history
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreditAccount'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/orders/{orderNumber}/credit-refunds:
+    post:
+      tags: [Credit]
+      operationId: chooseCreditRefunds
+      summary: Take the card part of my order's refunds as credit (one way)
+      description: |
+        A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
+        with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
+        way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
+        409 `NO_CARD_PORTION` when the order was paid with credit only.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Chosen
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CreditRefundChoice'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/gift-cards/config:
+    get:
+      tags: [Credit]
+      operationId: getGiftCardConfig
+      summary: Gift card amount limits, preset amounts and terms (staff settings)
+      description: Default limits are 10.00 to 500.00; gift cards never expire. Staff change them without a release.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Limits and terms
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardConfig'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/gift-cards:
+    get:
+      tags: [Credit]
+      operationId: listMyGiftCards
+      summary: The gift cards I bought, newest first (never with the code)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: My gift cards
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardPage'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Credit]
+      operationId: buyGiftCard
+      summary: Start buying a gift card; confirm the card payment with the client secret
+      description: |
+        Requires `Idempotency-Key`. payments creates the card (PENDING_PAYMENT) and a PaymentIntent for it: confirm
+        `clientSecret` with Stripe Elements (a card; credit cannot pay for a gift card), then
+        `POST /v1/account/gift-cards/{giftCardId}/confirm`. The code is generated and emailed on `sendAt` (now when
+        omitted). 422 `errors.amountMinor` when the amount is outside the staff-set limits.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 16, maxLength: 64}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GiftCardPurchaseRequest'}
+      responses:
+        '201':
+          description: Card created, payment pending
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardPurchase'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '402': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/gift-cards/{giftCardId}/confirm:
+    post:
+      tags: [Credit]
+      operationId: confirmGiftCard
+      summary: After the payment was confirmed, capture it and issue the card
+      description: Idempotent; the payments webhook does the same, so either order works.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: giftCardId, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The card (ACTIVE once paid)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCard'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/gift-cards/redeem:
+    post:
+      tags: [Credit]
+      operationId: redeemGiftCard
+      summary: Redeem a gift card code into my credit, once
+      description: |
+        404 `GIFT_CARD_INVALID` for a wrong code; 409 `GIFT_CARD_REDEEMED` when it was redeemed already. Wrong codes
+        are counted per shopper and per network address: over the limit the answer is 429 `RATE_LIMITED` with
+        `Retry-After`, even for a right code.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GiftCardRedeemRequest'}
+      responses:
+        '200':
+          description: Redeemed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GiftCardRedemption'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/checkout/summary:
     get:
@@ -4065,6 +4222,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/Rail'
           description: Optional checkout_cross_sell placement from content (product rail)
+        credit:
+          allOf:
+            - $ref: '#/components/schemas/CheckoutCredit'
+          description: What my AfroTransact credit would pay of this order (S320); absent when I have no credit
     CheckoutLocalDelivery:
       type: object
       description: |
@@ -4248,6 +4409,13 @@ components:
           type: boolean
           description: With newPaymentMethod, save the method on the shopper's Stripe Customer for future purchases (the order's PaymentIntent gets setup_future_usage=off_session, so the Payment Element is created with setupFutureUsage off_session)
         gift: {type: boolean}
+        useCredit:
+          type: boolean
+          description: |
+            Pay with my AfroTransact credit first (S320). Credit is spent, up to the order total, when the order is placed
+            (once per order, never more than the balance); the card pays only the rest. When credit pays everything
+            (`summary.credit.cardDueMinor` is 0) no payment method is needed: send none, the answer has no
+            `paymentClientSecret`, and the order is placed without a card (then `POST …/confirm` returns `placed`).
         couponCode:
           type: string
           maxLength: 20
@@ -4268,6 +4436,107 @@ components:
                   safePlace: {type: string}
                   instructions: {type: string, maxLength: 240}
                   contact: {type: string, enum: [text, call, none]}
+    CreditEntry:
+      type: object
+      description: One line of the credit history; the balance is the sum of the lines. The storefront words it from kind and source.
+      required: [id, kind, source, amountMinor, currency, balanceAfterMinor, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [GRANT, SPEND, REFUND, ADJUSTMENT]}
+        source: {type: string, enum: [REFERRAL, GIFT_CARD, MEMBERSHIP, REFUND, STAFF, PROMO, ORDER]}
+        amountMinor: {type: integer, format: int64, description: 'Signed: credit added is positive, credit spent negative'}
+        currency: {type: string}
+        balanceAfterMinor: {type: integer, format: int64}
+        createdAt: {type: string, format: date-time}
+    CreditAccount:
+      type: object
+      required: [balanceMinor, currency, entries, nextBefore]
+      properties:
+        balanceMinor: {type: integer, format: int64}
+        currency: {type: string}
+        entries: {type: array, items: {$ref: '#/components/schemas/CreditEntry'}}
+        nextBefore: {type: [string, 'null'], description: Pass as `before` for older entries; null on the last page}
+    CheckoutCredit:
+      type: object
+      description: What the shopper's credit would pay of this order if used (payments decides when the order is placed)
+      required: [availableMinor, appliedMinor, cardDueMinor]
+      properties:
+        availableMinor: {type: integer, format: int64}
+        appliedMinor: {type: integer, format: int64, description: The balance up to the total, leaving at least 0.50 for the card or paying everything}
+        cardDueMinor: {type: integer, format: int64, description: What the card pays then; 0 means no payment method is needed}
+    CreditRefundChoice:
+      type: object
+      required: [orderNumber, cardRefundsAsCredit, cardPartMinor, currency]
+      properties:
+        orderNumber: {type: string}
+        cardRefundsAsCredit: {type: boolean}
+        cardPartMinor: {type: integer, format: int64, description: What the card paid for the order}
+        currency: {type: string}
+    GiftCardConfig:
+      type: object
+      required: [minMinor, maxMinor, currency, presetsMinor, terms, publishableKey]
+      properties:
+        minMinor: {type: integer, format: int64}
+        maxMinor: {type: integer, format: int64}
+        currency: {type: string}
+        publishableKey: {type: string, description: 'The Stripe publishable key the buy page creates its Payment Element with (cards only)'}
+        presetsMinor: {type: array, items: {type: integer, format: int64}}
+        terms: {type: object, additionalProperties: {type: string}, description: 'Staff-written terms by language (en, fr, es, ar, yo); empty means the page shows its built-in terms'}
+    GiftCard:
+      type: object
+      description: A gift card as its buyer sees it. The code is never returned; the recipient gets it by email on the send date.
+      required: [id, status, amountMinor, currency, recipientEmail, sendAt, deliveryStatus, redeemed, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [PENDING_PAYMENT, ACTIVE, REDEEMED, VOID, PAYMENT_FAILED]}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        recipientEmail: {type: string}
+        recipientName: {type: [string, 'null']}
+        senderName: {type: [string, 'null']}
+        message: {type: [string, 'null']}
+        sendAt: {type: string, format: date-time}
+        deliveryStatus: {type: string, enum: [SCHEDULED, SENT]}
+        sentAt: {type: [string, 'null'], format: date-time}
+        redeemed: {type: boolean}
+        createdAt: {type: string, format: date-time}
+    GiftCardPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/GiftCard'}}
+        nextCursor: {type: [string, 'null']}
+    GiftCardPurchase:
+      allOf:
+        - $ref: '#/components/schemas/GiftCard'
+        - type: object
+          required: [clientSecret, publishableKey]
+          properties:
+            clientSecret: {type: [string, 'null'], description: Confirm the payment with Stripe Elements; null when it was already paid}
+            publishableKey: {type: string}
+    GiftCardPurchaseRequest:
+      type: object
+      required: [amountMinor, recipientEmail]
+      properties:
+        amountMinor: {type: integer, format: int64, description: Within the staff-set limits (default 10.00 to 500.00)}
+        recipientEmail: {type: string, maxLength: 254}
+        recipientName: {type: string, maxLength: 120}
+        senderName: {type: string, maxLength: 120}
+        message: {type: string, maxLength: 500}
+        sendAt: {type: string, format: date-time, description: When to email the card; omit to send it now (at most a year ahead)}
+        locale: {type: string, enum: [en, fr, es, ar, yo], description: Language of the email}
+    GiftCardRedeemRequest:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, maxLength: 64, examples: [ABCD-EFGH-JKLM-2345]}
+    GiftCardRedemption:
+      type: object
+      required: [redeemedMinor, balanceMinor, currency]
+      properties:
+        redeemedMinor: {type: integer, format: int64}
+        balanceMinor: {type: integer, format: int64, description: The credit balance after redeeming}
+        currency: {type: string}
     OrderConfirmation:
       type: object
       required: [orderNumber, status, totalMinor, currency, shipments]
@@ -4277,6 +4546,7 @@ components:
         paymentClientSecret: {type: [string, 'null'], description: The order's PaymentIntent client secret (always present once orders created it)}
         totalMinor: {type: integer}
         currency: {type: string}
+        creditMinor: {type: integer, format: int64, description: The part of the total paid with AfroTransact credit (S320); the card pays the rest}
         preorder:
           type: [object, 'null']
           description: The "You're in" facts when the order holds a pre-order package (relayed from orders)
@@ -4376,13 +4646,15 @@ components:
     OrderPayment:
       type: object
       description: What was charged and refunded (payments); shippingTaxMinor is the part of the tax charged on delivery
-      required: [status, capturedMinor, refundedMinor, refundableMinor, shippingTaxMinor]
+      required: [status, capturedMinor, refundedMinor, refundableMinor, shippingTaxMinor, creditMinor, cardRefundsAsCredit]
       properties:
         status: {type: string}
         capturedMinor: {type: integer}
         refundedMinor: {type: integer}
         refundableMinor: {type: integer}
         shippingTaxMinor: {type: integer}
+        creditMinor: {type: integer, format: int64, description: The part of the order paid with AfroTransact credit (S320); the card paid the rest}
+        cardRefundsAsCredit: {type: boolean, description: The card part of this order's refunds comes back as credit (the shopper's one-way choice)}
     OrderDetail:
       type: object
       required: [orderNumber, placedAt, status, currency, itemsMinor, shippingMinor, taxMinor, discountMinor, totalMinor, shipTo, shippingAddress, shipments]

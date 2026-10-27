@@ -176,6 +176,8 @@ type UpCheckout struct {
 	TotalMinor          int64                `json:"totalMinor"`
 	Currency            string               `json:"currency"`
 	Shipments           []UpCheckoutShipment `json:"shipments"`
+	// CreditMinor is the part of the total paid with AfroTransact credit (S320); the card pays the rest.
+	CreditMinor int64 `json:"creditMinor"`
 	// Preorder is orders' pre-order confirmation block (null without a pre-order package).
 	Preorder json.RawMessage `json:"preorder"`
 }
@@ -199,6 +201,8 @@ type UpCheckoutRequest struct {
 	CouponCode         string                `json:"couponCode,omitempty"`
 	// SavePaymentMethod asks orders for a PaymentIntent with setup_future_usage=off_session (new method saved).
 	SavePaymentMethod bool `json:"savePaymentMethod,omitempty"`
+	// UseCredit pays with the shopper's AfroTransact credit first; the card pays only the rest (S320).
+	UseCredit bool `json:"useCredit,omitempty"`
 	// Attribution {src, cr, po} is stored on the order and echoed in orders.order.placed.
 	Attribution *domain.Attribution `json:"attribution,omitempty"`
 }

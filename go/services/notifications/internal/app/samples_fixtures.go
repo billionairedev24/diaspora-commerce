@@ -111,6 +111,8 @@ func SampleEvents(l Links) map[string][]map[string]any {
 		"payments.intent.action_required": {{"paymentId": "2b8e3f7c-4d5a-4e9f-a0b1-c2d3e4f5a603", "orderId": "BK-24018",
 			"parentPaymentId": "3c9f4a8d-5e6b-4fa0-b1c2-d3e4f5a6b704", "customerId": "cust-1", "stripePaymentIntentId": nil,
 			"amountMinor": 15000, "currency": "USD", "reason": "authentication_required", "lineIds": []string{}}},
+		"payments.gift_card.deliver": {{"recipient": map[string]any{"email": "ama@example.com"}, "locale": "en", "giftCardId": "5d0e4f1a-6b7c-4d8e-9f0a-1b2c3d4e5f60",
+			"recipientName": "Ama", "senderName": "Kofi", "message": "Happy birthday! Treat yourself.", "amountMinor": 5000, "currency": "USD", "code": "ABCD-EFGH-JKLM-2345"}},
 		"trustops.claim.opened":            {sampleClaim("AWAITING_SELLER", nil), sampleClaim("AWAITING_SELLER", nil)},
 		"trustops.claim.decided":           {sampleClaim("RESOLVED_REFUND", "REFUND"), sampleClaim("RESOLVED_DENIED", "DENY")},
 		"trustops.claim.withdrawn":         {sampleClaim("WITHDRAWN", nil)},

@@ -45,6 +45,16 @@ function SectionBody({ section }: { section: SettingsSection }): ReactNode {
           <ResourceTable resource="payment-settings" urlPrefix="payment-settings" />
         </div>
       );
+    case 'credit':
+      return (
+        <div className="flex flex-col gap-3">
+          <p className="m-0 max-w-[80ch] text-sm text-muted">
+            Credit only buys products and services: it can&rsquo;t be paid out, refunded to a card or moved between customers. Granting credit, issuing gift cards and the liability report are in{' '}
+            <Link href="/payouts?tab=credit-adjustments">Payouts &amp; ledger</Link>.
+          </p>
+          <ResourceTable resource="money-settings" urlPrefix="money-settings" />
+        </div>
+      );
     case 'fees':
       return <FeesView scope="fees" />;
     case 'delivery-fees':
