@@ -1143,7 +1143,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/RunVisitRequest'}
       responses:
-        '204': {description: Counted, or nothing to count}
+        '204': {description: 'Counted, or nothing to count'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
@@ -1339,7 +1339,7 @@ paths:
         - {name: country, in: query, schema: {type: string, minLength: 2, maxLength: 2}}
         - {name: region, in: query, schema: {type: string, maxLength: 3}}
         - {name: city, in: query, schema: {type: string, maxLength: 80}}
-        - {name: visitor, in: query, schema: {type: string, pattern: '^[A-Za-z0-9_-]{1,64}$'}, description: An anonymous id the storefront keeps per browser, so A/B variants stay stable}
+        - {name: visitor, in: query, schema: {type: string, pattern: '^[A-Za-z0-9_-]{1,64}$'}, description: 'An anonymous id the storefront keeps per browser, so A/B variants stay stable'}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 10, default: 3}}
       responses:
         '200':
@@ -3148,7 +3148,7 @@ components:
         acceptingOrders: {type: boolean}
         ordersLeft: {type: [integer, 'null'], description: 'Orders left (null = not limited)'}
         full: {type: boolean, description: No room left; checkout offers the next run}
-        runUrl: {type: string, description: Link to the run on the location page, with attribution}
+        runUrl: {type: string, description: 'Link to the run on the location page, with attribution'}
     RunLocationPage:
       type: object
       required: [location, runs, locationUrl]
@@ -3165,7 +3165,7 @@ components:
         channel: {$ref: '#/components/schemas/RunChannel'}
         granted: {type: boolean}
         consentedAt: {type: [string, 'null'], format: date-time}
-        source: {type: [string, 'null'], description: Where the consent was given (location-page, account, ...)}
+        source: {type: [string, 'null'], description: 'Where the consent was given (location-page, account, ...)'}
         withdrawnAt: {type: [string, 'null'], format: date-time}
     RunSubscription:
       type: object
@@ -3212,7 +3212,7 @@ components:
     RunVisitRequest:
       type: object
       properties:
-        runId: {type: string, format: uuid, description: The run the visitor was looking at, if any}
+        runId: {type: string, format: uuid, description: 'The run the visitor was looking at, if any'}
         utmSource: {type: string, maxLength: 80, examples: [whatsapp]}
         utmMedium: {type: string, maxLength: 80, examples: [social]}
         utmCampaign: {type: string, maxLength: 120, examples: [delivery-run-bastrop-tx-20261024]}
