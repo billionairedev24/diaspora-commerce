@@ -40,6 +40,16 @@ tags:
   description: Signed, idempotent inbox for Stripe events
 - name: Saved payment methods
   description: The signed-in shopper's wallet (called by gateway-bff with the customer's token)
+- name: Gift cards
+  description: Buy a gift card with the normal card payment, have it emailed on a chosen date and redeem the code once into
+    AfroTransact credit (S321). Codes are stored hashed; wrong codes are rate limited. A redeemed card is credit and is never
+    refunded to a card.
+- name: Money settings
+  description: Staff-configurable gift card limits and terms and the credit approval limit (Settings, Money). Each change
+    has a reason and is kept in a history.
+- name: Credit
+  description: 'AfroTransact credit: a per-customer append-only ledger (grant, spend, refund, adjustment). Credit only buys
+    products and services; there is no cash-out, payout, card refund or transfer of credit anywhere in this API (ADR 0006).'
 paths:
   /v1/connected-accounts/{orgId}:
     get:
@@ -1956,6 +1966,540 @@ paths:
               schema:
                 $ref: '#/components/schemas/WebhookAck'
       security: []
+  /v1/money/settings:
+    get:
+      tags:
+      - Money settings
+      summary: Money settings in force (payments:read)
+      operationId: get
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MoneySettings'
+    put:
+      tags:
+      - Money settings
+      summary: Change the money settings with a reason (payments:configure)
+      description: Takes effect at once for new purchases and grants; a concurrent change is 409 payments.money-settings-changed.
+      operationId: update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoneySettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MoneySettings'
+  /v1/gift-cards:
+    get:
+      tags:
+      - Gift cards
+      summary: Look up gift cards (payments:read)
+      description: q matches a card id, the last four characters of the code, the recipient's email or name, the sender's name
+        or the purchaser's customer id.
+      operationId: search
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - ACTIVE
+          - REDEEMED
+          - VOID
+          - PAYMENT_FAILED
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GiftCard'
+    post:
+      tags:
+      - Gift cards
+      summary: Issue a gift card (ledger:adjust)
+      description: 'Goodwill or a promotion: a reason is required, the amount follows the limits of Settings, Money, and the
+        card is a liability from the start. It is emailed on sendAt (now by default).'
+      operationId: issue
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardIssueRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/{id}/void:
+    post:
+      tags:
+      - Gift cards
+      summary: Void an unredeemed gift card (ledger:adjust)
+      description: A purchased card is refunded to the buyer's card; one staff issued just ends. A redeemed card is credit and
+        cannot be voided (409 payments.gift-card-redeemed).
+      operationId: voidCard
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/{id}/resend:
+    post:
+      tags:
+      - Gift cards
+      summary: Email the gift card again with a new code (ledger:adjust)
+      description: The old code stops working.
+      operationId: resend
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/redeem:
+    post:
+      tags:
+      - Gift cards
+      summary: Redeem a gift card code into the signed-in shopper's credit
+      description: Once per card. Wrong codes are counted per shopper and per network address (X-Client-Address, set by the
+        gateway); over the limit the answer is 429 with Retry-After.
+      operationId: redeem
+      parameters:
+      - name: X-Client-Address
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardRedeemRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardRedemption'
+  /v1/gift-cards/purchases:
+    post:
+      tags:
+      - Gift cards
+      summary: Start buying a gift card; returns the Stripe client secret to pay with Elements
+      description: 'Idempotent per Idempotency-Key. The card is not active until the payment is captured (POST …/confirm, or
+        the Stripe webhook). Only a card payment buys a gift card: credit never does.'
+      operationId: purchase
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GiftCardPurchaseRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardPurchase'
+  /v1/gift-cards/purchases/{id}/confirm:
+    post:
+      tags:
+      - Gift cards
+      summary: 'After the payment was confirmed: capture it and issue the card'
+      operationId: confirm
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardPurchase'
+  /v1/credit/grants:
+    post:
+      tags:
+      - Credit
+      summary: Grant credit for a program (referral, membership, promotion; payments:credit.grant)
+      description: 'Idempotent per Idempotency-Key: a replay returns the first entry and adds nothing. There is no matching
+        operation to take credit out or to move it between customers.'
+      operationId: grant
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditGrantRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditEntry'
+  /v1/credit/adjustments:
+    get:
+      tags:
+      - Credit
+      summary: Credit adjustments, newest first (payments:read)
+      operationId: adjustments_1
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PROPOSED
+          - POSTED
+          - REJECTED
+      - name: customerId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditAdjustment'
+    post:
+      tags:
+      - Credit
+      summary: Staff grant or correction of a customer's credit (ledger:adjust)
+      description: A reason is required. Up to the limit set in Settings, Money, it is posted at once; above it, it is PROPOSED
+        and a different person with ledger:approve posts it (four eyes).
+      operationId: adjust
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditAdjustRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditAdjustment'
+  /v1/credit/adjustments/{id}/reject:
+    post:
+      tags:
+      - Credit
+      summary: Reject a proposed credit adjustment with the reason (ledger:approve)
+      operationId: reject
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditDecisionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditAdjustment'
+  /v1/credit/adjustments/{id}/approve:
+    post:
+      tags:
+      - Credit
+      summary: Approve a proposed credit adjustment (ledger:approve; never your own)
+      operationId: approve_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditDecisionRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditAdjustment'
+  /v1/money/settings/history:
+    get:
+      tags:
+      - Money settings
+      summary: Who changed the money settings, when and why (payments:read)
+      operationId: history
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoneySettingsChange'
+  /v1/gift-cards/{id}:
+    get:
+      tags:
+      - Gift cards
+      summary: One gift card (payments:read)
+      operationId: get_2
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCard'
+  /v1/gift-cards/mine:
+    get:
+      tags:
+      - Gift cards
+      summary: The gift cards the signed-in shopper bought, newest first
+      operationId: mine
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GiftCardPurchase'
+  /v1/gift-cards/config:
+    get:
+      tags:
+      - Gift cards
+      summary: Gift card limits, preset amounts and terms
+      operationId: config
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GiftCardConfig'
+  /v1/credit/me:
+    get:
+      tags:
+      - Credit
+      summary: The signed-in shopper's credit balance
+      operationId: myBalance
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditBalance'
+  /v1/credit/me/entries:
+    get:
+      tags:
+      - Credit
+      summary: The signed-in shopper's credit history, newest first
+      description: before pages backwards (the createdAt of the last entry seen).
+      operationId: myEntries
+      parameters:
+      - name: before
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditEntry'
+  /v1/credit/liabilities:
+    get:
+      tags:
+      - Credit
+      summary: Credit and gift card liabilities for finance (payments:read)
+      description: Credit owed to customers and unredeemed gift cards, apart, with the general-ledger accounts 2600 and 2650
+        beside them.
+      operationId: liabilities
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditLiabilities'
+  /v1/credit/customers/{customerId}:
+    get:
+      tags:
+      - Credit
+      summary: 'A customer''s credit: balance, history and adjustments (staff with payments:read)'
+      operationId: customer
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CustomerCredit'
+  /v1/credit/customers/{customerId}/balance:
+    get:
+      tags:
+      - Credit
+      summary: One customer's credit balance (payments:service for checkout, or staff with payments:read)
+      operationId: balanceOf
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditBalance'
 components:
   schemas:
     PaymentsSetting:
@@ -2425,14 +2969,19 @@ components:
           minLength: 0
         saveForOffSession:
           type: boolean
-          description: Save the confirmed payment method on the shopper's Stripe Customer (setup_future_usage=off_session)
-            so a later balance can be charged off-session; customerId is then the shopper's Stripe Customer
+          description: Save the confirmed payment method on the shopper's Stripe Customer (setup_future_usage=off_session) so
+            a later balance can be charged off-session; customerId is then the shopper's Stripe Customer
         offSession:
           type: boolean
-          description: 'S272 late pre-order adds: confirm the intent now, off-session, on the shopper''s default saved card
-            (shopperId required); the response status is AUTHORIZED, REQUIRES_ACTION (the customer must authenticate) or FAILED.
-            A late add paid with a pay-now link is an ordinary intent: the customer confirms it on AfroTransact''s pay page
-            with Stripe Elements; payments never creates a hosted Stripe page'
+          description: 'S272 late pre-order adds: confirm the intent now, off-session, on the shopper''s default saved card (shopperId
+            required); the response status is AUTHORIZED, REQUIRES_ACTION (the customer must authenticate) or FAILED. A late add
+            paid with a pay-now link is an ordinary intent: the customer confirms it on AfroTransact''s pay page with Stripe Elements;
+            payments never creates a hosted Stripe page'
+        useCredit:
+          type: boolean
+          description: 'S320: pay with the shopper''s AfroTransact credit first (shopperId required). The PaymentIntent is for
+            amountMinor minus the credit applied, and there is none when credit pays everything (the payment is AUTHORIZED at
+            once). Credit leaves at least 0.50 for the card or pays the whole order'
       required:
       - amountMinor
       - currency
@@ -2618,8 +3167,8 @@ components:
           type: string
         clientSecret:
           type: string
-          description: For Stripe.js / PaymentSheet confirmation (also to complete authentication of an off-session charge
-            in REQUIRES_ACTION); only returned to the calling service
+          description: For Stripe.js / PaymentSheet confirmation (also to complete authentication of an off-session charge in
+            REQUIRES_ACTION); only returned to the calling service
         amountMinor:
           type: integer
           format: int64
@@ -2663,6 +3212,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentLineResponse'
+        creditMinor:
+          type: integer
+          format: int64
+          description: The part of amountMinor paid with AfroTransact credit; the card pays amountMinor minus this (no PaymentIntent
+            when it is all of it)
     ReleaseRequest:
       type: object
       description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
@@ -2712,6 +3266,16 @@ components:
           enum:
           - SELLER
           - CUSTOMER
+        cardAsCredit:
+          type: boolean
+          description: 'S320: take the part that was paid with the card as AfroTransact credit instead of a card refund. One way:
+            credit never goes back to a card or to cash. The credit part of an order always comes back as credit'
+        chosenBy:
+          type: string
+          description: Who chose credit (the customer, or the staff member who did so for them with a reason); kept on the credit
+            entry
+          maxLength: 120
+          minLength: 0
       required:
       - lines
     RefundLineResponse:
@@ -2778,6 +3342,15 @@ components:
           format: date-time
         replayed:
           type: boolean
+        creditMinor:
+          type: integer
+          format: int64
+          description: 'S320: the part returned as AfroTransact credit (the credit the order used, plus the card part when the
+            shopper or staff chose credit)'
+        cardMinor:
+          type: integer
+          format: int64
+          description: The part that goes back to the card through Stripe
     Reversal:
       type: object
       properties:
@@ -2993,8 +3566,8 @@ components:
           minLength: 0
     OrderRefundRequest:
       type: object
-      description: 'Refund by order and line ids (service callers such as trust-ops): the amount is spread over the lines''
-        remaining items, shipping and tax'
+      description: 'Refund by order and line ids (service callers such as trust-ops): the amount is spread over the lines'' remaining
+        items, shipping and tax'
       properties:
         lineIds:
           type: array
@@ -3019,6 +3592,13 @@ components:
           enum:
           - SELLER
           - CUSTOMER
+        cardAsCredit:
+          type: boolean
+          description: Take the card part as credit; see POST /v1/payments/{id}/refunds
+        chosenBy:
+          type: string
+          maxLength: 120
+          minLength: 0
       required:
       - lineIds
     NewNegotiatedRate:
@@ -4142,6 +4722,553 @@ components:
           type: string
           format: date-time
           description: When that negotiated rate ends (null = open-ended)
+    CreditAdjustRequest:
+      type: object
+      properties:
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: Positive adds credit, negative takes it back (never below zero)
+        source:
+          type: string
+          enum:
+          - STAFF
+          - PROMO
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - amountMinor
+      - customerId
+      - reason
+      - source
+    CreditAdjustment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        source:
+          type: string
+          enum:
+          - STAFF
+          - PROMO
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+          - PROPOSED
+          - POSTED
+          - REJECTED
+        proposedBy:
+          type: string
+        proposedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        decisionNote:
+          type: string
+        entryId:
+          type: string
+          format: uuid
+    CreditBalance:
+      type: object
+      properties:
+        customerId:
+          type: string
+        balanceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    CreditDecisionRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+    CreditEntry:
+      type: object
+      description: One line of the ledger; the balance is the sum of amountMinor
+      properties:
+        id:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        kind:
+          type: string
+          enum:
+          - GRANT
+          - SPEND
+          - REFUND
+          - ADJUSTMENT
+        amountMinor:
+          type: integer
+          format: int64
+          description: 'Signed: credit added is positive, credit spent negative'
+        currency:
+          type: string
+        source:
+          type: string
+          enum:
+          - REFERRAL
+          - GIFT_CARD
+          - MEMBERSHIP
+          - REFUND
+          - STAFF
+          - PROMO
+          - ORDER
+        reason:
+          type: string
+        actor:
+          type: string
+          description: 'Who did it: the customer, a staff member or a service'
+        orderId:
+          type: string
+        reference:
+          type: string
+        balanceAfterMinor:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    CreditGrantRequest:
+      type: object
+      properties:
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: Above zero
+        source:
+          type: string
+          enum:
+          - REFERRAL
+          - MEMBERSHIP
+          - PROMO
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+        orderId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        reference:
+          type: string
+          description: The referral, membership period or promotion behind it
+          maxLength: 120
+          minLength: 0
+      required:
+      - amountMinor
+      - customerId
+      - reason
+      - source
+    CreditLiabilities:
+      type: object
+      description: What AfroTransact owes in credit and in unredeemed gift cards, separately. creditOnOpenOrdersMinor is credit
+        spent on orders that are not shipped yet.
+      properties:
+        currency:
+          type: string
+        creditOutstandingMinor:
+          type: integer
+          format: int64
+        accountsWithCredit:
+          type: integer
+          format: int64
+        flowsMinor:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        giftCardsOutstandingMinor:
+          type: integer
+          format: int64
+        giftCardsOutstandingCount:
+          type: integer
+          format: int64
+        giftCardsRedeemedMinor:
+          type: integer
+          format: int64
+        giftCardsVoidedMinor:
+          type: integer
+          format: int64
+        ledgerCreditMinor:
+          type: integer
+          format: int64
+        ledgerGiftCardsMinor:
+          type: integer
+          format: int64
+        creditOnOpenOrdersMinor:
+          type: integer
+          format: int64
+    CustomerCredit:
+      type: object
+      properties:
+        balance:
+          $ref: '#/components/schemas/CreditBalance'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditEntry'
+        adjustments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreditAdjustment'
+    GiftCard:
+      type: object
+      description: A gift card as staff see it (the code is never shown, only its last four characters)
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - ACTIVE
+          - REDEEMED
+          - VOID
+          - PAYMENT_FAILED
+        origin:
+          type: string
+          enum:
+          - PURCHASE
+          - STAFF
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        codeLast4:
+          type: string
+        purchaserId:
+          type: string
+        senderName:
+          type: string
+        recipientEmail:
+          type: string
+        recipientName:
+          type: string
+        message:
+          type: string
+        locale:
+          type: string
+        sendAt:
+          type: string
+          format: date-time
+        deliveryStatus:
+          type: string
+          enum:
+          - SCHEDULED
+          - SENT
+        deliveryCount:
+          type: integer
+          format: int32
+        sentAt:
+          type: string
+          format: date-time
+        issueReason:
+          type: string
+        issuedBy:
+          type: string
+        redeemedBy:
+          type: string
+        redeemedAt:
+          type: string
+          format: date-time
+        voidReason:
+          type: string
+        voidedBy:
+          type: string
+        voidedAt:
+          type: string
+          format: date-time
+        refundedToCard:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+    GiftCardConfig:
+      type: object
+      description: Limits, preset amounts and terms for the purchase page
+      properties:
+        minMinor:
+          type: integer
+          format: int64
+        maxMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        presetsMinor:
+          type: array
+          items:
+            type: integer
+            format: int64
+        terms:
+          type: object
+          additionalProperties:
+            type: string
+          description: Terms by language, as set by staff; empty = the page's built-in terms
+    GiftCardIssueRequest:
+      type: object
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+        recipientEmail:
+          type: string
+          maxLength: 254
+          minLength: 0
+        recipientName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        message:
+          type: string
+          maxLength: 500
+          minLength: 0
+        sendAt:
+          type: string
+          format: date-time
+        locale:
+          type: string
+          maxLength: 10
+          minLength: 0
+        reason:
+          type: string
+          description: Why staff issue it; at least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - amountMinor
+      - reason
+      - recipientEmail
+    GiftCardPurchase:
+      type: object
+      description: A gift card as its buyer sees it
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - ACTIVE
+          - REDEEMED
+          - VOID
+          - PAYMENT_FAILED
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        recipientEmail:
+          type: string
+        recipientName:
+          type: string
+        senderName:
+          type: string
+        message:
+          type: string
+        sendAt:
+          type: string
+          format: date-time
+        deliveryStatus:
+          type: string
+          enum:
+          - SCHEDULED
+          - SENT
+        sentAt:
+          type: string
+          format: date-time
+        redeemed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        clientSecret:
+          type: string
+          description: Stripe client secret to confirm the payment with Stripe Elements; only while the payment is pending
+    GiftCardPurchaseRequest:
+      type: object
+      properties:
+        amountMinor:
+          type: integer
+          format: int64
+          description: Within the limits of Settings, Money (default 10.00 to 500.00)
+        recipientEmail:
+          type: string
+          maxLength: 254
+          minLength: 0
+        recipientName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        senderName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        message:
+          type: string
+          maxLength: 500
+          minLength: 0
+        sendAt:
+          type: string
+          format: date-time
+          description: When to email the card; omit to send it now. Up to a year ahead
+        locale:
+          type: string
+          description: 'Language of the email: en, fr, es, ar or yo'
+          maxLength: 10
+          minLength: 0
+      required:
+      - amountMinor
+      - recipientEmail
+    GiftCardReasonRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    GiftCardRedeemRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 64
+          minLength: 0
+      required:
+      - code
+    GiftCardRedemption:
+      type: object
+      properties:
+        redeemedMinor:
+          type: integer
+          format: int64
+        balanceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    MoneySettings:
+      type: object
+      properties:
+        giftCardMinMinor:
+          type: integer
+          format: int64
+        giftCardMaxMinor:
+          type: integer
+          format: int64
+        giftCardPresets:
+          type: array
+          items:
+            type: integer
+            format: int64
+        giftCardTerms:
+          type: object
+          additionalProperties:
+            type: string
+        creditApprovalLimitMinor:
+          type: integer
+          format: int64
+          description: Staff grants and adjustments of credit above this need a second approver
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          description: Send it back with the next change; a concurrent change is 409
+    MoneySettingsChange:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+    MoneySettingsUpdate:
+      type: object
+      properties:
+        giftCardMinMinor:
+          type: integer
+          format: int64
+        giftCardMaxMinor:
+          type: integer
+          format: int64
+        giftCardPresets:
+          type: array
+          items:
+            type: integer
+            format: int64
+          maxItems: 8
+          minItems: 0
+        giftCardTerms:
+          type: object
+          additionalProperties:
+            type: string
+        creditApprovalLimitMinor:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+        version:
+          type: integer
+          format: int64
+      required:
+      - creditApprovalLimitMinor
+      - giftCardMaxMinor
+      - giftCardMinMinor
+      - giftCardPresets
+      - giftCardTerms
+      - reason
+      - version
   securitySchemes:
     bearer:
       type: http
