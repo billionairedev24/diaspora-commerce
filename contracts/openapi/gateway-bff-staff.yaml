@@ -2802,6 +2802,29 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/locations/{locationId}/attribution:
+    get:
+      tags: [Run economics]
+      operationId: getStaffRunLocationAttribution
+      security: [{sessionCookie: []}]
+      summary: Visits and sign-ups of a town or one of its runs, per UTM source, medium and campaign
+      description: |
+        delivery-runs `GET /v1/locations/{id}/attribution` (delivery-runs:read). First-party counters of the visits and
+        sign-ups that arrived with `utm_source`, `utm_medium` and `utm_campaign` (links shared on WhatsApp, social media
+        or email) over the last `days` (default 90), most visits first. Only the three tags are kept: no cookie, address
+        or visitor id. Product analytics can consume the same facts from the event stream (`orders.order.placed`
+        attribution, the `source` of `delivery-runs.subscription.*`); see docs/engineering/run-attribution.md.
+      parameters:
+        - {$ref: '#/components/parameters/LocationId'}
+        - {name: runId, in: query, schema: {type: string, format: uuid}, description: Only the visits of this run's link}
+        - {name: days, in: query, schema: {type: integer, minimum: 1, maximum: 366, default: 90}}
+      responses:
+        '200': {description: Counters, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunAttribution'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/delivery-runs/runs:
     get:
       tags: [Run economics]
@@ -7801,6 +7824,27 @@ components:
       description: Why a town is switched off (required) or on (optional); audited with the staff member's name
       properties:
         reason: {type: string, maxLength: 500}
+    StaffRunAttribution:
+      type: object
+      required: [visits, signups, rows]
+      properties:
+        locationId: {type: string, format: uuid}
+        runId: {type: [string, 'null'], description: 'Null for the whole town'}
+        since: {type: string, format: date, description: First day counted (UTC)}
+        visits: {type: integer}
+        signups: {type: integer}
+        rows:
+          type: array
+          items: {$ref: '#/components/schemas/StaffRunAttributionRow'}
+    StaffRunAttributionRow:
+      type: object
+      required: [utmSource, visits, signups]
+      properties:
+        utmSource: {type: string, examples: [whatsapp]}
+        utmMedium: {type: [string, 'null'], examples: [social]}
+        utmCampaign: {type: [string, 'null']}
+        visits: {type: integer}
+        signups: {type: integer}
     StaffRunLocations:
       type: object
       required: [items, can]
@@ -8015,7 +8059,7 @@ components:
         views: {type: integer}
         clicks: {type: integer}
         ctrPct: {type: [number, 'null'], description: clicks / views x 100}
-        orders: {type: [integer, 'null'], description: 'Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed)'}
+        orders: {type: [integer, 'null'], description: 'Orders that came through the advertorial and still stand: a window''s pre-orders whose tracking tag carries it, a run''s orders whose attribution (`cr=adv-...`) does and that still hold a slot on the run'}
     StaffAdvertorial:
       type: object
       required: [id, source, sourceId, variant, weight, priority, generated, headline, body, ctaLabel, status, serving, results, version]
@@ -8038,6 +8082,7 @@ components:
         ctaLabel: {type: string}
         startsAt: {type: [string, 'null'], format: date-time}
         endsAt: {type: [string, 'null'], format: date-time}
+        featuredProducts: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/StaffFeaturedProduct'}}
         status: {type: string, enum: [DRAFT, LIVE, PAUSED, ENDED]}
         ended: {type: [string, 'null'], enum: [SOURCE_CLOSED, CANCELLED, SCHEDULE, STAFF, null]}
         serving: {type: boolean, description: Visitors can see it right now}
@@ -8073,6 +8118,19 @@ components:
         ctaLabel: {type: string, minLength: 1, maxLength: 40}
         startsAt: {type: [string, 'null'], format: date-time}
         endsAt: {type: [string, 'null'], format: date-time}
+        featuredProducts:
+          type: array
+          maxItems: 4
+          items: {$ref: '#/components/schemas/StaffFeaturedProduct'}
+          description: 'Up to four products the card features. Left out on an edit: the current ones stay; an empty list clears them'
+    StaffFeaturedProduct:
+      type: object
+      description: 'A product featured on the card. The price is not kept: the product page shows today''s'
+      required: [atin, title]
+      properties:
+        atin: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{3,39}$', examples: [ATSHEA0001]}
+        title: {type: string, minLength: 1, maxLength: 140}
+        imageUrl: {type: [string, 'null'], maxLength: 500, description: An https picture}
     StaffPreorderObject:
       type: object
       additionalProperties: true

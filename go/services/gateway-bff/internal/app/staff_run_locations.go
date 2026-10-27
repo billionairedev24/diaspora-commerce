@@ -81,3 +81,30 @@ func (s *staffPreordersImpl) SwitchRunLocation(ctx context.Context, c *domain.Ca
 	}
 	return withCan(out, can), nil
 }
+
+// RunLocationAttribution reads the first-party UTM counters of a location, or of one of its runs (?runId=&days=). The
+// counters keep only the three tags: no cookie, address or visitor id.
+func (s *staffPreordersImpl) RunLocationAttribution(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error) {
+	if p := domain.ValidUUID(id); p != nil {
+		return nil, p
+	}
+	pq, err := passQuery(q, "runId", "days")
+	if err != nil {
+		return nil, err
+	}
+	if v := pq.Get("runId"); v != "" && domain.ValidUUID(v) != nil {
+		return nil, domain.ValidationProblem(map[string]string{"runId": "Choose one of the runs"})
+	}
+	if v := pq.Get("days"); v != "" && !wholeBetween(v, 1, 366) {
+		return nil, domain.ValidationProblem(map[string]string{"days": "Between 1 and 366"})
+	}
+	sc, _, err := s.need(ctx, c, poView)
+	if err != nil {
+		return nil, err
+	}
+	var out any
+	if err := sc.get(ctx, sc.up.DeliveryRuns, locationPath(id, "/attribution"), pq, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

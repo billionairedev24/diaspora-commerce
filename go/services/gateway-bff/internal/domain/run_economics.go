@@ -390,6 +390,7 @@ func AdvertorialBody(body map[string]any, create bool) (map[string]any, error) {
 			problems["priority"] = "Between 0 and 1000"
 		}
 	}
+	featuredProducts(body, problems, out)
 	var starts, ends time.Time
 	for _, k := range []string{"startsAt", "endsAt"} {
 		v, ok := body[k]
@@ -417,4 +418,58 @@ func AdvertorialBody(body map[string]any, create bool) (map[string]any, error) {
 		return nil, ValidationProblem(problems)
 	}
 	return out, nil
+}
+
+// MaxFeaturedProducts is how many products an advertorial features.
+const MaxFeaturedProducts = 4
+
+var featuredATINRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{3,39}$`)
+
+// featuredProducts checks the products staff feature on an advertorial's card: up to four, each with the product code, its
+// name and optionally an https picture. Left out, the current ones stay (delivery-runs); an empty list clears them. The
+// price is never kept: the product page shows today's.
+func featuredProducts(body map[string]any, problems map[string]string, out map[string]any) {
+	v, present := body["featuredProducts"]
+	if !present || v == nil {
+		return
+	}
+	list, ok := v.([]any)
+	if !ok {
+		problems["featuredProducts"] = "Choose up to four products"
+		return
+	}
+	if len(list) > MaxFeaturedProducts {
+		problems["featuredProducts"] = "Feature at most four products"
+		return
+	}
+	clean := make([]any, 0, len(list))
+	seen := map[string]bool{}
+	for _, raw := range list {
+		item, _ := raw.(map[string]any)
+		atin, _ := item["atin"].(string)
+		title, _ := item["title"].(string)
+		image, _ := item["imageUrl"].(string)
+		atin, title, image = strings.TrimSpace(atin), strings.TrimSpace(title), strings.TrimSpace(image)
+		switch {
+		case !featuredATINRe.MatchString(atin):
+			problems["featuredProducts"] = "Each featured product needs its product code"
+			return
+		case seen[atin]:
+			problems["featuredProducts"] = "A product can be featured once"
+			return
+		case title == "" || len([]rune(title)) > 140:
+			problems["featuredProducts"] = "A featured product's name is 1 to 140 characters"
+			return
+		case image != "" && (len(image) > 500 || !strings.HasPrefix(image, "https://")):
+			problems["featuredProducts"] = "A featured product's picture is an https address"
+			return
+		}
+		seen[atin] = true
+		entry := map[string]any{"atin": atin, "title": title}
+		if image != "" {
+			entry["imageUrl"] = image
+		}
+		clean = append(clean, entry)
+	}
+	out["featuredProducts"] = clean
 }

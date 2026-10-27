@@ -96,6 +96,8 @@ type StaffPreordersService interface {
 	SwitchRunLocation(ctx context.Context, c *domain.Caller, id string, on bool, body map[string]any) (any, error)
 	// RunLocationHistory is a location's runs (orders, fees, refunds), subscriber counts and subscriber growth.
 	RunLocationHistory(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// RunLocationAttribution is the visits and sign-ups of a location or one of its runs per UTM source, medium and campaign.
+	RunLocationAttribution(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
 	// Runs lists runs (?locationId=&status=&limit=).
 	Runs(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	// RunPnl is a run's P&L before it, after it, or the orders a cancelled run refunded.

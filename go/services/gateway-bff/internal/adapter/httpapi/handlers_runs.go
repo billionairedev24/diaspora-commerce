@@ -19,6 +19,7 @@ func (h *handlersImpl) registerStaffRuns(route func(pattern string, fn http.Hand
 	route("POST /v1/staff/delivery-runs/locations/{id}/deactivate", h.staffDeactivateRunLocation)
 	route("POST /v1/staff/delivery-runs/locations/{id}/activate", h.staffActivateRunLocation)
 	route("GET /v1/staff/delivery-runs/locations/{id}/history", h.staffRunLocationHistory)
+	route("GET /v1/staff/delivery-runs/locations/{id}/attribution", h.staffRunLocationAttribution)
 	route("GET /v1/staff/delivery-runs/runs", h.staffPreorderRuns)
 	route("POST /v1/staff/delivery-runs/runs", h.staffCreateRun)
 	route("GET /v1/staff/delivery-runs/runs/{id}", h.staffDeliveryRun)
@@ -119,6 +120,11 @@ func (h *handlersImpl) switchRunLocation(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	v, err := h.s.Staff.Preorders.SwitchRunLocation(r.Context(), callerFrom(r.Context()), r.PathValue("id"), on, b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffRunLocationAttribution(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.RunLocationAttribution(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.URL.Query())
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

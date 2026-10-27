@@ -2458,6 +2458,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/delivery-runs/locations/{locationId}/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Visits and sign-ups of a town or one of its runs, per UTM source, medium and campaign
+         * @description delivery-runs `GET /v1/locations/{id}/attribution` (delivery-runs:read). First-party counters of the visits and
+         *     sign-ups that arrived with `utm_source`, `utm_medium` and `utm_campaign` (links shared on WhatsApp, social media
+         *     or email) over the last `days` (default 90), most visits first. Only the three tags are kept: no cookie, address
+         *     or visitor id. Product analytics can consume the same facts from the event stream (`orders.order.placed`
+         *     attribution, the `source` of `delivery-runs.subscription.*`); see docs/engineering/run-attribution.md.
+         */
+        get: operations["getStaffRunLocationAttribution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/delivery-runs/runs": {
         parameters: {
             query?: never;
@@ -7216,6 +7240,29 @@ export interface components {
         StaffRunLocationSwitch: {
             reason?: string;
         };
+        StaffRunAttribution: {
+            /** Format: uuid */
+            locationId?: string;
+            /** @description Null for the whole town */
+            runId?: string | null;
+            /**
+             * Format: date
+             * @description First day counted (UTC)
+             */
+            since?: string;
+            visits: number;
+            signups: number;
+            rows: components["schemas"]["StaffRunAttributionRow"][];
+        };
+        StaffRunAttributionRow: {
+            /** @example whatsapp */
+            utmSource: string;
+            /** @example social */
+            utmMedium?: string | null;
+            utmCampaign?: string | null;
+            visits: number;
+            signups: number;
+        };
         StaffRunLocations: {
             items: components["schemas"]["StaffRunLocation"][];
             can: components["schemas"]["PreorderCan"];
@@ -7495,7 +7542,7 @@ export interface components {
             clicks: number;
             /** @description clicks / views x 100 */
             ctrPct?: number | null;
-            /** @description Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed) */
+            /** @description Orders that came through the advertorial and still stand: a window's pre-orders whose tracking tag carries it, a run's orders whose attribution (`cr=adv-...`) does and that still hold a slot on the run */
             orders?: number | null;
         };
         StaffAdvertorial: {
@@ -7524,6 +7571,7 @@ export interface components {
             startsAt?: string | null;
             /** Format: date-time */
             endsAt?: string | null;
+            featuredProducts?: components["schemas"]["StaffFeaturedProduct"][];
             /** @enum {string} */
             status: "DRAFT" | "LIVE" | "PAUSED" | "ENDED";
             /** @enum {string|null} */
@@ -7568,6 +7616,16 @@ export interface components {
             startsAt?: string | null;
             /** Format: date-time */
             endsAt?: string | null;
+            /** @description Up to four products the card features. Left out on an edit: the current ones stay; an empty list clears them */
+            featuredProducts?: components["schemas"]["StaffFeaturedProduct"][];
+        };
+        /** @description A product featured on the card. The price is not kept: the product page shows today's */
+        StaffFeaturedProduct: {
+            /** @example ATSHEA0001 */
+            atin: string;
+            title: string;
+            /** @description An https picture */
+            imageUrl?: string | null;
         };
         StaffPreorderObject: {
             [key: string]: unknown;
@@ -12201,6 +12259,37 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRunLocationAttribution: {
+        parameters: {
+            query?: {
+                /** @description Only the visits of this run's link */
+                runId?: string;
+                days?: number;
+            };
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Counters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunAttribution"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

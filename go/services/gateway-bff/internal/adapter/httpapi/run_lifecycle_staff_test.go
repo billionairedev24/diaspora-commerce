@@ -57,7 +57,7 @@ func (f *fakeDeliveryRuns) runLifecycle(w http.ResponseWriter, r *http.Request, 
 		loc["active"] = body["active"] != false
 		writeJ(w, 201, loc)
 		return true
-	case strings.HasPrefix(p, "/v1/locations/") && r.Method != http.MethodGet && !strings.HasSuffix(p, "/history"):
+	case strings.HasPrefix(p, "/v1/locations/") && r.Method != http.MethodGet && !strings.HasSuffix(p, "/history") && !strings.HasSuffix(p, "/attribution"):
 		id, action, _ := strings.Cut(strings.TrimPrefix(p, "/v1/locations/"), "/")
 		if id != runLocationID {
 			problemDetail(w, 404, "delivery-runs.location-not-found", "Location not found")
@@ -83,7 +83,7 @@ func (f *fakeDeliveryRuns) runLifecycle(w http.ResponseWriter, r *http.Request, 
 		}
 		writeJ(w, 200, loc)
 		return true
-	case strings.HasPrefix(p, "/v1/locations/") && !strings.HasSuffix(p, "/history") && r.Method == http.MethodGet:
+	case strings.HasPrefix(p, "/v1/locations/") && !strings.HasSuffix(p, "/history") && !strings.HasSuffix(p, "/attribution") && r.Method == http.MethodGet:
 		writeJ(w, 200, map[string]any{"id": runLocationID, "slug": "bastrop-tx", "name": "Bastrop", "market": "US", "state": "TX", "timeZone": "America/Chicago",
 			"area": map[string]any{"kind": "RADIUS", "geoZoneId": nil, "centerLat": 30.1105, "centerLng": -97.3153, "radiusMiles": 12.0}, "currency": "USD",
 			"defaultFeeMinor": 799, "defaultMinOrders": 10, "defaultCapacityOrders": 40, "defaultCutoffPolicy": "EXTEND", "defaultExtendDays": 7, "dropMode": "DOORSTEP",
