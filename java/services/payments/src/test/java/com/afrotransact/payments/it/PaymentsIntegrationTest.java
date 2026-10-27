@@ -113,12 +113,18 @@ abstract class PaymentsIntegrationTest {
     // ------------------------------------------------------------------ HTTP
 
     HttpResponse<String> send(String method, String path, Object body, String idempotencyKey) {
+        return send(method, path, body, idempotencyKey, Map.of());
+    }
+
+    HttpResponse<String> send(String method, String path, Object body, String idempotencyKey,
+                              Map<String, String> headers) {
         try {
             HttpRequest.Builder b = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
                     .timeout(Duration.ofSeconds(60)).header("Content-Type", "application/json");
             if (idempotencyKey != null) {
                 b.header("Idempotency-Key", idempotencyKey);
             }
+            headers.forEach(b::header);
             String json = body == null ? "" : body instanceof String s ? s : JSON.writeValueAsString(body);
             b.method(method, body == null ? HttpRequest.BodyPublishers.noBody()
                     : HttpRequest.BodyPublishers.ofString(json));
