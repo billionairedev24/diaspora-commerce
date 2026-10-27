@@ -132,7 +132,14 @@ export type PreorderOption = z.infer<typeof PreorderOptionSchema>;
 
 /** Cart / checkout `packages[].preorder`: lines eligible for the place's window are one pre-order package. */
 export const CartPreorderSchema = PreorderTermsSchema.extend({
+  /** The window's id, or the run's id when `kind` is RUN. */
   windowId: z.string(),
+  /** WINDOW, or RUN for a delivery run staff scheduled (S261): `closesAt` is then its order cutoff. */
+  kind: z.enum(['WINDOW', 'RUN']).default('WINDOW'),
+  /** RUN: orders the run needs to go ahead, orders holding a slot now and whether the minimum is met. */
+  minOrders: z.number().int().default(0),
+  ordersSoFar: z.number().int().default(0),
+  minimumMet: z.boolean().default(false),
   code: z.string(),
   name: z.string(),
   stage: PreorderStageSchema,

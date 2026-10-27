@@ -1,11 +1,12 @@
 'use client';
 
-import { type CheckoutPackage, type CheckoutSummary } from '@afrotransact/api-client';
+import { type CartPreorder, type CheckoutPackage, type CheckoutSummary } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, CheckCircle, Circle, CircleNotch, ImagePlaceholder, LockSimple, PoweredByStripe, Tag } from '@afrotransact/ui';
 import Link from 'next/link';
 import { type FormEvent } from 'react';
 
+import { RunNote } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
 
 import styles from './Checkout.module.css';
@@ -29,6 +30,8 @@ type Props = {
   blocked: boolean;
   preLocked: boolean;
   preLockedText?: string | null;
+  /** The delivery run the order goes on (S261): its minimum progress and cutoff are shown next to the button. */
+  preRun?: CartPreorder | null;
   undeliverable: boolean;
   addressList: boolean;
   busy: boolean;
@@ -59,6 +62,7 @@ export function CheckoutOrderPanel(props: Props) {
     blocked,
     preLocked,
     preLockedText,
+    preRun,
     undeliverable,
     addressList,
     busy,
@@ -105,6 +109,7 @@ export function CheckoutOrderPanel(props: Props) {
               {error}
             </p>
           )}
+          {preRun && <RunNote block={preRun} />}
           {preLocked && preLockedText && (
             <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
               {preLockedText}

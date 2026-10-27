@@ -256,6 +256,34 @@ describe('storefront pre-order states (mock BFF)', () => {
     expect(screen.getByRole('link', { name: 'Proceed to checkout' })).toBeVisible();
   });
 
+  it('delivery run (S261): the cart says delivery run, the minimum progress honestly, the cutoff and the cancel promise', async () => {
+    const c = api();
+    await c.setDeliveryLocation({ zip: '79401' });
+    const jollof = await c.getProduct(JOLLOF);
+    await c.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    await preview({ run: { minOrders: 10, ordersSoFar: 7 } });
+    const first = renderWithProviders(<CartView />);
+    expect(await screen.findByTestId('cart-preorder-head')).toHaveTextContent(/Delivery run · delivered \w{3}, \w{3} \d+/);
+    expect(screen.getByTestId('run-progress')).toHaveTextContent(/^7 of 10 orders so far\. The run goes ahead at 10; if it does not, you are refunded in full, delivery fee included\.$/);
+    expect(screen.getByTestId('run-cutoff')).toHaveTextContent(/^Order by \w{3}, \w{3} \d+, .+\. You can cancel for a full refund until then\.$/);
+    expect(screen.getByTestId('run-note')).toHaveTextContent('we show the next open run, or tell you that none is open');
+    first.unmount();
+
+    await preview({ run: { minOrders: 10, ordersSoFar: 10 } });
+    renderWithProviders(<CartView />);
+    await waitFor(() => expect(screen.getByTestId('run-progress')).toHaveTextContent('10 of 10 orders so far. The minimum is met, so this run is going ahead.'));
+  });
+
+  it('a window shows no run note', async () => {
+    const c = api();
+    await c.setDeliveryLocation({ zip: '79401' });
+    const jollof = await c.getProduct(JOLLOF);
+    await c.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    renderWithProviders(<CartView />);
+    expect(await screen.findByTestId('cart-preorder-head')).toHaveTextContent(/^Pre-order · delivered/);
+    expect(screen.queryByTestId('run-note')).toBeNull();
+  });
+
   it('locked checkout: the window is not open, so the cart explains why and blocks checkout', async () => {
     const c = api();
     await c.setDeliveryLocation({ zip: '79401' });

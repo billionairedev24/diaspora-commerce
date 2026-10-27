@@ -3556,7 +3556,19 @@ export interface components {
         };
         /** @description Pre-order block of a PREORDER package (relayed from the cart service), money in minor units. */
         CartPreorder: components["schemas"]["PreorderTerms"] & {
+            /** @description The window id, or the run id when kind is RUN */
             windowId?: string;
+            /**
+             * @description WINDOW, or RUN for a delivery run staff scheduled (S261; closesAt is then its order cutoff)
+             * @enum {string}
+             */
+            kind?: "WINDOW" | "RUN";
+            /** @description RUN: orders the run needs to go ahead */
+            minOrders?: number;
+            /** @description RUN: orders holding a slot now (counts toward the minimum and the capacity) */
+            ordersSoFar?: number;
+            /** @description RUN: ordersSoFar has reached minOrders */
+            minimumMet?: boolean;
             code?: string;
             name?: string;
             /** @enum {string} */

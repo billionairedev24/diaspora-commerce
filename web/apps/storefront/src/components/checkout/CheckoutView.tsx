@@ -481,6 +481,7 @@ export function CheckoutView() {
         blocked={blocked}
         preLocked={preLocked}
         preLockedText={preCopy?.copy.lockedText}
+        preRun={preBlock?.kind === 'RUN' ? preBlock : null}
         undeliverable={undeliverable}
         addressList={addressList}
         busy={busy}
