@@ -39,9 +39,17 @@ func (r *runAlertsImpl) LocationPage(ctx context.Context, slug string) (json.Raw
 	return r.send(ctx, httpclient.Request{Path: "/v1/public/locations/" + url.PathEscape(slug)})
 }
 
-func (r *runAlertsImpl) SubscribeEmail(ctx context.Context, locationID, email, source string) (json.RawMessage, error) {
-	return r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/public/subscriptions",
-		JSON: map[string]string{"locationId": locationID, "email": email, "source": source}})
+func (r *runAlertsImpl) SubscribeEmail(ctx context.Context, locationID, email, source string, utm map[string]string) (json.RawMessage, error) {
+	body := map[string]string{"locationId": locationID, "email": email, "source": source}
+	for k, v := range utm {
+		body[k] = v
+	}
+	return r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/public/subscriptions", JSON: body})
+}
+
+func (r *runAlertsImpl) CountVisit(ctx context.Context, slug string, body map[string]string) error {
+	_, err := r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/public/locations/" + url.PathEscape(slug) + "/visits", JSON: body})
+	return err
 }
 
 func (r *runAlertsImpl) Confirm(ctx context.Context, token string) (json.RawMessage, error) {
@@ -61,9 +69,12 @@ func (r *runAlertsImpl) Mine(ctx context.Context, bearer string) (json.RawMessag
 	return r.send(ctx, httpclient.Request{Path: "/v1/me/run-subscriptions", Bearer: bearer})
 }
 
-func (r *runAlertsImpl) SubscribeMine(ctx context.Context, bearer, locationID string, channels []string, source string) (json.RawMessage, error) {
-	return r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/run-subscriptions", Bearer: bearer,
-		JSON: map[string]any{"locationId": locationID, "channels": channels, "source": source}})
+func (r *runAlertsImpl) SubscribeMine(ctx context.Context, bearer, locationID string, channels []string, source string, utm map[string]string) (json.RawMessage, error) {
+	body := map[string]any{"locationId": locationID, "channels": channels, "source": source}
+	for k, v := range utm {
+		body[k] = v
+	}
+	return r.send(ctx, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/run-subscriptions", Bearer: bearer, JSON: body})
 }
 
 func (r *runAlertsImpl) UnsubscribeMine(ctx context.Context, bearer, locationID string, channels []string) (json.RawMessage, error) {

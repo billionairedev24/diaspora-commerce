@@ -16,6 +16,7 @@ func (h *handlersImpl) registerRunAlerts(route func(pattern string, fn http.Hand
 	}
 	route("GET /v1/delivery-runs/locations", h.runLocations)
 	route("GET /v1/delivery-runs/locations/{slug}", h.runLocationPage)
+	route("POST /v1/delivery-runs/locations/{slug}/visits", lookup(h.countRunVisit))
 	route("POST /v1/delivery-runs/subscriptions", lookup(h.subscribeRunAlerts))
 	route("POST /v1/delivery-runs/subscriptions/confirm", lookup(h.confirmRunAlerts))
 	route("POST /v1/delivery-runs/subscriptions/unsubscribe", lookup(h.unsubscribeRunAlerts))
@@ -106,6 +107,15 @@ func (h *handlersImpl) runAdvertorials(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "private, max-age=15")
 	}
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) countRunVisit(w http.ResponseWriter, r *http.Request) {
+	var b app.RunVisitRequest
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	h.reply(w, r, http.StatusNoContent, nil, h.s.RunAlerts.CountVisit(r.Context(), r.PathValue("slug"), b))
 }
 
 func (h *handlersImpl) runAdvertorialEvent(w http.ResponseWriter, r *http.Request) {

@@ -948,6 +948,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/delivery-runs/locations/{slug}/visits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Count a visit that arrived with UTM tags (best effort)
+         * @description delivery-runs `POST /v1/public/locations/{slug}/visits`. The storefront sends it once per visit to a location page
+         *     or run link whose address has `utm_*` tags, so staff can see visits and sign-ups per source in Pre-orders ->
+         *     Delivery runs. Only the three tags (and the run viewed) are sent: no cookie, address or visitor id. A visit
+         *     without tags is accepted and not counted. The storefront ignores failures.
+         */
+        post: operations["countRunLocationVisit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/delivery-runs/subscriptions": {
         parameters: {
             query?: never;
@@ -2622,6 +2645,28 @@ export interface components {
             expiresAt: string;
             deliveryDisplay?: string | null;
             feeDisplay?: string | null;
+            /** @description Up to four products staff chose; the card links each to its product page (/p/{atin}). The price is not kept: the product page shows today's. */
+            featuredProducts?: components["schemas"]["RunFeaturedProduct"][];
+        };
+        RunFeaturedProduct: {
+            /** @example ATSHEA0001 */
+            atin: string;
+            title: string;
+            /** @description An https picture */
+            imageUrl?: string | null;
+        };
+        RunVisitRequest: {
+            /**
+             * Format: uuid
+             * @description The run the visitor was looking at
+             */
+            runId?: string;
+            /** @example whatsapp */
+            utmSource?: string;
+            /** @example social */
+            utmMedium?: string;
+            /** @example delivery-run-bastrop-tx-20261024 */
+            utmCampaign?: string;
         };
         StockAlertItem: {
             atin: components["schemas"]["Atin"];
@@ -5717,6 +5762,34 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    countRunLocationVisit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RunVisitRequest"];
+            };
+        };
+        responses: {
+            /** @description Counted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
     subscribeRunAlerts: {
         parameters: {
             query?: never;
@@ -5736,6 +5809,14 @@ export interface operations {
                      * @example location-page
                      */
                     source?: string;
+                    /**
+                     * @description utm_source the visitor arrived with; counted as a sign-up of that source once confirmed
+                     * @example whatsapp
+                     */
+                    utmSource?: string;
+                    /** @example social */
+                    utmMedium?: string;
+                    utmCampaign?: string;
                 };
             };
         };
@@ -5855,6 +5936,14 @@ export interface operations {
                     channels: components["schemas"]["RunChannel"][];
                     /** @example account */
                     source?: string;
+                    /**
+                     * @description utm_source the shopper arrived with (counted as a sign-up)
+                     * @example whatsapp
+                     */
+                    utmSource?: string;
+                    /** @example social */
+                    utmMedium?: string;
+                    utmCampaign?: string;
                 };
             };
         };

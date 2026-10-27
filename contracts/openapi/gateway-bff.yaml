@@ -1124,6 +1124,30 @@ paths:
               schema: {$ref: '#/components/schemas/RunLocationPage'}
         '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/delivery-runs/locations/{slug}/visits:
+    post:
+      tags: [Delivery runs]
+      operationId: countRunLocationVisit
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Count a visit that arrived with UTM tags (best effort)
+      description: |
+        delivery-runs `POST /v1/public/locations/{slug}/visits`. The storefront sends it once per visit to a location page
+        or run link whose address has `utm_*` tags, so staff can see visits and sign-ups per source in Pre-orders ->
+        Delivery runs. Only the three tags (and the run viewed) are sent: no cookie, address or visitor id. A visit
+        without tags is accepted and not counted. The storefront ignores failures.
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,79}$'}}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RunVisitRequest'}
+      responses:
+        '204': {description: Counted, or nothing to count}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/delivery-runs/subscriptions:
     post:
       tags: [Delivery runs]
@@ -1147,6 +1171,9 @@ paths:
                 locationId: {type: string, format: uuid}
                 email: {type: string, format: email, maxLength: 254}
                 source: {type: string, maxLength: 80, description: 'Where the sign-up happened, kept on the consent record (default storefront)', examples: [location-page]}
+                utmSource: {type: string, maxLength: 80, description: 'utm_source the visitor arrived with; counted as a sign-up of that source once confirmed', examples: [whatsapp]}
+                utmMedium: {type: string, maxLength: 80, examples: [social]}
+                utmCampaign: {type: string, maxLength: 120}
       responses:
         '202':
           description: Accepted; the confirmation link is on its way
@@ -1256,6 +1283,9 @@ paths:
                 locationId: {type: string, format: uuid}
                 channels: {type: array, minItems: 1, items: {$ref: '#/components/schemas/RunChannel'}}
                 source: {type: string, maxLength: 80, examples: [account]}
+                utmSource: {type: string, maxLength: 80, description: utm_source the shopper arrived with (counted as a sign-up), examples: [whatsapp]}
+                utmMedium: {type: string, maxLength: 80, examples: [social]}
+                utmCampaign: {type: string, maxLength: 120}
       responses:
         '200':
           description: Subscription
@@ -3167,6 +3197,25 @@ components:
         expiresAt: {type: string, format: date-time}
         deliveryDisplay: {type: [string, 'null']}
         feeDisplay: {type: [string, 'null']}
+        featuredProducts:
+          type: array
+          maxItems: 4
+          description: 'Up to four products staff chose; the card links each to its product page (/p/{atin}). The price is not kept: the product page shows today''s.'
+          items: {$ref: '#/components/schemas/RunFeaturedProduct'}
+    RunFeaturedProduct:
+      type: object
+      required: [atin, title]
+      properties:
+        atin: {type: string, examples: [ATSHEA0001]}
+        title: {type: string}
+        imageUrl: {type: [string, 'null'], description: An https picture}
+    RunVisitRequest:
+      type: object
+      properties:
+        runId: {type: string, format: uuid, description: The run the visitor was looking at, if any}
+        utmSource: {type: string, maxLength: 80, examples: [whatsapp]}
+        utmMedium: {type: string, maxLength: 80, examples: [social]}
+        utmCampaign: {type: string, maxLength: 120, examples: [delivery-run-bastrop-tx-20261024]}
     StockAlertItem:
       type: object
       required: [atin, productTitle, status, createdAt, notifiedAt]

@@ -16,7 +16,7 @@ type RunAlertClient interface {
 	// LocationPage is GET /v1/public/locations/{slug}: the location, its upcoming runs, community and share links.
 	LocationPage(ctx context.Context, slug string) (json.RawMessage, error)
 	// SubscribeEmail is POST /v1/public/subscriptions with a locationId: always 202, the confirmation link is mailed.
-	SubscribeEmail(ctx context.Context, locationID, email, source string) (json.RawMessage, error)
+	SubscribeEmail(ctx context.Context, locationID, email, source string, utm map[string]string) (json.RawMessage, error)
 	// Confirm is POST /v1/public/subscriptions/confirm with the token of the confirmation link.
 	Confirm(ctx context.Context, token string) (json.RawMessage, error)
 	// Unsubscribe is POST /v1/public/subscriptions/unsubscribe with the token of a message link; no channels = all.
@@ -24,9 +24,12 @@ type RunAlertClient interface {
 	// Mine is GET /v1/me/run-subscriptions.
 	Mine(ctx context.Context, bearer string) (json.RawMessage, error)
 	// SubscribeMine is POST /v1/me/run-subscriptions: consent for the channels, active at once.
-	SubscribeMine(ctx context.Context, bearer, locationID string, channels []string, source string) (json.RawMessage, error)
+	SubscribeMine(ctx context.Context, bearer, locationID string, channels []string, source string, utm map[string]string) (json.RawMessage, error)
 	// UnsubscribeMine is DELETE /v1/me/run-subscriptions/{locationId}; no channels = all.
 	UnsubscribeMine(ctx context.Context, bearer, locationID string, channels []string) (json.RawMessage, error)
+	// CountVisit is POST /v1/public/locations/{slug}/visits {runId, utmSource, utmMedium, utmCampaign} (204): a visit that
+	// arrived with UTM tags, counted without cookie or visitor id.
+	CountVisit(ctx context.Context, slug string, body map[string]string) error
 	// Advertorials is GET /v1/public/advertorials (zip, lat, lng, country, region, city, visitor, limit).
 	Advertorials(ctx context.Context, q url.Values) (json.RawMessage, error)
 	// AdvertorialEvent is POST /v1/public/advertorials/{id}/events (VIEW or CLICK; 204).

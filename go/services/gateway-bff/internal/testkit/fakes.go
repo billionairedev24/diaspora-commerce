@@ -172,7 +172,7 @@ type Upstreams struct {
 	// LastWaitlist is the last delivery-runs POST /v1/public/subscriptions body (pre-order waitlist).
 	LastWaitlist map[string]any
 	// Last delivery-runs bodies and queries of the run-alert routes (S262, S263) and the advertorial events counted.
-	LastRunUnsubscribe, LastRunSubscribeMine map[string]any
+	LastRunUnsubscribe, LastRunSubscribeMine, LastRunVisit map[string]any
 	LastRunUnsubscribeMine                   []string
 	LastAdvertorialQuery                     url.Values
 	AdvertorialEvents                        []string

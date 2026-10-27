@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -30,6 +31,9 @@ type RunAlertService interface {
 	UnsubscribeMine(ctx context.Context, c *domain.Caller, locationID string, channels []string) (map[string]any, error)
 	// Advertorials serves the visitor's variants for the explicit place or the session's delivery location.
 	Advertorials(ctx context.Context, c *domain.Caller, q AdvertorialQuery) (map[string]any, error)
+	// CountVisit counts a visit to a location page or run link that arrived with UTM tags (best effort: the storefront
+	// ignores failures). Only the three tags are kept.
+	CountVisit(ctx context.Context, slug string, req RunVisitRequest) error
 	// AdvertorialEvent counts a VIEW or a CLICK (best effort: the storefront ignores failures).
 	AdvertorialEvent(ctx context.Context, id, eventType string) error
 }
@@ -39,13 +43,28 @@ type RunSubscribeRequest struct {
 	LocationID string `json:"locationId"`
 	Email      string `json:"email"`
 	Source     string `json:"source"`
+	// UTM tags the visitor arrived with, counted as a sign-up of that source once confirmed.
+	UTMSource   string `json:"utmSource"`
+	UTMMedium   string `json:"utmMedium"`
+	UTMCampaign string `json:"utmCampaign"`
+}
+
+// RunVisitRequest is POST /v1/delivery-runs/locations/{slug}/visits.
+type RunVisitRequest struct {
+	RunID       string `json:"runId"`
+	UTMSource   string `json:"utmSource"`
+	UTMMedium   string `json:"utmMedium"`
+	UTMCampaign string `json:"utmCampaign"`
 }
 
 // MyRunSubscriptionRequest is POST /v1/account/run-subscriptions.
 type MyRunSubscriptionRequest struct {
-	LocationID string   `json:"locationId"`
-	Channels   []string `json:"channels"`
-	Source     string   `json:"source"`
+	LocationID  string   `json:"locationId"`
+	Channels    []string `json:"channels"`
+	Source      string   `json:"source"`
+	UTMSource   string   `json:"utmSource"`
+	UTMMedium   string   `json:"utmMedium"`
+	UTMCampaign string   `json:"utmCampaign"`
 }
 
 // AdvertorialQuery is GET /v1/delivery-runs/advertorials; an empty place means the session's delivery location.
@@ -179,10 +198,14 @@ func (s *runAlertServiceImpl) Subscribe(ctx context.Context, req RunSubscribeReq
 	if err != nil {
 		fields["source"] = "Use lowercase letters, digits, dots, dashes or underscores"
 	}
+	utm, utmProblems := runUTM(req.UTMSource, req.UTMMedium, req.UTMCampaign)
+	for k, v := range utmProblems {
+		fields[k] = v
+	}
 	if len(fields) > 0 {
 		return nil, domain.ValidationProblem(fields)
 	}
-	raw, err := s.up.SubscribeEmail(ctx, req.LocationID, email, source)
+	raw, err := s.up.SubscribeEmail(ctx, req.LocationID, email, source, utm)
 	if err != nil {
 		return nil, mapErr("delivery-runs", err)
 	}
@@ -245,10 +268,14 @@ func (s *runAlertServiceImpl) SubscribeMine(ctx context.Context, c *domain.Calle
 	if err != nil {
 		fields["source"] = "Use lowercase letters, digits, dots, dashes or underscores"
 	}
+	utm, utmProblems := runUTM(req.UTMSource, req.UTMMedium, req.UTMCampaign)
+	for k, v := range utmProblems {
+		fields[k] = v
+	}
 	if len(fields) > 0 {
 		return nil, domain.ValidationProblem(fields)
 	}
-	raw, err := s.up.SubscribeMine(ctx, c.BearerToken, req.LocationID, chs, source)
+	raw, err := s.up.SubscribeMine(ctx, c.BearerToken, req.LocationID, chs, source, utm)
 	if err != nil {
 		return nil, mapErr("delivery-runs", err)
 	}
@@ -364,6 +391,53 @@ func (s *runAlertServiceImpl) Advertorials(ctx context.Context, c *domain.Caller
 		out["items"] = []any{}
 	}
 	return out, nil
+}
+
+// runUTM checks the UTM tags a visitor arrived with (at most 80, 80 and 120 characters, no control characters). Blank
+// tags are left out. delivery-runs cleans them again and keeps only these three.
+func runUTM(source, medium, campaign string) (map[string]string, map[string]string) {
+	out := map[string]string{}
+	problems := map[string]string{}
+	for _, t := range []struct {
+		key, value string
+		max        int
+	}{{"utmSource", source, 80}, {"utmMedium", medium, 80}, {"utmCampaign", campaign, 120}} {
+		v := strings.TrimSpace(t.value)
+		switch {
+		case v == "":
+		case len([]rune(v)) > t.max || strings.ContainsFunc(v, unicode.IsControl):
+			problems[t.key] = "A short tag, such as whatsapp"
+		default:
+			out[t.key] = v
+		}
+	}
+	return out, problems
+}
+
+func (s *runAlertServiceImpl) CountVisit(ctx context.Context, slug string, req RunVisitRequest) error {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if !runSlugRe.MatchString(slug) {
+		return domain.NewProblem(404, domain.CodeNotFound, "Not found", "We couldn't find that location.")
+	}
+	fields := map[string]string{}
+	body, problems := runUTM(req.UTMSource, req.UTMMedium, req.UTMCampaign)
+	for k, v := range problems {
+		fields[k] = v
+	}
+	if run := strings.TrimSpace(req.RunID); run != "" {
+		if domain.ValidUUID(run) != nil {
+			fields["runId"] = "Choose one of the runs"
+		} else {
+			body["runId"] = run
+		}
+	}
+	if len(fields) > 0 {
+		return domain.ValidationProblem(fields)
+	}
+	if len(body) == 0 || (len(body) == 1 && body["runId"] != "") {
+		return nil // nothing to count: a visit without tags is not sent
+	}
+	return mapErr("delivery-runs", s.up.CountVisit(ctx, slug, body))
 }
 
 func (s *runAlertServiceImpl) AdvertorialEvent(ctx context.Context, id, eventType string) error {
