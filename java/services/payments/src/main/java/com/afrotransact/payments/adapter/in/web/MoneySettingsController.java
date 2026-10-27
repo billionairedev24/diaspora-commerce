@@ -69,13 +69,13 @@ class MoneySettingsController {
         }
     }
 
-    @Operation(summary = "Money settings in force (payments:read)")
+    @Operation(operationId = "getMoneySettings", summary = "Money settings in force (payments:read)")
     @GetMapping("/v1/money/settings")
     SettingsResponse get() {
         return SettingsResponse.of(settings.get());
     }
 
-    @Operation(summary = "Change the money settings with a reason (payments:configure)",
+    @Operation(operationId = "updateMoneySettings", summary = "Change the money settings with a reason (payments:configure)",
             description = "Takes effect at once for new purchases and grants; a concurrent change is 409 "
                     + "payments.money-settings-changed.")
     @PutMapping("/v1/money/settings")
@@ -85,7 +85,7 @@ class MoneySettingsController {
                 body.creditApprovalLimitMinor(), body.reason(), body.version())));
     }
 
-    @Operation(summary = "Who changed the money settings, when and why (payments:read)")
+    @Operation(operationId = "moneySettingsHistory", summary = "Who changed the money settings, when and why (payments:read)")
     @GetMapping("/v1/money/settings/history")
     List<ChangeResponse> history(@RequestParam(defaultValue = "50") int limit) {
         return settings.history(limit).stream().map(ChangeResponse::of).toList();

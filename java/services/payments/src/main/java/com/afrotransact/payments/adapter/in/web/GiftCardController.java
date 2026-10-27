@@ -141,13 +141,13 @@ class GiftCardController {
 
     // ------------------------------------------------------------------ the shopper
 
-    @Operation(summary = "Gift card limits, preset amounts and terms")
+    @Operation(operationId = "giftCardConfig", summary = "Gift card limits, preset amounts and terms")
     @GetMapping("/v1/gift-cards/config")
     ConfigResponse config() {
         return ConfigResponse.of(giftCards.config());
     }
 
-    @Operation(summary = "Start buying a gift card; returns the Stripe client secret to pay with Elements",
+    @Operation(operationId = "startGiftCardPurchase", summary = "Start buying a gift card; returns the Stripe client secret to pay with Elements",
             description = "Idempotent per Idempotency-Key. The card is not active until the payment is captured "
                     + "(POST …/confirm, or the Stripe webhook). Only a card payment buys a gift card: credit never "
                     + "does.")
@@ -161,20 +161,20 @@ class GiftCardController {
         return MyGiftCardResponse.of(p.card(), p.clientSecret());
     }
 
-    @Operation(summary = "After the payment was confirmed: capture it and issue the card")
+    @Operation(operationId = "confirmGiftCardPurchase", summary = "After the payment was confirmed: capture it and issue the card")
     @PostMapping("/v1/gift-cards/purchases/{id}/confirm")
     MyGiftCardResponse confirm(@PathVariable UUID id) {
         Purchase p = giftCards.confirmPurchase(id);
         return MyGiftCardResponse.of(p.card(), null);
     }
 
-    @Operation(summary = "The gift cards the signed-in shopper bought, newest first")
+    @Operation(operationId = "myGiftCards", summary = "The gift cards the signed-in shopper bought, newest first")
     @GetMapping("/v1/gift-cards/mine")
     List<MyGiftCardResponse> mine() {
         return giftCards.myPurchases().stream().map(c -> MyGiftCardResponse.of(c, null)).toList();
     }
 
-    @Operation(summary = "Redeem a gift card code into the signed-in shopper's credit",
+    @Operation(operationId = "redeemGiftCard", summary = "Redeem a gift card code into the signed-in shopper's credit",
             description = "Once per card. Wrong codes are counted per shopper and per network address (X-Client-Address, "
                     + "set by the gateway); over the limit the answer is 429 with Retry-After.")
     @PostMapping("/v1/gift-cards/redeem")
@@ -186,7 +186,7 @@ class GiftCardController {
 
     // ------------------------------------------------------------------ staff
 
-    @Operation(summary = "Look up gift cards (payments:read)",
+    @Operation(operationId = "searchGiftCards", summary = "Look up gift cards (payments:read)",
             description = "q matches a card id, the last four characters of the code, the recipient's email or name, "
                     + "the sender's name or the purchaser's customer id.")
     @GetMapping("/v1/gift-cards")
@@ -196,13 +196,13 @@ class GiftCardController {
         return giftCards.search(q, status, limit).stream().map(GiftCardResponse::of).toList();
     }
 
-    @Operation(summary = "One gift card (payments:read)")
+    @Operation(operationId = "getGiftCard", summary = "One gift card (payments:read)")
     @GetMapping("/v1/gift-cards/{id}")
     GiftCardResponse get(@PathVariable UUID id) {
         return GiftCardResponse.of(giftCards.get(id));
     }
 
-    @Operation(summary = "Issue a gift card (ledger:adjust)",
+    @Operation(operationId = "issueGiftCard", summary = "Issue a gift card (ledger:adjust)",
             description = "Goodwill or a promotion: a reason is required, the amount follows the limits of Settings, "
                     + "Money, and the card is a liability from the start. It is emailed on sendAt (now by default).")
     @PostMapping("/v1/gift-cards")
@@ -212,7 +212,7 @@ class GiftCardController {
                 body.recipientName(), body.message(), body.sendAt(), body.locale(), body.reason())));
     }
 
-    @Operation(summary = "Void an unredeemed gift card (ledger:adjust)",
+    @Operation(operationId = "voidGiftCard", summary = "Void an unredeemed gift card (ledger:adjust)",
             description = "A purchased card is refunded to the buyer's card; one staff issued just ends. A redeemed "
                     + "card is credit and cannot be voided (409 payments.gift-card-redeemed).")
     @PostMapping("/v1/gift-cards/{id}/void")
@@ -220,7 +220,7 @@ class GiftCardController {
         return GiftCardResponse.of(giftCards.voidCard(id, body.reason()));
     }
 
-    @Operation(summary = "Email the gift card again with a new code (ledger:adjust)",
+    @Operation(operationId = "resendGiftCard", summary = "Email the gift card again with a new code (ledger:adjust)",
             description = "The old code stops working.")
     @PostMapping("/v1/gift-cards/{id}/resend")
     GiftCardResponse resend(@PathVariable UUID id, @Valid @RequestBody ReasonRequest body) {

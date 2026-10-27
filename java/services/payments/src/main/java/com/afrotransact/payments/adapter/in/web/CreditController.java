@@ -147,13 +147,13 @@ class CreditController {
 
     // ------------------------------------------------------------------ the shopper
 
-    @Operation(summary = "The signed-in shopper's credit balance")
+    @Operation(operationId = "myCreditBalance", summary = "The signed-in shopper's credit balance")
     @GetMapping("/v1/credit/me")
     BalanceResponse myBalance() {
         return BalanceResponse.of(credit.myBalance());
     }
 
-    @Operation(summary = "The signed-in shopper's credit history, newest first",
+    @Operation(operationId = "myCreditEntries", summary = "The signed-in shopper's credit history, newest first",
             description = "before pages backwards (the createdAt of the last entry seen).")
     @GetMapping("/v1/credit/me/entries")
     List<EntryResponse> myEntries(@RequestParam(required = false) Instant before,
@@ -163,19 +163,19 @@ class CreditController {
 
     // ------------------------------------------------------------------ services and staff
 
-    @Operation(summary = "One customer's credit balance (payments:service for checkout, or staff with payments:read)")
+    @Operation(operationId = "creditBalanceOf", summary = "One customer's credit balance (payments:service for checkout, or staff with payments:read)")
     @GetMapping("/v1/credit/customers/{customerId}/balance")
     BalanceResponse balanceOf(@PathVariable String customerId) {
         return BalanceResponse.of(credit.balanceOf(customerId));
     }
 
-    @Operation(summary = "A customer's credit: balance, history and adjustments (staff with payments:read)")
+    @Operation(operationId = "getCustomerCredit", summary = "A customer's credit: balance, history and adjustments (staff with payments:read)")
     @GetMapping("/v1/credit/customers/{customerId}")
     CustomerCreditResponse customer(@PathVariable String customerId, @RequestParam(defaultValue = "100") int limit) {
         return CustomerCreditResponse.of(credit.customer(customerId, limit));
     }
 
-    @Operation(summary = "Grant credit for a program (referral, membership, promotion; payments:credit.grant)",
+    @Operation(operationId = "grantCredit", summary = "Grant credit for a program (referral, membership, promotion; payments:credit.grant)",
             description = "Idempotent per Idempotency-Key: a replay returns the first entry and adds nothing. There "
                     + "is no matching operation to take credit out or to move it between customers.")
     @PostMapping("/v1/credit/grants")
@@ -188,7 +188,7 @@ class CreditController {
 
     // ------------------------------------------------------------------ staff adjustments
 
-    @Operation(summary = "Staff grant or correction of a customer's credit (ledger:adjust)",
+    @Operation(operationId = "adjustCredit", summary = "Staff grant or correction of a customer's credit (ledger:adjust)",
             description = "A reason is required. Up to the limit set in Settings, Money, it is posted at once; above "
                     + "it, it is PROPOSED and a different person with ledger:approve posts it (four eyes).")
     @PostMapping("/v1/credit/adjustments")
@@ -198,7 +198,7 @@ class CreditController {
                 Money.of(body.amountMinor(), "USD"), body.source(), body.reason())));
     }
 
-    @Operation(summary = "Credit adjustments, newest first (payments:read)")
+    @Operation(operationId = "listCreditAdjustments", summary = "Credit adjustments, newest first (payments:read)")
     @GetMapping("/v1/credit/adjustments")
     List<AdjustmentResponse> adjustments(@RequestParam(required = false) AdjustmentStatus status,
                                          @RequestParam(required = false) String customerId,
@@ -206,19 +206,19 @@ class CreditController {
         return credit.adjustments(status, customerId, limit).stream().map(AdjustmentResponse::of).toList();
     }
 
-    @Operation(summary = "Approve a proposed credit adjustment (ledger:approve; never your own)")
+    @Operation(operationId = "approveCreditAdjustment", summary = "Approve a proposed credit adjustment (ledger:approve; never your own)")
     @PostMapping("/v1/credit/adjustments/{id}/approve")
     AdjustmentResponse approve(@PathVariable UUID id, @RequestBody(required = false) DecisionRequest body) {
         return AdjustmentResponse.of(credit.approve(id, body == null ? null : body.note()));
     }
 
-    @Operation(summary = "Reject a proposed credit adjustment with the reason (ledger:approve)")
+    @Operation(operationId = "rejectCreditAdjustment", summary = "Reject a proposed credit adjustment with the reason (ledger:approve)")
     @PostMapping("/v1/credit/adjustments/{id}/reject")
     AdjustmentResponse reject(@PathVariable UUID id, @RequestBody(required = false) DecisionRequest body) {
         return AdjustmentResponse.of(credit.reject(id, body == null ? null : body.note()));
     }
 
-    @Operation(summary = "Credit and gift card liabilities for finance (payments:read)",
+    @Operation(operationId = "creditLiabilities", summary = "Credit and gift card liabilities for finance (payments:read)",
             description = "Credit owed to customers and unredeemed gift cards, apart, with the general-ledger "
                     + "accounts 2600 and 2650 beside them.")
     @GetMapping("/v1/credit/liabilities")

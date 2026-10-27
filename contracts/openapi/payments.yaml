@@ -1971,7 +1971,7 @@ paths:
       tags:
       - Money settings
       summary: Money settings in force (payments:read)
-      operationId: get
+      operationId: getMoneySettings
       responses:
         '200':
           description: OK
@@ -1984,7 +1984,7 @@ paths:
       - Money settings
       summary: Change the money settings with a reason (payments:configure)
       description: Takes effect at once for new purchases and grants; a concurrent change is 409 payments.money-settings-changed.
-      operationId: update
+      operationId: updateMoneySettings
       requestBody:
         content:
           application/json:
@@ -2005,7 +2005,7 @@ paths:
       summary: Look up gift cards (payments:read)
       description: q matches a card id, the last four characters of the code, the recipient's email or name, the sender's name
         or the purchaser's customer id.
-      operationId: search
+      operationId: searchGiftCards
       parameters:
       - name: q
         in: query
@@ -2045,7 +2045,7 @@ paths:
       summary: Issue a gift card (ledger:adjust)
       description: 'Goodwill or a promotion: a reason is required, the amount follows the limits of Settings, Money, and the
         card is a liability from the start. It is emailed on sendAt (now by default).'
-      operationId: issue
+      operationId: issueGiftCard
       requestBody:
         content:
           application/json:
@@ -2066,7 +2066,7 @@ paths:
       summary: Void an unredeemed gift card (ledger:adjust)
       description: A purchased card is refunded to the buyer's card; one staff issued just ends. A redeemed card is credit and
         cannot be voided (409 payments.gift-card-redeemed).
-      operationId: voidCard
+      operationId: voidGiftCard
       parameters:
       - name: id
         in: path
@@ -2093,7 +2093,7 @@ paths:
       - Gift cards
       summary: Email the gift card again with a new code (ledger:adjust)
       description: The old code stops working.
-      operationId: resend
+      operationId: resendGiftCard
       parameters:
       - name: id
         in: path
@@ -2121,7 +2121,7 @@ paths:
       summary: Redeem a gift card code into the signed-in shopper's credit
       description: Once per card. Wrong codes are counted per shopper and per network address (X-Client-Address, set by the
         gateway); over the limit the answer is 429 with Retry-After.
-      operationId: redeem
+      operationId: redeemGiftCard
       parameters:
       - name: X-Client-Address
         in: header
@@ -2148,7 +2148,7 @@ paths:
       summary: Start buying a gift card; returns the Stripe client secret to pay with Elements
       description: 'Idempotent per Idempotency-Key. The card is not active until the payment is captured (POST …/confirm, or
         the Stripe webhook). Only a card payment buys a gift card: credit never does.'
-      operationId: purchase
+      operationId: startGiftCardPurchase
       parameters:
       - name: Idempotency-Key
         in: header
@@ -2175,7 +2175,7 @@ paths:
       tags:
       - Gift cards
       summary: 'After the payment was confirmed: capture it and issue the card'
-      operationId: confirm
+      operationId: confirmGiftCardPurchase
       parameters:
       - name: id
         in: path
@@ -2197,7 +2197,7 @@ paths:
       summary: Grant credit for a program (referral, membership, promotion; payments:credit.grant)
       description: 'Idempotent per Idempotency-Key: a replay returns the first entry and adds nothing. There is no matching
         operation to take credit out or to move it between customers.'
-      operationId: grant
+      operationId: grantCredit
       parameters:
       - name: Idempotency-Key
         in: header
@@ -2224,7 +2224,7 @@ paths:
       tags:
       - Credit
       summary: Credit adjustments, newest first (payments:read)
-      operationId: adjustments_1
+      operationId: listCreditAdjustments
       parameters:
       - name: status
         in: query
@@ -2262,7 +2262,7 @@ paths:
       summary: Staff grant or correction of a customer's credit (ledger:adjust)
       description: A reason is required. Up to the limit set in Settings, Money, it is posted at once; above it, it is PROPOSED
         and a different person with ledger:approve posts it (four eyes).
-      operationId: adjust
+      operationId: adjustCredit
       requestBody:
         content:
           application/json:
@@ -2281,7 +2281,7 @@ paths:
       tags:
       - Credit
       summary: Reject a proposed credit adjustment with the reason (ledger:approve)
-      operationId: reject
+      operationId: rejectCreditAdjustment
       parameters:
       - name: id
         in: path
@@ -2306,7 +2306,7 @@ paths:
       tags:
       - Credit
       summary: Approve a proposed credit adjustment (ledger:approve; never your own)
-      operationId: approve_1
+      operationId: approveCreditAdjustment
       parameters:
       - name: id
         in: path
@@ -2331,7 +2331,7 @@ paths:
       tags:
       - Money settings
       summary: Who changed the money settings, when and why (payments:read)
-      operationId: history
+      operationId: moneySettingsHistory
       parameters:
       - name: limit
         in: query
@@ -2354,7 +2354,7 @@ paths:
       tags:
       - Gift cards
       summary: One gift card (payments:read)
-      operationId: get_2
+      operationId: getGiftCard
       parameters:
       - name: id
         in: path
@@ -2374,7 +2374,7 @@ paths:
       tags:
       - Gift cards
       summary: The gift cards the signed-in shopper bought, newest first
-      operationId: mine
+      operationId: myGiftCards
       responses:
         '200':
           description: OK
@@ -2389,7 +2389,7 @@ paths:
       tags:
       - Gift cards
       summary: Gift card limits, preset amounts and terms
-      operationId: config
+      operationId: giftCardConfig
       responses:
         '200':
           description: OK
@@ -2402,7 +2402,7 @@ paths:
       tags:
       - Credit
       summary: The signed-in shopper's credit balance
-      operationId: myBalance
+      operationId: myCreditBalance
       responses:
         '200':
           description: OK
@@ -2416,7 +2416,7 @@ paths:
       - Credit
       summary: The signed-in shopper's credit history, newest first
       description: before pages backwards (the createdAt of the last entry seen).
-      operationId: myEntries
+      operationId: myCreditEntries
       parameters:
       - name: before
         in: query
@@ -2447,7 +2447,7 @@ paths:
       summary: Credit and gift card liabilities for finance (payments:read)
       description: Credit owed to customers and unredeemed gift cards, apart, with the general-ledger accounts 2600 and 2650
         beside them.
-      operationId: liabilities
+      operationId: creditLiabilities
       responses:
         '200':
           description: OK
@@ -2460,7 +2460,7 @@ paths:
       tags:
       - Credit
       summary: 'A customer''s credit: balance, history and adjustments (staff with payments:read)'
-      operationId: customer
+      operationId: getCustomerCredit
       parameters:
       - name: customerId
         in: path
@@ -2486,7 +2486,7 @@ paths:
       tags:
       - Credit
       summary: One customer's credit balance (payments:service for checkout, or staff with payments:read)
-      operationId: balanceOf
+      operationId: creditBalanceOf
       parameters:
       - name: customerId
         in: path
