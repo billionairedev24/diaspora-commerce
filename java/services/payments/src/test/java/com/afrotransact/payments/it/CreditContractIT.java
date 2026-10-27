@@ -22,7 +22,8 @@ import tools.jackson.databind.JsonNode;
 class CreditContractIT extends PaymentsIntegrationTest {
 
     private static final Path CONTRACT = Path.of("../../../contracts/openapi/payments.yaml");
-    private static final List<String> PREFIXES = List.of("/v1/credit", "/v1/gift-cards", "/v1/money");
+    private static final List<String> PREFIXES = List.of("/v1/credit", "/v1/gift-cards", "/v1/money",
+            "/v1/orders/{orderId}/credit-refunds", "/v1/customers/me/orders/{orderId}/credit-refunds");
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> contract() throws IOException {
@@ -75,7 +76,7 @@ class CreditContractIT extends PaymentsIntegrationTest {
                 "CreditLiabilities", "CreditGrantRequest", "CreditAdjustRequest", "GiftCardConfig",
                 "GiftCardPurchase", "GiftCardPurchaseRequest", "GiftCardRedemption", "GiftCardRedeemRequest",
                 "GiftCard", "GiftCardIssueRequest", "GiftCardReasonRequest", "MoneySettings", "MoneySettingsUpdate",
-                "MoneySettingsChange", "CreatePaymentRequest", "PaymentResponse", "RefundRequest",
+                "MoneySettingsChange", "CreditRefundChoice", "CreditRefundChoiceRequest", "CreatePaymentRequest", "PaymentResponse", "RefundRequest",
                 "OrderRefundRequest", "RefundResponse")) {
             Map<String, Object> schema = documented.get(name);
             if (schema == null) {

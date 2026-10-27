@@ -395,6 +395,61 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
         assertEveryJournalBalances();
     }
 
+    @Test
+    void theShopperOrStaffCanChooseCreditForTheCardPartOfAnOrdersRefundsAndItIsOneWay() {
+        String customer = id("cust");
+        String order = id("ORD");
+        grant(customer, 2000, "PROMO", "promo-" + customer);
+        JsonNode payment = authorise(ok(createOrder(order, customer, 5000, true), 201), order);
+        String paymentId = payment.path("id").asString();
+        captureOrder(paymentId, order, 5000, 3000, 117);
+
+        // another shopper cannot choose for this order, a missing reason stops staff
+        TestSupport.as(TestSupport.customer(id("other")));
+        problem(send("POST", "/v1/customers/me/orders/" + order + "/credit-refunds", null, null), 403,
+                "payments.not-your-order");
+        TestSupport.as(MAKER);
+        problem(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason", "short"), null), 422,
+                "payments.reason-required");
+        TestSupport.as(TestSupport.FINANCE);
+        problem(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason",
+                "Finance without the adjust permission"), null), 403, "auth.missing-permission");
+
+        TestSupport.as(TestSupport.customer(customer));
+        JsonNode choice = ok(send("POST", "/v1/customers/me/orders/" + order + "/credit-refunds", null, null));
+        assertThat(choice.path("cardRefundsAsCredit").asBoolean()).isTrue();
+        assertThat(choice.path("cardPartMinor").asLong()).isEqualTo(3000);
+        assertThat(choice.path("chosenBy").asString()).isEqualTo(customer);
+        TestSupport.as(MAKER);
+        ok(send("POST", "/v1/orders/" + order + "/credit-refunds", Map.of("reason",
+                "The customer asked us to refund to credit"), null));
+        assertThat(jdbc.sql("select card_as_credit_by from payment where order_id = :o").param("o", order)
+                .query(String.class).single()).isEqualTo(customer);
+
+        // a refund made later by anyone (a cancelled shipment, a claim) now returns everything as credit
+        TestSupport.as(TestSupport.ORDERS_SERVICE);
+        JsonNode refund = ok(send("POST", "/v1/payments/" + paymentId + "/refunds", Map.of("lines", List.of(Map.of(
+                "lineId", "L1", "itemsMinor", 2500)), "reason", "Half the order was returned"), "refund-" + order),
+                201);
+        assertThat(refund.path("creditMinor").asLong()).isEqualTo(2500);
+        assertThat(refund.path("cardMinor").asLong()).isZero();
+        assertThat(WIREMOCK.findAll(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/refunds"))
+                .withRequestBody(WireMock.containing("payment_intent=pi_" + order)))).isEmpty();
+        assertThat(balance(customer)).isEqualTo(2500);
+        TestSupport.as(TestSupport.ORDERS_SERVICE);
+        assertThat(ok(send("GET", "/v1/payments/" + paymentId, null, null)).path("cardRefundsAsCredit")
+                .asBoolean()).isTrue();
+        assertEveryJournalBalances();
+
+        // an order paid with credit only has no card part to choose about
+        String creditOnly = id("ORD");
+        grant(customer, 9000, "PROMO", "promo2-" + customer);
+        ok(createOrder(creditOnly, customer, 4000, true), 201);
+        TestSupport.as(TestSupport.customer(customer));
+        problem(send("POST", "/v1/customers/me/orders/" + creditOnly + "/credit-refunds", null, null), 409,
+                "payments.no-card-portion");
+    }
+
     // ------------------------------------------------------------------ staff grants and the four-eyes limit
 
     @Test

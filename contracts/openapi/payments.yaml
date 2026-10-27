@@ -1998,6 +1998,32 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/MoneySettings'
+  /v1/orders/{orderId}/credit-refunds:
+    post:
+      tags:
+      - Credit
+      summary: Take the card part of an order's refunds as credit, for the customer, with a reason (ledger:adjust)
+      description: The same one-way choice made by staff; the reason and the staff member are kept.
+      operationId: chooseCreditRefundsAsStaff
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditRefundChoiceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditRefundChoice'
   /v1/gift-cards:
     get:
       tags:
@@ -2190,6 +2216,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/GiftCardPurchase'
+  /v1/customers/me/orders/{orderId}/credit-refunds:
+    post:
+      tags:
+      - Credit
+      summary: Take the card part of this order's refunds as credit (the shopper's own order)
+      description: 'One way: credit never goes back to a card or to cash. Refunds already sent to the card stay there. 409 payments.no-card-portion
+        when the order was paid with credit only (its refunds already come back as credit); 403 payments.not-your-order for
+        another shopper''s order.'
+      operationId: chooseCreditRefundsAsShopper
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreditRefundChoice'
   /v1/credit/grants:
     post:
       tags:
@@ -3217,6 +3265,9 @@ components:
           format: int64
           description: The part of amountMinor paid with AfroTransact credit; the card pays amountMinor minus this (no PaymentIntent
             when it is all of it)
+        cardRefundsAsCredit:
+          type: boolean
+          description: The shopper or staff chose credit for the card part of this order's refunds (one way)
     ReleaseRequest:
       type: object
       description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
@@ -4927,6 +4978,35 @@ components:
         creditOnOpenOrdersMinor:
           type: integer
           format: int64
+    CreditRefundChoice:
+      type: object
+      properties:
+        orderId:
+          type: string
+        cardRefundsAsCredit:
+          type: boolean
+          description: From now on the card part of every refund of this order comes back as AfroTransact credit
+        cardPartMinor:
+          type: integer
+          format: int64
+          description: What the card paid for the order
+        currency:
+          type: string
+        chosenBy:
+          type: string
+        chosenAt:
+          type: string
+          format: date-time
+    CreditRefundChoiceRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: At least 15 characters; kept in the audit trail
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
     CustomerCredit:
       type: object
       properties:

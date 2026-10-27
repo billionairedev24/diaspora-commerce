@@ -574,7 +574,8 @@ class PaymentServiceImpl implements PaymentService {
             // Each part goes back to what paid it: the credit part as credit, the card part to the card. The shopper
             // (or staff, with a reason) may take the card part as credit instead; never the other way round.
             Money creditPart = p.creditPartOf(amount, creditRefunded(p));
-            boolean cardAsCredit = cmd.cardAsCredit() && amount.minus(creditPart).isPositive();
+            boolean cardAsCredit = (cmd.cardAsCredit() || p.cardRefundsAsCredit())
+                    && amount.minus(creditPart).isPositive();
             Money toCredit = cardAsCredit ? amount : creditPart;
             Money toCard = amount.minus(toCredit);
             if (toCredit.isPositive() && shopperOf(p) == null) {

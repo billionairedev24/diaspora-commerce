@@ -158,14 +158,16 @@ final class PaymentsDtos {
                            boolean multicapture, boolean replayed, List<LineResponse> lines,
                            @Schema(description = "The part of amountMinor paid with AfroTransact credit; the card "
                                    + "pays amountMinor minus this (no PaymentIntent when it is all of it)")
-                           long creditMinor) {
+                           long creditMinor,
+                           @Schema(description = "The shopper or staff chose credit for the card part of this "
+                                   + "order's refunds (one way)") boolean cardRefundsAsCredit) {
 
         static PaymentResponse of(Payment p, boolean replayed) {
             return new PaymentResponse(p.id(), p.orderId(), p.status().name(), p.stripePaymentIntentId(),
                     p.clientSecret(), p.amount().minor(), p.captured().minor(), p.refunded().minor(),
                     p.released().minor(), p.currency(), p.feeScheduleId(), p.placedAt(), p.authorizedAt(),
                     p.failureMessage(), p.parentPaymentId(), p.isOffSession(), p.multicapture(), replayed,
-                    p.lines().stream().map(LineResponse::of).toList(), p.credit().minor());
+                    p.lines().stream().map(LineResponse::of).toList(), p.credit().minor(), p.cardRefundsAsCredit());
         }
     }
 

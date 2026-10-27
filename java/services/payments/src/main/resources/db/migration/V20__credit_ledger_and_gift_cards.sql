@@ -141,6 +141,11 @@ create index gift_card_attempt_subject on gift_card_attempt (subject, made_at de
 alter table payment add column credit_minor bigint not null default 0 check (credit_minor >= 0);
 alter table payment add column shopper_id varchar(120);
 alter table payment add constraint payment_credit_within_amount check (credit_minor <= amount_minor);
+-- The one-way choice to take the card part of every refund of this order as credit (customer, or staff with a reason).
+alter table payment add column card_as_credit boolean not null default false;
+alter table payment add column card_as_credit_by varchar(120);
+alter table payment add column card_as_credit_reason text;
+alter table payment add column card_as_credit_at timestamptz;
 alter table payment_capture add column credit_minor bigint not null default 0 check (credit_minor >= 0);
 alter table payment_refund add column credit_minor bigint not null default 0 check (credit_minor >= 0);
 alter table payment_refund add column card_as_credit boolean not null default false;
