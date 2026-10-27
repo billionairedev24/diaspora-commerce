@@ -30,7 +30,7 @@ class JdbcPreorderDecisionLog implements PreorderDecisionLog {
 
     @Override
     public List<WindowDecision> findByWindow(UUID windowId) {
-        return jdbc.sql("select * from preorder_window_decision where window_id = :w order by decided_at, id")
+        return jdbc.sql("select * from preorder_window_decision where window_id = :w order by decided_at, seq")
                 .param("w", windowId)
                 .query((rs, n) -> new WindowDecision(rs.getObject("id", UUID.class),
                         rs.getObject("window_id", UUID.class), DecisionKind.valueOf(rs.getString("kind")),

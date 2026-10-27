@@ -29,6 +29,7 @@ import com.afrotransact.deliveryruns.application.WindowView;
 import com.afrotransact.deliveryruns.domain.CommKind;
 import com.afrotransact.deliveryruns.domain.CreativeSlot;
 import com.afrotransact.deliveryruns.domain.CutoffPolicy;
+import com.afrotransact.deliveryruns.domain.DecisionKind;
 import com.afrotransact.deliveryruns.domain.DropMode;
 import com.afrotransact.deliveryruns.domain.InvalidTransitionException;
 import com.afrotransact.deliveryruns.domain.PreorderFulfilment;
@@ -40,7 +41,9 @@ import com.afrotransact.deliveryruns.domain.RefundStatus;
 import com.afrotransact.deliveryruns.domain.Run;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.RunStatus;
+import com.afrotransact.deliveryruns.domain.WindowDecision;
 import com.afrotransact.deliveryruns.domain.WindowOutcome;
+import com.afrotransact.deliveryruns.port.PreorderDecisionLog;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository;
 import com.afrotransact.deliveryruns.port.PreorderWindowRepository;
 import com.afrotransact.platform.test.PostgresTestContainer;
@@ -103,6 +106,7 @@ class PreorderDecisionIT {
     private final LocationService locations;
     private final RunService runs;
     private final JdbcClient jdbc;
+    private final PreorderDecisionLog decisionLog;
 
     @Autowired
     PreorderDecisionIT(@LocalServerPort int port, JsonMapper json, MutableClock clock, FakeUpstreams upstreams,
@@ -110,7 +114,7 @@ class PreorderDecisionIT {
                        PreorderProjectionService projection,
                        PreorderSchedulerService scheduler, PreorderWindowRepository windowRepository,
                        PreorderOrderRepository orderRepository, LocationService locations, RunService runs,
-                       JdbcClient jdbc) {
+                       JdbcClient jdbc, PreorderDecisionLog decisionLog) {
         this.http = RestClient.builder().baseUrl("http://localhost:" + port).build();
         this.json = json;
         this.clock = clock;
@@ -124,6 +128,7 @@ class PreorderDecisionIT {
         this.locations = locations;
         this.runs = runs;
         this.jdbc = jdbc;
+        this.decisionLog = decisionLog;
     }
 
     @DynamicPropertySource
@@ -219,6 +224,26 @@ class PreorderDecisionIT {
         assertThat(w.runId()).isNotNull();
         assertThat(outboxTypes(w.id().toString())).contains("preorder.window.closed")
                 .doesNotContain("preorder.window.decision_needed");
+    }
+
+    /**
+     * The flaky-test cause: the log was ordered by (decided_at, random id), so entries made in the same clock tick (an
+     * AWAITING note and the staff decision after it, under a frozen test clock) came back in either order. Entries
+     * with the same time now keep the order they were appended in, whatever their ids sort like.
+     */
+    @Test
+    void decisionsMadeInTheSameInstantKeepTheOrderTheyWereMadeIn() {
+        Fixture f = fixture("Same instant #1", 3, 2);
+        Instant at = clock.instant();
+        // The first entry gets the id that sorts last, so ordering by id would reverse them.
+        WindowDecision first = new WindowDecision(UUID.fromString("ffffffff-ffff-4fff-8fff-ffffffffffff"),
+                f.window().id(), DecisionKind.AWAITING, "first", "system", 2, 3, at);
+        WindowDecision second = new WindowDecision(UUID.fromString("00000000-0000-4000-8000-000000000000"),
+                f.window().id(), DecisionKind.PROCEED, "second", "local-dev", 2, 3, at);
+        decisionLog.append(first);
+        decisionLog.append(second);
+        assertThat(decisionLog.findByWindow(f.window().id())).extracting(WindowDecision::reason)
+                .containsExactly("first", "second");
     }
 
     @Test
