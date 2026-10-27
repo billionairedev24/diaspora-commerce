@@ -51,6 +51,14 @@ func (s *staffPreordersImpl) UpdateRunLocation(ctx context.Context, c *domain.Ca
 	if err != nil {
 		return nil, err
 	}
+	if _, has := sent["slug"]; !has {
+		// The town keeps its web address when it is renamed.
+		var current jobj
+		if err := sc.get(ctx, sc.up.DeliveryRuns, locationPath(id), nil, &current); err != nil {
+			return nil, err
+		}
+		sent["slug"] = jstr(current, "slug")
+	}
 	out, err := sc.send(ctx, http.MethodPut, locationPath(id), "", sent)
 	if err != nil {
 		return nil, err

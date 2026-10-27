@@ -226,6 +226,28 @@ describe('Sheet', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('a click inside another dialog that opened above it does not close the sheet behind it', async () => {
+    function Both() {
+      const [sheet, setSheet] = useState(false);
+      return (
+        <>
+          <Dialog open title="Client secret" onOpenChange={() => undefined}>
+            <button type="button" onClick={() => setSheet(true)}>Open the record</button>
+            <p>Shown once</p>
+          </Dialog>
+          <Sheet open={sheet} onOpenChange={setSheet} title="Record">
+            <p>Details</p>
+          </Sheet>
+        </>
+      );
+    }
+    render(<Both />);
+    await userEvent.click(screen.getByRole('button', { name: 'Open the record' }));
+    expect(await screen.findByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Shown once'));
+    expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+  });
+
   it('a persistent sheet (the assistant) stays open while the page is used, until Close', async () => {
     render(<PageWithSheet persistent />);
     await userEvent.click(screen.getByRole('button', { name: 'Page action 0' }));

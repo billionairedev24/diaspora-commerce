@@ -87,6 +87,8 @@ export function locationInputOf(form: LocationForm, saved: StaffRunLocation | nu
   const radius = decimal(form.radiusMiles);
   return {
     name: form.name.trim(),
+    // A town keeps its web address when it is renamed.
+    ...(saved ? { slug: saved.slug } : {}),
     market: form.market.trim(),
     state: form.state.trim() ? form.state.trim() : null,
     timeZone: form.timeZone.trim() ? form.timeZone.trim() : undefined,

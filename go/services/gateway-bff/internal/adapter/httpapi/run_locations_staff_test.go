@@ -150,6 +150,9 @@ func TestStaffRunLocationsConformance(t *testing.T) {
 	if got := sent("PUT /v1/locations/" + runLocationID); got["whatsappInviteUrl"] != nil || got["defaultMinOrders"] != float64(12) {
 		t.Fatalf("update relayed %v", got)
 	}
+	if got := sent("PUT /v1/locations/" + runLocationID); got["slug"] != "bastrop-tx" {
+		t.Errorf("a rename moved the town's web address: %v", got["slug"])
+	}
 	if _, has := sent("PUT /v1/locations/" + runLocationID)["active"]; has {
 		t.Error("an edit tried to switch the location")
 	}

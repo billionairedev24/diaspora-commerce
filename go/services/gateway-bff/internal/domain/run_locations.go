@@ -79,8 +79,9 @@ func RunLocationBody(body map[string]any, create bool) (map[string]any, error) {
 		} else {
 			out["slug"] = slug
 		}
-	} else if _, bad := problems["slug"]; !bad && okName {
-		// The address is made from the name unless staff typed one; upstream requires it on every replace.
+	} else if _, bad := problems["slug"]; !bad && okName && create {
+		// A new town's address is made from its name unless staff typed one. A change keeps the address it has (the
+		// caller reads it from delivery-runs): renaming a town must not move its page.
 		if derived := RunLocationSlug(name, state); derived != "" {
 			out["slug"] = derived
 		} else {

@@ -41,7 +41,7 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
   const [createErrors, setCreateErrors] = useState<Record<string, string>>({});
   const [createError, setCreateError] = useState<string | null>(null);
   /** A secret the new record came with (a new OAuth client secret): shown once, kept out of the query cache. */
-  const [reveal, setReveal] = useState<OneTimeSecret | null>(null);
+  const [reveal, setReveal] = useState<{ recordId: string; secret: OneTimeSecret } | null>(null);
 
   const query = useQuery({
     ...staffQueries.page(api, resource, { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize, cursor: state.cursor }),
@@ -62,7 +62,7 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
     onSuccess: (r) => {
       const { reveal: secret, ...sheet } = r;
       qc.setQueryData(staffKeys.record(resource, r.id), sheet);
-      if (secret) setReveal(secret);
+      if (secret) setReveal({ recordId: r.id, secret });
       void qc.invalidateQueries({ queryKey: staffKeys.resource(resource) });
       setCreating(false);
       toast.show(t('st.resourceTable.created', { title: r.title }));
@@ -145,7 +145,8 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
         }
       />
       <RecordSheet resource={resource} id={openId} onClose={() => setOpen(null)} sharedOpen={urlPrefix !== undefined} />
-      <RevealDialog secret={reveal} onClose={() => setReveal(null)} />
+      {/* Shown once the new record's sheet is open, so the dialog sits above the sheet and clicking in it never closes the sheet. */}
+      <RevealDialog secret={reveal && reveal.recordId === openId ? reveal.secret : null} onClose={() => setReveal(null)} />
       {data?.createForm ? (
         <Dialog open={creating} onOpenChange={setCreating} title={data.createForm.title} width={480}>
           <FormFields form={data.createForm} busy={create.isPending} serverErrors={createErrors} error={createError} onCancel={() => setCreating(false)} onSubmit={(v) => create.mutate(v)} />

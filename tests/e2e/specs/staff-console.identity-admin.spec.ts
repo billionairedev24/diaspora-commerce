@@ -85,7 +85,7 @@ test.describe('staff console · identity & access', () => {
     // Signing keys: rotate; the new key is active and the previous one keeps publishing while it retires.
     await page.getByRole('tab', { name: 'Signing keys' }).click();
     const keys = page.getByRole('table', { name: 'Signing keys' });
-    await expect(keys.getByText('Retiring')).toBeVisible();
+    await expect(keys.getByText('Retiring').first()).toBeVisible(); // earlier runs on the same server leave retiring keys
     await page.getByRole('button', { name: 'New' }).click();
     const rotateKey = page.getByRole('dialog', { name: 'Rotate the signing key' });
     await rotateKey.getByLabel(/^Reason/).fill(reason);
@@ -93,6 +93,8 @@ test.describe('staff console · identity & access', () => {
     await rotateKey.getByRole('button', { name: 'Rotate' }).click();
     await expect(rotateKey).toBeHidden();
     await expect(keys.getByText('Active')).toHaveCount(1);
+    // The new key's sheet opens beside the table and covers the tabs: close it before moving on.
+    await page.keyboard.press('Escape');
 
     // Token inspector: a token the mock signed is valid, a forged one is not; the token is never shown back.
     await page.getByRole('tab', { name: 'Token inspector' }).click();
