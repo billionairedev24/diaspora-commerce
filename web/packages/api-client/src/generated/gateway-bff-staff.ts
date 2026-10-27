@@ -2744,6 +2744,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/featured-products/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find products to feature on an advertorial's card, by name
+         * @description search `GET /v1/search` through the staff session (preorders at VIEW or above): up to eight products shoppers can
+         *     find, with the product code, name, picture (https only) and seller. No price: the card never quotes one.
+         */
+        get: operations["searchStaffFeaturedProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/advertorials": {
         parameters: {
             query?: never;
@@ -7618,6 +7639,11 @@ export interface components {
             endsAt?: string | null;
             /** @description Up to four products the card features. Left out on an edit: the current ones stay; an empty list clears them */
             featuredProducts?: components["schemas"]["StaffFeaturedProduct"][];
+        };
+        StaffFeaturedProductHits: {
+            items: (components["schemas"]["StaffFeaturedProduct"] & {
+                sellerName?: string;
+            })[];
         };
         /** @description A product featured on the card. The price is not kept: the product page shows today's */
         StaffFeaturedProduct: {
@@ -12699,6 +12725,32 @@ export interface operations {
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffFeaturedProducts: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffFeaturedProductHits"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

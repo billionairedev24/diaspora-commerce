@@ -342,6 +342,19 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	}
 	do("ops", "GET", "/v1/staff/delivery-runs/locations/nope/history", nil, 404)
 
+	// ---- finding products to feature, by name ----
+	found := jsonOf(t, do("marketing", "GET", "/v1/staff/featured-products/search?q=shea", nil, 200))["items"].([]any)
+	if len(found) != 2 || found[0].(map[string]any)["atin"] != "ATSHEA0001" || found[0].(map[string]any)["imageUrl"] != "https://cdn.example/shea.jpg" ||
+		found[0].(map[string]any)["sellerName"] != "Accra Naturals" || found[1].(map[string]any)["imageUrl"] != nil || found[0].(map[string]any)["priceMinor"] != nil {
+		t.Fatalf("featured product search = %v", found)
+	}
+	do("finance", "GET", "/v1/staff/featured-products/search?q=garri", nil, 200)
+	for _, q := range []string{"", "a", strings.Repeat("q", 121)} {
+		do("ops", "GET", "/v1/staff/featured-products/search?q="+q, nil, 422)
+	}
+	do("ops", "GET", "/v1/staff/featured-products/search?q=down", nil, 503)
+	do("", "GET", "/v1/staff/featured-products/search?q=shea", nil, 401)
+
 	// ---- UTM attribution of a location and of one of its runs (S262) ----
 	attribution := jsonOf(t, do("finance", "GET", "/v1/staff/delivery-runs/locations/"+runLocationID+"/attribution?days=30", nil, 200))
 	if rows := attribution["rows"].([]any); attribution["visits"] != float64(140) || len(rows) != 2 || query("GET /v1/locations/"+runLocationID+"/attribution") != "days=30" {
@@ -521,7 +534,7 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	do("ops", "POST", "/v1/staff/advertorials/nope/pause", nil, 404)
 
 	for _, op := range []string{"getStaffEconomicsSettings", "updateStaffEconomicsSettings", "listStaffEconomicsChanges", "previewStaffWindowEconomics",
-		"getStaffPreorderEconomics", "listStaffRunLocations", "getStaffRunLocationHistory", "getStaffRunLocationAttribution", "listStaffPreorderRuns", "getStaffRunPnl", "previewStaffRunEconomics",
+		"getStaffPreorderEconomics", "listStaffRunLocations", "getStaffRunLocationHistory", "getStaffRunLocationAttribution", "searchStaffFeaturedProducts", "listStaffPreorderRuns", "getStaffRunPnl", "previewStaffRunEconomics",
 		"listStaffAdvertorials", "createStaffAdvertorial", "generateStaffAdvertorial", "getStaffAdvertorial", "updateStaffAdvertorial", "actStaffAdvertorial"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)

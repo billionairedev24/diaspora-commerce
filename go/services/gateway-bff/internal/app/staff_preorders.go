@@ -96,6 +96,9 @@ type StaffPreordersService interface {
 	SwitchRunLocation(ctx context.Context, c *domain.Caller, id string, on bool, body map[string]any) (any, error)
 	// RunLocationHistory is a location's runs (orders, fees, refunds), subscriber counts and subscriber growth.
 	RunLocationHistory(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// SearchFeaturedProducts finds products to feature on an advertorial's card (?q=, 2 to 120 characters): the
+	// product code, name and picture, never a price.
+	SearchFeaturedProducts(ctx context.Context, c *domain.Caller, q string) (any, error)
 	// RunLocationAttribution is the visits and sign-ups of a location or one of its runs per UTM source, medium and campaign.
 	RunLocationAttribution(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
 	// Runs lists runs (?locationId=&status=&limit=).

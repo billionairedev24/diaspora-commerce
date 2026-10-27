@@ -3101,6 +3101,23 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/featured-products/search:
+    get:
+      tags: [Advertorials]
+      operationId: searchStaffFeaturedProducts
+      security: [{sessionCookie: []}]
+      summary: Find products to feature on an advertorial's card, by name
+      description: |
+        search `GET /v1/search` through the staff session (preorders at VIEW or above): up to eight products shoppers can
+        find, with the product code, name, picture (https only) and seller. No price: the card never quotes one.
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 120}}
+      responses:
+        '200': {description: Products, content: {application/json: {schema: {$ref: '#/components/schemas/StaffFeaturedProductHits'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/advertorials:
     get:
       tags: [Advertorials]
@@ -8123,6 +8140,19 @@ components:
           maxItems: 4
           items: {$ref: '#/components/schemas/StaffFeaturedProduct'}
           description: 'Up to four products the card features. Left out on an edit: the current ones stay; an empty list clears them'
+    StaffFeaturedProductHits:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 8
+          items:
+            allOf:
+              - $ref: '#/components/schemas/StaffFeaturedProduct'
+              - type: object
+                properties:
+                  sellerName: {type: string}
     StaffFeaturedProduct:
       type: object
       description: 'A product featured on the card. The price is not kept: the product page shows today''s'

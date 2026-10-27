@@ -34,6 +34,7 @@ func (h *handlersImpl) registerStaffRuns(route func(pattern string, fn http.Hand
 	route("GET /v1/staff/delivery-runs/runs/{id}/orders", h.staffRunOrders)
 	route("GET /v1/staff/delivery-runs/runs/{id}/pnl", h.staffRunPnl)
 	route("POST /v1/staff/delivery-runs/economics-preview", h.staffPreorderPlanRun)
+	route("GET /v1/staff/featured-products/search", h.staffSearchFeaturedProducts)
 	route("GET /v1/staff/advertorials", h.staffAdvertorials)
 	route("POST /v1/staff/advertorials", h.staffCreateAdvertorial)
 	route("POST /v1/staff/advertorials/generate", h.staffGenerateAdvertorial)
@@ -120,6 +121,11 @@ func (h *handlersImpl) switchRunLocation(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	v, err := h.s.Staff.Preorders.SwitchRunLocation(r.Context(), callerFrom(r.Context()), r.PathValue("id"), on, b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffSearchFeaturedProducts(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.SearchFeaturedProducts(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
