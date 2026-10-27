@@ -72,6 +72,9 @@ and tick; "who" is the role that signs it off. Anything marked **blocker** must 
 - [ ] Nexus tracker reviewed; registrations in states over the threshold are filed.
 - [ ] Remittance record and filings screens are accessible only to roles with the tax permissions.
 
+- [ ] Stored value (AfroTransact credit, gift cards): terms reviewed by counsel for each launch state (no cash-out, expiry rules,
+  escheat), liability reports signed off by finance, gift card codes rate limited.
+
 ## 7. Delivery, inventory and operations
 
 - [ ] Hubs, delivery zones, pickup points and carrier accounts are real (carrier sandbox credentials replaced with production

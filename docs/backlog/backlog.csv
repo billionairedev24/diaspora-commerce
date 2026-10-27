@@ -1151,3 +1151,29 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Staff record a state's thresholds and registration (number, effective date); changes are attributed
 - Seller Center → Payouts → Sales tax statement shows tax collected, refunded and net per state for a chosen month, with totals and a CSV
 - Verified: unit tests, tracker integration test against PostgreSQL 16 (not Testcontainers), BFF contract tests, web tests. Remaining: screens not viewed in a browser; the default threshold is a placeholder to be set per state by a tax advisor; the tracker does not register anyone; no warning is sent when a state is crossed","E14","","Medium","5","tax staff-console seller-center gateway-bff tax-returns","tax-returns","In Progress"
+"E35","Epic","Shopper wallet, gift cards, referrals and membership","Ways for customers to hold, give and earn value on AfroTransact and to get free delivery: AfroTransact credit (store credit), gift cards, a referral program and a membership. Decisions and defaults: docs/adr/0006-credit-gift-cards-referral-membership.md.","","","Shopper wallet and membership","High","","wallet membership","payments","To Do"
+"S320","Story","AfroTransact credit: shopper balance ledger, spend at checkout, refund to credit","Each customer has a USD credit balance kept as an append-only ledger (grant, spend, refund, adjustment, expiry-free), spendable at checkout before the card, with staff grants and adjustments (reason, maker-checker above a limit), refunds that can go to credit, statements for the customer and a ledger report for finance.","- Balance is the sum of an append-only ledger; every entry has a reason and an actor
+- Checkout applies credit first (partial or full) and charges the card for the rest; a full credit order needs no card
+- Refunds go back to the original method by default and to credit when the customer or staff choose it; credit spent is returned as credit
+- Staff grant or adjust credit with a reason; large amounts need a second approver
+- Customer sees balance and history in the storefront and the app; finance sees totals and liabilities
+- Idempotent: a retried order never spends twice; concurrent orders cannot overspend
+- Contracts first, conformance tests, ITs for concurrency and refund paths","E35","","High","13","wallet checkout","payments","To Do"
+"S321","Story","Gift cards: buy, send by email, redeem into AfroTransact credit","Customers buy a gift card (fixed or custom amount) with a card, choose a recipient email, message and send date; the recipient redeems the code into AfroTransact credit. Staff can issue, void and look up gift cards.","- Purchase with the normal checkout payment; code generated, stored hashed, emailed on the send date
+- Redeeming adds the value to the recipient credit once; codes are rate limited against guessing
+- Amount limits and terms are staff-configurable; no expiry by default
+- Staff issue, void and look up cards (reason, audit); refunds of an unredeemed card void it
+- Sold gift cards are a liability in finance reports, not revenue, until spent
+- Contracts first, tests incl. double redeem and brute force","E35","","High","8","wallet gift-cards","payments","To Do"
+"S322","Story","Referral program: share a code, both sides earn credit","Every customer has a referral code and link. When a friend signs up with it and their first order is delivered (minimum order value), both get AfroTransact credit. Staff configure the reward, minimum and caps and see referrals, rewards paid and suspected abuse.","- Code and share link per customer in the storefront and the app
+- Reward is granted once, after the friend first order is delivered and past the return window rule, to both
+- Reward amounts, minimum order and per-customer caps are staff-configurable with reason and audit
+- Abuse checks: self-referral, same device/address/payment method, caps; flagged referrals wait for staff
+- Staff screen lists referrals with names, status and rewards; customer sees their referrals
+- Contracts first, tests","E35","","Medium","8","wallet referral","payments","To Do"
+"S323","Story","Membership: free delivery and shipping for members","A paid membership (monthly or yearly, with a trial) that waives AfroTransact delivery and carrier shipping fees above a minimum order, applied through the delivery fee rules, with billing, renewal, cancel, pause and failed-payment handling.","- Plans, price, trial, minimum order and which fees are waived are staff-configurable
+- Customer joins from checkout or account, pays by saved card, sees renewal date and can cancel (benefit until period end)
+- Checkout and cart show the fee waived because of membership, and orders record the benefit applied
+- Failed renewals retry then lapse; refunds of the membership fee follow a clear rule
+- Staff see members, status and cost of the benefit (fees waived); reports for finance
+- Contracts first, tests incl. proration-free cancel and lapse","E35","","Medium","13","membership","payments","To Do"
