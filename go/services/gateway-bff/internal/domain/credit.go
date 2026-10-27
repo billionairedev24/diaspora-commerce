@@ -51,11 +51,13 @@ type CheckoutCredit struct {
 
 // GiftCardConfig is what the buy page needs: limits, preset amounts and staff-written terms by language.
 type GiftCardConfig struct {
-	MinMinor     int64             `json:"minMinor"`
-	MaxMinor     int64             `json:"maxMinor"`
-	Currency     string            `json:"currency"`
-	PresetsMinor []int64           `json:"presetsMinor"`
-	Terms        map[string]string `json:"terms"`
+	MinMinor int64  `json:"minMinor"`
+	MaxMinor int64  `json:"maxMinor"`
+	Currency string `json:"currency"`
+	// PublishableKey is the Stripe key the Payment Element on the buy page is created with.
+	PublishableKey string            `json:"publishableKey"`
+	PresetsMinor   []int64           `json:"presetsMinor"`
+	Terms          map[string]string `json:"terms"`
 }
 
 // GiftCard is a card as its buyer sees it: never the code, never who redeemed it.

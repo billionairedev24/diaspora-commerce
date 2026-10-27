@@ -1,3 +1,4 @@
+export { MOCK_GIFT_AMOUNT_MINOR, MOCK_GIFT_CODE, MOCK_RATE_LIMITED_CODE } from './credit';
 export { suggestAddresses } from './addresses';
 export { getDb, resetDb } from './db';
 export { addBusinessDays, dayLabel, etaDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, type PlatformDeliveryConfig, platformDeliveryConfig, type PlatformDeliveryPricingMode, setPlatformDeliveryPricing } from './delivery';

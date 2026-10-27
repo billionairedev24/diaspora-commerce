@@ -53,7 +53,7 @@ func TestCreditAndGiftCardRoutesConformAndNeverMoveCreditOut(t *testing.T) {
 	// Gift cards: limits, my cards, buying (idempotent, validated), confirming.
 	r = b.do("GET", "/v1/gift-cards/config", nil)
 	mustStatus(t, r, 200)
-	if cfg := r.json(t); num(cfg, "minMinor") != 1000 || num(cfg, "maxMinor") != 50000 || len(cfg["presetsMinor"].([]any)) != 4 {
+	if cfg := r.json(t); num(cfg, "minMinor") != 1000 || num(cfg, "maxMinor") != 50000 || cfg["publishableKey"] != testkit.TestPublishableKey || len(cfg["presetsMinor"].([]any)) != 4 {
 		t.Fatalf("config = %s", r.body)
 	}
 	mustStatus(t, b.do("GET", "/v1/account/gift-cards", nil), 200)

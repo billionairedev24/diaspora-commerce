@@ -3,6 +3,7 @@
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
+import { creditSplit } from '../credit-split';
 import { type PaymentMethod } from '../schemas/account';
 import { type CartPackage } from '../schemas/cart';
 import { type DeliveryOption } from '../schemas/cart';
@@ -27,7 +28,7 @@ import {
   type ShipmentDetail,
   StartReturnRequestSchema
 } from '../schemas/shopper';
-import { checkoutCredit, creditSplit, creditState, spendCredit } from './credit';
+import { checkoutCredit, creditState, spendCredit } from './credit';
 import { getDb, type MockSession } from './db';
 import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf } from './delivery';
 import { PICKUP_POINTS } from './fixtures/geo';

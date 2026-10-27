@@ -3808,6 +3808,8 @@ export interface components {
             /** Format: int64 */
             maxMinor: number;
             currency: string;
+            /** @description The Stripe publishable key the buy page creates its Payment Element with (cards only) */
+            publishableKey: string;
             presetsMinor: number[];
             /** @description Staff-written terms by language (en, fr, es, ar, yo); empty means the page shows its built-in terms */
             terms: {

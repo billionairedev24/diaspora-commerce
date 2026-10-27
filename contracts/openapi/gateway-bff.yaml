@@ -4418,11 +4418,12 @@ components:
         currency: {type: string}
     GiftCardConfig:
       type: object
-      required: [minMinor, maxMinor, currency, presetsMinor, terms]
+      required: [minMinor, maxMinor, currency, presetsMinor, terms, publishableKey]
       properties:
         minMinor: {type: integer, format: int64}
         maxMinor: {type: integer, format: int64}
         currency: {type: string}
+        publishableKey: {type: string, description: 'The Stripe publishable key the buy page creates its Payment Element with (cards only)'}
         presetsMinor: {type: array, items: {type: integer, format: int64}}
         terms: {type: object, additionalProperties: {type: string}, description: 'Staff-written terms by language (en, fr, es, ar, yo); empty means the page shows its built-in terms'}
     GiftCard:

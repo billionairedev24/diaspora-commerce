@@ -276,5 +276,7 @@
   "common.showAll": "Fi gbogbo rẹ̀ hàn ({n})",
   "common.showFewer": "Fi díẹ̀ hàn",
   "hub.deliveryAlerts": "Àwọn ìkìlọ̀ ìfiránṣẹ́",
-  "hub.deliveryAlertsSub": "Àwọn ìrìn ìfiránṣẹ́ àti ìpàṣẹ ṣáájú àgbègbè rẹ, nípasẹ̀ ímeèlì, SMS, ohun èlò tàbí WhatsApp"
+  "hub.deliveryAlertsSub": "Àwọn ìrìn ìfiránṣẹ́ àti ìpàṣẹ ṣáájú àgbègbè rẹ, nípasẹ̀ ímeèlì, SMS, ohun èlò tàbí WhatsApp",
+  "hub.credit": "Owó ìdókòwò AfroTransact",
+  "hub.creditSub": "Ìwọ̀n, ìtàn àti káàdì ẹ̀bùn"
 }

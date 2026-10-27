@@ -2,6 +2,7 @@ export { type AddressLookup, addressLookup, type AddressLookupClient, type Addre
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
 export { CORRELATION_HEADER, newCorrelationId, withCorrelationHeaders } from './correlation';
 export * from './credit-client';
+export { creditSplit, MIN_CARD_MINOR } from './credit-split';
 export * from './delivery-runs';
 export { ApiError, isApiError } from './errors';
 export * from './fee-rates';
@@ -14,6 +15,7 @@ export { formatMoney, percentOff, splitMoney } from './money';
 export { countSmsSegments, MAX_SMS_SEGMENTS, missingPlaceholders, templatePlaceholders } from './notifications';
 export * from './preorders';
 export { bffProblemType, PROBLEM_TYPE_BASE } from './problem-types';
+export { creditKeys, creditQueries } from './query/credit';
 export { accountKeys, careersKeys, cartKeys, helpKeys, legalKeys, productKeys, searchKeys, siteKeys } from './query/keys';
 export { accountQueries, careersQueries, cartQueries, helpQueries, legalQueries, productQueries, searchQueries, siteQueries } from './query/options';
 export { sellerKeys, sellerQueries } from './query/seller';

@@ -4,6 +4,7 @@
 import { http } from 'msw';
 import { z } from 'zod';
 
+import { creditSplit } from '../credit-split';
 import {
   type CheckoutCredit,
   type CreditEntry,
@@ -20,8 +21,6 @@ export const MOCK_GIFT_CODE = 'ABCD-EFGH-JKLM-2345';
 export const MOCK_GIFT_AMOUNT_MINOR = 5000;
 /** A code that answers 429, so browser tests can see the "too many wrong codes" state. */
 export const MOCK_RATE_LIMITED_CODE = 'ZZZZ-ZZZZ-ZZZZ-2222';
-/** Stripe cannot charge less than 0.50: credit leaves at least this on the card, or pays everything. */
-const MIN_CARD_MINOR = 50;
 const MAX_WRONG_CODES = 5;
 
 export interface MockCreditState {
@@ -59,14 +58,6 @@ export function creditState(a: AccountState, userId: string): MockCreditState {
   return s;
 }
 
-/** How an order total is paid when credit is used: credit first, never more than the balance, at least 0.50 for the card. */
-export function creditSplit(balanceMinor: number, totalMinor: number): { appliedMinor: number; cardDueMinor: number } {
-  let applied = Math.min(balanceMinor, totalMinor);
-  const rest = totalMinor - applied;
-  if (rest > 0 && rest < MIN_CARD_MINOR) applied = Math.max(0, totalMinor - MIN_CARD_MINOR);
-  return { appliedMinor: applied, cardDueMinor: totalMinor - applied };
-}
-
 export function checkoutCredit(s: MockCreditState, totalMinor: number): CheckoutCredit | undefined {
   if (s.balanceMinor <= 0 || totalMinor <= 0) return undefined;
   const { appliedMinor, cardDueMinor } = creditSplit(s.balanceMinor, totalMinor);
@@ -87,6 +78,7 @@ const GIFT_CONFIG = {
   minMinor: 1000,
   maxMinor: 50_000,
   currency: 'USD',
+  publishableKey: 'pk_test_mock',
   presetsMinor: [2500, 5000, 10_000, 20_000],
   terms: {} as Record<string, string>
 };

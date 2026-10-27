@@ -1,6 +1,7 @@
 'use client';
 
 import { type CheckoutSummary, type PaymentMethod } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { PoweredByStripe, ShieldCheck } from '@afrotransact/ui';
 import { type RefObject } from 'react';
 
@@ -34,6 +35,8 @@ type Props = {
   onNewMethod: (c: PaymentElementChange) => void;
   payEl: RefObject<PaymentElementHandle | null>;
   methodTypes: string[] | undefined;
+  /** The shopper's AfroTransact credit applied to this order (S320); absent without credit. */
+  credit?: { availableMinor: number; appliedMinor: number; cardDueMinor: number; use: boolean; setUse: (v: boolean) => void } | null;
 };
 
 /**
@@ -41,14 +44,34 @@ type Props = {
  * shopper picks "Use a different payment method"; with none on file the form is open. The Stripe Payment Element is
  * always mounted (deferred mode), only hidden while a saved method is chosen, so Place order can confirm it.
  */
-export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save, setSave, newMethod: _newMethod, onNewMethod, payEl, methodTypes }: Props) {
+export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save, setSave, newMethod: _newMethod, onNewMethod, payEl, methodTypes, credit }: Props) {
   const t = useT();
+  const fmt = useFormatters();
   const saved = s.paymentMethods;
-  const formOpen = saved.length === 0 || payWith === 'new';
+  const creditPaysAll = !!credit?.use && credit.appliedMinor > 0 && credit.cardDueMinor === 0;
+  const formOpen = !creditPaysAll && (saved.length === 0 || payWith === 'new');
+  const cardTotal = credit?.use && credit.cardDueMinor > 0 ? credit.cardDueMinor : total;
 
   return (
     <div className={styles.payment} id="co-payment">
-      {saved.length > 0 && (
+      {credit && credit.availableMinor > 0 && (
+        <div className={styles.credit} data-testid="checkout-credit">
+          <label className={styles.save}>
+            <input type="checkbox" checked={credit.use} onChange={(e) => credit.setUse(e.target.checked)} data-testid="checkout-use-credit" />
+            <span>
+              {t('co.credit.use', { amount: fmt.money(credit.availableMinor) })}
+              <small>{t('co.credit.hint')}</small>
+            </span>
+          </label>
+          {credit.use && credit.appliedMinor > 0 && (
+            <p className={styles.creditSplit} role="status" data-testid="checkout-credit-split">
+              {creditPaysAll ? t('co.credit.paysAll', { credit: fmt.money(credit.appliedMinor) }) : t('co.credit.paysPart', { credit: fmt.money(credit.appliedMinor), card: fmt.money(credit.cardDueMinor) })}
+            </p>
+          )}
+          {credit.use && credit.appliedMinor === 0 && <p className={styles.creditSplit}>{t('co.credit.tiny')}</p>}
+        </div>
+      )}
+      {saved.length > 0 && !creditPaysAll && (
         <fieldset className={styles.saved}>
           <legend className={styles.legend}>{t('co.savedMethods')}</legend>
           {saved.map((p) => (
@@ -81,7 +104,7 @@ export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save
         <PaymentElementField
           ref={payEl}
           publishableKey={s.publishableKey ?? ''}
-          amountMinor={total}
+          amountMinor={cardTotal}
           currency={s.currency}
           save={save}
           stripeCustomerId={s.stripeCustomerId}
@@ -103,9 +126,9 @@ export function PaymentStep({ s, total, payWith, setPayWith, pmId, setPmId, save
       <div className={styles.paymentFoot}>
         {formOpen ? <AcceptedPaymentsHint /> : null}
         <p className={styles.secureText}>
-          <ShieldCheck aria-hidden /> <span>{t('pay.storedByStripe')} {t('co.chargeNote')}</span>
+          <ShieldCheck aria-hidden /> <span>{creditPaysAll ? t('co.credit.chargeNote') : `${t('pay.storedByStripe')} ${t('co.chargeNote')}`}</span>
         </p>
-        <PoweredByStripe height={22} />
+        {creditPaysAll ? null : <PoweredByStripe height={22} />}
       </div>
     </div>
   );

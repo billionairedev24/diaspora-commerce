@@ -51,6 +51,8 @@ export const GiftCardConfigSchema = z.object({
   minMinor: MinorSchema,
   maxMinor: MinorSchema,
   currency: z.string(),
+  /** The Stripe publishable key the buy page's Payment Element is created with. */
+  publishableKey: z.string(),
   presetsMinor: z.array(MinorSchema),
   /** Staff-written terms by language; empty means the page shows its built-in terms. */
   terms: z.record(z.string(), z.string())

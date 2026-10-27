@@ -95,7 +95,7 @@ func (s *creditServiceImpl) GiftCardConfig(ctx context.Context, c *domain.Caller
 		return domain.GiftCardConfig{}, mapErr("payments", err)
 	}
 	out := domain.GiftCardConfig{MinMinor: cfg.MinMinor, MaxMinor: cfg.MaxMinor, Currency: firstNonEmpty(cfg.Currency, domain.Currency),
-		PresetsMinor: cfg.PresetsMinor, Terms: cfg.Terms}
+		PresetsMinor: cfg.PresetsMinor, Terms: cfg.Terms, PublishableKey: s.publishableKey}
 	if out.PresetsMinor == nil {
 		out.PresetsMinor = []int64{}
 	}
