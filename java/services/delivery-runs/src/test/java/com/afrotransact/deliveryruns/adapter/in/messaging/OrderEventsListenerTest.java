@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.OrderPlaced;
 import com.afrotransact.deliveryruns.application.PreorderProjectionService;
 import com.afrotransact.deliveryruns.application.RunProgressService;
@@ -90,7 +91,8 @@ class OrderEventsListenerTest {
     void preorderShipmentMovesAndDeliveriesDriveTheRunProgress() {
         PreorderProjectionService projection = mock(PreorderProjectionService.class);
         RunProgressService progress = mock(RunProgressService.class);
-        OrderEventsListener listener = new OrderEventsListener(projection, progress, json);
+        OrderEventsListener listener = new OrderEventsListener(projection, progress, mock(AttributionService.class),
+                json);
         UUID e1 = UUID.randomUUID();
         UUID e2 = UUID.randomUUID();
         UUID e3 = UUID.randomUUID();
@@ -111,10 +113,36 @@ class OrderEventsListenerTest {
     }
 
     @Test
+    void anOrderPlacedWithAnAdvertorialCreativeIsAttributedWhateverItCarries() {
+        PreorderProjectionService projection = mock(PreorderProjectionService.class);
+        AttributionService attribution = mock(AttributionService.class);
+        OrderEventsListener listener = new OrderEventsListener(projection, mock(RunProgressService.class), attribution,
+                json);
+        listener.handle("orders.order.placed", UUID.randomUUID(), json.readTree("""
+                {"orderId": "o-7", "placedAt": "2026-10-23T09:00:00Z",
+                 "attribution": {"src": "page", "cr": "adv-0123456789abcdef0123456789abcdef"},
+                 "shipments": [{"shipmentId": "s-1", "fulfilmentType": "SELLER_FULFILLED", "lines": []}]}"""));
+        verify(attribution).orderPlaced("o-7", "adv-0123456789abcdef0123456789abcdef", "page",
+                Instant.parse("2026-10-23T09:00:00Z"));
+        verifyNoInteractions(projection);
+    }
+
+    @Test
+    void anOrderWithoutAttributionIsNotRecorded() {
+        AttributionService attribution = mock(AttributionService.class);
+        OrderEventsListener listener = new OrderEventsListener(mock(PreorderProjectionService.class),
+                mock(RunProgressService.class), attribution, json);
+        listener.handle("orders.order.placed", UUID.randomUUID(), json.readTree("""
+                {"orderId": "o-8", "placedAt": "2026-10-23T09:00:00Z", "shipments": []}"""));
+        verifyNoInteractions(attribution);
+    }
+
+    @Test
     void shipmentsOfOtherOrdersThanPreordersNeverTouchARun() {
         PreorderProjectionService projection = mock(PreorderProjectionService.class);
         RunProgressService progress = mock(RunProgressService.class);
-        OrderEventsListener listener = new OrderEventsListener(projection, progress, json);
+        OrderEventsListener listener = new OrderEventsListener(projection, progress, mock(AttributionService.class),
+                json);
         listener.handle("orders.shipment.status_changed", UUID.randomUUID(), json.readTree("""
                 {"orderId": "o-1", "shipmentId": "s-1", "fulfilmentType": "FBA_AFROTRANSACT", "to": "picked_up"}"""));
         listener.handle("orders.shipment.delivered", UUID.randomUUID(), json.readTree("""

@@ -12,8 +12,10 @@ import com.afrotransact.deliveryruns.domain.AdvertorialCopy;
 import com.afrotransact.deliveryruns.domain.AdvertorialEnd;
 import com.afrotransact.deliveryruns.domain.AdvertorialSource;
 import com.afrotransact.deliveryruns.domain.AdvertorialStatus;
+import com.afrotransact.deliveryruns.domain.FeaturedProduct;
 import com.afrotransact.deliveryruns.domain.LocalAdvertorial;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -26,11 +28,28 @@ final class AdvertorialDtos {
     private AdvertorialDtos() {
     }
 
+    @Schema(name = "FeaturedProduct", description = "A product staff feature on the card (up to four). The price is "
+            + "not kept: the product page shows today's.")
+    record FeaturedProductBody(@NotBlank @Size(max = 40) @Schema(example = "ATSHEA0001") String atin,
+                               @NotBlank @Size(max = 140) String title,
+                               @Size(max = 500) @Schema(description = "https picture, if the product has one")
+                               String imageUrl) {
+
+        FeaturedProduct toDomain() {
+            return new FeaturedProduct(atin, title, imageUrl);
+        }
+
+        static FeaturedProductBody of(FeaturedProduct p) {
+            return new FeaturedProductBody(p.atin(), p.title(), p.imageUrl());
+        }
+    }
+
     @Schema(name = "AdvertorialResults", description = "What an advertorial brought")
     record ResultsResponse(long views, long clicks,
                            @Schema(description = "clicks / views x 100; null without views") Double ctrPct,
-                           @Schema(description = "Pre-orders whose tracking tag carries the advertorial; null for "
-                                   + "runs (their orders are not attributed)") Integer orders) {
+                           @Schema(description = "Orders that came through the advertorial and still stand: a "
+                                   + "window's pre-orders whose tracking tag carries it, a run's orders whose "
+                                   + "attribution (cr=adv-...) does and that still hold a slot on the run") int orders) {
 
         static ResultsResponse of(AdvertorialView.Results r) {
             return new ResultsResponse(r.views(), r.clicks(), r.ctrPct(), r.orders());
@@ -45,7 +64,8 @@ final class AdvertorialDtos {
                                String sourceStatus, Instant sourceCloses, UUID locationId, String locationName,
                                String variant, int weight, int priority,
                                @Schema(description = "The words follow the window or run until staff edit them")
-                               boolean generated, String headline, String body, String ctaLabel, Instant startsAt,
+                               boolean generated, String headline, String body, String ctaLabel,
+                               List<FeaturedProductBody> featuredProducts, Instant startsAt,
                                Instant endsAt, AdvertorialStatus status, AdvertorialEnd ended,
                                @Schema(description = "Visitors can see it right now") boolean serving,
                                ResultsResponse results, String createdBy, Instant createdAt, Instant updatedAt,
@@ -56,7 +76,7 @@ final class AdvertorialDtos {
             return new AdvertorialResponse(a.id(), a.source(), a.sourceId(), v.sourceName(), v.sourceCode(),
                     v.sourceStatus(), v.sourceCloses(), a.locationId(), v.locationName(), a.variant(), a.weight(),
                     a.priority(), a.generated(), a.copy().headline(), a.copy().body(), a.copy().ctaLabel(),
-                    a.startsAt(), a.endsAt(), a.status(), a.ended(), v.serving(), ResultsResponse.of(v.results()),
+                    a.featured().stream().map(FeaturedProductBody::of).toList(), a.startsAt(), a.endsAt(), a.status(), a.ended(), v.serving(), ResultsResponse.of(v.results()),
                     a.createdBy(), a.createdAt(), a.updatedAt(), a.version());
         }
     }
@@ -82,11 +102,16 @@ final class AdvertorialDtos {
                               @NotBlank @Size(max = AdvertorialCopy.MAX_HEADLINE) String headline,
                               @Size(max = AdvertorialCopy.MAX_BODY) String body,
                               @NotBlank @Size(max = AdvertorialCopy.MAX_CTA) String ctaLabel, Instant startsAt,
-                              Instant endsAt) {
+                              Instant endsAt,
+                              @Size(max = FeaturedProduct.MAX_PER_ADVERTORIAL) @Valid
+                              @Schema(description = "Up to four products to show on the card. Left out on an edit: "
+                                      + "the current ones stay; an empty list clears them")
+                              List<FeaturedProductBody> featuredProducts) {
 
         AdvertorialCommand toCommand() {
             return new AdvertorialCommand(source, sourceId, variant, weight, priority, headline, body, ctaLabel,
-                    startsAt, endsAt);
+                    startsAt, endsAt, featuredProducts == null ? null
+                            : featuredProducts.stream().map(FeaturedProductBody::toDomain).toList());
         }
     }
 
@@ -96,12 +121,15 @@ final class AdvertorialDtos {
                           String headline, String body, String ctaLabel,
                           @Schema(description = "With UTM and, for windows, order attribution") String ctaUrl,
                           String imageUrl,
+                          @Schema(description = "Up to four products staff chose; the card links each to its "
+                                  + "product page") List<FeaturedProductBody> featuredProducts,
                           @Schema(description = "The live countdown counts down to this") Instant countdownTarget,
                           Instant expiresAt, String deliveryDisplay, String feeDisplay) {
 
         static ServedResponse of(ServedAdvertorial s) {
             return new ServedResponse(s.id(), s.source(), s.sourceId(), s.variant(), s.code(), s.place(),
-                    s.headline(), s.body(), s.ctaLabel(), s.ctaUrl(), s.imageUrl(), s.countdownTarget(),
+                    s.headline(), s.body(), s.ctaLabel(), s.ctaUrl(), s.imageUrl(),
+                    s.featured().stream().map(FeaturedProductBody::of).toList(), s.countdownTarget(),
                     s.expiresAt(), s.deliveryDisplay(), s.feeDisplay());
         }
     }

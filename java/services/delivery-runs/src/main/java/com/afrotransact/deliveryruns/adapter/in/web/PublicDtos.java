@@ -91,7 +91,14 @@ final class PublicDtos {
                                     @Size(max = 100) @Schema(description = "Waitlist area", example = "US/TX/Lubbock")
                                     String area,
                                     @Size(max = 2) String country, @Size(max = 3) String region,
-                                    @Size(max = 80) String city) {
+                                    @Size(max = 80) String city,
+                                    @Size(max = 80) @Schema(description = "utm_source the visitor arrived with "
+                                            + "(run alerts only; counted as a sign-up once confirmed)",
+                                            example = "whatsapp") String utmSource,
+                                    @Size(max = 80) @Schema(example = "social") String utmMedium,
+                                    @Size(max = 120) @Schema(example = "delivery-run-bastrop-tx-20261024")
+                                    String utmCampaign,
+                                    @Schema(description = "The run the visitor was looking at, if any") UUID runId) {
     }
 
     @Schema(name = "SubscriptionAccepted")
@@ -108,7 +115,13 @@ final class PublicDtos {
 
     @Schema(name = "MySubscriptionRequest")
     record MySubscriptionRequest(@NotNull UUID locationId, @NotEmpty Set<Channel> channels,
-                                 @Size(max = 80) @Schema(example = "location-page") String source) {
+                                 @Size(max = 80) @Schema(example = "location-page") String source,
+                                 @Size(max = 80) @Schema(description = "utm_source the shopper arrived with "
+                                         + "(counted as a sign-up)", example = "whatsapp") String utmSource,
+                                 @Size(max = 80) @Schema(example = "social") String utmMedium,
+                                 @Size(max = 120) @Schema(example = "delivery-run-bastrop-tx-20261024")
+                                 String utmCampaign,
+                                 @Schema(description = "The run the shopper was looking at, if any") UUID runId) {
     }
 
     @Schema(name = "ChannelConsent")

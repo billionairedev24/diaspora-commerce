@@ -50,6 +50,9 @@ tags:
   description: 'Location-targeted advertorials per pre-order window or delivery run: staff generate or write them, visitors
     in the area see them with a live closing countdown, and they report views, clicks and orders (S263). delivery-runs:read
     to view; preorders:manage to change.'
+- name: Attribution
+  description: 'Visits and sign-ups per UTM source, medium and campaign for a location and its runs (S262): first-party counters,
+    no visitor is identified.'
 paths:
   /v1/delivery-fees:
     get:
@@ -347,6 +350,113 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/LocationHistory'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/locations/{id}/activate:
+    post:
+      tags:
+      - Locations
+      summary: Switch a deactivated location back on (delivery-runs:manage)
+      description: 'The optional reason is audited like the switch off. Already active: unchanged.'
+      operationId: activate
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationSwitchRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Location'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/locations/{id}/attribution:
+    get:
+      tags:
+      - Attribution
+      summary: Attributed visits and sign-ups of a location, or of one of its runs (delivery-runs:read)
+      description: Per UTM source, medium and campaign over the last days (default 90, at most 366), most visits first.
+      operationId: report
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: runId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 90
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Attribution'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/locations/{id}/deactivate:
+    post:
+      tags:
+      - Locations
+      summary: Switch a location off with the reason that is audited (delivery-runs:manage)
+      description: 'The reason is required and recorded with who and when (event delivery-runs.location.changed, audit log).
+        409 delivery-runs.location-has-live-runs while a run of the location announced, takes orders or is on the road. Already
+        inactive: unchanged.'
+      operationId: deactivateWithReason
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationDeactivateRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Location'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -1656,6 +1766,38 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/LocationPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/locations/{slug}/visits:
+    post:
+      tags:
+      - Attribution
+      summary: Count a visit that carried UTM tags (no sign-in)
+      description: The shop front sends it once per visit to a location page or run link whose address has utm_* tags. Only
+        the three tags are kept (cleaned to short lower-case tokens, at most 100 different sets per location and day, the
+        rest counted as 'other'); no cookie, address or visitor id. A visit without tags is accepted and not counted. 404
+        for an unknown or inactive location.
+      operationId: countVisit
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -4203,7 +4345,9 @@ components:
 
         or polygonGeoJson (registered in geo-service as a zone owned by delivery-runs:<slug>). centerLat/centerLng
 
-        is always required: the circle centre, and the drive destination for run economics.'
+        is always required: the circle centre, and the drive destination for run economics. An edit never switches
+
+        a location on or off: use activate / deactivate, which are audited (active only matters on create).'
       properties:
         slug:
           type: string
@@ -4816,6 +4960,26 @@ components:
           type: string
           maxLength: 80
           minLength: 0
+        utmSource:
+          type: string
+          description: utm_source the visitor arrived with (run alerts only; counted as a sign-up once confirmed)
+          example: whatsapp
+          maxLength: 80
+          minLength: 0
+        utmMedium:
+          type: string
+          example: social
+          maxLength: 80
+          minLength: 0
+        utmCampaign:
+          type: string
+          example: delivery-run-bastrop-tx-20261024
+          maxLength: 120
+          minLength: 0
+        runId:
+          type: string
+          format: uuid
+          description: The run the visitor was looking at, if any
       required:
       - email
     SubscriptionAccepted:
@@ -5262,6 +5426,26 @@ components:
           example: location-page
           maxLength: 80
           minLength: 0
+        utmSource:
+          type: string
+          description: utm_source the shopper arrived with (counted as a sign-up)
+          example: whatsapp
+          maxLength: 80
+          minLength: 0
+        utmMedium:
+          type: string
+          example: social
+          maxLength: 80
+          minLength: 0
+        utmCampaign:
+          type: string
+          example: delivery-run-bastrop-tx-20261024
+          maxLength: 120
+          minLength: 0
+        runId:
+          type: string
+          format: uuid
+          description: The run the shopper was looking at, if any
       required:
       - channels
       - locationId
@@ -6472,6 +6656,11 @@ components:
             $ref: '#/components/schemas/MonthlyCount'
     LocationRunSummary:
       type: object
+      description: 'One run of a location: the orders it carries, the delivery fees it earns and whether it reached its minimum.
+
+        A cancelled run earns nothing: feeRevenueMinor is 0 and ordersRefunded says how many orders were refunded
+
+        in full.'
       properties:
         id:
           type: string
@@ -6496,6 +6685,9 @@ components:
         feeRevenueMinor:
           type: integer
           format: int64
+        ordersRefunded:
+          type: integer
+          format: int32
         minOrders:
           type: integer
           format: int32
@@ -6701,6 +6893,14 @@ components:
         endsAt:
           type: string
           format: date-time
+        featuredProducts:
+          type: array
+          description: 'Up to four products to show on the card. Left out on an edit: the current ones stay; an empty list
+            clears them'
+          items:
+            $ref: '#/components/schemas/FeaturedProduct'
+          maxItems: 4
+          minItems: 0
       required:
       - ctaLabel
       - headline
@@ -6721,7 +6921,8 @@ components:
         orders:
           type: integer
           format: int32
-          description: Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed)
+          description: 'Orders that came through the advertorial and still stand: a window''s pre-orders whose tracking tag
+            carries it, a run''s orders whose attribution (cr=adv-...) does and that still hold a slot on the run'
     LocalAdvertorial:
       type: object
       description: 'Words for the visitors of the area a pre-order window or run serves, shown with a live closing
@@ -6772,6 +6973,10 @@ components:
           type: string
         ctaLabel:
           type: string
+        featuredProducts:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeaturedProduct'
         startsAt:
           type: string
           format: date-time
@@ -6966,6 +7171,11 @@ components:
           description: With UTM and, for windows, order attribution
         imageUrl:
           type: string
+        featuredProducts:
+          type: array
+          description: Up to four products staff chose; the card links each to its product page
+          items:
+            $ref: '#/components/schemas/FeaturedProduct'
         countdownTarget:
           type: string
           format: date-time
@@ -7099,6 +7309,106 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LocalAdvertorial'
+    FeaturedProduct:
+      type: object
+      description: 'A product staff feature on the card (up to four). The price is not kept: the product page shows today''s.'
+      properties:
+        atin:
+          type: string
+          example: ATSHEA0001
+          maxLength: 40
+          minLength: 0
+        title:
+          type: string
+          maxLength: 140
+          minLength: 0
+        imageUrl:
+          type: string
+          description: https picture, if the product has one
+          maxLength: 500
+          minLength: 0
+      required:
+      - atin
+      - title
+    VisitRequest:
+      type: object
+      properties:
+        runId:
+          type: string
+          format: uuid
+          description: The run the visitor was looking at, if any
+        utmSource:
+          type: string
+          example: whatsapp
+          maxLength: 80
+          minLength: 0
+        utmMedium:
+          type: string
+          example: social
+          maxLength: 80
+          minLength: 0
+        utmCampaign:
+          type: string
+          example: delivery-run-bastrop-tx-20261024
+          maxLength: 120
+          minLength: 0
+    LocationDeactivateRequest:
+      type: object
+      description: Why a location is switched off (required, audited)
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    LocationSwitchRequest:
+      type: object
+      description: Why a location is switched on or off (audited)
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+    Attribution:
+      type: object
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+          description: Null for the whole location
+        since:
+          type: string
+          format: date
+          description: First day counted (UTC)
+        visits:
+          type: integer
+          format: int64
+        signups:
+          type: integer
+          format: int64
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttributionRow'
+    AttributionRow:
+      type: object
+      properties:
+        utmSource:
+          type: string
+        utmMedium:
+          type: string
+        utmCampaign:
+          type: string
+        visits:
+          type: integer
+          format: int64
+        signups:
+          type: integer
+          format: int64
   securitySchemes:
     bearer:
       type: http

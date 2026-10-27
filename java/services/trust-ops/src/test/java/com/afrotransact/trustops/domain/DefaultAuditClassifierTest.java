@@ -89,4 +89,21 @@ class DefaultAuditClassifierTest {
         assertThat(classifier.classify("preorder.settings.changed", Map.of("enabled", false, "actor", "staff-4"),
                 "preorder-settings").orElseThrow().summary()).contains("master switch off");
     }
+
+    @Test
+    void deliveryLocationSwitchesNameTheStaffMemberAndTheReason() {
+        AuditFacts off = classifier.classify("delivery-runs.location.changed", Map.of("locationId", "loc-1", "name",
+                "Bastrop", "action", "DEACTIVATED", "actorId", "staff-3", "reason", "Seasonal pause"), "loc-1")
+                .orElseThrow();
+        assertThat(off.actorId()).isEqualTo("staff-3");
+        assertThat(off.entityType()).isEqualTo("DELIVERY_RUN_LOCATION");
+        assertThat(off.entityId()).isEqualTo("loc-1");
+        assertThat(off.summary()).isEqualTo("Switched off delivery location Bastrop — Seasonal pause");
+        assertThat(classifier.classify("delivery-runs.location.changed", Map.of("locationId", "loc-1", "name",
+                "Bastrop", "action", "ACTIVATED", "actorId", "staff-3"), "loc-1").orElseThrow().summary())
+                .isEqualTo("Switched on delivery location Bastrop");
+        assertThat(classifier.classify("delivery-runs.location.changed", Map.of("locationId", "loc-1", "name",
+                "Bastrop", "action", "UPDATED", "actorId", "staff-3"), "loc-1").orElseThrow().summary())
+                .startsWith("Edited");
+    }
 }

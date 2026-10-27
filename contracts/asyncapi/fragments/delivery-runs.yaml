@@ -35,6 +35,7 @@ channels:
       preorderWindowCancelled: {$ref: '#/components/messages/preorderWindowCancelled'}
       preorderSettingsChanged: {$ref: '#/components/messages/preorderSettingsChanged'}
       preorderAreasChanged: {$ref: '#/components/messages/preorderAreasChanged'}
+      deliveryRunsLocationChanged: {$ref: '#/components/messages/deliveryRunsLocationChanged'}
       preorderExportCreated: {$ref: '#/components/messages/preorderExportCreated'}
       preorderWaitlistJoined: {$ref: '#/components/messages/preorderWaitlistJoined'}
 operations:
@@ -58,7 +59,8 @@ operations:
       (payment PAYMENT_LINK, preorder.late_order.payment_link). preorder.window.* follow a window's lifecycle (keyed by
       window id; opened / closed / delivered come from the scheduler, closed after the paid orders were handed to a
       run, which publishes delivery-runs.run.confirmed; paused / resumed carry the staff actorId);
-      preorder.settings.changed and preorder.areas.changed (key preorder-settings) and
+      preorder.settings.changed and preorder.areas.changed (key preorder-settings),
+      delivery-runs.location.changed (key location id; trust-ops audits it with the staff member and reason) and
       preorder.export.created are audit records; preorder.waitlist.joined records a waitlist sign-up.
       ADR 0005 §4: staff set a minimum order count per window. When the close date passes below it the window is not
       cancelled: it becomes AWAITING_DECISION and preorder.window.decision_needed tells staff (decision.kind
@@ -156,6 +158,13 @@ components:
       title: Staff edited one region's coverage in place (cities added, removed or switched; audit; key preorder-settings)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PreorderAreasChanged'}
+    deliveryRunsLocationChanged:
+      name: delivery-runs.location.changed
+      title: >-
+        Staff created, edited, switched on or switched off a delivery-run location (audit: who, when and, for a
+        switch, why; keyed by location id)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/DeliveryRunsLocationChanged'}
     preorderExportCreated:
       name: preorder.export.created
       title: Staff exported a window's orders, picking list or advertorial report (audit)
@@ -509,6 +518,18 @@ components:
             orders: {type: integer, description: 'Orders that counted'}
             minimum: {type: integer}
             at: {type: string, format: date-time}
+    DeliveryRunsLocationChanged:
+      type: object
+      required: [locationId, slug, name, action, active, actorId]
+      properties:
+        locationId: {type: string, format: uuid}
+        slug: {type: string, examples: [bastrop-tx]}
+        name: {type: string, examples: [Bastrop]}
+        action: {type: string, enum: [CREATED, UPDATED, ACTIVATED, DEACTIVATED]}
+        active: {type: boolean, description: 'Whether the location takes runs after the change'}
+        actorId: {type: string, description: Staff subject}
+        reason: {type: string, description: 'Why it was switched off (required for DEACTIVATED) or on (optional)'}
+        changedAt: {type: string, format: date-time}
     PreorderAreasChanged:
       type: object
       required: [region, added, removed, switched, actorId]

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.deliveryruns.domain.AdvertorialSource;
+import com.afrotransact.deliveryruns.domain.FeaturedProduct;
 
 /**
  * Public (no sign-in): the advertorials a visitor sees for their deliver-to place, and the counting of views and
@@ -58,6 +59,7 @@ public interface AdvertorialServing {
      * @param ctaLabel        the button
      * @param ctaUrl          where it goes, with UTM and (windows) order attribution
      * @param imageUrl        the window's hero, when it has one
+     * @param featured        up to four products staff chose to show on the card
      * @param countdownTarget the instant the live countdown counts down to (the close or cutoff)
      * @param expiresAt       when it stops being served
      * @param deliveryDisplay the delivery day, e.g. "Sunday, October 25"
@@ -65,7 +67,7 @@ public interface AdvertorialServing {
      */
     record ServedAdvertorial(UUID id, AdvertorialSource source, UUID sourceId, String variant, String code,
                              String place, String headline, String body, String ctaLabel, String ctaUrl,
-                             String imageUrl, Instant countdownTarget, Instant expiresAt, String deliveryDisplay,
-                             String feeDisplay) {
+                             String imageUrl, List<FeaturedProduct> featured, Instant countdownTarget,
+                             Instant expiresAt, String deliveryDisplay, String feeDisplay) {
     }
 }

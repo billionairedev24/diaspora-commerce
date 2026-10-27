@@ -86,6 +86,8 @@ at:
       - /v1/public/preorders/waitlist/unsubscribe
       # Views and clicks of location advertorials (S263).
       - /v1/public/advertorials/*/events
+      # Tagged visits to a location page (S262).
+      - /v1/public/locations/*/visits
   events:
     relay-enabled: true
   delivery-runs:

@@ -20,6 +20,7 @@ import com.afrotransact.deliveryruns.domain.LocalAdvertorial;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.port.AdvertorialRepository;
 import com.afrotransact.deliveryruns.port.AdvertorialRepository.Counters;
+import com.afrotransact.deliveryruns.port.AttributionRepository;
 import com.afrotransact.deliveryruns.port.DuplicateEntryException;
 import com.afrotransact.deliveryruns.port.PreorderOrderRepository;
 import com.afrotransact.platform.security.Actor;
@@ -36,14 +37,17 @@ class AdvertorialServiceImpl implements AdvertorialService {
 
     private final AdvertorialRepository advertorials;
     private final PreorderOrderRepository orders;
+    private final AttributionRepository attribution;
     private final AdvertorialSources sources;
     private final PermissionChecker permissions;
     private final Clock clock;
 
     AdvertorialServiceImpl(AdvertorialRepository advertorials, PreorderOrderRepository orders,
-                           AdvertorialSources sources, PermissionChecker permissions, Clock clock) {
+                           AttributionRepository attribution, AdvertorialSources sources,
+                           PermissionChecker permissions, Clock clock) {
         this.advertorials = advertorials;
         this.orders = orders;
+        this.attribution = attribution;
         this.sources = sources;
         this.permissions = permissions;
         this.clock = clock;
@@ -103,7 +107,8 @@ class AdvertorialServiceImpl implements AdvertorialService {
                 .filter(l -> !taken.contains(l)).findFirst().orElse("Z");
         LocalAdvertorial created = LocalAdvertorial.authored(UUID.randomUUID(), c.source(), c.sourceId(),
                 info.locationId(), variant, c.weight() == null ? 1 : c.weight(),
-                c.priority() == null ? 0 : c.priority(), copy(c), c.startsAt(), c.endsAt(), actor.subject(), now);
+                c.priority() == null ? 0 : c.priority(), copy(c), c.startsAt(), c.endsAt(),
+                c.featured() == null ? List.of() : c.featured(), actor.subject(), now);
         return views(List.of(insert(created))).get(0);
     }
 
@@ -115,7 +120,7 @@ class AdvertorialServiceImpl implements AdvertorialService {
         LocalAdvertorial edited = current.edit(copy(c), c.variant() == null || c.variant().isBlank()
                         ? current.variant() : c.variant().trim(), c.weight() == null ? current.weight() : c.weight(),
                 c.priority() == null ? current.priority() : c.priority(), c.startsAt(), c.endsAt(),
-                Instant.now(clock));
+                c.featured() == null ? current.featured() : c.featured(), Instant.now(clock));
         return views(List.of(save(edited))).get(0);
     }
 
@@ -187,13 +192,15 @@ class AdvertorialServiceImpl implements AdvertorialService {
     private List<AdvertorialView> views(List<LocalAdvertorial> list) {
         Instant now = Instant.now(clock);
         Map<UUID, Counters> counters = advertorials.counters(list.stream().map(LocalAdvertorial::id).toList());
-        Map<String, Integer> attributed = orders.attributedOrders(list.stream()
-                .filter(a -> a.source() == AdvertorialSource.WINDOW).map(LocalAdvertorial::creative).toList());
+        Map<String, Integer> attributed = new HashMap<>(orders.attributedOrders(list.stream()
+                .filter(a -> a.source() == AdvertorialSource.WINDOW).map(LocalAdvertorial::creative).toList()));
+        attributed.putAll(attribution.runOrdersByCreative(list.stream()
+                .filter(a -> a.source() == AdvertorialSource.RUN).map(LocalAdvertorial::creative).toList()));
         Map<UUID, Optional<Info>> infos = new HashMap<>();
         return list.stream().map(a -> {
             Optional<Info> info = infos.computeIfAbsent(a.sourceId(), id -> sources.find(a.source(), id, now));
             Counters c = counters.getOrDefault(a.id(), new Counters(0, 0));
-            Integer sold = a.source() == AdvertorialSource.WINDOW ? attributed.getOrDefault(a.creative(), 0) : null;
+            int sold = attributed.getOrDefault(a.creative(), 0);
             return new AdvertorialView(a, info.map(Info::name).orElse(null), info.map(Info::code).orElse(null),
                     info.map(Info::status).orElse(null), info.map(Info::closes).orElse(null),
                     info.map(Info::locationName).orElse(null),

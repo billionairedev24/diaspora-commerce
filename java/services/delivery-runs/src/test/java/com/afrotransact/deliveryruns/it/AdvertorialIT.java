@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.afrotransact.deliveryruns.application.ExtendCommand;
 import com.afrotransact.deliveryruns.application.LocationService;
@@ -312,7 +313,7 @@ class AdvertorialIT {
                 .path("items").get(0);
         assertThat(a.path("generated").asBoolean()).isTrue();
         assertThat(a.path("headline").asString()).startsWith("AfroTransact delivery run to Bastrop");
-        assertThat(a.path("results").path("orders").isNull()).as("run orders are not attributed").isTrue();
+        assertThat(a.path("results").path("orders").asInt(-1)).as("no order came through it yet").isZero();
 
         Res inside = call(HttpMethod.GET, "/v1/public/advertorials?zip=78602&visitor=v1&limit=10", null, null);
         JsonNode s = null;
@@ -326,7 +327,9 @@ class AdvertorialIT {
         assertThat(s.path("place").asString()).isEqualTo("Bastrop");
         assertThat(Instant.parse(s.path("countdownTarget").asString())).isEqualTo(run.terms().cutoffAt());
         assertThat(s.path("ctaUrl").asString()).contains("/delivery-runs/").contains("utm_medium=advertorial")
-                .contains("utm_content=adv-");
+                .contains("utm_content=adv-").as("the order attribution the storefront keeps until checkout")
+                .contains("src=page&cr=adv-");
+        assertThat(s.path("featuredProducts")).as("none featured unless staff choose some").isEmpty();
         assertThat(call(HttpMethod.GET, "/v1/public/advertorials?zip=78701&limit=10", null, null).body().path("items"))
                 .as("Austin is outside the run's area").extracting(i -> i.path("sourceId").asString())
                 .doesNotContain(run.id().toString());
@@ -380,7 +383,8 @@ class AdvertorialIT {
 
     /** An open Plainview window (publishing it drafts its advertorial) with {@code orders} projected orders. */
     private Fixture fixture(String name, String prefix, int days) {
-        String city = prefix + UUID.randomUUID().toString().replaceAll("[^a-z]", "").substring(0, 6);
+        String city = prefix + UUID.randomUUID().toString().replace("-", "").chars().limit(8)
+                .mapToObj(c -> String.valueOf((char) ('a' + Character.digit(c, 16)))).collect(Collectors.joining());
         Instant now = clock.instant();
         Instant closes = now.plus(Duration.ofDays(days));
         Instant opens = now.minus(Duration.ofDays(1));

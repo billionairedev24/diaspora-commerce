@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -104,5 +105,46 @@ class LocalAdvertorialTest {
                 null, "A", 1, 1001, WORDS, null, null, "s", NOW)).isInstanceOf(RuleViolation.class);
         assertThatThrownBy(() -> LocalAdvertorial.authored(UUID.randomUUID(), AdvertorialSource.RUN, UUID.randomUUID(),
                 null, "not a label", 1, 0, WORDS, null, null, "s", NOW)).isInstanceOf(RuleViolation.class);
+    }
+
+    @Test
+    void upToFourDifferentProductsCanBeFeaturedAndTheyStayThroughTheLifecycle() {
+        List<FeaturedProduct> four = List.of(new FeaturedProduct("ATSHEA0001", "Shea butter", "https://img.test/a.jpg"),
+                new FeaturedProduct("ATGARI0001", "Garri", null), new FeaturedProduct("ATEGUS0001", "Egusi", null),
+                new FeaturedProduct("ATPALM0001", "Palm oil", null));
+        LocalAdvertorial a = LocalAdvertorial.authored(UUID.randomUUID(), AdvertorialSource.RUN, UUID.randomUUID(),
+                UUID.randomUUID(), "A", 1, 0, WORDS, null, null, four, "staff-1", NOW);
+        assertThat(a.featured()).containsExactlyElementsOf(four);
+        assertThat(a.publish(NOW).pause(NOW).featured()).hasSize(4);
+        assertThat(a.edit(WORDS, "A", 1, 0, null, null, NOW).featured()).as("an edit of the words keeps them")
+                .hasSize(4);
+        assertThat(a.edit(WORDS, "A", 1, 0, null, null, List.of(), NOW).featured()).isEmpty();
+        assertThat(generated().featured()).isEmpty();
+    }
+
+    @Test
+    void moreThanFourOrTheSameProductTwiceIsRefused() {
+        List<FeaturedProduct> five = List.of(product("ATONE0001"), product("ATTWO0001"), product("ATTHREE001"),
+                product("ATFOUR0001"), product("ATFIVE0001"));
+        assertThatThrownBy(() -> LocalAdvertorial.authored(UUID.randomUUID(), AdvertorialSource.RUN, UUID.randomUUID(),
+                null, "A", 1, 0, WORDS, null, null, five, "staff-1", NOW)).isInstanceOf(RuleViolation.class)
+                .hasMessageContaining("at most 4");
+        FeaturedProduct p = product("ATONE0001");
+        assertThatThrownBy(() -> LocalAdvertorial.authored(UUID.randomUUID(), AdvertorialSource.RUN, UUID.randomUUID(),
+                null, "A", 1, 0, WORDS, null, null, List.of(p, p), "staff-1", NOW)).isInstanceOf(RuleViolation.class)
+                .hasMessageContaining("once");
+    }
+
+    @Test
+    void aFeaturedProductNeedsACodeANameAndAnHttpsPicture() {
+        assertThatThrownBy(() -> new FeaturedProduct(" ", "Garri", null)).isInstanceOf(RuleViolation.class);
+        assertThatThrownBy(() -> new FeaturedProduct("ATGARI0001", "", null)).isInstanceOf(RuleViolation.class);
+        assertThatThrownBy(() -> new FeaturedProduct("ATGARI0001", "Garri", "http://img.test/a.jpg"))
+                .isInstanceOf(RuleViolation.class);
+        assertThat(new FeaturedProduct(" ATGARI0001 ", " Garri ", " ").imageUrl()).isNull();
+    }
+
+    private static FeaturedProduct product(String atin) {
+        return new FeaturedProduct(atin, "Product " + atin, null);
     }
 }

@@ -49,6 +49,15 @@ class RunLinks {
         return runUrl(location, run) + "&" + utm(source, medium, campaign(location, run), content);
     }
 
+    /**
+     * The run link from an advertorial: {@code src=page&cr=<creative>} is the order attribution the storefront keeps
+     * until checkout (so the advertorial is credited with the run's order), plus the UTM of the click.
+     */
+    String runAdvertorialUrl(Location location, Run run, String creative) {
+        return runUrl(location, run) + "&src=page&cr=" + encode(creative) + "&"
+                + utm("storefront", "advertorial", campaign(location, run), creative);
+    }
+
     /** One attributed run link per announcement channel, plus {@code social} for shares. */
     Map<String, String> channelLinks(Location location, Run run, String content) {
         Map<String, String> out = new LinkedHashMap<>();

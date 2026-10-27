@@ -14,6 +14,7 @@ import com.afrotransact.deliveryruns.domain.AdvertorialCopy;
 import com.afrotransact.deliveryruns.domain.AdvertorialEnd;
 import com.afrotransact.deliveryruns.domain.AdvertorialSource;
 import com.afrotransact.deliveryruns.domain.AdvertorialStatus;
+import com.afrotransact.deliveryruns.domain.FeaturedProduct;
 import com.afrotransact.deliveryruns.domain.LocalAdvertorial;
 import com.afrotransact.deliveryruns.port.AdvertorialRepository;
 import com.afrotransact.deliveryruns.port.ConcurrentUpdateException;
@@ -21,14 +22,19 @@ import com.afrotransact.deliveryruns.port.DuplicateEntryException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
+import tools.jackson.core.type.TypeReference;
 
 @Repository
 class JdbcAdvertorialRepository implements AdvertorialRepository {
 
-    private final JdbcClient jdbc;
+    private static final TypeReference<List<FeaturedProduct>> FEATURED = new TypeReference<>() { };
 
-    JdbcAdvertorialRepository(JdbcClient jdbc) {
+    private final JdbcClient jdbc;
+    private final JsonCodec json;
+
+    JdbcAdvertorialRepository(JdbcClient jdbc, JsonCodec json) {
         this.jdbc = jdbc;
+        this.json = json;
     }
 
     @Override
@@ -36,15 +42,17 @@ class JdbcAdvertorialRepository implements AdvertorialRepository {
         try {
             jdbc.sql("""
                     insert into local_advertorial (id, source_kind, source_id, location_id, variant, weight, priority,
-                        generated, headline, body, cta_label, starts_at, ends_at, status, ended, created_by,
-                        created_at, updated_at, version)
+                        generated, headline, body, cta_label, featured_products, starts_at, ends_at, status, ended,
+                        created_by, created_at, updated_at, version)
                     values (:id, :kind, :sourceId, :location, :variant, :weight, :priority, :generated, :headline,
-                        :body, :cta, :startsAt, :endsAt, :status, :ended, :createdBy, :createdAt, :updatedAt, 0)
+                        :body, :cta, cast(:featured as jsonb), :startsAt, :endsAt, :status, :ended, :createdBy,
+                        :createdAt, :updatedAt, 0)
                     """).param("id", a.id()).param("kind", a.source().name()).param("sourceId", a.sourceId())
                     .param("location", a.locationId()).param("variant", a.variant()).param("weight", a.weight())
                     .param("priority", a.priority()).param("generated", a.generated())
                     .param("headline", a.copy().headline()).param("body", a.copy().body())
-                    .param("cta", a.copy().ctaLabel()).param("startsAt", Sql.ts(a.startsAt()))
+                    .param("cta", a.copy().ctaLabel()).param("featured", json.write(a.featured()))
+                    .param("startsAt", Sql.ts(a.startsAt()))
                     .param("endsAt", Sql.ts(a.endsAt())).param("status", a.status().name())
                     .param("ended", a.ended() == null ? null : a.ended().name()).param("createdBy", a.createdBy())
                     .param("createdAt", Sql.ts(a.createdAt())).param("updatedAt", Sql.ts(a.updatedAt())).update();
@@ -61,15 +69,15 @@ class JdbcAdvertorialRepository implements AdvertorialRepository {
             rows = jdbc.sql("""
                     update local_advertorial set variant = :variant, weight = :weight, priority = :priority,
                         generated = :generated, headline = :headline, body = :body, cta_label = :cta,
-                        starts_at = :startsAt, ends_at = :endsAt, status = :status, ended = :ended,
-                        updated_at = :updatedAt, version = version + 1
+                        featured_products = cast(:featured as jsonb), starts_at = :startsAt, ends_at = :endsAt,
+                        status = :status, ended = :ended, updated_at = :updatedAt, version = version + 1
                     where id = :id and version = :version
                     """).param("id", a.id()).param("variant", a.variant()).param("weight", a.weight())
                     .param("priority", a.priority()).param("generated", a.generated())
                     .param("headline", a.copy().headline()).param("body", a.copy().body())
-                    .param("cta", a.copy().ctaLabel()).param("startsAt", Sql.ts(a.startsAt()))
-                    .param("endsAt", Sql.ts(a.endsAt())).param("status", a.status().name())
-                    .param("ended", a.ended() == null ? null : a.ended().name())
+                    .param("cta", a.copy().ctaLabel()).param("featured", json.write(a.featured()))
+                    .param("startsAt", Sql.ts(a.startsAt())).param("endsAt", Sql.ts(a.endsAt()))
+                    .param("status", a.status().name()).param("ended", a.ended() == null ? null : a.ended().name())
                     .param("updatedAt", Sql.ts(a.updatedAt())).param("version", a.version()).update();
         } catch (DuplicateKeyException e) {
             throw new DuplicateEntryException("This " + a.source() + " already has a variant " + a.variant(), e);
@@ -151,7 +159,7 @@ class JdbcAdvertorialRepository implements AdvertorialRepository {
                 new AdvertorialCopy(rs.getString("headline"), rs.getString("body"), rs.getString("cta_label")),
                 Sql.instant(rs, "starts_at"), Sql.instant(rs, "ends_at"),
                 AdvertorialStatus.valueOf(rs.getString("status")), ended == null ? null : AdvertorialEnd.valueOf(ended),
-                rs.getString("created_by"), Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"),
-                rs.getLong("version"));
+                json.read(rs.getString("featured_products"), FEATURED), rs.getString("created_by"),
+                Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"), rs.getLong("version"));
     }
 }

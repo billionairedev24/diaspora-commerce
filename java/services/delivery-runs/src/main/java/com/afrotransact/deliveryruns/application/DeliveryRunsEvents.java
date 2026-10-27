@@ -20,6 +20,12 @@ public final class DeliveryRunsEvents {
     public static final String RUN_OUT_FOR_DELIVERY = "delivery-runs.run.out_for_delivery";
     public static final String RUN_COMPLETED = "delivery-runs.run.completed";
 
+    /**
+     * A location was created, edited, switched on or switched off by staff (audit: who, when and, for a switch, why).
+     * Keyed by location id.
+     */
+    public static final String LOCATION_CHANGED = "delivery-runs.location.changed";
+
     public static final String SUBSCRIPTION_CREATED = "delivery-runs.subscription.created";
     public static final String SUBSCRIPTION_CONFIRMED = "delivery-runs.subscription.confirmed";
     public static final String SUBSCRIPTION_CANCELLED = "delivery-runs.subscription.cancelled";
