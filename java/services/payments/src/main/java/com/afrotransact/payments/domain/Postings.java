@@ -22,10 +22,20 @@ public final class Postings {
      */
     public static Journal capture(UUID id, Instant at, String key, String orderId, String paymentId,
                                   String chargeId, PaymentSplit split) {
+        return capture(id, at, key, orderId, paymentId, chargeId, split, Money.zero(split.charge().currency()));
+    }
+
+    /**
+     * Capture of an order partly paid with credit: the credit share of the capture is Dr 2600 customer credit instead
+     * of money from Stripe, so Dr 1000 is the card share less the fee. The credit becomes revenue here, at shipment.
+     */
+    public static Journal capture(UUID id, Instant at, String key, String orderId, String paymentId,
+                                  String chargeId, PaymentSplit split, Money creditShare) {
         Journal.Builder b = Journal.builder(JournalType.CAPTURE, key).order(orderId).payment(paymentId)
                 .stripeRef(chargeId).description("Capture of order " + orderId);
         RecipientShare platform = split.platform();
-        b.debit(LedgerAccount.of(Chart.STRIPE_CLEARING), split.charge().minus(split.stripeFee()));
+        b.debit(LedgerAccount.of(Chart.STRIPE_CLEARING), split.charge().minus(split.stripeFee()).minus(creditShare));
+        b.debit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), creditShare);
         b.debit(LedgerAccount.of(Chart.STRIPE_FEES), platform.stripeFee());
         for (RecipientShare s : split.sellers()) {
             LedgerAccount owner = s.isRetail() ? LedgerAccount.retailSales()
@@ -54,6 +64,15 @@ public final class Postings {
      */
     public static Journal refund(UUID id, Instant at, String key, String orderId, String paymentId, String refundRef,
                                  List<RefundLine> lines, String retailOrgId) {
+        return refund(id, at, key, orderId, paymentId, refundRef, lines, retailOrgId, null);
+    }
+
+    /**
+     * Refund with a credit part: the part given back as credit is Cr 2600 customer credit instead of Cr 2200 refunds
+     * payable (no Stripe refund follows for it).
+     */
+    public static Journal refund(UUID id, Instant at, String key, String orderId, String paymentId, String refundRef,
+                                 List<RefundLine> lines, String retailOrgId, Money creditPart) {
         Journal.Builder b = Journal.builder(JournalType.REFUND, key).order(orderId).payment(paymentId)
                 .stripeRef(refundRef).description("Refund on order " + orderId);
         Money total = null;
@@ -72,7 +91,9 @@ public final class Postings {
         if (total == null) {
             throw new PaymentsRuleViolation("payments.invalid-refund", "A refund needs at least one line");
         }
-        b.credit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), total);
+        Money credit = creditPart == null ? Money.zero(total.currency()) : creditPart;
+        b.credit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), total.minus(credit));
+        b.credit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), credit);
         return b.build(id, at);
     }
 
@@ -81,8 +102,8 @@ public final class Postings {
         return Journal.builder(JournalType.REFUND_SETTLED, key).order(refund.orderId())
                 .payment(refund.paymentId().toString()).stripeRef(refund.stripeRefundId())
                 .description("Refund " + refund.stripeRefundId() + " paid by Stripe")
-                .debit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), refund.amount())
-                .credit(LedgerAccount.of(Chart.STRIPE_CLEARING), refund.amount())
+                .debit(LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE), refund.stripeAmount())
+                .credit(LedgerAccount.of(Chart.STRIPE_CLEARING), refund.stripeAmount())
                 .build(id, at);
     }
 
@@ -317,5 +338,66 @@ public final class Postings {
     /** Who carries an order line's money: 4400 Retail sales for AfroTransact Retail, else the seller's 2000 payable. */
     public static LedgerAccount owner(String orgId, String retailOrgId) {
         return orgId.equals(retailOrgId) ? LedgerAccount.retailSales() : LedgerAccount.sellerPayable(orgId);
+    }
+
+    // ---------------------------------------------------------------- credit and gift cards (S320, S321)
+
+    /** Credit granted (staff, promotion, referral, membership): the program's cost. Dr 5200 / Cr 2600. */
+    public static Journal creditGranted(UUID id, Instant at, String key, String customerId, Money amount,
+                                        String reason) {
+        return Journal.builder(JournalType.CREDIT_GRANT, key).description("Credit granted to " + customerId + ": "
+                + reason).debit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), amount)
+                .credit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), amount).build(id, at);
+    }
+
+    /** Credit taken back by a staff correction. Dr 2600 / Cr 5200. */
+    public static Journal creditTakenBack(UUID id, Instant at, String key, String customerId, Money amount,
+                                          String reason) {
+        return Journal.builder(JournalType.CREDIT_ADJUSTMENT, key).description("Credit corrected for " + customerId
+                + ": " + reason).debit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), amount)
+                .credit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), amount).build(id, at);
+    }
+
+    /**
+     * A gift card paid by card: the money is a liability until the card is redeemed. Dr 1000 (charge less fee), Dr 5000
+     * (fee) / Cr 2650. Matched to the charge by reconciliation.
+     */
+    public static Journal giftCardSold(UUID id, Instant at, String key, GiftCard card, String chargeId, Money fee) {
+        return Journal.builder(JournalType.GIFT_CARD_SOLD, key).stripeRef(chargeId)
+                .description("Gift card " + card.id() + " sold")
+                .debit(LedgerAccount.of(Chart.STRIPE_CLEARING), card.amount().minus(fee))
+                .debit(LedgerAccount.of(Chart.STRIPE_FEES), fee)
+                .credit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount()).build(id, at);
+    }
+
+    /** A gift card issued by staff. Dr 5200 / Cr 2650. */
+    public static Journal giftCardIssued(UUID id, Instant at, String key, GiftCard card) {
+        return Journal.builder(JournalType.GIFT_CARD_ISSUED, key).description("Gift card " + card.id()
+                + " issued by staff: " + card.issueReason())
+                .debit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), card.amount())
+                .credit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount()).build(id, at);
+    }
+
+    /** A gift card redeemed into the recipient's credit. Dr 2650 / Cr 2600. */
+    public static Journal giftCardRedeemed(UUID id, Instant at, String key, GiftCard card, String customerId) {
+        return Journal.builder(JournalType.GIFT_CARD_REDEEMED, key).description("Gift card " + card.id()
+                + " redeemed by " + customerId)
+                .debit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount())
+                .credit(LedgerAccount.of(Chart.CUSTOMER_CREDIT), card.amount()).build(id, at);
+    }
+
+    /**
+     * An unredeemed gift card voided. A purchased one is refunded to the purchaser's card (Dr 2650 / Cr 1000, matched
+     * to the Stripe refund); one staff issued just ends the liability (Dr 2650 / Cr 5200).
+     */
+    public static Journal giftCardVoided(UUID id, Instant at, String key, GiftCard card, String refundRef) {
+        Journal.Builder b = Journal.builder(JournalType.GIFT_CARD_VOIDED, key).description("Gift card " + card.id()
+                + " voided").debit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount());
+        if (refundRef != null) {
+            b.stripeRef(refundRef).credit(LedgerAccount.of(Chart.STRIPE_CLEARING), card.amount());
+        } else {
+            b.credit(LedgerAccount.of(Chart.CREDIT_GRANTED_EXPENSE), card.amount());
+        }
+        return b.build(id, at);
     }
 }

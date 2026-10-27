@@ -106,6 +106,15 @@ at:
     zone: ${PAYMENTS_ZONE:America/New_York}
     payout:
       minimum-minor: ${PAYOUT_MINIMUM_MINOR:2500}
+    # S321 gift cards. Codes are stored as HMACs under GIFT_CARD_CODE_KEY (blank: derived from the Stripe webhook
+    # secret). A customer may get max-failures codes wrong, a network address max-failures-per-address, per window;
+    # the send-date job emails due cards.
+    gift-cards:
+      code-key: ${GIFT_CARD_CODE_KEY:}
+      max-failures: ${GIFT_CARD_MAX_FAILURES:5}
+      max-failures-per-address: ${GIFT_CARD_MAX_FAILURES_PER_ADDRESS:20}
+      window: ${GIFT_CARD_ATTEMPT_WINDOW:15m}
+      delivery-batch: 50
     # S226: AfroTransact Retail supplier payments (retail.payment.released) are due this many days after release
     # unless retail-service sends a due date.
     supplier-payments:

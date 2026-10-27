@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import com.afrotransact.payments.application.GiftCardService;
 import com.afrotransact.payments.application.NegotiatedRateService;
 import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.application.ReconciliationService;
@@ -31,13 +32,15 @@ class PaymentsJobs {
     private final ProviderFeeService providerFees;
     private final ReconciliationService reconciliation;
     private final NegotiatedRateService negotiatedRates;
+    private final GiftCardService giftCards;
     private final Clock clock;
     private final int webhookBatch;
     private final int settlementBatch;
     private final ZoneId zone;
 
     PaymentsJobs(WebhookService webhooks, SettlementService settlements, ProviderFeeService providerFees,
-                 ReconciliationService reconciliation, NegotiatedRateService negotiatedRates, Clock clock,
+                 ReconciliationService reconciliation, NegotiatedRateService negotiatedRates, GiftCardService giftCards,
+                 Clock clock,
                  @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
                  @Value("${at.payments.jobs.settlement-batch:200}") int settlementBatch,
                  @Value("${at.payments.zone:UTC}") String zone) {
@@ -46,6 +49,7 @@ class PaymentsJobs {
         this.providerFees = providerFees;
         this.reconciliation = reconciliation;
         this.negotiatedRates = negotiatedRates;
+        this.giftCards = giftCards;
         this.clock = clock;
         this.webhookBatch = webhookBatch;
         this.settlementBatch = settlementBatch;
@@ -86,6 +90,17 @@ class PaymentsJobs {
             int expired = negotiatedRates.expireDue();
             if (expired > 0) {
                 LOG.info("Expired {} negotiated rates", expired);
+            }
+        });
+    }
+
+    /** Emails the gift cards whose send date has come (S321); the code is generated at this moment. */
+    @Scheduled(fixedDelayString = "${at.payments.jobs.gift-card-interval:30s}")
+    void deliverGiftCards() {
+        run("gift-card-delivery", () -> {
+            int sent = giftCards.deliverDue();
+            if (sent > 0) {
+                LOG.info("Handed {} gift cards to notifications", sent);
             }
         });
     }

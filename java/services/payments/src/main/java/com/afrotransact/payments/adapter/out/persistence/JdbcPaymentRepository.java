@@ -34,7 +34,7 @@ class JdbcPaymentRepository implements PaymentRepository {
             select id, order_id, customer_id, currency, amount_minor, status, stripe_payment_intent_id,
                    client_secret, fee_schedule_id, placed_at, captured_minor, refunded_minor, authorized_at,
                    failure_message, metadata::text as metadata, created_at, updated_at, version, parent_payment_id,
-                   multicapture
+                   multicapture, credit_minor, shopper_id
             from payment
             """;
     private static final TypeReference<List<RefundLineRow>> REFUND_LINES = new TypeReference<>() { };
@@ -55,13 +55,14 @@ class JdbcPaymentRepository implements PaymentRepository {
                 insert into payment (id, order_id, customer_id, currency, amount_minor, status,
                     stripe_payment_intent_id, client_secret, fee_schedule_id, placed_at, captured_minor,
                     refunded_minor, authorized_at, failure_message, metadata, created_at, updated_at, version,
-                    parent_payment_id, multicapture)
+                    parent_payment_id, multicapture, credit_minor, shopper_id)
                 values (:id, :orderId, :customerId, :currency, :amount, :status, :pi, :secret, :schedule, :placedAt,
                     :captured, :refunded, :authorizedAt, :failure, cast(:metadata as jsonb), :createdAt, :updatedAt, 0,
-                    :parent, :multicapture)
+                    :parent, :multicapture, :credit, :shopper)
                 """ + conflict)
                 .param("id", p.id()).param("parent", p.parentPaymentId()).param("orderId", p.orderId())
                 .param("multicapture", p.multicapture())
+                .param("credit", p.credit().minor()).param("shopper", p.shopperId())
                 .param("customerId", p.customerId())
                 .param("currency", p.currency()).param("amount", p.amount().minor())
                 .param("status", p.status().name()).param("pi", p.stripePaymentIntentId())
@@ -150,10 +151,11 @@ class JdbcPaymentRepository implements PaymentRepository {
                 update payment set status = :status, stripe_payment_intent_id = :pi, client_secret = :secret,
                     captured_minor = :captured, refunded_minor = :refunded, authorized_at = :authorizedAt,
                     failure_message = :failure, updated_at = :updatedAt, multicapture = :multicapture,
-                    version = version + 1
+                    credit_minor = :credit, shopper_id = :shopper, version = version + 1
                 where id = :id and version = :version
                 """)
                 .param("multicapture", p.multicapture())
+                .param("credit", p.credit().minor()).param("shopper", p.shopperId())
                 .param("status", p.status().name()).param("pi", p.stripePaymentIntentId())
                 .param("secret", p.clientSecret()).param("captured", p.captured().minor())
                 .param("refunded", p.refunded().minor()).param("authorizedAt", Sql.ts(p.authorizedAt()))
@@ -182,7 +184,7 @@ class JdbcPaymentRepository implements PaymentRepository {
         return new Payment(p.id(), p.orderId(), p.customerId(), p.amount(), p.status(), p.stripePaymentIntentId(),
                 p.clientSecret(), p.feeScheduleId(), p.placedAt(), p.captured(), p.refunded(), p.authorizedAt(),
                 p.failureMessage(), p.metadata(), p.lines(), p.createdAt(), p.updatedAt(), p.version() + 1,
-                p.parentPaymentId(), p.multicapture());
+                p.parentPaymentId(), p.multicapture(), p.credit(), p.shopperId());
     }
 
     private List<PaymentLine> lines(UUID paymentId, String currency) {
@@ -231,22 +233,23 @@ class JdbcPaymentRepository implements PaymentRepository {
                 rs.getLong("captured_minor"), rs.getLong("refunded_minor"), Sql.instant(rs, "authorized_at"),
                 rs.getString("failure_message"), json.stringMap(rs.getString("metadata")),
                 Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"), rs.getLong("version"),
-                rs.getObject("parent_payment_id", UUID.class), rs.getBoolean("multicapture"));
+                rs.getObject("parent_payment_id", UUID.class), rs.getBoolean("multicapture"), rs.getLong("credit_minor"),
+                rs.getString("shopper_id"));
     }
 
     @Override
     public void insertCapture(Capture c) {
         jdbc.sql("""
                 insert into payment_capture (id, payment_id, shipment_id, amount_minor, stripe_fee_minor,
-                    fee_estimated, stripe_charge_id, final_capture, line_ids, journal_id, captured_at)
+                    fee_estimated, stripe_charge_id, final_capture, line_ids, journal_id, captured_at, credit_minor)
                 values (:id, :pid, :shipment, :amount, :fee, :estimated, :charge, :final, cast(:lines as jsonb),
-                    :journal, :at)
+                    :journal, :at, :credit)
                 """)
                 .param("id", c.id()).param("pid", c.paymentId()).param("shipment", c.shipmentId())
                 .param("amount", c.amount().minor()).param("fee", c.stripeFee().minor())
                 .param("estimated", c.feeEstimated()).param("charge", c.stripeChargeId())
                 .param("final", c.finalCapture()).param("lines", json.write(c.lineIds()))
-                .param("journal", c.journalId()).param("at", Sql.ts(c.capturedAt()))
+                .param("journal", c.journalId()).param("at", Sql.ts(c.capturedAt())).param("credit", c.credit().minor())
                 .update();
     }
 
@@ -279,16 +282,16 @@ class JdbcPaymentRepository implements PaymentRepository {
                 Money.of(rs.getLong("stripe_fee_minor"), currency), rs.getBoolean("fee_estimated"),
                 rs.getString("stripe_charge_id"), rs.getBoolean("final_capture"),
                 json.strings(rs.getString("line_ids_json")), rs.getObject("journal_id", UUID.class),
-                Sql.instant(rs, "captured_at"));
+                Sql.instant(rs, "captured_at"), Money.of(rs.getLong("credit_minor"), currency));
     }
 
     @Override
     public void insertRefund(Refund r) {
         jdbc.sql("""
                 insert into payment_refund (id, payment_id, order_id, stripe_refund_id, currency, amount_minor,
-                    status, reason, lines, created_at, settled_at)
+                    status, reason, lines, created_at, settled_at, credit_minor, card_as_credit)
                 values (:id, :pid, :orderId, :stripeId, :currency, :amount, :status, :reason, cast(:lines as jsonb),
-                    :createdAt, :settledAt)
+                    :createdAt, :settledAt, :credit, :cardAsCredit)
                 """)
                 .param("id", r.id()).param("pid", r.paymentId()).param("orderId", r.orderId())
                 .param("stripeId", r.stripeRefundId()).param("currency", r.amount().currency())
@@ -296,6 +299,7 @@ class JdbcPaymentRepository implements PaymentRepository {
                 .param("reason", r.reason()).param("lines", json.write(r.lines().stream().map(RefundLineRow::of)
                         .toList()))
                 .param("createdAt", Sql.ts(r.createdAt())).param("settledAt", Sql.ts(r.settledAt()))
+                .param("credit", r.credit().minor()).param("cardAsCredit", r.cardAsCredit())
                 .update();
     }
 
@@ -326,7 +330,8 @@ class JdbcPaymentRepository implements PaymentRepository {
         return new Refund(rs.getObject("id", UUID.class), rs.getObject("payment_id", UUID.class),
                 rs.getString("order_id"), rs.getString("stripe_refund_id"),
                 Money.of(rs.getLong("amount_minor"), currency), RefundStatus.valueOf(rs.getString("status")),
-                rs.getString("reason"), lines, Sql.instant(rs, "created_at"), Sql.instant(rs, "settled_at"));
+                rs.getString("reason"), lines, Sql.instant(rs, "created_at"), Sql.instant(rs, "settled_at"),
+                Money.of(rs.getLong("credit_minor"), currency), rs.getBoolean("card_as_credit"));
     }
 
     /** Stored form of a refund line (plain numbers). */
@@ -352,12 +357,14 @@ class JdbcPaymentRepository implements PaymentRepository {
                           PaymentStatus status, String intentId, String clientSecret, UUID scheduleId,
                           Instant placedAt, long captured, long refunded, Instant authorizedAt,
                           String failure, Map<String, String> metadata, Instant createdAt,
-                          Instant updatedAt, long version, UUID parentId, boolean multicapture) {
+                          Instant updatedAt, long version, UUID parentId, boolean multicapture, long credit,
+                          String shopperId) {
 
         Payment toPayment(List<PaymentLine> lines) {
             return new Payment(id, orderId, customerId, Money.of(amount, currency), status, intentId, clientSecret,
                     scheduleId, placedAt, Money.of(captured, currency), Money.of(refunded, currency), authorizedAt,
-                    failure, metadata, lines, createdAt, updatedAt, version, parentId, multicapture);
+                    failure, metadata, lines, createdAt, updatedAt, version, parentId, multicapture,
+                    Money.of(credit, currency), shopperId);
         }
     }
 }
