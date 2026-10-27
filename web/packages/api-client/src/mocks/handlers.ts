@@ -12,6 +12,7 @@ import { ZipSchema } from '../schemas/location';
 import { NewsletterRequestSchema } from '../schemas/site';
 import { fromApiSearchParams } from '../search-params';
 import { mockAddressSuggestions, mockResolveAddress } from './addresses';
+import { creditHandlers } from './credit';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
 import { deliveryRunHandlers } from './delivery-run-handlers';
@@ -264,6 +265,7 @@ export const handlers = [
   ...shopperSettingsHandlers,
   /* Addresses, payments, orders, returns, checkout, services & bookings, Lola */
   ...shopperHandlers,
+  ...creditHandlers,
   ...preorderHandlers,
   ...deliveryRunHandlers,
   ...legalHandlers,

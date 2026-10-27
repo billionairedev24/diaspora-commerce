@@ -1,6 +1,7 @@
 export { type AddressLookup, addressLookup, type AddressLookupClient, type AddressSearchOptions, newAddressSessionToken, type ResolvableAddressSuggestion } from './address-lookup';
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
 export { CORRELATION_HEADER, newCorrelationId, withCorrelationHeaders } from './correlation';
+export * from './credit-client';
 export * from './delivery-runs';
 export { ApiError, isApiError } from './errors';
 export * from './fee-rates';
@@ -25,6 +26,7 @@ export * from './schemas/careers';
 export * from './schemas/cart';
 export * from './schemas/catalog';
 export * from './schemas/common';
+export * from './schemas/credit';
 export * from './schemas/exports';
 export * from './schemas/help';
 export * from './schemas/home';

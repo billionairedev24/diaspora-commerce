@@ -5,6 +5,7 @@ import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './accou
 import { CartPackageSchema } from './cart';
 import { ProductSummarySchema } from './catalog';
 import { DeliveryFeeRuleRefSchema, MinorSchema } from './common';
+import { CheckoutCreditSchema } from './credit';
 import { RailSchema } from './home';
 
 /* Storefront account (address input, order detail & tracking, returns, login & security), checkout, services &
@@ -121,7 +122,11 @@ export const OrderDetailSchema = z.object({
   shipments: z.array(ShipmentDetailSchema),
   /** What was charged and refunded (payments); absent when payments cannot answer. */
   payment: z
-    .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema })
+    .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema,
+      /** The part paid with AfroTransact credit; the card paid the rest (S320). */
+      creditMinor: MinorSchema.default(0),
+      /** The card part of this order's refunds comes back as credit (the shopper's one-way choice). */
+      cardRefundsAsCredit: z.boolean().default(false) })
     .optional()
 });
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
@@ -316,7 +321,9 @@ export const CheckoutSummarySchema = z.object({
   sellerCount: z.number().int(),
   publishableKey: z.string().optional(),
   stripeCustomerId: z.string().optional(),
-  crossSell: RailSchema.nullish()
+  crossSell: RailSchema.nullish(),
+  /** What the shopper's AfroTransact credit would pay of this order; absent without credit (S320). */
+  credit: CheckoutCreditSchema.nullish()
 });
 export type CheckoutSummary = z.infer<typeof CheckoutSummarySchema>;
 
@@ -347,6 +354,8 @@ export const PlaceOrderRequestSchema = z.object({
   newPaymentMethod: z.boolean().optional(),
   /** With newPaymentMethod: keep it on the shopper's Stripe Customer (setup_future_usage=off_session). */
   savePaymentMethod: z.boolean().optional(),
+  /** Pay with AfroTransact credit first; with enough credit no payment method is needed (S320). */
+  useCredit: z.boolean().optional(),
   gift: z.boolean().optional(),
   couponCode: z.string().max(20).optional(),
   deliverySelections: z.array(DeliverySelectionSchema),
@@ -359,6 +368,8 @@ export const OrderConfirmationSchema = z.object({
   orderNumber: z.string(),
   status: z.enum(['placed', 'awaiting_payment', 'processing', 'requires_action']),
   paymentClientSecret: nullableString.optional(),
+  /** The part of the total paid with credit (S320). */
+  creditMinor: MinorSchema.optional(),
   totalMinor: MinorSchema,
   currency: z.string(),
   shipments: z.array(z.object({ shipmentId: z.string(), label: z.string(), eta: z.string(), deliveryCode: nullableString.optional() })),
