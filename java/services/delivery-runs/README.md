@@ -14,8 +14,40 @@ Bastrop from Austin). A run makes those orders economical by batching them.
 Payment is not part of a run (ADR 0005 §1): nothing is authorised for later, no capture waits for a minimum, and there
 are no card holds that expire. If a window or a run is cancelled, **every order on it is refunded in full, delivery fee
 included**, automatically and idempotently, and stock is released. The earlier idea of customers reserving a run slot
-with a saved card (S261 as first written) is superseded by windows; the reservation API below remains for runs staff
-schedule directly and is not used by checkout.
+with a saved card (S261 as first written) is superseded: a customer pays at checkout like any other order, and the
+reservation API below is how checkout puts an order **on a run staff scheduled** (see
+[Checkout and runs](#checkout-offers-the-next-open-run-s261)).
+
+### Checkout offers the next open run (S261)
+
+Precedence, decided once per cart line and never both:
+
+1. **A delivery run staff scheduled** (S260) when the shopper's ZIP is covered by an open run with room (`GET
+   /v1/public/runs/available?zip=`, earliest cutoff first, `full` runs skipped) **and** the line is AfroTransact's own
+   stock (Retail or FBA, in stock for the quantity). The cart (cart-service, ZIP from the BFF as `X-Delivery-Zip`) shows a
+   `preorder:<runId>` package with `kind` RUN, the delivery date, the **cutoff**, the fee and the fee rule behind it, and the
+   honest minimum progress (`ordersSoFar` of `minOrders`, orders holding a slot now; the shopper's own counts once placed).
+2. **A pre-order window** (the line's goods are not AfroTransact's, or no run is open for the ZIP, or the run list is
+   unavailable): the S272 behaviour, unchanged.
+3. Otherwise the line ships now.
+
+At placement orders-service repeats the lookup (the cart is advice, orders decides), snapshots the run, its date, cutoff,
+fee and fee rule on the PREORDER shipment (`source` RUN), then takes a slot with `POST /v1/service/runs/{id}/reservations`
+(`allowNextRun=false`: the shopper was quoted this date and fee) **before** anything is charged. The slot counts toward the
+run's minimum and capacity at once, is idempotent per order, and is released on a failed payment, a customer cancel
+(until the run's cutoff, the same path as a window cancel), a refund and a cancelled run. After the cutoff the run is no
+longer listed, so the cart moves to the next open run or, if none, the line falls back to a window or ships now; an order
+that races the cutoff gets `orders.run-closed` or `orders.run-full` before any charge. Confirming, extending or cancelling
+a run (staff or the cutoff job) goes through the existing consumers: `delivery-runs.run.cancelled` makes orders refund
+every order on it and notifications tell the customers; `run.confirmed` issues the handover codes.
+
+Payment stays **authorise at checkout, capture when the package ships** (unchanged, see *Known gaps*).
+
+**Stock.** Pre-order and run lines of AfroTransact stock hold a real inventory reservation: confirmed with the payment,
+committed when the package leaves, released on cancel, refund or a cancelled run (retried on an inventory outage). What
+stays best effort: a seller's own goods in a window are not AfroTransact's to reserve (nothing is held); an inventory
+outage at placement degrades like any order's stock hold (logged, retried by the follow-up job); and a quantity the cart
+saw in stock can sell out before placement, in which case the order is refused at placement, not at the cart.
 
 This pass covers S260 (service and run lifecycle), the pre-order windows (S270, S271) with the staff-set minimum, the
 decision for a window that closes below it and cancellation with refunds (ADR 0005 §1 and §4), and the data and API
@@ -403,8 +435,8 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
   therefore usually *releases* the authorisation (`VOIDED`: nothing was taken) rather than refunding a captured payment
   (`REFUNDED`); both leave the customer whole, delivery fee included. Moving to capture-at-order is an orders / payments
   change, not a delivery-runs one.
-- **Stock.** PREORDER packages are not inventory-tracked in orders-service (they sell goods AfroTransact already holds),
-  so cancelling releases a stock reservation only if inventory has one for the lines (best effort, 404 ignored).
+- **Stock.** Pre-order and run lines of AfroTransact stock hold an inventory reservation (S261, see *Checkout offers the
+  next open run*); a seller's own goods in a window hold none, and release stays best effort (404 ignored).
 - **Run-level automatic decisions.** `RunScheduleJob` still decides runs staff schedule *directly* at their cutoff
   (`CutoffPolicy` EXTEND / CANCEL, auto-cancel `MINIMUM_NOT_MET`). Runs created from windows are `CONFIRMED` at hand-over
   and never reach that job; the window's own minimum and the staff decision are what ADR 0005 §4 asks for.
@@ -417,12 +449,10 @@ cd java && ./mvnw -B -f services/delivery-runs/pom.xml verify     # checkstyle, 
   a run's `completed` still does not mark packages delivered, it follows them. The progress follows PREORDER shipments
   only, and the by-hand moves `start-collecting`, `out-for-delivery` and `complete` are still not logged with a reason
   (extend, confirm and cancel are, since S260).
-- **A run staff schedule is not fed by checkout (S260).** Customers order into pre-order windows; when a window closes it
-  hands its paid orders to a run it creates itself (`fromWindow`). Nothing in orders-service calls the slot reservation API
-  (`POST /v1/service/runs/{runId}/reservations`), so a run scheduled in the console takes no customer orders until something
-  reserves slots (a service client, or `fromWindow` adopting a matching scheduled run: a follow-up). Its minimum, capacity,
-  extend, confirm and cancel behave as specified (see `RunStaffActionsIT`, `RunFlowIT`), but the refund of its orders can
-  only happen for runs that hold slots.
+- **Runs staff schedule are fed by checkout (S261).** AfroTransact-held goods go on the next open run for the shopper's
+  ZIP (see *Checkout offers the next open run*); a closing window still creates its own run (`fromWindow`) rather than
+  adopting a matching scheduled one (follow-up). Runs are found by ZIP only (a shopper without a 5-digit ZIP sees windows);
+  mobile apps do not show the run package yet; a run is not offered for an order of seller-fulfilled goods.
 - **Who may act.** The console gates run changes on `preorders:manage` (EDIT on the module). delivery-runs requires
   `delivery-runs:manage` for them: Operations and Dispatch have both, Marketing has only the first and gets a 403 from
   delivery-runs. A dedicated permission is a follow-up.

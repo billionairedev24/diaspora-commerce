@@ -101,6 +101,19 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
 - **Not built.** Components in more than one currency on a single lot (freight paid in dollars on pesos goods is entered in the lot's
   currency at the same rate), automatic rate feeds, and re-valuing stock when a rate changes (by design, a lot keeps its receiving rate).
 
+## Implementation notes (checkout and delivery runs: S261)
+
+- **Which one the shopper is offered.** A run staff scheduled for the shopper's ZIP wins over a pre-order window for
+  AfroTransact-held goods that are in stock; every other line is looked up in windows; a line is never offered both. No
+  open run with room, or delivery-runs unavailable, falls back to the window, then to shipping now.
+- **What the shopper sees.** Delivery date, the order cutoff, the fee with the fee rule behind it (§3), and honest minimum
+  progress ("7 of 10 orders so far"; met or not, and that an unmet run refunds in full). After the cutoff the next open run
+  is offered, else the shopper is told none is open; an order that races the cutoff is refused before any charge.
+- **Slots and charging.** The order takes a run slot before it is charged (idempotent per order, counts toward the minimum and
+  capacity, released on payment failure, cancel, refund and a cancelled run). Charging is unchanged: authorise at checkout,
+  capture when the package ships; a cancelled run voids or refunds in full with the delivery fee (§1).
+- **Stock.** Run and pre-order lines of AfroTransact stock hold an inventory reservation until they ship or are cancelled.
+
 ## Implementation notes (run lifecycle in the staff console: S260)
 
 - **Staff schedule and decide on runs.** Pre-orders, Delivery runs creates a run for a location (its area, a geo polygon or a
