@@ -33,10 +33,56 @@ func fakeRun(id, status string, reserved, minimum int) map[string]any {
 		"milestones": map[string]any{"openedAt": "2026-10-20T09:00:00Z"}, "createdAt": "2026-10-19T09:00:00Z", "updatedAt": "2026-10-19T09:00:00Z", "version": 2}
 }
 
+// fakeLocation is a location as delivery-runs answers it.
+func fakeLocation(id string, name, slug any) map[string]any {
+	return map[string]any{"id": id, "slug": slug, "name": name, "market": "US", "state": "TX", "timeZone": "America/Chicago",
+		"area": map[string]any{"kind": "RADIUS", "geoZoneId": nil, "centerLat": 30.1105, "centerLng": -97.3153, "radiusMiles": 12.0}, "currency": "USD",
+		"defaultFeeMinor": 799, "defaultMinOrders": 10, "defaultCapacityOrders": 40, "defaultCutoffPolicy": "EXTEND", "defaultExtendDays": 7, "dropMode": "DOORSTEP",
+		"pickupPoint": nil, "whatsappInviteUrl": nil, "active": true, "version": 1}
+}
+
 // runLifecycle fakes delivery-runs' run lifecycle routes; false when the route is not one of them.
 func (f *fakeDeliveryRuns) runLifecycle(w http.ResponseWriter, r *http.Request, body map[string]any) bool {
 	p := r.URL.Path
 	switch {
+	case p == "/v1/locations" && r.Method == http.MethodPost:
+		if body["slug"] == "taken-tx" {
+			problemDetail(w, 409, "delivery-runs.slug-taken", "A location with this web address already exists")
+			return true
+		}
+		loc := fakeLocation(runLocationID, body["name"], body["slug"])
+		for k, v := range body {
+			loc[k] = v
+		}
+		loc["active"] = body["active"] != false
+		writeJ(w, 201, loc)
+		return true
+	case strings.HasPrefix(p, "/v1/locations/") && r.Method != http.MethodGet && !strings.HasSuffix(p, "/history"):
+		id, action, _ := strings.Cut(strings.TrimPrefix(p, "/v1/locations/"), "/")
+		if id != runLocationID {
+			problemDetail(w, 404, "delivery-runs.location-not-found", "Location not found")
+			return true
+		}
+		loc := fakeLocation(id, "Bastrop", "bastrop-tx")
+		switch {
+		case action == "" && r.Method == http.MethodPut:
+			for k, v := range body {
+				loc[k] = v
+			}
+			loc["active"] = true // an edit never switches a location
+		case action == "deactivate":
+			if body["reason"] == "live" {
+				problemDetail(w, 409, "delivery-runs.location-has-live-runs", "A run of this location is open")
+				return true
+			}
+			loc["active"] = false
+		case action == "activate":
+			loc["active"] = true
+		default:
+			return false
+		}
+		writeJ(w, 200, loc)
+		return true
 	case strings.HasPrefix(p, "/v1/locations/") && !strings.HasSuffix(p, "/history") && r.Method == http.MethodGet:
 		writeJ(w, 200, map[string]any{"id": runLocationID, "slug": "bastrop-tx", "name": "Bastrop", "market": "US", "state": "TX", "timeZone": "America/Chicago",
 			"area": map[string]any{"kind": "RADIUS", "geoZoneId": nil, "centerLat": 30.1105, "centerLng": -97.3153, "radiusMiles": 12.0}, "currency": "USD",

@@ -2356,7 +2356,80 @@ export interface paths {
          */
         get: operations["listStaffRunLocations"];
         put?: never;
+        /**
+         * Add a town delivery runs serve
+         * @description delivery-runs `POST /v1/locations` (preorders:manage, EDIT; delivery-runs:manage upstream). Give the name and market,
+         *     where the town delivers (a radius in miles around its centre, or an area registered as a zone in geo-service, or
+         *     a drawn GeoJSON outline), the defaults new runs start from (fee, minimum, capacity, cutoff policy), the IANA
+         *     time zone (default America/Chicago) and the community (WhatsApp) link. The slug is made from the name and state
+         *     when it is not given. The location is active unless `active` is false. Field problems are answered per field (422).
+         */
+        post: operations["createStaffRunLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a town's details
+         * @description delivery-runs `PUT /v1/locations/{id}` (preorders:manage, EDIT). Replaces the details; an edit never switches the
+         *     location on or off (use deactivate and activate, which are audited) and runs already scheduled keep their own
+         *     fee, minimum and capacity.
+         */
+        put: operations["updateStaffRunLocation"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch a town off, with the reason that is audited
+         * @description delivery-runs `POST /v1/locations/{id}/deactivate` (preorders:manage, EDIT). The reason is required and is recorded
+         *     with the staff member's name and the time (event delivery-runs.location.changed, audit log). Refused with 409
+         *     while a run of the town announced, takes orders or is on the road. A switched-off town gets no new runs and
+         *     disappears from the shop front; its history stays. Already off: unchanged.
+         */
+        post: operations["deactivateStaffRunLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch a town back on
+         * @description delivery-runs `POST /v1/locations/{id}/activate` (preorders:manage, EDIT). The reason is optional and audited like the switch off. Already on, unchanged.
+         */
+        post: operations["activateStaffRunLocation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7085,6 +7158,63 @@ export interface components {
             } | null;
         } & {
             [key: string]: unknown;
+        };
+        StaffRunLocationDetail: components["schemas"]["StaffRunLocation"] & {
+            can?: components["schemas"]["PreorderCan"];
+        };
+        /**
+         * @description A town. `areaKind` RADIUS needs `radiusMiles`; POLYGON needs `geoZoneId` (an existing geo-service zone) or
+         *     `polygonGeoJson` (registered as a zone). `centerLat` and `centerLng` are always required: the circle centre and the
+         *     drive destination for run economics. `active` only matters on create.
+         */
+        StaffRunLocationRequest: {
+            /** @example Bastrop */
+            name: string;
+            /**
+             * @description Made from the name and state when absent
+             * @example bastrop-tx
+             */
+            slug?: string;
+            /** @example US */
+            market: string;
+            /** @example TX */
+            state?: string | null;
+            /**
+             * @description IANA time zone; default America/Chicago
+             * @example America/Chicago
+             */
+            timeZone?: string;
+            /** @enum {string} */
+            areaKind: "POLYGON" | "RADIUS";
+            radiusMiles?: number;
+            geoZoneId?: string;
+            polygonGeoJson?: string;
+            centerLat: number;
+            centerLng: number;
+            originLat?: number;
+            originLng?: number;
+            /** @description Delivery fee new runs start from, minor units */
+            defaultFeeMinor?: number;
+            currency?: string;
+            defaultMinOrders?: number;
+            defaultCapacityOrders?: number;
+            defaultCapacityPackages?: number;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            /** @enum {string} */
+            defaultCutoffPolicy?: "EXTEND" | "CANCEL";
+            defaultExtendDays?: number;
+            /**
+             * @description The community (WhatsApp) link; blank or null clears it
+             * @example https://chat.whatsapp.com/AbCdEf123
+             */
+            whatsappInviteUrl?: string | null;
+            /** @description Create only; the default is on */
+            active?: boolean;
+        };
+        /** @description Why a town is switched off (required) or on (optional); audited with the staff member's name */
+        StaffRunLocationSwitch: {
+            reason?: string;
         };
         StaffRunLocations: {
             items: components["schemas"]["StaffRunLocation"][];
@@ -11920,6 +12050,131 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deactivateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationSwitch"];
+            };
+        };
+        responses: {
+            /** @description Switched off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    activateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationSwitch"];
+            };
+        };
+        responses: {
+            /** @description Switched on */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

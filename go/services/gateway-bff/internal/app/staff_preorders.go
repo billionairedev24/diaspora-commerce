@@ -88,6 +88,12 @@ type StaffPreordersService interface {
 	PlanWindow(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	// RunLocations lists the towns served by delivery runs.
 	RunLocations(ctx context.Context, c *domain.Caller) (any, error)
+	// CreateRunLocation adds a town delivery runs serve (name, area, defaults, time zone, community link).
+	CreateRunLocation(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// UpdateRunLocation replaces a location's details; it never switches the location on or off.
+	UpdateRunLocation(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// SwitchRunLocation switches a location off (reason required, audited) or back on (reason optional).
+	SwitchRunLocation(ctx context.Context, c *domain.Caller, id string, on bool, body map[string]any) (any, error)
 	// RunLocationHistory is a location's runs (orders, fees, refunds), subscriber counts and subscriber growth.
 	RunLocationHistory(ctx context.Context, c *domain.Caller, id string) (any, error)
 	// Runs lists runs (?locationId=&status=&limit=).
