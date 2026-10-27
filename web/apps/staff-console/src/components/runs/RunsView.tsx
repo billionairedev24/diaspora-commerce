@@ -1,10 +1,10 @@
 'use client';
 
-import { type RunHistoryRow, staffRunQueries } from '@afrotransact/api-client';
+import { type RunHistoryRow, staffRunKeys, staffRunQueries } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, Select } from '@afrotransact/ui';
-import { Plus } from '@phosphor-icons/react/ssr';
-import { useQuery } from '@tanstack/react-query';
+import { Button, Select, useToast } from '@afrotransact/ui';
+import { PencilSimple, Plus } from '@phosphor-icons/react/ssr';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { HBars } from '@/components/preorders/PreorderCharts';
@@ -13,10 +13,11 @@ import { EmptyState, ErrorState, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 
 import { AdvertorialsPanel } from './AdvertorialsPanel';
+import { LocationFormSheet } from './LocationForm';
 import { RunFormSheet } from './RunForm';
 import { RunList, RunsNeedingDecision } from './RunList';
 import { RunPnlPanel } from './RunPnlPanel';
-import { RunSheet } from './RunSheet';
+import { ActionDialog, RunSheet } from './RunSheet';
 import { RUN_STATUS_PILL, runStatusLabel, useCanManageRuns, useRunsApi } from './shared';
 
 function HistoryTable({ rows, currency, selected, onSelect }: { rows: RunHistoryRow[]; currency: string; selected: string | null; onSelect: (id: string) => void }) {
@@ -130,15 +131,47 @@ export function RunsView() {
   const manage = useCanManageRuns();
   const locations = useQuery(staffRunQueries.locations(api));
   const [chosen, setChosen] = useState('');
+  const qc = useQueryClient();
+  const toast = useToast();
   const [sheet, setSheet] = useState<{ kind: 'view'; id: string } | { kind: 'form'; id: string | null } | null>(null);
+  const [place, setPlace] = useState<{ kind: 'form'; id: string | null } | { kind: 'off' | 'on' } | null>(null);
   if (locations.isPending) return <Spinner />;
   if (locations.isError) return <ErrorState error={locations.error} onRetry={() => void locations.refetch()} />;
   const items = locations.data.items;
-  if (items.length === 0) return <EmptyState title={t('st.runs.runs.empty.title')}>{t('st.runs.runs.empty.help')}</EmptyState>;
-  const location = items.find((l) => l.id === chosen) ?? items[0];
-  if (!location) return null;
   const canManage = locations.data.can.manage && manage;
+  const location = items.find((l) => l.id === chosen) ?? items.find((l) => l.active !== false) ?? items[0];
+  const addButton = (
+    <Button icon={<Plus aria-hidden size={18} />} variant="neutral" disabled={!canManage} title={canManage ? undefined : t('st.runs.loc.noAccess')} onClick={() => setPlace({ kind: 'form', id: null })}>
+      {t('st.runs.loc.add')}
+    </Button>
+  );
+  const locationSheet = (
+    <LocationFormSheet
+      open={place?.kind === 'form'}
+      location={place?.kind === 'form' && place.id ? (items.find((l) => l.id === place.id) ?? null) : null}
+      onClose={() => setPlace(null)}
+      onSaved={(saved) => {
+        setChosen(saved.id);
+        setPlace(null);
+      }}
+    />
+  );
+  if (!location) {
+    return (
+      <div className="flex flex-col gap-4 p-5" data-testid="runs-view">
+        <EmptyState title={t('st.runs.loc.empty.title')}>{t('st.runs.runs.empty.help')}</EmptyState>
+        <div>{addButton}</div>
+        {locationSheet}
+      </div>
+    );
+  }
+  const off = location.active === false;
   const view = (id: string) => setSheet({ kind: 'view', id });
+  const switched = (on: boolean) => (reason: string) =>
+    (on ? api.activateLocation(location.id, reason || undefined) : api.deactivateLocation(location.id, reason)).then(() => {
+      void qc.invalidateQueries({ queryKey: staffRunKeys.all });
+      toast.show(t(on ? 'st.runs.loc.toast.on' : 'st.runs.loc.toast.off'));
+    });
   return (
     <div className="flex flex-col gap-4 p-5" data-testid="runs-view">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -151,13 +184,54 @@ export function RunsView() {
         </Button>
       </div>
       <RunsNeedingDecision onOpen={view} />
-      <Select label={t('st.runs.runs.location')} value={location.id} onChange={(e) => setChosen(e.currentTarget.value)} options={items.map((l) => ({ value: l.id, label: l.name }))} className="max-w-xs" />
+      <div className="flex flex-wrap items-end gap-3">
+        <Select
+          label={t('st.runs.runs.location')}
+          value={location.id}
+          onChange={(e) => setChosen(e.currentTarget.value)}
+          options={items.map((l) => ({ value: l.id, label: l.active === false ? t('st.runs.loc.offOption', { name: l.name }) : l.name }))}
+          className="max-w-xs"
+        />
+        <Button variant="neutral" icon={<PencilSimple aria-hidden size={18} />} disabled={!canManage} title={canManage ? undefined : t('st.runs.loc.noAccess')} onClick={() => setPlace({ kind: 'form', id: location.id })}>
+          {t('st.runs.loc.edit')}
+        </Button>
+        <Button variant="neutral" disabled={!canManage} title={canManage ? undefined : t('st.runs.loc.noAccess')} onClick={() => setPlace({ kind: off ? 'on' : 'off' })}>
+          {t(off ? 'st.runs.loc.switchOn' : 'st.runs.loc.switchOff')}
+        </Button>
+        {addButton}
+      </div>
+      {off ? (
+        <p className="m-0 max-w-[80ch] rounded-md border border-border bg-surface-muted p-3 text-sm" data-testid="location-off-notice">
+          {t('st.runs.loc.offNotice', { town: location.name })}
+        </p>
+      ) : null}
       <RunList location={location} onOpen={view} />
       <LocationHistory key={location.id} locationId={location.id} currency={location.currency ?? 'USD'} />
       <RunSheet
         runId={sheet?.kind === 'view' ? sheet.id : null}
         onClose={() => setSheet(null)}
         onEdit={(run) => setSheet({ kind: 'form', id: run.id })}
+      />
+      {locationSheet}
+      <ActionDialog
+        open={place?.kind === 'off'}
+        title={t('st.runs.loc.off.title', { town: location.name })}
+        help={t('st.runs.loc.off.help')}
+        reasonLabel={t('st.runs.loc.off.reason')}
+        confirmLabel={t('st.runs.loc.off.confirm')}
+        danger
+        onClose={() => setPlace(null)}
+        onSubmit={switched(false)}
+      />
+      <ActionDialog
+        open={place?.kind === 'on'}
+        title={t('st.runs.loc.on.title', { town: location.name })}
+        help={t('st.runs.loc.on.help')}
+        reasonLabel={t('st.runs.loc.on.reason')}
+        reasonRequired={false}
+        confirmLabel={t('st.runs.loc.on.confirm')}
+        onClose={() => setPlace(null)}
+        onSubmit={switched(true)}
       />
       <RunFormSheet
         open={sheet?.kind === 'form'}
