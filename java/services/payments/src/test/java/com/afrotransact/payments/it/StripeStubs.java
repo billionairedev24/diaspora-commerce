@@ -26,6 +26,14 @@ final class StripeStubs {
                 intent(piId, amount, "requires_payment_method", null, 0));
     }
 
+    /** The PaymentIntent of a gift card purchase by this customer (metadata kind=gift_card). */
+    void giftCardIntent(String afroCustomerId, String piId, long amount) {
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing("metadata[kind]=gift_card"))
+                .withRequestBody(WireMock.containing("metadata[afrotransact_customer_id]=" + afroCustomerId)),
+                intent(piId, amount, "requires_payment_method", null, 0));
+    }
+
     void retrieveIntent(String piId, long amount, String status) {
         json(WireMock.get(WireMock.urlPathEqualTo("/v1/payment_intents/" + piId)),
                 intent(piId, amount, status, null, 0));
