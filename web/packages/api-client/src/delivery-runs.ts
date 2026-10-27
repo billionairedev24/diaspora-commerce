@@ -96,6 +96,17 @@ export type RunSubscriptionList = z.infer<typeof RunSubscriptionListSchema>;
 
 export const RunSubscribeAcceptedSchema = z.object({ status: z.literal('CONFIRMATION_SENT') });
 
+/** A product staff feature on an advertorial's card; the price is not kept (the product page shows today's). */
+export const RunFeaturedProductSchema = z.object({ atin: z.string(), title: z.string(), imageUrl: z.string().nullish() });
+export type RunFeaturedProduct = z.infer<typeof RunFeaturedProductSchema>;
+
+/** The UTM tags a visitor arrived with (the only attribution kept: no cookie, address or visitor id). */
+export interface RunUtmTags {
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+}
+
 /** An advertorial served to the shopper's place, one variant. */
 export const RunAdvertorialSchema = z.object({
   id: z.string(),
@@ -115,7 +126,9 @@ export const RunAdvertorialSchema = z.object({
   countdownTarget: z.string().nullable().default(null),
   expiresAt: z.string(),
   deliveryDisplay: z.string().nullable().default(null),
-  feeDisplay: z.string().nullable().default(null)
+  feeDisplay: z.string().nullable().default(null),
+  /** Up to four products the card features, each linking to its product page. */
+  featuredProducts: z.array(RunFeaturedProductSchema).max(4).default([])
 });
 export type RunAdvertorial = z.infer<typeof RunAdvertorialSchema>;
 export const RunAdvertorialListSchema = z.object({ items: z.array(RunAdvertorialSchema) });
@@ -145,7 +158,7 @@ export function deliveryRunMethods(request: Requester) {
     listRunLocations: (signal?: AbortSignal): Promise<RunLocationList> => request('/v1/delivery-runs/locations', RunLocationListSchema, { signal }),
     getRunLocation: (slug: string, signal?: AbortSignal): Promise<RunLocationPage> => request(`/v1/delivery-runs/locations/${enc(slug)}`, RunLocationPageSchema, { signal }),
     /** Email sign-up for one location; always accepted, the confirmation link follows (double opt-in). */
-    subscribeRunAlerts: (body: { locationId: string; email: string; source?: string }): Promise<z.infer<typeof RunSubscribeAcceptedSchema>> =>
+    subscribeRunAlerts: (body: { locationId: string; email: string; source?: string } & RunUtmTags): Promise<z.infer<typeof RunSubscribeAcceptedSchema>> =>
       request('/v1/delivery-runs/subscriptions', RunSubscribeAcceptedSchema, { method: 'POST', body }),
     /** The confirmation link (`/delivery-runs/subscriptions/confirm?token=`). */
     confirmRunAlerts: (token: string): Promise<RunSubscription> => request('/v1/delivery-runs/subscriptions/confirm', RunSubscriptionSchema, { method: 'POST', body: { token } }),
@@ -162,6 +175,9 @@ export function deliveryRunMethods(request: Requester) {
       channels?.forEach((c) => q.append('channel', c));
       return request(`/v1/account/run-subscriptions/${enc(locationId)}`, RunSubscriptionSchema, { method: 'DELETE', query: q });
     },
+    /** Best effort: a visit that arrived with UTM tags, once per visit; callers ignore a failure. */
+    countRunVisit: (slug: string, body: RunUtmTags & { runId?: string }): Promise<void> =>
+      request(`/v1/delivery-runs/locations/${enc(slug)}/visits`, z.void(), { method: 'POST', body }),
     listRunAdvertorials: (query: RunAdvertorialQuery = {}, signal?: AbortSignal): Promise<RunAdvertorialList> =>
       request('/v1/delivery-runs/advertorials', RunAdvertorialListSchema, {
         query: {

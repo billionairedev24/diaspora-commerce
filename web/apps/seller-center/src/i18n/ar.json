@@ -986,5 +986,6 @@
   "sc.runPickups.bagsHelp": "كيس لكل طلب، بترتيب رقم الطلب.",
   "sc.runPickups.bag": "الطلب {order}",
   "sc.runPickups.bagCollected": "تم الاستلام",
-  "sc.runPickups.bagWaiting": "بانتظار السائق"
+  "sc.runPickups.bagWaiting": "بانتظار السائق",
+  "sc.payouts.order.unnamed": "an earlier order"
 }

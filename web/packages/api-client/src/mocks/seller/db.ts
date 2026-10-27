@@ -534,7 +534,7 @@ function freshDb(now: Date): MockSellerDb {
     planFeeCollectionAvailable: true,
     planFeeDeductions: [
       { invoiceId: 'in_3', invoiceNumber: 'AT-1003', label: 'Plan fee (invoice AT-1003)', status: 'WITHHELD', requestedMinor: 11115, withheldMinor: 9000, releasedMinor: 0,
-        outstandingMinor: 0, createdAt: iso(now), transfers: [{ orderId: 'AT-2026-400112', amountMinor: 9000, at: iso(now), label: 'Plan fee (invoice AT-1003) deducted from order AT-2026-400112' }] }
+        outstandingMinor: 0, createdAt: iso(now), transfers: [{ orderId: 'ord-400112', orderNumber: 'AT-2026-400112', amountMinor: 9000, at: iso(now), label: 'Plan fee (invoice AT-1003) deducted from order AT-2026-400112' }] }
     ],
     team: {
       [SELLER_ORG]: [

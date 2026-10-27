@@ -1322,5 +1322,6 @@
   "runs.unsubscribe.doneTitle": "Avisos detenidos",
   "runs.unsubscribe.doneBody": "Ya no recibirás avisos de rutas de este lugar.",
   "runs.unsubscribe.invalidTitle": "Este enlace no es válido",
-  "runs.unsubscribe.invalidBody": "Puede que sea antiguo. Puedes desactivar los avisos en tu cuenta, en Avisos de entrega."
+  "runs.unsubscribe.invalidBody": "Puede que sea antiguo. Puedes desactivar los avisos en tu cuenta, en Avisos de entrega.",
+  "runs.adv.featured": "Destacados en esta ruta"
 }

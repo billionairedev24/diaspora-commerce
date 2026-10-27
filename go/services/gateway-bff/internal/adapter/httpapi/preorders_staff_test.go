@@ -84,6 +84,20 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"id": "ast-9", "status": "READY"})
 		return
 	}
+	if p == "/v1/search" {
+		q := r.URL.Query().Get("q")
+		f.record(r)
+		if strings.Contains(q, "down") {
+			problemDetail(w, 503, "search.unavailable", "Search is down")
+			return
+		}
+		hits := []any{
+			map[string]any{"atin": "ATSHEA0001", "title": "Shea butter, raw", "sellerName": "Accra Naturals", "imageUrl": "https://cdn.example/shea.jpg", "priceMinor": 1299, "inStock": true},
+			map[string]any{"atin": "ATGARI0001", "title": "Garri, white", "sellerName": "AfroTransact Retail", "imageUrl": "http://insecure.example/g.jpg", "priceMinor": 899, "inStock": true},
+			map[string]any{"title": "No code"}}
+		writeJ(w, 200, map[string]any{"hits": hits, "total": 3, "page": 0, "size": 8, "facets": map[string]any{}})
+		return
+	}
 	if strings.HasPrefix(p, "/v1/delivery-fees") {
 		f.deliveryFees(w, r)
 		return
@@ -204,7 +218,7 @@ func preorderStaffBFF(t *testing.T) (*fakeDeliveryRuns, func(token, method, path
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), DeliveryRuns: up("delivery-runs"), Media: up("media"), Geo: up("geo")},
+	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), DeliveryRuns: up("delivery-runs"), Media: up("media"), Geo: up("geo"), Search: up("search")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
 		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Renderer: exportfiles.NewRenderer(), Log: log, Background: func(fn func()) { fn() }}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),

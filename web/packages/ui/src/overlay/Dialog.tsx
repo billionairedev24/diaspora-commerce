@@ -80,6 +80,15 @@ export interface SheetProps extends Omit<DialogProps, 'width'> {
 
 const keepOpen = (e: Event) => e.preventDefault();
 
+/**
+ * Whether an interaction happened inside another dialog or menu (a one-time secret, a confirmation, a menu) that sits on top
+ * of the sheet: that is not "outside" for the sheet, so clicking in it must not close the sheet behind it.
+ */
+const inAnotherLayer = (e: Event) => e.target instanceof Element && e.target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]') !== null;
+const closeOnOutsideClick = (e: Event) => {
+  if (inAnotherLayer(e)) e.preventDefault();
+};
+
 /** Side sheet / drawer (record details, Lola, mobile navigation). */
 export function Sheet({ open, onOpenChange, title, description, header, children, side = 'right', modal = side === 'left', persistent = false, closeLabel = 'Close', className, width }: SheetProps) {
   const returnFocus = useReturnFocus(open);
@@ -90,7 +99,7 @@ export function Sheet({ open, onOpenChange, title, description, header, children
         <Content
           className={cx(styles.sheet, styles[side], !modal && styles.docked, className)}
           onCloseAutoFocus={returnFocus}
-          onInteractOutside={modal || !persistent ? undefined : keepOpen}
+          onInteractOutside={modal ? undefined : persistent ? keepOpen : closeOnOutsideClick}
           // Only a click outside closes a docked sheet; focus moving elsewhere (a dialog closing, a menu) does not.
           onFocusOutside={modal ? undefined : keepOpen}
           style={side === 'left' && width ? ({ '--sheet-width': `${width}px` } as CSSProperties) : undefined}

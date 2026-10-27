@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-/* Staff console › Finance › Plans & billing (S292–S298) against the mock BFF: the plan catalogue with the Stripe sync
-   status, a promo-code trial campaign, a reward rule with its "who qualifies now" preview, a per-seller credit with a
+/* Staff console › Finance › Plans & billing (S292–S298) against the mock BFF: the plan catalogue, a promo-code trial campaign, a reward rule with its "who qualifies now" preview, a per-seller credit with a
    reason code that lands in the grants log, a per-seller override of how the plan is paid and the platform default
    for new sellers (Settings). Names are unique per run so the journey can run again. */
 test.describe('staff console · plans & billing', () => {
@@ -11,7 +10,7 @@ test.describe('staff console · plans & billing', () => {
     await expect(page.getByRole('heading', { name: 'Plans & billing' })).toBeVisible();
     const plans = page.getByRole('table', { name: 'Plans' });
     await expect(plans.getByRole('row', { name: /Seller Growth/ })).toBeVisible();
-    await expect(page.getByRole('table', { name: 'Stripe sync status' })).toContainText('Free');
+    await expect(plans.getByRole('row', { name: /Seller Essentials/ })).toContainText('$0.00');
 
     await page.getByRole('tab', { name: 'Trials & promotions' }).click();
     await page.getByRole('button', { name: 'New campaign' }).click();
@@ -71,12 +70,15 @@ test.describe('staff console · plans & billing', () => {
     await page.getByRole('tab', { name: 'Settings' }).click();
     await expect(page.getByTestId('kill-switch')).toContainText('On: sellers may pay their plan from their sales');
     const defaults = page.getByLabel('Default for new sellers');
-    await defaults.selectOption('CARD');
+    // Save stays off until the choice changes, so flip it to the other one and then put it back.
+    const original = await defaults.inputValue();
+    const other = original === 'CARD' ? 'EARNINGS_FIRST' : 'CARD';
+    await defaults.selectOption(other);
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Default saved')).toBeVisible();
-    await defaults.selectOption('EARNINGS_FIRST');
+    await defaults.selectOption(original);
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(defaults).toHaveValue('EARNINGS_FIRST');
+    await expect(defaults).toHaveValue(original);
   });
 
   /* S299: "1st month free (the trial) and 2nd month free if the seller sold less than $1,000". A LESS_THAN rule anchored

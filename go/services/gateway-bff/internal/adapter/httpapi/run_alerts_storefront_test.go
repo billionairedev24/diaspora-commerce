@@ -147,6 +147,9 @@ func TestRunAlertStorefrontRoutes(t *testing.T) {
 	if len(items) != 1 || items[0].(map[string]any)["id"] != testkit.RunAdvertorialID || !strings.Contains(items[0].(map[string]any)["ctaUrl"].(string), "cr=adv-") {
 		t.Fatalf("advertorials = %s", r.body)
 	}
+	if fp, _ := items[0].(map[string]any)["featuredProducts"].([]any); len(fp) != 2 || fp[0].(map[string]any)["atin"] != "ATSHEA0001" {
+		t.Fatalf("featured products = %s", r.body)
+	}
 	if q := bff.Upstreams.LastAdvertorialQuery; q.Get("zip") != "79401" || q.Get("visitor") != "v_123" || q.Get("limit") != "2" || q.Get("region") == "" {
 		t.Fatalf("upstream query = %v", q)
 	}
@@ -159,6 +162,32 @@ func TestRunAlertStorefrontRoutes(t *testing.T) {
 		mustStatus(t, b.do("GET", "/v1/delivery-runs/advertorials?"+bad, nil), 422)
 	}
 
+	// A visit that arrived with UTM tags is counted with the tags only; one without tags, or for a bad run, is not sent.
+	const visitRunID = "9d4a1c7e-0000-4000-8000-0000000000d1"
+	visits := "/v1/delivery-runs/locations/" + testkit.RunLocationSlug + "/visits"
+	bff.Upstreams.LastRunVisit = nil
+	mustStatus(t, b.do("POST", visits, map[string]any{"utmSource": " whatsapp ", "utmMedium": "social", "utmCampaign": "delivery-run-bastrop-tx-20261024", "runId": visitRunID}), 204)
+	if got := bff.Upstreams.LastRunVisit; got["utmSource"] != "whatsapp" || got["utmMedium"] != "social" || got["runId"] != visitRunID || len(got) != 4 {
+		t.Fatalf("visit relayed %v", got)
+	}
+	bff.Upstreams.LastRunVisit = nil
+	mustStatus(t, b.do("POST", visits, map[string]any{"runId": visitRunID}), 204)
+	mustStatus(t, b.do("POST", visits, nil), 204)
+	if bff.Upstreams.LastRunVisit != nil {
+		t.Fatalf("a visit without tags reached delivery-runs: %v", bff.Upstreams.LastRunVisit)
+	}
+	mustStatus(t, b.do("POST", visits, map[string]any{"utmSource": strings.Repeat("s", 81)}), 422)
+	mustStatus(t, b.do("POST", visits, map[string]any{"utmSource": "x", "runId": "not-a-run"}), 422)
+	mustStatus(t, b.do("POST", "/v1/delivery-runs/locations/nowhere/visits", map[string]any{"utmSource": "x"}), 404)
+	mustStatus(t, b.do("POST", "/v1/delivery-runs/locations/Not%20A%20Slug/visits", map[string]any{"utmSource": "x"}), 404)
+
+	// The tags a guest arrived with ride along on the sign-up.
+	mustStatus(t, b.do("POST", "/v1/delivery-runs/subscriptions", map[string]any{"locationId": testkit.RunLocationID, "email": "ada@example.com", "source": "location-page", "utmSource": "whatsapp", "utmCampaign": "c1"}), 202)
+	if w := bff.Upstreams.LastWaitlist; w["utmSource"] != "whatsapp" || w["utmCampaign"] != "c1" || w["utmMedium"] != nil {
+		t.Fatalf("sign-up relayed %v", w)
+	}
+	mustStatus(t, b.do("POST", "/v1/delivery-runs/subscriptions", map[string]any{"locationId": testkit.RunLocationID, "email": "ada@example.com", "utmMedium": strings.Repeat("m", 81)}), 422)
+
 	events := "/v1/delivery-runs/advertorials/" + testkit.RunAdvertorialID + "/events"
 	mustStatus(t, b.do("POST", events, map[string]any{"type": "view"}), 204)
 	mustStatus(t, b.do("POST", events, map[string]any{"type": "CLICK"}), 204)
@@ -170,7 +199,7 @@ func TestRunAlertStorefrontRoutes(t *testing.T) {
 	}
 
 	for _, op := range []string{"listRunLocations", "getRunLocation", "subscribeRunAlerts", "confirmRunAlerts", "unsubscribeRunAlerts",
-		"listMyRunSubscriptions", "subscribeMyRunAlerts", "unsubscribeMyRunAlerts", "listRunAdvertorials", "recordRunAdvertorialEvent"} {
+		"listMyRunSubscriptions", "subscribeMyRunAlerts", "unsubscribeMyRunAlerts", "listRunAdvertorials", "recordRunAdvertorialEvent", "countRunLocationVisit"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
 		}

@@ -13,6 +13,7 @@ import com.afrotransact.deliveryruns.adapter.in.web.PublicDtos.UnsubscribeReques
 import com.afrotransact.deliveryruns.application.PreorderAudienceService;
 import com.afrotransact.deliveryruns.application.SubscriptionService;
 import com.afrotransact.deliveryruns.domain.Channel;
+import com.afrotransact.deliveryruns.domain.UtmTags;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -54,7 +55,8 @@ class SubscriptionController {
                     body.source());
             return new AcceptedResponse("WAITLISTED");
         }
-        subscriptions.subscribeEmail(body.locationId(), body.email(), body.source());
+        subscriptions.subscribeEmail(body.locationId(), body.email(), body.source(),
+                UtmTags.clean(body.utmSource(), body.utmMedium(), body.utmCampaign()), body.runId());
         return new AcceptedResponse("CONFIRMATION_SENT");
     }
 
@@ -89,7 +91,8 @@ class SubscriptionController {
     @Operation(summary = "Signed-in shopper: subscribe to a location (or add channels); active at once")
     @PostMapping("/v1/me/run-subscriptions")
     SubscriptionResponse subscribe(@Valid @RequestBody MySubscriptionRequest body) {
-        return SubscriptionResponse.of(subscriptions.subscribeMine(body.locationId(), body.channels(), body.source()));
+        return SubscriptionResponse.of(subscriptions.subscribeMine(body.locationId(), body.channels(), body.source(),
+                UtmTags.clean(body.utmSource(), body.utmMedium(), body.utmCampaign()), body.runId()));
     }
 
     @Operation(summary = "Signed-in shopper: withdraw channels for a location (no channel = all)")

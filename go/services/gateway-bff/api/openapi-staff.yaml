@@ -225,6 +225,26 @@ paths:
         '429': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── resources
+  /v1/staff/lookups/{kind}:
+    get:
+      tags: [Resources]
+      operationId: searchStaffLookup
+      security: [{sessionCookie: []}]
+      summary: Find drivers or sellers by name for a form's picker
+      description: |
+        The searchable pickers of the console's forms (Assign driver, Stripe lookup): up to 20 matches by name, the id the
+        form sends, and a second line (email, kind of seller). `drivers` needs Delivery dispatch at View and the people
+        directory (users:read) upstream; `sellers` needs Payouts at View. Leave `q` out for the first matches.
+      parameters:
+        - {name: kind, in: path, required: true, schema: {type: string, enum: [drivers, sellers]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: 'Part of the name; 2 characters or more when given'}
+      responses:
+        '200': {description: Matches, content: {application/json: {schema: {$ref: '#/components/schemas/StaffLookupResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/resources/{resource}:
     get:
       tags: [Resources]
@@ -2700,6 +2720,91 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Run economics]
+      operationId: createStaffRunLocation
+      security: [{sessionCookie: []}]
+      summary: Add a town delivery runs serve
+      description: |
+        delivery-runs `POST /v1/locations` (preorders:manage, EDIT; delivery-runs:manage upstream). Give the name and market,
+        where the town delivers (a radius in miles around its centre, or an area registered as a zone in geo-service, or
+        a drawn GeoJSON outline), the defaults new runs start from (fee, minimum, capacity, cutoff policy), the IANA
+        time zone (default America/Chicago) and the community (WhatsApp) link. The slug is made from the name and state
+        when it is not given. The location is active unless `active` is false. Field problems are answered per field (422).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationRequest'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/locations/{locationId}:
+    put:
+      tags: [Run economics]
+      operationId: updateStaffRunLocation
+      security: [{sessionCookie: []}]
+      summary: Change a town's details
+      description: |
+        delivery-runs `PUT /v1/locations/{id}` (preorders:manage, EDIT). Replaces the details; an edit never switches the
+        location on or off (use deactivate and activate, which are audited) and runs already scheduled keep their own
+        fee, minimum and capacity.
+      parameters: [{$ref: '#/components/parameters/LocationId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationRequest'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/locations/{locationId}/deactivate:
+    post:
+      tags: [Run economics]
+      operationId: deactivateStaffRunLocation
+      security: [{sessionCookie: []}]
+      summary: Switch a town off, with the reason that is audited
+      description: |
+        delivery-runs `POST /v1/locations/{id}/deactivate` (preorders:manage, EDIT). The reason is required and is recorded
+        with the staff member's name and the time (event delivery-runs.location.changed, audit log). Refused with 409
+        while a run of the town announced, takes orders or is on the road. A switched-off town gets no new runs and
+        disappears from the shop front; its history stays. Already off: unchanged.
+      parameters: [{$ref: '#/components/parameters/LocationId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationSwitch'}}}
+      responses:
+        '200': {description: Switched off, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/locations/{locationId}/activate:
+    post:
+      tags: [Run economics]
+      operationId: activateStaffRunLocation
+      security: [{sessionCookie: []}]
+      summary: Switch a town back on
+      description: delivery-runs `POST /v1/locations/{id}/activate` (preorders:manage, EDIT). The reason is optional and audited like the switch off. Already on, unchanged.
+      parameters: [{$ref: '#/components/parameters/LocationId'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationSwitch'}}}
+      responses:
+        '200': {description: Switched on, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunLocationDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/delivery-runs/locations/{locationId}/history:
     get:
       tags: [Run economics]
@@ -2716,6 +2821,29 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/delivery-runs/locations/{locationId}/attribution:
+    get:
+      tags: [Run economics]
+      operationId: getStaffRunLocationAttribution
+      security: [{sessionCookie: []}]
+      summary: Visits and sign-ups of a town or one of its runs, per UTM source, medium and campaign
+      description: |
+        delivery-runs `GET /v1/locations/{id}/attribution` (delivery-runs:read). First-party counters of the visits and
+        sign-ups that arrived with `utm_source`, `utm_medium` and `utm_campaign` (links shared on WhatsApp, social media
+        or email) over the last `days` (default 90), most visits first. Only the three tags are kept: no cookie, address
+        or visitor id. Product analytics can consume the same facts from the event stream (`orders.order.placed`
+        attribution, the `source` of `delivery-runs.subscription.*`); see docs/engineering/run-attribution.md.
+      parameters:
+        - {$ref: '#/components/parameters/LocationId'}
+        - {name: runId, in: query, schema: {type: string, format: uuid}, description: Only the visits of this run's link}
+        - {name: days, in: query, schema: {type: integer, minimum: 1, maximum: 366, default: 90}}
+      responses:
+        '200': {description: Counters, content: {application/json: {schema: {$ref: '#/components/schemas/StaffRunAttribution'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/delivery-runs/runs:
     get:
@@ -2992,6 +3120,23 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/featured-products/search:
+    get:
+      tags: [Advertorials]
+      operationId: searchStaffFeaturedProducts
+      security: [{sessionCookie: []}]
+      summary: Find products to feature on an advertorial's card, by name
+      description: |
+        search `GET /v1/search` through the staff session (preorders at VIEW or above): up to eight products shoppers can
+        find, with the product code, name, picture (https only) and seller. No price: the card never quotes one.
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 120}}
+      responses:
+        '200': {description: Products, content: {application/json: {schema: {$ref: '#/components/schemas/StaffFeaturedProductHits'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/advertorials:
     get:
@@ -6331,6 +6476,21 @@ components:
         - {type: boolean}
         - {type: array, items: {type: string}}
         - {type: 'null'}
+    StaffLookupResult:
+      type: object
+      required: [kind, items]
+      properties:
+        kind: {type: string, enum: [drivers, sellers]}
+        items:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              detail: {type: string}
     FormField:
       type: object
       required: [key, label, type, required]
@@ -6339,6 +6499,7 @@ components:
         label: {type: string}
         type: {type: string, enum: [text, textarea, number, money, select, multiselect, toggle, date, datetime, email, password]}
         required: {type: boolean}
+        lookup: {type: string, enum: [drivers, sellers], description: 'A text field that is a searchable picker: staff choose by name (GET /v1/staff/lookups/{kind}), the form sends the id'}
         options: {type: array, items: {$ref: '#/components/schemas/FieldOption'}}
         min: {type: number}
         max: {type: number}
@@ -7674,6 +7835,69 @@ components:
         defaultCutoffPolicy: {type: string, enum: [EXTEND, CANCEL]}
         defaultExtendDays: {type: integer}
         pickupPoint: {type: [object, 'null'], additionalProperties: true}
+    StaffRunLocationDetail:
+      allOf:
+        - $ref: '#/components/schemas/StaffRunLocation'
+        - type: object
+          properties:
+            can: {$ref: '#/components/schemas/PreorderCan'}
+    StaffRunLocationRequest:
+      type: object
+      description: |
+        A town. `areaKind` RADIUS needs `radiusMiles`; POLYGON needs `geoZoneId` (an existing geo-service zone) or
+        `polygonGeoJson` (registered as a zone). `centerLat` and `centerLng` are always required: the circle centre and the
+        drive destination for run economics. `active` only matters on create.
+      required: [name, market, areaKind, centerLat, centerLng]
+      properties:
+        name: {type: string, maxLength: 120, examples: [Bastrop]}
+        slug: {type: string, maxLength: 80, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', description: Made from the name and state when absent, examples: [bastrop-tx]}
+        market: {type: string, maxLength: 16, examples: [US]}
+        state: {type: [string, 'null'], maxLength: 8, examples: [TX]}
+        timeZone: {type: string, description: 'IANA time zone; default America/Chicago', examples: [America/Chicago]}
+        areaKind: {type: string, enum: [POLYGON, RADIUS]}
+        radiusMiles: {type: number, exclusiveMinimum: 0, maximum: 100}
+        geoZoneId: {type: string, maxLength: 80}
+        polygonGeoJson: {type: string, maxLength: 200000}
+        centerLat: {type: number, minimum: -90, maximum: 90}
+        centerLng: {type: number, minimum: -180, maximum: 180}
+        originLat: {type: number, minimum: -90, maximum: 90}
+        originLng: {type: number, minimum: -180, maximum: 180}
+        defaultFeeMinor: {type: integer, minimum: 0, description: 'Delivery fee new runs start from, minor units'}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        defaultMinOrders: {type: integer, minimum: 1, maximum: 10000}
+        defaultCapacityOrders: {type: integer, minimum: 1, maximum: 10000}
+        defaultCapacityPackages: {type: integer, minimum: 1, maximum: 100000}
+        dropMode: {type: string, enum: [DOORSTEP, PICKUP_POINT]}
+        defaultCutoffPolicy: {type: string, enum: [EXTEND, CANCEL]}
+        defaultExtendDays: {type: integer, minimum: 1, maximum: 30}
+        whatsappInviteUrl: {type: [string, 'null'], maxLength: 500, description: 'The community (WhatsApp) link; blank or null clears it', examples: ['https://chat.whatsapp.com/AbCdEf123']}
+        active: {type: boolean, description: Create only; the default is on}
+    StaffRunLocationSwitch:
+      type: object
+      description: Why a town is switched off (required) or on (optional); audited with the staff member's name
+      properties:
+        reason: {type: string, maxLength: 500}
+    StaffRunAttribution:
+      type: object
+      required: [visits, signups, rows]
+      properties:
+        locationId: {type: string, format: uuid}
+        runId: {type: [string, 'null'], description: 'Null for the whole town'}
+        since: {type: string, format: date, description: First day counted (UTC)}
+        visits: {type: integer}
+        signups: {type: integer}
+        rows:
+          type: array
+          items: {$ref: '#/components/schemas/StaffRunAttributionRow'}
+    StaffRunAttributionRow:
+      type: object
+      required: [utmSource, visits, signups]
+      properties:
+        utmSource: {type: string, examples: [whatsapp]}
+        utmMedium: {type: [string, 'null'], examples: [social]}
+        utmCampaign: {type: [string, 'null']}
+        visits: {type: integer}
+        signups: {type: integer}
     StaffRunLocations:
       type: object
       required: [items, can]
@@ -7888,7 +8112,7 @@ components:
         views: {type: integer}
         clicks: {type: integer}
         ctrPct: {type: [number, 'null'], description: clicks / views x 100}
-        orders: {type: [integer, 'null'], description: 'Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed)'}
+        orders: {type: [integer, 'null'], description: 'Orders that came through the advertorial and still stand: a window''s pre-orders whose tracking tag carries it, a run''s orders whose attribution (`cr=adv-...`) does and that still hold a slot on the run'}
     StaffAdvertorial:
       type: object
       required: [id, source, sourceId, variant, weight, priority, generated, headline, body, ctaLabel, status, serving, results, version]
@@ -7911,6 +8135,7 @@ components:
         ctaLabel: {type: string}
         startsAt: {type: [string, 'null'], format: date-time}
         endsAt: {type: [string, 'null'], format: date-time}
+        featuredProducts: {type: array, maxItems: 4, items: {$ref: '#/components/schemas/StaffFeaturedProduct'}}
         status: {type: string, enum: [DRAFT, LIVE, PAUSED, ENDED]}
         ended: {type: [string, 'null'], enum: [SOURCE_CLOSED, CANCELLED, SCHEDULE, STAFF, null]}
         serving: {type: boolean, description: Visitors can see it right now}
@@ -7946,6 +8171,32 @@ components:
         ctaLabel: {type: string, minLength: 1, maxLength: 40}
         startsAt: {type: [string, 'null'], format: date-time}
         endsAt: {type: [string, 'null'], format: date-time}
+        featuredProducts:
+          type: array
+          maxItems: 4
+          items: {$ref: '#/components/schemas/StaffFeaturedProduct'}
+          description: 'Up to four products the card features. Left out on an edit: the current ones stay; an empty list clears them'
+    StaffFeaturedProductHits:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 8
+          items:
+            allOf:
+              - $ref: '#/components/schemas/StaffFeaturedProduct'
+              - type: object
+                properties:
+                  sellerName: {type: string}
+    StaffFeaturedProduct:
+      type: object
+      description: 'A product featured on the card. The price is not kept: the product page shows today''s'
+      required: [atin, title]
+      properties:
+        atin: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{3,39}$', examples: [ATSHEA0001]}
+        title: {type: string, minLength: 1, maxLength: 140}
+        imageUrl: {type: [string, 'null'], maxLength: 500, description: An https picture}
     StaffPreorderObject:
       type: object
       additionalProperties: true

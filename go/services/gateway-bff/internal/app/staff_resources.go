@@ -475,6 +475,12 @@ func withMax(f domain.FormField, n int) domain.FormField { f.MaxLength = n; retu
 
 func withValue(f domain.FormField, v any) domain.FormField { f.Value = v; return f }
 
+// withLookup makes a text field a searchable picker of drivers or sellers; the value is still the id.
+func withLookup(f domain.FormField, kind string) domain.FormField {
+	f.Lookup = kind
+	return f
+}
+
 func withOptions(f domain.FormField, o []domain.FieldOption) domain.FormField {
 	f.Options = o
 	return f

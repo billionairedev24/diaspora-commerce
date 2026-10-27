@@ -88,8 +88,19 @@ type StaffPreordersService interface {
 	PlanWindow(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	// RunLocations lists the towns served by delivery runs.
 	RunLocations(ctx context.Context, c *domain.Caller) (any, error)
+	// CreateRunLocation adds a town delivery runs serve (name, area, defaults, time zone, community link).
+	CreateRunLocation(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
+	// UpdateRunLocation replaces a location's details; it never switches the location on or off.
+	UpdateRunLocation(ctx context.Context, c *domain.Caller, id string, body map[string]any) (any, error)
+	// SwitchRunLocation switches a location off (reason required, audited) or back on (reason optional).
+	SwitchRunLocation(ctx context.Context, c *domain.Caller, id string, on bool, body map[string]any) (any, error)
 	// RunLocationHistory is a location's runs (orders, fees, refunds), subscriber counts and subscriber growth.
 	RunLocationHistory(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// SearchFeaturedProducts finds products to feature on an advertorial's card (?q=, 2 to 120 characters): the
+	// product code, name and picture, never a price.
+	SearchFeaturedProducts(ctx context.Context, c *domain.Caller, q string) (any, error)
+	// RunLocationAttribution is the visits and sign-ups of a location or one of its runs per UTM source, medium and campaign.
+	RunLocationAttribution(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
 	// Runs lists runs (?locationId=&status=&limit=).
 	Runs(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	// RunPnl is a run's P&L before it, after it, or the orders a cancelled run refunded.

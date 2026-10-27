@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createStaffApiClient, isApiError, type RunScheduleInput, staffRunKeys } from '../src';
+import { createStaffApiClient, isApiError, type RunLocationInput, type RunScheduleInput, staffRunKeys } from '../src';
 import { MOCK_STAFF_ROLE_COOKIE, resetStaffDb } from '../src/mocks/staff';
 import { handleStaffMockRequest } from '../src/mocks/staff-runtime';
 import {
@@ -10,6 +10,7 @@ import {
   runBreakEven,
   runCostModel,
   runCutoffOutcome,
+  runLocationProblems,
   runNeedsAttention,
   runOutlook,
   runScheduleProblems,
@@ -433,5 +434,69 @@ describe('scheduling, opening, extending, confirming and cancelling a run throug
       ['EXTEND', 'System', true, 'MINIMUM_NOT_MET'],
       ['CANCEL', 'System', true, 'MINIMUM_NOT_MET']
     ]);
+  });
+});
+
+describe('delivery-run locations through the mock BFF (S262)', () => {
+  const town = (extra: Partial<RunLocationInput> = {}): RunLocationInput => ({
+    name: 'Bastrop',
+    market: 'US',
+    state: 'TX',
+    areaKind: 'RADIUS',
+    radiusMiles: 12,
+    centerLat: 30.1105,
+    centerLng: -97.3153,
+    defaultFeeMinor: 799,
+    defaultMinOrders: 10,
+    defaultCapacityOrders: 40,
+    whatsappInviteUrl: 'https://chat.whatsapp.com/AbCdEf123',
+    ...extra
+  });
+
+  it('checks a location field by field, the way the BFF does', () => {
+    expect(runLocationProblems(town())).toEqual({});
+    expect(runLocationProblems({ ...town(), name: ' ', radiusMiles: 0, centerLat: 120, defaultMinOrders: 0, defaultFeeMinor: -1, whatsappInviteUrl: 'join us' })).toEqual({
+      name: 'required',
+      radiusMiles: 'range',
+      centerLat: 'range',
+      defaultMinOrders: 'range',
+      defaultFeeMinor: 'range',
+      whatsappInviteUrl: 'link'
+    });
+    expect(runLocationProblems({ ...town(), areaKind: 'POLYGON' }).polygonGeoJson).toBe('zone');
+    expect(runLocationProblems({ ...town(), defaultMinOrders: 20, defaultCapacityOrders: 5 }).defaultCapacityOrders).toBe('order');
+  });
+
+  it('adds a town with a web address made from its name, then edits it without switching it', async () => {
+    const created = await runs().createLocation(town());
+    expect(created).toMatchObject({ name: 'Bastrop', slug: 'bastrop-tx', active: true, area: { kind: 'RADIUS', radiusMiles: 12 }, defaultMinOrders: 10, whatsappInviteUrl: 'https://chat.whatsapp.com/AbCdEf123' });
+    expect((await runs().locations()).items.map((l) => l.name)).toContain('Bastrop');
+    const edited = await runs().updateLocation(created.id, town({ name: 'Bastrop County', areaKind: 'POLYGON', polygonGeoJson: '{"type":"Polygon","coordinates":[]}', whatsappInviteUrl: '' }));
+    expect(edited).toMatchObject({ name: 'Bastrop County', active: true, whatsappInviteUrl: null, area: { kind: 'POLYGON', geoZoneId: expect.stringMatching(/^zone-/) } });
+    await expect(runs().createLocation(town())).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('refuses a town field by field', async () => {
+    const err = await runs().createLocation(town({ name: '', radiusMiles: null, centerLng: 400 })).catch((e: unknown) => e);
+    expect(isApiError(err) && err.status === 422 && Object.keys(err.fieldErrors).sort()).toEqual(['centerLng', 'name', 'radiusMiles']);
+    await expect(runs().updateLocation('4b2f9d3a-0000-4000-8000-0000000fffff', town())).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('switches a town off with a reason, refuses new runs there, and switches it back on', async () => {
+    const created = await runs().createLocation(town());
+    await expect(runs().deactivateLocation(created.id, '  ')).rejects.toMatchObject({ status: 422 });
+    expect((await runs().deactivateLocation(created.id, 'Driver moved away')).active).toBe(false);
+    await expect(runs().createRun(schedule({ locationId: created.id }))).rejects.toMatchObject({ status: 422 });
+    expect((await runs().activateLocation(created.id)).active).toBe(true);
+  });
+
+  it('keeps a town with a live run switched on', async () => {
+    await expect(runs().deactivateLocation(LUBBOCK, 'Closing')).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('lets only managers change a town', async () => {
+    await expect(runs('platform.finance').createLocation(town())).rejects.toMatchObject({ status: 403 });
+    await expect(runs('platform.finance').deactivateLocation(LUBBOCK, 'x')).rejects.toMatchObject({ status: 403 });
+    expect((await runs('platform.finance').locations()).can.manage).toBe(false);
   });
 });

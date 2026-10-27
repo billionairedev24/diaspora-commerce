@@ -8,6 +8,7 @@ import { Notice } from '@/components/ui/Notice';
 import { toLocalInput, toMinor } from '@/lib/format';
 
 import { FormErrors } from '../ui/FormErrors';
+import { LookupField } from './LookupField';
 
 type Draft = Record<string, string | boolean | string[]>;
 
@@ -66,6 +67,7 @@ const fieldId = (key: string) => `fld-${key.replace(/[^a-z0-9]/gi, '-')}`;
 function Input({ f, value, error, onChange }: { f: FormField; value: string | boolean | string[] | undefined; error?: string; onChange: (v: string | boolean | string[]) => void }) {
   const id = fieldId(f.key);
   const label = `${f.label}${f.required && f.type !== 'toggle' ? '' : ' (optional)'}`;
+  if (f.lookup && f.type === 'text') return <LookupField field={f} id={id} label={label} value={typeof value === 'string' ? value : ''} error={error} onChange={onChange} />;
   switch (f.type) {
     case 'toggle':
       return <Checkbox id={id} label={f.label} checked={value === true} onChange={(e) => onChange(e.currentTarget.checked)} />;

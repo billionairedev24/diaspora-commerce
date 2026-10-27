@@ -467,7 +467,7 @@ func routesResource() *staffResource {
 		actions: []staffAction{
 			{key: "assign", label: "Assign driver", tone: "primary", permission: "delivery:dispatch", when: inState("PLANNED", "ASSIGNED"),
 				form: func(context.Context, staffCtx, jobj) *domain.Form {
-					return &domain.Form{Title: "Assign a driver", SubmitLabel: "Assign", Fields: []domain.FormField{withMax(ff("driverId", "Driver id", "text", true), 64), withMax(ff("vehicleId", "Vehicle", "text", false), 40)}}
+					return &domain.Form{Title: "Assign a driver", SubmitLabel: "Assign", Fields: []domain.FormField{withLookup(withMax(ff("driverId", "Driver", "text", true), 64), lookupDrivers), withMax(ff("vehicleId", "Vehicle", "text", false), 40)}}
 				},
 				run: func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
 					return sc.post(ctx, sc.up.Fulfilment, "/v1/dispatch/routes/"+url.PathEscape(jstr(o, "id"))+"/assign", omitEmpty(jobj{"driverId": vs(v, "driverId"), "vehicleId": vs(v, "vehicleId")}), nil)

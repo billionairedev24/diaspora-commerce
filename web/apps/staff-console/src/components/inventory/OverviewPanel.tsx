@@ -86,8 +86,8 @@ export function OverviewPanel() {
             <li key={`${a.type}-${a.lotId ?? a.shipmentId ?? i}`} className="flex flex-wrap items-center gap-2 text-sm">
               <StatusPill tone={a.severity === 'HIGH' ? 'bad' : 'warn'}>{humanize(a.type)}</StatusPill>
               <span className="flex-1">{a.message}</span>
-              {a.lotId ? <Link className="text-link" href={`/inventory?tab=stock&lot=${a.lotId}`}>Open lot</Link> : null}
-              {a.shipmentId ? <Link className="text-link" href={`/inventory?tab=inbound&id=${a.shipmentId}`}>Open shipment</Link> : null}
+              {a.lotId ? <Link className="inline-flex text-link pointer-coarse:min-h-11 pointer-coarse:items-center" href={`/inventory?tab=stock&lot=${a.lotId}`}>Open lot</Link> : null}
+              {a.shipmentId ? <Link className="inline-flex text-link pointer-coarse:min-h-11 pointer-coarse:items-center" href={`/inventory?tab=inbound&id=${a.shipmentId}`}>Open shipment</Link> : null}
             </li>
           ))}
         </ul>

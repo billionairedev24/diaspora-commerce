@@ -57,7 +57,8 @@ final class LocationDtos {
     @Schema(name = "LocationRequest", description = """
             A town or area. areaKind RADIUS needs radiusMiles; POLYGON needs geoZoneId (an existing geo-service zone)
             or polygonGeoJson (registered in geo-service as a zone owned by delivery-runs:<slug>). centerLat/centerLng
-            is always required: the circle centre, and the drive destination for run economics.""")
+            is always required: the circle centre, and the drive destination for run economics. An edit never switches
+            a location on or off: use activate / deactivate, which are audited (active only matters on create).""")
     record LocationRequest(
             @NotBlank @Size(max = 80) @Pattern(regexp = "^[a-z0-9]+(-[a-z0-9]+)*$")
             @Schema(example = "bastrop-tx") String slug,
@@ -94,6 +95,14 @@ final class LocationDtos {
                     pickupPoint == null ? null : pickupPoint.toDomain(), whatsappInviteUrl, socialLinks,
                     defaultCutoffPolicy, defaultExtendDays, active);
         }
+    }
+
+    @Schema(name = "LocationDeactivateRequest", description = "Why a location is switched off (required, audited)")
+    record DeactivateRequest(@NotBlank @Size(max = 500) String reason) {
+    }
+
+    @Schema(name = "LocationSwitchRequest", description = "Why a location is switched on or off (audited)")
+    record SwitchRequest(@Size(max = 500) String reason) {
     }
 
     @Schema(name = "RunArea")

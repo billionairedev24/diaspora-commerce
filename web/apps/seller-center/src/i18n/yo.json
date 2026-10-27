@@ -986,5 +986,6 @@
   "sc.runPickups.bagsHelp": "Àpò kan fún àṣẹ kọ̀ọ̀kan, ní ìtẹ̀léra nọ́ńbà àṣẹ.",
   "sc.runPickups.bag": "Àṣẹ {order}",
   "sc.runPickups.bagCollected": "A ti gbà á",
-  "sc.runPickups.bagWaiting": "Ó ń dúró de awakọ̀"
+  "sc.runPickups.bagWaiting": "Ó ń dúró de awakọ̀",
+  "sc.payouts.order.unnamed": "an earlier order"
 }

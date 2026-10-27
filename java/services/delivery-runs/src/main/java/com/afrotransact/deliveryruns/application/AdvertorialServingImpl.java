@@ -67,7 +67,7 @@ class AdvertorialServingImpl implements AdvertorialServing {
                 Advertorial data = publicRuns.advertorial(a.run().id());
                 candidates.put(a.run().id(), new Candidate(AdvertorialSource.RUN, a.run().id(), null, data.town(),
                         data.cutoffAt(), data.deliveryDay(), data.feeDisplay(), null,
-                        creative -> links.runUrl(a.location(), a.run(), "storefront", "advertorial", creative)));
+                        creative -> links.runAdvertorialUrl(a.location(), a.run(), creative)));
             }
         }
         if (hasText(q.country()) && hasText(q.region())) {
@@ -122,7 +122,8 @@ class AdvertorialServingImpl implements AdvertorialServing {
         String url = c.link().apply(a.creative());
         Instant expires = a.endsAt() != null && a.endsAt().isBefore(c.closes()) ? a.endsAt() : c.closes();
         return new ServedAdvertorial(a.id(), a.source(), a.sourceId(), a.variant(), c.code(), c.place(),
-                a.copy().headline(), a.copy().body(), a.copy().ctaLabel(), url, c.image(), c.closes(), expires,
+                a.copy().headline(), a.copy().body(), a.copy().ctaLabel(), url, c.image(), a.featured(), c.closes(),
+                expires,
                 c.delivery(), c.fee());
     }
 

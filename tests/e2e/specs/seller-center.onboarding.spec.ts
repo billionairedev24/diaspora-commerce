@@ -60,7 +60,7 @@ test.describe('seller center · application wizard', () => {
     await expect(page.getByText(/There are \d problems with this step/)).toBeVisible();
     await expect(page).toHaveURL(/\/onboarding\/business$/);
     await page.getByRole('radio', { name: /Single-member LLC/ }).check();
-    await page.getByLabel(/Store or business display name/).fill('Titi Foods');
+    await page.getByLabel(/^Business name/).fill('Titi Foods');
     await expect(page.getByLabel(/Business email/)).toHaveValue('titilayo@adeskitchen.com');
     await expect(page.getByLabel(/Mobile phone/)).toHaveValue('(713) 249-0142');
     await shot(page, '1-business');

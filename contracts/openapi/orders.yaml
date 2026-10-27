@@ -1700,6 +1700,9 @@ components:
     SellerShipmentView:
       type: object
       properties:
+        orderId:
+          type: string
+          description: The order's id, which payments reports against held funds (screens show the order number)
         orderNumber:
           type: string
         orderStatus:

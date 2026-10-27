@@ -250,7 +250,7 @@ function OrdersList({ runId }: { runId: string }) {
 }
 
 /** A modal that asks for what an action needs (a reason and sometimes more), then does it. The reason is logged with who and when. */
-function ActionDialog({
+export function ActionDialog({
   open,
   title,
   help,

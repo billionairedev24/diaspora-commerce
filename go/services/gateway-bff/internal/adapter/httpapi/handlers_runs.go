@@ -14,7 +14,12 @@ func (h *handlersImpl) registerStaffRuns(route func(pattern string, fn http.Hand
 	route("POST /v1/staff/preorders/economics-preview", h.staffPlanWindow)
 	route("GET /v1/staff/preorders/{id}/economics", h.staffWindowEconomics)
 	route("GET /v1/staff/delivery-runs/locations", h.staffRunLocations)
+	route("POST /v1/staff/delivery-runs/locations", h.staffCreateRunLocation)
+	route("PUT /v1/staff/delivery-runs/locations/{id}", h.staffUpdateRunLocation)
+	route("POST /v1/staff/delivery-runs/locations/{id}/deactivate", h.staffDeactivateRunLocation)
+	route("POST /v1/staff/delivery-runs/locations/{id}/activate", h.staffActivateRunLocation)
 	route("GET /v1/staff/delivery-runs/locations/{id}/history", h.staffRunLocationHistory)
+	route("GET /v1/staff/delivery-runs/locations/{id}/attribution", h.staffRunLocationAttribution)
 	route("GET /v1/staff/delivery-runs/runs", h.staffPreorderRuns)
 	route("POST /v1/staff/delivery-runs/runs", h.staffCreateRun)
 	route("GET /v1/staff/delivery-runs/runs/{id}", h.staffDeliveryRun)
@@ -29,6 +34,7 @@ func (h *handlersImpl) registerStaffRuns(route func(pattern string, fn http.Hand
 	route("GET /v1/staff/delivery-runs/runs/{id}/orders", h.staffRunOrders)
 	route("GET /v1/staff/delivery-runs/runs/{id}/pnl", h.staffRunPnl)
 	route("POST /v1/staff/delivery-runs/economics-preview", h.staffPreorderPlanRun)
+	route("GET /v1/staff/featured-products/search", h.staffSearchFeaturedProducts)
 	route("GET /v1/staff/advertorials", h.staffAdvertorials)
 	route("POST /v1/staff/advertorials", h.staffCreateAdvertorial)
 	route("POST /v1/staff/advertorials/generate", h.staffGenerateAdvertorial)
@@ -76,6 +82,55 @@ func (h *handlersImpl) staffWindowEconomics(w http.ResponseWriter, r *http.Reque
 
 func (h *handlersImpl) staffRunLocations(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Preorders.RunLocations(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffCreateRunLocation(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.CreateRunLocation(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) staffUpdateRunLocation(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.UpdateRunLocation(r.Context(), callerFrom(r.Context()), r.PathValue("id"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffDeactivateRunLocation(w http.ResponseWriter, r *http.Request) {
+	h.switchRunLocation(w, r, false)
+}
+
+func (h *handlersImpl) staffActivateRunLocation(w http.ResponseWriter, r *http.Request) {
+	h.switchRunLocation(w, r, true)
+}
+
+func (h *handlersImpl) switchRunLocation(w http.ResponseWriter, r *http.Request, on bool) {
+	// Switching on needs no body; switching off answers 422 for the missing reason.
+	b := map[string]any{}
+	if err := decode(r, &b, true); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.SwitchRunLocation(r.Context(), callerFrom(r.Context()), r.PathValue("id"), on, b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffSearchFeaturedProducts(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.SearchFeaturedProducts(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffRunLocationAttribution(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.RunLocationAttribution(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.URL.Query())
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

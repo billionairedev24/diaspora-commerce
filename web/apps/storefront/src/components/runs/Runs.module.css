@@ -39,6 +39,10 @@
 .advFacts { margin: 0; font-size: var(--at-text-sm); color: var(--at-ink-200); }
 .advCountdown { font-family: var(--at-font-mono); font-weight: var(--at-weight-bold); color: var(--at-gold-500); }
 .advImage { width: 100%; aspect-ratio: 16 / 7; border-radius: var(--at-radius-md); background-size: cover; background-position: center; }
+.advProducts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
+.advProduct { display: inline-flex; align-items: center; gap: var(--at-space-2); min-height: var(--at-size-control); padding: 0 var(--at-space-3); border-radius: var(--at-radius-pill); border: 1px solid var(--at-ink-600); color: var(--at-ink-0); font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); text-decoration: none; }
+.advProduct:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+.advProductImage { width: 1.75rem; height: 1.75rem; border-radius: var(--at-radius-sm); background-size: cover; background-position: center; flex: none; }
 .advCta { align-self: flex-start; display: inline-flex; align-items: center; height: var(--at-size-control); padding: 0 var(--at-space-5); border-radius: var(--at-radius-pill); background: var(--at-gold-500); color: var(--at-ink-1000); font-weight: var(--at-weight-bold); text-decoration: none; }
 .advCta:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
 @media (hover: hover) {

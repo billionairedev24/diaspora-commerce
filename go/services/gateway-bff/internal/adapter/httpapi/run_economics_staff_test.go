@@ -106,6 +106,11 @@ func (f *fakeDeliveryRuns) runEconomics(w http.ResponseWriter, r *http.Request) 
 		writeJ(w, 200, []any{map[string]any{"id": runLocationID, "slug": "bastrop-tx", "name": "Bastrop", "market": "US", "state": "TX", "timeZone": "America/Chicago",
 			"currency": "USD", "defaultFeeMinor": 799, "defaultMinOrders": 10, "dropMode": "DOORSTEP", "whatsappInviteUrl": "https://chat.whatsapp.com/BastropRuns",
 			"active": true, "version": 1}})
+	case strings.HasPrefix(p, "/v1/locations/") && strings.HasSuffix(p, "/attribution"):
+		writeJ(w, 200, map[string]any{"locationId": runLocationID, "runId": r.URL.Query().Get("runId"), "since": "2026-07-29", "visits": 140, "signups": 21,
+			"rows": []any{
+				map[string]any{"utmSource": "whatsapp", "utmMedium": "social", "utmCampaign": "delivery-run-bastrop-tx-20261024", "visits": 90, "signups": 15},
+				map[string]any{"utmSource": "instagram", "utmMedium": "social", "utmCampaign": "", "visits": 50, "signups": 6}}})
 	case strings.HasPrefix(p, "/v1/locations/") && strings.HasSuffix(p, "/history"):
 		writeJ(w, 200, map[string]any{"location": map[string]any{"id": runLocationID, "slug": "bastrop-tx", "name": "Bastrop"},
 			"runs": []any{
@@ -336,6 +341,33 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 		t.Fatalf("history = %v", history)
 	}
 	do("ops", "GET", "/v1/staff/delivery-runs/locations/nope/history", nil, 404)
+
+	// ---- finding products to feature, by name ----
+	found := jsonOf(t, do("marketing", "GET", "/v1/staff/featured-products/search?q=shea", nil, 200))["items"].([]any)
+	if len(found) != 2 || found[0].(map[string]any)["atin"] != "ATSHEA0001" || found[0].(map[string]any)["imageUrl"] != "https://cdn.example/shea.jpg" ||
+		found[0].(map[string]any)["sellerName"] != "Accra Naturals" || found[1].(map[string]any)["imageUrl"] != nil || found[0].(map[string]any)["priceMinor"] != nil {
+		t.Fatalf("featured product search = %v", found)
+	}
+	do("finance", "GET", "/v1/staff/featured-products/search?q=garri", nil, 200)
+	for _, q := range []string{"", "a", strings.Repeat("q", 121)} {
+		do("ops", "GET", "/v1/staff/featured-products/search?q="+q, nil, 422)
+	}
+	do("ops", "GET", "/v1/staff/featured-products/search?q=down", nil, 503)
+	do("", "GET", "/v1/staff/featured-products/search?q=shea", nil, 401)
+
+	// ---- UTM attribution of a location and of one of its runs (S262) ----
+	attribution := jsonOf(t, do("finance", "GET", "/v1/staff/delivery-runs/locations/"+runLocationID+"/attribution?days=30", nil, 200))
+	if rows := attribution["rows"].([]any); attribution["visits"] != float64(140) || len(rows) != 2 || query("GET /v1/locations/"+runLocationID+"/attribution") != "days=30" {
+		t.Fatalf("attribution = %v (query %q)", attribution, query("GET /v1/locations/"+runLocationID+"/attribution"))
+	}
+	do("ops", "GET", "/v1/staff/delivery-runs/locations/"+runLocationID+"/attribution?runId="+runID, nil, 200)
+	for _, q := range []string{"?days=0", "?days=367", "?days=many", "?runId=nope"} {
+		if e := jsonOf(t, do("ops", "GET", "/v1/staff/delivery-runs/locations/"+runLocationID+"/attribution"+q, nil, 422)); e["errors"] == nil {
+			t.Errorf("%s: errors = %v", q, e)
+		}
+	}
+	do("ops", "GET", "/v1/staff/delivery-runs/locations/nope/attribution", nil, 404)
+	do("", "GET", "/v1/staff/delivery-runs/locations/"+runLocationID+"/attribution", nil, 401)
 	list := jsonOf(t, do("finance", "GET", "/v1/staff/delivery-runs/runs?locationId="+runLocationID+"&status=open,confirmed&limit=50", nil, 200))
 	if len(list["items"].([]any)) != 1 || query("GET /v1/runs") != "limit=50&locationId="+runLocationID+"&status=OPEN%2CCONFIRMED" {
 		t.Fatalf("runs = %v (query %q)", list, query("GET /v1/runs"))
@@ -412,6 +444,40 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 		t.Fatalf("create relayed %v", got)
 	}
 	before = tried("POST /v1/advertorials")
+	featured := map[string]any{"atin": " ATSHEA0001 ", "title": " Shea butter ", "imageUrl": "https://cdn.example/shea.jpg"}
+	withProducts := map[string]any{}
+	for k, v := range words {
+		withProducts[k] = v
+	}
+	withProducts["featuredProducts"] = []any{featured, map[string]any{"atin": "ATGARI0001", "title": "Garri"}}
+	do("marketing", "POST", "/v1/staff/advertorials", withProducts, 201)
+	if got, _ := sent("POST /v1/advertorials")["featuredProducts"].([]any); len(got) != 2 || got[0].(map[string]any)["atin"] != "ATSHEA0001" ||
+		got[0].(map[string]any)["title"] != "Shea butter" || got[1].(map[string]any)["imageUrl"] != nil {
+		t.Fatalf("create relayed featured products %v", sent("POST /v1/advertorials"))
+	}
+	before = tried("POST /v1/advertorials")
+	for name, products := range map[string]any{
+		"five products":  []any{map[string]any{"atin": "ATAAAA0001", "title": "a"}, map[string]any{"atin": "ATAAAA0002", "title": "a"}, map[string]any{"atin": "ATAAAA0003", "title": "a"}, map[string]any{"atin": "ATAAAA0004", "title": "a"}, map[string]any{"atin": "ATAAAA0005", "title": "a"}},
+		"no code":        []any{map[string]any{"title": "Garri"}},
+		"bad code":       []any{map[string]any{"atin": "no way!", "title": "Garri"}},
+		"same twice":     []any{map[string]any{"atin": "ATGARI0001", "title": "Garri"}, map[string]any{"atin": "ATGARI0001", "title": "Garri"}},
+		"no name":        []any{map[string]any{"atin": "ATGARI0001", "title": " "}},
+		"insecure image": []any{map[string]any{"atin": "ATGARI0001", "title": "Garri", "imageUrl": "http://cdn.example/g.jpg"}},
+		"not a list":     "ATGARI0001",
+	} {
+		b := map[string]any{}
+		for k, v := range words {
+			b[k] = v
+		}
+		b["featuredProducts"] = products
+		if e := jsonOf(t, do("ops", "POST", "/v1/staff/advertorials", b, 422)); e["errors"].(map[string]any)["featuredProducts"] == nil {
+			t.Errorf("%s: errors = %v", name, e)
+		}
+	}
+	if tried("POST /v1/advertorials") != before {
+		t.Error("an advertorial with bad featured products reached delivery-runs")
+	}
+	before = tried("POST /v1/advertorials")
 	for name, mutate := range map[string]func(map[string]any){
 		"no headline":     func(b map[string]any) { delete(b, "headline") },
 		"long headline":   func(b map[string]any) { b["headline"] = strings.Repeat("h", 141) },
@@ -468,7 +534,7 @@ func TestStaffRunEconomicsConformance(t *testing.T) {
 	do("ops", "POST", "/v1/staff/advertorials/nope/pause", nil, 404)
 
 	for _, op := range []string{"getStaffEconomicsSettings", "updateStaffEconomicsSettings", "listStaffEconomicsChanges", "previewStaffWindowEconomics",
-		"getStaffPreorderEconomics", "listStaffRunLocations", "getStaffRunLocationHistory", "listStaffPreorderRuns", "getStaffRunPnl", "previewStaffRunEconomics",
+		"getStaffPreorderEconomics", "listStaffRunLocations", "getStaffRunLocationHistory", "getStaffRunLocationAttribution", "searchStaffFeaturedProducts", "listStaffPreorderRuns", "getStaffRunPnl", "previewStaffRunEconomics",
 		"listStaffAdvertorials", "createStaffAdvertorial", "generateStaffAdvertorial", "getStaffAdvertorial", "updateStaffAdvertorial", "actStaffAdvertorial"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)

@@ -1322,5 +1322,6 @@
   "runs.unsubscribe.doneTitle": "Alertes arrêtées",
   "runs.unsubscribe.doneBody": "Vous ne recevrez plus d'alertes de tournées pour ce lieu.",
   "runs.unsubscribe.invalidTitle": "Ce lien n'est pas valide",
-  "runs.unsubscribe.invalidBody": "Il est peut-être ancien. Vous pouvez désactiver les alertes dans votre compte, sous Alertes de livraison."
+  "runs.unsubscribe.invalidBody": "Il est peut-être ancien. Vous pouvez désactiver les alertes dans votre compte, sous Alertes de livraison.",
+  "runs.adv.featured": "À la une dans cette tournée"
 }

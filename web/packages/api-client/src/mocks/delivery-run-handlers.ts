@@ -42,13 +42,15 @@ interface RunsMock {
   /** Email sign-ups waiting for their confirmation link. */
   pending: { email: string; locationId: string }[];
   events: { id: string; type: string }[];
+  /** Visits counted with their UTM tags. */
+  visits: { slug: string; utmSource?: string; utmMedium?: string; utmCampaign?: string; runId?: string }[];
 }
 const STATE = new WeakMap<object, RunsMock>();
 const state = (): RunsMock => {
   const db = getDb();
   let s = STATE.get(db);
   if (!s) {
-    s = { subs: new Map(), pending: [], events: [] };
+    s = { subs: new Map(), pending: [], events: [], visits: [] };
     STATE.set(db, s);
   }
   return s;
@@ -68,7 +70,8 @@ const locationById = (id: string) => LOCATIONS.find((l) => l.id === id);
 const badToken = (token: string) => token.length < 8 || token.startsWith('invalid');
 const invalidToken = () => new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'This link is not valid.', { errors: { token: 'This link is not valid or was already replaced' } });
 
-const SubscribeBody = z.object({ locationId: z.string().uuid(), email: z.string().email(), source: z.string().max(80).optional() });
+const SubscribeBody = z.object({ locationId: z.string().uuid(), email: z.string().email(), source: z.string().max(80).optional(), utmSource: z.string().max(80).optional(), utmMedium: z.string().max(80).optional(), utmCampaign: z.string().max(120).optional() });
+const VisitBody = z.object({ runId: z.string().uuid().optional(), utmSource: z.string().max(80).optional(), utmMedium: z.string().max(80).optional(), utmCampaign: z.string().max(120).optional() });
 const MineBody = z.object({ locationId: z.string().uuid(), channels: z.array(RunChannelSchema).min(1), source: z.string().max(80).optional() });
 const TokenBody = z.object({ token: z.string().min(1).max(200) });
 const UnsubscribeBody = z.object({ token: z.string().min(1).max(200), channels: z.array(RunChannelSchema).optional() });
@@ -76,6 +79,13 @@ const EventBody = z.object({ type: z.enum(['VIEW', 'CLICK']) });
 
 export const deliveryRunHandlers = [
   http.get('*/v1/delivery-runs/locations', route(() => json({ items: LOCATIONS.map(locationOf) }))),
+  http.post('*/v1/delivery-runs/locations/:slug/visits', route(async (ctx, p) => {
+    const b = await body(ctx.request, VisitBody);
+    const l = LOCATIONS.find((x) => x.slug === p.slug);
+    if (!l) throw new MockProblem(404, 'NOT_FOUND', 'Not found', 'We couldn’t find that location.');
+    if (b.utmSource || b.utmMedium || b.utmCampaign) state().visits.push({ slug: l.slug, ...b });
+    return new Response(null, { status: 204 });
+  })),
   http.get('*/v1/delivery-runs/locations/:slug', route((ctx, p) => {
     const l = LOCATIONS.find((x) => x.slug === p.slug);
     if (!l) throw new MockProblem(404, 'NOT_FOUND', 'Not found', 'We couldn’t find that location.');
@@ -186,7 +196,11 @@ export const deliveryRunHandlers = [
         countdownTarget: closes,
         expiresAt: closes,
         deliveryDisplay: 'Sunday',
-        feeDisplay: '$7.99'
+        feeDisplay: '$7.99',
+        featuredProducts: [
+          { atin: 'ATSHEA0001', title: 'Shea butter', imageUrl: null },
+          { atin: 'ATGARI0001', title: 'Garri', imageUrl: null }
+        ]
       }]
     });
   })),
@@ -209,6 +223,9 @@ function subscription(locationId: string, consents: RunSubscription['consents'],
     confirmedAt: prior?.confirmedAt ?? now.toISOString()
   };
 }
+
+/** Test hook: the visits the mock counted. */
+export const mockRunVisits = (): readonly RunsMock['visits'][number][] => state().visits;
 
 /** Test hook: what the mock counted. */
 export const mockRunAdvertorialEvents = (): readonly { id: string; type: string }[] => state().events;

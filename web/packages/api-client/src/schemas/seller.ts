@@ -1232,7 +1232,8 @@ export const PayoutBalanceSchema = z.object({
   payoutsPausedMessage: nullableString,
   /** Payments has no Stripe Connect account for the organisation: earnings stay on hold until it is registered. */
   payoutAccountMissing: z.boolean().default(false),
-  holds: z.array(z.object({ orderId: z.string(), amountMinor: z.number().int(), releaseAt: nullableString }))
+  /** Held funds per order: `orderNumber` is what screens show (null when payments' id is not among the recent shipments). */
+  holds: z.array(z.object({ orderId: z.string(), orderNumber: nullableString, amountMinor: z.number().int(), releaseAt: nullableString }))
 });
 export type PayoutBalance = z.infer<typeof PayoutBalanceSchema>;
 export const PayoutSchema = z.object({
@@ -1256,7 +1257,7 @@ export const PlanFeeDeductionSchema = z.object({
   releasedMinor: z.number().int(),
   outstandingMinor: z.number().int(),
   createdAt: z.string(),
-  transfers: z.array(z.object({ orderId: z.string(), amountMinor: z.number().int(), at: z.string(), label: z.string() }))
+  transfers: z.array(z.object({ orderId: z.string(), orderNumber: nullableString, amountMinor: z.number().int(), at: z.string(), label: z.string() }))
 });
 export type PlanFeeDeduction = z.infer<typeof PlanFeeDeductionSchema>;
 export const PayoutsViewSchema = z.object({

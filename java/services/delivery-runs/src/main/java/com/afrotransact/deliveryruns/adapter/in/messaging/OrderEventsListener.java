@@ -9,6 +9,7 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.application.AttributionService;
 import com.afrotransact.deliveryruns.application.OrderPlaced;
 import com.afrotransact.deliveryruns.application.PreorderProjectionService;
 import com.afrotransact.deliveryruns.application.RunProgressService;
@@ -50,11 +51,14 @@ class OrderEventsListener {
 
     private final PreorderProjectionService projection;
     private final RunProgressService progress;
+    private final AttributionService attribution;
     private final JsonMapper json;
 
-    OrderEventsListener(PreorderProjectionService projection, RunProgressService progress, JsonMapper json) {
+    OrderEventsListener(PreorderProjectionService projection, RunProgressService progress,
+                        AttributionService attribution, JsonMapper json) {
         this.projection = projection;
         this.progress = progress;
+        this.attribution = attribution;
         this.json = json;
     }
 
@@ -87,7 +91,10 @@ class OrderEventsListener {
     /** Dispatches one parsed event (package-private for tests). */
     void handle(String type, UUID eventId, JsonNode n) {
         switch (type) {
-            case ORDER_PLACED -> placed(eventId, n).ifPresent(e -> projection.onOrderPlaced(eventId, e));
+            case ORDER_PLACED -> {
+                attribute(n);
+                placed(eventId, n).ifPresent(e -> projection.onOrderPlaced(eventId, e));
+            }
             case SHIPMENT_CANCELLED -> {
                 String orderId = text(n, "orderId");
                 String shipmentId = text(n, "shipmentId");
@@ -124,6 +131,20 @@ class OrderEventsListener {
             default -> {
                 // other order events are not needed
             }
+        }
+    }
+
+    /**
+     * Remembers the advertorial an order came from ({@code attribution.cr=adv-...}) whatever the order carries: the
+     * run slot it takes is joined at read time (S263), so it does not matter which of the two arrives first.
+     */
+    private void attribute(JsonNode n) {
+        JsonNode a = n.path("attribution");
+        String creative = a.isObject() ? text(a, "cr") : null;
+        String orderId = text(n, "orderId");
+        Instant placedAt = instant(n, "placedAt");
+        if (creative != null && orderId != null && placedAt != null) {
+            attribution.orderPlaced(orderId, creative, text(a, "src"), placedAt);
         }
     }
 

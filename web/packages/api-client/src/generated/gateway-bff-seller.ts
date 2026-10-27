@@ -4035,6 +4035,8 @@ export interface components {
             canRequestToday: boolean;
             holds: {
                 orderId: string;
+                /** @description What the screen shows. Payments reports ids only; the BFF names the order from the seller's own shipments, null when it is not among the recent ones */
+                orderNumber: string | null;
                 amountMinor: number;
                 releaseAt: string | null;
             }[];
@@ -4127,6 +4129,8 @@ export interface components {
             /** @description The settlements it was deducted from (negative amounts were paid back with them) */
             transfers: {
                 orderId: string;
+                /** @description What the screen shows (null when the order is not among the seller's recent shipments) */
+                orderNumber: string | null;
                 amountMinor: number;
                 /** Format: date-time */
                 at: string;

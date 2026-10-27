@@ -137,7 +137,7 @@ export function amountMinor(text: string): number | null {
   return Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'));
 }
 
-const wholeOrNull = (text: string): number | null => {
+export const wholeOrNull = (text: string): number | null => {
   const t = text.trim();
   if (!t) return null;
   return /^\d{1,6}$/.test(t) ? Number(t) : Number.NaN;

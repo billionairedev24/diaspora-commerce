@@ -979,5 +979,6 @@
   "sc.runPickups.bagsHelp": "One bag per order, in order-number order.",
   "sc.runPickups.bag": "Order {order}",
   "sc.runPickups.bagCollected": "Collected",
-  "sc.runPickups.bagWaiting": "Waiting for the driver"
+  "sc.runPickups.bagWaiting": "Waiting for the driver",
+  "sc.payouts.order.unnamed": "an earlier order"
 }

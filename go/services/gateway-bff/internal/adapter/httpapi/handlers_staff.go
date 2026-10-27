@@ -61,6 +61,7 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	h.registerStaffPlans(route)
 	route("GET /v1/staff/dashboard", h.staffDashboard)
+	route("GET /v1/staff/lookups/{kind}", h.staffLookup)
 	route("GET /v1/staff/resources/{resource}", h.staffList)
 	route("POST /v1/staff/resources/{resource}", h.staffCreate)
 	route("GET /v1/staff/resources/{resource}/{id}", h.staffRecord)
@@ -187,6 +188,11 @@ func (h *handlersImpl) staffList(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.s.Staff.Records.List(r.Context(), callerFrom(r.Context()), name,
 		app.StaffQuery{Q: strings.TrimSpace(q.Get("q")), Status: q.Get("status"), Cursor: q.Get("cursor"), Sort: q["sort"], Page: page, Size: size})
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffLookup(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Records.Lookup(r.Context(), callerFrom(r.Context()), r.PathValue("kind"), r.URL.Query().Get("q"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

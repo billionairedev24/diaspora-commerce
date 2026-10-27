@@ -331,6 +331,21 @@ type FormField struct {
 	Help        string        `json:"help,omitempty"`
 	Placeholder string        `json:"placeholder,omitempty"`
 	Value       any           `json:"value,omitempty"`
+	// Lookup makes the field a searchable picker (drivers, sellers): staff pick by name, the form sends the id.
+	Lookup string `json:"lookup,omitempty"`
+}
+
+// LookupHit is one match of a picker: the id the form sends, the name staff read and a second line.
+type LookupHit struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// LookupResult is GET /v1/staff/lookups/{kind}.
+type LookupResult struct {
+	Kind  string      `json:"kind"`
+	Items []LookupHit `json:"items"`
 }
 
 // Form is a create, edit or action form.

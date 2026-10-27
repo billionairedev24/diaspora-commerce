@@ -1628,7 +1628,7 @@ export const sellerHandlers = [
           payoutsPausedReason: paused(ctx) ? ('AUTO_PAST_DUE' as const) : null,
           payoutsPausedMessage: paused(ctx) ? 'Stripe needs overdue information. Payouts resume automatically once Account health is resolved.' : null,
           payoutAccountMissing: false,
-          holds: [{ orderId: 'AT-2026-400160', amountMinor: 31225, releaseAt: new Date(ctx.now.getTime() + 3 * 86_400_000).toISOString().slice(0, 10) }, { orderId: 'AT-2026-400197', amountMinor: 21500, releaseAt: null }],
+          holds: [{ orderId: 'ord-400160', orderNumber: 'AT-2026-400160', amountMinor: 31225, releaseAt: new Date(ctx.now.getTime() + 3 * 86_400_000).toISOString().slice(0, 10) }, { orderId: 'ord-400197', orderNumber: 'AT-2026-400197', amountMinor: 21500, releaseAt: null }],
           planFeesMinor: ctx.db.planFeeDeductions.reduce((a, d) => a + d.outstandingMinor, 0) },
         payouts: ctx.db.payouts,
         historyAvailable: true,

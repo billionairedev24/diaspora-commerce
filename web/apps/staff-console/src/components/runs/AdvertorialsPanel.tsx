@@ -8,6 +8,7 @@ import {
   advertorialInputProblems,
   type AdvertorialSource,
   type AdvertorialStatus,
+  type FeaturedProduct,
   type StaffAdvertorial,
   staffRunKeys,
   staffRunQueries
@@ -22,6 +23,7 @@ import { Pill } from '@/components/preorders/primitives';
 import { EmptyState, ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 
+import { FeaturedProductsField } from './FeaturedProductsField';
 import { CARD, useCanManageRuns, useRunsApi } from './shared';
 
 const STATUS_PILL: Record<AdvertorialStatus, string> = {
@@ -40,9 +42,10 @@ interface FormState {
   priority: string;
   startsAt: string;
   endsAt: string;
+  featuredProducts: FeaturedProduct[];
 }
 
-const emptyForm = (variant: string): FormState => ({ variant, headline: '', body: '', ctaLabel: '', weight: '1', priority: '0', startsAt: '', endsAt: '' });
+const emptyForm = (variant: string): FormState => ({ variant, headline: '', body: '', ctaLabel: '', weight: '1', priority: '0', startsAt: '', endsAt: '', featuredProducts: [] });
 
 const formOf = (a: StaffAdvertorial): FormState => ({
   variant: a.variant,
@@ -52,7 +55,8 @@ const formOf = (a: StaffAdvertorial): FormState => ({
   weight: String(a.weight),
   priority: String(a.priority),
   startsAt: a.startsAt ? toLocalInput(a.startsAt) : '',
-  endsAt: a.endsAt ? toLocalInput(a.endsAt) : ''
+  endsAt: a.endsAt ? toLocalInput(a.endsAt) : '',
+  featuredProducts: a.featuredProducts
 });
 
 const wholeOrNaN = (text: string): number => (/^\d{1,4}$/.test(text.trim()) ? Number(text.trim()) : Number.NaN);
@@ -65,7 +69,8 @@ const inputOf = (f: FormState): AdvertorialInput => ({
   weight: wholeOrNaN(f.weight),
   priority: wholeOrNaN(f.priority),
   startsAt: f.startsAt ? fromLocalInput(f.startsAt) : null,
-  endsAt: f.endsAt ? fromLocalInput(f.endsAt) : null
+  endsAt: f.endsAt ? fromLocalInput(f.endsAt) : null,
+  featuredProducts: f.featuredProducts
 });
 
 const PROBLEM_KEY: Record<string, MessageKey> = {
@@ -101,6 +106,7 @@ function VariantDialog({
   const say = (field: string): string | null => {
     const k = shown ? raw[field] : undefined;
     if (!k) return null;
+    if (field === 'featuredProducts') return t('st.runs.adv.featured.max', { max: ADVERTORIAL_LIMITS.featured });
     const limit = field === 'headline' ? ADVERTORIAL_LIMITS.headline : field === 'body' ? ADVERTORIAL_LIMITS.body : field === 'ctaLabel' ? ADVERTORIAL_LIMITS.ctaLabel : field === 'variant' ? ADVERTORIAL_LIMITS.variant : 0;
     return t(PROBLEM_KEY[k] ?? 'st.runs.adv.problem.required', { max: limit, weight: ADVERTORIAL_LIMITS.weightMax, priority: ADVERTORIAL_LIMITS.priorityMax });
   };
@@ -141,6 +147,7 @@ function VariantDialog({
           <TextField type="datetime-local" label={t('st.runs.adv.form.endsAt')} value={f.endsAt} error={say('endsAt')} onChange={(e) => set({ endsAt: e.currentTarget.value })} />
         </div>
         <p className="m-0 text-xs text-muted">{t('st.runs.adv.form.scheduleHelp')}</p>
+        <FeaturedProductsField value={f.featuredProducts} error={say('featuredProducts')} onChange={(next) => set({ featuredProducts: next })} />
         {failure ? (
           <p role="alert" className="m-0 text-sm text-danger">
             {failure}
@@ -179,7 +186,9 @@ function Results({ a }: { a: StaffAdvertorial }) {
       </div>
       <div className="flex gap-1">
         <dt className="text-muted">{t('st.runs.adv.results.orders')}</dt>
-        <dd className="m-0 font-bold">{r.orders === null ? t('st.runs.adv.results.notTracked') : fmt.number(r.orders)}</dd>
+        <dd className="m-0 font-bold" data-testid={`adv-orders-${a.variant}`}>
+          {r.orders === null ? t('st.runs.adv.results.notTracked') : fmt.number(r.orders)}
+        </dd>
       </div>
     </dl>
   );
@@ -267,6 +276,11 @@ export function AdvertorialsPanel({ source, sourceId }: { source: AdvertorialSou
               <strong>{a.headline}</strong>
               {a.body ? <p className="m-0 text-sm">{a.body}</p> : null}
               <span className="text-xs text-muted">{t('st.runs.adv.cta', { label: a.ctaLabel })}</span>
+              {a.featuredProducts.length > 0 ? (
+                <span className="text-xs text-muted" data-testid={`adv-featured-${a.variant}`}>
+                  {t('st.runs.adv.featured.on', { names: a.featuredProducts.map((p) => p.title).join(', ') })}
+                </span>
+              ) : null}
             </div>
             <span className="text-xs text-muted">
               {t('st.runs.adv.weighting', { weight: a.weight, priority: a.priority })}

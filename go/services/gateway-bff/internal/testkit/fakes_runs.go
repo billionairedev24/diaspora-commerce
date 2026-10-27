@@ -119,6 +119,18 @@ func (u *Upstreams) runAlertRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, runSubscription(chs, false))
 	})
+	mux.HandleFunc("POST /v1/public/locations/{slug}/visits", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		u.LastRunVisit = b
+		u.mu.Unlock()
+		if r.PathValue("slug") != RunLocationSlug {
+			problem(w, 404, "delivery-runs.location-not-found", "Location not found", nil)
+			return
+		}
+		w.WriteHeader(204)
+	})
 	mux.HandleFunc("GET /v1/public/advertorials", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		u.mu.Lock()
@@ -133,7 +145,8 @@ func (u *Upstreams) runAlertRoutes(mux *http.ServeMux) {
 			"headline": "Lubbock pre-order closes Thursday", "body": "Order African groceries before the cutoff.", "ctaLabel": "Order now",
 			"ctaUrl":   "https://afrotransact.example/pre-orders/LBK-7?utm_source=advertorial&src=page&cr=adv-0123456789abcdef0123456789abcdef&po=LBK-7",
 			"imageUrl": nil, "countdownTarget": "2026-10-22T04:59:00Z", "expiresAt": "2026-10-22T04:59:00Z",
-			"deliveryDisplay": "Sunday, October 25", "feeDisplay": "$7.99"}}})
+			"deliveryDisplay": "Sunday, October 25", "feeDisplay": "$7.99",
+			"featuredProducts": []any{map[string]any{"atin": "ATSHEA0001", "title": "Shea butter", "imageUrl": "https://cdn.example/shea.jpg"}, map[string]any{"atin": "ATGARI0001", "title": "Garri"}}}}})
 	})
 	mux.HandleFunc("POST /v1/public/advertorials/{id}/events", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any

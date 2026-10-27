@@ -1,6 +1,6 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
-import { type NotificationPreviewRequest, type ResourceKey, type RunDispatchStatus } from '../schemas/staff';
+import { type LookupKind, type NotificationPreviewRequest, type ResourceKey, type RunDispatchStatus } from '../schemas/staff';
 import { type ResourceQuery, type StaffApiClient } from '../staff-client';
 
 /* TanStack Query key factories for the staff console. Everything hangs off ['staff'] so signing out (or a role change)
@@ -20,6 +20,7 @@ export const staffKeys = {
   identityDocuments: () => [...staffKeys.all, 'identity', 'documents'] as const,
   fees: () => [...staffKeys.all, 'fees'] as const,
   feeOrgs: (q: string) => [...staffKeys.fees(), 'orgs', q] as const,
+  lookup: (kind: string, q: string) => [...staffKeys.all, 'lookup', kind, q] as const,
   deliveryQuote: (orgId: string, miles: number, packages: number) => [...staffKeys.fees(), 'delivery-quote', orgId, miles, packages] as const,
   pickups: () => [...staffKeys.all, 'dispatch', 'pickups'] as const,
   pickupList: (nodeId: string) => [...staffKeys.pickups(), 'list', nodeId] as const,
@@ -61,6 +62,8 @@ export const staffQueries = {
   identityDocuments: (api: StaffApiClient) =>
     queryOptions({ queryKey: staffKeys.identityDocuments(), queryFn: ({ signal }) => api.getIdentityDocuments(signal), staleTime: 60_000 }),
   fees: (api: StaffApiClient) => queryOptions({ queryKey: staffKeys.fees(), queryFn: ({ signal }) => api.getFees(signal), staleTime: 15_000 }),
+  lookup: (api: StaffApiClient, kind: LookupKind, q: string) =>
+    queryOptions({ queryKey: staffKeys.lookup(kind, q), queryFn: ({ signal }) => api.lookup(kind, q, signal), staleTime: 30_000 }),
   feeOrgs: (api: StaffApiClient, q: string) =>
     queryOptions({ queryKey: staffKeys.feeOrgs(q), queryFn: ({ signal }) => api.searchFeeOrgs(q, signal), staleTime: 30_000 }),
   deliveryQuote: (api: StaffApiClient, orgId: string, miles: number, packages: number) =>

@@ -24,6 +24,8 @@ import {
   type RunDropMode,
   type RunEconomics,
   type RunHistoryRow,
+  type RunLocationInput,
+  runLocationProblems,
   type RunLogEntry,
   type RunMilestones,
   type RunOrderStatus,
@@ -68,6 +70,22 @@ interface Place {
   driveMinutes: number;
   growth: [string, number][];
   channels: Record<string, number>;
+  /** What staff entered for a town they added or changed (the seeded towns use the defaults below). */
+  details?: {
+    market?: string;
+    state?: string | null;
+    timeZone?: string;
+    currency?: string;
+    defaultFeeMinor?: number;
+    defaultMinOrders?: number;
+    defaultCapacityOrders?: number | null;
+    defaultCapacityPackages?: number | null;
+    defaultExtendDays?: number;
+    defaultCutoffPolicy?: RunCutoffPolicy;
+    dropMode?: RunDropMode;
+    whatsappInviteUrl?: string | null;
+  };
+  active?: boolean;
 }
 
 /* One location per seeded pre-order city: an origin hub sweeps the sellers and drives out. */
@@ -97,6 +115,8 @@ interface RunsState {
   settings: EconomicsSettings;
   changes: EconomicsChange[];
   runs: MockRun[];
+  /** The towns: the seeded ones, those staff added and the changes they made. */
+  places: Place[];
   /** What was decided about each run (extend, confirm, cancel), oldest first. */
   logs: Map<string, RunLogEntry[]>;
   advertorials: StaffAdvertorial[];
@@ -171,6 +191,7 @@ function seed(db: MockStaffDb): RunsState {
     ctaLabel: 'Order now',
     startsAt: null,
     endsAt: null,
+    featuredProducts: [],
     status: 'LIVE',
     ended: null,
     serving: true,
@@ -182,9 +203,9 @@ function seed(db: MockStaffDb): RunsState {
     ...extra
   });
   const advertorials = [
-    adv(1, {}),
+    adv(1, { featuredProducts: [{ atin: 'ATSHEA0001', title: 'Shea butter, raw' }, { atin: 'ATGARI0001', title: 'Garri, white' }] }),
     adv(2, { variant: 'B', generated: false, headline: 'Last days: Lubbock jollof and spice box', body: 'Pre-order closes Thursday. Free pickup, door delivery from the run fee.', ctaLabel: 'Reserve yours', results: { views: 1792, clicks: 274, ctrPct: 15.3, orders: 52 } }),
-    adv(3, { source: 'RUN', sourceId: run(4, lbk, 'OPEN', 6, 19).id, sourceName: 'Lubbock run', sourceCode: null, sourceStatus: 'OPEN', variant: 'A', headline: 'Our Lubbock delivery run is open', ctaLabel: 'See the run', results: { views: 420, clicks: 38, ctrPct: 9, orders: null } })
+    adv(3, { source: 'RUN', sourceId: run(4, lbk, 'OPEN', 6, 19).id, sourceName: 'Lubbock run', sourceCode: null, sourceStatus: 'OPEN', variant: 'A', headline: 'Our Lubbock delivery run is open', ctaLabel: 'See the run', results: { views: 420, clicks: 38, ctrPct: 9, orders: 6 } })
   ];
   const logs = new Map<string, RunLogEntry[]>([
     [
@@ -195,7 +216,7 @@ function seed(db: MockStaffDb): RunsState {
       ]
     ]
   ]);
-  return { settings: { ...DEFAULT_ECONOMICS, version: 0, source: 'CONFIG', updatedAt: null, updatedBy: null, reason: null, can: { manage: true } }, changes: [], runs, logs, advertorials, seq: 100 };
+  return { settings: { ...DEFAULT_ECONOMICS, version: 0, source: 'CONFIG', updatedAt: null, updatedBy: null, reason: null, can: { manage: true } }, changes: [], runs, places: PLACES.map((p) => ({ ...p })), logs, advertorials, seq: 100 };
 }
 
 /** The mock database's clock (seeded "now" plus elapsed real time), like the pre-order mock's. */
@@ -239,6 +260,7 @@ const RunPlanBody = z.object({
   expectedOrders: z.number().int().nullish(),
   commissionShareMinor: z.number().int().nullish()
 });
+const FeaturedBody = z.object({ atin: z.string(), title: z.string(), imageUrl: z.string().nullish() });
 const AdvertorialBody = z.object({
   source: z.enum(['WINDOW', 'RUN']).optional(),
   sourceId: z.string().optional(),
@@ -249,7 +271,8 @@ const AdvertorialBody = z.object({
   body: z.string().nullish(),
   ctaLabel: z.string(),
   startsAt: z.string().nullish(),
-  endsAt: z.string().nullish()
+  endsAt: z.string().nullish(),
+  featuredProducts: z.array(FeaturedBody).optional()
 });
 const GenerateBody = z.object({ source: z.enum(['WINDOW', 'RUN']), sourceId: z.string() });
 const RunScheduleBody = z.object({
@@ -276,6 +299,87 @@ const RunExtendBody = z.object({
   reason: z.string().nullish()
 });
 const ReasonBody = z.object({ reason: z.string().nullish() });
+const LocationBody = z.object({
+  name: z.string().optional(),
+  slug: z.string().nullish(),
+  market: z.string().optional(),
+  state: z.string().nullish(),
+  timeZone: z.string().nullish(),
+  areaKind: z.enum(['POLYGON', 'RADIUS']).optional(),
+  radiusMiles: z.number().nullish(),
+  geoZoneId: z.string().nullish(),
+  polygonGeoJson: z.string().nullish(),
+  centerLat: z.number().optional(),
+  centerLng: z.number().optional(),
+  defaultFeeMinor: z.number().nullish(),
+  currency: z.string().nullish(),
+  defaultMinOrders: z.number().nullish(),
+  defaultCapacityOrders: z.number().nullish(),
+  defaultCapacityPackages: z.number().nullish(),
+  dropMode: z.enum(['DOORSTEP', 'PICKUP_POINT']).nullish(),
+  defaultCutoffPolicy: z.enum(['EXTEND', 'CANCEL']).nullish(),
+  defaultExtendDays: z.number().nullish(),
+  whatsappInviteUrl: z.string().nullish(),
+  active: z.boolean().optional()
+});
+/** Run statuses in which a location cannot be switched off (the run is announced, takes orders or is on the road). */
+const LIVE_RUN_STATUSES: string[] = ['ANNOUNCED', 'OPEN', 'EXTENDED', 'CUT_OFF', 'CONFIRMED', 'COLLECTING', 'OUT_FOR_DELIVERY'];
+const slugOf = (name: string, state?: string | null) =>
+  `${name} ${state ?? ''}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+const locationInput = (b: z.infer<typeof LocationBody>): RunLocationInput => ({
+  name: b.name ?? '',
+  market: b.market ?? '',
+  state: b.state ?? null,
+  timeZone: b.timeZone ?? 'America/Chicago',
+  areaKind: b.areaKind ?? ('' as never),
+  radiusMiles: b.radiusMiles ?? null,
+  geoZoneId: b.geoZoneId ?? null,
+  polygonGeoJson: b.polygonGeoJson ?? null,
+  centerLat: b.centerLat ?? Number.NaN,
+  centerLng: b.centerLng ?? Number.NaN,
+  defaultFeeMinor: b.defaultFeeMinor ?? null,
+  currency: b.currency ?? 'USD',
+  defaultMinOrders: b.defaultMinOrders ?? null,
+  defaultCapacityOrders: b.defaultCapacityOrders ?? null,
+  defaultCapacityPackages: b.defaultCapacityPackages ?? null,
+  dropMode: b.dropMode ?? null,
+  defaultCutoffPolicy: b.defaultCutoffPolicy ?? null,
+  defaultExtendDays: b.defaultExtendDays ?? null,
+  whatsappInviteUrl: b.whatsappInviteUrl ?? null
+});
+const LOCATION_WORDS = { required: 'This is required', range: 'Outside the allowed range', whole: 'Enter a whole number', order: 'Capacity cannot be below the minimum orders', tooLong: 'Too long', link: 'Paste the full link, starting with https://', zone: 'Choose the area the location delivers to, or draw its outline' } as const;
+const locationErrors = (input: RunLocationInput): Record<string, string> => {
+  const errors = Object.fromEntries(Object.entries(runLocationProblems(input)).map(([k, v]) => [k, LOCATION_WORDS[v]])) as Record<string, string>;
+  if (input.timeZone) {
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: input.timeZone });
+    } catch {
+      errors.timeZone = 'Use an IANA time zone such as America/Chicago';
+    }
+  }
+  return errors;
+};
+const areaOf = (input: RunLocationInput): RunArea =>
+  input.areaKind === 'RADIUS'
+    ? { kind: 'RADIUS', geoZoneId: null, centerLat: input.centerLat, centerLng: input.centerLng, radiusMiles: input.radiusMiles ?? null }
+    : { kind: 'POLYGON', geoZoneId: input.geoZoneId?.trim() || `zone-${slugOf(input.name)}`, centerLat: input.centerLat, centerLng: input.centerLng, radiusMiles: null };
+const detailsOf = (input: RunLocationInput): NonNullable<Place['details']> => ({
+  market: input.market.trim().toUpperCase(),
+  state: input.state?.trim() ? input.state.trim().toUpperCase() : null,
+  timeZone: input.timeZone,
+  currency: input.currency,
+  defaultFeeMinor: input.defaultFeeMinor ?? 799,
+  defaultMinOrders: input.defaultMinOrders ?? 12,
+  defaultCapacityOrders: input.defaultCapacityOrders ?? 40,
+  defaultCapacityPackages: input.defaultCapacityPackages ?? null,
+  defaultExtendDays: input.defaultExtendDays ?? 7,
+  defaultCutoffPolicy: input.defaultCutoffPolicy ?? 'EXTEND',
+  dropMode: input.dropMode ?? 'DOORSTEP',
+  whatsappInviteUrl: input.whatsappInviteUrl?.trim() ? input.whatsappInviteUrl.trim() : null
+});
 
 const RANK = { VIEW: 1, EDIT: 2, APPROVE: 3, FULL: 4 } as const;
 
@@ -310,16 +414,31 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
   const withEtag = <T extends { version: number }>(body: T, status = 200) => HttpResponse.json(body as never, { status, headers: { ETag: `"${body.version}"` } });
   const validation = (errors: Record<string, string>) => problem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', errors);
 
-  const placeOf = (id: string | null | undefined) => PLACES.find((p) => p.id === id);
-  const placeOfTargets = (targets: string[] | undefined) => {
+  const placeOf = (ctx: PreorderCtx, id: string | null | undefined) => st(ctx).places.find((p) => p.id === id);
+  const placeOfTargets = (ctx: PreorderCtx, targets: string[] | undefined) => {
     const first = targets?.[0];
     if (!first) return undefined;
     const a = areaFromKey(first);
-    return PLACES.find((p) => areaFromKey(p.key).city?.toLowerCase() === a.city?.toLowerCase() && !!a.city);
+    return st(ctx).places.find((p) => areaFromKey(p.key).city?.toLowerCase() === a.city?.toLowerCase() && !!a.city);
   };
   const locationRow = (p: Place): StaffRunLocation => ({
-    id: p.id, slug: p.slug, name: p.name, market: 'US', state: 'TX', timeZone: 'America/Chicago', currency: 'USD', defaultFeeMinor: 799, defaultMinOrders: 12, defaultCapacityOrders: 40,
-    defaultCutoffPolicy: 'EXTEND', defaultExtendDays: 7, dropMode: 'DOORSTEP', whatsappInviteUrl: `https://chat.example/join/${p.slug}`, area: p.area, active: true
+    id: p.id,
+    slug: p.slug,
+    name: p.name,
+    market: p.details?.market ?? 'US',
+    state: p.details?.state === undefined ? 'TX' : p.details.state,
+    timeZone: p.details?.timeZone ?? 'America/Chicago',
+    currency: p.details?.currency ?? 'USD',
+    defaultFeeMinor: p.details?.defaultFeeMinor ?? 799,
+    defaultMinOrders: p.details?.defaultMinOrders ?? 12,
+    defaultCapacityOrders: p.details?.defaultCapacityOrders === undefined ? 40 : p.details.defaultCapacityOrders,
+    defaultCapacityPackages: p.details?.defaultCapacityPackages ?? null,
+    defaultCutoffPolicy: p.details?.defaultCutoffPolicy ?? 'EXTEND',
+    defaultExtendDays: p.details?.defaultExtendDays ?? 7,
+    dropMode: p.details?.dropMode ?? 'DOORSTEP',
+    whatsappInviteUrl: p.details?.whatsappInviteUrl === undefined ? `https://chat.example/join/${p.slug}` : p.details.whatsappInviteUrl,
+    area: p.area,
+    active: p.active !== false
   });
   const evaluate = (ctx: PreorderCtx, p: Place, dropMode: RunDropMode, feeMinor: number, minOrders: number, capacity: number | null, orders: number, commission: number | null): RunEconomics => {
     const cost = runCostModel(st(ctx).settings, p, dropMode);
@@ -348,12 +467,12 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
     if (source === 'WINDOW') {
       const w = ctx.db.preorders.windows.find((x) => x.id === sourceId);
       if (!w) throw validation({ sourceId: 'No such pre-order window' });
-      const p = placeOfTargets(w.targets);
+      const p = placeOfTargets(ctx, w.targets);
       return { name: w.name, code: w.code, status: preorderStatus(w, clockOf(ctx.db)) as string, closes: w.closesAt, location: p, place: areaFromKey(w.targets[0] ?? '').city ?? w.name };
     }
     const r = st(ctx).runs.find((x) => x.id === sourceId);
     if (!r) throw validation({ sourceId: 'No such delivery run' });
-    const p = placeOf(r.locationId);
+    const p = placeOf(ctx, r.locationId);
     return { name: `${p?.name ?? 'Delivery'} run`, code: null, status: r.status as string, closes: r.cutoffAt, location: p, place: p?.name ?? '' };
   };
   const decorate = (ctx: PreorderCtx, a: StaffAdvertorial): StaffAdvertorial => {
@@ -406,7 +525,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       fromCutoff: cutoffs?.[0] ?? null, toCutoff: cutoffs?.[1] ?? null, at
     });
   };
-  const place = (r: MockRun): Place | undefined => placeOf(r.locationId);
+  const place = (ctx: PreorderCtx, r: MockRun): Place | undefined => placeOf(ctx, r.locationId);
   /** The cutoff job (every minute in delivery-runs): confirms a run at its minimum, extends a short one once, else cancels it. */
   const settle = (db: MockStaffDb, s: RunsState) => {
     const now = clockOf(db);
@@ -435,7 +554,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
   };
   const INTERNAL_RUN_FIELDS = new Set(['orders', 'packages', 'completed']);
   const detail = (ctx: PreorderCtx, r: MockRun): StaffRunDetail => {
-    const p = place(r);
+    const p = place(ctx, r);
     const dropMode = (r.dropMode as RunDropMode | undefined) ?? 'DOORSTEP';
     const economics = p ? evaluate(ctx, p, dropMode, r.feeMinor, r.minOrders, r.capacityOrders ?? null, r.reservedOrders, null) : null;
     const base = Object.fromEntries(Object.entries(r).filter(([k]) => !INTERNAL_RUN_FIELDS.has(k))) as StaffRun;
@@ -536,7 +655,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       view(ctx);
       const b = await json(ctx.request, WindowPlanBody);
       if (!b.locationId && !b.targets?.length) throw validation({ targets: 'Choose where the pre-order delivers' });
-      const p = placeOf(b.locationId) ?? placeOfTargets(b.targets);
+      const p = placeOf(ctx, b.locationId) ?? placeOfTargets(ctx, b.targets);
       const door = b.door !== false;
       const dropMode: RunDropMode = door ? 'DOORSTEP' : 'PICKUP_POINT';
       const fee = (door ? b.doorFeeMinor : b.pickupFeeMinor) ?? 799;
@@ -563,7 +682,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const all = ordersOf(pre, w);
       const counted = cancelled ? [] : all.filter((o) => o.status !== 'CANCELLED');
       const refunded = cancelled ? all.filter((o) => o.refundStatus !== null) : [];
-      const p = placeOfTargets(w.targets);
+      const p = placeOfTargets(ctx, w.targets);
       const door = counted.filter((o) => o.fulfilment === 'DOOR').length;
       const fee = w.doorFeeOverride ?? 799;
       const economics = p && !cancelled ? evaluate(ctx, p, w.door ? 'DOORSTEP' : 'PICKUP_POINT', fee, w.minOrders, null, counted.length, null) : null;
@@ -591,7 +710,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
     http.post(`${W}/delivery-runs/economics-preview`, route(async (ctx): Promise<RunEconomics> => {
       view(ctx);
       const b = await json(ctx.request, RunPlanBody);
-      const p = placeOf(b.locationId);
+      const p = placeOf(ctx, b.locationId);
       if (!p) throw notFound('No such location.');
       const min = b.minOrders ?? 12;
       return evaluate(ctx, p, b.dropMode ?? 'DOORSTEP', b.feeMinor ?? 799, min, b.capacityOrders ?? null, b.expectedOrders ?? min, b.commissionShareMinor ?? null);
@@ -599,7 +718,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
     http.get(`${W}/delivery-runs/runs/:id/pnl`, route((ctx, params): RunPnl => {
       view(ctx);
       const r = runOf(ctx, params.id);
-      const p = placeOf(r.locationId);
+      const p = placeOf(ctx, r.locationId);
       if (!p) throw notFound('No such location.');
       const commission = new URL(ctx.request.url).searchParams.get('commissionShareMinor');
       const cancelled = r.status === 'CANCELLED';
@@ -617,11 +736,77 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
     /* ── locations and runs ── */
     http.get(`${W}/delivery-runs/locations`, route((ctx) => {
       view(ctx);
-      return { items: PLACES.map(locationRow), can: can(ctx) };
+      return { items: st(ctx).places.map(locationRow), can: can(ctx) };
+    })),
+    http.post(`${W}/delivery-runs/locations`, route(async (ctx) => {
+      manage(ctx);
+      const b = await json(ctx.request, LocationBody);
+      const s = st(ctx);
+      const input = locationInput(b);
+      const errors = locationErrors(input);
+      const slug = (b.slug?.trim() || slugOf(input.name, input.state)).toLowerCase();
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug)) errors.slug = 'Use lower-case letters, digits and hyphens, such as bastrop-tx';
+      if (Object.keys(errors).length) throw validation(errors);
+      if (s.places.some((p) => p.slug === slug)) throw problem(409, 'delivery-runs.slug-taken', 'Already exists', 'A location with this web address already exists');
+      s.seq += 1;
+      const place: Place = {
+        id: `4b2f9d3a-0000-4000-8000-${String(s.seq).padStart(12, '0')}`,
+        slug,
+        name: input.name.trim(),
+        key: `${input.market.trim().toUpperCase()}/${(input.state ?? '').trim().toUpperCase()}/${input.name.trim()}`,
+        area: areaOf(input),
+        roadMiles: 60,
+        driveMinutes: 75,
+        growth: [],
+        channels: { EMAIL: 0, SMS: 0, PUSH: 0, WHATSAPP: 0 },
+        details: detailsOf(input),
+        active: b.active !== false
+      };
+      s.places.push(place);
+      audit(ctx, 'location.created', place.id, `Added the delivery location ${place.name}`);
+      return { ...locationRow(place), can: can(ctx) };
+    }, 201)),
+    http.put(`${W}/delivery-runs/locations/:id`, route(async (ctx, params) => {
+      manage(ctx);
+      const place = placeOf(ctx, params.id);
+      if (!place) throw notFound('No such location.');
+      const b = await json(ctx.request, LocationBody);
+      const input = locationInput(b);
+      const errors = locationErrors(input);
+      if (Object.keys(errors).length) throw validation(errors);
+      Object.assign(place, { name: input.name.trim(), area: areaOf(input), details: detailsOf(input) });
+      audit(ctx, 'location.updated', place.id, `Changed the delivery location ${place.name}`);
+      return { ...locationRow(place), can: can(ctx) };
+    })),
+    http.post(`${W}/delivery-runs/locations/:id/deactivate`, route(async (ctx, params) => {
+      manage(ctx);
+      const place = placeOf(ctx, params.id);
+      if (!place) throw notFound('No such location.');
+      const reason = reasonOf(await json(ctx.request, ReasonBody), 'Say why: the reason is logged with your name');
+      if (place.active === false) return { ...locationRow(place), can: can(ctx) };
+      if (st(ctx).runs.some((r) => r.locationId === place.id && LIVE_RUN_STATUSES.includes(r.status))) {
+        throw problem(409, 'delivery-runs.location-has-live-runs', 'Not possible now', 'A run of this location is announced, takes orders or is on the road. Cancel or finish it first.');
+      }
+      place.active = false;
+      audit(ctx, 'location.deactivated', place.id, `Switched off the delivery location ${place.name}: ${reason}`);
+      return { ...locationRow(place), can: can(ctx) };
+    })),
+    http.post(`${W}/delivery-runs/locations/:id/activate`, route(async (ctx, params) => {
+      manage(ctx);
+      const place = placeOf(ctx, params.id);
+      if (!place) throw notFound('No such location.');
+      const body = await json(ctx.request, ReasonBody);
+      const reason = (body.reason ?? '').trim();
+      if (reason.length > 500) throw validation({ reason: 'At most 500 characters' });
+      if (place.active === false) {
+        place.active = true;
+        audit(ctx, 'location.activated', place.id, `Switched on the delivery location ${place.name}${reason ? `: ${reason}` : ''}`);
+      }
+      return { ...locationRow(place), can: can(ctx) };
     })),
     http.get(`${W}/delivery-runs/locations/:id/history`, route((ctx, params) => {
       view(ctx);
-      const p = placeOf(params.id);
+      const p = placeOf(ctx, params.id);
       if (!p) throw notFound('No such location.');
       const runs = st(ctx).runs.filter((r) => r.locationId === p.id).sort((a, b) => b.windowStart.localeCompare(a.windowStart));
       const rows: RunHistoryRow[] = runs.map((r) => ({
@@ -652,8 +837,9 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       manage(ctx);
       const b = await json(ctx.request, RunScheduleBody);
       const errors = scheduleErrors(b, true);
-      const p = placeOf(b.locationId);
+      const p = placeOf(ctx, b.locationId);
       if (b.locationId && !p) errors.locationId = 'Choose one of the locations';
+      if (p && p.active === false) throw problem(422, 'delivery-runs.location-inactive', 'Not possible', 'The location is not active');
       if (!errors.cutoffAt && b.cutoffAt && Date.parse(b.cutoffAt) <= clockOf(ctx.db)) errors.cutoffAt = 'The cutoff must be in the future';
       if (Object.keys(errors).length || !p) throw validation(errors);
       const s = st(ctx);
@@ -728,7 +914,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
         extendDays: b.extendDays ?? r.extendDays,
         notes: b.notes?.trim() ? b.notes.trim() : null
       });
-      audit(ctx, 'run.updated', r.id, `Changed the run of ${place(r)?.name ?? 'a location'}`);
+      audit(ctx, 'run.updated', r.id, `Changed the run of ${place(ctx, r)?.name ?? 'a location'}`);
       return bump(ctx, r);
     })),
     http.delete(`${W}/delivery-runs/runs/:id`, route((ctx, params) => {
@@ -737,7 +923,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       if (r.status !== 'DRAFT') throw problem(422, 'delivery-runs.run-not-draft', 'Not a draft', 'Only draft runs can be deleted; cancel instead');
       const s = st(ctx);
       s.runs = s.runs.filter((x) => x.id !== r.id);
-      audit(ctx, 'run.deleted', r.id, `Deleted a draft run of ${place(r)?.name ?? 'a location'}`);
+      audit(ctx, 'run.deleted', r.id, `Deleted a draft run of ${place(ctx, r)?.name ?? 'a location'}`);
       return new HttpResponse(null, { status: 204 });
     })),
     http.post(`${W}/delivery-runs/runs/:id/announce`, route((ctx, params) => {
@@ -746,7 +932,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       if (r.status !== 'DRAFT') throw invalidMove(r, 'ANNOUNCED');
       r.status = 'ANNOUNCED';
       r.milestones = { ...r.milestones, announcedAt: ctx.now.toISOString() };
-      audit(ctx, 'run.announced', r.id, `Announced the run of ${place(r)?.name ?? 'a location'}`);
+      audit(ctx, 'run.announced', r.id, `Announced the run of ${place(ctx, r)?.name ?? 'a location'}`);
       return bump(ctx, r);
     })),
     http.post(`${W}/delivery-runs/runs/:id/open`, route((ctx, params) => {
@@ -756,7 +942,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       if (Date.parse(r.cutoffAt) <= clockOf(ctx.db)) throw problem(422, 'delivery-runs.cutoff-passed', 'Cutoff passed', 'The cutoff has passed; extend the run instead');
       r.status = 'OPEN';
       r.milestones = { ...r.milestones, announcedAt: r.milestones.announcedAt ?? ctx.now.toISOString(), openedAt: ctx.now.toISOString() };
-      audit(ctx, 'run.opened', r.id, `Opened the run of ${place(r)?.name ?? 'a location'} for orders`);
+      audit(ctx, 'run.opened', r.id, `Opened the run of ${place(ctx, r)?.name ?? 'a location'} for orders`);
       return bump(ctx, r);
     })),
     http.post(`${W}/delivery-runs/runs/:id/extend`, route(async (ctx, params) => {
@@ -784,7 +970,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
         sellerPickupAt: b.sellerPickupAt ? new Date(b.sellerPickupAt).toISOString() : r.sellerPickupAt ? new Date(Date.parse(r.sellerPickupAt) + by).toISOString() : null
       });
       record(st(ctx), r, 'EXTEND', ctx.action.actor, false, reason, from, ctx.now.toISOString(), [before, r.cutoffAt]);
-      audit(ctx, 'run.extended', r.id, `Moved the cutoff of the run of ${place(r)?.name ?? 'a location'}: ${reason}`);
+      audit(ctx, 'run.extended', r.id, `Moved the cutoff of the run of ${place(ctx, r)?.name ?? 'a location'}: ${reason}`);
       return bump(ctx, r);
     })),
     http.post(`${W}/delivery-runs/runs/:id/confirm`, route(async (ctx, params) => {
@@ -800,7 +986,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       r.status = 'CONFIRMED';
       r.milestones = { ...r.milestones, cutOffAt: ctx.now.toISOString(), confirmedAt: ctx.now.toISOString() };
       record(st(ctx), r, below ? 'CONFIRM_OVERRIDE' : 'CONFIRM', ctx.action.actor, false, reason || null, from, ctx.now.toISOString());
-      audit(ctx, 'run.confirmed', r.id, `Confirmed the run of ${place(r)?.name ?? 'a location'}${below ? ` below its minimum: ${reason}` : ''}`);
+      audit(ctx, 'run.confirmed', r.id, `Confirmed the run of ${place(ctx, r)?.name ?? 'a location'}${below ? ` below its minimum: ${reason}` : ''}`);
       return bump(ctx, r);
     })),
     http.post(`${W}/delivery-runs/runs/:id/cancel`, route(async (ctx, params) => {
@@ -814,7 +1000,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       r.cancelReason = reason;
       r.milestones = { ...r.milestones, cancelledAt: ctx.now.toISOString() };
       record(st(ctx), r, 'CANCEL', ctx.action.actor, false, reason, from, ctx.now.toISOString());
-      audit(ctx, 'run.cancelled', r.id, `Cancelled the run of ${place(r)?.name ?? 'a location'} and refunded ${r.orders} orders: ${reason}`);
+      audit(ctx, 'run.cancelled', r.id, `Cancelled the run of ${place(ctx, r)?.name ?? 'a location'} and refunded ${r.orders} orders: ${reason}`);
       return bump(ctx, r);
     })),
     http.get(`${W}/delivery-runs/runs/:id/log`, route((ctx, params) => {
@@ -832,6 +1018,32 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
 
 
     /* ── advertorials ── */
+    http.get(`${W}/featured-products/search`, route((ctx) => {
+      view(ctx);
+      const q = (new URL(ctx.request.url).searchParams.get('q') ?? '').trim();
+      if (q.length < 2 || q.length > 120) throw validation({ q: 'Type 2 to 120 characters' });
+      const needle = q.toLowerCase();
+      return { items: FEATURE_CATALOGUE.filter((p) => p.title.toLowerCase().includes(needle) || (p.sellerName ?? '').toLowerCase().includes(needle)).slice(0, 8) };
+    })),
+    http.get(`${W}/delivery-runs/locations/:id/attribution`, route((ctx, params) => {
+      view(ctx);
+      const p = placeOf(ctx, params.id);
+      if (!p) throw notFound('No such location.');
+      const q = new URL(ctx.request.url).searchParams;
+      const runId = q.get('runId');
+      const days = q.get('days');
+      if (runId && !st(ctx).runs.some((r) => r.id === runId && r.locationId === p.id)) throw validation({ runId: 'Choose one of the runs' });
+      if (days !== null && !(Number.isInteger(Number(days)) && Number(days) >= 1 && Number(days) <= 366)) throw validation({ days: 'Between 1 and 366' });
+      const rows = attributionRows(p, runId);
+      return {
+        locationId: p.id,
+        runId,
+        since: new Date(clockOf(ctx.db) - Number(days ?? 90) * DAY).toISOString().slice(0, 10),
+        visits: rows.reduce((n, r) => n + r.visits, 0),
+        signups: rows.reduce((n, r) => n + r.signups, 0),
+        rows
+      };
+    })),
     http.get(`${W}/advertorials`, route((ctx) => {
       view(ctx);
       const q = new URL(ctx.request.url).searchParams;
@@ -855,7 +1067,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const a: StaffAdvertorial = {
         id: `5c3a0e4b-0000-4000-8000-${String(s.seq).padStart(12, '0')}`, source: b.source, sourceId: b.sourceId, sourceName: info.name, sourceCode: info.code, sourceStatus: info.status,
         sourceCloses: info.closes, locationId: info.location?.id ?? null, locationName: info.location?.name ?? null, variant: nextVariant(s.advertorials, b.source, b.sourceId), weight: 1, priority: 0,
-        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'LIVE', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: b.source === 'WINDOW' ? 0 : null },
+        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'LIVE', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: 0 }, featuredProducts: [],
         createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
       };
       s.advertorials.unshift(a);
@@ -876,7 +1088,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
         sourceStatus: info.status, sourceCloses: info.closes, locationId: info.location?.id ?? null, locationName: info.location?.name ?? null,
         variant: b.variant?.trim() || nextVariant(s.advertorials, b.source as AdvertorialSource, b.sourceId as string), weight: b.weight ?? 1, priority: b.priority ?? 0, generated: false,
         headline: b.headline.trim(), body: (b.body ?? '').trim(), ctaLabel: b.ctaLabel.trim(), startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null, status: 'DRAFT', ended: null, serving: false,
-        results: { views: 0, clicks: 0, ctrPct: null, orders: b.source === 'WINDOW' ? 0 : null }, createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
+        results: { views: 0, clicks: 0, ctrPct: null, orders: 0 }, featuredProducts: featured(b.featuredProducts), createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
       };
       s.advertorials.unshift(a);
       audit(ctx, 'advertorial.created', a.id, `Wrote variant ${a.variant} for ${info.name}`);
@@ -897,7 +1109,8 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       audit(ctx, 'advertorial.updated', a.id, `Edited variant ${a.variant} of ${a.sourceName ?? a.sourceId}`);
       return withEtag(save(ctx, a, {
         headline: b.headline.trim(), body: (b.body ?? '').trim(), ctaLabel: b.ctaLabel.trim(), variant: b.variant?.trim() || a.variant, weight: b.weight ?? a.weight, priority: b.priority ?? a.priority,
-        startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null, generated: false
+        startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null, generated: false,
+        ...(b.featuredProducts ? { featuredProducts: featured(b.featuredProducts) } : {})
       }));
     })),
     http.post(`${W}/advertorials/:id/:action`, route((ctx, params) => {
@@ -937,3 +1150,26 @@ function problemWords(p: Record<string, string>): Record<string, string> {
 
 /** Test hook: the mock database's runs state (the same object the handlers use). */
 export const mockRunsState = (): RunsState => stateOf(getStaffDb());
+
+/** Products the editor can find (the search index in production). */
+const FEATURE_CATALOGUE: { atin: string; title: string; imageUrl?: string; sellerName?: string }[] = [
+  { atin: 'ATSHEA0001', title: 'Shea butter, raw', sellerName: 'Accra Naturals' },
+  { atin: 'ATGARI0001', title: 'Garri, white', sellerName: 'AfroTransact Retail' },
+  { atin: 'ATEGUS0001', title: 'Egusi, ground', sellerName: 'Mama Tee Foods' },
+  { atin: 'ATPALM0001', title: 'Palm oil, 1 litre', sellerName: 'Mama Tee Foods' },
+  { atin: 'ATJOLL0001', title: 'Jollof spice box', sellerName: 'AfroTransact Retail' },
+  { atin: 'ATPLAN0001', title: 'Plantain chips', sellerName: 'Lagos Snacks' }
+];
+
+const featured = (list: { atin: string; title: string; imageUrl?: string | null }[] | undefined) =>
+  (list ?? []).map((p) => ({ atin: p.atin.trim(), title: p.title.trim(), ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}) }));
+
+/** Where visits and sign-ups of a town came from (seeded; a run's link carries a share of them). */
+function attributionRows(p: Place, runId: string | null) {
+  const base = [
+    { utmSource: 'whatsapp', utmMedium: 'social', utmCampaign: `delivery-run-${p.slug}-20261024`, visits: 140, signups: 23 },
+    { utmSource: 'instagram', utmMedium: 'social', utmCampaign: '', visits: 64, signups: 7 },
+    { utmSource: 'email', utmMedium: 'newsletter', utmCampaign: 'weekly-run', visits: 41, signups: 12 }
+  ];
+  return runId ? base.slice(0, 2).map((r) => ({ ...r, visits: Math.round(r.visits / 2), signups: Math.round(r.signups / 2) })) : base;
+}

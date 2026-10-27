@@ -83,8 +83,10 @@ Pre-order windows are the one customer-facing offer; a delivery run is how a clo
   `DELIVERY_RUNS_WHATSAPP_ENABLED` (off) because they are sent only from templates Meta must approve; consent and the community
   link work without it.
 - **Advertorials** live in delivery-runs because their audience, expiry (the close or cancellation) and attributed orders are all
-  this service's data. Not built: featured products in an advertorial, a mobile app screen, and reporting UTM parameters to an
-  analytics sink (the repository has none; UTM is kept on the sign-up source).
+  this service's data. Featured products (up to four, chosen by name, no price kept) and the orders credited to a run's advertorial
+  are built; UTM visits and sign-ups are first-party counters, and what product analytics can consume and what WhatsApp needs from
+  Meta are in `docs/engineering/run-attribution.md`. Not built: a mobile app screen, and pushing UTM parameters to an analytics
+  sink (the repository has none).
 
 ## Implementation notes (currency, §7)
 

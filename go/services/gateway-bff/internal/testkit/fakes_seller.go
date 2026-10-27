@@ -1089,7 +1089,7 @@ func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/payouts/balance", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "currency": "USD", "availableMinor": 128455, "onHoldMinor": 52725, "requestedOrInTransitMinor": 0,
 			"paidMinor": 932210, "providerFeesMinor": 1500, "planFeesMinor": 0, "minimumPayoutMinor": 2500, "canRequestToday": true,
-			"payoutsPaused": true, "payoutsPausedReason": "AUTO_PAST_DUE", "onHold": []map[string]any{{"orderId": "AT-2026-000123", "amountMinor": 52725, "releaseAt": "2026-10-24T10:00:00Z"}, {"orderId": "AT-2026-000130", "amountMinor": 8000}}})
+			"payoutsPaused": true, "payoutsPausedReason": "AUTO_PAST_DUE", "onHold": []map[string]any{{"orderId": "o1", "amountMinor": 52725, "releaseAt": "2026-10-24T10:00:00Z"}, {"orderId": "o-older", "amountMinor": 8000}}})
 	})
 	// S298: plan invoices paid from sales (a DECLINED one took nothing and is not shown).
 	mux.HandleFunc("GET /v1/orgs/{id}/plan-fee-withholdings", func(w http.ResponseWriter, _ *http.Request) {
@@ -1102,7 +1102,7 @@ func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
 				"withheldMinor": 9000, "releasedMinor": 0, "settledMinor": 9000, "outstandingMinor": 0, "status": "WITHHELD",
 				"reason": "Only $90.00 of $111.15 was available; the card pays the rest", "label": "Plan fee (invoice AT-0003)",
 				"createdAt": "2026-10-10T00:00:00Z", "updatedAt": "2026-10-12T00:00:00Z", "deductions": []any{map[string]any{
-					"orderId": "AT-2026-000123", "amountMinor": 9000, "at": "2026-10-12T00:00:00Z",
+					"orderId": "o1", "amountMinor": 9000, "at": "2026-10-12T00:00:00Z",
 					"label": "Plan fee (invoice AT-0003) deducted from order AT-2026-000123"}}}})
 	})
 	mux.HandleFunc("GET /v1/payouts/provider-fees", func(w http.ResponseWriter, _ *http.Request) {
@@ -1168,7 +1168,7 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 		defer u.mu.Unlock()
 		o := u.orderJSON()
 		sh := o["shipments"].([]map[string]any)[0]
-		writeJSON(w, 200, map[string]any{"items": []any{map[string]any{"orderNumber": o["orderNumber"], "orderStatus": o["status"], "placedAt": o["placedAt"],
+		writeJSON(w, 200, map[string]any{"items": []any{map[string]any{"orderId": o["id"], "orderNumber": o["orderNumber"], "orderStatus": o["status"], "placedAt": o["placedAt"],
 			"shipTo": o["shippingAddress"], "shipment": sh}}, "nextCursor": nil, "total": 1})
 	})
 	mux.HandleFunc("GET /v1/orders/{number}", func(w http.ResponseWriter, r *http.Request) {

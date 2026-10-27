@@ -92,6 +92,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/lookups/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find drivers or sellers by name for a form's picker
+         * @description The searchable pickers of the console's forms (Assign driver, Stripe lookup): up to 20 matches by name, the id the
+         *     form sends, and a second line (email, kind of seller). `drivers` needs Delivery dispatch at View and the people
+         *     directory (users:read) upstream; `sellers` needs Payouts at View. Leave `q` out for the first matches.
+         */
+        get: operations["searchStaffLookup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/resources/{resource}": {
         parameters: {
             query?: never;
@@ -2356,7 +2378,80 @@ export interface paths {
          */
         get: operations["listStaffRunLocations"];
         put?: never;
+        /**
+         * Add a town delivery runs serve
+         * @description delivery-runs `POST /v1/locations` (preorders:manage, EDIT; delivery-runs:manage upstream). Give the name and market,
+         *     where the town delivers (a radius in miles around its centre, or an area registered as a zone in geo-service, or
+         *     a drawn GeoJSON outline), the defaults new runs start from (fee, minimum, capacity, cutoff policy), the IANA
+         *     time zone (default America/Chicago) and the community (WhatsApp) link. The slug is made from the name and state
+         *     when it is not given. The location is active unless `active` is false. Field problems are answered per field (422).
+         */
+        post: operations["createStaffRunLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a town's details
+         * @description delivery-runs `PUT /v1/locations/{id}` (preorders:manage, EDIT). Replaces the details; an edit never switches the
+         *     location on or off (use deactivate and activate, which are audited) and runs already scheduled keep their own
+         *     fee, minimum and capacity.
+         */
+        put: operations["updateStaffRunLocation"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch a town off, with the reason that is audited
+         * @description delivery-runs `POST /v1/locations/{id}/deactivate` (preorders:manage, EDIT). The reason is required and is recorded
+         *     with the staff member's name and the time (event delivery-runs.location.changed, audit log). Refused with 409
+         *     while a run of the town announced, takes orders or is on the road. A switched-off town gets no new runs and
+         *     disappears from the shop front; its history stays. Already off: unchanged.
+         */
+        post: operations["deactivateStaffRunLocation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Switch a town back on
+         * @description delivery-runs `POST /v1/locations/{id}/activate` (preorders:manage, EDIT). The reason is optional and audited like the switch off. Already on, unchanged.
+         */
+        post: operations["activateStaffRunLocation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2377,6 +2472,30 @@ export interface paths {
          *     channel) and 12 months of subscriber growth.
          */
         get: operations["getStaffRunLocationHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/delivery-runs/locations/{locationId}/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Visits and sign-ups of a town or one of its runs, per UTM source, medium and campaign
+         * @description delivery-runs `GET /v1/locations/{id}/attribution` (delivery-runs:read). First-party counters of the visits and
+         *     sign-ups that arrived with `utm_source`, `utm_medium` and `utm_campaign` (links shared on WhatsApp, social media
+         *     or email) over the last `days` (default 90), most visits first. Only the three tags are kept: no cookie, address
+         *     or visitor id. Product analytics can consume the same facts from the event stream (`orders.order.placed`
+         *     attribution, the `source` of `delivery-runs.subscription.*`); see docs/engineering/run-attribution.md.
+         */
+        get: operations["getStaffRunLocationAttribution"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2641,6 +2760,27 @@ export interface paths {
          *     `expectedOrders` defaults to the minimum. 502 when geo-service cannot measure the route.
          */
         post: operations["previewStaffRunEconomics"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/featured-products/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find products to feature on an advertorial's card, by name
+         * @description search `GET /v1/search` through the staff session (preorders at VIEW or above): up to eight products shoppers can
+         *     find, with the product code, name, picture (https only) and seller. No price: the card never quotes one.
+         */
+        get: operations["searchStaffFeaturedProducts"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5649,12 +5789,26 @@ export interface components {
             label: string;
         };
         FieldValue: string | number | boolean | string[] | null;
+        StaffLookupResult: {
+            /** @enum {string} */
+            kind: "drivers" | "sellers";
+            items: {
+                id: string;
+                name: string;
+                detail?: string;
+            }[];
+        };
         FormField: {
             key: string;
             label: string;
             /** @enum {string} */
             type: "text" | "textarea" | "number" | "money" | "select" | "multiselect" | "toggle" | "date" | "datetime" | "email" | "password";
             required: boolean;
+            /**
+             * @description A text field that is a searchable picker: staff choose by name (GET /v1/staff/lookups/{kind}), the form sends the id
+             * @enum {string}
+             */
+            lookup?: "drivers" | "sellers";
             options?: components["schemas"]["FieldOption"][];
             min?: number;
             max?: number;
@@ -7086,6 +7240,86 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        StaffRunLocationDetail: components["schemas"]["StaffRunLocation"] & {
+            can?: components["schemas"]["PreorderCan"];
+        };
+        /**
+         * @description A town. `areaKind` RADIUS needs `radiusMiles`; POLYGON needs `geoZoneId` (an existing geo-service zone) or
+         *     `polygonGeoJson` (registered as a zone). `centerLat` and `centerLng` are always required: the circle centre and the
+         *     drive destination for run economics. `active` only matters on create.
+         */
+        StaffRunLocationRequest: {
+            /** @example Bastrop */
+            name: string;
+            /**
+             * @description Made from the name and state when absent
+             * @example bastrop-tx
+             */
+            slug?: string;
+            /** @example US */
+            market: string;
+            /** @example TX */
+            state?: string | null;
+            /**
+             * @description IANA time zone; default America/Chicago
+             * @example America/Chicago
+             */
+            timeZone?: string;
+            /** @enum {string} */
+            areaKind: "POLYGON" | "RADIUS";
+            radiusMiles?: number;
+            geoZoneId?: string;
+            polygonGeoJson?: string;
+            centerLat: number;
+            centerLng: number;
+            originLat?: number;
+            originLng?: number;
+            /** @description Delivery fee new runs start from, minor units */
+            defaultFeeMinor?: number;
+            currency?: string;
+            defaultMinOrders?: number;
+            defaultCapacityOrders?: number;
+            defaultCapacityPackages?: number;
+            /** @enum {string} */
+            dropMode?: "DOORSTEP" | "PICKUP_POINT";
+            /** @enum {string} */
+            defaultCutoffPolicy?: "EXTEND" | "CANCEL";
+            defaultExtendDays?: number;
+            /**
+             * @description The community (WhatsApp) link; blank or null clears it
+             * @example https://chat.whatsapp.com/AbCdEf123
+             */
+            whatsappInviteUrl?: string | null;
+            /** @description Create only; the default is on */
+            active?: boolean;
+        };
+        /** @description Why a town is switched off (required) or on (optional); audited with the staff member's name */
+        StaffRunLocationSwitch: {
+            reason?: string;
+        };
+        StaffRunAttribution: {
+            /** Format: uuid */
+            locationId?: string;
+            /** @description Null for the whole town */
+            runId?: string | null;
+            /**
+             * Format: date
+             * @description First day counted (UTC)
+             */
+            since?: string;
+            visits: number;
+            signups: number;
+            rows: components["schemas"]["StaffRunAttributionRow"][];
+        };
+        StaffRunAttributionRow: {
+            /** @example whatsapp */
+            utmSource: string;
+            /** @example social */
+            utmMedium?: string | null;
+            utmCampaign?: string | null;
+            visits: number;
+            signups: number;
+        };
         StaffRunLocations: {
             items: components["schemas"]["StaffRunLocation"][];
             can: components["schemas"]["PreorderCan"];
@@ -7365,7 +7599,7 @@ export interface components {
             clicks: number;
             /** @description clicks / views x 100 */
             ctrPct?: number | null;
-            /** @description Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed) */
+            /** @description Orders that came through the advertorial and still stand: a window's pre-orders whose tracking tag carries it, a run's orders whose attribution (`cr=adv-...`) does and that still hold a slot on the run */
             orders?: number | null;
         };
         StaffAdvertorial: {
@@ -7394,6 +7628,7 @@ export interface components {
             startsAt?: string | null;
             /** Format: date-time */
             endsAt?: string | null;
+            featuredProducts?: components["schemas"]["StaffFeaturedProduct"][];
             /** @enum {string} */
             status: "DRAFT" | "LIVE" | "PAUSED" | "ENDED";
             /** @enum {string|null} */
@@ -7438,6 +7673,21 @@ export interface components {
             startsAt?: string | null;
             /** Format: date-time */
             endsAt?: string | null;
+            /** @description Up to four products the card features. Left out on an edit: the current ones stay; an empty list clears them */
+            featuredProducts?: components["schemas"]["StaffFeaturedProduct"][];
+        };
+        StaffFeaturedProductHits: {
+            items: (components["schemas"]["StaffFeaturedProduct"] & {
+                sellerName?: string;
+            })[];
+        };
+        /** @description A product featured on the card. The price is not kept: the product page shows today's */
+        StaffFeaturedProduct: {
+            /** @example ATSHEA0001 */
+            atin: string;
+            title: string;
+            /** @description An https picture */
+            imageUrl?: string | null;
         };
         StaffPreorderObject: {
             [key: string]: unknown;
@@ -8206,6 +8456,36 @@ export interface operations {
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffLookup: {
+        parameters: {
+            query?: {
+                /** @description Part of the name; 2 characters or more when given */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                kind: "drivers" | "sellers";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffLookupResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -11923,6 +12203,131 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    createStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deactivateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationSwitch"];
+            };
+        };
+        responses: {
+            /** @description Switched off */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    activateStaffRunLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StaffRunLocationSwitch"];
+            };
+        };
+        responses: {
+            /** @description Switched on */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunLocationDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getStaffRunLocationHistory: {
         parameters: {
             query?: never;
@@ -11946,6 +12351,37 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffRunLocationAttribution: {
+        parameters: {
+            query?: {
+                /** @description Only the visits of this run's link */
+                runId?: string;
+                days?: number;
+            };
+            header?: never;
+            path: {
+                locationId: components["parameters"]["LocationId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Counters */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffRunAttribution"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -12355,6 +12791,32 @@ export interface operations {
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffFeaturedProducts: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffFeaturedProductHits"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

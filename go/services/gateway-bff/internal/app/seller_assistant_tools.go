@@ -340,7 +340,12 @@ func toolPayouts(ctx context.Context, r *assistantRun, _ map[string]any) (any, e
 		if i >= maxRows {
 			break
 		}
-		row := map[string]any{"order": h.OrderID, "amount": moneyLabel(h.AmountMinor)}
+		// The order is named by its number; payments' ids mean nothing to a seller.
+		order := "an order whose number is not among the recent ones"
+		if h.OrderNumber != nil {
+			order = *h.OrderNumber
+		}
+		row := map[string]any{"order": order, "amount": moneyLabel(h.AmountMinor)}
 		if t, ok := parseRelease(h); ok {
 			row["releasedOn"] = t.Format("2006-01-02")
 			if days := int(t.Sub(now).Hours()/24 + 0.999); days > 0 {

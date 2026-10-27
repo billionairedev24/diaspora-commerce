@@ -1322,5 +1322,6 @@
   "runs.unsubscribe.doneTitle": "A ti dáwọ́ àwọn ìkìlọ̀ dúró",
   "runs.unsubscribe.doneBody": "Ìwọ kò ní gba àwọn ìkìlọ̀ ìrìn fún ibi yìí mọ́.",
   "runs.unsubscribe.invalidTitle": "Ọ̀nà ìsopọ̀ yìí kò tọ́",
-  "runs.unsubscribe.invalidBody": "Ó lè ti dàgbà. O lè pa àwọn ìkìlọ̀ nínú àkọọ́lẹ̀ rẹ lábẹ́ Àwọn ìkìlọ̀ ìfiránṣẹ́."
+  "runs.unsubscribe.invalidBody": "Ó lè ti dàgbà. O lè pa àwọn ìkìlọ̀ nínú àkọọ́lẹ̀ rẹ lábẹ́ Àwọn ìkìlọ̀ ìfiránṣẹ́.",
+  "runs.adv.featured": "Featured in this run"
 }

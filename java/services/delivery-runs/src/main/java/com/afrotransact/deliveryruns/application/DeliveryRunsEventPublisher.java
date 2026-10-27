@@ -1,7 +1,9 @@
 package com.afrotransact.deliveryruns.application;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.afrotransact.deliveryruns.domain.Channel;
@@ -52,6 +54,23 @@ class DeliveryRunsEventPublisher {
                 sellers);
         events.publish(type, DeliveryRunsEvents.AGGREGATE, run.id().toString(), payload);
         advertorials.onRun(type, location, run);
+    }
+
+    /**
+     * A location was created ({@code CREATED}), edited ({@code UPDATED}) or switched ({@code ACTIVATED} /
+     * {@code DEACTIVATED}).
+     */
+    void locationChanged(String action, Location location, String actorId, String reason, Instant at) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("locationId", location.id());
+        p.put("slug", location.slug());
+        p.put("name", location.name());
+        p.put("action", action);
+        p.put("active", location.active());
+        p.put("actorId", actorId);
+        p.put("reason", reason);
+        p.put("changedAt", at);
+        events.publish(DeliveryRunsEvents.LOCATION_CHANGED, DeliveryRunsEvents.AGGREGATE, location.id().toString(), p);
     }
 
     void subscription(String type, Location location, Subscription s, Set<Channel> changed, String source,

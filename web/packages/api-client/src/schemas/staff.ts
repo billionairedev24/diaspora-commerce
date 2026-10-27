@@ -108,11 +108,21 @@ export const FieldValueSchema = z.union([z.string(), z.number(), z.boolean(), z.
 export type FieldValue = z.infer<typeof FieldValueSchema>;
 export const FieldTypeSchema = z.enum(['text', 'textarea', 'number', 'money', 'select', 'multiselect', 'toggle', 'date', 'datetime', 'email', 'password']);
 export type FieldType = z.infer<typeof FieldTypeSchema>;
+/** The searchable pickers of forms: staff choose a driver or a seller by name, the form sends the id. */
+export const LOOKUP_KINDS = ['drivers', 'sellers'] as const;
+export const LookupKindSchema = z.enum(LOOKUP_KINDS);
+export type LookupKind = z.infer<typeof LookupKindSchema>;
+export const LookupResultSchema = z.object({ kind: LookupKindSchema, items: z.array(z.object({ id: z.string(), name: z.string(), detail: z.string().optional() })) });
+export type LookupResult = z.infer<typeof LookupResultSchema>;
+export type LookupHit = LookupResult['items'][number];
+
 export const FormFieldSchema = z.object({
   key: z.string(),
   label: z.string(),
   type: FieldTypeSchema,
   required: z.boolean(),
+  /** A text field that is a picker (GET /v1/staff/lookups/{kind}). */
+  lookup: LookupKindSchema.optional(),
   options: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
   min: z.number().optional(),
   max: z.number().optional(),

@@ -26,12 +26,12 @@ public record AdvertorialView(LocalAdvertorial advertorial, String sourceName, S
      * @param views  times it was shown
      * @param clicks times its button was clicked
      * @param ctrPct clicks / views x 100 (null without views)
-     * @param orders pre-orders whose tracking tag carries the advertorial (null for runs: their orders are not
-     *               attributed)
+     * @param orders orders that came through the advertorial and still stand: a window's pre-orders whose tracking tag
+     *               carries it, a run's orders whose attribution does and that still hold a slot on the run
      */
-    public record Results(long views, long clicks, Double ctrPct, Integer orders) {
+    public record Results(long views, long clicks, Double ctrPct, int orders) {
 
-        public static Results of(long views, long clicks, Integer orders) {
+        public static Results of(long views, long clicks, int orders) {
             Double ctr = views == 0 ? null : Math.round(clicks * 1000.0 / views) / 10.0;
             return new Results(views, clicks, ctr, orders);
         }

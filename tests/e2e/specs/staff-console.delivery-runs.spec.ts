@@ -71,10 +71,63 @@ test.describe('staff console · delivery runs', () => {
     await expect(panel).toBeHidden();
   });
 
+  test('adds a delivery location, changes it, switches it off with a reason and back on @a11y', async ({ page }, testInfo) => {
+    const town = `Cedar ${Date.now().toString(36).slice(-5)}`;
+    await page.goto('/preorders/runs');
+    const view = page.getByTestId('runs-view');
+    await view.getByRole('button', { name: 'Add location' }).click();
+    const form = page.getByTestId('location-form');
+    await expect(form).toBeVisible();
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'staff add delivery location' });
+
+    // Refused field by field, then added with a radius around the town and what new runs start from.
+    await form.getByRole('button', { name: 'Add location' }).click();
+    await expect(form.getByText('This is required').first()).toBeVisible();
+    await form.getByLabel('Town name').fill(town);
+    await form.getByLabel('State or region').fill('TX');
+    await form.getByLabel('Centre latitude').fill('30.1105');
+    await form.getByLabel('Centre longitude').fill('-97.3153');
+    await form.getByLabel('Radius (miles)').fill('250');
+    await form.getByRole('button', { name: 'Add location' }).click();
+    await expect(form.getByText('Outside the allowed range')).toBeVisible();
+    await form.getByLabel('Radius (miles)').fill('12');
+    await form.getByLabel('Community (WhatsApp) link').fill('https://chat.whatsapp.com/AbCdEf123');
+    await form.getByRole('button', { name: 'Add location' }).click();
+    await expect(form).toBeHidden();
+    await expect(view.getByRole('combobox', { name: 'Location' })).toHaveValue(/.+/);
+    await expect(view.getByRole('combobox', { name: 'Location' }).locator('option:checked')).toHaveText(town);
+
+    // Change it: the name changes, the town stays on.
+    await view.getByRole('button', { name: 'Edit location' }).click();
+    await expect(form.getByLabel('Town name')).toHaveValue(town);
+    await expect(form.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+    await form.getByLabel('Minimum orders').fill('9');
+    await form.getByRole('button', { name: 'Save changes' }).click();
+    await expect(form).toBeHidden();
+    await expect(view.getByTestId('location-off-notice')).toHaveCount(0);
+
+    // Switch it off: a reason is required; its name shows (never an id) and it says it is off.
+    await view.getByRole('button', { name: 'Switch off' }).click();
+    const off = page.getByRole('dialog', { name: `Switch off ${town}?` });
+    await off.getByRole('button', { name: 'Switch off location' }).click();
+    await expect(off.getByText('Enter a reason.')).toBeVisible();
+    await off.getByRole('textbox', { name: 'Why is it being switched off?' }).fill('No driver there this season');
+    await off.getByRole('button', { name: 'Switch off location' }).click();
+    await expect(view.getByTestId('location-off-notice')).toContainText(`${town} is switched off`);
+    await expect(view.getByRole('combobox', { name: 'Location' }).locator('option:checked')).toHaveText(`${town} (switched off)`);
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'staff switched-off delivery location' });
+
+    // And back on.
+    await view.getByRole('button', { name: 'Switch on' }).click();
+    await page.getByRole('dialog', { name: `Switch ${town} back on?` }).getByRole('button', { name: 'Switch on location' }).click();
+    await expect(view.getByTestId('location-off-notice')).toHaveCount(0);
+  });
+
   test('is read-only for staff who cannot manage pre-orders', async ({ context, page, baseURL }) => {
     await context.addCookies([{ name: 'at_mock_staff_role', value: 'platform.finance', url: baseURL ?? 'http://localhost:3412' }]);
     await page.goto('/preorders/runs');
     await expect(page.getByRole('button', { name: 'New run' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Add location' })).toBeDisabled();
     await page
       .getByRole('button', { name: /Open the Lubbock run/ })
       .first()

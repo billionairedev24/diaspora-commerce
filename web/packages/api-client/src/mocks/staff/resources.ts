@@ -17,6 +17,7 @@ import {
 import { type MockRecord, type Scalar } from './db';
 import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
+import { MOCK_DRIVERS } from './lookups';
 
 export interface ActionCtx {
   actor: string;
@@ -400,8 +401,8 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     actions: [
       {
         key: 'assign', label: 'Assign driver', tone: 'primary', permission: 'delivery:dispatch', when: (r) => stateReason(r, 'PLANNED', 'ASSIGNED'),
-        form: () => form('Assign a driver', 'Assign', [field('driverId', 'Driver', 'select', true, { options: [{ value: 'drv-1', label: 'Tunde Adeyemi' }, { value: 'drv-2', label: 'Chinedu Okafor' }] }), field('vehicleId', 'Vehicle', 'text', false, { maxLength: 40 })]),
-        apply: (r, v, ctx) => { r.fields.driver = v.driverId === 'drv-1' ? 'Tunde Adeyemi' : 'Chinedu Okafor'; r.fields.vehicle = str(v.vehicleId) || null; r.fields.status = 'ASSIGNED'; log(r, ctx, `Assigned ${str(r.fields.driver)}`); }
+        form: () => form('Assign a driver', 'Assign', [field('driverId', 'Driver', 'text', true, { maxLength: 64, lookup: 'drivers' }), field('vehicleId', 'Vehicle', 'text', false, { maxLength: 40 })]),
+        apply: (r, v, ctx) => { r.fields.driver = MOCK_DRIVERS.find((d) => d.id === v.driverId)?.name ?? 'Driver'; r.fields.vehicle = str(v.vehicleId) || null; r.fields.status = 'ASSIGNED'; log(r, ctx, `Assigned ${str(r.fields.driver)}`); }
       },
       { key: 'cancel', label: 'Cancel route', tone: 'danger', permission: 'delivery:dispatch', form: reasonForm('Cancel the route', 'Cancel route'), when: (r) => stateReason(r, 'PLANNED', 'ASSIGNED'), apply: setStatus('CANCELLED', 'Cancelled — shipments back to the pool') }
     ],
@@ -759,7 +760,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       permission: 'payments:read',
       form: form('Look up in Stripe', 'Look up', [
         field('ref', 'Stripe id', 'text', true, { maxLength: 120, pattern: '^[a-z]{2,6}_[A-Za-z0-9_]{6,100}$', help: 'For example po_…, tr_…, pi_…, ch_…, re_…, txn_…, dp_…, acct_…' }),
-        field('orgId', "Seller's organisation id (for a payout)", 'text', false, { maxLength: 80 })
+        field('orgId', 'Seller (for a payout)', 'text', false, { maxLength: 80, lookup: 'sellers' })
       ], 'Reads the object from Stripe and shows what the ledger booked for it.'),
       build: (v, _id, ctx) => ({ id: `${str(v.ref)} ${str(v.orgId)}`.trim(), fields: { ref: str(v.ref), kind: 'Payout', stripeStatus: 'in_transit', amountMinor: 50_000, created: ctx.now.toISOString() }, activity: [] })
     }
