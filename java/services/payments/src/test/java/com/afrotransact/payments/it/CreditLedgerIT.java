@@ -425,6 +425,8 @@ class CreditLedgerIT extends PaymentsIntegrationTest {
         assertThat(posted.path("status").asString()).isEqualTo("POSTED");
         assertThat(posted.path("decidedBy").asString()).isEqualTo("fin-checker");
         assertThat(balance(customer)).isEqualTo(27_500);
+        assertThat(outbox("payments.credit.adjusted", customer)).as("one audit event per posted adjustment")
+                .isEqualTo(2);
         TestSupport.as(CHECKER);
         problem(send("POST", "/v1/credit/adjustments/" + big.path("id").asString() + "/approve", Map.of(), null), 422,
                 "payments.adjustment-decided");

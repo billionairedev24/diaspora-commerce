@@ -22,6 +22,7 @@ import com.afrotransact.payments.port.CreditLedgerRepository;
 import com.afrotransact.payments.port.GiftCardRepository;
 import com.afrotransact.payments.port.LedgerRepository;
 import com.afrotransact.payments.port.MoneySettingsRepository;
+import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -40,14 +41,15 @@ class CreditServiceImpl implements CreditService {
     private final GiftCardRepository giftCards;
     private final LedgerRepository generalLedger;
     private final MoneyTransactions tx;
+    private final DomainEventPublisher events;
     private final PaymentsAccess access;
     private final PaymentsSettings settings;
     private final Clock clock;
 
     CreditServiceImpl(CreditLedger ledger, CreditLedgerRepository entries, CreditAdjustmentRepository adjustments,
                       MoneySettingsRepository moneySettings, GiftCardRepository giftCards,
-                      LedgerRepository generalLedger, MoneyTransactions tx, PaymentsAccess access,
-                      PaymentsSettings settings, Clock clock) {
+                      LedgerRepository generalLedger, MoneyTransactions tx, DomainEventPublisher events,
+                      PaymentsAccess access, PaymentsSettings settings, Clock clock) {
         this.ledger = ledger;
         this.entries = entries;
         this.adjustments = adjustments;
@@ -55,6 +57,7 @@ class CreditServiceImpl implements CreditService {
         this.giftCards = giftCards;
         this.generalLedger = generalLedger;
         this.tx = tx;
+        this.events = events;
         this.access = access;
         this.settings = settings;
         this.clock = clock;
@@ -118,7 +121,7 @@ class CreditServiceImpl implements CreditService {
                 return proposed;
             }
             CreditEntry entry = post(proposed, actor.subject());
-            return adjustments.update(proposed.postedByMaker(entry.id(), now));
+            return published(adjustments.update(proposed.postedByMaker(entry.id(), now)));
         });
     }
 
@@ -131,7 +134,7 @@ class CreditServiceImpl implements CreditService {
             // the four-eyes rule is checked before anything is posted
             current.approve(actor.subject(), note, UUID.randomUUID(), now);
             CreditEntry entry = post(current, actor.subject());
-            return adjustments.update(current.approve(actor.subject(), note, entry.id(), now));
+            return published(adjustments.update(current.approve(actor.subject(), note, entry.id(), now)));
         });
     }
 
@@ -162,6 +165,15 @@ class CreditServiceImpl implements CreditService {
                 totals.flowsMinor(), cards.get(GiftCard.Status.ACTIVE)[1], cards.get(GiftCard.Status.ACTIVE)[0],
                 cards.get(GiftCard.Status.REDEEMED)[1], cards.get(GiftCard.Status.VOID)[1], ledgerCredit,
                 ledgerGiftCards, totals.outstandingMinor() - ledgerCredit);
+    }
+
+    /** The audit event of a posted adjustment (key = customer id). */
+    private CreditAdjustment published(CreditAdjustment posted) {
+        events.publish(PaymentsEvents.CREDIT_ADJUSTED, PaymentsEvents.AGGREGATE_PAYMENT, posted.customerId(),
+                new PaymentsEventPayloads.CreditAdjustedPayload(posted.id().toString(), posted.customerId(),
+                        posted.amount().minor(), posted.amount().currency(), posted.source().name(), posted.reason(),
+                        posted.proposedBy(), posted.decidedBy()));
+        return posted;
     }
 
     private long ledgerBalance(Chart chart) {
