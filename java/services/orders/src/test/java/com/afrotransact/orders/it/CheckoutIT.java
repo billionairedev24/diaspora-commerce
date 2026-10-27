@@ -34,6 +34,77 @@ class CheckoutIT extends OrdersIntegrationTest {
                 """.formatted(addressId, fbaPackage, sellerPackage);
     }
 
+    private String creditBody(String sellerPackage, boolean useCredit) {
+        return """
+                {"addressId":"addr-1","deliverySelections":[{"packageId":"%s","option":"carrier"}]%s}
+                """.formatted(sellerPackage, useCredit ? ",\"useCredit\":true" : "");
+    }
+
+    /** One seller line of 40.00 (+ 8.25 % tax = 43.30, carrier shipping free above 35.00). */
+    private String creditCart(String bearer) {
+        String sellerAtin = id("ATS");
+        String sellerOrg = id("org-sel");
+        UPSTREAMS.cart(bearer, Upstreams.pkg(sellerOrg, "Mama Tee", "SELLER",
+                Upstreams.line(sellerAtin, sellerOrg, "SELLER", 4000, 1)));
+        UPSTREAMS.addresses(bearer, "addr-1", "TX");
+        UPSTREAMS.reservation(sellerAtin, "HOU-FC", 1);
+        return sellerOrg + ":SELLER";
+    }
+
+    @Test
+    void creditIsAskedForAtCheckoutAndTheCardPaysOnlyTheRest() {
+        String customer = id("cust");
+        String bearer = "tok-" + customer;
+        String sellerPackage = creditCart(bearer);
+        String paymentId = UUID.randomUUID().toString();
+        UPSTREAMS.paymentWithCredit(customer, paymentId, 2000, false);
+        TestSupport.as(TestSupport.customer(customer));
+
+        JsonNode created = ok(send("POST", "/v1/checkout", creditBody(sellerPackage, true), "Idempotency-Key",
+                "idem-" + customer, "Authorization", "Bearer " + bearer), 201);
+        assertThat(created.path("status").asString()).isEqualTo("awaiting_payment");
+        assertThat(created.path("clientSecret").asString()).isEqualTo("pi_" + paymentId + "_secret");
+        assertThat(created.path("creditMinor").asLong()).isEqualTo(2000);
+        assertThat(created.path("totalMinor").asLong()).isEqualTo(4330);
+        // the order's total goes to payments whole, with the request to use credit: payments spends the credit and
+        // creates the PaymentIntent for the rest
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(created.path("orderId").asString()))
+                .withRequestBody(WireMock.matchingJsonPath("$.amountMinor", WireMock.equalTo("4330")))
+                .withRequestBody(WireMock.matchingJsonPath("$.useCredit", WireMock.equalTo("true")))
+                .withRequestBody(WireMock.matchingJsonPath("$.shopperId", WireMock.equalTo(customer))));
+
+        // the same key with another choice is a different request
+        problem(send("POST", "/v1/checkout", creditBody(sellerPackage, false), "Idempotency-Key", "idem-" + customer,
+                "Authorization", "Bearer " + bearer), 409, "orders.idempotency-key-reused");
+    }
+
+    @Test
+    void creditThatPaysTheWholeOrderNeedsNoCardAndPlacesTheOrder() {
+        String customer = id("cust");
+        String bearer = "tok-" + customer;
+        String sellerPackage = creditCart(bearer);
+        String paymentId = UUID.randomUUID().toString();
+        UPSTREAMS.paymentWithCredit(customer, paymentId, 4330, true);
+        TestSupport.as(TestSupport.customer(customer));
+
+        JsonNode created = ok(send("POST", "/v1/checkout", creditBody(sellerPackage, true), "Idempotency-Key",
+                "idem-" + customer, "Authorization", "Bearer " + bearer), 201);
+        String orderId = created.path("orderId").asString();
+        String number = created.path("orderNumber").asString();
+        assertThat(created.path("creditMinor").asLong()).isEqualTo(4330);
+        assertThat(created.path("clientSecret").isNull() || created.path("clientSecret").isMissingNode())
+                .as("no card to confirm").isTrue();
+
+        // payments authorises it at once and says so with payments.intent.succeeded: the saga places the order
+        assertThat(paymentEvents.onIntentEvent(UUID.randomUUID(), "payments.intent.succeeded", orderId, null))
+                .isTrue();
+        eventually(() -> "placed".equals(ok(send("GET", "/v1/checkout/" + number, null)).path("status").asString()),
+                "order placed without a card");
+        assertThat(ok(send("GET", "/v1/checkout/" + number, null)).path("creditMinor").asLong()).isEqualTo(4330);
+        assertThat(outbox("orders.order.placed", orderId)).isEqualTo(1);
+    }
+
     @Test
     void checkoutReservesWithTheOrderIdCreatesTheIntentAndPlacesTheOrderAfterPayment() {
         String customer = id("cust");

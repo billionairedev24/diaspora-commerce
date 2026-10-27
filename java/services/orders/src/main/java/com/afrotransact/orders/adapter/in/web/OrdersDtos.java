@@ -41,7 +41,11 @@ final class OrdersDtos {
                     + "orders.order.placed") @Valid AttributionDto attribution,
             @Schema(description = "Paid with a new method from Stripe's Payment Element: save it on the shopper's "
                     + "Stripe Customer for future purchases (the PaymentIntent gets setup_future_usage=off_session)")
-            Boolean savePaymentMethod) {
+            Boolean savePaymentMethod,
+            @Schema(description = "S320: pay with the shopper's AfroTransact credit first. Credit is spent, up to the "
+                    + "order total, in the step that creates the payment (once per order, never more than the "
+                    + "balance); the card pays only the rest, and an order that credit pays in full needs no card "
+                    + "(the answer has no clientSecret). Credit can only buy products and services") Boolean useCredit) {
 
         CheckoutCommand toCommand(String idempotencyKey, String bearer) {
             List<CheckoutInput.Selection> selections = deliverySelections == null ? List.of()
@@ -51,7 +55,8 @@ final class OrdersDtos {
                     l.quantity() == null ? 0 : l.quantity())).toList();
             return new CheckoutCommand(idempotencyKey, bearer, addressId, selections, selected, couponCode,
                     attribution == null ? null : Attribution.ofNullable(attribution.src(), attribution.cr(),
-                            attribution.po()), Boolean.TRUE.equals(savePaymentMethod));
+                            attribution.po()), Boolean.TRUE.equals(savePaymentMethod),
+                    Boolean.TRUE.equals(useCredit));
         }
     }
 

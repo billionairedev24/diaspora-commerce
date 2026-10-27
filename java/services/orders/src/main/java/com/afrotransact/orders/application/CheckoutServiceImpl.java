@@ -24,6 +24,7 @@ import com.afrotransact.orders.port.CheckoutRequestRepository.CheckoutRequest;
 import com.afrotransact.orders.port.HandoverCodeVault;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
+import com.afrotransact.orders.port.UpstreamFailure;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -97,7 +98,8 @@ class CheckoutServiceImpl implements CheckoutService {
             throw new OrdersRuleViolation("orders.address-required", "Choose a delivery address");
         }
         String fingerprint = Fingerprint.of(cmd.addressId().trim() + "|" + cmd.selections() + "|" + cmd.lines()
-                + (cmd.couponCode() == null ? "" : "|" + cmd.couponCode()) + (cmd.savePaymentMethod() ? "|save" : ""));
+                + (cmd.couponCode() == null ? "" : "|" + cmd.couponCode()) + (cmd.savePaymentMethod() ? "|save" : "")
+                + (cmd.useCredit() ? "|credit" : ""));
         Claimed claimed = claim(customer.subject(), key, fingerprint);
         CheckoutRequest request = claimed.request();
         boolean start = claimed.fresh()
@@ -219,7 +221,7 @@ class CheckoutServiceImpl implements CheckoutService {
         return new CheckoutInput(request.orderId(), request.orderNumber(), request.customerId(),
                 request.idempotencyKey(), request.workflowId(), currency, shipTo, select(snapshot, cmd.lines()),
                 cmd.selections(), settings.paymentTimeout().toSeconds(), Instant.now(clock), cmd.couponCode(),
-                cmd.attribution(), snapshot.preorderFulfilment(), null, cmd.savePaymentMethod());
+                cmd.attribution(), snapshot.preorderFulfilment(), null, cmd.savePaymentMethod(), cmd.useCredit());
     }
 
     /** Every available line, or the requested subset (quantities never above what is in the cart). */
@@ -304,14 +306,29 @@ class CheckoutServiceImpl implements CheckoutService {
         };
         if (order.isEmpty()) {
             return new CheckoutView(r.orderId(), r.orderNumber(), status, r.clientSecret(), r.clientSecret(),
-                    null, null, null, null, null, null, List.of(), null);
+                    null, null, null, null, null, null, List.of(), null, creditOf(r));
         }
         Order o = order.get();
         int count = o.shipments().size();
         return new CheckoutView(o.id(), o.number(), status, r.clientSecret(), r.clientSecret(),
                 o.totals().grandTotalMinor(), o.currency(),
                 o.totals().itemsMinor(), o.totals().shippingMinor(), o.totals().taxMinor(), o.totals().discountMinor(),
-                o.shipments().stream().map(s -> shipment(s, count)).toList(), preorder(o));
+                o.shipments().stream().map(s -> shipment(s, count)).toList(), preorder(o), creditOf(r));
+    }
+
+    /**
+     * What AfroTransact credit paid of the order (S320), read from its payment once there is one. Unknown (null) when
+     * payments cannot answer: the answer never fails because of it.
+     */
+    private Long creditOf(CheckoutRequest r) {
+        if (r.paymentId() == null) {
+            return null;
+        }
+        try {
+            return payments.get(r.paymentId(), false).creditMinor();
+        } catch (UpstreamFailure f) {
+            return null;
+        }
     }
 
     /** The "You're in" facts (S272): the first pre-order window of the order and what ships now besides it. */

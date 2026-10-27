@@ -22,15 +22,25 @@ import com.afrotransact.orders.domain.ShipTo;
  * @param origin   attribution, channel and on-behalf details (S272)
  * @param paymentMethodTypes Stripe payment method types of the PaymentIntent (S272 pre-orders); empty = automatic
  * @param savePaymentMethod  the PaymentIntent saves the shopper's new method (setup_future_usage=off_session, S282)
+ * @param useCredit          the shopper pays with AfroTransact credit first (S320); the card pays only the rest
  */
 public record OrderDraft(String orderId, String orderNumber, String customerId, String workflowId, String currency,
                          ShipTo shipTo, boolean reserved, List<DraftShipment> shipments, Instant createdAt,
                          CouponRef coupon, OrderOrigin origin, List<String> paymentMethodTypes,
-                         boolean savePaymentMethod) {
+                         boolean savePaymentMethod, boolean useCredit) {
 
     public OrderDraft {
         origin = origin == null ? OrderOrigin.none() : origin;
         paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
+    }
+
+    /** A draft that does not use credit. */
+    public OrderDraft(String orderId, String orderNumber, String customerId, String workflowId, String currency,
+                      ShipTo shipTo, boolean reserved, List<DraftShipment> shipments, Instant createdAt,
+                      CouponRef coupon, OrderOrigin origin, List<String> paymentMethodTypes,
+                      boolean savePaymentMethod) {
+        this(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, shipments, createdAt, coupon,
+                origin, paymentMethodTypes, savePaymentMethod, false);
     }
 
     /** A draft that does not save the payment method. */
@@ -52,19 +62,19 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
     /** The draft with a coupon's discounts applied. */
     public OrderDraft withCoupon(List<DraftShipment> discounted, CouponRef ref) {
         return new OrderDraft(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, discounted,
-                createdAt, ref, origin, paymentMethodTypes, savePaymentMethod);
+                createdAt, ref, origin, paymentMethodTypes, savePaymentMethod, useCredit);
     }
 
     /** The draft with another origin (S272 late adds: channel AGENT_LATE, staff actor). */
     public OrderDraft withOrigin(OrderOrigin next) {
         return new OrderDraft(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, shipments,
-                createdAt, coupon, next, paymentMethodTypes, savePaymentMethod);
+                createdAt, coupon, next, paymentMethodTypes, savePaymentMethod, useCredit);
     }
 
     /** The draft with other shipments (tax quotes). */
     public OrderDraft withShipments(List<DraftShipment> next) {
         return new OrderDraft(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, next,
-                createdAt, coupon, origin, paymentMethodTypes, savePaymentMethod);
+                createdAt, coupon, origin, paymentMethodTypes, savePaymentMethod, useCredit);
     }
 
     /** Shipping of every shipment. */

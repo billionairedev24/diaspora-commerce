@@ -1483,6 +1483,11 @@ components:
           type: string
         paymentClientSecret:
           type: string
+        creditMinor:
+          type: integer
+          format: int64
+          description: The part of the total paid with AfroTransact credit (S320); the card pays the rest. An order that
+            credit pays in full has no clientSecret and needs no card.
         totalMinor:
           type: integer
           format: int64
@@ -1601,6 +1606,12 @@ components:
           type: boolean
           description: 'Paid with a new method from Stripe''s Payment Element: save it on the shopper''s Stripe Customer
             for future purchases (the PaymentIntent gets setup_future_usage=off_session)'
+        useCredit:
+          type: boolean
+          description: 'S320: pay with the shopper''s AfroTransact credit first. Credit is spent, up to the order total,
+            in the step that creates the payment (once per order, never more than the balance); the card pays only the
+            rest, and an order that credit pays in full needs no card (the answer has no clientSecret). Credit can
+            only buy products and services: it is never paid out, refunded to a card or transferred.'
       required:
       - addressId
     DeliverySelection:
