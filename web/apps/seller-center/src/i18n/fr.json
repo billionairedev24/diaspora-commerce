@@ -986,5 +986,6 @@
   "sc.runPickups.bagsHelp": "Un sac par commande, dans l’ordre des numéros.",
   "sc.runPickups.bag": "Commande {order}",
   "sc.runPickups.bagCollected": "Récupéré",
-  "sc.runPickups.bagWaiting": "En attente du chauffeur"
+  "sc.runPickups.bagWaiting": "En attente du chauffeur",
+  "sc.payouts.order.unnamed": "une commande plus ancienne"
 }

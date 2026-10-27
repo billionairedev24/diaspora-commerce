@@ -59,6 +59,13 @@ describe('Seller Center screens (against the seller mocks)', () => {
     expect(await screen.findAllByText(/paused/i)).not.toHaveLength(0);
   });
 
+  it('names each order on hold by its order number, never by payments’ id', async () => {
+    await renderScreen(<PayoutsView />);
+    const holds = await screen.findAllByTestId('hold-order');
+    expect(holds.map((h) => h.textContent)).toEqual(['AT-2026-400160', 'AT-2026-400197']);
+    expect(screen.queryByText(/ord-400160/)).not.toBeInTheDocument();
+  });
+
   it('shows outstanding provider fees next to the connection fee, Stripe and late-cancel fees', async () => {
     await renderScreen(<EarningsView />, PROVIDER_ORG);
     const totals = await screen.findByLabelText('Earnings totals');

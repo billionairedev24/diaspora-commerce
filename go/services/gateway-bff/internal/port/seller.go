@@ -993,6 +993,7 @@ type OrderView struct {
 
 // SellerShipmentRow is orders' SellerShipmentView.
 type SellerShipmentRow struct {
+	OrderID     string            `json:"orderId"`
 	OrderNumber string            `json:"orderNumber"`
 	OrderStatus string            `json:"orderStatus"`
 	PlacedAt    time.Time         `json:"placedAt"`

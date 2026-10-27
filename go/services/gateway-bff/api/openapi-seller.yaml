@@ -4173,9 +4173,10 @@ components:
           type: array
           items:
             type: object
-            required: [orderId, amountMinor, releaseAt]
+            required: [orderId, orderNumber, amountMinor, releaseAt]
             properties:
               orderId: {type: string}
+              orderNumber: {type: [string, 'null'], description: 'What the screen shows. Payments reports ids only; the BFF names the order from the seller''s own shipments, null when it is not among the recent ones'}
               amountMinor: {type: integer}
               releaseAt: {type: [string, 'null']}
     Payout:
@@ -4249,9 +4250,10 @@ components:
           description: The settlements it was deducted from (negative amounts were paid back with them)
           items:
             type: object
-            required: [orderId, amountMinor, at, label]
+            required: [orderId, orderNumber, amountMinor, at, label]
             properties:
               orderId: {type: string}
+              orderNumber: {type: [string, 'null'], description: What the screen shows (null when the order is not among the seller's recent shipments)}
               amountMinor: {type: integer}
               at: {type: string, format: date-time}
               label: {type: string}

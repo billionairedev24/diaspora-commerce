@@ -123,7 +123,7 @@ func TestSellerAssistantReturnsAndDisputesOnEveryTier(t *testing.T) {
 }
 
 func TestSellerAssistantEssentialsHasFewerToolsAndADailyLimit(t *testing.T) {
-	bff, b := sellerSetup(t, testkit.Options{})
+	bff, b := sellerSetup(t, testkit.Options{SellerPending: true})
 	bff.Upstreams.SetSellerPlan("seller_essentials")
 	if j := b.do("GET", "/v1/seller/assistant", nil).json(t); j["tier"] != "ESSENTIALS" || num(j["limits"].(map[string]any), "dailyMessages") != 15 || j["upgrade"].(map[string]any)["planCode"] != "seller_growth" {
 		t.Fatalf("status = %v", j)

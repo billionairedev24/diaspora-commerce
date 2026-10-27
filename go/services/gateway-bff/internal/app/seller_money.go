@@ -85,13 +85,76 @@ func (s *sellerMoneyImpl) Payouts(ctx context.Context, c *domain.Caller) (domain
 		msg := domain.PayoutsPausedMessage(reason)
 		out.Balance.PayoutsPausedMessage = &msg
 	}
+	ids := make([]string, 0, len(bal.OnHold))
 	for _, h := range bal.OnHold {
-		out.Balance.Holds = append(out.Balance.Holds, domain.PayoutHold{OrderID: h.OrderID, AmountMinor: h.AmountMinor, ReleaseAt: strPtr(h.ReleaseAt)})
+		ids = append(ids, h.OrderID)
+	}
+	for _, d := range out.PlanFeeDeductions {
+		for _, t := range d.Transfers {
+			ids = append(ids, t.OrderID)
+		}
+	}
+	numbers := s.orderNumbers(ctx, c.BearerToken, ids)
+	for _, h := range bal.OnHold {
+		out.Balance.Holds = append(out.Balance.Holds, domain.PayoutHold{OrderID: h.OrderID, OrderNumber: numbers.pointer(h.OrderID), AmountMinor: h.AmountMinor, ReleaseAt: strPtr(h.ReleaseAt)})
+	}
+	for i := range out.PlanFeeDeductions {
+		for j := range out.PlanFeeDeductions[i].Transfers {
+			t := &out.PlanFeeDeductions[i].Transfers[j]
+			t.OrderNumber = numbers.pointer(t.OrderID)
+		}
 	}
 	for _, p := range history {
 		out.Payouts = append(out.Payouts, payoutOf(p))
 	}
 	return out, nil
+}
+
+// orderNumberIndex maps the order ids payments reports to the order numbers sellers read.
+type orderNumberIndex map[string]string
+
+func (n orderNumberIndex) pointer(id string) *string {
+	if v, ok := n[id]; ok {
+		return &v
+	}
+	return nil
+}
+
+// maxOrderNumberPages bounds how much of the seller's shipment queue is read to name the orders on hold.
+const maxOrderNumberPages = 5
+
+// orderNumbers names the orders payments reports (held funds, plan fee deductions) by their order number, from the
+// seller's own shipment queue: payments knows ids only. It reads newest first and stops once every id is named or after
+// a few pages; an order it does not find stays unnamed (the screen then says "Order" without an id). Best effort.
+func (s *sellerMoneyImpl) orderNumbers(ctx context.Context, bearer string, ids []string) orderNumberIndex {
+	out := orderNumberIndex{}
+	if s.r.d.Orders == nil || len(ids) == 0 {
+		return out
+	}
+	want := map[string]bool{}
+	for _, id := range ids {
+		if id != "" {
+			want[id] = true
+		}
+	}
+	cursor := ""
+	for page := 0; page < maxOrderNumberPages && len(want) > 0; page++ {
+		q, err := s.r.d.Orders.Queue(ctx, bearer, "", cursor, 100)
+		if err != nil {
+			return out
+		}
+		for _, row := range q.Items {
+			if want[row.OrderID] && row.OrderNumber != "" {
+				out[row.OrderID] = row.OrderNumber
+				delete(want, row.OrderID)
+			}
+		}
+		if q.NextCursor == nil || *q.NextCursor == "" {
+			break
+		}
+		cursor = *q.NextCursor
+	}
+	return out
 }
 
 // planFeeDeductionsOf maps payments' plan fee withholdings to the "Plan fee (invoice …)" lines; DECLINED ones (nothing

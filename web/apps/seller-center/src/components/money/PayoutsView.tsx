@@ -47,7 +47,7 @@ function PlanFeeDeductions({ items, currency, t }: { items: PlanFeeDeduction[]; 
             {d.transfers.map((x) => (
               <span key={`${x.orderId}-${x.at}`} className="flex gap-2 pl-3 text-xs text-muted">
                 <span className="flex-1">
-                  {x.amountMinor >= 0 ? t('sc.payouts.planFees.deducted', { order: x.orderId }) : t('sc.payouts.planFees.paidBack', { order: x.orderId })}
+                  {x.amountMinor >= 0 ? t('sc.payouts.planFees.deducted', { order: x.orderNumber ?? t('sc.payouts.order.unnamed') }) : t('sc.payouts.planFees.paidBack', { order: x.orderNumber ?? t('sc.payouts.order.unnamed') })}
                 </span>
                 <span>{money(-x.amountMinor, currency)}</span>
               </span>
@@ -168,7 +168,9 @@ export function PayoutsView() {
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-sm">
             {b.holds.map((h) => (
               <li key={h.orderId} className="flex items-center gap-2 border-b border-border/50 py-1.5 last:border-0">
-                <span className="flex-1 font-mono text-xs text-text">{h.orderId}</span>
+                <span className="flex-1 font-mono text-xs text-text" data-testid="hold-order">
+                  {h.orderNumber ?? t('sc.payouts.order.unnamed')}
+                </span>
                 <span className="text-xs text-muted">{h.releaseAt ? `Releases ${shortDate(h.releaseAt)}` : 'Releases after delivery'}</span>
                 <strong>{money(h.amountMinor, b.currency)}</strong>
               </li>

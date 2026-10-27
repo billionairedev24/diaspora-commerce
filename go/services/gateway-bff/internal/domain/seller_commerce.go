@@ -624,7 +624,9 @@ var StockReasons = []string{"STOCK_TAKE", "DAMAGED", "FOUND", "RETURNED", "OTHER
 
 // PayoutHold is net on settlement hold for one order.
 type PayoutHold struct {
-	OrderID     string  `json:"orderId"`
+	OrderID string `json:"orderId"`
+	// OrderNumber is what the screens show; nil when the order is not in the seller's recent shipments.
+	OrderNumber *string `json:"orderNumber"`
 	AmountMinor int64   `json:"amountMinor"`
 	ReleaseAt   *string `json:"releaseAt"`
 }
@@ -689,6 +691,7 @@ type PayoutsView struct {
 // PlanFeeTransfer is part of a plan fee deducted from (or, negative, paid back with) one order's settlement.
 type PlanFeeTransfer struct {
 	OrderID     string    `json:"orderId"`
+	OrderNumber *string   `json:"orderNumber"`
 	AmountMinor int64     `json:"amountMinor"`
 	At          time.Time `json:"at"`
 	Label       string    `json:"label"`

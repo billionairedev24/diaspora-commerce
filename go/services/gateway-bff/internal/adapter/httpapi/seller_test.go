@@ -276,6 +276,17 @@ func TestSellerContractConformance(t *testing.T) {
 	exerciseSellerListing(t, bff, b)
 	// Money.
 	// S298: plan invoices paid from sales are listed as "Plan fee (invoice …)" deductions; DECLINED ones took nothing.
+	// Held funds and plan fee deductions name the order by its number, never by payments' id.
+	if v := b.do("GET", "/v1/seller/payouts", nil).json(t); true {
+		holds := v["balance"].(map[string]any)["holds"].([]any)
+		if len(holds) != 2 || holds[0].(map[string]any)["orderNumber"] != "AT-2026-000123" || holds[1].(map[string]any)["orderNumber"] != nil {
+			t.Fatalf("holds = %v", holds)
+		}
+		transfers := v["planFeeDeductions"].([]any)[0].(map[string]any)["transfers"].([]any)
+		if transfers[0].(map[string]any)["orderNumber"] != "AT-2026-000123" {
+			t.Fatalf("plan fee transfers = %v", transfers)
+		}
+	}
 	if r := b.do("GET", "/v1/seller/payouts", nil); r.status != 200 || len(r.json(t)["planFeeDeductions"].([]any)) != 1 ||
 		r.json(t)["planFeeDeductions"].([]any)[0].(map[string]any)["label"] != "Plan fee (invoice AT-0003)" {
 		t.Fatalf("payouts plan fees = %d %s", r.status, r.body)

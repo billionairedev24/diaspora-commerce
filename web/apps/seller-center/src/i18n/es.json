@@ -986,5 +986,6 @@
   "sc.runPickups.bagsHelp": "Una bolsa por pedido, en orden de número.",
   "sc.runPickups.bag": "Pedido {order}",
   "sc.runPickups.bagCollected": "Recogido",
-  "sc.runPickups.bagWaiting": "Esperando al conductor"
+  "sc.runPickups.bagWaiting": "Esperando al conductor",
+  "sc.payouts.order.unnamed": "un pedido anterior"
 }
