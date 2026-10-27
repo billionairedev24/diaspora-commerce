@@ -4,6 +4,7 @@ import { type ApiClientOptions, createRequester } from './http';
 import { createInventoryHubApi } from './inventory-hub';
 import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
 import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
+import { type LookupKind, type LookupResult, LookupResultSchema } from './schemas/staff';
 import {
   type Customer360,
   Customer360Schema,
@@ -155,6 +156,8 @@ export function createStaffApiClient(options: ApiClientOptions) {
 
     /* Fees & commissions */
     getFees: (signal?: AbortSignal): Promise<FeesOverview> => request('/v1/staff/fees', FeesOverviewSchema, { signal }),
+    /** Drivers or sellers by name for a form's picker (the id is what the form sends). */
+    lookup: (kind: LookupKind, q: string, signal?: AbortSignal): Promise<LookupResult> => request(`/v1/staff/lookups/${enc(kind)}`, LookupResultSchema, { query: { q: q || undefined }, signal }),
     searchFeeOrgs: (q: string, signal?: AbortSignal): Promise<FeeOrgSearch> => request('/v1/staff/fees/orgs', FeeOrgSearchSchema, { query: { q }, signal }),
     createFeeSchedule: (body: FeeScheduleDraft, key?: string): Promise<FeeScheduleView> =>
       request('/v1/staff/fees/schedules', FeeScheduleViewSchema, { method: 'POST', body, headers: idem(key) }),

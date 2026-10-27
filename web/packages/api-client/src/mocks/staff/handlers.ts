@@ -51,8 +51,9 @@ import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { canAdvance, planRun } from './dispatch';
 import { feeRateHandlers } from './fee-rates';
-import { activeFeeSchedule, createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
+import { activeFeeSchedule, createFeeSchedule, FEE_ORGS, feeRecords, feesOverview, feeView, MOCK_RETAIL_ORG_ID, quoteDelivery, searchFeeOrgs } from './fees';
 import { identityDocuments, inspectToken, retireActiveKeys, sessionsToDrop, stepUpErrors } from './identity';
+import { MOCK_DRIVERS } from './lookups';
 import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
@@ -1038,6 +1039,22 @@ export const staffHandlers = [
       requireModule(ctx, 'fee-schedules');
       if (!ctx.permissions.includes('payments:read') && !ctx.permissions.includes('payments:configure')) throw forbidden('This needs the payments:read permission.');
       return feesOverview(ctx.db.feeSchedules, ctx.now, canConfigureFees(ctx));
+    })
+  ),
+  http.get(
+    `${W}/lookups/:kind`,
+    route((ctx, p) => {
+      const kind = p.kind;
+      if (kind !== 'drivers' && kind !== 'sellers') throw notFound('There is nothing to search for there.');
+      requireModule(ctx, kind === 'drivers' ? 'routes' : 'stripe-lookup');
+      const q = (query(ctx).get('q') ?? '').trim();
+      if (q.length === 1 || q.length > 120) throw invalid({ q: 'Type 2 to 120 characters' });
+      const needle = q.toLowerCase();
+      const items =
+        kind === 'drivers'
+          ? MOCK_DRIVERS.filter((d) => !needle || d.name.toLowerCase().includes(needle))
+          : FEE_ORGS.filter((o) => o.id !== MOCK_RETAIL_ORG_ID && (!needle || o.name.toLowerCase().includes(needle))).map((o) => ({ id: o.id, name: o.name, detail: o.kind.toLowerCase() }));
+      return { kind, items: items.slice(0, 20) };
     })
   ),
   http.get(
