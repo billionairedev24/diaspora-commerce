@@ -54,7 +54,7 @@ describe('adding and changing a location', () => {
     await waitFor(() => expect(screen.queryByTestId('location-form')).not.toBeInTheDocument());
     // The new town is chosen, and its name (never an id) reads in the list.
     expect(await screen.findByRole('combobox', { name: 'Location' })).toHaveDisplayValue('Bastrop');
-    expect(await screen.findByRole('heading', { name: /Bastrop/ })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('run-list')).toHaveTextContent('Bastrop'));
   });
 
   it('changes a town without switching it, and saves only once something changed', async () => {

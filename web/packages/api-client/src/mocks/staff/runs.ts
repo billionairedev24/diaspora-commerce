@@ -191,6 +191,7 @@ function seed(db: MockStaffDb): RunsState {
     ctaLabel: 'Order now',
     startsAt: null,
     endsAt: null,
+    featuredProducts: [],
     status: 'LIVE',
     ended: null,
     serving: true,
@@ -202,9 +203,9 @@ function seed(db: MockStaffDb): RunsState {
     ...extra
   });
   const advertorials = [
-    adv(1, {}),
+    adv(1, { featuredProducts: [{ atin: 'ATSHEA0001', title: 'Shea butter, raw' }, { atin: 'ATGARI0001', title: 'Garri, white' }] }),
     adv(2, { variant: 'B', generated: false, headline: 'Last days: Lubbock jollof and spice box', body: 'Pre-order closes Thursday. Free pickup, door delivery from the run fee.', ctaLabel: 'Reserve yours', results: { views: 1792, clicks: 274, ctrPct: 15.3, orders: 52 } }),
-    adv(3, { source: 'RUN', sourceId: run(4, lbk, 'OPEN', 6, 19).id, sourceName: 'Lubbock run', sourceCode: null, sourceStatus: 'OPEN', variant: 'A', headline: 'Our Lubbock delivery run is open', ctaLabel: 'See the run', results: { views: 420, clicks: 38, ctrPct: 9, orders: null } })
+    adv(3, { source: 'RUN', sourceId: run(4, lbk, 'OPEN', 6, 19).id, sourceName: 'Lubbock run', sourceCode: null, sourceStatus: 'OPEN', variant: 'A', headline: 'Our Lubbock delivery run is open', ctaLabel: 'See the run', results: { views: 420, clicks: 38, ctrPct: 9, orders: 6 } })
   ];
   const logs = new Map<string, RunLogEntry[]>([
     [
@@ -259,6 +260,7 @@ const RunPlanBody = z.object({
   expectedOrders: z.number().int().nullish(),
   commissionShareMinor: z.number().int().nullish()
 });
+const FeaturedBody = z.object({ atin: z.string(), title: z.string(), imageUrl: z.string().nullish() });
 const AdvertorialBody = z.object({
   source: z.enum(['WINDOW', 'RUN']).optional(),
   sourceId: z.string().optional(),
@@ -269,7 +271,8 @@ const AdvertorialBody = z.object({
   body: z.string().nullish(),
   ctaLabel: z.string(),
   startsAt: z.string().nullish(),
-  endsAt: z.string().nullish()
+  endsAt: z.string().nullish(),
+  featuredProducts: z.array(FeaturedBody).optional()
 });
 const GenerateBody = z.object({ source: z.enum(['WINDOW', 'RUN']), sourceId: z.string() });
 const RunScheduleBody = z.object({
@@ -1015,6 +1018,32 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
 
 
     /* ── advertorials ── */
+    http.get(`${W}/featured-products/search`, route((ctx) => {
+      view(ctx);
+      const q = (new URL(ctx.request.url).searchParams.get('q') ?? '').trim();
+      if (q.length < 2 || q.length > 120) throw validation({ q: 'Type 2 to 120 characters' });
+      const needle = q.toLowerCase();
+      return { items: FEATURE_CATALOGUE.filter((p) => p.title.toLowerCase().includes(needle) || (p.sellerName ?? '').toLowerCase().includes(needle)).slice(0, 8) };
+    })),
+    http.get(`${W}/delivery-runs/locations/:id/attribution`, route((ctx, params) => {
+      view(ctx);
+      const p = placeOf(ctx, params.id);
+      if (!p) throw notFound('No such location.');
+      const q = new URL(ctx.request.url).searchParams;
+      const runId = q.get('runId');
+      const days = q.get('days');
+      if (runId && !st(ctx).runs.some((r) => r.id === runId && r.locationId === p.id)) throw validation({ runId: 'Choose one of the runs' });
+      if (days !== null && !(Number.isInteger(Number(days)) && Number(days) >= 1 && Number(days) <= 366)) throw validation({ days: 'Between 1 and 366' });
+      const rows = attributionRows(p, runId);
+      return {
+        locationId: p.id,
+        runId,
+        since: new Date(clockOf(ctx.db) - Number(days ?? 90) * DAY).toISOString().slice(0, 10),
+        visits: rows.reduce((n, r) => n + r.visits, 0),
+        signups: rows.reduce((n, r) => n + r.signups, 0),
+        rows
+      };
+    })),
     http.get(`${W}/advertorials`, route((ctx) => {
       view(ctx);
       const q = new URL(ctx.request.url).searchParams;
@@ -1038,7 +1067,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       const a: StaffAdvertorial = {
         id: `5c3a0e4b-0000-4000-8000-${String(s.seq).padStart(12, '0')}`, source: b.source, sourceId: b.sourceId, sourceName: info.name, sourceCode: info.code, sourceStatus: info.status,
         sourceCloses: info.closes, locationId: info.location?.id ?? null, locationName: info.location?.name ?? null, variant: nextVariant(s.advertorials, b.source, b.sourceId), weight: 1, priority: 0,
-        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'LIVE', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: b.source === 'WINDOW' ? 0 : null },
+        generated: true, ...draftWords(info), startsAt: null, endsAt: null, status: 'LIVE', ended: null, serving: false, results: { views: 0, clicks: 0, ctrPct: null, orders: 0 }, featuredProducts: [],
         createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
       };
       s.advertorials.unshift(a);
@@ -1059,7 +1088,7 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
         sourceStatus: info.status, sourceCloses: info.closes, locationId: info.location?.id ?? null, locationName: info.location?.name ?? null,
         variant: b.variant?.trim() || nextVariant(s.advertorials, b.source as AdvertorialSource, b.sourceId as string), weight: b.weight ?? 1, priority: b.priority ?? 0, generated: false,
         headline: b.headline.trim(), body: (b.body ?? '').trim(), ctaLabel: b.ctaLabel.trim(), startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null, status: 'DRAFT', ended: null, serving: false,
-        results: { views: 0, clicks: 0, ctrPct: null, orders: b.source === 'WINDOW' ? 0 : null }, createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
+        results: { views: 0, clicks: 0, ctrPct: null, orders: 0 }, featuredProducts: featured(b.featuredProducts), createdBy: ctx.action.actor, createdAt: ctx.now.toISOString(), updatedAt: ctx.now.toISOString(), version: 0
       };
       s.advertorials.unshift(a);
       audit(ctx, 'advertorial.created', a.id, `Wrote variant ${a.variant} for ${info.name}`);
@@ -1080,7 +1109,8 @@ export function runHandlers(W: string, deps: PreorderHandlerDeps) {
       audit(ctx, 'advertorial.updated', a.id, `Edited variant ${a.variant} of ${a.sourceName ?? a.sourceId}`);
       return withEtag(save(ctx, a, {
         headline: b.headline.trim(), body: (b.body ?? '').trim(), ctaLabel: b.ctaLabel.trim(), variant: b.variant?.trim() || a.variant, weight: b.weight ?? a.weight, priority: b.priority ?? a.priority,
-        startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null, generated: false
+        startsAt: b.startsAt ?? null, endsAt: b.endsAt ?? null, generated: false,
+        ...(b.featuredProducts ? { featuredProducts: featured(b.featuredProducts) } : {})
       }));
     })),
     http.post(`${W}/advertorials/:id/:action`, route((ctx, params) => {
@@ -1120,3 +1150,26 @@ function problemWords(p: Record<string, string>): Record<string, string> {
 
 /** Test hook: the mock database's runs state (the same object the handlers use). */
 export const mockRunsState = (): RunsState => stateOf(getStaffDb());
+
+/** Products the editor can find (the search index in production). */
+const FEATURE_CATALOGUE: { atin: string; title: string; imageUrl?: string; sellerName?: string }[] = [
+  { atin: 'ATSHEA0001', title: 'Shea butter, raw', sellerName: 'Accra Naturals' },
+  { atin: 'ATGARI0001', title: 'Garri, white', sellerName: 'AfroTransact Retail' },
+  { atin: 'ATEGUS0001', title: 'Egusi, ground', sellerName: 'Mama Tee Foods' },
+  { atin: 'ATPALM0001', title: 'Palm oil, 1 litre', sellerName: 'Mama Tee Foods' },
+  { atin: 'ATJOLL0001', title: 'Jollof spice box', sellerName: 'AfroTransact Retail' },
+  { atin: 'ATPLAN0001', title: 'Plantain chips', sellerName: 'Lagos Snacks' }
+];
+
+const featured = (list: { atin: string; title: string; imageUrl?: string | null }[] | undefined) =>
+  (list ?? []).map((p) => ({ atin: p.atin.trim(), title: p.title.trim(), ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}) }));
+
+/** Where visits and sign-ups of a town came from (seeded; a run's link carries a share of them). */
+function attributionRows(p: Place, runId: string | null) {
+  const base = [
+    { utmSource: 'whatsapp', utmMedium: 'social', utmCampaign: `delivery-run-${p.slug}-20261024`, visits: 140, signups: 23 },
+    { utmSource: 'instagram', utmMedium: 'social', utmCampaign: '', visits: 64, signups: 7 },
+    { utmSource: 'email', utmMedium: 'newsletter', utmCampaign: 'weekly-run', visits: 41, signups: 12 }
+  ];
+  return runId ? base.slice(0, 2).map((r) => ({ ...r, visits: Math.round(r.visits / 2), signups: Math.round(r.signups / 2) })) : base;
+}

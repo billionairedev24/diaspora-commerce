@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, Spinner } from '@/components/ui/States';
 import { type MessageKey, useT } from '@/i18n/t';
 
 import { AdvertorialsPanel } from './AdvertorialsPanel';
+import { AttributionPanel } from './AttributionPanel';
 import { LocationFormSheet } from './LocationForm';
 import { RunFormSheet } from './RunForm';
 import { RunList, RunsNeedingDecision } from './RunList';
@@ -105,11 +106,13 @@ function LocationHistory({ locationId, currency }: { locationId: string; currenc
         </section>
         <HBars title={t('st.runs.runs.subscribers.growth')} color="gold" labelWidth={80} rows={h.subscriberGrowth.map((g) => ({ k: g.month, n: g.count }))} />
       </div>
+      <AttributionPanel locationId={locationId} town={h.location.name} />
       <HBars title={t('st.runs.runs.history.chart')} color="ink" labelWidth={110} rows={oldestFirst.map((r) => ({ k: fmt.date(r.windowStart, 'short'), n: r.orders }))} />
       {h.runs.length === 0 ? <EmptyState title={t('st.runs.runs.history.empty')} /> : <HistoryTable rows={h.runs} currency={currency} selected={selected} onSelect={setSelected} />}
       {selected ? (
         <div className="flex flex-col gap-4">
           <RunPnlPanel key={selected} runId={selected} />
+          <AttributionPanel key={`attr-${selected}`} locationId={locationId} town={h.location.name} runId={selected} />
           <AdvertorialsPanel key={`adv-${selected}`} source="RUN" sourceId={selected} />
         </div>
       ) : h.runs.length > 0 ? (

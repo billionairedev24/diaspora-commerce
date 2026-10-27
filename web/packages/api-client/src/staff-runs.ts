@@ -643,10 +643,18 @@ export const AdvertorialResultsSchema = z.object({
   views: z.number().int(),
   clicks: z.number().int(),
   ctrPct: z.number().nullable().default(null),
-  /** Pre-orders whose tracking tag carries the advertorial; null for runs (their orders are not attributed). */
+  /** Orders that came through the advertorial and still stand: a window's pre-orders whose tracking tag carries it, a run's orders whose attribution (cr=adv-...) does and that still hold a slot. */
   orders: z.number().int().nullable().default(null)
 });
 export type AdvertorialResults = z.infer<typeof AdvertorialResultsSchema>;
+
+/** A product featured on an advertorial's card (the price is not kept: the product page shows today's). */
+export const FeaturedProductSchema = z.object({ atin: z.string(), title: z.string(), imageUrl: z.string().nullish() });
+export type FeaturedProduct = z.infer<typeof FeaturedProductSchema>;
+/** A product found by name for the editor. */
+export const FeaturedProductHitSchema = FeaturedProductSchema.extend({ sellerName: z.string().optional() });
+export type FeaturedProductHit = z.infer<typeof FeaturedProductHitSchema>;
+export const FeaturedProductHitsSchema = z.object({ items: z.array(FeaturedProductHitSchema) });
 
 export const StaffAdvertorialSchema = z.object({
   id: z.string(),
@@ -668,6 +676,8 @@ export const StaffAdvertorialSchema = z.object({
   ctaLabel: z.string(),
   startsAt: z.string().nullable().default(null),
   endsAt: z.string().nullable().default(null),
+  /** Up to four products the card features. */
+  featuredProducts: z.array(FeaturedProductSchema).max(4).default([]),
   status: AdvertorialStatusSchema,
   ended: AdvertorialEndSchema.nullable().default(null),
   /** Visitors can see it right now. */
@@ -696,9 +706,11 @@ export interface AdvertorialInput {
   ctaLabel: string;
   startsAt?: string | null;
   endsAt?: string | null;
+  /** Up to four products. Left out on an edit: the current ones stay; an empty list clears them. */
+  featuredProducts?: FeaturedProduct[];
 }
 
-export const ADVERTORIAL_LIMITS = { headline: 140, body: 400, ctaLabel: 40, variant: 8, weightMax: 100, priorityMax: 1000 } as const;
+export const ADVERTORIAL_LIMITS = { headline: 140, body: 400, ctaLabel: 40, variant: 8, weightMax: 100, priorityMax: 1000, featured: 4 } as const;
 
 export type AdvertorialAction = 'publish' | 'pause' | 'end';
 
@@ -720,8 +732,28 @@ export function advertorialInputProblems(input: AdvertorialInput, creating: bool
   if (input.weight !== null && input.weight !== undefined && (input.weight < 1 || input.weight > ADVERTORIAL_LIMITS.weightMax)) out.weight = 'range';
   if (input.priority !== null && input.priority !== undefined && (input.priority < 0 || input.priority > ADVERTORIAL_LIMITS.priorityMax)) out.priority = 'range';
   if (input.startsAt && input.endsAt && Date.parse(input.endsAt) <= Date.parse(input.startsAt)) out.endsAt = 'order';
+  if ((input.featuredProducts?.length ?? 0) > ADVERTORIAL_LIMITS.featured) out.featuredProducts = 'range';
   return out;
 }
+
+/** The UTM attribution of a location or one of its runs: visits and sign-ups per source, medium and campaign. */
+export const StaffRunAttributionRowSchema = z.object({
+  utmSource: z.string(),
+  utmMedium: z.string().nullish(),
+  utmCampaign: z.string().nullish(),
+  visits: z.number().int(),
+  signups: z.number().int()
+});
+export const StaffRunAttributionSchema = z.object({
+  locationId: z.string().optional(),
+  runId: z.string().nullish(),
+  since: z.string().optional(),
+  visits: z.number().int(),
+  signups: z.number().int(),
+  rows: z.array(StaffRunAttributionRowSchema)
+});
+export type StaffRunAttribution = z.infer<typeof StaffRunAttributionSchema>;
+export type StaffRunAttributionRow = z.infer<typeof StaffRunAttributionRowSchema>;
 
 /* ── Client ────────────────────────────────────────────── */
 
@@ -779,6 +811,9 @@ export function createStaffRunsApi(request: Requester, _options: ApiClientOption
       request(`/v1/staff/delivery-runs/locations/${enc(locationId)}/deactivate`, StaffRunLocationSchema, { method: 'POST', body: { reason } }),
     activateLocation: (locationId: string, reason?: string): Promise<StaffRunLocation> =>
       request(`/v1/staff/delivery-runs/locations/${enc(locationId)}/activate`, StaffRunLocationSchema, { method: 'POST', body: reason ? { reason } : {} }),
+    /** Visits and sign-ups of a town (or one of its runs) per UTM source, medium and campaign; first-party counters, no cookie or visitor id. */
+    locationAttribution: (locationId: string, q: { runId?: string; days?: number } = {}, signal?: AbortSignal): Promise<StaffRunAttribution> =>
+      request(`/v1/staff/delivery-runs/locations/${enc(locationId)}/attribution`, StaffRunAttributionSchema, { query: { runId: q.runId, days: str(q.days) }, signal }),
     runs: (q: RunListQuery = {}, signal?: AbortSignal): Promise<StaffRun[]> =>
       request('/v1/staff/delivery-runs/runs', StaffRunsSchema, { query: { locationId: q.locationId, status: q.status?.join(','), limit: str(q.limit) }, signal }).then((r) => r.items),
 
@@ -807,6 +842,9 @@ export function createStaffRunsApi(request: Requester, _options: ApiClientOption
     /* Advertorials */
     advertorials: (q: AdvertorialListQuery = {}, signal?: AbortSignal): Promise<StaffAdvertorials> =>
       request('/v1/staff/advertorials', StaffAdvertorialsSchema, { query: { source: q.source, sourceId: q.sourceId, status: q.status, limit: str(q.limit) }, signal }),
+    /** Finds products by name to feature on the card (2 to 120 characters). */
+    searchFeaturedProducts: (q: string, signal?: AbortSignal): Promise<FeaturedProductHit[]> =>
+      request('/v1/staff/featured-products/search', FeaturedProductHitsSchema, { query: { q }, signal }).then((r) => r.items),
     advertorial: (id: string, signal?: AbortSignal): Promise<StaffAdvertorial> => request(`/v1/staff/advertorials/${enc(id)}`, StaffAdvertorialSchema, { signal }),
     /** A draft written from the window's or run's own details (re-calling returns the same generated draft). */
     generateAdvertorial: (source: AdvertorialSource, sourceId: string): Promise<StaffAdvertorial> =>
@@ -833,6 +871,8 @@ export const staffRunKeys = {
   runPnl: (runId: string, commissionShareMinor?: number) => [...staffRunKeys.all, 'pnl', runId, commissionShareMinor ?? null] as const,
   locations: () => [...staffRunKeys.all, 'locations'] as const,
   history: (locationId: string) => [...staffRunKeys.all, 'history', locationId] as const,
+  attribution: (locationId: string, runId?: string) => [...staffRunKeys.all, 'attribution', locationId, runId ?? 'all'] as const,
+  featuredSearch: (q: string) => [...staffRunKeys.all, 'featured-search', q] as const,
   runs: (q: RunListQuery) => [...staffRunKeys.all, 'list', q] as const,
   run: (runId: string) => [...staffRunKeys.all, 'run', runId] as const,
   runLog: (runId: string) => [...staffRunKeys.all, 'run-log', runId] as const,
@@ -851,6 +891,9 @@ export const staffRunQueries = {
     queryOptions({ queryKey: staffRunKeys.runPnl(runId, commissionShareMinor), queryFn: ({ signal }) => api.runPnl(runId, commissionShareMinor, signal), staleTime: 10_000 }),
   locations: (api: StaffRunsApi) => queryOptions({ queryKey: staffRunKeys.locations(), queryFn: ({ signal }) => api.locations(signal), staleTime: 30_000 }),
   history: (api: StaffRunsApi, locationId: string) => queryOptions({ queryKey: staffRunKeys.history(locationId), queryFn: ({ signal }) => api.locationHistory(locationId, signal), staleTime: 15_000 }),
+  attribution: (api: StaffRunsApi, locationId: string, runId?: string) =>
+    queryOptions({ queryKey: staffRunKeys.attribution(locationId, runId), queryFn: ({ signal }) => api.locationAttribution(locationId, { runId }, signal), staleTime: 30_000 }),
+  featuredSearch: (api: StaffRunsApi, q: string) => queryOptions({ queryKey: staffRunKeys.featuredSearch(q), queryFn: ({ signal }) => api.searchFeaturedProducts(q, signal), staleTime: 60_000 }),
   runs: (api: StaffRunsApi, q: RunListQuery = {}) => queryOptions({ queryKey: staffRunKeys.runs(q), queryFn: ({ signal }) => api.runs(q, signal), staleTime: 10_000 }),
   run: (api: StaffRunsApi, runId: string) => queryOptions({ queryKey: staffRunKeys.run(runId), queryFn: ({ signal }) => api.run(runId, signal), staleTime: 5_000 }),
   runLog: (api: StaffRunsApi, runId: string) => queryOptions({ queryKey: staffRunKeys.runLog(runId), queryFn: ({ signal }) => api.runLog(runId, signal), staleTime: 5_000 }),
