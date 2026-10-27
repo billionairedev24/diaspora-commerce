@@ -508,10 +508,13 @@ channels:
         $ref: '#/components/messages/contentNewsletterConfirmationRequested'
   notificationsPaymentEvents:
     address: at.payment.events
-    description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity).
+    description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity),
+      and the gift card recipient on the send date (payload email).
     messages:
       notificationsPaymentIntentActionRequired:
         $ref: '#/components/messages/paymentsIntentActionRequired'
+      notificationsPaymentGiftCardDeliver:
+        $ref: '#/components/messages/paymentsGiftCardDeliver'
   notificationsTrustOpsEvents:
     address: at.trustops.events
     description: trust-ops (S230) → the customer (customerId resolved through identity) and every owner of the seller organisation
@@ -11261,7 +11264,9 @@ operations:
     channel:
       $ref: '#/channels/notificationsPaymentEvents'
     summary: payments.intent.action_required with a customerId → payment.authentication_required to the customer (email, push;
-      link to the booking for BK- references, else the orders page). Other payment events are ignored.
+      link to the booking for BK- references, else the orders page). payments.gift_card.deliver → payment.gift_card.delivered
+      to the recipient's email in the language the buyer chose (en, fr, es, ar, yo); the code is in the email and nowhere
+      else. Other payment events are ignored.
   consumeNotificationsTrustOpsEvents:
     action: receive
     channel:
