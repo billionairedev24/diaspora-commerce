@@ -24,6 +24,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { key: 'signin', label: 'Sign-in & integrations', description: 'Which social sign-in buttons appear on sign-in.', module: 'dev', group: 'platform' },
   { key: 'identity', label: 'Identity & access', description: 'OAuth clients, sign-ins and tokens, signing keys, the token inspector and the sign-in settings of the identity service.', module: 'identity', group: 'platform' },
   { key: 'payments', label: 'Payments & payouts', description: 'How long money is held, the smallest payout, and which Stripe the platform uses.', module: 'payouts', group: 'money' },
+  { key: 'credit', label: 'Credit & gift cards', description: 'The smallest and largest gift card, the amounts offered, the gift card terms, and how much staff may add to a customer\'s credit before a second person must approve. Every change is kept with its reason.', module: 'payouts', group: 'money' },
   { key: 'fees', label: 'Fees & commissions', description: 'Fee schedule versions, commission by category and plan, connection fees, negotiated rates and delivery pricing.', module: 'fees', group: 'money' },
   { key: 'delivery-fees', label: 'Delivery fees', description: 'What customers pay for AfroTransact delivery by distance, carrier shipping beyond our coverage, and pickup, by currency, with a reason on every change.', module: 'preorders', group: 'money' },
   {
