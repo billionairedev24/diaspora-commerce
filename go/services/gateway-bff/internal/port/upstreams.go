@@ -150,6 +150,8 @@ type CartOwner struct {
 	Country string
 	Region  string
 	City    string
+	// Zip is the 5-digit ZIP of the delivery place: delivery runs are found by it (S261).
+	Zip string
 }
 
 // UpstreamCartLine is a cart-service line. OfferID is the offers-service offer of the line (empty for lines added

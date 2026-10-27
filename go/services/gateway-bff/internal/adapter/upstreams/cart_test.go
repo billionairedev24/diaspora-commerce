@@ -20,11 +20,11 @@ func TestCartSendsDeliveryPlaceHeaders(t *testing.T) {
 	defer srv.Close()
 	cart := NewCart(httpclient.New(httpclient.Options{Name: "cart", BaseURL: srv.URL, Transport: http.DefaultTransport}))
 
-	owner := port.CartOwner{GuestID: "g-1", Country: "US", Region: "TX", City: "Lubbock"}
+	owner := port.CartOwner{GuestID: "g-1", Country: "US", Region: "TX", City: "Lubbock", Zip: "79401"}
 	if _, err := cart.Get(context.Background(), owner); err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	for h, want := range map[string]string{"X-Delivery-Country": "US", "X-Delivery-Region": "TX", "X-Delivery-City": "Lubbock", GuestCartHeader: "g-1"} {
+	for h, want := range map[string]string{"X-Delivery-Country": "US", "X-Delivery-Region": "TX", "X-Delivery-City": "Lubbock", "X-Delivery-Zip": "79401", GuestCartHeader: "g-1"} {
 		if v := got.Get(h); v != want {
 			t.Errorf("%s = %q, want %q", h, v, want)
 		}
@@ -35,5 +35,8 @@ func TestCartSendsDeliveryPlaceHeaders(t *testing.T) {
 	}
 	if v := got.Get("X-Delivery-Country"); v != "" {
 		t.Errorf("X-Delivery-Country sent without a place: %q", v)
+	}
+	if v := got.Get("X-Delivery-Zip"); v != "" {
+		t.Errorf("X-Delivery-Zip sent without a place: %q", v)
 	}
 }

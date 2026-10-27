@@ -32,11 +32,18 @@ paths:
         package per window (`packageId` `preorder:<windowId>`, `fulfilment` PREORDER) with `preorder{windowId, name,
         deliversOn, stage, closesAt, fulfilment, options[]}`. A window that is not open locks its package
         (`preorder.locked`) and the cart is not checkoutable. The same applies to every cart response.
+
+        Delivery runs (S261): with a ZIP (`zip` or `X-Delivery-Zip`) AfroTransact-held lines (Retail and FBA, in stock) are
+        offered the next open delivery run staff scheduled for that ZIP that has room (delivery-runs
+        `GET /v1/public/runs/available`) before any window: the package is `preorder:<runId>` with `preorder.kind` RUN,
+        the run's cutoff in `closesAt`, its fee and the minimum progress (`minOrders`, `ordersSoFar`, `minimumMet`).
+        Other lines are asked about at windows. A line is never offered both.
       parameters:
         - {$ref: '#/components/parameters/Guest'}
         - {$ref: '#/components/parameters/Country'}
         - {$ref: '#/components/parameters/Region'}
         - {$ref: '#/components/parameters/City'}
+        - {$ref: '#/components/parameters/Zip'}
       responses:
         '200': {$ref: '#/components/responses/Cart'}
         '400': {$ref: '#/components/responses/Problem'}
@@ -176,6 +183,11 @@ components:
       in: query
       description: Delivery city; also X-Delivery-City
       schema: {type: string}
+    Zip:
+      name: zip
+      in: query
+      description: Delivery ZIP (5 digits); also X-Delivery-Zip. Delivery runs are found by ZIP.
+      schema: {type: string}
   responses:
     Cart:
       description: The cart
@@ -248,7 +260,14 @@ components:
       type: object
       description: S272 pre-order window of a package (lines of several sellers delivered together)
       properties:
-        windowId: {type: string}
+        windowId: {type: string, description: 'The window id, or the run id when kind is RUN'}
+        kind:
+          type: string
+          enum: [WINDOW, RUN]
+          description: WINDOW, or RUN for a delivery run staff scheduled (S261; closesAt is then its order cutoff)
+        minOrders: {type: integer, format: int32, description: 'RUN: orders the run needs to go ahead'}
+        ordersSoFar: {type: integer, format: int32, description: 'RUN: orders holding a slot now (counts toward the minimum and the capacity)'}
+        minimumMet: {type: boolean, description: 'RUN: ordersSoFar has reached minOrders (true when the run has no minimum)'}
         code: {type: string, description: 'Window code, e.g. LBK-7'}
         name: {type: string}
         deliversOn: {type: string, format: date}

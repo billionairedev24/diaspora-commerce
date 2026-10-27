@@ -37,6 +37,11 @@ type CartService interface {
 // Option configures the cart service.
 type Option func(*cartServiceImpl)
 
+// WithRuns offers the next open delivery run staff scheduled (S261) to AfroTransact-held lines before pre-order windows.
+func WithRuns(r port.DeliveryRuns) Option {
+	return func(s *cartServiceImpl) { s.runs = r }
+}
+
 // WithPreorders groups pre-order lines into window packages when the request names a delivery location (S272).
 func WithPreorders(p port.PreorderEligibility) Option {
 	return func(s *cartServiceImpl) { s.preorders = p }
@@ -74,8 +79,10 @@ type cartServiceImpl struct {
 	lookup port.OfferLookup // offers service: lines that carry an offerId
 	// preorders is delivery-runs eligibility (nil: no pre-orders, every line ships now).
 	preorders port.PreorderEligibility
-	retries   int
-	now       func() time.Time
+	// runs lists the open delivery runs for a ZIP (nil: no runs are offered).
+	runs    port.DeliveryRuns
+	retries int
+	now     func() time.Time
 }
 
 var _ CartService = (*cartServiceImpl)(nil)
@@ -202,26 +209,58 @@ func (s *cartServiceImpl) present(ctx context.Context, c domain.Cart) (domain.Vi
 	if err != nil {
 		return domain.View{}, err
 	}
-	return c.PresentWithPreorders(live, avail, s.preorderLines(ctx, c.Lines)), nil
+	return c.PresentWithPreorders(live, avail, s.preorderLines(ctx, c.Lines, live, avail)), nil
 }
 
-// preorderLines asks delivery-runs about the cart's lines at the request's location. The cart degrades to "ships
-// now" (logged) when delivery-runs is unavailable; checkout asks again and decides.
-func (s *cartServiceImpl) preorderLines(ctx context.Context, lines []domain.Line) map[string]domain.PreorderLine {
+// preorderLines says which lines are not "ships now" at the request's location, and through what. Precedence (S261):
+// AfroTransact-held goods that are in stock go on the next open delivery run staff scheduled for the ZIP when one has
+// room; every other line is asked about at delivery-runs' pre-order windows, so a line is never offered both. The
+// cart degrades to "ships now" (logged) when delivery-runs is unavailable; checkout asks again and decides.
+func (s *cartServiceImpl) preorderLines(ctx context.Context, lines []domain.Line, live map[string]domain.Offer,
+	avail map[string]int) map[string]domain.PreorderLine {
 	loc := locationOf(ctx)
-	if s.preorders == nil || !loc.Known() || len(lines) == 0 {
+	if !loc.Known() || len(lines) == 0 {
 		return nil
 	}
-	atins := make([]string, 0, len(lines))
+	out := map[string]domain.PreorderLine{}
+	rest := make([]string, 0, len(lines))
+	run, hasRun := s.nextRun(ctx, loc)
 	for _, l := range lines {
-		atins = append(atins, l.VariantATIN)
+		o, ok := live[l.VariantATIN]
+		if hasRun && ok && domain.HeldByAfroTransact(o) && avail[l.VariantATIN] >= l.Quantity {
+			out[l.VariantATIN] = domain.RunLine(run)
+			continue
+		}
+		rest = append(rest, l.VariantATIN)
 	}
-	out, err := s.preorders.Eligibility(ctx, loc, atins)
-	if err != nil {
-		slog.WarnContext(ctx, "pre-order eligibility unavailable; showing every line as ships now", "error", err)
-		return nil
+	if s.preorders != nil && len(rest) > 0 && (loc.Country != "" || loc.Region != "" || loc.City != "") {
+		got, err := s.preorders.Eligibility(ctx, loc, rest)
+		if err != nil {
+			slog.WarnContext(ctx, "pre-order eligibility unavailable; showing those lines as ships now", "error", err)
+		}
+		for atin, l := range got {
+			out[atin] = l
+		}
 	}
 	return out
+}
+
+// nextRun is the first open run covering the ZIP that has room.
+func (s *cartServiceImpl) nextRun(ctx context.Context, loc domain.Location) (domain.OpenRun, bool) {
+	if s.runs == nil || loc.PostalCode == "" {
+		return domain.OpenRun{}, false
+	}
+	runs, err := s.runs.OpenRuns(ctx, loc.PostalCode)
+	if err != nil {
+		slog.WarnContext(ctx, "open delivery runs unavailable; no run is offered", "error", err)
+		return domain.OpenRun{}, false
+	}
+	for _, r := range runs {
+		if !r.Full {
+			return r, true
+		}
+	}
+	return domain.OpenRun{}, false
 }
 
 func (s *cartServiceImpl) SetPreorderFulfilment(ctx context.Context, owner domain.Owner, windowID, fulfilment string) (domain.View, error) {

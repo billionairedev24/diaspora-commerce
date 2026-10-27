@@ -5938,6 +5938,27 @@ components:
           description: No room left; checkout offers the next run
         runUrl:
           type: string
+        deliversOn:
+          type: string
+          format: date
+          description: The delivery date in the location's time zone (the window's day)
+        timeZone:
+          type: string
+          description: IANA time zone of the location
+        minOrders:
+          type: integer
+          format: int32
+          description: Orders the run needs to go ahead
+        ordersSoFar:
+          type: integer
+          format: int32
+          description: Orders holding a slot now, paid or about to be (counts toward the minimum and the capacity)
+        minimumMet:
+          type: boolean
+          description: ordersSoFar has reached minOrders
+        feeRule:
+          $ref: '#/components/schemas/DeliveryFeeRuleRef'
+          description: The delivery fee rule behind feeMinor (ADR 0005 §3); absent on location pages
     PreorderPublicWindow:
       type: object
       description: What shoppers see of a window (no PII)

@@ -1021,6 +1021,10 @@ components:
         missedChoice:
           type: string
           description: REFUND | WAIT (null until answered)
+        kind:
+          type: string
+          enum: [WINDOW, RUN]
+          description: WINDOW, or RUN for a delivery run staff scheduled (S261); windowId is then the run id and cancellableUntil its cutoff
     MissedDeliveryRequest:
       type: object
       properties:
@@ -1523,6 +1527,10 @@ components:
           type: integer
           format: int32
           description: Units of the same order that ship now
+        kind:
+          type: string
+          enum: [WINDOW, RUN]
+          description: WINDOW, or RUN for a delivery run staff scheduled (S261); windowId is then the run id and closesAt its cutoff
     Shipment:
       type: object
       properties:

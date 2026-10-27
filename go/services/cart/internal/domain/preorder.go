@@ -15,6 +15,10 @@ const (
 	PreorderPackagePrefix = "preorder:"
 	// StageOpen is the only stage whose lines can be checked out.
 	StageOpen = "OPEN"
+	// KindWindow is a pre-order window delivery-runs sells from; KindRun a delivery run staff scheduled (S261), where
+	// the package's WindowID is the run's id and ClosesAt its order cutoff.
+	KindWindow = "WINDOW"
+	KindRun    = "RUN"
 )
 
 // ErrInvalidFulfilment is returned for a pre-order fulfilment other than DOOR or PICKUP, or one the window does not
@@ -26,10 +30,14 @@ type Location struct {
 	Country string
 	Region  string
 	City    string
+	// PostalCode is the 5-digit ZIP (optional): delivery runs are found by ZIP, pre-order windows by region.
+	PostalCode string
 }
 
 // Known reports whether a location was given.
-func (l Location) Known() bool { return l.Country != "" || l.Region != "" || l.City != "" }
+func (l Location) Known() bool {
+	return l.Country != "" || l.Region != "" || l.City != "" || l.PostalCode != ""
+}
 
 // FeeRule is the staff delivery fee rule behind a fee (ADR 0005 §3): the method, the rule and its version, the distance
 // band applied and where the amount came from. The cart shows it next to the fee; orders keep it with the order.
@@ -65,6 +73,10 @@ type PreorderLine struct {
 	// DoorFeeRule / PickupFeeRule are the rules behind the two fees (nil when delivery-runs sent none).
 	DoorFeeRule   *FeeRule `json:"doorFeeRule,omitempty"`
 	PickupFeeRule *FeeRule `json:"pickupFeeRule,omitempty"`
+	// Kind is WINDOW (default) or RUN; MinOrders and OrdersSoFar are the run's minimum progress ("7 of 10 orders").
+	Kind        string `json:"kind,omitempty"`
+	MinOrders   int    `json:"minOrders,omitempty"`
+	OrdersSoFar int    `json:"ordersSoFar,omitempty"`
 }
 
 // AllPaymentMethods is what a window allows when its payment setup names none.
@@ -104,6 +116,13 @@ type PackagePreorder struct {
 	FeeMinor int64 `json:"feeMinor"`
 	// FeeRule is the rule behind FeeMinor: what the shopper is shown at checkout and what the order records.
 	FeeRule *FeeRule `json:"feeRule,omitempty"`
+	// Kind is WINDOW or RUN (a delivery run staff scheduled: WindowID is then the run's id and ClosesAt its cutoff).
+	Kind string `json:"kind"`
+	// MinOrders / OrdersSoFar / MinimumMet are a run's honest minimum progress: orders holding a slot now, counting
+	// the shopper's own only once placed. Zero for a window (its minimum is staff-side).
+	MinOrders   int  `json:"minOrders"`
+	OrdersSoFar int  `json:"ordersSoFar"`
+	MinimumMet  bool `json:"minimumMet"`
 	// Locked is true when the window is not open: its lines cannot be checked out (upcoming or closed).
 	Locked bool `json:"locked"`
 }
@@ -139,7 +158,11 @@ func preorderOf(p PreorderLine, chosen string) *PackagePreorder {
 		DeliversOn: p.DeliversOn, Stage: p.Stage, ClosesAt: p.ClosesAt, OpensAt: p.OpensAt, TimeZone: tz,
 		Door: p.Door, Pickup: p.Pickup, DoorFeeMinor: p.DoorFeeMinor, PickupFeeMinor: p.PickupFeeMinor,
 		Currency: currency, PickupWindow: p.PickupWindow, AllowedMethods: methods,
-		Locked: !strings.EqualFold(p.Stage, StageOpen), Options: []PreorderOption{}}
+		Locked: !strings.EqualFold(p.Stage, StageOpen), Options: []PreorderOption{}, Kind: KindWindow}
+	if strings.EqualFold(p.Kind, KindRun) {
+		pp.Kind, pp.MinOrders, pp.OrdersSoFar = KindRun, p.MinOrders, p.OrdersSoFar
+		pp.MinimumMet = p.MinOrders <= 0 || p.OrdersSoFar >= p.MinOrders
+	}
 	if p.Door {
 		pp.Options = append(pp.Options, PreorderOption{Fulfilment: FulfilmentDoor, FeeMinor: p.DoorFeeMinor, Currency: currency,
 			Rule: p.DoorFeeRule})
@@ -157,4 +180,47 @@ func preorderOf(p PreorderLine, chosen string) *PackagePreorder {
 		pp.Fulfilment, pp.FeeMinor, pp.FeeRule = pp.Options[0].Fulfilment, pp.Options[0].FeeMinor, pp.Options[0].Rule
 	}
 	return pp
+}
+
+// OpenRun is an open delivery run covering the shopper's ZIP (delivery-runs, S261). Money is in minor units.
+type OpenRun struct {
+	RunID       string
+	Town        string
+	CutoffAt    string
+	DeliversOn  string
+	TimeZone    string
+	FeeMinor    int64
+	Currency    string
+	Door        bool
+	Pickup      bool
+	FeeRule     *FeeRule
+	MinOrders   int
+	OrdersSoFar int
+	Full        bool
+}
+
+// RunLine is an open run as the pre-order line of a variant that AfroTransact holds in stock: the run's own id,
+// cutoff, date and fee, with its minimum progress.
+func RunLine(r OpenRun) PreorderLine {
+	name := "Delivery run"
+	if r.Town != "" {
+		name = r.Town + " delivery run"
+	}
+	l := PreorderLine{Preorder: true, WindowID: r.RunID, WindowName: name, Stage: StageOpen, DeliversOn: r.DeliversOn,
+		ClosesAt: r.CutoffAt, Door: r.Door, Pickup: r.Pickup, Currency: r.Currency, TimeZone: r.TimeZone,
+		Kind: KindRun, MinOrders: r.MinOrders, OrdersSoFar: r.OrdersSoFar}
+	if r.Door {
+		l.DoorFeeMinor, l.DoorFeeRule = r.FeeMinor, r.FeeRule
+	}
+	if r.Pickup {
+		l.PickupFeeMinor, l.PickupFeeRule = r.FeeMinor, r.FeeRule
+	}
+	return l
+}
+
+// HeldByAfroTransact reports whether a line is AfroTransact's own stock (Retail or FBA), which delivery runs carry;
+// a seller's own goods and AfroTransact Delivery from a seller's store are not.
+func HeldByAfroTransact(o Offer) bool {
+	f := strings.ToUpper(strings.TrimSpace(o.Fulfilment))
+	return f != "" && f != "SELLER" && f != FulfilmentAfroTransactDelivery
 }

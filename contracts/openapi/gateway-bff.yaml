@@ -4155,7 +4155,14 @@ components:
         - {$ref: '#/components/schemas/PreorderTerms'}
         - type: object
           properties:
-            windowId: {type: string}
+            windowId: {type: string, description: 'The window id, or the run id when kind is RUN'}
+            kind:
+              type: string
+              enum: [WINDOW, RUN]
+              description: WINDOW, or RUN for a delivery run staff scheduled (S261; closesAt is then its order cutoff)
+            minOrders: {type: integer, description: 'RUN: orders the run needs to go ahead'}
+            ordersSoFar: {type: integer, description: 'RUN: orders holding a slot now (counts toward the minimum and the capacity)'}
+            minimumMet: {type: boolean, description: 'RUN: ordersSoFar has reached minOrders'}
             code: {type: string}
             name: {type: string}
             stage: {type: string, enum: [UPCOMING, OPEN, CLOSED]}

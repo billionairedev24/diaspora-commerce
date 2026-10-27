@@ -67,6 +67,7 @@ const (
 	CountryHeader = "X-Delivery-Country"
 	RegionHeader  = "X-Delivery-Region"
 	CityHeader    = "X-Delivery-City"
+	ZipHeader     = "X-Delivery-Zip"
 )
 
 // located puts the request's delivery location on the context.
@@ -80,7 +81,8 @@ func located(next http.HandlerFunc) http.Handler {
 			return strings.TrimSpace(r.Header.Get(header))
 		}
 		loc := domain.Location{Country: strings.ToUpper(pick("country", CountryHeader)),
-			Region: pick("region", RegionHeader), City: pick("city", CityHeader)}
+			Region: pick("region", RegionHeader), City: pick("city", CityHeader),
+			PostalCode: pick("zip", ZipHeader)}
 		if loc.Known() {
 			r = r.WithContext(app.WithLocation(r.Context(), loc))
 		}

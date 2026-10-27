@@ -15,9 +15,18 @@ type eligibility struct {
 	seen  domain.Location
 }
 
-func (e *eligibility) Eligibility(_ context.Context, loc domain.Location, _ []string) (map[string]domain.PreorderLine, error) {
+func (e *eligibility) Eligibility(_ context.Context, loc domain.Location, atins []string) (map[string]domain.PreorderLine, error) {
 	e.seen = loc
-	return e.lines, e.err
+	if e.err != nil {
+		return nil, e.err
+	}
+	out := map[string]domain.PreorderLine{}
+	for _, a := range atins {
+		if l, ok := e.lines[a]; ok {
+			out[a] = l
+		}
+	}
+	return out, nil
 }
 
 func preorderSvc(e *eligibility) app.CartService {

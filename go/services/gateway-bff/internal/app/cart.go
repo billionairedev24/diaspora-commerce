@@ -78,6 +78,9 @@ func (s *cartServiceImpl) owner(ctx context.Context, c *domain.Caller) port.Cart
 		return o
 	}
 	loc := s.d.Location.Current(ctx, c)
+	if zip := strings.TrimSpace(loc.ZIP); len(zip) == 5 {
+		o.Zip = zip
+	}
 	if loc.State == "" {
 		return o
 	}
