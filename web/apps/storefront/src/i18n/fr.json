@@ -1383,5 +1383,11 @@
   "co.credit.tiny": "Une carte ne peut pas être débitée de moins de 0,50 $, votre crédit reste donc inutilisé pour cette commande.",
   "co.credit.row": "Crédit AfroTransact",
   "co.credit.payingAll": "Paiement avec le crédit AfroTransact",
-  "co.credit.chargeNote": "Votre crédit est utilisé maintenant. Si un article est annulé ou retourné, son crédit retourne sur votre solde."
+  "co.credit.chargeNote": "Votre crédit est utilisé maintenant. Si un article est annulé ou retourné, son crédit retourne sur votre solde.",
+  "ord.paidWithCredit": "Payé avec le crédit AfroTransact",
+  "ord.cardAsCredit.title": "Remboursements en crédit",
+  "ord.cardAsCredit.body": "La part payée par carte était de {amount}. Elle est remboursée sur votre carte. Si vous préférez, elle peut être versée en crédit AfroTransact. Ce choix est définitif, et le crédit ne peut pas être reconverti en argent. La part payée en crédit revient toujours en crédit.",
+  "ord.cardAsCredit.button": "Rembourser la part carte en crédit",
+  "ord.cardAsCredit.confirm": "Oui, rembourser en crédit",
+  "ord.cardAsCredit.done": "Les remboursements de la part carte de cette commande reviendront en crédit."
 }

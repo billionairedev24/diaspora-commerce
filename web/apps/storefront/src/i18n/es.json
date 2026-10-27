@@ -1383,5 +1383,11 @@
   "co.credit.tiny": "No se puede cobrar menos de $0,50 a una tarjeta, así que tu crédito no se usa en este pedido.",
   "co.credit.row": "Crédito AfroTransact",
   "co.credit.payingAll": "Pagando con crédito AfroTransact",
-  "co.credit.chargeNote": "Tu crédito se usa ahora. Si se cancela o devuelve un artículo, su crédito vuelve a tu saldo."
+  "co.credit.chargeNote": "Tu crédito se usa ahora. Si se cancela o devuelve un artículo, su crédito vuelve a tu saldo.",
+  "ord.paidWithCredit": "Pagado con crédito AfroTransact",
+  "ord.cardAsCredit.title": "Reembolsos como crédito",
+  "ord.cardAsCredit.body": "La parte pagada con tarjeta fue {amount}. Sus reembolsos vuelven a tu tarjeta. Si lo prefieres, pueden ir a tu crédito AfroTransact. No se puede deshacer, y el crédito no se puede volver a convertir en dinero. La parte pagada con crédito siempre vuelve como crédito.",
+  "ord.cardAsCredit.button": "Reembolsar la parte de tarjeta como crédito",
+  "ord.cardAsCredit.confirm": "Sí, reembolsar como crédito",
+  "ord.cardAsCredit.done": "Los reembolsos de la parte de tarjeta de este pedido volverán como crédito."
 }

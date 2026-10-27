@@ -1376,5 +1376,11 @@
   "co.credit.tiny": "A card can’t be charged less than $0.50, so your credit stays unused on this order.",
   "co.credit.row": "AfroTransact credit",
   "co.credit.payingAll": "Paying with AfroTransact credit",
-  "co.credit.chargeNote": "Your credit is used now. If an item is cancelled or returned, its credit goes back to your balance."
+  "co.credit.chargeNote": "Your credit is used now. If an item is cancelled or returned, its credit goes back to your balance.",
+  "ord.paidWithCredit": "Paid with AfroTransact credit",
+  "ord.cardAsCredit.title": "Refunds as credit",
+  "ord.cardAsCredit.body": "The part you paid by card was {amount}. Refunds of it go back to your card. If you prefer, they can go to your AfroTransact credit instead. This can’t be undone, and credit can’t be turned back into money. The part paid with credit always returns as credit.",
+  "ord.cardAsCredit.button": "Refund the card part as credit",
+  "ord.cardAsCredit.confirm": "Yes, refund as credit",
+  "ord.cardAsCredit.done": "Refunds of the card part of this order will come back as credit."
 }

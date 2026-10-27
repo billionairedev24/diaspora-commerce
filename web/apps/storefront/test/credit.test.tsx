@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { CheckoutView } from '@/components/checkout/CheckoutView';
 import { CreditView } from '@/components/credit/CreditView';
 import { GiftCardView } from '@/components/credit/GiftCardView';
+import { OrderDetailView } from '@/components/orders/OrderDetailView';
 
 import { installMockBff, signInDemo } from './mockBff';
 import { renderWithProviders } from './render';
@@ -123,3 +124,26 @@ describe('credit at checkout (S320)', () => {
     expect(order?.status).toBe('placed');
   });
 });
+
+describe('refunds as credit (S320)', () => {
+  it('shows what credit paid and takes the card part of refunds as credit, after a second click', async () => {
+    const api = await signInDemo();
+    const jollof = await api.getProduct('AT000000P2');
+    await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 12 });
+    const sum = await api.getCheckoutSummary();
+    const conf = await api.placeOrder(
+      { addressId: 'ad1', useCredit: true, paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: sum.packages[0]?.packageId ?? '', option: 'carrier' }] },
+      'checkout-credit-ui-0001'
+    );
+    await api.confirmCheckoutPayment(conf.orderNumber);
+    const user = userEvent.setup();
+    renderWithProviders(<OrderDetailView orderNumber={conf.orderNumber} />);
+    expect(await screen.findByTestId('order-credit')).toHaveTextContent('$25.00');
+    await user.click(await screen.findByTestId('order-card-as-credit-button'));
+    expect(await screen.findByText(/can’t be turned back into money/)).toBeInTheDocument();
+    await user.click(screen.getByTestId('order-card-as-credit-confirm'));
+    await waitFor(async () => expect((await api.getOrder(conf.orderNumber)).payment?.cardRefundsAsCredit).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId('order-card-as-credit-button')).not.toBeInTheDocument());
+  });
+});
+

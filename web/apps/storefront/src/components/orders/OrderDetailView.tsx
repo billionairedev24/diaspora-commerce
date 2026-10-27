@@ -2,9 +2,10 @@
 
 import { isApiError, orderKeys } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { buttonClassName, ImagePlaceholder, Key, Skeleton, Truck, useToast } from '@afrotransact/ui';
+import { Button, buttonClassName, ImagePlaceholder, Key, Skeleton, Truck, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useState } from 'react';
 
 import pageStyles from '@/components/account/Pages.module.css';
 import { useT } from '@/i18n/t';
@@ -21,6 +22,45 @@ import { PickupDetails } from './PickupDetails';
 
 const stamp = (tag: string, iso: string) => new Date(iso).toLocaleString(tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const day = (tag: string, iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString(tag, { weekday: 'short', month: 'short', day: 'numeric' }) : null);
+
+/**
+ * The shopper's one-way choice to take refunds of the card part of an order as AfroTransact credit (S320). Without it
+ * they go back to the card; credit that paid for the order always returns as credit. Two steps, because it can't be undone.
+ */
+function CardAsCredit({ orderNumber, cardMinor, chosen }: { orderNumber: string; cardMinor: number; chosen: boolean }) {
+  const t = useT();
+  const fmt = useFormatters();
+  const api = browserApi();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [confirming, setConfirming] = useState(false);
+  const choose = useMutation({
+    mutationFn: () => api.chooseCreditRefunds(orderNumber),
+    onSuccess: async () => { setConfirming(false); await qc.invalidateQueries({ queryKey: orderKeys.all }); toast.show(t('ord.cardAsCredit.done')); },
+    onError: (e) => toast.show(isApiError(e) ? e.message : t('auth.genericError'))
+  });
+  return (
+    <div data-testid="order-card-as-credit">
+      <strong>{t('ord.cardAsCredit.title')}</strong>
+      {chosen ? (
+        <p className={pageStyles.muted}>{t('ord.cardAsCredit.done')}</p>
+      ) : (
+        <>
+          <p className={pageStyles.muted}>{t('ord.cardAsCredit.body', { amount: fmt.money(cardMinor) })}</p>
+          {confirming ? (
+            <Button onClick={() => choose.mutate()} loading={choose.isPending} data-testid="order-card-as-credit-confirm">
+              {t('ord.cardAsCredit.confirm')}
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={() => setConfirming(true)} data-testid="order-card-as-credit-button">
+              {t('ord.cardAsCredit.button')}
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 /** One order (S148): shipments with tracking timelines, delivery codes, items, totals, cancel and return. */
 export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
@@ -162,6 +202,12 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                   <dd>
                     <strong>{fmt.money(o.totalMinor)}</strong>
                   </dd>
+                  {o.payment && o.payment.creditMinor > 0 && (
+                    <>
+                      <dt>{t('ord.paidWithCredit')}</dt>
+                      <dd data-testid="order-credit">{fmt.money(o.payment.creditMinor)}</dd>
+                    </>
+                  )}
                   {o.payment && o.payment.refundedMinor > 0 && (
                     <>
                       <dt>{t('ord.refunded')}</dt>
@@ -171,6 +217,9 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                     </>
                   )}
                 </dl>
+                {o.payment && o.totalMinor - o.payment.creditMinor > 0 && (
+                  <CardAsCredit orderNumber={o.orderNumber} cardMinor={o.totalMinor - o.payment.creditMinor} chosen={o.payment.cardRefundsAsCredit} />
+                )}
               </section>
               {o.shippingAddress && (
                 <section className={pageStyles.card}>

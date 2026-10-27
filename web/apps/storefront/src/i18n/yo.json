@@ -1383,5 +1383,11 @@
   "co.credit.tiny": "A kò lè gba kéré ju $0.50 lórí káàdì, nítorí náà owó ìdókòwò rẹ kò ní wúlò fún ìbéèrè yìí.",
   "co.credit.row": "Owó ìdókòwò AfroTransact",
   "co.credit.payingAll": "Ń sanwó pẹ̀lú owó ìdókòwò AfroTransact",
-  "co.credit.chargeNote": "A lo owó ìdókòwò rẹ báyìí. Tí a bá fagilé tàbí dá ọjà padà, owó ìdókòwò rẹ̀ á padà sí ìwọ̀n rẹ."
+  "co.credit.chargeNote": "A lo owó ìdókòwò rẹ báyìí. Tí a bá fagilé tàbí dá ọjà padà, owó ìdókòwò rẹ̀ á padà sí ìwọ̀n rẹ.",
+  "ord.paidWithCredit": "A fi owó ìdókòwò AfroTransact san",
+  "ord.cardAsCredit.title": "Ìdápadà owó gẹ́gẹ́ bí owó ìdókòwò",
+  "ord.cardAsCredit.body": "Apá tí o fi káàdì san jẹ́ {amount}. Ìdápadà rẹ̀ ń lọ sí káàdì rẹ. Tí o bá fẹ́, ó lè lọ sí owó ìdókòwò AfroTransact rẹ dípò. A kò lè yí èyí padà, a kò sì lè sọ owó ìdókòwò di owó. Apá tí a fi owó ìdókòwò san á máa padà gẹ́gẹ́ bí owó ìdókòwò nígbà gbogbo.",
+  "ord.cardAsCredit.button": "Dá apá káàdì padà gẹ́gẹ́ bí owó ìdókòwò",
+  "ord.cardAsCredit.confirm": "Bẹ́ẹ̀ni, dá a padà gẹ́gẹ́ bí owó ìdókòwò",
+  "ord.cardAsCredit.done": "Ìdápadà apá káàdì ìbéèrè yìí á padà gẹ́gẹ́ bí owó ìdókòwò."
 }
