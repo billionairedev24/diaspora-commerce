@@ -71,10 +71,12 @@ public final class OrdersEventPayloads {
      * @param closesAt   the customer may cancel for a full refund until then
      * @param fulfilment DOOR | PICKUP
      * @param feeMinor   the window's door or pickup fee charged on the order (all its shipments of that window)
+     * @param source     WINDOW, or RUN for a delivery run staff scheduled (S261): then {@code windowId} is the run's id
+     *                   and the order holds a slot on it in delivery-runs rather than a pre-order window order
      */
     public record PreorderSummary(String windowId, String code, String name, String number, LocalDate deliversOn,
                                   Instant closesAt, String fulfilment, long feeMinor, String currency,
-                                  String pickupWindow) {
+                                  String pickupWindow, String source) {
 
         static PreorderSummary of(Order o, PreorderPackage p) {
             if (p == null) {
@@ -83,7 +85,7 @@ public final class OrdersEventPayloads {
             long fee = o.preorderShipments().stream().filter(s -> s.preorder().windowId().equals(p.windowId()))
                     .mapToLong(Shipment::shippingMinor).sum();
             return new PreorderSummary(p.windowId(), p.windowCode(), p.windowName(), null, p.deliversOn(),
-                    p.closesAt(), p.fulfilment().name(), fee, o.currency(), null);
+                    p.closesAt(), p.fulfilment().name(), fee, o.currency(), null, p.source().name());
         }
     }
 

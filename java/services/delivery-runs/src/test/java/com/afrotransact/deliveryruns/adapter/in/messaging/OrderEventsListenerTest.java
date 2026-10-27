@@ -57,6 +57,18 @@ class OrderEventsListenerTest {
     }
 
     @Test
+    void anOrderOnAStaffScheduledRunHoldsASlotAndIsNotProjectedIntoAWindow() {
+        String body = """
+                {"orderId": "o-run", "placedAt": "2026-10-07T16:30:00Z",
+                 "shipments": [
+                   {"shipmentId": "s-1", "sellerOrgId": "org-a", "fulfilmentType": "PREORDER",
+                    "windowId": "%s", "preorder": {"windowId": "%s", "source": "RUN"}, "fulfilment": "DOOR",
+                    "totalMinor": 3000, "shippingMinor": 799, "lines": [{"variantAtin": "EGU", "quantity": 2}]}]}
+                """.formatted(UUID.randomUUID(), UUID.randomUUID());
+        assertThat(OrderEventsListener.placed(UUID.randomUUID(), json.readTree(body))).isEmpty();
+    }
+
+    @Test
     void ordersWithoutPreorderPackagesAreIgnored() {
         String body = """
                 {"orderId": "o-1", "placedAt": "2026-10-07T16:30:00Z",

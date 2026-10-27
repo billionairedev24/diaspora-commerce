@@ -321,7 +321,7 @@ class CheckoutServiceImpl implements CheckoutService {
                     .mapToInt(x -> x.lines().stream().mapToInt(OrderLine::quantity).sum()).sum();
             return new CheckoutView.Preorder(o.number(), s.preorder().windowName(), s.preorder().windowId(),
                     s.preorder().windowCode(), s.preorder().deliversOn(), s.preorder().closesAt(), settings.zone(),
-                    s.preorder().fulfilment().name(), others);
+                    s.preorder().fulfilment().name(), others, s.preorder().source().name());
         }).orElse(null);
     }
 
@@ -330,8 +330,8 @@ class CheckoutServiceImpl implements CheckoutService {
                 ? vault.reveal(s.id(), s.handoverCodeSealed()) : null;
         String label = "Shipment " + s.seq() + " of " + count + (s.sellerName() == null ? "" : " · " + s.sellerName());
         if (s.preorderShipment()) {
-            label = "Pre-order · delivered " + s.preorder().deliversOn() + (s.sellerName() == null ? ""
-                    : " · " + s.sellerName());
+            label = (s.preorder().run() ? "Delivery run · delivered " : "Pre-order · delivered ")
+                    + s.preorder().deliversOn() + (s.sellerName() == null ? "" : " · " + s.sellerName());
         }
         return new CheckoutView.Shipment(s.id(), label, s.promisedBy() == null ? null : s.promisedBy().toString(),
                 s.promisedBy(), s.deliveryMethod().name(), code, s.fulfilmentType().name(),

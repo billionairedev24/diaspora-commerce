@@ -32,10 +32,12 @@ import com.afrotransact.orders.domain.OrderStatus;
 import com.afrotransact.orders.domain.OrderTotals;
 import com.afrotransact.orders.domain.PreorderFulfilment;
 import com.afrotransact.orders.domain.PreorderPackage;
+import com.afrotransact.orders.domain.PreorderSource;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.FollowUpRepository;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.OrderCouponRepository;
@@ -61,6 +63,7 @@ class PreorderRefundFollowUpTest {
     private final OrderRepository orders = mock(OrderRepository.class);
     private final PaymentsClient payments = mock(PaymentsClient.class);
     private final InventoryClient inventory = mock(InventoryClient.class);
+    private final DeliveryRunSlots runSlots = mock(DeliveryRunSlots.class);
     private final DomainEventPublisher events = mock(DomainEventPublisher.class);
     private FollowUpServiceImpl service;
 
@@ -69,7 +72,7 @@ class PreorderRefundFollowUpTest {
         OrdersSettings settings = new OrdersSettings("org-retail", Duration.ofMinutes(15), Duration.ofSeconds(5),
                 Duration.ofHours(1), Set.of(), Map.of(), 10, 3, "America/Chicago");
         service = new FollowUpServiceImpl(tasks, orders, payments, inventory, mock(CouponsClient.class),
-                mock(OrderCouponRepository.class), TransactionOperations.withoutTransaction(), settings, events,
+                runSlots, mock(OrderCouponRepository.class), TransactionOperations.withoutTransaction(), settings, events,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -82,6 +85,16 @@ class PreorderRefundFollowUpTest {
                 LocalDate.now().plusDays(3), captured ? "cap-1" : null, captured ? NOW : null, null, null, NOW,
                 List.of(line), 0, null, PreorderPackage.placed("win-1", "LBK-7", "Lubbock Pre-order #7",
                 LocalDate.now().plusDays(3), NOW.minusSeconds(3600), PreorderFulfilment.DOOR));
+    }
+
+    /** A shipment sold through the delivery run {@code run-1} (S261). */
+    private static Shipment onRun(ShipmentStatus status, boolean captured) {
+        Shipment s = preorder(status, captured);
+        return new Shipment(s.id(), ORDER, s.seq(), s.sellerOrgId(), s.sellerName(), s.fulfilmentType(), null,
+                s.deliveryMethod(), s.serviceLevel(), null, s.preferences(), false, false, null, null, status,
+                s.shippingMinor(), null, null, s.promisedFrom(), s.promisedBy(), s.captureId(), s.capturedAt(), null,
+                null, NOW, s.lines(), 0, null, PreorderPackage.placed("run-1", null, "Bastrop delivery run",
+                LocalDate.now().plusDays(3), NOW.minusSeconds(3600), PreorderFulfilment.DOOR, PreorderSource.RUN));
     }
 
     private Shipment due(Shipment s) {
@@ -132,6 +145,63 @@ class PreorderRefundFollowUpTest {
         assertThat(settled.amountMinor()).isEqualTo(s.totalMinor());
         // Stock held for the pre-order's lines is released where inventory has a reservation for them.
         verify(inventory).releaseGroups(eq(ORDER), eq(s.id()), anyList(), anyString());
+    }
+
+    @Test
+    void cancellingTheOnlyShipmentOfARunOrderGivesTheSlotBack() {
+        Shipment s = due(onRun(ShipmentStatus.CANCELLED, true));
+        when(payments.refund(eq("pay-1"), eq("refund-" + s.id()), anyList(), anyString())).thenReturn("re_1");
+
+        assertThat(service.runDue()).isEqualTo(1);
+
+        verify(runSlots).release("run-1", ORDER);
+        verify(events).publish(eq(OrdersEvents.PREORDER_REFUND_SETTLED), eq(OrdersEvents.AGGREGATE), eq(ORDER), any());
+    }
+
+    @Test
+    void aWindowOrderHasNoSlotToGiveBack() {
+        due(preorder(ShipmentStatus.CANCELLED, true));
+
+        assertThat(service.runDue()).isEqualTo(1);
+
+        verify(runSlots, never()).release(anyString(), anyString());
+    }
+
+    @Test
+    void aRunThatKeepsTheSlotIsLoggedAndNeverFailsTheRefundThatWasMade() {
+        Shipment s = due(onRun(ShipmentStatus.CANCELLED, true));
+        when(payments.refund(eq("pay-1"), eq("refund-" + s.id()), anyList(), anyString())).thenReturn("re_1");
+        doThrow(new UpstreamFailure("delivery-runs", 422, "delivery-runs.run-dispatched", "on the road", false,
+                null, null)).when(runSlots).release(anyString(), anyString());
+
+        assertThat(service.runDue()).isEqualTo(1);
+
+        verify(events).publish(eq(OrdersEvents.PREORDER_REFUND_SETTLED), eq(OrdersEvents.AGGREGATE), eq(ORDER), any());
+        verify(events, never()).publish(eq(OrdersEvents.PREORDER_REFUND_FAILED), anyString(), anyString(), any());
+    }
+
+    @Test
+    void anUnreachableDeliveryRunsRetriesTheTaskSoTheSlotIsNotLeftHeld() {
+        Shipment s = due(onRun(ShipmentStatus.CANCELLED, true));
+        when(payments.refund(eq("pay-1"), eq("refund-" + s.id()), anyList(), anyString())).thenReturn("re_1");
+        doThrow(new UpstreamFailure("delivery-runs", 503, "delivery-runs.unavailable", "down", true, null, null))
+                .when(runSlots).release(anyString(), anyString());
+
+        assertThat(service.runDue()).isZero();
+
+        verify(tasks).retry(anyString(), eq(1), any(), anyString());
+        verify(events, never()).publish(eq(OrdersEvents.PREORDER_REFUND_SETTLED), anyString(), anyString(), any());
+    }
+
+    @Test
+    void anInventoryOutageWhileReleasingStockRetriesTheTaskInsteadOfLeavingTheUnitsHeld() {
+        Shipment s = due(preorder(ShipmentStatus.CANCELLED, false));
+        doThrow(new UpstreamFailure("inventory", 503, "inventory.unavailable", "down", true, null, null))
+                .when(inventory).releaseGroups(eq(ORDER), eq(s.id()), anyList(), anyString());
+
+        assertThat(service.runDue()).isZero();
+
+        verify(tasks).retry(anyString(), eq(1), any(), anyString());
     }
 
     @Test

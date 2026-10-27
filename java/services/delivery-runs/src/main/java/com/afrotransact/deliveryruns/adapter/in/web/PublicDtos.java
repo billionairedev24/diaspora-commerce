@@ -1,6 +1,7 @@
 package com.afrotransact.deliveryruns.adapter.in.web;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -8,11 +9,13 @@ import java.util.UUID;
 
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.AreaResponse;
 import com.afrotransact.deliveryruns.adapter.in.web.LocationDtos.PickupPointBody;
+import com.afrotransact.deliveryruns.adapter.in.web.PreorderDtos.FeeRuleRef;
 import com.afrotransact.deliveryruns.application.AvailableRun;
 import com.afrotransact.deliveryruns.application.LocationPage;
 import com.afrotransact.deliveryruns.domain.Channel;
 import com.afrotransact.deliveryruns.domain.ChannelConsent;
 import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.FeeSnapshot;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.Run;
@@ -37,18 +40,33 @@ final class PublicDtos {
                              DropMode dropMode, PickupPointBody pickupPoint, boolean acceptingOrders,
                              @Schema(description = "Orders left (null = not limited)") Integer ordersLeft,
                              @Schema(description = "No room left; checkout offers the next run") boolean full,
-                             String runUrl) {
+                             String runUrl,
+                             @Schema(description = "The delivery date in the location's time zone (the window's day)")
+                             LocalDate deliversOn,
+                             @Schema(description = "IANA time zone of the location") String timeZone,
+                             @Schema(description = "Orders the run needs to go ahead") int minOrders,
+                             @Schema(description = "Orders holding a slot now, paid or about to be (counts toward the "
+                                     + "minimum and the capacity)") int ordersSoFar,
+                             @Schema(description = "ordersSoFar has reached minOrders") boolean minimumMet,
+                             @Schema(description = "The delivery fee rule behind feeMinor (ADR 0005 §3); null when the "
+                                     + "caller does not need it (location pages)") FeeRuleRef feeRule) {
 
-        static PublicRunResponse of(Run r, Location l, boolean accepting, String runUrl) {
+        static PublicRunResponse of(Run r, Location l, boolean accepting, String runUrl, FeeSnapshot feeRule) {
             RunTerms t = r.terms();
             return new PublicRunResponse(r.id(), l.id(), l.slug(), l.name(), r.status().name(), t.window().start(),
                     t.window().end(), t.cutoffAt(), t.feeMinor(), t.currency(), t.dropMode(),
                     PickupPointBody.of(t.pickupPoint()), accepting, t.capacity().ordersLeft(r.reservedOrders()),
-                    r.isFull(1), runUrl);
+                    r.isFull(1), runUrl, t.window().start().atZone(l.details().timeZone()).toLocalDate(),
+                    l.details().timeZone().getId(), t.minOrders(), r.reservedOrders(), r.minimumMet(),
+                    FeeRuleRef.of(feeRule));
+        }
+
+        static PublicRunResponse of(Run r, Location l, boolean accepting, String runUrl) {
+            return of(r, l, accepting, runUrl, null);
         }
 
         static PublicRunResponse of(AvailableRun a) {
-            return of(a.run(), a.location(), true, a.runUrl());
+            return of(a.run(), a.location(), true, a.runUrl(), a.feeRule());
         }
     }
 

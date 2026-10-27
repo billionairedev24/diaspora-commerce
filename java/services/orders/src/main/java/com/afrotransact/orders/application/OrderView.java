@@ -93,10 +93,12 @@ public record OrderView(String id, String orderNumber, String status, String cus
      * @param cancellableUntil the customer may cancel for a full refund (delivery fee included) until then
      * @param deliveryMissed   the delivery date passed undelivered: the customer may choose REFUND or WAIT
      * @param missedChoice     the customer's answer (null until answered)
+     * @param kind             WINDOW, or RUN for a delivery run staff scheduled (then {@code windowId} is the run's id
+     *                         and {@code cancellableUntil} its cutoff)
      */
     public record PreorderView(String windowId, String windowCode, String windowName, LocalDate deliversOn,
                                String fulfilment, Instant cancellableUntil, boolean deliveryMissed,
-                               String missedChoice) {
+                               String missedChoice, String kind) {
     }
 
     /**

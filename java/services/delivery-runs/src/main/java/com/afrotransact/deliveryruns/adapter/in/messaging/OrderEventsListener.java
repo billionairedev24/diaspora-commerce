@@ -152,6 +152,11 @@ class OrderEventsListener {
             if (!isPreorder || windowId == null) {
                 continue;
             }
+            if ("RUN".equalsIgnoreCase(text(pre, "source"))) {
+                // S261: an order on a staff-scheduled run holds a slot on it (orders reserved it through the slot
+                // API); there is no pre-order window to project it into.
+                continue;
+            }
             Optional<UUID> wid = uuid(windowId);
             if (wid.isEmpty()) {
                 LOG.warn("Skipping a package of order event {}: invalid windowId {}", eventId, windowId);

@@ -7459,6 +7459,14 @@ components:
           type:
           - string
           - 'null'
+        source:
+          type: string
+          enum:
+          - WINDOW
+          - RUN
+          description: 'WINDOW (default when absent), or RUN for a delivery run staff scheduled (S261): windowId is then the
+            run id and the order holds a slot on the run (POST /v1/service/runs/{id}/reservations), not a pre-order window
+            order'
     OrdersShipmentStatus:
       type: string
       enum:

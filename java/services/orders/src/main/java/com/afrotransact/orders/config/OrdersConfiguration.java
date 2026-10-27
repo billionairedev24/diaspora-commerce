@@ -71,12 +71,13 @@ class OrdersConfiguration {
 
     @Bean
     PreorderSettings preorderSettings(@Value("${at.orders.preorders.enabled:true}") boolean enabled,
+                                      @Value("${at.orders.preorders.runs-enabled:true}") boolean runsEnabled,
                                       @Value("${at.orders.preorders.job-batch:100}") int jobBatch,
                                       @Value("${at.orders.preorders.link-expiry-hours:24}") int linkExpiryHours,
                                       @Value("${at.orders.pay-links.base-url:http://localhost:3000}") String payPage,
                                       @Value("${at.orders.preorders.late-add-duplicate-window:10m}")
                                       Duration duplicateWindow) {
-        return new PreorderSettings(enabled, jobBatch, linkExpiryHours, payPage, duplicateWindow);
+        return new PreorderSettings(enabled, runsEnabled, jobBatch, linkExpiryHours, payPage, duplicateWindow);
     }
 
     @Bean

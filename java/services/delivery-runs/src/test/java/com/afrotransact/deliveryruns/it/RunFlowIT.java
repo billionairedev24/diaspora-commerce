@@ -23,6 +23,7 @@ import com.afrotransact.deliveryruns.application.DispatchList;
 import com.afrotransact.deliveryruns.application.LocationService;
 import com.afrotransact.deliveryruns.application.PublicRunService;
 import com.afrotransact.deliveryruns.application.ReserveCommand;
+import com.afrotransact.deliveryruns.application.RunCommand;
 import com.afrotransact.deliveryruns.application.RunSchedulerService;
 import com.afrotransact.deliveryruns.application.RunService;
 import com.afrotransact.deliveryruns.application.RunSlotService;
@@ -309,6 +310,82 @@ class RunFlowIT {
         ItSupport.as(new Actor("orders-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
                 Set.of("delivery-runs:reserve")));
         assertThatThrownBy(() -> runs.cancel(UUID.randomUUID(), "x")).isInstanceOf(ForbiddenActionException.class);
+    }
+
+    /**
+     * S261: what checkout needs to offer a run honestly. The open run is listed for the address with its progress
+     * toward the minimum (reservations count as they are taken and stop counting when released), and the rule behind its
+     * fee, or the run's own fee when staff set one that differs from the rule's.
+     */
+    @Test
+    void anOpenRunIsOfferedWithItsProgressTowardTheMinimumAndTheRuleBehindItsFee() {
+        Location bastrop = locations.create(Fixtures.bastrop(Fixtures.slug("bastrop"), DropMode.DOORSTEP, null,
+                CutoffPolicy.CANCEL));
+        Run ruled = runs.open(runs.create(Fixtures.run(bastrop.id(), clock.instant(), Duration.ofDays(3), 10)).id());
+
+        AvailableRun first = availableRun(ruled.id());
+        assertThat(first.run().terms().minOrders()).isEqualTo(10);
+        assertThat(first.run().reservedOrders()).isZero();
+        assertThat(first.feeRule().source().name()).isEqualTo("RULE");
+        assertThat(first.feeRule().method().name()).isEqualTo("AFROTRANSACT_DELIVERY");
+        assertThat(first.feeRule().amountMinor()).isEqualTo(ruled.terms().feeMinor());
+        assertThat(first.feeRule().ruleVersion()).isPositive();
+        assertThat(first.full()).isFalse();
+
+        reserve(ruled.id(), "ord-p1", "cust-1");
+        reserve(ruled.id(), "ord-p2", "cust-2");
+        reserve(ruled.id(), "ord-p3", "cust-3");
+        assertThat(availableRun(ruled.id()).run().reservedOrders()).as("7 of 10 would read 3 of 10 here")
+                .isEqualTo(3);
+        slots.release(ruled.id(), "ord-p3");
+        assertThat(availableRun(ruled.id()).run().reservedOrders()).isEqualTo(2);
+        assertThat(availableRun(ruled.id()).run().minimumMet()).isFalse();
+
+        Instant start = clock.instant().plus(Duration.ofDays(9));
+        Run custom = runs.open(runs.create(new RunCommand(bastrop.id(), start, start.plus(Duration.ofHours(4)),
+                clock.instant().plus(Duration.ofDays(6)), null, null, 999L, null, 3, null, null, null, null, null,
+                null, null)).id());
+        AvailableRun overridden = availableRun(custom.id());
+        assertThat(overridden.feeRule().amountMinor()).isEqualTo(999);
+        assertThat(overridden.feeRule().source().name()).as("staff set the fee on the run itself")
+                .isEqualTo("WINDOW_OVERRIDE");
+        // The earliest cutoff comes first: the "next" run is the one after it.
+        assertThat(publicRuns.available("78602", null, null)).extracting(a -> a.run().id()).containsSubsequence(
+                ruled.id(), custom.id());
+    }
+
+    /**
+     * S261: checkout asks for exactly the run it priced ({@code allowNextRun=false}). After the cutoff, or when the
+     * run is full, that is refused (409) rather than quietly moved to a run with another date and fee; the run then no
+     * longer appears among the open runs, so the cart offers the next one.
+     */
+    @Test
+    void anOrderForAClosedOrFullRunIsRefusedNotMovedWhenCheckoutAsksForThatRun() {
+        Location bastrop = locations.create(Fixtures.bastrop(Fixtures.slug("bastrop"), DropMode.DOORSTEP, 1,
+                CutoffPolicy.CANCEL));
+        Run first = runs.open(runs.create(Fixtures.run(bastrop.id(), clock.instant(), Duration.ofDays(2), 1)).id());
+        Run next = runs.open(runs.create(Fixtures.run(bastrop.id(), clock.instant(), Duration.ofDays(9), 1)).id());
+
+        slots.reserve(new ReserveCommand(first.id(), "ord-q1", "cust-1", 1, false));
+        assertThatThrownBy(() -> slots.reserve(new ReserveCommand(first.id(), "ord-q2", "cust-2", 1, false)))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("full");
+        assertThat(publicRuns.available("78602", null, null)).filteredOn(a -> a.run().id().equals(first.id()))
+                .allSatisfy(a -> assertThat(a.full()).isTrue());
+        assertThat(slots.reserve(new ReserveCommand(first.id(), "ord-q1", "cust-1", 1, false)).created())
+                .as("the same order asking again is answered, not refused").isFalse();
+
+        clock.set(first.terms().cutoffAt().plusSeconds(1));
+        assertThatThrownBy(() -> slots.reserve(new ReserveCommand(first.id(), "ord-q3", "cust-3", 1, false)))
+                .isInstanceOf(ConflictException.class).hasMessageContaining("no longer takes orders");
+        assertThat(publicRuns.available("78602", null, null)).extracting(a -> a.run().id())
+                .doesNotContain(first.id()).contains(next.id());
+        // The same order that may roll over does go to the next run (staff-facing callers, other services).
+        assertThat(slots.reserve(new ReserveCommand(first.id(), "ord-q3", "cust-3", 1, true)).moved()).isTrue();
+    }
+
+    private AvailableRun availableRun(UUID runId) {
+        return publicRuns.available("78602", null, null).stream().filter(a -> a.run().id().equals(runId))
+                .findFirst().orElseThrow();
     }
 
     private SlotReservation reserve(UUID runId, String orderId, String customerId) {

@@ -74,7 +74,8 @@ class OrderViews {
         boolean cancellable = customerMayCancel(order, s);
         Instant cancellableUntil = cancellable ? cancelWindowEnd(order, s) : null;
         if (s.preorderShipment()) {
-            label = "Pre-order · delivered " + s.preorder().deliversOn()
+            label = (s.preorder().run() ? "Delivery run · delivered " : "Pre-order · delivered ")
+                    + s.preorder().deliversOn()
                     + (s.sellerName() == null ? "" : " · " + s.sellerName());
         }
         Instant windowEnds = returnWindows.windowEndsAt(s).orElse(null);
@@ -100,7 +101,8 @@ class OrderViews {
                 s.preorder() == null ? null : new OrderView.PreorderView(s.preorder().windowId(),
                         s.preorder().windowCode(), s.preorder().windowName(), s.preorder().deliversOn(),
                         s.preorder().fulfilment().name(), s.preorder().closesAt(), s.preorder().deliveryMissed(),
-                        s.preorder().missedChoice() == null ? null : s.preorder().missedChoice().name()),
+                        s.preorder().missedChoice() == null ? null : s.preorder().missedChoice().name(),
+                        s.preorder().source().name()),
                 s.feeRule() == null ? null : new OrderView.DeliveryFeeRuleView(s.feeRule().method(),
                         s.feeRule().ruleId(), s.feeRule().ruleVersion(), s.feeRule().currency(),
                         s.feeRule().amountMinor(), s.feeRule().source(), s.feeRule().band(),

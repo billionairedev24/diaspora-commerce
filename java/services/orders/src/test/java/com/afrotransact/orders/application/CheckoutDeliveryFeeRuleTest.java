@@ -34,6 +34,7 @@ import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.port.CartClient;
 import com.afrotransact.orders.port.DeliveryFeeRules;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.PreorderEligibility;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,7 +65,7 @@ class CheckoutDeliveryFeeRuleTest {
                 Duration.ofHours(1), Set.of(), Map.of(), 10, 3, "America/Chicago");
         activities = new CheckoutActivitiesImpl(mock(MarketEligibility.class), null, null, null, tax,
                 new DefaultShippingPolicy(DefaultShippingPolicy.Rates.defaults()), handover, null, null, null, null,
-                null, null, null, null, null, null, null, mock(PreorderEligibility.class), rules,
+                null, null, null, null, null, null, null, mock(PreorderEligibility.class), mock(DeliveryRunSlots.class), rules,
                 new PreorderSettings(true, 100, 24, null, null), settings, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

@@ -13,6 +13,7 @@ import java.util.Set;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.FollowUpRepository;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.OrderCouponRepository;
@@ -53,6 +54,7 @@ class FollowUpServiceImpl implements FollowUpService {
     private final PaymentsClient payments;
     private final InventoryClient inventory;
     private final CouponsClient coupons;
+    private final DeliveryRunSlots runSlots;
     private final OrderCouponRepository orderCoupons;
     private final TransactionOperations tx;
     private final OrdersSettings settings;
@@ -60,14 +62,15 @@ class FollowUpServiceImpl implements FollowUpService {
     private final Clock clock;
 
     FollowUpServiceImpl(FollowUpRepository tasks, OrderRepository orders, PaymentsClient payments,
-                        InventoryClient inventory, CouponsClient coupons, OrderCouponRepository orderCoupons,
-                        TransactionOperations tx, OrdersSettings settings, DomainEventPublisher events,
+                        InventoryClient inventory, CouponsClient coupons, DeliveryRunSlots runSlots,
+                        OrderCouponRepository orderCoupons, TransactionOperations tx, OrdersSettings settings, DomainEventPublisher events,
                         Clock clock) {
         this.tasks = tasks;
         this.orders = orders;
         this.payments = payments;
         this.inventory = inventory;
         this.coupons = coupons;
+        this.runSlots = runSlots;
         this.orderCoupons = orderCoupons;
         this.tx = tx;
         this.settings = settings;
@@ -110,6 +113,7 @@ class FollowUpServiceImpl implements FollowUpService {
             case SETTLE -> settle(order);
             case CANCEL -> cancelled(order, order.shipment(task.shipmentId()));
             case SETTLE_SHIPMENT -> settleShipment(order, order.shipment(task.shipmentId()));
+            case COMMIT_STOCK -> commitPreorderStock(order, order.shipment(task.shipmentId()));
             default -> throw new IllegalStateException("Unknown follow-up " + task.kind());
         }
     }
@@ -205,6 +209,7 @@ class FollowUpServiceImpl implements FollowUpService {
         cancelMoneyAndStock(order, s);
         if (s.preorderShipment()) {
             releasePreorderStock(order, s);
+            releaseRunSlot(order, s);
             tx.executeWithoutResult(status -> events.publish(OrdersEvents.PREORDER_REFUND_SETTLED,
                     OrdersEvents.AGGREGATE, order.id(),
                     OrdersEventPayloads.PreorderRefundSettled.of(order, s, Instant.now(clock))));
@@ -212,13 +217,60 @@ class FollowUpServiceImpl implements FollowUpService {
     }
 
     /**
-     * PREORDER packages are not inventory-tracked here (the window sells goods AfroTransact already holds), but if
-     * inventory holds a per-line reservation for them it is released. Best effort: the money has been dealt with.
+     * Gives the order's slot on its delivery run back (S261) so the run's minimum and capacity stay honest, once no
+     * live shipment of the order is left on the run. Idempotent in delivery-runs. A run that is already on the road
+     * keeps the slot (it refuses, 409); that is logged, never a reason to fail the refund that has been made.
+     */
+    private void releaseRunSlot(Order order, Shipment s) {
+        if (!s.preorder().run()) {
+            return;
+        }
+        String runId = s.preorder().runId();
+        boolean stillOnRun = order.shipments().stream().anyMatch(o -> !o.id().equals(s.id()) && o.live()
+                && o.preorderShipment() && runId.equals(o.preorder().runId()));
+        if (stillOnRun) {
+            return;
+        }
+        try {
+            runSlots.release(runId, order.id());
+        } catch (UpstreamFailure f) {
+            if (f.retryable()) {
+                throw f;
+            }
+            LOG.warn("Run {} kept the slot of cancelled order {} ({}): {}", runId, order.number(), f.code(),
+                    f.getMessage());
+        }
+    }
+
+    /**
+     * The stock inventory held for a PREORDER shipment's lines (Retail and FBA goods) leaves the shelf with the
+     * package. Best effort: a shipment with no reservation (a seller's own goods in a window, or an order placed before
+     * pre-orders reserved stock) has nothing to commit, which inventory answers with 404.
+     */
+    private void commitPreorderStock(Order order, Shipment s) {
+        try {
+            inventory.commitGroups(order.id(), s.id(), PaymentLines.lineIds(s));
+        } catch (UpstreamFailure f) {
+            if (f.status() != 404) {
+                throw f;
+            }
+            LOG.debug("No stock reservation to commit for pre-order shipment {} ({})", s.id(), f.code());
+        }
+    }
+
+    /**
+     * Gives back the stock inventory holds for a cancelled PREORDER shipment's lines (Retail and FBA goods reserved at
+     * checkout, S261; orders placed before that, and a seller's own goods in a window, have none: inventory answers
+     * 404). An outage is retried with the rest of the task (the refund is idempotent); a reservation inventory
+     * refuses to release (already shipped, 409) is logged and left.
      */
     private void releasePreorderStock(Order order, Shipment s) {
         try {
             inventory.releaseGroups(order.id(), s.id(), PaymentLines.lineIds(s), "Pre-order cancelled");
         } catch (UpstreamFailure f) {
+            if (f.retryable()) {
+                throw f;
+            }
             LOG.info("No stock reservation released for pre-order shipment {} ({}); nothing to release", s.id(),
                     f.code());
         }

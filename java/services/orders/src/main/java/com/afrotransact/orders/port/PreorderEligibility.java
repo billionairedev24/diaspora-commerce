@@ -8,6 +8,7 @@ import java.util.Set;
 
 import com.afrotransact.orders.domain.FeeRuleSnapshot;
 import com.afrotransact.orders.domain.PreorderFulfilment;
+import com.afrotransact.orders.domain.PreorderSource;
 import com.afrotransact.orders.domain.PreorderStage;
 
 /**
@@ -43,11 +44,26 @@ public interface PreorderEligibility {
      * @param pickupPointId  the window's pickup point (null when not sent)
      * @param doorFeeRule    the rule behind {@code doorFeeMinor} (ADR 0005 §3), kept on the order; null when not sent
      * @param pickupFeeRule  the rule behind {@code pickupFeeMinor}; null when not sent
+     * @param source         WINDOW (delivery-runs' eligibility), or RUN for a staff-scheduled run checkout resolved
+     *                       itself, in which case {@code windowId} is the run's id
+     * @param minOrders      RUN only: orders the run needs to go ahead
+     * @param ordersSoFar    RUN only: orders holding a slot when checkout asked
      */
     record Line(String variantAtin, boolean preorder, String windowId, String windowCode, String windowName,
                 PreorderStage stage, LocalDate deliversOn, Instant closesAt, boolean door, boolean pickup,
                 long doorFeeMinor, long pickupFeeMinor, String currency, Set<String> allowedMethods,
-                String pickupPointId, FeeRuleSnapshot doorFeeRule, FeeRuleSnapshot pickupFeeRule) {
+                String pickupPointId, FeeRuleSnapshot doorFeeRule, FeeRuleSnapshot pickupFeeRule,
+                PreorderSource source, int minOrders, int ordersSoFar) {
+
+        /** A window's line. */
+        public Line(String variantAtin, boolean preorder, String windowId, String windowCode, String windowName,
+                    PreorderStage stage, LocalDate deliversOn, Instant closesAt, boolean door, boolean pickup,
+                    long doorFeeMinor, long pickupFeeMinor, String currency, Set<String> allowedMethods,
+                    String pickupPointId, FeeRuleSnapshot doorFeeRule, FeeRuleSnapshot pickupFeeRule) {
+            this(variantAtin, preorder, windowId, windowCode, windowName, stage, deliversOn, closesAt, door, pickup,
+                    doorFeeMinor, pickupFeeMinor, currency, allowedMethods, pickupPointId, doorFeeRule, pickupFeeRule,
+                    PreorderSource.WINDOW, 0, 0);
+        }
 
         /** A line whose fees come without their rules (tests, older delivery-runs). */
         public Line(String variantAtin, boolean preorder, String windowId, String windowCode, String windowName,
@@ -62,6 +78,7 @@ public interface PreorderEligibility {
             allowedMethods = allowedMethods == null || allowedMethods.isEmpty() ? ALL_METHODS
                     : Set.copyOf(allowedMethods);
             currency = currency == null || currency.isBlank() ? "USD" : currency;
+            source = source == null ? PreorderSource.WINDOW : source;
         }
 
         /** Whether the window offers this fulfilment. */

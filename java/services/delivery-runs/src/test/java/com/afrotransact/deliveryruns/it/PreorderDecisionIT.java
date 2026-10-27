@@ -236,10 +236,14 @@ class PreorderDecisionIT {
         Fixture f = fixture("Same instant #1", 3, 2);
         Instant at = clock.instant();
         // The first entry gets the id that sorts last, so ordering by id would reverse them.
-        WindowDecision first = new WindowDecision(UUID.fromString("ffffffff-ffff-4fff-8fff-ffffffffffff"),
-                f.window().id(), DecisionKind.AWAITING, "first", "system", 2, 3, at);
-        WindowDecision second = new WindowDecision(UUID.fromString("00000000-0000-4000-8000-000000000000"),
-                f.window().id(), DecisionKind.PROCEED, "second", "local-dev", 2, 3, at);
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        UUID later = a.compareTo(b) > 0 ? a : b;
+        UUID earlier = a.compareTo(b) > 0 ? b : a;
+        WindowDecision first = new WindowDecision(later, f.window().id(), DecisionKind.AWAITING, "first", "system", 2,
+                3, at);
+        WindowDecision second = new WindowDecision(earlier, f.window().id(), DecisionKind.PROCEED, "second",
+                "local-dev", 2, 3, at);
         decisionLog.append(first);
         decisionLog.append(second);
         assertThat(decisionLog.findByWindow(f.window().id())).extracting(WindowDecision::reason)

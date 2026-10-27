@@ -30,10 +30,12 @@ public record CheckoutView(String orderId, String orderNumber, String status, St
      * @param closesAt       cancel for a full refund until then
      * @param timeZone       business time zone the dates are shown in
      * @param otherItemCount units of the same order that ship now
+     * @param kind           WINDOW, or RUN for a delivery run staff scheduled (then {@code windowId} is the run's id
+     *                       and {@code closesAt} its cutoff)
      */
     public record Preorder(String number, String windowName, String windowId, String windowCode,
                            LocalDate deliversOn, Instant closesAt, String timeZone, String fulfilment,
-                           int otherItemCount) {
+                           int otherItemCount, String kind) {
     }
 
     /**

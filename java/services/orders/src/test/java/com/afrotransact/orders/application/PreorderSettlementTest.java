@@ -37,6 +37,7 @@ import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.TransitionActor;
 import com.afrotransact.orders.domain.TransitionSource;
 import com.afrotransact.orders.port.CouponsClient;
+import com.afrotransact.orders.port.DeliveryRunSlots;
 import com.afrotransact.orders.port.FollowUpRepository;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.OrderCouponRepository;
@@ -111,8 +112,9 @@ class PreorderSettlementTest {
         List<FollowUpRepository.FollowUp> queued = queuedAfterDelivering(order(s), s, ActorKind.PLATFORM_ADMIN,
                 TransitionSource.API, "Customer collected at the community hall");
 
+        // A pickup handed over without ever being picked up by a driver also takes the shipment's stock off the shelf.
         assertThat(queued).extracting(FollowUpRepository.FollowUp::kind)
-                .containsExactly(FollowUpRepository.Kind.SETTLE);
+                .containsExactlyInAnyOrder(FollowUpRepository.Kind.SETTLE, FollowUpRepository.Kind.COMMIT_STOCK);
     }
 
     @Test
@@ -141,7 +143,7 @@ class PreorderSettlementTest {
         OrdersSettings settings = new OrdersSettings("org-retail", Duration.ofMinutes(15), Duration.ofSeconds(5),
                 Duration.ofHours(1), Set.of(), Map.of(), 10, 3, "America/Chicago");
         FollowUpServiceImpl service = new FollowUpServiceImpl(tasks, repo, payments, mock(InventoryClient.class),
-                mock(CouponsClient.class), mock(OrderCouponRepository.class), TransactionOperations.withoutTransaction(),
+                mock(CouponsClient.class), mock(DeliveryRunSlots.class), mock(OrderCouponRepository.class), TransactionOperations.withoutTransaction(),
                 settings, events, Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertThat(service.runDue()).isEqualTo(1);
