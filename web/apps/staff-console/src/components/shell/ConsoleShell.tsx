@@ -308,7 +308,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         expandLabel={t('st.consoleShell.expandMenu')}
         collapseLabel={t('st.consoleShell.collapseMenu')}
       >
-        <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">
+        <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-24 outline-none sm:px-8">
           {canOpen ? (
             <AccountFormatPreferences apply={setFormatPreferences}>{children}</AccountFormatPreferences>
           ) : (
