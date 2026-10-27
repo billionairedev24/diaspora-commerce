@@ -24,6 +24,7 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		Bookings: upstreams.NewCustomerBookings(client("bookings", base)),
 		Lola:     upstreams.NewLola(client("ai-gateway", base), upstreams.LolaOptions{BaseURL: base}),
 		Delivery: upstreams.NewDeliveryFacts(client("promise", base), client("carrier-gateway", base), client("geo", base), tokens),
+		Credit:   upstreams.NewCredit(client("payments", base)),
 		Identity: identity, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: TestPublishableKey, IdentityPublicURL: u.URL(), Clock: clock.Now, Log: log,
 	}
@@ -34,5 +35,6 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
 		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", u.URL())), "us"),
 		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(client("orders", base), tokens), TestPublishableKey),
-		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", base)), d.Bookings, s.Search)}
+		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", base)), d.Bookings, s.Search),
+		Credit:        app.NewCreditService(d.Credit, d.Orders, TestPublishableKey)}
 }

@@ -32,7 +32,9 @@ type ShopperDeps struct {
 	LocalDelivery port.LocalDeliveryClient
 	Offers        port.StorefrontOffersClient
 	// Coupons validates checkout coupon codes (offers-service; optional).
-	Coupons  port.CheckoutCouponsClient
+	Coupons port.CheckoutCouponsClient
+	// Credit reads the shopper's AfroTransact credit for the checkout page and the credit screens (optional).
+	Credit   port.CreditClient
 	Identity port.IdentityClient
 	Checkout CheckoutService
 	Carts    CartService
@@ -379,7 +381,8 @@ func (s *customerOrdersServiceImpl) withPayment(ctx context.Context, c *domain.C
 		s.d.log().WarnContext(ctx, "order payment unavailable", "error", err)
 		return
 	}
-	sum := domain.OrderPayment{Status: strings.ToLower(p.Status), CapturedMinor: p.CapturedMinor, RefundedMinor: p.RefundedMinor}
+	sum := domain.OrderPayment{Status: strings.ToLower(p.Status), CapturedMinor: p.CapturedMinor, RefundedMinor: p.RefundedMinor,
+		CreditMinor: p.CreditMinor, CardRefundsAsCredit: p.CardRefundsAsCredit}
 	refunded := map[string]int64{}
 	for _, l := range p.Lines {
 		sum.RefundableMinor += max(0, l.RefundableMinor)
@@ -492,6 +495,7 @@ func toConfirmation(v port.UpCheckout) domain.OrderConfirmation {
 			ETA: firstNonEmpty(s.ETA, s.PromisedBy), DeliveryCode: strPtr(s.DeliveryCode)})
 	}
 	out.Preorder = preorderBlock(v.Preorder)
+	out.CreditMinor = v.CreditMinor
 	return out
 }
 
@@ -558,6 +562,8 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 		}
 	}
 	switch {
+	// An order that credit pays in full has no card: payments decides, so a payment source is optional with credit.
+	case sources == 0 && req.UseCredit:
 	case req.Wallet != "" && !walletKinds[req.Wallet]:
 		errs["wallet"] = "Choose Apple Pay, Google Pay or Link"
 	case sources == 0:
@@ -595,7 +601,7 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 	}
 	v, status, err := s.d.Orders.Checkout(ctx, c.BearerToken, key, port.UpCheckoutRequest{AddressID: req.AddressID, DeliverySelections: sels,
 		Lines: lines, PaymentMethodID: req.PaymentMethodID, Wallet: req.Wallet, Gift: req.Gift, CouponCode: strings.TrimSpace(req.CouponCode),
-		SavePaymentMethod: req.SavePaymentMethod, Attribution: req.Attribution.Clean()})
+		SavePaymentMethod: req.SavePaymentMethod, UseCredit: req.UseCredit, Attribution: req.Attribution.Clean()})
 	if err != nil {
 		return port.PlaceOrderResult{}, orderErr(err)
 	}

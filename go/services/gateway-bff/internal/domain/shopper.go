@@ -108,6 +108,10 @@ type OrderPayment struct {
 	RefundedMinor    int64  `json:"refundedMinor"`
 	RefundableMinor  int64  `json:"refundableMinor"`
 	ShippingTaxMinor int64  `json:"shippingTaxMinor"`
+	// CreditMinor is the part of the order paid with AfroTransact credit (S320); the card paid the rest.
+	CreditMinor int64 `json:"creditMinor"`
+	// CardRefundsAsCredit: the card part of this order's refunds comes back as credit (the shopper's one-way choice).
+	CardRefundsAsCredit bool `json:"cardRefundsAsCredit"`
 }
 
 // ---------------------------------------------------------------- returns

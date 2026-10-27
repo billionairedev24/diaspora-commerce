@@ -619,6 +619,8 @@ type CheckoutSummary struct {
 	StripeCustomerID string `json:"stripeCustomerId,omitempty"`
 	// CrossSell is the checkout_cross_sell placement from content (optional product rail).
 	CrossSell *Rail `json:"crossSell,omitempty"`
+	// Credit is what the shopper's AfroTransact credit would pay of this order (S320); absent without credit.
+	Credit *CheckoutCredit `json:"credit,omitempty"`
 }
 
 // PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).
@@ -632,6 +634,9 @@ type PlaceOrderRequest struct {
 	NewPaymentMethod bool `json:"newPaymentMethod,omitempty"`
 	// SavePaymentMethod (with NewPaymentMethod) keeps the method on the shopper's Stripe Customer.
 	SavePaymentMethod bool `json:"savePaymentMethod,omitempty"`
+	// UseCredit pays with the shopper's AfroTransact credit first (S320); the card pays only the rest, and an order that
+	// credit pays in full needs no payment method.
+	UseCredit bool `json:"useCredit,omitempty"`
 	// CouponCode is validated and redeemed by orders with offers-service (released if the order fails).
 	CouponCode string `json:"couponCode,omitempty"`
 	// Attribution is the last-touch source {src, cr, po}; the handler falls back to the at_attr cookie.
@@ -654,6 +659,8 @@ type OrderConfirmation struct {
 	TotalMinor          int64                       `json:"totalMinor"`
 	Currency            string                      `json:"currency"`
 	Shipments           []OrderConfirmationShipment `json:"shipments"`
+	// CreditMinor is the part of the total paid with AfroTransact credit (S320); the card pays the rest.
+	CreditMinor int64 `json:"creditMinor"`
 	// Preorder is the "You're in" block of an order with a pre-order package (number, windowName, deliversOn,
 	// closesAt, timeZone, otherItemCount), relayed from orders; omitted otherwise.
 	Preorder json.RawMessage `json:"preorder,omitempty"`
