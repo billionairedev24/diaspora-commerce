@@ -225,6 +225,26 @@ paths:
         '429': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── resources
+  /v1/staff/lookups/{kind}:
+    get:
+      tags: [Resources]
+      operationId: searchStaffLookup
+      security: [{sessionCookie: []}]
+      summary: Find drivers or sellers by name for a form's picker
+      description: |
+        The searchable pickers of the console's forms (Assign driver, Stripe lookup): up to 20 matches by name, the id the
+        form sends, and a second line (email, kind of seller). `drivers` needs Delivery dispatch at View and the people
+        directory (users:read) upstream; `sellers` needs Payouts at View. Leave `q` out for the first matches.
+      parameters:
+        - {name: kind, in: path, required: true, schema: {type: string, enum: [drivers, sellers]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: 'Part of the name; 2 characters or more when given'}
+      responses:
+        '200': {description: Matches, content: {application/json: {schema: {$ref: '#/components/schemas/StaffLookupResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/resources/{resource}:
     get:
       tags: [Resources]
@@ -6456,6 +6476,21 @@ components:
         - {type: boolean}
         - {type: array, items: {type: string}}
         - {type: 'null'}
+    StaffLookupResult:
+      type: object
+      required: [kind, items]
+      properties:
+        kind: {type: string, enum: [drivers, sellers]}
+        items:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              detail: {type: string}
     FormField:
       type: object
       required: [key, label, type, required]
@@ -6464,6 +6499,7 @@ components:
         label: {type: string}
         type: {type: string, enum: [text, textarea, number, money, select, multiselect, toggle, date, datetime, email, password]}
         required: {type: boolean}
+        lookup: {type: string, enum: [drivers, sellers], description: 'A text field that is a searchable picker: staff choose by name (GET /v1/staff/lookups/{kind}), the form sends the id'}
         options: {type: array, items: {$ref: '#/components/schemas/FieldOption'}}
         min: {type: number}
         max: {type: number}

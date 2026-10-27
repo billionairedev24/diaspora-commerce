@@ -92,6 +92,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/lookups/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find drivers or sellers by name for a form's picker
+         * @description The searchable pickers of the console's forms (Assign driver, Stripe lookup): up to 20 matches by name, the id the
+         *     form sends, and a second line (email, kind of seller). `drivers` needs Delivery dispatch at View and the people
+         *     directory (users:read) upstream; `sellers` needs Payouts at View. Leave `q` out for the first matches.
+         */
+        get: operations["searchStaffLookup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/staff/resources/{resource}": {
         parameters: {
             query?: never;
@@ -5767,12 +5789,26 @@ export interface components {
             label: string;
         };
         FieldValue: string | number | boolean | string[] | null;
+        StaffLookupResult: {
+            /** @enum {string} */
+            kind: "drivers" | "sellers";
+            items: {
+                id: string;
+                name: string;
+                detail?: string;
+            }[];
+        };
         FormField: {
             key: string;
             label: string;
             /** @enum {string} */
             type: "text" | "textarea" | "number" | "money" | "select" | "multiselect" | "toggle" | "date" | "datetime" | "email" | "password";
             required: boolean;
+            /**
+             * @description A text field that is a searchable picker: staff choose by name (GET /v1/staff/lookups/{kind}), the form sends the id
+             * @enum {string}
+             */
+            lookup?: "drivers" | "sellers";
             options?: components["schemas"]["FieldOption"][];
             min?: number;
             max?: number;
@@ -8420,6 +8456,36 @@ export interface operations {
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffLookup: {
+        parameters: {
+            query?: {
+                /** @description Part of the name; 2 characters or more when given */
+                q?: string;
+            };
+            header?: never;
+            path: {
+                kind: "drivers" | "sellers";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffLookupResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

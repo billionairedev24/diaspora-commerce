@@ -533,10 +533,10 @@ func stripeLookupResource() *staffResource {
 		create: &staffCreate{permission: "payments:read",
 			form: func(context.Context, staffCtx) domain.Form {
 				return domain.Form{Title: "Look up in Stripe", SubmitLabel: "Look up",
-					Intro: "Reads the object from Stripe and shows what the ledger booked for it. A payout lives on the seller's Stripe account, so give the seller's organisation id with a payout id.",
+					Intro: "Reads the object from Stripe and shows what the ledger booked for it. A payout lives on the seller's Stripe account, so choose the seller with a payout id.",
 					Fields: []domain.FormField{
 						withPattern(withMax(ff("ref", "Stripe id", "text", true), 120), "^[a-z]{2,6}_[A-Za-z0-9_]{6,100}$", "For example po_…, tr_…, pi_…, ch_…, re_…, txn_…, dp_…, acct_…"),
-						withMax(ff("orgId", "Seller's organisation id (for a payout)", "text", false), 80),
+						withLookup(withMax(ff("orgId", "Seller (for a payout)", "text", false), 80), lookupSellers),
 					}}
 			},
 			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {

@@ -32,6 +32,8 @@ type StaffRecordsService interface {
 	Update(ctx context.Context, c *domain.Caller, resource, id string, values map[string]any, version string) (domain.RecordDetail, error)
 	Act(ctx context.Context, c *domain.Caller, resource, id, action string, values map[string]any, idem string) (domain.RecordDetail, error)
 	AddNote(ctx context.Context, c *domain.Caller, resource, id, text string) (domain.RecordDetail, error)
+	// Lookup finds drivers or sellers by name for a form's picker (the module of the form, at View).
+	Lookup(ctx context.Context, c *domain.Caller, kind, q string) (domain.LookupResult, error)
 	// FileURL is where to open one file attached to a record (view access; the upstream logs who opened it).
 	FileURL(ctx context.Context, c *domain.Caller, resource, id, fileID string) (string, error)
 }
