@@ -11,7 +11,6 @@ import (
 // no cash-out, payout, card refund or transfer.
 func (h *handlersImpl) registerCredit(route func(pattern string, fn http.HandlerFunc)) {
 	route("GET /v1/account/credit", h.accountCredit)
-	route("POST /v1/account/orders/{orderNumber}/credit-refunds", h.chooseCreditRefunds)
 	route("GET /v1/gift-cards/config", h.giftCardConfig)
 	route("GET /v1/account/gift-cards", h.myGiftCards)
 	route("POST /v1/account/gift-cards", h.buyGiftCard)
@@ -22,11 +21,6 @@ func (h *handlersImpl) registerCredit(route func(pattern string, fn http.Handler
 func (h *handlersImpl) accountCredit(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	v, err := h.s.Shopper.Credit.Account(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("before"), limit)
-	h.ok(w, r, v, err)
-}
-
-func (h *handlersImpl) chooseCreditRefunds(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Shopper.Credit.ChooseCreditRefunds(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"))
 	h.ok(w, r, v, err)
 }
 

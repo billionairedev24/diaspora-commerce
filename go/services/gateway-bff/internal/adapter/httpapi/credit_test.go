@@ -109,19 +109,6 @@ func TestCreditAndGiftCardRoutesConformAndNeverMoveCreditOut(t *testing.T) {
 		t.Fatalf("code = %s", c)
 	}
 
-	// The card part of an order's refunds as credit: one way; nothing to choose when credit paid it all.
-	r = b.do("POST", "/v1/account/orders/"+testkit.ShopperOrderNumber+"/credit-refunds", nil)
-	mustStatus(t, r, 200)
-	if ch := r.json(t); ch["cardRefundsAsCredit"] != true || num(ch, "cardPartMinor") != 1353 || ch["orderNumber"] != testkit.ShopperOrderNumber {
-		t.Fatalf("choice = %s", r.body)
-	}
-	r = b.do("POST", "/v1/account/orders/"+testkit.CreditOnlyOrderNumber+"/credit-refunds", nil)
-	mustStatus(t, r, 409)
-	if c := problemCode(t, r); c != "NO_CARD_PORTION" {
-		t.Fatalf("code = %s", c)
-	}
-	mustStatus(t, b.do("POST", "/v1/account/orders/AT-2026-NOPE/credit-refunds", nil), 404)
-
 	// The order shows what credit paid.
 	r = b.do("GET", "/v1/account/orders/"+testkit.ShopperOrderNumber, nil)
 	mustStatus(t, r, 200)
@@ -157,14 +144,16 @@ func TestCreditAndGiftCardRoutesConformAndNeverMoveCreditOut(t *testing.T) {
 	}
 	b.headers = nil
 
+	// A delivered order has no self-service refund, so there is no shopper route that chooses credit for a refund.
 	// Nothing in the API turns credit into cash: no route to withdraw, pay out, refund to a card or transfer it.
-	for _, p := range []string{"/v1/account/credit/withdraw", "/v1/account/credit/payout", "/v1/account/credit/transfer", "/v1/account/credit/refund"} {
+	for _, p := range []string{"/v1/account/credit/withdraw", "/v1/account/credit/payout", "/v1/account/credit/transfer", "/v1/account/credit/refund",
+		"/v1/account/orders/" + testkit.ShopperOrderNumber + "/credit-refunds"} {
 		if s := b.do("POST", p, map[string]any{"amountMinor": 100}).status; s != 404 && s != 405 {
 			t.Fatalf("POST %s answered %d: there must be no such route", p, s)
 		}
 	}
 
-	for _, op := range []string{"getAccountCredit", "chooseCreditRefunds", "getGiftCardConfig", "listMyGiftCards", "buyGiftCard", "confirmGiftCard",
+	for _, op := range []string{"getAccountCredit", "getGiftCardConfig", "listMyGiftCards", "buyGiftCard", "confirmGiftCard",
 		"redeemGiftCard"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)

@@ -24,8 +24,6 @@ type CreditService interface {
 	ConfirmPurchase(ctx context.Context, c *domain.Caller, id string) (domain.GiftCard, error)
 	// Redeem adds the card's value to the shopper's credit, once; clientAddress feeds the guessing limits.
 	Redeem(ctx context.Context, c *domain.Caller, code, clientAddress string) (domain.GiftCardRedemption, error)
-	// ChooseCreditRefunds takes the card part of the refunds of the shopper's order as credit (one way).
-	ChooseCreditRefunds(ctx context.Context, c *domain.Caller, orderNumber string) (domain.CreditRefundChoice, error)
 }
 
 type creditServiceImpl struct {
@@ -196,23 +194,6 @@ func (s *creditServiceImpl) Redeem(ctx context.Context, c *domain.Caller, code, 
 		return domain.GiftCardRedemption{}, giftErr(err)
 	}
 	return domain.GiftCardRedemption{RedeemedMinor: r.RedeemedMinor, BalanceMinor: r.BalanceMinor, Currency: firstNonEmpty(r.Currency, domain.Currency)}, nil
-}
-
-func (s *creditServiceImpl) ChooseCreditRefunds(ctx context.Context, c *domain.Caller, orderNumber string) (domain.CreditRefundChoice, error) {
-	if err := requireCustomer(c); err != nil {
-		return domain.CreditRefundChoice{}, err
-	}
-	// The order is read with the shopper's token: that is the ownership check, and payments knows orders by id.
-	o, err := s.orders.Get(ctx, c.BearerToken, orderNumber)
-	if err != nil {
-		return domain.CreditRefundChoice{}, checkoutStatusErr(err)
-	}
-	r, err := s.credit.ChooseCreditRefunds(ctx, c.BearerToken, o.ID)
-	if err != nil {
-		return domain.CreditRefundChoice{}, giftErr(err)
-	}
-	return domain.CreditRefundChoice{OrderNumber: orderNumber, CardRefundsAsCredit: r.CardRefundsAsCredit, CardPartMinor: r.CardPartMinor,
-		Currency: firstNonEmpty(r.Currency, domain.Currency)}, nil
 }
 
 // giftErr names the gift card and credit answers a shopper can act on; everything else is the usual mapping.
