@@ -1,0 +1,42 @@
+/* AfroTransact membership (S323). Design tokens only. */
+.intro { margin: 0; max-width: 46rem; font-size: var(--at-text-lg); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+.toggle { display: inline-flex; gap: var(--at-space-1); padding: var(--at-space-1); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); align-self: flex-start; }
+.toggleOption { min-height: var(--at-size-touch); padding: 0 var(--at-space-4); border: 0; border-radius: var(--at-radius-pill); background: transparent; font: inherit; font-weight: var(--at-weight-semibold); cursor: pointer; color: var(--at-color-text); }
+.toggleOption[aria-pressed='true'] { background: var(--at-color-surface); box-shadow: var(--at-shadow-sm); }
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: var(--at-space-4); }
+.tier { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.tierHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--at-space-2); }
+.tierName { margin: 0; font-family: var(--at-font-heading); font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); }
+.price { margin: 0; font-size: var(--at-text-3xl); font-weight: var(--at-weight-bold); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.priceUnit { font-size: var(--at-text-sm); font-weight: var(--at-weight-regular); color: var(--at-color-text-muted); }
+.fine { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.save { margin: 0; font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); color: var(--at-color-success); }
+.benefits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
+.benefit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--at-space-2); align-items: start; }
+.benefitIcon { color: var(--at-color-success); margin-top: 2px; }
+.benefitText { display: flex; flex-direction: column; gap: 2px; }
+.benefitTitle { font-weight: var(--at-weight-semibold); }
+.benefitDetail { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.pill { display: inline-flex; align-self: flex-start; padding: 2px var(--at-space-2); border-radius: var(--at-radius-pill); background: var(--at-color-surface-brand); font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); }
+.pillWarn { background: var(--at-color-warning-bg); }
+.pillBad { background: var(--at-color-danger-bg); color: var(--at-color-danger); }
+.summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-2) var(--at-space-4); align-items: baseline; }
+.big { margin: 0; font-family: var(--at-font-heading); font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); }
+.planRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-1) var(--at-space-3); align-items: center; padding: var(--at-space-3) 0; border-top: 1px solid var(--at-color-border); }
+.planRow:first-child { border-top: 0; }
+.planText { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.buttons { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
+.entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-1) var(--at-space-3); align-items: baseline; padding: var(--at-space-3) 0; border-top: 1px solid var(--at-color-border); }
+.entry:first-child { border-top: 0; }
+.amount { justify-self: end; font-weight: var(--at-weight-bold); font-variant-numeric: tabular-nums; }
+.date { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.note { padding: var(--at-space-3) var(--at-space-4); border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); font-size: var(--at-text-sm); }
+.alert { padding: var(--at-space-3) var(--at-space-4); border-radius: var(--at-radius-sm); background: var(--at-color-warning-bg); font-size: var(--at-text-sm); }
+
+/* "Join Plus to save $X on this order" in the cart and at checkout */
+.upsell { display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-3) var(--at-space-4); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface-brand); }
+.upsellTitle { display: flex; gap: var(--at-space-2); align-items: center; font-weight: var(--at-weight-bold); }
+.upsellBody { margin: 0; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.upsellLink { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); }
+.waived { color: var(--at-color-success); font-weight: var(--at-weight-semibold); }
+.waivedNote { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }

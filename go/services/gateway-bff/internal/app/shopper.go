@@ -35,11 +35,13 @@ type ShopperDeps struct {
 	// Coupons validates checkout coupon codes (offers-service; optional).
 	Coupons port.CheckoutCouponsClient
 	// Credit reads the shopper's AfroTransact credit for the checkout page and the credit screens (optional).
-	Credit   port.CreditClient
-	Identity port.IdentityClient
-	Checkout CheckoutService
-	Carts    CartService
-	Location LocationService
+	Credit port.CreditClient
+	// Membership prices the shopper's membership benefits on the checkout page (S323; optional).
+	Membership port.MembershipClient
+	Identity   port.IdentityClient
+	Checkout   CheckoutService
+	Carts      CartService
+	Location   LocationService
 	// PublishableKey is the Stripe publishable key handed to Stripe.js / PaymentSheet.
 	PublishableKey string
 	// IdentityPublicURL is where the browser reaches identity (hosted passkey registration page).
@@ -333,6 +335,9 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 			PromisedBy: optStr(sh.PromisedBy), DeliveredAt: optStr(sh.DeliveredAt), DeliveryCode: optStr(sh.HandoverCode),
 			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline), Returnable: sh.Returnable,
 			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly, DeliveryFeeRule: sh.DeliveryFeeRule}
+		if w := sh.MembershipWaiver; w != nil {
+			d.MembershipWaiver = &domain.OrderMembershipWaiver{TierName: firstNonEmpty(w.TierName, w.TierCode), Benefit: w.Benefit, WaivedMinor: w.WaivedMinor}
+		}
 		if ld := sh.LocalDelivery; ld != nil {
 			d.LocalDelivery = &domain.OrderLocalDelivery{RoadMiles: ld.RoadMiles, DurationMinutes: ld.DurationMinutes, ChargeMinor: ld.CustomerChargeMinor}
 		}

@@ -1560,5 +1560,11 @@
   "st.settings.referrals.description": "Ohun tí oníbàárà tó ń pín àti ọ̀rẹ́ tó ń darapọ̀ ń gbà, nígbà tí wọ́n bá gbà á, àwọn ààlà, àti gbogbo ìpè pẹ̀lú àwọn tí a dúró fún àyẹ̀wò. A tọ́jú gbogbo àyípadà pẹ̀lú ìdí rẹ̀.",
   "st.settings.referrals.intro": "AfroTransact ni ó ń san àwọn ẹ̀bùn: owó ìdókòwò (kì í ṣe owó ọwọ́ láéláé) tàbí ọjọ́ ọ̀fẹ́ ti ẹgbẹ́, a sì ń ṣètò wọn lọ́tọ̀ọ̀tọ̀ fún oníbàárà tó ń pín àti ọ̀rẹ́ tó ń darapọ̀. Ọ̀rẹ́ kan tóótun nígbà tí a bá kó àṣẹ àkọ́kọ́ rẹ̀ tó tó iye tó kéré jù dé, a sì ń fún àwọn ẹ̀bùn lẹ́yìn tí ọjọ́ ìdápadà bá parí. Àwọn ìpè tó ń pín ẹ̀rọ, nẹ́tíwọ́kì, àdírẹ́sì ìkó-ọjà-dé tàbí káàdì ń dúró níbí fún àyẹ̀wò.",
   "st.settings.referrals.listTitle": "Àwọn ìpè àti àtòjọ àyẹ̀wò",
-  "st.resourceTable.allStatuses": "Gbogbo"
+  "st.resourceTable.allStatuses": "Gbogbo",
+  "st.settings.membership.label": "Ẹ̀tọ́ ọmọ ẹgbẹ́",
+  "st.settings.membership.description": "Àwọn ìpele tí àwọn oníbàárà lè darapọ̀ mọ́: owó, ìdánwò ọ̀fẹ́ àti àwọn àǹfààní, pẹ̀lú òfin ìdápadà owó àti ìgbìyànjú. A ń pa gbogbo àyípadà mọ́ pẹ̀lú ìdí rẹ̀.",
+  "st.settings.membership.intro": "Ṣàlàyé ìpele kọ̀ọ̀kan níbí: owó oṣooṣù àti ọdọọdún, ìdánwò ọ̀fẹ́, títẹ̀jáde tàbí yíyọ kúrò, àti àwọn àǹfààní láti inú àtòkọ. Àwọn ọmọ ẹgbẹ́ ń pa owó tí wọ́n forúkọ sílẹ̀ lé mọ́. Owó ìrànwọ́ tí ẹ̀tọ́ ọmọ ẹgbẹ́ ń fún ń ra ọjà àti iṣẹ́ nìkan.",
+  "st.settings.membership.reportLink": "Àwọn ọmọ ẹgbẹ́, ìfagilé, iye owó àwọn àǹfààní àti owó tó ń padà wá",
+  "st.settings.membership.tiers": "Àwọn ìpele",
+  "st.settings.membership.rules": "Òfin ìsanwó"
 }

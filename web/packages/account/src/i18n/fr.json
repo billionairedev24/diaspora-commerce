@@ -280,5 +280,7 @@
   "hub.credit": "Crédit AfroTransact",
   "hub.creditSub": "Solde, historique et cartes cadeaux",
   "hub.refer": "Parrainer un ami",
-  "hub.referSub": "Partagez votre code, gagnez des récompenses"
+  "hub.referSub": "Partagez votre code, gagnez des récompenses",
+  "hub.membership": "Abonnement",
+  "hub.membershipSub": "Formule, avantages et facturation"
 }

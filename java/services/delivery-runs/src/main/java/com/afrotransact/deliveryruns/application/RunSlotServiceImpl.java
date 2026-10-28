@@ -69,7 +69,8 @@ class RunSlotServiceImpl implements RunSlotService {
         Instant now = Instant.now(clock);
         Run requested = runs.lockById(c.runId()).orElseThrow(RunSlotServiceImpl::runNotFound);
         Run target = requested;
-        if (!requested.canTake(packages, now)) {
+        int early = c.earlyAccessHours() == null ? 0 : c.earlyAccessHours();
+        if (!requested.canTake(packages, now) && !requested.canTakeEarly(packages, now, early)) {
             boolean full = requested.acceptsOrders(now);
             if (c.allowNextRun() != null && !c.allowNextRun()) {
                 throw refused(full);
@@ -88,7 +89,7 @@ class RunSlotServiceImpl implements RunSlotService {
             throw new ConflictException("delivery-runs.order-already-reserved",
                     "Order " + c.orderId() + " already holds a run slot");
         }
-        Run saved = runs.update(target.reserve(packages, now));
+        Run saved = runs.update(target.reserve(packages, now, early));
         return new SlotReservation(slot, saved, requested.id(), !target.id().equals(requested.id()), true);
     }
 

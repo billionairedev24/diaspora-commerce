@@ -64,14 +64,26 @@ public interface PaymentsClient {
      *                  the PaymentIntent so the mobile PaymentSheet lists their saved cards (S245); null for none
      * @param useCredit S320: pay with the shopper's AfroTransact credit first; the PaymentIntent is for the rest and
      *                  there is none when credit pays everything
+     * @param membershipWaivers S323: the shipping fees the shopper's membership waived, recorded by payments as the
+     *                  benefits used
      */
     record NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
                      Map<String, String> metadata, List<Line> lines, String shopperId,
                      List<String> paymentMethodTypes, boolean offSession, boolean saveForOffSession,
-                     boolean useCredit) {
+                     boolean useCredit, List<WaivedFee> membershipWaivers) {
 
         public NewIntent {
             paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
+            membershipWaivers = membershipWaivers == null ? List.of() : List.copyOf(membershipWaivers);
+        }
+
+        /** An intent with no membership waivers. */
+        public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
+                         Map<String, String> metadata, List<Line> lines, String shopperId,
+                         List<String> paymentMethodTypes, boolean offSession, boolean saveForOffSession,
+                         boolean useCredit) {
+            this(orderId, amountMinor, currency, placedAt, metadata, lines, shopperId, paymentMethodTypes, offSession,
+                    saveForOffSession, useCredit, List.of());
         }
 
         /** An intent that does not use credit. */
@@ -99,6 +111,10 @@ public interface PaymentsClient {
                          Map<String, String> metadata, List<Line> lines) {
             this(orderId, amountMinor, currency, placedAt, metadata, lines, null);
         }
+    }
+
+    /** A shipping fee waived by the shopper's membership: the shipment, the benefit and the amount. */
+    record WaivedFee(String ref, String benefit, long amountMinor, String tierCode) {
     }
 
     /**

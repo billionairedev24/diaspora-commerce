@@ -29,6 +29,7 @@ import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, me
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, readCookie, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
+import { membershipQuote, membershipState, recordMembershipUse } from './membership';
 import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
 import { buildCart, isGroceryProductType, MockProblem, sessionLocation } from './service';
 import { account, type AccountState, bookingFor, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
@@ -164,7 +165,7 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
 function packageDeliveryFees(packages: CheckoutSummary['packages'], raw: string | null): number {
   const byPkg = new Map<string, string>();
   for (const part of (raw ?? '').split(',')) {
-    const i = part.indexOf(':');
+    const i = part.lastIndexOf(':'); // package ids hold a colon ("seller:FULFILMENT"), option keys never
     if (i > 0) byPkg.set(part.slice(0, i).trim(), part.slice(i + 1).trim());
   }
   return packages.reduce((sum, p) => {
@@ -219,10 +220,13 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
   if (!packages.length) throw new MockProblem(409, 'CART_EMPTY', 'Your cart is empty', 'Select at least one item to check out.', { available: 0, inCart: 0, requested: 0 });
   const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
   const shipping = packageDeliveryFees(packages, packageDelivery ?? null);
-  const coupon = couponCode ? mockCouponQuote(couponCode, packages, shipping) : undefined;
+  // The membership waives delivery fees by the tier's rules (S323); a coupon's free shipping applies to what is left.
+  const savings = membershipQuote(membershipState(a), packages, packageDelivery ?? null);
+  const waived = savings.totalWaivedMinor;
+  const coupon = couponCode ? mockCouponQuote(couponCode, packages, shipping - waived) : undefined;
   const discountMinor = coupon?.applicable ? coupon.discountMinor : 0;
   const shippingDiscountMinor = coupon?.applicable ? coupon.shippingDiscountMinor : 0;
-  const netShipping = Math.max(0, shipping - shippingDiscountMinor);
+  const netShipping = Math.max(0, shipping - waived - shippingDiscountMinor);
   const tx = addr?.state === 'TX';
   const generalSubtotal = packages.reduce(
     (s, p) => s + p.lines.reduce((n, l) => n + (isGroceryProductType(l.productType) ? 0 : l.lineTotalMinor), 0),
@@ -236,7 +240,7 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
   const taxMinor = tx ? Math.round(taxable * combinedRate) : 0;
   const taxRateLabel = tx ? `${(combinedRate * 100).toFixed(2)}%` : addr ? 'No sales tax' : 'Add your address to see an estimate';
   return {
-    packages,
+    packages: packages.map((p) => ({ ...p, membershipWaivedMinor: savings.waivers.filter((w) => w.packageId === p.packageId).reduce((n, w) => n + w.waivedMinor, 0) })),
     addresses: a.addresses,
     paymentMethods: a.paymentMethods,
     subtotalMinor: subtotal,
@@ -250,7 +254,9 @@ function summary(ctx: Ctx, addressId: string | null, packageDelivery?: string | 
     currency: 'USD',
     sellerCount: new Set(packages.map((p) => p.seller.id)).size,
     publishableKey: publishableKey(ctx),
-    credit: checkoutCredit(creditState(a, requireUser(ctx).id), subtotal - discountMinor + netShipping + taxMinor)
+    credit: checkoutCredit(creditState(a, requireUser(ctx).id), subtotal - discountMinor + netShipping + taxMinor),
+    membershipWaivedMinor: waived,
+    membership: savings.member || savings.upsell ? savings : undefined
   };
 }
 
@@ -504,6 +510,12 @@ export const shopperHandlers = [
     return json(a.prefs);
   })),
 
+  /* What the membership does for the cart (S323) */
+  http.get('*/v1/cart/membership', route((ctx) => {
+    const a = me(ctx);
+    return json(membershipQuote(membershipState(a), checkoutPackages(ctx.session, ctx.session.zip, ctx.now), null));
+  })),
+
   /* Checkout */
   http.get('*/v1/checkout/summary', route((ctx) => {
     const q = new URL(ctx.request.url).searchParams;
@@ -549,10 +561,13 @@ export const shopperHandlers = [
     if (Object.keys(errors).length) throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { errors });
     const n = seq();
     const orderNumber = `AT-2026-${String(200000 + n).padStart(6, '0')}`;
-    const shipping = s.packages.reduce((sum, p) => {
+    const fees = s.packages.reduce((sum, p) => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
       return sum + (p.deliveryOptions.find((o) => o.key === sel?.option)?.feeMinor ?? 0);
     }, 0);
+    // The membership's waiver by the options chosen, recorded on each shipment with the tier and the benefit (S323).
+    const savings = membershipQuote(membershipState(a), s.packages, req.deliverySelections.map((x) => `${x.packageId}:${x.option}`).join(','));
+    const shipping = fees - savings.totalWaivedMinor;
     const tax = Math.round(s.subtotalMinor * (addr?.state === 'TX' ? 0.0825 : addr?.state === 'NY' ? 0.08875 : 0.07));
     const shipments = s.packages.map((p, i): ShipmentDetail => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
@@ -565,6 +580,10 @@ export const shopperHandlers = [
         lines: p.lines.map((l) => ({ lineId: l.lineId, atin: l.atin, title: l.title, imageUrl: null, quantity: l.quantity, unitPriceMinor: l.priceMinor, itemsMinor: l.lineTotalMinor })),
         timeline: [{ status: 'placed', label: 'Order placed', at: iso(ctx.now) }],
         deliveryFeeRule: opt?.feeRule ?? null,
+        membershipWaiver: (() => {
+          const w = savings.waivers.find((x) => x.packageId === p.packageId);
+          return w && savings.tierName ? { tierName: savings.tierName, benefit: w.benefit, waivedMinor: w.waivedMinor } : null;
+        })(),
         localDelivery: p.localDelivery?.available
           ? { roadMiles: p.localDelivery.roadMiles, durationMinutes: p.localDelivery.durationMinutes, chargeMinor: p.localDelivery.chargeMinor ?? 0 }
           : null,
@@ -590,6 +609,7 @@ export const shopperHandlers = [
             otherItemCount: s.packages.filter((p) => !p.preorder).reduce((a, p) => a + p.itemCount, 0) }
         : null };
     a.checkouts.set(key, pending);
+    recordMembershipUse(membershipState(a), savings, ctx.now);
     if (byCredit) {
       a.orders.unshift(order);
       ctx.session.lines = ctx.session.lines.filter((l) => !pending.lineIds.includes(l.lineId));

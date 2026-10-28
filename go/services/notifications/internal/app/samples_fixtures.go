@@ -117,6 +117,13 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			"rewardType": "CREDIT", "creditMinor": 1000, "currency": "USD", "membershipDays": 0, "friendName": "Amara O."},
 			{"referralId": "6e1f5a2b-7c8d-4e9f-a0b1-2c3d4e5f6a71", "customerId": "cust-2", "side": "REFERRED",
 				"rewardType": "MEMBERSHIP_DAYS", "creditMinor": 0, "currency": "USD", "membershipDays": 14, "friendName": nil}},
+		"payments.membership.changed": {
+			{"membershipId": "7f2a6b3c-8d9e-4f0a-b1c2-3d4e5f6a7b81", "customerId": "cust-1", "event": "RENEWED", "tierCode": "plus", "tierName": "Plus",
+				"status": "ACTIVE", "interval": "MONTHLY", "periodEnd": "2026-11-28T10:00:00Z", "amountMinor": 999, "currency": "USD", "detail": "Plus until 2026-11-28"},
+			{"membershipId": "7f2a6b3c-8d9e-4f0a-b1c2-3d4e5f6a7b82", "customerId": "cust-2", "event": "RENEWAL_FAILED", "tierCode": "plus", "tierName": "Plus",
+				"status": "PAST_DUE", "interval": "MONTHLY", "periodEnd": "2026-10-28T10:00:00Z", "amountMinor": 999, "currency": "USD", "detail": "card_declined"},
+			{"membershipId": "7f2a6b3c-8d9e-4f0a-b1c2-3d4e5f6a7b83", "customerId": "cust-3", "event": "TRIAL_ENDING", "tierCode": "plus", "tierName": "Plus",
+				"status": "TRIALING", "interval": "YEARLY", "periodEnd": "2026-11-02T10:00:00Z", "amountMinor": 9900, "currency": "USD", "detail": "Trial ends 2026-11-02T10:00:00Z"}},
 		"trustops.claim.opened":            {sampleClaim("AWAITING_SELLER", nil), sampleClaim("AWAITING_SELLER", nil)},
 		"trustops.claim.decided":           {sampleClaim("RESOLVED_REFUND", "REFUND"), sampleClaim("RESOLVED_DENIED", "DENY")},
 		"trustops.claim.withdrawn":         {sampleClaim("WITHDRAWN", nil)},

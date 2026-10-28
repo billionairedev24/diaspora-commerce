@@ -34,6 +34,8 @@ type ShopperServices struct {
 	BusinessPages app.BusinessPageService
 	// Credit is AfroTransact credit and gift cards (S320, S321; optional).
 	Credit app.CreditService
+	// Membership is the shopper's membership: tiers, joining, changing plan, canceling (S323; optional).
+	Membership app.MembershipService
 	// Referral is "Refer a friend" (S322; optional).
 	Referral app.ReferralService
 }
@@ -68,6 +70,9 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	}
 	if h.s.Shopper.Credit != nil {
 		h.registerCredit(route)
+	}
+	if h.s.Shopper.Membership != nil {
+		h.registerMembership(route)
 	}
 	if h.s.Shopper.Referral != nil {
 		h.registerReferral(route)

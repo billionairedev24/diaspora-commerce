@@ -1918,6 +1918,15 @@ paths:
         schema:
           type: number
           format: double
+      - name: earlyAccessHours
+        in: query
+        description: 'S323: a member''s early access hours; announced runs opening within that time are listed (orders-service
+          sends the hours of the customer''s membership; a run only takes the order when its reservation names them too)'
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
       responses:
         '200':
           description: OK
@@ -2748,7 +2757,8 @@ paths:
       summary: Pre-order eligibility of products at a place (delivery-runs:reserve, orders-service)
       description: 'atins: comma-separated or repeated (1–100). A product is pre-order where pre-order is on, its catalog
         category is in the window''s categories and it is not flagged shipsNow (catalog flags preorderEligible / shipsNow).
-        Returns the effective fees orders-service charges for the PREORDER package. 502 when catalog is unavailable.'
+        Returns the effective fees orders-service charges for the PREORDER package. earlyAccessHours (S323, a member''s
+        early access): a window opening within that time is reported OPEN. 502 when catalog is unavailable.'
       operationId: eligibility
       parameters:
       - name: country
@@ -2773,6 +2783,13 @@ paths:
           type: array
           items:
             type: string
+      - name: earlyAccessHours
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
       responses:
         '200':
           description: OK
@@ -4682,6 +4699,13 @@ components:
         allowNextRun:
           type: boolean
           description: Roll over to the location's next open run when this one is full or closed (default true)
+        earlyAccessHours:
+          type: integer
+          format: int32
+          description: 'S323: the customer''s membership lets them take a slot on an announced run that opens within this
+            many hours'
+          maximum: 720
+          minimum: 0
       required:
       - customerId
       - orderId

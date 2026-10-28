@@ -39,6 +39,12 @@ public record ReferralRewardGrant(UUID referralId, ReferralSide side, String cus
                 idempotencyKey);
     }
 
+    /** The same grant with other terms: a member's reward is bigger by the boost of the tier (S323). */
+    public ReferralRewardGrant withReward(ReferralReward terms) {
+        return new ReferralRewardGrant(referralId, side, customerId, terms, currency, status, entryId, grantedAt,
+                idempotencyKey);
+    }
+
     public ReferralRewardGrant with(Status next) {
         return new ReferralRewardGrant(referralId, side, customerId, reward, currency, next, entryId, grantedAt,
                 idempotencyKey);

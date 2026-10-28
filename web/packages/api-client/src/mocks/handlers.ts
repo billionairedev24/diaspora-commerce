@@ -21,6 +21,7 @@ import { helpHandlers } from './help-handlers';
 import { helpRequestHandlers } from './help-requests';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
+import { membershipHandlers } from './membership';
 import { preorderHandlers } from './preorder-handlers';
 import { referralHandlers } from './referral';
 import {
@@ -269,6 +270,7 @@ export const handlers = [
   ...shopperHandlers,
   ...helpRequestHandlers,
   ...creditHandlers,
+  ...membershipHandlers,
   ...referralHandlers,
   ...preorderHandlers,
   ...deliveryRunHandlers,

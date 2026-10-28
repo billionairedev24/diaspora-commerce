@@ -182,10 +182,12 @@ class JdbcReferralRepository implements ReferralRepository {
     @Override
     public void updateReward(ReferralRewardGrant g) {
         jdbc.sql("""
-                update referral_reward set status = :status, entry_id = :entry, granted_at = :at
+                update referral_reward set status = :status, entry_id = :entry, granted_at = :at, credit_minor = :credit,
+                    membership_days = :days
                 where referral_id = :referral and side = :side
                 """)
-                .param("status", g.status().name()).param("entry", g.entryId()).param("at", Sql.ts(g.grantedAt()))
+                .param("status", g.status().name()).param("credit", g.reward().creditMinor())
+                .param("days", g.reward().membershipDays()).param("entry", g.entryId()).param("at", Sql.ts(g.grantedAt()))
                 .param("referral", g.referralId()).param("side", g.side().name()).update();
     }
 

@@ -283,7 +283,7 @@ func RefundLimitProblem(limit int64) *Problem {
 var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "moderation", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
-	"reconciliation", "reconciliation-runs", "ledger-adjustments", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
+	"reconciliation", "reconciliation-runs", "ledger-adjustments", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "membership-tiers", "memberships", "membership-settings", "membership-report", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
 	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "exchange-rates"}
 
 // Column is one table column; Width is its share of the table in percent.
@@ -775,7 +775,10 @@ type SupportPermissions struct {
 
 // Customer360 is GET /v1/staff/support/customers/{id}.
 type Customer360 struct {
-	Customer         SupportCustomer       `json:"customer"`
+	Customer SupportCustomer `json:"customer"`
+	// Membership is the customer's AfroTransact membership (S323): support tools show the priority-support flag and the
+	// free-returns benefit; null when the customer is not a member.
+	Membership       *SupportMembership    `json:"membership"`
 	Orders           []SupportOrder        `json:"orders"`
 	Bookings         []SupportBooking      `json:"bookings"`
 	Claims           []SupportClaim        `json:"claims"`
@@ -786,6 +789,13 @@ type Customer360 struct {
 	RefundLimitMinor *int64                `json:"refundLimitMinor"`
 	Can              SupportPermissions    `json:"can"`
 	Unavailable      []string              `json:"unavailable"`
+}
+
+// SupportMembership is what a customer's membership gives support: priority handling (names, not ids).
+type SupportMembership struct {
+	TierName        string `json:"tierName"`
+	Status          string `json:"status"`
+	PrioritySupport bool   `json:"prioritySupport"`
 }
 
 // SupportActionResult answers support actions.

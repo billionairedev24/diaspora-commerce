@@ -67,7 +67,16 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
                                Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns,
                                LocalDeliveryView localDelivery, PreorderView preorder,
-                               DeliveryFeeRuleView deliveryFeeRule) {
+                               DeliveryFeeRuleView deliveryFeeRule, MembershipWaiverView membershipWaiver) {
+    }
+
+    /**
+     * A shipping fee the customer's membership waived (S323): the tier and benefit that did it and the fee that was not
+     * charged. {@code shippingMinor} of the shipment is what was charged after it.
+     *
+     * @param benefit FREE_DELIVERY or FREE_SHIPPING
+     */
+    public record MembershipWaiverView(String tierCode, String tierName, String benefit, long waivedMinor) {
     }
 
     /**

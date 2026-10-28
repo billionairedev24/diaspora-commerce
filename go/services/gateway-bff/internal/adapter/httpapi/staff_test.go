@@ -235,6 +235,18 @@ func giftCardFake(now string) map[string]any {
 		"deliveryStatus": "SENT", "deliveryCount": 1, "sentAt": now, "refundedToCard": false, "createdAt": now}
 }
 
+func membershipTierFake(now string) map[string]any {
+	return map[string]any{"code": "plus", "name": "Plus", "description": "Free delivery and cashback", "status": "PUBLISHED", "sortOrder": 10, "currency": "USD",
+		"monthlyPriceMinor": 999, "yearlyPriceMinor": 9900, "trialDays": 14, "updatedAt": now, "updatedBy": "stf-1", "version": 4,
+		"benefits": []any{map[string]any{"code": "FREE_DELIVERY", "minOrderMinor": 2500}, map[string]any{"code": "FREE_SHIPPING", "minOrderMinor": 2500, "capMinor": 1500},
+			map[string]any{"code": "CASHBACK", "percentBps": 200, "minOrderMinor": 0}, map[string]any{"code": "PRIORITY_SUPPORT"}}}
+}
+
+func membershipFake(now string) map[string]any {
+	return map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000c9", "customerId": "cus-1", "tierCode": "plus", "interval": "MONTHLY", "source": "PAID", "status": "ACTIVE",
+		"priceMinor": 999, "currency": "USD", "startedAt": now, "periodStart": now, "periodEnd": now, "cancelAtPeriodEnd": false, "retryCount": 0, "freeDaysGranted": 0}
+}
+
 func referralFake(now string, status string) map[string]any {
 	return map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "referrerId": "cus-1", "referredId": "cus-2", "referredName": "Kofi B.", "status": status,
 		"flags": []any{"SAME_DEVICE"}, "signedUpAt": now, "expiresAt": now, "qualifyingOrderId": "AT-000042", "qualifyingMinor": 4000, "deliveredAt": now, "eligibleAt": now,
@@ -504,6 +516,48 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/money/settings/history":
 		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000b1", "changedBy": "stf-1", "changedAt": now, "reason": "Raise the gift card ceiling for the holidays",
 			"before": "{}", "after": "{}"}})
+	// payments: membership tiers, billing rules, members and the report (S323)
+	case p == "/v1/memberships/admin/tiers" && r.Method == http.MethodGet:
+		premium := membershipTierFake(now)
+		premium["code"], premium["name"], premium["status"], premium["sortOrder"] = "premium", "Premium", "DRAFT", 20
+		writeJ(w, 200, []any{map[string]any{"tier": membershipTierFake(now), "members": 12, "trialing": 3}, map[string]any{"tier": premium, "members": 0, "trialing": 0}})
+	case p == "/v1/memberships/admin/tiers" && r.Method == http.MethodPost:
+		t := membershipTierFake(now)
+		t["code"], t["name"], t["status"] = body["code"], body["name"], body["status"]
+		writeJ(w, 201, t)
+	case strings.HasSuffix(p, "/changes") && strings.HasPrefix(p, "/v1/memberships/admin/tiers/"):
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000d1", "tierCode": "plus", "action": "PUBLISHED", "changedBy": "stf-1", "changedAt": now,
+			"reason": "Open Plus to every shopper", "beforeJson": "{}", "afterJson": "{}"}})
+	case strings.HasPrefix(p, "/v1/memberships/admin/tiers/") && r.Method == http.MethodPut:
+		t := membershipTierFake(now)
+		t["status"] = body["status"]
+		writeJ(w, 200, t)
+	case p == "/v1/memberships/admin/settings" && r.Method == http.MethodGet:
+		writeJ(w, 200, map[string]any{"refundWindowDays": 7, "retryDays": []any{1, 3, 5}, "updatedBy": "stf-1", "updatedAt": now, "version": 2})
+	case p == "/v1/memberships/admin/settings" && r.Method == http.MethodPut:
+		writeJ(w, 200, map[string]any{"refundWindowDays": body["refundWindowDays"], "retryDays": body["retryDays"], "updatedBy": "stf-1", "updatedAt": now, "version": 3})
+	case p == "/v1/memberships/admin/settings/changes":
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000d2", "changedBy": "stf-1", "changedAt": now, "reason": "Match the returns window", "beforeJson": "{}", "afterJson": "{}"}})
+	case p == "/v1/memberships/admin/members":
+		writeJ(w, 200, []any{membershipFake(now)})
+	case strings.HasSuffix(p, "/events") && strings.HasPrefix(p, "/v1/memberships/admin/members/"):
+		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000e2", "type": "JOINED", "tierCode": "plus", "actor": "cus-1", "detail": "Started a 14 day trial", "occurredAt": now}})
+	case strings.HasSuffix(p, "/entitlements") && strings.HasPrefix(p, "/v1/memberships/customers/"):
+		writeJ(w, 200, map[string]any{"member": true, "customerId": "cus-1", "tierCode": "plus", "tierName": "Plus", "status": "ACTIVE", "benefits": []any{}, "prioritySupport": true,
+			"memberPrices": false, "earlyAccessHours": 0, "rewardBoostBps": 0})
+	case strings.HasPrefix(p, "/v1/memberships/customers/"):
+		writeJ(w, 200, map[string]any{"membership": membershipFake(now), "tier": membershipTierFake(now), "pendingTier": nil, "usage": []any{map[string]any{"benefit": "FREE_DELIVERY", "uses": 2, "amountMinor": 1198, "currency": "USD"}},
+			"charges": []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "kind": "JOIN", "amountMinor": 999, "currency": "USD", "status": "SUCCEEDED", "refundedMinor": 0, "createdAt": now}},
+			"refund":  map[string]any{"eligible": true, "reason": "OK", "amountMinor": 999, "currency": "USD"}, "trialAvailable": false, "refundWindowDays": 7,
+			"card": map[string]any{"brand": "visa", "last4": "4242"}})
+	case strings.HasSuffix(p, "/refund") && strings.HasPrefix(p, "/v1/memberships/admin/charges/"):
+		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "status": "REFUNDED", "refundedMinor": 999})
+	case p == "/v1/memberships/admin/report":
+		writeJ(w, 200, map[string]any{"currency": "USD", "liveMembers": 15, "trialing": 3, "mrrMinor": 11988, "arrMinor": 143856, "chargedMinor": 21978, "refundedMinor": 999, "netRevenueMinor": 20979,
+			"benefitCostMinor": 5400, "creditGrantedMinor": 1200, "feesWaivedMinor": 4200, "membersAtStart": 10, "joined": 8, "ended": 3, "lapsed": 1, "canceled": 2, "refunded": 1, "churnBps": 3000,
+			"tiers": []any{map[string]any{"tierCode": "plus", "tierName": "Plus", "status": "PUBLISHED", "members": 15, "trialing": 3, "active": 11, "pastDue": 1, "cancelling": 2, "mrrMinor": 11988,
+				"joined": 8, "canceled": 2, "lapsed": 1, "refunded": 1, "membersAtStart": 10, "churnBps": 3000, "chargedMinor": 21978, "refundedMinor": 999}},
+			"costs": []any{map[string]any{"benefit": "FREE_DELIVERY", "uses": 7, "amountMinor": 4200}, map[string]any{"benefit": "CASHBACK", "uses": 9, "amountMinor": 1200}}})
 	// payments: the referral program (S322)
 	case p == "/v1/referrals" && r.Method == http.MethodGet:
 		writeJ(w, 200, []any{referralFake(now, "IN_REVIEW"), referralFake(now, "REWARDED")})
@@ -947,6 +1001,74 @@ func TestStaffContractConformance(t *testing.T) {
 	}
 	do("admin", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "lots", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 422)
 	do("support", "PATCH", "/v1/staff/resources/money-settings/money", map[string]any{"values": map[string]any{"giftCardMin": 10, "giftCardMax": 600, "presets": "25", "creditApprovalLimit": 150, "reason": "Raise the ceiling for the holidays"}}, 403)
+	// Membership (S323): tiers staff define in Settings, with a reason; Save is refused until something changes.
+	tier := do("admin", "GET", "/v1/staff/resources/membership-tiers/plus", nil, 200)
+	if tier["title"] != "Plus membership" {
+		t.Fatalf("tier sheet = %v", tier["title"])
+	}
+	if tier["status"] != "PUBLISHED" {
+		t.Fatalf("tier status = %v", tier["status"])
+	}
+	tierEdit := func(change func(v map[string]any)) map[string]any {
+		v := map[string]any{"name": "Plus", "description": "Free delivery and cashback", "status": "PUBLISHED", "sortOrder": 10, "monthlyPrice": 9.99, "yearlyPrice": 99, "trialDays": 14,
+			"freeDelivery": true, "freeDeliveryMin": 25, "freeDeliveryCap": 0, "freeShipping": true, "freeShippingMin": 25, "freeShippingCap": 15, "cashback": true, "cashbackPercent": 2,
+			"cashbackMin": 0, "cashbackCap": 0, "memberPrices": false, "earlyAccess": false, "earlyAccessHours": 0, "prioritySupport": true, "boostedRewards": false,
+			"boostedPercent": 0, "monthlyCredit": false, "monthlyCreditAmount": 0, "reason": "Raise the cashback for the holidays"}
+		change(v)
+		return map[string]any{"values": v}
+	}
+	do("admin", "PATCH", "/v1/staff/resources/membership-tiers/plus", tierEdit(func(map[string]any) {}), 422) // nothing changed: Save stays disabled, the server refuses too
+	do("admin", "PATCH", "/v1/staff/resources/membership-tiers/plus", tierEdit(func(v map[string]any) { v["cashbackPercent"] = 3; v["earlyAccess"] = true; v["earlyAccessHours"] = 24 }), 200)
+	if sent := f.bodies["PUT /v1/memberships/admin/tiers/plus"]; sent["reason"] != "Raise the cashback for the holidays" || sent["expectedVersion"] != float64(4) || sent["monthlyPriceMinor"] != float64(999) ||
+		len(sent["benefits"].([]any)) != 5 {
+		t.Fatalf("tier body = %v", sent)
+	}
+	do("admin", "PATCH", "/v1/staff/resources/membership-tiers/plus", tierEdit(func(v map[string]any) { v["cashbackPercent"] = 90 }), 422)
+	do("admin", "PATCH", "/v1/staff/resources/membership-tiers/plus", tierEdit(func(v map[string]any) { v["earlyAccess"] = true; v["earlyAccessHours"] = 0 }), 422)
+	do("admin", "PATCH", "/v1/staff/resources/membership-tiers/plus", tierEdit(func(v map[string]any) { v["cashbackPercent"] = 3; v["reason"] = "" }), 422)
+	do("support", "PATCH", "/v1/staff/resources/membership-tiers/plus", tierEdit(func(v map[string]any) { v["cashbackPercent"] = 3 }), 403)
+	do("admin", "POST", "/v1/staff/resources/membership-tiers/plus/actions/retire", map[string]any{"values": map[string]any{"reason": "Replaced by the Premium tier"}}, 200)
+	if sent := f.bodies["PUT /v1/memberships/admin/tiers/plus"]; sent["status"] != "RETIRED" || sent["reason"] != "Replaced by the Premium tier" {
+		t.Fatalf("retire body = %v", sent)
+	}
+	do("admin", "POST", "/v1/staff/resources/membership-tiers/plus/actions/publish", map[string]any{"values": map[string]any{"reason": "Opening Plus again"}}, 409) // it is published
+	do("admin", "POST", "/v1/staff/resources/membership-tiers", map[string]any{"values": map[string]any{"code": "premium", "name": "Premium", "status": "DRAFT", "sortOrder": 20, "monthlyPrice": 19.99,
+		"yearlyPrice": 199, "trialDays": 7, "freeDelivery": true, "freeDeliveryMin": 0, "cashback": true, "cashbackPercent": 5, "monthlyCredit": true, "monthlyCreditAmount": 5,
+		"reason": "A bigger tier for large households"}}, 201)
+	if sent := f.bodies["POST /v1/memberships/admin/tiers"]; sent["code"] != "premium" || sent["expectedVersion"] != nil || len(sent["benefits"].([]any)) != 3 {
+		t.Fatalf("new tier body = %v", sent)
+	}
+	do("admin", "POST", "/v1/staff/resources/membership-tiers", map[string]any{"values": map[string]any{"code": "Bad Code", "name": "Premium", "status": "DRAFT", "sortOrder": 20,
+		"monthlyPrice": 19.99, "yearlyPrice": 199, "trialDays": 7, "reason": "A bigger tier for large households"}}, 422)
+	rules := do("admin", "GET", "/v1/staff/resources/membership-settings/membership", nil, 200)
+	if rules["title"] != "Membership billing rules" {
+		t.Fatalf("rules sheet = %v", rules["title"])
+	}
+	do("admin", "PATCH", "/v1/staff/resources/membership-settings/membership", map[string]any{"values": map[string]any{"refundWindowDays": 7, "retryDays": "1, 3, 5", "reason": "No change at all here"}}, 422)
+	do("admin", "PATCH", "/v1/staff/resources/membership-settings/membership", map[string]any{"values": map[string]any{"refundWindowDays": 14, "retryDays": "2, 4", "reason": "Match the returns window"}}, 200)
+	if sent := f.bodies["PUT /v1/memberships/admin/settings"]; sent["refundWindowDays"] != float64(14) || len(sent["retryDays"].([]any)) != 2 || sent["expectedVersion"] != float64(2) {
+		t.Fatalf("membership settings body = %v", sent)
+	}
+	members := do("admin", "GET", "/v1/staff/resources/memberships", nil, 200)
+	if row := members["rows"].([]any)[0].(map[string]any)["cells"].(map[string]any); row["tierName"] != "Plus" || row["customerName"] == "cus-1" || row["customerName"] == nil {
+		t.Fatalf("members table = %v", row)
+	}
+	if found := do("admin", "GET", "/v1/staff/resources/memberships?q=plus", nil, 200)["rows"].([]any); len(found) != 1 {
+		t.Fatalf("search by tier name found %d members, want 1", len(found))
+	}
+	member := do("admin", "GET", "/v1/staff/resources/memberships/0f0f0f0f-0000-4000-8000-0000000000c9", nil, 200)
+	if len(member["tables"].([]any)) != 3 {
+		t.Fatalf("member sheet tables = %v", member["tables"])
+	}
+	do("admin", "POST", "/v1/staff/resources/memberships/0f0f0f0f-0000-4000-8000-0000000000c9/actions/refund", map[string]any{"values": map[string]any{"reason": "Charged twice by mistake"}}, 200)
+	if sent := f.bodies["POST /v1/memberships/admin/charges/0f0f0f0f-0000-4000-8000-0000000000f1/refund"]; sent["reason"] != "Charged twice by mistake" {
+		t.Fatalf("refund body = %v", sent)
+	}
+	do("support", "POST", "/v1/staff/resources/memberships/0f0f0f0f-0000-4000-8000-0000000000c9/actions/refund", map[string]any{"values": map[string]any{"reason": "Charged twice by mistake"}}, 403)
+	report := do("admin", "GET", "/v1/staff/resources/membership-report", nil, 200)
+	if len(report["rows"].([]any)) != 17 {
+		t.Fatalf("report rows = %d", len(report["rows"].([]any)))
+	}
 	// The referral program (S322): referrals by name with their rewards and cost, the review queue, each side's reward.
 	refs := do("admin", "GET", "/v1/staff/resources/referrals?status=IN_REVIEW", nil, 200)
 	if cols := refs["columns"].([]any); cols[0].(map[string]any)["label"] != "Referrer" || cols[1].(map[string]any)["label"] != "Friend" {
@@ -1166,6 +1288,9 @@ func TestStaffContractConformance(t *testing.T) {
 	c360 := do("support", "GET", "/v1/staff/support/customers/cus-1", nil, 200)
 	if len(c360["orders"].([]any)) != 2 || len(c360["claims"].([]any)) == 0 || !strings.Contains(fmt.Sprint(c360["unavailable"]), "bookings") {
 		t.Fatalf("customer 360 = %v", c360)
+	}
+	if m, _ := c360["membership"].(map[string]any); m == nil || m["tierName"] != "Plus" || m["prioritySupport"] != true {
+		t.Fatalf("customer 360 membership = %v", c360["membership"])
 	}
 	refund := map[string]any{"customerId": "cus-1", "orderNumber": "AT-000001", "amountMinor": 30000, "reason": "Late delivery", "via": "ORDER"}
 	if c := do("support", "POST", "/v1/staff/support/refunds", refund, 403, "Idempotency-Key", "refund-000001")["code"]; c != domain.CodeRefundLimit {

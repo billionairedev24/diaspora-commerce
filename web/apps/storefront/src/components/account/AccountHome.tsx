@@ -1,7 +1,7 @@
 'use client';
 
 import { type AccountMessageKey, useAccountT } from '@afrotransact/account';
-import { BellRinging, CalendarCheck, CreditCard, Gift, Headset, IdentificationCard, MapPin, Package, ShareNetwork, ShieldCheck, Sparkle,Truck } from '@phosphor-icons/react';
+import { BellRinging, CalendarCheck, CreditCard, Gift, Headset, IdentificationCard, MapPin, Package, SealCheck, ShareNetwork, ShieldCheck, Sparkle,Truck } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
@@ -48,6 +48,7 @@ export function AccountHome() {
     { href: '/account/addresses', title: 'hub.addresses', sub: 'hub.addressesSub', icon: <MapPin /> },
     { href: '/account/payments', title: 'hub.payments', sub: 'hub.paymentsSub', icon: <CreditCard /> },
     { href: '/account/credit', title: 'hub.credit', sub: 'hub.creditSub', icon: <Gift /> },
+    { href: '/account/membership', title: 'hub.membership', sub: 'hub.membershipSub', icon: <SealCheck /> },
     { href: '/account/refer', title: 'hub.refer', sub: 'hub.referSub', icon: <ShareNetwork /> },
     { href: '/account/bookings', title: 'hub.bookings', sub: 'hub.bookingsSub', icon: <CalendarCheck /> },
     { href: '/account/profile', title: 'hub.profile', sub: 'hub.profileSub', icon: <IdentificationCard /> },

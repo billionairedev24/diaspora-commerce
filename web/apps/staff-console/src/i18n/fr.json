@@ -1560,5 +1560,11 @@
   "st.settings.referrals.description": "Ce que gagnent le client qui partage et l’ami qui s’inscrit, quand il le gagne, les limites, et chaque parrainage avec ceux retenus pour vérification. Chaque modification est conservée avec son motif.",
   "st.settings.referrals.intro": "AfroTransact paie les récompenses : du crédit (jamais d’argent) ou des jours d’abonnement gratuits, réglés séparément pour le client qui partage et l’ami qui s’inscrit. Un ami est qualifié lorsque sa première commande d’au moins le minimum est livrée, et les récompenses sont accordées une fois le délai de retour écoulé. Les parrainages qui partagent un appareil, un réseau, une adresse de livraison ou une carte attendent ici une vérification.",
   "st.settings.referrals.listTitle": "Parrainages et file de vérification",
-  "st.resourceTable.allStatuses": "Tous"
+  "st.resourceTable.allStatuses": "Tous",
+  "st.settings.membership.label": "Abonnement",
+  "st.settings.membership.description": "Les formules que les clients peuvent rejoindre : prix, essai gratuit et avantages, ainsi que les règles de remboursement et de nouvelle tentative. Chaque modification est conservée avec son motif.",
+  "st.settings.membership.intro": "Définissez chaque formule ici : prix mensuel et annuel, essai gratuit, publication ou retrait, et avantages choisis dans le menu. Les membres gardent le prix de leur inscription. Le crédit accordé par un abonnement ne sert qu’à acheter des produits et des services.",
+  "st.settings.membership.reportLink": "Membres, résiliations, coût des avantages et revenu récurrent",
+  "st.settings.membership.tiers": "Formules",
+  "st.settings.membership.rules": "Règles de facturation"
 }

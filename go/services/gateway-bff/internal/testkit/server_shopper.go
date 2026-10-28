@@ -24,11 +24,12 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(client("payments", base)), Orders: upstreams.NewCustomerOrders(client("orders", base)),
 		Returns: upstreams.NewReturns(client("tax-returns", base), tokens), Payments: upstreams.NewOrderPayments(client("payments", base)), Security: upstreams.NewSecurity(client("identity", base)),
-		Bookings: upstreams.NewCustomerBookings(client("bookings", base)),
-		Lola:     upstreams.NewLola(client("ai-gateway", base), upstreams.LolaOptions{BaseURL: base}),
-		Delivery: upstreams.NewDeliveryFacts(client("promise", base), client("carrier-gateway", base), client("geo", base), tokens),
-		Credit:   upstreams.NewCredit(client("payments", base)),
-		Identity: identity, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
+		Bookings:   upstreams.NewCustomerBookings(client("bookings", base)),
+		Lola:       upstreams.NewLola(client("ai-gateway", base), upstreams.LolaOptions{BaseURL: base}),
+		Delivery:   upstreams.NewDeliveryFacts(client("promise", base), client("carrier-gateway", base), client("geo", base), tokens),
+		Credit:     upstreams.NewCredit(client("payments", base)),
+		Membership: upstreams.NewMembership(client("payments", base)),
+		Identity:   identity, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: TestPublishableKey, IdentityPublicURL: u.URL(), Clock: clock.Now, Log: log,
 	}
 	help := app.NewHelpRequestsService(app.HelpRequestsDeps{Orders: d.Orders, Claims: upstreams.NewHelpRequests(client("trust-ops", base)),
@@ -42,5 +43,6 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(client("orders", base), tokens), TestPublishableKey),
 		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", base)), d.Bookings, s.Search),
 		Credit:        app.NewCreditService(d.Credit, d.Orders, TestPublishableKey),
+		Membership:    app.NewMembershipService(d.Membership, tokens, s.Cart),
 		Referral:      app.NewReferralService(upstreams.NewReferral(client("payments", base)), TestStorefrontOrigin)}
 }

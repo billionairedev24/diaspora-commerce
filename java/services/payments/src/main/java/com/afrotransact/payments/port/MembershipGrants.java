@@ -2,11 +2,10 @@ package com.afrotransact.payments.port;
 
 /**
  * Grants free membership days to a customer (the membership program, S323). The referral program only models the
- * reward type and asks through this port.
+ * reward type and asks through this port; {@code MembershipProgramGrants} is the adapter.
  *
- * <p>TODO(S323): the membership service is built separately. Until its adapter replaces the unavailable stand-in
- * ({@code UnavailableMembershipGrants}), membership rewards stay DEFERRED and are retried by the reward job, so nothing
- * is lost and nothing is granted twice.
+ * <p>When the program cannot take a grant (no published tier), membership rewards stay DEFERRED and are retried by the
+ * reward job, so nothing is lost and nothing is granted twice.
  */
 public interface MembershipGrants {
 

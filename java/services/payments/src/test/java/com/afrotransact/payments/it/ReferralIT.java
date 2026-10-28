@@ -29,7 +29,7 @@ import tools.jackson.databind.JsonNode;
  * least the minimum value), the return window, the once-only grant through the credit ledger (source REFERRAL), abuse
  * checks and the staff review, caps, separate rewards per side, the kill switch and expiry.
  */
-class ReferralIT extends PaymentsIntegrationTest {
+class ReferralIT extends MembershipSupport {
 
     private static final String DEVICE_A = "a".repeat(64);
     private static final String DEVICE_B = "b".repeat(64);
@@ -483,7 +483,7 @@ class ReferralIT extends PaymentsIntegrationTest {
     // ------------------------------------------------------------------ settings
 
     @Test
-    void eachSideIsConfiguredSeparatelyAndMembershipWaitsForTheMembershipProgram() {
+    void eachSideIsConfiguredSeparatelyAndMembershipDaysAreGrantedByTheMembershipProgram() {
         JsonNode before = settings();
         JsonNode saved = ok(put(Map.of("returnWindowDays", 0,
                 "referrer", Map.of("type", "CREDIT", "creditMinor", 1500, "membershipDays", 0),
@@ -499,11 +499,41 @@ class ReferralIT extends PaymentsIntegrationTest {
         assertThat(balance(referrer)).isEqualTo(1500);
         assertThat(balance(friend)).as("a membership reward is not credit").isZero();
         JsonNode referral = referralOf(friend);
-        assertThat(referral.path("status").asString()).isEqualTo("PARTIALLY_REWARDED");
-        assertThat(referral.path("rewards").toString()).contains("DEFERRED").contains("GRANTED");
-        // TODO(S323): until the membership program lands the days stay deferred, and retries never repeat the credit
+        assertThat(referral.path("status").asString()).isEqualTo("REWARDED");
+        assertThat(referral.path("rewards").toString()).doesNotContain("DEFERRED");
+        // the friend holds free days of the entry tier, no card needed, and retries never repeat any reward
+        JsonNode mine = me(friend).path("membership");
+        assertThat(mine.path("source").asString()).isEqualTo("COMPLIMENTARY");
+        assertThat(mine.path("freeDaysGranted").asInt()).isEqualTo(14);
+        assertThat(entitlements(friend).path("member").asBoolean()).isTrue();
         program.grantDue(100);
         assertThat(referralEntries(referrer)).isEqualTo(1);
+        assertThat(me(friend).path("membership").path("freeDaysGranted").asInt()).isEqualTo(14);
+        assertThat(membershipCount(friend)).isEqualTo(1);
+    }
+
+    @Test
+    void aMemberWhoseTierBoostsRewardsEarnsBiggerReferralRewardsAndANonMemberDoesNot() {
+        ok(put(Map.of("returnWindowDays", 0,
+                "referrer", Map.of("type", "CREDIT", "creditMinor", 1000, "membershipDays", 0),
+                "referred", Map.of("type", "MEMBERSHIP_DAYS", "creditMinor", 0, "membershipDays", 10))));
+        String tier = tierCode("boost");
+        tier(tier, 40, 999, 9900, 0, List.of(benefit("BOOSTED_REWARDS", Map.of("percentBps", 5000))));
+        String referrer = shopperWithCard();
+        chargeWorks(referrer, ".*:join:intent", 999);
+        join(referrer, tier, "MONTHLY");
+
+        String friend = id("friend");
+        delivered40(referrer, friend, "50 E St");
+        program.grantDue(100);
+        assertThat(balance(referrer)).as("10.00 and half as much again").isEqualTo(1500);
+        assertThat(me(friend).path("membership").path("freeDaysGranted").asInt()).as("a non-member gets the plain 10 days")
+                .isEqualTo(10);
+
+        String plain = id("referrer");
+        delivered40(plain, id("friend"), "51 F St");
+        program.grantDue(100);
+        assertThat(balance(plain)).isEqualTo(1000);
     }
 
     @Test

@@ -128,6 +128,17 @@ class JdbcRunRepository implements RunRepository {
     }
 
     @Override
+    public List<Run> findAnnouncedOpeningBy(Collection<UUID> locationIds, Instant now, Instant opensBy) {
+        if (locationIds.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql("select * from run where location_id in (:ids) and status = 'ANNOUNCED' and opens_at is not "
+                        + "null and opens_at <= :opensBy and cutoff_at > :now order by cutoff_at")
+                .param("ids", List.copyOf(locationIds)).param("opensBy", Sql.ts(opensBy)).param("now", Sql.ts(now))
+                .query(this::map).list();
+    }
+
+    @Override
     public List<Run> lockAcceptingAfter(UUID locationId, Instant afterCutoff, Instant now, int limit) {
         return jdbc.sql("select * from run where location_id = :locationId and " + ACCEPTING
                         + " and cutoff_at > :after and cutoff_at > :now order by cutoff_at limit :limit for update")

@@ -4,6 +4,7 @@ import { type AddressSearchOptions } from './address-lookup';
 import { creditMethods } from './credit-client';
 import { deliveryRunMethods } from './delivery-runs';
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
+import { membershipMethods } from './membership-client';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
 import { referralMethods } from './referral-client';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema } from './schemas/account';
@@ -114,6 +115,7 @@ export function createApiClient(options: ApiClientOptions) {
     ...preorderMethods(request),
     ...deliveryRunMethods(request),
     ...creditMethods(request),
+    ...membershipMethods(request),
     ...referralMethods(request),
 
     /* Auth: sign-in and sign-up run on identity's hosted pages (single sign-on), started with a full-page navigation to

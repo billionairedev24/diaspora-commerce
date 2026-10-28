@@ -188,6 +188,21 @@ public final class PaymentsEventPayloads {
                                         String source, String reason, String proposedBy, String decidedBy) {
     }
 
+    /** payments.membership.tier_changed: staff created, edited, published or retired a tier (S323 audit). */
+    public record MembershipTierChangedPayload(String tierCode, String action, String status, String reason,
+                                               String changedBy) {
+    }
+
+    /**
+     * payments.membership.changed: a shopper's membership started, renewed, failed to renew, lapsed, ended, was
+     * upgraded or got free days (S323). {@code event} is the lifecycle step; the amounts are the fee charged or
+     * refunded, if any.
+     */
+    public record MembershipChangedPayload(String membershipId, String customerId, String event, String tierCode,
+                                           String tierName, String status, String interval, Instant periodEnd,
+                                           long amountMinor, String currency, String detail) {
+    }
+
     /**
      * payments.referral.rewarded: one side of a referral was granted its reward. {@code friendName} is the other
      * side's first name and last initial for the referrer's message, null for the friend.

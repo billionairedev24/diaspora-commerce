@@ -45,7 +45,7 @@ class ServiceController {
     @PostMapping("/v1/service/runs/{runId}/reservations")
     ResponseEntity<ReservationResponse> reserve(@PathVariable UUID runId, @Valid @RequestBody ReserveRequest body) {
         SlotReservation r = slots.reserve(new ReserveCommand(runId, body.orderId(), body.customerId(), body.packages(),
-                body.allowNextRun()));
+                body.allowNextRun(), body.earlyAccessHours()));
         return ResponseEntity.status(r.created() ? HttpStatus.CREATED : HttpStatus.OK).body(ReservationResponse.of(r));
     }
 

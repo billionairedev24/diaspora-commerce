@@ -152,6 +152,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 	}))
 
 	u.creditRoutes(mux)
+	u.membershipRoutes(mux)
 	u.referralRoutes(mux)
 
 	mux.HandleFunc("GET /v1/payments", authed(func(w http.ResponseWriter, r *http.Request) {
@@ -176,6 +177,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 				"returnable": true, "returnWindowEndsAt": "2026-11-02T17:00:00Z", "problemReportOnly": false,
 				"deliveryFeeRule": map[string]any{"method": "CARRIER", "ruleId": "7f0c6d4e-1c1e-4f43-9c1e-0a0f5f1d2a11", "ruleVersion": 4, "currency": "USD",
 					"amountMinor": 0, "source": "RULE", "band": "free over 35.00"},
+				"membershipWaiver": map[string]any{"tierCode": "plus", "tierName": "Plus", "benefit": "FREE_SHIPPING", "waivedMinor": MembershipWaivedOnOrderMinor},
 				"lines":    []map[string]any{{"id": ShopperLineID, "variantAtin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250, "itemsMinor": 2500}},
 				"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "at": "2026-10-01T15:00:00Z"}, {"from": "out_for_delivery", "to": "delivered", "at": "2026-10-03T17:00:00Z"}}}}}
 	}

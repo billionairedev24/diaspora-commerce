@@ -273,5 +273,7 @@
   "hub.credit": "AfroTransact credit",
   "hub.creditSub": "Balance, history and gift cards",
   "hub.refer": "Refer a friend",
-  "hub.referSub": "Share your code, earn rewards"
+  "hub.referSub": "Share your code, earn rewards",
+  "hub.membership": "Membership",
+  "hub.membershipSub": "Plan, benefits and billing"
 }
