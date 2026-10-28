@@ -618,6 +618,13 @@ func TestSellerContractConformance(t *testing.T) {
 	keyed.Upstreams.AccountHealthForbidden = true
 	mustStatus(t, kb.do("POST", "/v1/seller/stripe/session", nil), 403)
 
+	// Reviews (S324): list, reply once, report.
+	mustStatus(t, kb.do("GET", "/v1/seller/reviews?unanswered=true", nil), 200)
+	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reply", map[string]any{"text": "Thank you, Amara."}), 200)
+	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reply", map[string]any{"text": "Again"}), 409)
+	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reports", map[string]any{"reasonCode": "SPAM"}), 201)
+	mustStatus(t, kb.do("POST", "/v1/seller/reviews/"+testkit.ReviewSeededID+"/reports", map[string]any{"reasonCode": "SPAM"}), 200)
+
 	for _, op := range []string{"getSellerSession", "setActiveOrg", "getOnboarding", "getCompliance", "getDashboard", "listSellerOrders", "getSellerOrder",
 		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree",
 		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
@@ -625,7 +632,7 @@ func TestSellerContractConformance(t *testing.T) {
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
 		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings",
 		"saveOnboardingOwners", "createSellerStripeSession", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
-		"refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload"} {
+		"listSellerReviews", "replyToSellerReview", "reportSellerReview", "refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
 		}

@@ -70,6 +70,20 @@ func (p *projectorImpl) Handle(ctx context.Context, e events.Envelope) error {
 			return nil
 		}
 		return p.product(ctx, pe, version)
+	case domain.RatingChanged:
+		var re domain.RatingEvent
+		if err := json.Unmarshal(e.Payload, &re); err != nil || re.ATIN == "" {
+			p.log.WarnContext(ctx, "skipping malformed rating event", "event_id", e.ID, "error", err)
+			return nil
+		}
+		found, err := p.index.ApplyRating(ctx, p.market, re.ATIN, re.Average, re.Count, version)
+		if err != nil {
+			return fmt.Errorf("rating %s: %w", re.ATIN, err)
+		}
+		if !found {
+			p.log.InfoContext(ctx, "rating for a product that is not indexed ignored", "atin", re.ATIN)
+		}
+		return nil
 	case domain.AvailabilityChanged:
 		var ae domain.AvailabilityEvent
 		if err := json.Unmarshal(e.Payload, &ae); err != nil {

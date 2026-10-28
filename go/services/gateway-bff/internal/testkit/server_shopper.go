@@ -44,5 +44,7 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", base)), d.Bookings, s.Search),
 		Credit:        app.NewCreditService(d.Credit, d.Orders, TestPublishableKey),
 		Membership:    app.NewMembershipService(d.Membership, tokens, s.Cart),
-		Referral:      app.NewReferralService(upstreams.NewReferral(client("payments", base)), TestStorefrontOrigin)}
+		Referral:      app.NewReferralService(upstreams.NewReferral(client("payments", base)), TestStorefrontOrigin),
+		Reviews: app.NewProductReviewService(upstreams.NewReviews(client("catalog", u.URL())), upstreams.NewMedia(client("media", u.URL())),
+			upstreams.NewAccountSettings(client("identity", base)))}
 }

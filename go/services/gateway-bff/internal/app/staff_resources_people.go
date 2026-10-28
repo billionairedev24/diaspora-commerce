@@ -25,7 +25,7 @@ func staffResources() map[string]*staffResource {
 	all = append(all, identityAdminResources()...)
 	all = append(all,
 		supportCasesResource(), auditResource(),
-		ordersResource(), productsResource(), moderationResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
+		ordersResource(), productsResource(), moderationResource(), productReviewsResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
 		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(), pickupLocationsResource(),
 		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(), taxCodesResource(), taxRulesResource(), taxReviewResource(),
 		marketsResource(), siteSettingsResource(), maintenanceResource(), taxFilingsResource(), taxNexusResource(), taxNexusResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"), couponsResource(),

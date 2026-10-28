@@ -60,6 +60,8 @@ type Services struct {
 	SellerCoupons app.SellerCouponsService
 	// SellerCases lists the organisation's returns and disputes.
 	SellerCases app.SellerCasesService
+	// SellerReviews is Seller Center's Reviews (S324): the organisation's reviews, one reply each; registered when set.
+	SellerReviews app.SellerReviewsService
 	// SellerTax is the monthly statement of the sales tax collected on the seller's behalf; its routes are registered when set.
 	SellerTax app.SellerTaxService
 	// SellerFba is Seller Center's Send to AfroTransact (S281); its routes are registered when set.

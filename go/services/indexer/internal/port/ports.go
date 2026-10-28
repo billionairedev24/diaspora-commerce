@@ -16,6 +16,9 @@ type ProductIndex interface {
 	// ApplyAvailability sets one variant×node quantity and recomputes the product's totals.
 	// It returns false when no product carries the variant yet.
 	ApplyAvailability(ctx context.Context, market, variantATIN, node string, qty int, version int64) (bool, error)
+	// ApplyRating sets a product's rating (average stars) and review count from catalog's aggregate, guarded by version
+	// like every other write. It returns false when the product is not indexed (yet).
+	ApplyRating(ctx context.Context, market, atin string, average float64, count int, version int64) (bool, error)
 	// RenameSeller sets seller_name on every document of the seller and returns how many changed.
 	RenameSeller(ctx context.Context, market, sellerID, name string) (int, error)
 	// MissingEmbeddings returns up to limit LIVE documents without an embedding, ordered by ATIN after the given one.

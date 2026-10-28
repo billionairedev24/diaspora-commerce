@@ -8,6 +8,7 @@ import Link from 'next/link';
 
 import pageStyles from '@/components/account/Pages.module.css';
 import { benefitName } from '@/components/membership/memberText';
+import { RateItemButton } from '@/components/reviews/ReviewSheet';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
@@ -90,6 +91,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                         <span>
                           {l.quantity} × {fmt.money(l.unitPriceMinor)}
                           {(l.refundedMinor ?? 0) > 0 && <span className={pageStyles.success}> · {t('ord.lineRefunded', { amount: fmt.money(l.refundedMinor ?? 0) })}</span>}
+                          {s.deliveredAt && l.productAtin && <RateItemButton atin={l.productAtin} title={l.title} imageUrl={l.imageUrl} />}
                         </span>
                       </li>
                     ))}

@@ -50,13 +50,13 @@ final class TrustOpsPayloads {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("itemId", i.id().toString());
         m.put("productId", i.product() == null ? null : i.product().productId().toString());
-        m.put("atin", i.product() == null ? null : i.product().atin());
+        m.put("atin", i.product() != null ? i.product().atin() : i.review() == null ? null : i.review().atin());
         m.put("sellerOrgId", i.orgId());
         m.put("customerId", i.report() != null && i.report().source() == ListingFlagSource.CUSTOMER_REPORT
                 ? i.report().reporterId() : null);
         m.put("title", i.title());
         if (i.review() != null) {
-            m.put("bookingId", i.review().bookingId().toString());
+            m.put(i.productReview() ? "reviewId" : "bookingId", i.review().bookingId().toString());
             m.put("serviceId", i.review().serviceId() == null ? null : i.review().serviceId().toString());
             m.put("rating", i.review().rating());
         }
@@ -68,8 +68,9 @@ final class TrustOpsPayloads {
         m.put("aiRiskLevel", i.triage() == null ? null : i.triage().riskLevel());
         m.put("itemType", i.type().name());
         m.put("reportSource", i.report() == null ? null : i.report().source().name());
-        m.put("reportReason", i.report() == null ? null : i.report().reasonCode().name());
-        m.put("reports", i.report() == null ? 0 : i.report().reports());
+        m.put("reportReason", i.report() != null ? i.report().reasonCode().name()
+                : i.review() == null ? null : i.review().reportReason());
+        m.put("reports", i.report() != null ? i.report().reports() : i.review() == null ? 0 : i.review().reports());
         m.put("decidedBy", i.decidedBy());
         m.put("dueAt", i.sla().dueAt().toString());
         return m;

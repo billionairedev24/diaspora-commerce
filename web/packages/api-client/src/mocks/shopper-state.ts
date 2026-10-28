@@ -71,7 +71,7 @@ function product(id: string) {
 function deliveredOrder(orderNumber: string, placed: Date, items: Array<{ id: string; qty: number }>, label: string, seller: string): MockOrder {
   const lines = items.map((it, i) => {
     const p = product(it.id);
-    return { lineId: `${orderNumber}-l${i + 1}`, atin: p.atin, title: p.title, imageUrl: null, quantity: it.qty, unitPriceMinor: p.priceMinor, itemsMinor: p.priceMinor * it.qty };
+    return { lineId: `${orderNumber}-l${i + 1}`, atin: p.atin, productAtin: p.atin, title: p.title, imageUrl: null, quantity: it.qty, unitPriceMinor: p.priceMinor, itemsMinor: p.priceMinor * it.qty };
   });
   const itemsMinor = lines.reduce((a, l) => a + l.itemsMinor, 0);
   const taxMinor = Math.round(itemsMinor * 0.0825);

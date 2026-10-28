@@ -345,6 +345,24 @@ class JdbcOrderRepository implements OrderRepository {
     }
 
     @Override
+    public Optional<DeliveredPurchase> deliveredPurchase(String customerId, String productAtin) {
+        return jdbc.sql("""
+                select o.id as order_id, o.number, s.id as shipment_id, s.delivered_at
+                from order_line l
+                join shipment s on s.id = l.shipment_id
+                join customer_order o on o.id = l.order_id
+                where o.customer_id = :customer and l.product_atin = :atin and s.status = 'DELIVERED'
+                order by s.delivered_at desc nulls last, s.id
+                limit 1
+                """)
+                .param("customer", customerId).param("atin", productAtin)
+                .query((rs, n) -> new DeliveredPurchase(rs.getObject("order_id", UUID.class).toString(),
+                        rs.getString("number"), rs.getObject("shipment_id", UUID.class).toString(),
+                        rs.getTimestamp("delivered_at") == null ? null : rs.getTimestamp("delivered_at").toInstant()))
+                .optional();
+    }
+
+    @Override
     public List<String> preorderShipmentsOfWindow(String windowId) {
         return jdbc.sql("""
                 select s.id from shipment s

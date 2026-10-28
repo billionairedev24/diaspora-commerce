@@ -56,5 +56,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", up.Seller)), d.Bookings, s.Search),
 		Credit:        app.NewCreditService(d.Credit, d.Orders, cfg.Stripe.PublishableKey),
 		Membership:    app.NewMembershipService(d.Membership, sc.serviceTokens, s.Cart),
-		Referral:      app.NewReferralService(upstreams.NewReferral(sc.payments), cfg.Web.PublicOrigin)}
+		Referral:      app.NewReferralService(upstreams.NewReferral(sc.payments), cfg.Web.PublicOrigin),
+		Reviews: app.NewProductReviewService(upstreams.NewReviews(client("catalog", up.Catalog)), upstreams.NewMedia(client("media", up.Media)),
+			upstreams.NewAccountSettings(sc.identity))}
 }

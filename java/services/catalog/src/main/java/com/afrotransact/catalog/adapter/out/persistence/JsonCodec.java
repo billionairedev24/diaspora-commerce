@@ -23,6 +23,7 @@ class JsonCodec {
     private static final TypeReference<List<AttributeDefinition>> ATTRIBUTES = new TypeReference<>() { };
     private static final TypeReference<List<VariationTheme>> THEMES = new TypeReference<>() { };
     private static final TypeReference<List<ProductData>> PRODUCT_DATA = new TypeReference<>() { };
+    private static final TypeReference<List<String>> STRINGS = new TypeReference<>() { };
 
     private final JsonMapper mapper;
 
@@ -70,6 +71,11 @@ class JsonCodec {
 
     <T> T read(String json, Class<T> type) {
         return mapper.readValue(json, type);
+    }
+
+    /** A JSON array of strings (review photo URLs). */
+    List<String> strings(String json) {
+        return json == null || json.isBlank() ? List.of() : mapper.readValue(json, STRINGS);
     }
 
     List<ProductData> productData(String json) {

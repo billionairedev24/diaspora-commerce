@@ -24,6 +24,7 @@ import { legalHandlers } from './legal-handlers';
 import { membershipHandlers } from './membership';
 import { preorderHandlers } from './preorder-handlers';
 import { referralHandlers } from './referral';
+import { reviewHandlers } from './reviews';
 import {
   addToCart,
   buildCart,
@@ -272,6 +273,7 @@ export const handlers = [
   ...creditHandlers,
   ...membershipHandlers,
   ...referralHandlers,
+  ...reviewHandlers,
   ...preorderHandlers,
   ...deliveryRunHandlers,
   ...legalHandlers,

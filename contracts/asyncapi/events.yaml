@@ -119,6 +119,28 @@ channels:
         $ref: '#/components/messages/catalogProductTermsChanged'
       catalogProductResubmitted:
         $ref: '#/components/messages/catalogProductResubmitted'
+      catalogProductRatingChanged:
+        $ref: '#/components/messages/catalogProductRatingChanged'
+  catalogProductReviewEvents:
+    address: at.product-review.events
+    description: Verified-purchase product reviews (S324, key = review id). Headers event-id, event-type, occurred-at.
+    messages:
+      catalogReviewSubmitted:
+        $ref: '#/components/messages/catalogReviewSubmitted'
+      catalogReviewPublished:
+        $ref: '#/components/messages/catalogReviewPublished'
+      catalogReviewUpdated:
+        $ref: '#/components/messages/catalogReviewUpdated'
+      catalogReviewRejected:
+        $ref: '#/components/messages/catalogReviewRejected'
+      catalogReviewRemoved:
+        $ref: '#/components/messages/catalogReviewRemoved'
+      catalogReviewDeleted:
+        $ref: '#/components/messages/catalogReviewDeleted'
+      catalogReviewReported:
+        $ref: '#/components/messages/catalogReviewReported'
+      catalogReviewReplied:
+        $ref: '#/components/messages/catalogReviewReplied'
   catalogProductImportEvents:
     address: at.product-import.events
     description: Bulk product uploads (S308, key = upload id). Headers event-id, event-type, occurred-at.
@@ -1151,6 +1173,77 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/CatalogImportCompleted'
+    catalogProductRatingChanged:
+      name: catalog.product.rating_changed
+      title: A product's average rating or review count changed (S324)
+      summary: Published when a review is published, edited, removed or deleted and the product's average, count or star breakdown
+        moved. Key = product id, so it stays in order with the product's lifecycle. The search indexer sets the product document's
+        rating and reviewCount from it (rating filter and sort, listing cards).
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductRatingChanged'
+    catalogReviewSubmitted:
+      name: catalog.review.submitted
+      title: A product review waits for moderation (status PENDING)
+      summary: The review failed the automatic checks, or was edited after a rejection or removal. trust-ops-service queues
+        it as a PRODUCT_REVIEW item; a newer submission of the same review replaces its open item.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
+    catalogReviewPublished:
+      name: catalog.review.published
+      title: A product review is public (passed the checks, or moderation approved it)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
+    catalogReviewUpdated:
+      name: catalog.review.updated
+      title: The customer edited a published review and it stayed public
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
+    catalogReviewRejected:
+      name: catalog.review.rejected
+      title: Moderation refused a pending review (reasonCode set)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
+    catalogReviewRemoved:
+      name: catalog.review.removed
+      title: Moderation took a review down (reasonCode set)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
+    catalogReviewDeleted:
+      name: catalog.review.deleted
+      title: The customer deleted their review
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
+    catalogReviewReported:
+      name: catalog.review.reported
+      title: A customer or the product's seller reported a published review
+      summary: One event per new report (a repeated report publishes nothing). reportReason is the new report's reason code
+        (ABUSIVE, PERSONAL_INFORMATION, SPAM, OFF_TOPIC, CONFLICT_OF_INTEREST, OTHER) and reportCount the reports on the review's
+        current text. trust-ops-service queues the review, or counts the report on its open item.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
+    catalogReviewReplied:
+      name: catalog.review.replied
+      title: The product's seller replied to a review (once)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogReview'
     catalogCategoryRequestCreated:
       name: catalog.category-request.created
       headers:
@@ -3796,6 +3889,173 @@ components:
         occurredAt:
           type: string
           format: date-time
+    CatalogProductRatingChanged:
+      type: object
+      required:
+      - productId
+      - atin
+      - ownerOrgId
+      - average
+      - count
+      - breakdown
+      properties:
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+          pattern: ^AT[0-9A-Z]{8}$
+        ownerOrgId:
+          type: string
+        average:
+          type: number
+          description: Average stars over published reviews
+          two decimals (0 when there are none): null
+        count:
+          type: integer
+          minimum: 0
+          description: Published reviews
+        breakdown:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items:
+            type: integer
+            minimum: 0
+          description: Reviews that gave 1, 2, 3, 4 and 5 stars, in that order
+    CatalogReview:
+      type: object
+      required:
+      - contentType
+      - reviewId
+      - productId
+      - atin
+      - sellerOrgId
+      - customerId
+      - reviewerName
+      - rating
+      - status
+      - flags
+      - createdAt
+      - reportCount
+      - approvePath
+      - rejectPath
+      - removePath
+      properties:
+        contentType:
+          type: string
+          enum:
+          - PRODUCT_REVIEW
+          description: Lets a generic moderation queue route it
+        reviewId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+          pattern: ^AT[0-9A-Z]{8}$
+        productTitle:
+          type: string
+        sellerOrgId:
+          type: string
+          description: The product's owner (may reply and report)
+        customerId:
+          type: string
+          description: The author's token subject; never public
+        reviewerName:
+          type: string
+          description: 'Public display name: first name and last initial, e.g. "Adaeze N."'
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        title:
+          type:
+          - string
+          - 'null'
+        text:
+          type:
+          - string
+          - 'null'
+        photoUrls:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - PUBLISHED
+          - REJECTED
+          - REMOVED
+          - DELETED
+        flags:
+          type: array
+          items:
+            type: string
+            enum:
+            - PROFANITY
+            - LINK
+            - EMAIL
+            - PHONE
+          description: What the automatic checks found in the current text
+        createdAt:
+          type: string
+          format: date-time
+        reportCount:
+          type: integer
+          description: Reports on the current text
+        reportReason:
+          type:
+          - string
+          - 'null'
+          description: Reason of the report that raised catalog.review.reported
+        moderatedBy:
+          type:
+          - string
+          - 'null'
+          description: Staff subject, trust-ops client, or system:auto-checks
+        moderatedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        reasonCode:
+          type:
+          - string
+          - 'null'
+          enum:
+          - ABUSIVE
+          - PERSONAL_INFORMATION
+          - SPAM
+          - OFF_TOPIC
+          - CONFLICT_OF_INTEREST
+          - OTHER
+          - null
+        moderationNote:
+          type:
+          - string
+          - 'null'
+        replyText:
+          type:
+          - string
+          - 'null'
+        repliedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        approvePath:
+          type: string
+          description: Catalog endpoint that publishes the review (catalog:moderate)
+        rejectPath:
+          type: string
+          description: Endpoint that refuses a pending review, body {reasonCode, note}
+        removePath:
+          type: string
+          description: Endpoint that takes a review down, body {reasonCode, note}
     CatalogCategoryRequestEvent:
       type: object
       properties:
@@ -10900,9 +11160,12 @@ components:
           - NEW_LISTING
           - LIVE_LISTING
           - SERVICE_REVIEW
+          - PRODUCT_REVIEW
           description: NEW_LISTING = submission (APPROVED / REJECTED in catalog); LIVE_LISTING = reported or flagged live
             listing (APPROVED = kept live, REJECTED = taken down in catalog); SERVICE_REVIEW = customer review of a booking
-            (APPROVED = published, REJECTED = rejected in bookings; CLOSED = decided in bookings directly)
+            (APPROVED = published, REJECTED = rejected in bookings; CLOSED = decided in bookings directly); PRODUCT_REVIEW
+            = verified-purchase review of a product that failed the automatic checks or was reported (APPROVED = published
+            or kept public, REJECTED = rejected or removed in catalog; CLOSED = decided or made moot in catalog directly)
         reportSource:
           type:
           - string
@@ -11294,6 +11557,21 @@ operations:
       / reinstated: Trust and Safety removed a live or paused listing (POST /v1/products/{id}/takedown, status TAKEN_DOWN,
       hidden from public reads) or reversed it (POST /v1/products/{id}/restore, back to LIVE or PAUSED). Read models keep
       a product public only while its status is LIVE and sellerHidden is false.'
+  publishCatalogProductReviewEvents:
+    action: send
+    channel:
+      $ref: '#/channels/catalogProductReviewEvents'
+    summary: 'Verified-purchase product reviews (S324). A customer with a DELIVERED order line for the product writes a review
+      (POST /v1/products/{atin}/reviews). It passes the automatic checks (profanity list, links, e-mail addresses, phone numbers)
+      and is published at once (catalog.review.published), or fails them and is announced as catalog.review.submitted with
+      status PENDING: trust-ops-service queues it as a PRODUCT_REVIEW item. An edit (PUT /v1/products/{atin}/reviews/mine)
+      is checked again: catalog.review.updated when the review stays public, catalog.review.submitted when it goes to moderation
+      (an edit of a rejected or removed review always does). Moderation (POST /v1/product-reviews/{id}/approve | reject |
+      remove) publishes catalog.review.published / rejected / removed; the customer deleting their review publishes catalog.review.deleted.
+      A customer or the product''s seller reporting a published review publishes catalog.review.reported (once per reporter
+      and review), which trust-ops-service queues as a PRODUCT_REVIEW item; the seller''s single reply publishes catalog.review.replied.
+      Every decision rewrites the product''s rating in the same transaction and, when it moved, publishes catalog.product.rating_changed
+      on the product channel.'
   publishCatalogProductImportEvents:
     action: send
     channel:
@@ -11458,6 +11736,14 @@ operations:
       restores it. Each document also carries an embedding of its text (title, brand, category path) from ai-gateway's POST
       /v1/embeddings (purpose search-document, client indexer-service, scope ai:use) for hybrid search (S036); an embedding
       failure never blocks the event, and a backfill embeds LIVE documents without one.
+  consumeIndexerRatingEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/catalogProductEvents'
+    summary: catalog.product.rating_changed (S324) sets the product document's rating (average, two decimals) and reviewCount
+      without touching the rest of the document; later product upserts keep them. Version = occurred-at, like every other
+      write; an event for a product that is not indexed yet is logged and skipped (the rating arrives again with the product's
+      next review).
   consumeIndexerOffersEvents:
     action: receive
     channel:
@@ -11951,6 +12237,19 @@ operations:
       the review (POST /v1/reviews/{bookingId}/approve), removing it rejects the review with a review reason code (POST /v1/reviews/{bookingId}/reject),
       both with the trust-ops-service token (scope bookings:reviews:moderate). booking.review.approved / rejected close an
       item decided directly in bookings (and are no-ops for decisions made in trust-ops).'
+  consumeTrustOpsProductReviewEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/catalogProductReviewEvents'
+    summary: 'Consumer group trust-ops-service-product-reviews (inbox consumer trust-ops:product-reviews; other events are
+      ignored): catalog.review.submitted (status PENDING) and catalog.review.reported (a published review reported by a customer
+      or the seller) are queued for moderation as a PRODUCT_REVIEW item (one open item per review; a report on a review that
+      already has one is counted on it, a newer submission replaces it), with the listing SLA and an AI triage hint with subjectType
+      REVIEW when ai-gateway answers (fail-open). Allowing it publishes the review (POST /v1/product-reviews/{id}/approve;
+      a reported review simply stays public); removing it rejects a pending review (POST /v1/product-reviews/{id}/reject)
+      or takes a published one down (POST /v1/product-reviews/{id}/remove) with a review reason code, both with the trust-ops-service
+      token (scope catalog:moderate). catalog.review.published / updated / rejected / removed / deleted close an open item
+      decided or made moot elsewhere (no-ops for decisions made in trust-ops).'
   consumeTrustOpsOrderEvents:
     action: receive
     channel:

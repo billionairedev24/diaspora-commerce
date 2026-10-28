@@ -144,4 +144,81 @@ class ModerationItemTest {
         assertThat(blank.text()).isNull();
         assertThat(blank.summary()).isEqualTo("★★★☆☆ review of a service");
     }
+
+    private static ReviewSubmission productReview(int reports) {
+        return ReviewSubmission.productReview(UUID.randomUUID(), "org_ade", UUID.randomUUID(), "AT7K2M9QXA",
+                "Jollof Spice Mix 500g", "cust-1", "Kemi A.", 2, "Too mild", "Call 0803 123 4567",
+                List.of("https://utfs.io/f/a.jpg"), List.of("PHONE"), reports, reports > 0 ? "SPAM" : null, T0);
+    }
+
+    @Test
+    void productReviewItemsAreReviewsWithTheirOwnSubjectAndReasonCodes() {
+        ReviewSubmission r = productReview(0);
+        ModerationItem item = ModerationItem.queueProductReview(UUID.randomUUID(), r, null, T0, policy);
+
+        assertThat(item.type()).isEqualTo(ModerationItemType.PRODUCT_REVIEW);
+        assertThat(item.type().listing()).isFalse();
+        assertThat(item.type().review()).isTrue();
+        assertThat(item.productReview()).isTrue();
+        assertThat(item.serviceReview()).isFalse();
+        assertThat(item.reviewItem()).isTrue();
+        assertThat(item.product()).isNull();
+        assertThat(item.subjectId()).isEqualTo(r.bookingId());
+        assertThat(item.orgId()).isEqualTo("org_ade");
+        assertThat(item.title()).isEqualTo("★★☆☆☆ review of Jollof Spice Mix 500g");
+        assertThat(item.sla().dueAt()).isEqualTo(T0.plus(Duration.ofHours(24)));
+        assertThat(ModerationItem.queueProductReview(UUID.randomUUID(), r, hint("HIGH"), T0, policy).priority())
+                .isEqualTo(ModerationPriority.HIGH);
+
+        assertThat(item.reject("amaka", ModerationReasonCode.PERSONAL_INFORMATION, null, T0).status())
+                .isEqualTo(ModerationStatus.REJECTED);
+        assertThatThrownBy(() -> item.reject("amaka", ModerationReasonCode.COUNTERFEIT, null, T0))
+                .isInstanceOf(TrustRuleViolation.class).hasMessageContaining("cannot remove a review");
+        assertThat(ModerationReasonCode.SPAM.appliesTo(ModerationItemType.PRODUCT_REVIEW)).isTrue();
+        assertThat(ModerationReasonCode.OTHER.appliesTo(ModerationItemType.PRODUCT_REVIEW)).isTrue();
+        assertThat(ModerationReasonCode.COUNTERFEIT.appliesTo(ModerationItemType.PRODUCT_REVIEW)).isFalse();
+        assertThatThrownBy(() -> ModerationItem.queueProductReview(UUID.randomUUID(), review(3), null, T0, policy))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void reportsAreCountedOnTheOpenReviewItemAndReportedReviewsSayWhatTheyAre() {
+        ModerationItem item = ModerationItem.queueProductReview(UUID.randomUUID(), productReview(1), null, T0, policy);
+
+        assertThat(item.review().reported()).isTrue();
+        assertThat(item.title()).isEqualTo("★★☆☆☆ reported review of Jollof Spice Mix 500g");
+        ModerationItem again = item.reviewReportedAgain();
+        assertThat(again.review().reports()).isEqualTo(2);
+        assertThat(again.review().reportReason()).isEqualTo("SPAM");
+        assertThat(again.version()).isEqualTo(item.version());
+        assertThat(productReview(0).reported()).isFalse();
+    }
+
+    @Test
+    void aNewerVersionOfTheReviewSupersedesTheOpenItem() {
+        ModerationItem item = ModerationItem.queueProductReview(UUID.randomUUID(), productReview(0), null, T0, policy);
+        ModerationItem closed = item.supersede(T0.plusSeconds(60));
+
+        assertThat(closed.status()).isEqualTo(ModerationStatus.CLOSED);
+        assertThat(closed.decidedBy()).isEqualTo("catalog");
+        assertThat(closed.decisionNote()).startsWith("Superseded");
+        assertThatThrownBy(() -> closed.supersede(T0)).isInstanceOf(IllegalStateException.class);
+        assertThat(item.closeUpstream("PUBLISHED", T0).decisionNote()).isEqualTo("Decided in catalog: PUBLISHED");
+    }
+
+    @Test
+    void productReviewSubmissionsKeepLongerTextAndNormaliseTheirLists() {
+        ReviewSubmission r = ReviewSubmission.productReview(UUID.randomUUID(), "org_a", UUID.randomUUID(), "AT7K2M9QXA",
+                " ", "c", "Kemi A.", 5, " ", "x".repeat(3000), null, null, -4, " ", T0);
+        assertThat(r.text()).hasSize(3000);
+        assertThat(r.title()).isNull();
+        assertThat(r.photoUrls()).isEmpty();
+        assertThat(r.flags()).isEmpty();
+        assertThat(r.reports()).isZero();
+        assertThat(r.reportReason()).isNull();
+        assertThat(r.summary()).isEqualTo("★★★★★ review of a product");
+        // booking reviews still cap at 2000 characters
+        assertThat(new ReviewSubmission(UUID.randomUUID(), "org_a", null, null, null, null, 3, "y".repeat(2500), null)
+                .text()).hasSize(2000);
+    }
 }

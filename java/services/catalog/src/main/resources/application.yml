@@ -122,7 +122,19 @@ at:
       token-path: /oauth2/token
       client-id: ${CATALOG_CLIENT_ID:catalog-service}
       client-secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
-      scopes: media:import
+      scopes: media:import orders:purchase-check
+    # S324 verified-purchase product reviews: catalog asks orders-service whether the customer received the product
+    # (GET /v1/lookup/customers/{customerId}/purchases/{atin}, scope orders:purchase-check).
+    orders:
+      base-url: ${ORDERS_URL:http://localhost:8104}
+      timeout: ${ORDERS_TIMEOUT:3s}
+    reviews:
+      # A review can be edited for this long after it was written (then it is final).
+      edit-window: ${REVIEWS_EDIT_WINDOW:30d}
+      # Photos must be https URLs on one of these hosts (empty = any https host); media-service publishes review photos.
+      photo-hosts: ${REVIEWS_PHOTO_HOSTS:}
+      # Extra words (comma-separated) that send a review to moderation, on top of the built-in profanity list.
+      extra-blocked-words: ${REVIEWS_EXTRA_BLOCKED_WORDS:}
     # S031 GTIN prefill: providers in lookup order, cached per GTIN in product_data_lookup.
     product-data:
       order: ${PRODUCT_DATA_ORDER:GS1,OPEN_FOOD_FACTS}

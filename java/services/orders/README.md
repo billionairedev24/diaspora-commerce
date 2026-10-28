@@ -158,6 +158,7 @@ RFC 9457 problems with `code` `orders.*`. Reference pages `/swagger-ui.html`, `/
 | `POST /v1/orders/{number}/shipments/{id}/cancel` | customer | until packed |
 | `GET /v1/orders/{number}/payment-split` | staff / seller (own row) | from payments `GET /v1/orders/{id}/split`; per recipient items, shipping, tax, commission, FBA fees, **`deliveryFeesMinor`** (S259: AfroTransact Delivery pickup fees the seller paid; on the AfroTransact row the total earned), Stripe fee share, net |
 | `GET /v1/seller/shipments?status=` | seller `orders:read` (staff: `org=`) | queue with next actions |
+| `GET /v1/lookup/customers/{customerId}/purchases/{atin}` | SERVICE with `orders:purchase-check` (catalog) | S324: has this customer a DELIVERED order line for the product? Returns the delivering order, never its contents or address |
 | `GET /v1/admin/orders?number&customer&seller&status&shipmentStatus&from&to` | staff `orders:read` | search |
 | `POST /v1/shipments/{id}/transitions {to, reason, handoverCode}` | seller / staff / fulfilment service | actor rules above; a pickup order is handed over (`delivered`) with the customer's 4-digit `handoverCode` (staff may give a `reason` instead); staff confirming a driver delivery by hand give a `reason` |
 | `POST /v1/shipments/{id}/tracking {carrier, trackingNumber}` | seller / staff | carrier label for webhook matching |

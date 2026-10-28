@@ -421,7 +421,8 @@ export const shopperHandlers = [
     return json({
     items: all.slice(start, start + limit).map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
       shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.statusLabel, items: s.items, cancellable: s.cancellable, carrier: s.carrier,
-        trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode,
+        trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode, sellerName: s.sellerName,
+        lines: s.lines.map((l) => ({ title: l.title, quantity: l.quantity, imageUrl: l.imageUrl, productAtin: l.productAtin ?? l.atin })),
         ...reportFacts(o, s.shipmentId, ctx.now) })) })),
     nextCursor: start + limit < all.length ? String(start + limit) : null
   });

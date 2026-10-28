@@ -31,6 +31,14 @@ Notes on approve, flag and send-back are internal. Only the message on *Return t
 shown to the applicant. Staff names are never shown to applicants.
 :::
 
+## Review moderation
+
+Reviews that failed the automatic checks, and reviews customers or sellers reported, appear in **Catalog, Moderation queue**
+as *Product review* items (**Catalog, Product reviews** lists every review). Open one to read the stars, text and photos,
+why it is here and who reported it. **Allow** publishes it (or keeps a reported review public); **Reject** or **Remove** takes
+it down with a reason the customer sees (abusive, personal information, spam, off topic, conflict of interest, other). Rejected
+and removed reviews leave the product's average and count straight away. People and products are shown by name.
+
 ## Payouts and Stripe
 
 **Payouts** lists every seller payout. Open one for the seller's details, amounts, the Stripe payout/transfer IDs

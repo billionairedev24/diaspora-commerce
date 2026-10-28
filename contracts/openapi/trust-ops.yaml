@@ -20,8 +20,9 @@ security:
 - bearer: []
 tags:
 - name: Listing moderation
-  description: Queue of listings and booking reviews awaiting a human decision, with SLA timers, assignment, AI triage hints,
-    allow / remove with reason codes and escalation (catalog:moderate; deciding a review also needs bookings:reviews:moderate)
+  description: Queue of listings, booking reviews and product reviews awaiting a human decision, with SLA timers, assignment,
+    AI triage hints, allow / remove with reason codes and escalation (catalog:moderate; deciding a booking review also needs
+    bookings:reviews:moderate)
 - name: Audit log
   description: Immutable, hash-chained record of every privileged action (audit:read)
 - name: Support cases
@@ -499,7 +500,8 @@ paths:
       - Listing moderation
       summary: 'Moderation queue, soonest due first (default: open items of both types)'
       description: 'type=NEW_LISTING: submissions awaiting review; type=LIVE_LISTING: reported or flagged live listings (catalog.product.flagged);
-        type=SERVICE_REVIEW: customer reviews of bookings (booking.review.submitted).'
+        type=SERVICE_REVIEW: customer reviews of bookings (booking.review.submitted); type=PRODUCT_REVIEW: verified-purchase
+        product reviews that failed the automatic checks or were reported (catalog.review.submitted | reported).'
       operationId: queue_2
       parameters:
       - name: status
@@ -533,6 +535,7 @@ paths:
           - NEW_LISTING
           - LIVE_LISTING
           - SERVICE_REVIEW
+          - PRODUCT_REVIEW
       - name: page
         in: query
         required: false
@@ -578,8 +581,9 @@ paths:
       - Listing moderation
       summary: Allow, then close the item (audited)
       description: 'NEW_LISTING: approves the product in catalog. LIVE_LISTING: keeps the listing live and dismisses the reports
-        (no catalog call). SERVICE_REVIEW: publishes the review in bookings (POST /v1/reviews/{bookingId}/approve). If the
-        owning service refuses, the item stays open (409).'
+        (no catalog call). SERVICE_REVIEW: publishes the review in bookings (POST /v1/reviews/{bookingId}/approve). PRODUCT_REVIEW:
+        publishes a pending review in catalog (POST /v1/product-reviews/{id}/approve); a reported review stays public and the
+        reports are dismissed (no catalog call). If the owning service refuses, the item stays open (409).'
       operationId: approve
       parameters:
       - name: id
@@ -658,7 +662,9 @@ paths:
       summary: Remove with a reason code, then close the item (audited)
       description: 'NEW_LISTING: rejects the product in catalog. LIVE_LISTING: takes the live listing down in catalog (POST
         /v1/products/{id}/takedown). SERVICE_REVIEW: rejects the review in bookings (POST /v1/reviews/{bookingId}/reject;
-        review reason codes). If the owning service refuses, the item stays open (409).'
+        review reason codes). PRODUCT_REVIEW: rejects a pending review in catalog (POST /v1/product-reviews/{id}/reject) or
+        takes a reported one down (POST /v1/product-reviews/{id}/remove). If the owning service refuses, the item stays open
+        (409).'
       operationId: reject
       parameters:
       - name: id
@@ -705,8 +711,8 @@ paths:
       tags:
       - Listing moderation
       summary: Reason codes for removing an item
-      description: Listing codes by default (and for type=NEW_LISTING or LIVE_LISTING); review codes for type=SERVICE_REVIEW.
-        OTHER fits both and needs a note.
+      description: Listing codes by default (and for type=NEW_LISTING or LIVE_LISTING); review codes for type=SERVICE_REVIEW
+        or PRODUCT_REVIEW. OTHER fits both and needs a note.
       operationId: reasonCodes
       parameters:
       - name: type
@@ -718,6 +724,7 @@ paths:
           - NEW_LISTING
           - LIVE_LISTING
           - SERVICE_REVIEW
+          - PRODUCT_REVIEW
       responses:
         '200':
           description: OK
@@ -1202,6 +1209,7 @@ components:
           - NEW_LISTING
           - LIVE_LISTING
           - SERVICE_REVIEW
+          - PRODUCT_REVIEW
         report:
           $ref: '#/components/schemas/ReportResponse'
         review:
@@ -1315,7 +1323,8 @@ components:
           format: int32
     ReviewResponse:
       type: object
-      description: The customer review a SERVICE_REVIEW item is about (bookings-service)
+      description: The customer review a SERVICE_REVIEW (bookings-service) or PRODUCT_REVIEW (catalog) item is about. For a
+        product review bookingId is the review id, serviceId the product id and serviceName the product title
       properties:
         bookingId:
           type: string
@@ -1338,6 +1347,29 @@ components:
         submittedAt:
           type: string
           format: date-time
+        atin:
+          type: string
+          description: 'Product reviews: the product ATIN'
+        title:
+          type: string
+          description: 'Product reviews: the review title'
+        photoUrls:
+          type: array
+          description: 'Product reviews: photo URLs'
+          items:
+            type: string
+        flags:
+          type: array
+          description: 'Product reviews: what the automatic checks found (PROFANITY, LINK, EMAIL, PHONE)'
+          items:
+            type: string
+        reports:
+          type: integer
+          format: int32
+          description: 'Product reviews: reports on a published review (0 for a submission waiting for its first decision)'
+        reportReason:
+          type: string
+          description: 'Product reviews: reason code of the first report'
     TriageResponse:
       type: object
       description: AI triage hint (advisory; absent when AI is off or unavailable)

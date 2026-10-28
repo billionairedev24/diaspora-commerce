@@ -185,6 +185,7 @@ export function detailKind(key: string, statusKey: string | undefined): DetailFi
 }
 
 const REASON_CODES = options('PROHIBITED_ITEM', 'UNAPPROVED_HEALTH_CLAIM', 'RESTRICTED_INGREDIENT', 'COUNTERFEIT', 'IMAGE_POLICY', 'MISLEADING_CONTENT', 'LABELLING', 'OTHER');
+const REVIEW_REASON_OPTIONS = options('ABUSIVE', 'PERSONAL_INFORMATION', 'SPAM', 'OFF_TOPIC', 'CONFLICT_OF_INTEREST', 'OTHER');
 const noteForm = (title: string, submit: string, required = true) => () => form(title, submit, [field('note', 'Note', 'textarea', required, { maxLength: 2000 })]);
 const reasonForm = (title: string, submit: string) => () => form(title, submit, [field('reason', 'Reason', 'textarea', true, { maxLength: 1000 })]);
 
@@ -342,6 +343,22 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       { key: 'approve', label: 'Allow', tone: 'primary', permission: 'catalog:moderate', level: 'APPROVE', form: noteForm('Allow the listing', 'Allow', false), when: (r) => stateReason(r, 'PENDING', 'ESCALATED'), apply: setStatus('APPROVED', 'Allowed') },
       { key: 'reject', label: 'Remove', tone: 'danger', permission: 'catalog:moderate', level: 'APPROVE', form: () => form('Remove the listing', 'Remove', [field('reasonCode', 'Reason', 'select', true, { options: REASON_CODES }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING', 'ESCALATED'), apply: setStatus('REJECTED', 'Removed') },
       { key: 'escalate', label: 'Escalate', tone: 'neutral', permission: 'catalog:moderate', form: reasonForm('Escalate to senior review', 'Escalate'), when: (r) => stateReason(r, 'PENDING'), apply: setStatus('ESCALATED', 'Escalated') }
+    ]
+  },
+  'product-reviews': {
+    title: 'Product reviews',
+    columns: [col('productTitle', 'Product', 'strong', 26), col('rating', 'Rating', 'number', 8), col('reviewerName', 'Shown as', 'text', 14), col('seller', 'Seller', 'text', 16), col('reportCount', 'Reports', 'number', 8), col('createdAt', 'Written', 'datetime', 14), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('PENDING', 'PUBLISHED', 'REJECTED', 'REMOVED'),
+    search: ['atin', 'productTitle'],
+    searchPlaceholder: 'Product ATIN',
+    exportable: true,
+    titleOf: (r) => `${'★'.repeat(Number(r.fields.rating))}${'☆'.repeat(5 - Number(r.fields.rating))} · ${str(r.fields.productTitle)}`,
+    subtitleOf: (r) => `${str(r.fields.atin)} · shown as ${str(r.fields.reviewerName)}`,
+    actions: [
+      { key: 'approve', label: 'Publish', tone: 'primary', permission: 'catalog:moderate', level: 'APPROVE', form: noteForm('Publish the review', 'Publish', false), when: (r) => stateReason(r, 'PENDING', 'REJECTED', 'REMOVED'), apply: setStatus('PUBLISHED', 'Published') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'catalog:moderate', level: 'APPROVE', form: () => form('Reject the review', 'Reject', [field('reasonCode', 'Reason (the customer sees it)', 'select', true, { options: REVIEW_REASON_OPTIONS }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING'), apply: setStatus('REJECTED', 'Rejected') },
+      { key: 'remove', label: 'Remove', tone: 'danger', permission: 'catalog:moderate', level: 'APPROVE', form: () => form('Take the review down', 'Remove', [field('reasonCode', 'Reason (the customer sees it)', 'select', true, { options: REVIEW_REASON_OPTIONS }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING', 'PUBLISHED'), apply: setStatus('REMOVED', 'Removed') }
     ]
   },
   claims: {

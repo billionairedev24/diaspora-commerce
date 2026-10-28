@@ -64,6 +64,13 @@ tags:
     description: Search and typeahead (proxy of the search service with delivery promises)
   - name: Catalog
     description: Product detail with buy box, offers and delivery promise
+  - name: Reviews
+    description: |
+      Verified-purchase ratings and reviews of products (S324). Anyone reads a product's published reviews and rating.
+      A signed-in shopper whose order for the product was delivered (catalog asks orders-service) rates it 1 to 5 stars
+      with an optional title, text and up to 5 photos, once; they can edit it for 30 days and delete it, and report other
+      reviews. Reviews pass automatic checks (profanity, links, personal data) and are published or held for Trust &
+      Safety; they show as "Verified purchase" with the reviewer's first name and last initial. The seller replies once.
   - name: Cart
     description: Cart split into packages per seller, save for later
   - name: Auth
@@ -502,6 +509,200 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/products/{atin}/reviews:
+    get:
+      tags: [Reviews]
+      operationId: listProductReviews
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: A product's published reviews with its rating, sorted and paged
+      description: |
+        catalog `GET /v1/public/products/{atin}/reviews`. Reviews are always verified purchases; reviewers show as first
+        name and last initial. `rating` covers every published review whatever the `stars` filter.
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+        - {name: sort, in: query, schema: {type: string, enum: [recent, highest, lowest], default: recent}}
+        - {name: stars, in: query, description: Only reviews with this rating, schema: {type: integer, minimum: 1, maximum: 5}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 10}}
+      responses:
+        '200':
+          description: One page of reviews and the rating
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProductReviewsPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+    post:
+      tags: [Reviews]
+      operationId: writeProductReview
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: Review a product I received
+      description: |
+        403 `REVIEW_NOT_VERIFIED_PURCHASE` unless a shipment of mine with this product was delivered; 409
+        `REVIEW_ALREADY_EXISTS` (one review per product: edit it). Each photo is `{assetId}` for a new upload (`POST /v1/review-photos/uploads`, PUT the file, then
+        `…/complete`) or `{url}` for a photo the review already has. The review is published at
+        once (`status` PUBLISHED) or, when the automatic checks flag it, waits for moderation (PENDING).
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewInput'}
+      responses:
+        '201':
+          description: The review
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OwnReview'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/products/{atin}/reviews/mine:
+    get:
+      tags: [Reviews]
+      operationId: getMyProductReview
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: Can I review this product, and my review of it
+      description: |
+        `eligible` is true when the product was delivered to me and I have not reviewed it. `reason` says why not:
+        `not-purchased` or `already-reviewed`. My review is returned in any state, with the reason when moderation refused
+        or removed it.
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+      responses:
+        '200':
+          description: My standing with the product
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MyReview'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Reviews]
+      operationId: editMyProductReview
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: Edit my review (within 30 days of writing it)
+      description: |
+        The checks run again: a clean edit stays public, a flagged one goes to moderation, and an edit of a review
+        moderation refused or removed always does. 409 `REVIEW_EDIT_WINDOW_CLOSED` after 30 days. Each photo is `{assetId}` for a new upload (`POST /v1/review-photos/uploads`, PUT the file, then
+        `…/complete`) or `{url}` for a photo the review already has.
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewInput'}
+      responses:
+        '200':
+          description: The updated review
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OwnReview'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+    delete:
+      tags: [Reviews]
+      operationId: deleteMyProductReview
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: Delete my review (any time)
+      description: The product's rating is recomputed and I can review the product again.
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+      responses:
+        '204': {description: Deleted}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/reviews/{reviewId}/reports:
+    post:
+      tags: [Reviews]
+      operationId: reportReview
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: Report a published review
+      description: |
+        One report per person and review (a repeat answers 200 with `created: false`). Reports reach Trust & Safety's
+        moderation queue; the review stays public until they decide. Not my own review (403).
+      parameters:
+        - {name: reviewId, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReviewReportRequest'}
+      responses:
+        '200':
+          description: Already reported
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReviewReportResult'}
+        '201':
+          description: Reported
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReviewReportResult'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/review-photos/uploads:
+    post:
+      tags: [Reviews]
+      operationId: requestReviewPhotoUpload
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: Signed direct upload for a review photo (JPEG, PNG or WebP, at most 8 MB)
+      description: |
+        Returns a short-lived URL from the media service (public, moderated images). PUT the file there with the given
+        headers, call `…/uploads/{assetId}/complete`, then send the review with `photos: [{assetId}]`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType, size]
+              properties:
+                fileName: {type: string, maxLength: 200}
+                contentType: {type: string, enum: [image/jpeg, image/png, image/webp]}
+                size: {type: integer, format: int64, minimum: 1, maximum: 8388608}
+      responses:
+        '201':
+          description: Upload instructions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResumeUpload'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/review-photos/uploads/{assetId}/complete:
+    post:
+      tags: [Reviews]
+      operationId: completeReviewPhotoUpload
+      security: [{sessionCookie: []}, {bearer: []}]
+      summary: Check the uploaded photo (real type and size) and finalise it
+      description: |
+        `status` READY means media published the photo; otherwise it is still being checked or was refused and the review
+        cannot use it.
+      parameters:
+        - {name: assetId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: The photo
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReviewPhotoAsset'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/cart:
     get:
       tags: [Cart]
@@ -3263,7 +3464,8 @@ components:
             Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, PRODUCT_NOT_FOUND, OFFER_NOT_FOUND,
             LINE_NOT_FOUND, SAVED_NOT_FOUND, STOCK_LIMIT, OUT_OF_STOCK, INVALID_CREDENTIALS, INVALID_CODE, CHALLENGE_EXPIRED,
             EMAIL_TAKEN, WEAK_PASSWORD, PROVIDER_DISABLED, ZIP_NOT_SERVICEABLE, PAYMENT_DECLINED, IDEMPOTENCY_CONFLICT,
-            STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; AfroTransact Delivery from the seller's store
+            STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; product reviews (S324): REVIEW_NOT_VERIFIED_PURCHASE,
+            REVIEW_ALREADY_EXISTS, REVIEW_EDIT_WINDOW_CLOSED; AfroTransact Delivery from the seller's store
             (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
             DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED.
         errors:
@@ -3417,6 +3619,121 @@ components:
         selected: {type: boolean}
         available: {type: boolean}
         priceMinor: {type: integer}
+    ReviewRating:
+      type: object
+      description: Average stars over a product's published reviews, how many there are and how many gave 1, 2, 3, 4 and 5 stars
+      required: [average, count, breakdown]
+      properties:
+        average: {type: number, minimum: 0, maximum: 5}
+        count: {type: integer, minimum: 0}
+        breakdown:
+          type: array
+          description: Reviews that gave 1, 2, 3, 4 and 5 stars, in that order
+          minItems: 5
+          maxItems: 5
+          items: {type: integer, minimum: 0}
+    ReviewPhoto:
+      type: object
+      required: [url]
+      properties:
+        url: {type: string, format: uri}
+    ReviewReply:
+      type: object
+      description: The seller's single public reply
+      required: [text, at]
+      properties:
+        text: {type: string}
+        at: {type: string, format: date-time}
+    PublicReview:
+      type: object
+      description: A published review. Always a verified purchase; the reviewer shows as first name and last initial
+      required: [id, reviewerName, rating, title, text, photos, verifiedPurchase, createdAt, reply]
+      properties:
+        id: {type: string, format: uuid}
+        reviewerName: {type: string, examples: [Adaeze N.]}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        title: {type: [string, 'null']}
+        text: {type: [string, 'null']}
+        photos: {type: array, items: {$ref: '#/components/schemas/ReviewPhoto'}}
+        verifiedPurchase: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        reply: {oneOf: [{$ref: '#/components/schemas/ReviewReply'}, {type: 'null'}]}
+    ProductReviewsPage:
+      type: object
+      required: [rating, items, total, page, size]
+      properties:
+        rating: {$ref: '#/components/schemas/ReviewRating'}
+        items: {type: array, items: {$ref: '#/components/schemas/PublicReview'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    ReviewModeration:
+      type: object
+      description: Why moderation refused or removed a review
+      required: [reasonCode, reason, note]
+      properties:
+        reasonCode: {type: string, enum: [ABUSIVE, PERSONAL_INFORMATION, SPAM, OFF_TOPIC, CONFLICT_OF_INTEREST, OTHER]}
+        reason: {type: string, description: The reason in words for the shopper}
+        note: {type: [string, 'null']}
+    OwnReview:
+      type: object
+      description: |
+        The shopper's own review in any state: PUBLISHED, PENDING (waiting for moderation) or REJECTED / REMOVED
+        (`moderation` says why; editing it sends it back to moderation).
+      required: [id, reviewerName, rating, title, text, photos, status, createdAt, updatedAt, editableUntil, editable, moderation, reply]
+      properties:
+        id: {type: string, format: uuid}
+        reviewerName: {type: string}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        title: {type: [string, 'null']}
+        text: {type: [string, 'null']}
+        photos: {type: array, items: {$ref: '#/components/schemas/ReviewPhoto'}}
+        status: {type: string, enum: [PUBLISHED, PENDING, REJECTED, REMOVED]}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        editableUntil: {type: string, format: date-time}
+        editable: {type: boolean}
+        moderation: {oneOf: [{$ref: '#/components/schemas/ReviewModeration'}, {type: 'null'}]}
+        reply: {oneOf: [{$ref: '#/components/schemas/ReviewReply'}, {type: 'null'}]}
+    MyReview:
+      type: object
+      required: [eligible, reason, review]
+      properties:
+        eligible: {type: boolean, description: The product was delivered to me and I have not reviewed it}
+        reason: {type: [string, 'null'], enum: [not-purchased, already-reviewed, null]}
+        review: {oneOf: [{$ref: '#/components/schemas/OwnReview'}, {type: 'null'}]}
+    ReviewPhotoInput:
+      type: object
+      description: A new upload (`assetId`) or a photo the review already has (`url`)
+      properties:
+        assetId: {type: string}
+        url: {type: string, format: uri}
+    ReviewInput:
+      type: object
+      required: [rating]
+      properties:
+        rating: {type: integer, minimum: 1, maximum: 5}
+        title: {type: string, maxLength: 120}
+        text: {type: string, maxLength: 4000}
+        photos: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/ReviewPhotoInput'}}
+    ReviewReportRequest:
+      type: object
+      required: [reasonCode]
+      properties:
+        reasonCode: {type: string, enum: [ABUSIVE, PERSONAL_INFORMATION, SPAM, OFF_TOPIC, CONFLICT_OF_INTEREST, OTHER]}
+        details: {type: string, maxLength: 500, description: Required for OTHER}
+    ReviewReportResult:
+      type: object
+      required: [created]
+      properties:
+        created: {type: boolean}
+    ReviewPhotoAsset:
+      type: object
+      required: [assetId, url, status]
+      properties:
+        assetId: {type: string}
+        url: {type: [string, 'null'], format: uri}
+        status: {type: string, description: READY when media published the photo}
     ProductDetail:
       type: object
       required: [product, buyBox, otherOffers, shipsFrom, soldBy, returnsPolicy, unitPriceLabel]
@@ -5113,6 +5430,7 @@ components:
       properties:
         lineId: {type: string}
         atin: {type: string}
+        productAtin: {type: string, description: 'The product page''s ATIN (atin is the variant''s); "Rate this item" opens its reviews (S324). Empty for old orders'}
         title: {type: string}
         imageUrl: {type: [string, 'null']}
         quantity: {type: integer}

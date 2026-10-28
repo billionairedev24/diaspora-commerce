@@ -19,6 +19,12 @@ Kafka → Elasticsearch projection of the product read model used by [search](..
 - Product events become one document per product page (`searchindex.ProductDocument`): department and path resolved
   from catalog-service's category tree (cached), seller display name, fulfilment (`AFROTRANSACT` for AfroTransact Retail,
   `SELLER` otherwise), lowest variant price, variant ATINs and status. Only `LIVE` documents are searchable.
+- **Ratings (S324):** `catalog.product.rating_changed` (`at.product.events`, published by catalog-service when a
+  product review is published, edited, removed or deleted) sets the document's `rating` (average stars, two decimals)
+  and `review_count` and, on Meilisearch, the `rank_boost` that depends on them. Product upserts never touch them, so a
+  rating survives every catalog event; writes are version-guarded by the event time (`rating_version`) and an event for
+  a product that is not indexed yet is logged and skipped. This is what the search rating filter and sort and the
+  listing cards read.
 - Availability events update one `variant×node` quantity and recompute `available_qty` / `in_stock` for the product
   (search turns them into the low-stock / out-of-stock signals of S038).
 - **Embeddings (S036):** each product document carries an `embedding` (1536-dim `dense_vector`) of its text

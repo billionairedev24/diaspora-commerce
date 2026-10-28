@@ -253,6 +253,12 @@ func (m *mediaImpl) RenameLibraryImage(ctx context.Context, bearer, assetID, fil
 	return out, err
 }
 
+func (m *mediaImpl) Asset(ctx context.Context, bearer, assetID string) (port.MediaAsset, error) {
+	var a port.MediaAsset
+	_, err := call(ctx, m.c, httpclient.Request{Path: "/v1/assets/" + url.PathEscape(assetID), Bearer: bearer}, &a)
+	return a, err
+}
+
 func (m *mediaImpl) Complete(ctx context.Context, bearer, assetID string) (port.MediaAsset, error) {
 	var a port.MediaAsset
 	_, err := call(ctx, m.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(assetID) + "/complete", Bearer: bearer}, &a)

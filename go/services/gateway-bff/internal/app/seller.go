@@ -41,6 +41,8 @@ type SellerDeps struct {
 	// Fees reads payments' fee schedules with the BFF's service token (nil: the Fees page answers 503).
 	Fees     port.FeesClient
 	Bookings port.BookingsClient
+	// Reviews is catalog's verified-purchase review API: the organisation's reviews and replies (S324); nil answers 503.
+	Reviews port.ReviewsClient
 	// PublishableKey is the Stripe publishable key Connect.js uses for the embedded onboarding (empty locally: the seller
 	// service's local stand-in then answers account sessions with localTest).
 	PublishableKey string

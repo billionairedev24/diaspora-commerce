@@ -14,7 +14,7 @@ import com.afrotransact.trustops.port.Page;
 /**
  * S117 moderation queue: SLA timers, assignment, approve / reject with reason codes, escalation. Holds new
  * submissions (NEW_LISTING), since S228 reported or flagged live listings (LIVE_LISTING) and since S243 customer
- * reviews of bookings (SERVICE_REVIEW).
+ * reviews of bookings (SERVICE_REVIEW) and since S324 verified-purchase reviews of products (PRODUCT_REVIEW).
  */
 public interface ModerationService {
 
@@ -44,6 +44,21 @@ public interface ModerationService {
     Optional<ModerationItemView> enqueueReview(UUID eventId, ReviewSubmission review);
 
     /**
+     * Queues a verified-purchase review of a product ({@code catalog.review.submitted} with status PENDING, or
+     * {@code catalog.review.reported} for a published review someone reported) with AI triage (fail-open). A report on
+     * a review that already has an open item is counted on it; a newer submission replaces the open item (which
+     * closes as superseded). Re-deliveries are ignored.
+     */
+    Optional<ModerationItemView> enqueueProductReview(UUID eventId, ReviewSubmission review);
+
+    /**
+     * catalog decided the review, or it changed, was withdrawn or deleted ({@code catalog.review.published | updated |
+     * rejected | removed | deleted}): closes its open queue item, if any (nothing to do when the decision was made
+     * here).
+     */
+    void closeFromCatalogReview(UUID eventId, UUID reviewId, String catalogStatus);
+
+    /**
      * bookings recorded a decision on the review ({@code booking.review.approved|rejected}): closes its open queue
      * item, if any (nothing to do when the decision was made here).
      */
@@ -67,7 +82,9 @@ public interface ModerationService {
      * Allows the item, then closes it. Audited. A new submission is approved in catalog
      * ({@code POST /v1/products/{id}/approve}); a live listing simply stays live (the reports are dismissed); a review
      * is published in bookings ({@code POST /v1/reviews/{bookingId}/approve}, which also needs the caller to hold
-     * {@code bookings:reviews:moderate}).
+     * {@code bookings:reviews:moderate}); a pending product review is published in catalog
+     * ({@code POST /v1/product-reviews/{id}/approve}) and a reported one simply stays public (the reports are
+     * dismissed).
      */
     ModerationItemView approve(UUID id, String note);
 
@@ -75,7 +92,8 @@ public interface ModerationService {
      * Removes the item with the reason code and note, then closes it. Audited. A new submission is rejected in
      * catalog ({@code /reject}); a live listing is taken down ({@code POST /v1/products/{id}/takedown}); a review is
      * rejected in bookings ({@code POST /v1/reviews/{bookingId}/reject}, review reason codes only, caller needs
-     * {@code bookings:reviews:moderate}).
+     * {@code bookings:reviews:moderate}); a pending product review is rejected in catalog
+     * ({@code POST /v1/product-reviews/{id}/reject}) and a reported one taken down ({@code /remove}).
      */
     ModerationItemView reject(UUID id, ModerationReasonCode reasonCode, String note);
 

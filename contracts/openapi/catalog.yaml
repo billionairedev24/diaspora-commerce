@@ -32,6 +32,15 @@ tags:
   description: GTIN / ISBN checks and GTIN prefill for the product builder, GTIN lookups by service clients
 - name: Listing reports
   description: Shoppers report a live listing (signed in); reports reach the trust-ops moderation queue through catalog.product.flagged
+- name: Product reviews
+  description: 'Verified-purchase ratings and reviews (S324): customers who received a product review it once, public reads
+    of the published reviews and the rating, and reports'
+- name: Seller reviews
+  description: The product owner sees the published reviews of its products and replies once to each (catalog:write). Sellers
+    cannot edit or hide a review; they can report it.
+- name: Review moderation
+  description: Trust and safety staff and the trust-ops service client (catalog:moderate) approve, reject and remove product
+    reviews. Decisions are idempotent; the product's rating follows each decision.
 - name: Image library
   description: 'Library images (media) matched to listings by SKU file names: attach matching images, image usage (S310)'
 - name: Bulk upload
@@ -791,6 +800,208 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/product-reviews:
+    get:
+      tags:
+      - Review moderation
+      summary: Product reviews by state, newest first (catalog:moderate)
+      operationId: listProductReviews
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - PUBLISHED
+          - REJECTED
+          - REMOVED
+          - DELETED
+      - name: atin
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReviewPage'
+  /v1/product-reviews/{reviewId}:
+    get:
+      tags:
+      - Review moderation
+      summary: One product review (catalog:moderate)
+      operationId: getProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/approve:
+    post:
+      tags:
+      - Review moderation
+      summary: Publish a review
+      description: A pending review becomes public and counts in the rating; also reinstates a rejected or removed one. Approving
+        a published review changes nothing. catalog.review.published.
+      operationId: approveProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewApproveRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/reject:
+    post:
+      tags:
+      - Review moderation
+      summary: Reject a review that is waiting for moderation
+      description: The customer sees the reason and may edit the review (which goes back to moderation). 409 catalog.review-not-pending
+        for a published review - remove it instead. 422 without a note for reasonCode OTHER. catalog.review.rejected.
+      operationId: rejectProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRemoveRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/remove:
+    post:
+      tags:
+      - Review moderation
+      summary: Take a review down, published or not
+      description: It stops being public and counting in the rating; the customer sees the reason. catalog.review.removed.
+      operationId: removeProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRemoveRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductReview'
+  /v1/product-reviews/{reviewId}/reply:
+    post:
+      tags:
+      - Seller reviews
+      summary: Reply to a published review, once (catalog:write, members of the owning organisation)
+      description: 409 catalog.review-not-published before approval, 409 catalog.review-already-replied the second time; catalog.review.replied.
+        The reply is public and cannot be edited.
+      operationId: replyToProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReplyRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerReview'
+  /v1/product-reviews/{reviewId}/reports:
+    post:
+      tags:
+      - Product reviews
+      summary: Report a published review (signed-in customer, or a member of the product's seller)
+      description: 'One report per reporter and review: a repeated report returns 200 with created=false. The first report
+        of a text queues the review in trust-ops (catalog.review.reported); sellers can report but never edit or hide a review.'
+      operationId: reportProductReview
+      parameters:
+      - name: reviewId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReportRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReviewReportResult'
   /v1/product-types:
     get:
       tags:
@@ -913,6 +1124,97 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Product'
+  /v1/products/{atin}/reviews:
+    post:
+      tags:
+      - Product reviews
+      summary: Review a product I received (signed-in customer)
+      description: 403 catalog.review-not-verified-purchase without a delivered order line for the product; 409 catalog.review-already-exists
+        the second time. The review is published at once or, when the automatic checks (profanity, links, personal data) flag
+        it, waits for moderation (status PENDING). Publishes catalog.review.published or catalog.review.submitted.
+      operationId: writeProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteReviewRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OwnReview'
+  /v1/products/{atin}/reviews/mine:
+    get:
+      tags:
+      - Product reviews
+      summary: 'My standing with a product: may I review it, and my review (signed-in customer)'
+      description: eligible is true when orders-service says the customer received the product and they have no live review
+        yet. A review in any state is returned, with the moderation reason when it was refused or removed. 503 catalog.purchase-check-unavailable
+        when orders cannot answer.
+      operationId: myProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MyReview'
+    put:
+      tags:
+      - Product reviews
+      summary: Edit my review within 30 days (signed-in customer)
+      description: The checks run again. 409 catalog.review-edit-window-closed after the window. An edit of a rejected or
+        removed review always goes back to moderation.
+      operationId: editProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditReviewRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OwnReview'
+    delete:
+      tags:
+      - Product reviews
+      summary: Delete my review (signed-in customer)
+      description: Any time. The rating is recomputed; the customer can review the product again.
+      operationId: deleteProductReview
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
   /v1/products/{id}:
     get:
       tags:
@@ -1179,6 +1481,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicProduct'
       security: []
+  /v1/public/products/{atin}/rating:
+    get:
+      tags:
+      - Product reviews
+      summary: 'A live product''s rating: average, count and star breakdown'
+      operationId: productRating
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductRating'
+      security: []
+  /v1/public/products/{atin}/reviews:
+    get:
+      tags:
+      - Product reviews
+      summary: Published reviews of a live product, with its rating
+      description: Sorted NEWEST (default), HIGHEST or LOWEST, optionally only reviews with the given stars. Reviewers show
+        as first name and last initial, always Verified purchase.
+      operationId: publicProductReviews
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: stars
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          default: NEWEST
+          enum:
+          - NEWEST
+          - HIGHEST
+          - LOWEST
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+          maximum: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicReviewPage'
+      security: []
   /v1/public/products/{atin}/reports:
     post:
       tags:
@@ -1226,6 +1603,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicVariant'
       security: []
+  /v1/seller/reviews:
+    get:
+      tags:
+      - Seller reviews
+      summary: Published reviews of my products, newest first (catalog:write)
+      description: Sellers see their own organisation; staff name it with orgId. The customer's identity is left out. unanswered=true
+        lists reviews without a reply.
+      operationId: listSellerReviews
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: unanswered
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerReviewPage'
   /v1/variants/{atin}:
     get:
       tags:
@@ -2177,6 +2595,471 @@ components:
           type: boolean
         shipsNow:
           type: boolean
+        rating:
+          $ref: '#/components/schemas/ProductRating'
+    ReviewPhoto:
+      type: object
+      description: 'A review photo: the public https URL media-service gave the uploaded, moderated image'
+      properties:
+        url:
+          type: string
+          maxLength: 1024
+      required:
+      - url
+    WriteReviewRequest:
+      type: object
+      description: 'Stars are required; title, text and up to 5 photos are optional. reviewerName is the shopper''s account
+        name: only the first name and last initial are kept'
+      properties:
+        reviewerName:
+          type: string
+          maxLength: 200
+        rating:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+          maxLength: 120
+        text:
+          type: string
+          maxLength: 4000
+        photos:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+      required:
+      - rating
+    EditReviewRequest:
+      type: object
+      description: The whole review again (stars, title, text, photos)
+      properties:
+        rating:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 5
+        title:
+          type: string
+          maxLength: 120
+        text:
+          type: string
+          maxLength: 4000
+        photos:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+      required:
+      - rating
+    ReviewReportRequest:
+      type: object
+      description: Report a published review
+      properties:
+        reasonCode:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        details:
+          type: string
+          maxLength: 500
+      required:
+      - reasonCode
+    ReviewReasonCode:
+      type: string
+      description: Why a review is reported or removed (OTHER needs a note when removing)
+      enum:
+      - ABUSIVE
+      - PERSONAL_INFORMATION
+      - SPAM
+      - OFF_TOPIC
+      - CONFLICT_OF_INTEREST
+      - OTHER
+    ReviewReportResult:
+      type: object
+      properties:
+        created:
+          type: boolean
+        reports:
+          type: integer
+          format: int32
+      required:
+      - created
+      - reports
+    ReviewReplyRequest:
+      type: object
+      description: The product owner's single public reply
+      properties:
+        text:
+          type: string
+          maxLength: 1000
+          minLength: 1
+      required:
+      - text
+    ReviewApproveRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+    ReviewRemoveRequest:
+      type: object
+      description: reasonCode is required; note is required for OTHER
+      properties:
+        reasonCode:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        note:
+          type: string
+          maxLength: 500
+      required:
+      - reasonCode
+    ProductRating:
+      type: object
+      description: Average stars over published reviews, the count and how many reviews gave 1, 2, 3, 4 and 5 stars
+      properties:
+        average:
+          type: number
+          description: Two decimals; 0 without reviews
+        count:
+          type: integer
+          format: int32
+        breakdown:
+          type: array
+          description: Counts for 1, 2, 3, 4 and 5 stars, in that order
+          items:
+            type: integer
+            format: int32
+          maxItems: 5
+          minItems: 5
+      required:
+      - average
+      - breakdown
+      - count
+    ReviewReply:
+      type: object
+      properties:
+        text:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+      - at
+      - text
+    ReviewModeration:
+      type: object
+      description: 'The last moderation decision: why a review was refused or removed'
+      properties:
+        by:
+          type: string
+        at:
+          type: string
+          format: date-time
+        reasonCode:
+          $ref: '#/components/schemas/ReviewReasonCode'
+        note:
+          type: string
+    PublicReview:
+      type: object
+      description: A published review as shoppers see it - Verified purchase, the reviewer's first name and last initial only
+      properties:
+        id:
+          type: string
+          format: uuid
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        verifiedPurchase:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+      required:
+      - createdAt
+      - id
+      - photos
+      - rating
+      - reviewerName
+      - verifiedPurchase
+    PublicReviewPage:
+      type: object
+      description: One page of published reviews and the product's rating
+      properties:
+        rating:
+          $ref: '#/components/schemas/ProductRating'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicReview'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+      required:
+      - items
+      - page
+      - rating
+      - size
+      - total
+    OwnReview:
+      type: object
+      description: The customer's own review in any state; moderation says why it was refused
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        productTitle:
+          type: string
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        status:
+          type: string
+          enum:
+          - PENDING
+          - PUBLISHED
+          - REJECTED
+          - REMOVED
+          - DELETED
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        editableUntil:
+          type: string
+          format: date-time
+        editable:
+          type: boolean
+        moderation:
+          $ref: '#/components/schemas/ReviewModeration'
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+      required:
+      - atin
+      - createdAt
+      - editable
+      - editableUntil
+      - id
+      - photos
+      - productTitle
+      - rating
+      - reviewerName
+      - status
+      - updatedAt
+    MyReview:
+      type: object
+      description: 'What the signed-in customer can do about a product: eligible means they received it and have not reviewed
+        it yet; reason says why not (not-purchased, already-reviewed)'
+      properties:
+        eligible:
+          type: boolean
+        reason:
+          type: string
+        review:
+          $ref: '#/components/schemas/OwnReview'
+      required:
+      - eligible
+    SellerReview:
+      type: object
+      description: A published review of the organisation's product, with the customer's identity left out
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        productTitle:
+          type: string
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        verifiedPurchase:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        reportCount:
+          type: integer
+          format: int32
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+      required:
+      - atin
+      - createdAt
+      - id
+      - photos
+      - productTitle
+      - rating
+      - reportCount
+      - reviewerName
+      - verifiedPurchase
+    SellerReviewPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerReview'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+      required:
+      - items
+      - page
+      - size
+      - total
+    ProductReview:
+      type: object
+      description: A review for moderation - the author's id, the delivering order, what the automatic checks found and the
+        decision
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        productTitle:
+          type: string
+        sellerOrgId:
+          type: string
+        customerId:
+          type: string
+        reviewerName:
+          type: string
+        orderNumber:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        title:
+          type: string
+        text:
+          type: string
+        photos:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReviewPhoto'
+        status:
+          type: string
+          enum:
+          - PENDING
+          - PUBLISHED
+          - REJECTED
+          - REMOVED
+          - DELETED
+        flags:
+          type: array
+          items:
+            type: string
+            enum:
+            - PROFANITY
+            - LINK
+            - EMAIL
+            - PHONE
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        reportCount:
+          type: integer
+          format: int32
+        moderation:
+          $ref: '#/components/schemas/ReviewModeration'
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+        version:
+          type: integer
+          format: int64
+      required:
+      - atin
+      - createdAt
+      - customerId
+      - flags
+      - id
+      - orderNumber
+      - photos
+      - productId
+      - productTitle
+      - rating
+      - reportCount
+      - reviewerName
+      - sellerOrgId
+      - status
+      - updatedAt
+      - version
+    ProductReviewPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductReview'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+      required:
+      - items
+      - page
+      - size
+      - total
     PublicVariant:
       type: object
       properties:

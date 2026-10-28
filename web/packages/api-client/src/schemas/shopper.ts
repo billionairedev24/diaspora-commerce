@@ -48,6 +48,8 @@ export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
 export const OrderLineViewSchema = z.object({
   lineId: z.string(),
   atin: z.string(),
+  /** The product page's ATIN (atin is the variant's): "Rate this item" opens its reviews (S324). */
+  productAtin: z.string().optional(),
   title: z.string(),
   imageUrl: nullableString,
   quantity: z.number().int(),

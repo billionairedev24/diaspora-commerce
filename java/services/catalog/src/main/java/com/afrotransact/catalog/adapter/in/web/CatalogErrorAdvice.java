@@ -3,8 +3,10 @@ package com.afrotransact.catalog.adapter.in.web;
 import java.util.Map;
 
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.catalog.domain.ReviewStateConflict;
 import com.afrotransact.catalog.domain.imports.SpreadsheetRejected;
 import com.afrotransact.catalog.port.ImageImporter.ImageServiceUnavailable;
+import com.afrotransact.catalog.port.PurchaseVerifier.PurchaseCheckUnavailable;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -45,6 +47,25 @@ class CatalogErrorAdvice {
         pd.setType(ProblemTypes.of("catalog.media-unavailable"));
         pd.setTitle("Image library unavailable");
         pd.setProperty("code", "catalog.media-unavailable");
+        return pd;
+    }
+
+    @ExceptionHandler(ReviewStateConflict.class)
+    ProblemDetail reviewConflict(ReviewStateConflict ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        pd.setType(ProblemTypes.of(ex.code()));
+        pd.setTitle("Review state conflict");
+        pd.setProperty("code", ex.code());
+        return pd;
+    }
+
+    @ExceptionHandler(PurchaseCheckUnavailable.class)
+    ProblemDetail purchaseCheckUnavailable(PurchaseCheckUnavailable ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "We could not check your purchase right now; try again in a minute");
+        pd.setType(ProblemTypes.of("catalog.purchase-check-unavailable"));
+        pd.setTitle("Purchase check unavailable");
+        pd.setProperty("code", "catalog.purchase-check-unavailable");
         return pd;
     }
 

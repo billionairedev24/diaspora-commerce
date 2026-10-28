@@ -19,8 +19,10 @@ type OrderAddress struct {
 
 // OrderLineView is one bought line.
 type OrderLineView struct {
-	LineID         string  `json:"lineId"`
-	ATIN           string  `json:"atin"`
+	LineID string `json:"lineId"`
+	ATIN   string `json:"atin"`
+	// ProductATIN is the product page's ATIN (ATIN is the variant's): "Rate this item" opens its reviews (S324).
+	ProductATIN    string  `json:"productAtin"`
 	Title          string  `json:"title"`
 	ImageURL       *string `json:"imageUrl"`
 	Quantity       int     `json:"quantity"`

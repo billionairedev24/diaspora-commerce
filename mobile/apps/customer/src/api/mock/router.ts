@@ -3,7 +3,7 @@
 import { bffProblemType, type Cart, type CartPackage, type DeliveryPromise, type ProductDetail, type ProductSummary, type SearchPage } from '@afrotransact/api-client';
 
 import { type Booking, type CheckoutSummary, type OrderConfirmation, type OrderTracking } from '../types';
-import { mockDb, type MockLine, type MockShipment, nextId, productByAtin } from './db';
+import { mockDb, type MockLine, type MockReview, type MockShipment, nextId, productByAtin } from './db';
 import { type FixtureProduct, PRODUCTS, PROVIDERS, USER } from './fixtures';
 import { atZoned } from './zoned';
 
@@ -259,7 +259,74 @@ const LABEL: Record<string, string> = { REQUESTED: 'Awaiting provider', CONFIRME
 
 /* ── Routes ────────────────────────────────────────────────────────────────── */
 
+/** A product the shopper has received (a delivered shipment holds it): the backend's rule for who can review (S324). */
+function receivedAtin(atin: string): boolean {
+  return mockDb().orders.some((o) => o.shipments.some((s) => s.status === 'delivered' && s.items.some((it) => it.atin === atin)));
+}
+
+const EDIT_WINDOW_MS = 30 * 86_400_000;
+
+function ownReview(r: MockReview) {
+  const editableUntil = new Date(new Date(r.createdAt).getTime() + EDIT_WINDOW_MS);
+  return { id: r.id, reviewerName: `${USER.firstName} ${USER.lastName.charAt(0)}.`, rating: r.rating, title: r.title, text: r.text, photos: [] as Array<{ url: string }>, status: r.status, createdAt: r.createdAt,
+    updatedAt: r.updatedAt, editableUntil: editableUntil.toISOString(), editable: editableUntil.getTime() > Date.now(), moderation: null, reply: null };
+}
+
+/** The automatic checks of catalog (links, e-mail addresses, phone numbers, profanity): a flagged review waits for staff. */
+const flagged = (...parts: Array<string | null | undefined>) => /https?:\/\/|www\.|\S+@\S+\.\S+|(?:\+?\d[\s().-]?){9,}|\b(?:damn|shit|fuck)\w*/i.test(parts.filter(Boolean).join(' '));
+
+function readReview(body: unknown): { rating: number; title: string | null; text: string | null } | Response {
+  const b = (body ?? {}) as { rating?: unknown; title?: unknown; text?: unknown };
+  if (typeof b.rating !== 'number' || !Number.isInteger(b.rating) || b.rating < 1 || b.rating > 5) {
+    return new Response(JSON.stringify({ type: bffProblemType('VALIDATION_FAILED'), title: 'Check your review', status: 422, code: 'VALIDATION_FAILED', errors: { rating: 'Choose 1 to 5 stars' } }), { status: 422, headers: { 'Content-Type': 'application/problem+json' } });
+  }
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  return { rating: b.rating, title: str(b.title), text: str(b.text) };
+}
+
 const ROUTES: Array<[string, string, Handler]> = [
+  ['GET', '/v1/products/:atin/reviews', ({ params }) => {
+    const own = mockDb().reviews[params.atin ?? ''];
+    const published = own?.status === 'PUBLISHED' ? [own] : [];
+    const breakdown = [1, 2, 3, 4, 5].map((n) => published.filter((r) => r.rating === n).length);
+    const count = published.length;
+    return json({ rating: { average: count ? published.reduce((a, r) => a + r.rating, 0) / count : 0, count, breakdown },
+      items: published.map((r) => ({ id: r.id, reviewerName: ownReview(r).reviewerName, rating: r.rating, title: r.title, text: r.text, photos: [], verifiedPurchase: true, createdAt: r.createdAt, reply: null })),
+      total: count, page: 0, size: 10 });
+  }],
+  ['GET', '/v1/products/:atin/reviews/mine', ({ params }) => {
+    const atin = params.atin ?? '';
+    const own = mockDb().reviews[atin];
+    if (own) return json({ eligible: false, reason: 'already-reviewed', review: ownReview(own) });
+    const eligible = receivedAtin(atin);
+    return json({ eligible, reason: eligible ? null : 'not-purchased', review: null });
+  }],
+  ['POST', '/v1/products/:atin/reviews', ({ params, body }) => {
+    const atin = params.atin ?? '';
+    if (!receivedAtin(atin)) return problem(403, 'Only buyers can review', 'REVIEW_NOT_VERIFIED_PURCHASE', 'Only customers who received this item can review it.');
+    if (mockDb().reviews[atin]) return problem(409, 'Already reviewed', 'REVIEW_ALREADY_EXISTS', 'You have already reviewed this item.');
+    const input = readReview(body);
+    if (input instanceof Response) return input;
+    const now = new Date().toISOString();
+    const review: MockReview = { id: `00000000-0000-4000-8000-${String(mockDb().seq++).padStart(12, '0')}`, ...input, status: flagged(input.title, input.text) ? 'PENDING' : 'PUBLISHED', createdAt: now, updatedAt: now };
+    mockDb().reviews[atin] = review;
+    return json(ownReview(review), 201);
+  }],
+  ['PUT', '/v1/products/:atin/reviews/mine', ({ params, body }) => {
+    const own = mockDb().reviews[params.atin ?? ''];
+    if (!own) return problem(404, 'No review', 'NOT_FOUND', 'You have not reviewed this item.');
+    if (!ownReview(own).editable) return problem(409, 'Editing is closed', 'REVIEW_EDIT_WINDOW_CLOSED', 'Reviews can be edited for 30 days after you wrote them.');
+    const input = readReview(body);
+    if (input instanceof Response) return input;
+    Object.assign(own, input, { status: flagged(input.title, input.text) ? 'PENDING' : 'PUBLISHED', updatedAt: new Date().toISOString() });
+    return json(ownReview(own));
+  }],
+  ['DELETE', '/v1/products/:atin/reviews/mine', ({ params }) => {
+    const db = mockDb();
+    if (!db.reviews[params.atin ?? '']) return problem(404, 'No review', 'NOT_FOUND', 'You have not reviewed this item.');
+    delete db.reviews[params.atin ?? ''];
+    return noContent();
+  }],
   ['GET', '/v1/me', () => json({ authenticated: true, user: { id: USER.id, firstName: USER.firstName, lastName: USER.lastName, email: USER.email, initials: 'AO', roles: ['account.customer'] }, counts: { orders: mockDb().orders.length, addresses: mockDb().addresses.length, paymentMethods: mockDb().paymentMethods.length } })],
   ['GET', '/v1/search', ({ url }) => json(search(url.searchParams.get('q') ?? '', Number(url.searchParams.get('page') ?? 0), Number(url.searchParams.get('size') ?? 24)))],
   ['GET', '/v1/products/:atin', ({ params }) => { const p = productByAtin(params.atin ?? ''); return p ? json(detailOf(p)) : problem(404, 'Product not found', 'NOT_FOUND'); }],

@@ -18,6 +18,7 @@ export interface MockShipment {
   deliveryCode: string | null;
   items: Array<{ atin: string; quantity: number }>;
 }
+export interface MockReview { id: string; rating: number; title: string | null; text: string | null; status: 'PUBLISHED' | 'PENDING'; createdAt: string; updatedAt: string }
 export interface MockOrder { orderNumber: string; placedAt: string; totalMinor: number; shipTo: string; status: string; shipments: MockShipment[] }
 
 const daysFromNow = (d: number, h = 10) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(h, 0, 0, 0); return x; };
@@ -65,6 +66,8 @@ function seed() {
     bookings: seedBookings(),
     bookingHistory: {} as Record<string, Array<{ at: string; by: string; action: string }>>,
     devices: [] as Array<{ id: string; token: string; app: string; platform: string; provider: string }>,
+    /** The shopper's own product reviews by product ATIN (S324). */
+    reviews: {} as Record<string, MockReview>,
     prefs: { email: true, sms: true, push: true, marketingOptIn: false, updatedAt: new Date().toISOString() },
     seq: 100
   };

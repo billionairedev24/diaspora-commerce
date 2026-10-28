@@ -5,6 +5,7 @@ import { type ApiClientOptions, createDownloader, createRequester, type Download
 import { createSellerFbaApi } from './inventory-hub';
 import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
 import { type AddressSuggestions, AddressSuggestionsSchema, type PostalAddress, PostalAddressSchema } from './schemas/location';
+import { type ReviewReportInput, type ReviewReportResult, ReviewReportResultSchema, type SellerReview, type SellerReviewPage, SellerReviewPageSchema, SellerReviewSchema } from './schemas/reviews';
 import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
@@ -312,6 +313,16 @@ export function createSellerApiClient(options: ApiClientOptions) {
       (await request(`/v1/seller/returns${status ? `?status=${enc(status)}` : ''}`, SellerReturnListSchema, { signal })).items,
     listDisputes: async (status?: string, signal?: AbortSignal): Promise<SellerDispute[]> =>
       (await request(`/v1/seller/disputes${status ? `?status=${enc(status)}` : ''}`, SellerDisputeListSchema, { signal })).items,
+    /* Reviews of the organisation's products (S324): read, reply once, report. Sellers cannot edit or hide a review. */
+    listReviews: (q: { unanswered?: boolean; page?: number; size?: number } = {}, signal?: AbortSignal): Promise<SellerReviewPage> =>
+      request('/v1/seller/reviews', SellerReviewPageSchema, {
+        signal,
+        query: { unanswered: q.unanswered ? 'true' : undefined, page: q.page === undefined ? undefined : String(q.page), size: q.size === undefined ? undefined : String(q.size) }
+      }),
+    replyToReview: (id: string, text: string): Promise<SellerReview> =>
+      request(`/v1/seller/reviews/${enc(id)}/reply`, SellerReviewSchema, { method: 'POST', body: { text } }),
+    reportReview: (id: string, body: ReviewReportInput): Promise<ReviewReportResult> =>
+      request(`/v1/seller/reviews/${enc(id)}/reports`, ReviewReportResultSchema, { method: 'POST', body }),
     listCoupons: async (signal?: AbortSignal) => (await request('/v1/seller/coupons', SellerCouponListSchema, { signal })).items,
     createCoupon: (body: CreateSellerCoupon): Promise<SellerCoupon> =>
       request('/v1/seller/coupons', SellerCouponSchema, { method: 'POST', body }),

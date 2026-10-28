@@ -43,7 +43,8 @@ export default async function ProductPage({ params }: Props) {
     sku: p.atin,
     brand: { '@type': 'Brand', name: p.brand },
     description: p.bullets.join(' '),
-    aggregateRating: { '@type': 'AggregateRating', ratingValue: p.rating, reviewCount: p.reviewCount },
+    // Only verified-purchase reviews count (S324); schema.org wants no aggregateRating without any.
+    ...(p.reviewCount > 0 ? { aggregateRating: { '@type': 'AggregateRating', ratingValue: p.rating, reviewCount: p.reviewCount } } : {}),
     offers: buyBox
       ? { '@type': 'Offer', price: (buyBox.priceMinor / 100).toFixed(2), priceCurrency: buyBox.currency, availability: 'https://schema.org/InStock', seller: { '@type': 'Organization', name: buyBox.seller.name } }
       : { '@type': 'Offer', availability: 'https://schema.org/OutOfStock' }

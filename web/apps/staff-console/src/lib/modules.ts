@@ -70,6 +70,7 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
   orders: [{ resource: 'orders', label: 'Orders' }],
   catalog: [
     { resource: 'moderation', label: 'Moderation queue' },
+    { resource: 'product-reviews', label: 'Product reviews' },
     { resource: 'products', label: 'Products' }
   ],
   inventory: [{ resource: 'inventory', label: 'Lots' }],

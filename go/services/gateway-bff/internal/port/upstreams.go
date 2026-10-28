@@ -113,6 +113,8 @@ type CatalogProduct struct {
 	} `json:"images"`
 	VariationTheme string           `json:"variationTheme"`
 	Variants       []CatalogVariant `json:"variants"`
+	// Rating is the average over the product's published, verified-purchase reviews (S324); zeros without any.
+	Rating UpRating `json:"rating"`
 }
 
 // CatalogVariantView is a variant with its product (GET /v1/public/variants/{atin}).

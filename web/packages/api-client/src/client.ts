@@ -7,6 +7,7 @@ import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { membershipMethods } from './membership-client';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
 import { referralMethods } from './referral-client';
+import { reviewMethods } from './reviews-client';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema } from './schemas/account';
 import { type Me, MeSchema, type PhoneCodeSent, PhoneCodeSentSchema, type PhoneVerification, PhoneVerificationSchema, type SignOutResult, SignOutResultSchema } from './schemas/auth';
 import {
@@ -117,6 +118,7 @@ export function createApiClient(options: ApiClientOptions) {
     ...creditMethods(request),
     ...membershipMethods(request),
     ...referralMethods(request),
+    ...reviewMethods(request),
 
     /* Auth: sign-in and sign-up run on identity's hosted pages (single sign-on), started with a full-page navigation to
        loginUrl(); the BFF keeps the tokens (OIDC authorization code + PKCE). */

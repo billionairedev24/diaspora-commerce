@@ -32,7 +32,7 @@
 .shipMain { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
 .items { display: flex; flex-direction: column; gap: var(--at-space-2); }
 .itemList { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
-.item { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
+.item { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
 .itemTitle { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .thumb { width: 56px; height: 56px; object-fit: cover; border-radius: var(--at-radius-sm); background: var(--at-color-surface-muted); border: 1px solid var(--at-color-border); }
 .codeBlock { display: flex; flex-direction: column; align-items: flex-start; gap: var(--at-space-2); }

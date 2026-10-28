@@ -128,7 +128,7 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const api = client();
     const session = await api.getSession();
     expect(session.portal).toBe('SELLER_CENTER');
-    expect(keysOf(session)).toEqual(['home', 'orders', 'returns', 'disputes', 'listings', 'inventory', 'coupons', 'payouts', 'fees', 'billing', 'account-health', 'team']);
+    expect(keysOf(session)).toEqual(['home', 'orders', 'returns', 'disputes', 'listings', 'reviews', 'inventory', 'coupons', 'payouts', 'fees', 'billing', 'account-health', 'team']);
     expect(session.navGroups.map((g) => g.label)).toEqual(['Overview', 'Commerce', 'Growth', 'Finance', 'Trust & compliance', 'Settings']);
     // Returns and disputes: read only, filterable by status; the buyer is never in the payload.
     await expect(api.listReturns()).resolves.toHaveLength(2);

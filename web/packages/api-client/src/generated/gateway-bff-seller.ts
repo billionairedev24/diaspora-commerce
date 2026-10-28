@@ -804,6 +804,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Published reviews of the organisation's products, newest first
+         * @description catalog `GET /v1/seller/reviews` with the member's token (module Reviews). Only published reviews are listed; the
+         *     customer is never identified. `unanswered=true` lists the reviews that still wait for a reply.
+         */
+        get: operations["listSellerReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/reviews/{reviewId}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reply to a published review, once
+         * @description The reply is public next to the review and cannot be edited or deleted. 409 `ALREADY_DONE` when the review already
+         *     has a reply, 409 `CONFLICT` while it is not published.
+         */
+        post: operations["replyToSellerReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/reviews/{reviewId}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a review to Trust & Safety
+         * @description One report per member and review (a repeat answers 200 with `created: false`). The review stays public until Trust & Safety decide.
+         */
+        post: operations["reportSellerReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/coupons": {
         parameters: {
             query?: never;
@@ -2448,7 +2510,7 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /** @enum {string} */
-        ModuleKey: "onboarding" | "home" | "orders" | "returns" | "disputes" | "listings" | "inventory" | "coupons" | "calendar" | "requests" | "hours" | "services" | "policy" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
+        ModuleKey: "onboarding" | "home" | "orders" | "returns" | "disputes" | "listings" | "reviews" | "inventory" | "coupons" | "calendar" | "requests" | "hours" | "services" | "policy" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
         SellerUser: {
             id: string;
             firstName: string;
@@ -3226,6 +3288,49 @@ export interface components {
         SellerDisputeList: {
             items: components["schemas"]["SellerDispute"][];
             total: number;
+        };
+        SellerReviewPhoto: {
+            /** Format: uri */
+            url: string;
+        };
+        SellerReviewReply: {
+            text: string;
+            /** Format: date-time */
+            at: string;
+        };
+        /** @description A published, verified-purchase review of one of the organisation's products. The customer is never identified. */
+        SellerReview: {
+            /** Format: uuid */
+            id: string;
+            atin: string;
+            productTitle: string;
+            /** @example Adaeze N. */
+            reviewerName: string;
+            rating: number;
+            title: string | null;
+            text: string | null;
+            photos: components["schemas"]["SellerReviewPhoto"][];
+            verifiedPurchase: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            reportCount: number;
+            reply: components["schemas"]["SellerReviewReply"] | null;
+        };
+        SellerReviewPage: {
+            items: components["schemas"]["SellerReview"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        SellerReviewReportRequest: {
+            /** @enum {string} */
+            reasonCode: "ABUSIVE" | "PERSONAL_INFORMATION" | "SPAM" | "OFF_TOPIC" | "CONFLICT_OF_INTEREST" | "OTHER";
+            /** @description Required for OTHER */
+            details?: string;
+        };
+        SellerReviewReportResult: {
+            created: boolean;
         };
         SellerCouponList: {
             items: components["schemas"]["SellerCoupon"][];
@@ -6265,6 +6370,108 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerReviews: {
+        parameters: {
+            query?: {
+                unanswered?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of reviews */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    replyToSellerReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The review with the reply */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    reportSellerReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerReviewReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Already reported */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewReportResult"];
+                };
+            };
+            /** @description Reported */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerReviewReportResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

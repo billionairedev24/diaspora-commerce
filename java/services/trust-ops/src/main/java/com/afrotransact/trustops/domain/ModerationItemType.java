@@ -13,10 +13,22 @@ public enum ModerationItemType {
      * A customer review of a completed booking (bookings' booking.review.submitted): allow publishes it, remove
      * rejects it, both through bookings-service ({@code POST /v1/reviews/{bookingId}/approve|reject}).
      */
-    SERVICE_REVIEW;
+    SERVICE_REVIEW,
+    /**
+     * A verified-purchase review of a product (catalog's catalog.review.submitted when it failed the automatic
+     * checks, or catalog.review.reported for a published review someone reported): allow publishes it (or keeps a
+     * reported one public), remove rejects it (pending) or takes it down (published), through catalog-service
+     * ({@code POST /v1/product-reviews/{id}/approve|reject|remove}).
+     */
+    PRODUCT_REVIEW;
 
     /** Listing items (new or live) as opposed to reviews. */
     public boolean listing() {
-        return this != SERVICE_REVIEW;
+        return this != SERVICE_REVIEW && this != PRODUCT_REVIEW;
+    }
+
+    /** Customer reviews of bookings or of products. */
+    public boolean review() {
+        return !listing();
     }
 }

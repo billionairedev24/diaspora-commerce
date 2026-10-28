@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { PdpPreorderBanner, PdpPreorderBox, PdpStandardDelivery } from '@/components/preorder/PdpPreorder';
+import { ProductReviews } from '@/components/reviews/ProductReviews';
 import { DeliverToDialog } from '@/components/shell/DeliverToDialog';
 import { LolaSheet } from '@/components/shell/LolaSheet';
 import { useT } from '@/i18n/t';
@@ -300,6 +301,7 @@ export function ProductView({ atin }: { atin: string }) {
         </aside>
       </div>
       {pre && <PdpPreorderBanner live={pre} />}
+      <ProductReviews atin={p.atin} title={p.title} />
       <DeliverToDialog open={locOpen} onOpenChange={setLocOpen} />
       <LolaSheet open={lolaOpen} onOpenChange={setLolaOpen} />
     </div>

@@ -348,7 +348,7 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 		}
 		d.Proof = deliveredProof(entries)
 		for _, l := range sh.Lines {
-			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, Title: l.Title,
+			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, ProductATIN: l.ProductATIN, Title: l.Title,
 				ImageURL: optStr(l.ImageURL), Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, ItemsMinor: l.ItemsMinor})
 		}
 		out.Shipments = append(out.Shipments, d)

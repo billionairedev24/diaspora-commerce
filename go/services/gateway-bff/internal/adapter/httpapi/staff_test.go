@@ -391,6 +391,15 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"variants": []any{map[string]any{"atin": "AT0001-1", "sku": "SHEA", "status": "IN_REVIEW"}}}))
 	case strings.HasPrefix(p, "/v1/products/"):
 		writeJ(w, 200, map[string]any{"id": "prd-1", "atin": "AT0001", "title": "Shea butter", "status": "IN_REVIEW", "ownerOrgId": "org-1"})
+	case p == "/v1/product-reviews" || strings.HasPrefix(p, "/v1/product-reviews/"):
+		rev := map[string]any{"id": "11111111-1111-4111-8111-111111111111", "atin": "AT0001", "productTitle": "Shea butter", "sellerOrgId": "org-1", "customerId": "cus-1",
+			"reviewerName": "Ada O.", "rating": 4, "title": "Good", "text": "Nice", "status": "PUBLISHED", "reportCount": 0, "createdAt": now, "version": 1,
+			"photos": []any{}, "flags": []any{}}
+		if p == "/v1/product-reviews" {
+			writeJ(w, 200, page(rev))
+		} else {
+			writeJ(w, 200, rev)
+		}
 	// trust-ops
 	case p == "/v1/moderation/items" || strings.HasPrefix(p, "/v1/moderation/items/"):
 		item := map[string]any{"id": "mod-1", "title": "Herbal tea", "type": "NEW_LISTING", "status": "PENDING", "sla": map[string]any{"dueAt": now, "state": "ON_TRACK"}}

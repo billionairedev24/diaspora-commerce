@@ -355,6 +355,129 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/products/{atin}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A product's published reviews with its rating, sorted and paged
+         * @description catalog `GET /v1/public/products/{atin}/reviews`. Reviews are always verified purchases; reviewers show as first
+         *     name and last initial. `rating` covers every published review whatever the `stars` filter.
+         */
+        get: operations["listProductReviews"];
+        put?: never;
+        /**
+         * Review a product I received
+         * @description 403 `REVIEW_NOT_VERIFIED_PURCHASE` unless a shipment of mine with this product was delivered; 409
+         *     `REVIEW_ALREADY_EXISTS` (one review per product: edit it). Each photo is `{assetId}` for a new upload (`POST /v1/review-photos/uploads`, PUT the file, then
+         *     `…/complete`) or `{url}` for a photo the review already has. The review is published at
+         *     once (`status` PUBLISHED) or, when the automatic checks flag it, waits for moderation (PENDING).
+         */
+        post: operations["writeProductReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{atin}/reviews/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Can I review this product, and my review of it
+         * @description `eligible` is true when the product was delivered to me and I have not reviewed it. `reason` says why not:
+         *     `not-purchased` or `already-reviewed`. My review is returned in any state, with the reason when moderation refused
+         *     or removed it.
+         */
+        get: operations["getMyProductReview"];
+        /**
+         * Edit my review (within 30 days of writing it)
+         * @description The checks run again: a clean edit stays public, a flagged one goes to moderation, and an edit of a review
+         *     moderation refused or removed always does. 409 `REVIEW_EDIT_WINDOW_CLOSED` after 30 days. Each photo is `{assetId}` for a new upload (`POST /v1/review-photos/uploads`, PUT the file, then
+         *     `…/complete`) or `{url}` for a photo the review already has.
+         */
+        put: operations["editMyProductReview"];
+        post?: never;
+        /**
+         * Delete my review (any time)
+         * @description The product's rating is recomputed and I can review the product again.
+         */
+        delete: operations["deleteMyProductReview"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reviews/{reviewId}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a published review
+         * @description One report per person and review (a repeat answers 200 with `created: false`). Reports reach Trust & Safety's
+         *     moderation queue; the review stays public until they decide. Not my own review (403).
+         */
+        post: operations["reportReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/review-photos/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signed direct upload for a review photo (JPEG, PNG or WebP, at most 8 MB)
+         * @description Returns a short-lived URL from the media service (public, moderated images). PUT the file there with the given
+         *     headers, call `…/uploads/{assetId}/complete`, then send the review with `photos: [{assetId}]`.
+         */
+        post: operations["requestReviewPhotoUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/review-photos/uploads/{assetId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the uploaded photo (real type and size) and finalise it
+         * @description `status` READY means media published the photo; otherwise it is still being checked or was refused and the review
+         *     cannot use it.
+         */
+        post: operations["completeReviewPhotoUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/cart": {
         parameters: {
             query?: never;
@@ -2599,7 +2722,8 @@ export interface components {
              * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, PRODUCT_NOT_FOUND, OFFER_NOT_FOUND,
              *     LINE_NOT_FOUND, SAVED_NOT_FOUND, STOCK_LIMIT, OUT_OF_STOCK, INVALID_CREDENTIALS, INVALID_CODE, CHALLENGE_EXPIRED,
              *     EMAIL_TAKEN, WEAK_PASSWORD, PROVIDER_DISABLED, ZIP_NOT_SERVICEABLE, PAYMENT_DECLINED, IDEMPOTENCY_CONFLICT,
-             *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; AfroTransact Delivery from the seller's store
+             *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; product reviews (S324): REVIEW_NOT_VERIFIED_PURCHASE,
+             *     REVIEW_ALREADY_EXISTS, REVIEW_EDIT_WINDOW_CLOSED; AfroTransact Delivery from the seller's store
              *     (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
              *     DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED.
              */
@@ -2747,6 +2871,113 @@ export interface components {
             selected: boolean;
             available: boolean;
             priceMinor: number;
+        };
+        /** @description Average stars over a product's published reviews, how many there are and how many gave 1, 2, 3, 4 and 5 stars */
+        ReviewRating: {
+            average: number;
+            count: number;
+            /** @description Reviews that gave 1, 2, 3, 4 and 5 stars, in that order */
+            breakdown: number[];
+        };
+        ReviewPhoto: {
+            /** Format: uri */
+            url: string;
+        };
+        /** @description The seller's single public reply */
+        ReviewReply: {
+            text: string;
+            /** Format: date-time */
+            at: string;
+        };
+        /** @description A published review. Always a verified purchase; the reviewer shows as first name and last initial */
+        PublicReview: {
+            /** Format: uuid */
+            id: string;
+            /** @example Adaeze N. */
+            reviewerName: string;
+            rating: number;
+            title: string | null;
+            text: string | null;
+            photos: components["schemas"]["ReviewPhoto"][];
+            verifiedPurchase: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            reply: components["schemas"]["ReviewReply"] | null;
+        };
+        ProductReviewsPage: {
+            rating: components["schemas"]["ReviewRating"];
+            items: components["schemas"]["PublicReview"][];
+            /** Format: int64 */
+            total: number;
+            page: number;
+            size: number;
+        };
+        /** @description Why moderation refused or removed a review */
+        ReviewModeration: {
+            /** @enum {string} */
+            reasonCode: "ABUSIVE" | "PERSONAL_INFORMATION" | "SPAM" | "OFF_TOPIC" | "CONFLICT_OF_INTEREST" | "OTHER";
+            /** @description The reason in words for the shopper */
+            reason: string;
+            note: string | null;
+        };
+        /**
+         * @description The shopper's own review in any state: PUBLISHED, PENDING (waiting for moderation) or REJECTED / REMOVED
+         *     (`moderation` says why; editing it sends it back to moderation).
+         */
+        OwnReview: {
+            /** Format: uuid */
+            id: string;
+            reviewerName: string;
+            rating: number;
+            title: string | null;
+            text: string | null;
+            photos: components["schemas"]["ReviewPhoto"][];
+            /** @enum {string} */
+            status: "PUBLISHED" | "PENDING" | "REJECTED" | "REMOVED";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            editableUntil: string;
+            editable: boolean;
+            moderation: components["schemas"]["ReviewModeration"] | null;
+            reply: components["schemas"]["ReviewReply"] | null;
+        };
+        MyReview: {
+            /** @description The product was delivered to me and I have not reviewed it */
+            eligible: boolean;
+            /** @enum {string|null} */
+            reason: "not-purchased" | "already-reviewed" | null;
+            review: components["schemas"]["OwnReview"] | null;
+        };
+        /** @description A new upload (`assetId`) or a photo the review already has (`url`) */
+        ReviewPhotoInput: {
+            assetId?: string;
+            /** Format: uri */
+            url?: string;
+        };
+        ReviewInput: {
+            rating: number;
+            title?: string;
+            text?: string;
+            photos?: components["schemas"]["ReviewPhotoInput"][];
+        };
+        ReviewReportRequest: {
+            /** @enum {string} */
+            reasonCode: "ABUSIVE" | "PERSONAL_INFORMATION" | "SPAM" | "OFF_TOPIC" | "CONFLICT_OF_INTEREST" | "OTHER";
+            /** @description Required for OTHER */
+            details?: string;
+        };
+        ReviewReportResult: {
+            created: boolean;
+        };
+        ReviewPhotoAsset: {
+            assetId: string;
+            /** Format: uri */
+            url: string | null;
+            /** @description READY when media published the photo */
+            status: string;
         };
         ProductDetail: {
             product: {
@@ -4538,6 +4769,8 @@ export interface components {
         OrderLineView: {
             lineId: string;
             atin: string;
+            /** @description The product page's ATIN (atin is the variant's); "Rate this item" opens its reviews (S324). Empty for old orders */
+            productAtin?: string;
             title: string;
             imageUrl: string | null;
             quantity: number;
@@ -5651,6 +5884,245 @@ export interface operations {
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+        };
+    };
+    listProductReviews: {
+        parameters: {
+            query?: {
+                sort?: "recent" | "highest" | "lowest";
+                /** @description Only reviews with this rating */
+                stars?: number;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                atin: components["parameters"]["Atin"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of reviews and the rating */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductReviewsPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+        };
+    };
+    writeProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: components["parameters"]["Atin"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            /** @description The review */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getMyProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: components["parameters"]["Atin"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description My standing with the product */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    editMyProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: components["parameters"]["Atin"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            /** @description The updated review */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+        };
+    };
+    deleteMyProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: components["parameters"]["Atin"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    reportReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Already reported */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewReportResult"];
+                };
+            };
+            /** @description Reported */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewReportResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    requestReviewPhotoUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fileName: string;
+                    /** @enum {string} */
+                    contentType: "image/jpeg" | "image/png" | "image/webp";
+                    /** Format: int64 */
+                    size: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload instructions */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeUpload"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    completeReviewPhotoUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The photo */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewPhotoAsset"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getCart: {

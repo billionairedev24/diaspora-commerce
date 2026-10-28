@@ -878,6 +878,7 @@ type MediaAsset struct {
 	ID          string `json:"id"`
 	URL         string `json:"url"`
 	ContentType string `json:"contentType"`
+	Purpose     string `json:"purpose"`
 	Bytes       *int64 `json:"bytes"`
 	Width       *int   `json:"width"`
 	Height      *int   `json:"height"`
@@ -925,6 +926,9 @@ type MediaClient interface {
 	// RequestLibraryUpload is RequestUpload of a product image that also goes into the image library.
 	RequestLibraryUpload(ctx context.Context, bearer, fileName, contentType string, size int64) (MediaUpload, error)
 	Complete(ctx context.Context, bearer, assetID string) (MediaAsset, error)
+	// Asset reads one asset's metadata with the caller's token (their own upload); a public image has its URL once media
+	// has published it (S324 review photos).
+	Asset(ctx context.Context, bearer, assetID string) (MediaAsset, error)
 	Library(ctx context.Context, bearer, q, status, matched string, page, size int) (MediaLibraryPage, error)
 	RemoveFromLibrary(ctx context.Context, bearer, assetID string) error
 	RenameLibraryImage(ctx context.Context, bearer, assetID, fileName string) (MediaLibraryImage, error)

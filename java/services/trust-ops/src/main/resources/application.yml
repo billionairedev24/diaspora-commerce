@@ -142,6 +142,7 @@ at:
       order-topic: at.order.events
       handoff-topic: at.ai-handoff.events
       bookings-topic: at.bookings.events
+      product-review-topic: at.product-review.events
     jobs:
       enabled: ${TRUSTOPS_JOBS_ENABLED:true}
       sla-interval: ${TRUSTOPS_SLA_SWEEP_INTERVAL:60s}
