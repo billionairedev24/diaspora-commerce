@@ -236,6 +236,7 @@ class MembershipCheckoutIT extends OrdersIntegrationTest {
                 "idem-" + customer, "Authorization", "Bearer " + bearer), 201);
         // the window's door fee (7.99 by default) went to payments as an AfroTransact delivery fee and came back waived
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/memberships/waivers"))
+                .withRequestBody(WireMock.matchingJsonPath("$.customerId", WireMock.equalTo(customer)))
                 .withRequestBody(WireMock.matchingJsonPath("$.fees[0].kind", WireMock.equalTo("AFROTRANSACT_DELIVERY")))
                 .withRequestBody(WireMock.matchingJsonPath("$.fees[0].feeMinor", WireMock.equalTo("799"))));
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
