@@ -33,6 +33,31 @@ public final class CatalogEvents {
     public static final String PRODUCT_TAKEN_DOWN = "catalog.product.taken_down";
     /** A takedown was reversed; status is the listing's status before the takedown (LIVE or PAUSED). */
     public static final String PRODUCT_REINSTATED = "catalog.product.reinstated";
+    /**
+     * The product's average rating or review count changed (S324): a review was published, edited, removed or
+     * deleted. Aggregate {@code product} (topic at.product.events, key = product id), so it stays in order with the
+     * product's lifecycle; the search indexer updates rating and reviewCount from it.
+     */
+    public static final String PRODUCT_RATING_CHANGED = "catalog.product.rating_changed";
+
+    /** Aggregate of product review events (topic at.product-review.events, key = review id). */
+    public static final String AGGREGATE_REVIEW = "product-review";
+    /** A review is waiting for a human: it failed the automatic checks, or was edited after a rejection (PENDING). */
+    public static final String REVIEW_SUBMITTED = "catalog.review.submitted";
+    /** A review is public: it passed the checks, or moderation approved it. */
+    public static final String REVIEW_PUBLISHED = "catalog.review.published";
+    /** The customer edited a published review and it stayed public. */
+    public static final String REVIEW_UPDATED = "catalog.review.updated";
+    /** Moderation refused a pending review. */
+    public static final String REVIEW_REJECTED = "catalog.review.rejected";
+    /** Moderation took a review down. */
+    public static final String REVIEW_REMOVED = "catalog.review.removed";
+    /** The customer deleted their review. */
+    public static final String REVIEW_DELETED = "catalog.review.deleted";
+    /** A customer or the product owner reported a published review (trust-ops queues it). */
+    public static final String REVIEW_REPORTED = "catalog.review.reported";
+    /** The product owner replied to a review. */
+    public static final String REVIEW_REPLIED = "catalog.review.replied";
     public static final String CATEGORY_REQUESTED = "catalog.category-request.created";
     public static final String CATEGORY_APPROVED = "catalog.category-request.approved";
     public static final String CATEGORY_REJECTED = "catalog.category-request.rejected";
