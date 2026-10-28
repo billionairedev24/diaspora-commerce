@@ -11325,7 +11325,8 @@ operations:
     summary: payments.intent.action_required with a customerId → payment.authentication_required to the customer (email, push;
       link to the booking for BK- references, else the orders page). payments.gift_card.deliver → payment.gift_card.delivered
       to the recipient's email in the language the buyer chose (en, fr, es, ar, yo); the code is in the email and nowhere
-      else. Other payment events are ignored.
+      else: payments removes it from the outbox once the event is relayed and notifications masks it in the stored copy
+      once the email is sent. Other payment events are ignored.
   consumeNotificationsTrustOpsEvents:
     action: receive
     channel:
