@@ -1555,5 +1555,11 @@
   "st.runs.adv.featured.add": "Add",
   "st.runs.adv.featured.seller": "from {seller}",
   "st.runs.adv.featured.max": "Feature at most {max} products.",
-  "st.runs.adv.featured.on": "Features: {names}"
+  "st.runs.adv.featured.on": "Features: {names}",
+  "st.settings.membership.label": "Ẹ̀tọ́ ọmọ ẹgbẹ́",
+  "st.settings.membership.description": "Àwọn ìpele tí àwọn oníbàárà lè darapọ̀ mọ́: owó, ìdánwò ọ̀fẹ́ àti àwọn àǹfààní, pẹ̀lú òfin ìdápadà owó àti ìgbìyànjú. A ń pa gbogbo àyípadà mọ́ pẹ̀lú ìdí rẹ̀.",
+  "st.settings.membership.intro": "Ṣàlàyé ìpele kọ̀ọ̀kan níbí: owó oṣooṣù àti ọdọọdún, ìdánwò ọ̀fẹ́, títẹ̀jáde tàbí yíyọ kúrò, àti àwọn àǹfààní láti inú àtòkọ. Àwọn ọmọ ẹgbẹ́ ń pa owó tí wọ́n forúkọ sílẹ̀ lé mọ́. Owó ìrànwọ́ tí ẹ̀tọ́ ọmọ ẹgbẹ́ ń fún ń ra ọjà àti iṣẹ́ nìkan.",
+  "st.settings.membership.reportLink": "Àwọn ọmọ ẹgbẹ́, ìfagilé, iye owó àwọn àǹfààní àti owó tó ń padà wá",
+  "st.settings.membership.tiers": "Àwọn ìpele",
+  "st.settings.membership.rules": "Òfin ìsanwó"
 }

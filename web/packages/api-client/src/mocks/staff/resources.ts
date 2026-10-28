@@ -18,6 +18,7 @@ import { type MockRecord, type Scalar } from './db';
 import { exchangeRatesDef } from './exchange-rates';
 import { IDENTITY_RESOURCES } from './identity';
 import { MOCK_DRIVERS } from './lookups';
+import { tierBenefitDetails } from './membership-tiers';
 
 export interface ActionCtx {
   actor: string;
@@ -946,7 +947,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     subtitleOf: (r) => `${humanize(str(r.fields.status))} · $${(num(r.fields.monthlyPriceMinor) / 100).toFixed(2)} a month or $${(num(r.fields.yearlyPriceMinor) / 100).toFixed(2)} a year · ${str(r.fields.members)} members`,
     sections: [
       ['The plan', ['name', 'code', 'description', 'status', 'sortOrder', 'monthlyPriceMinor', 'yearlyPriceMinor', 'trialDays']],
-      ['Benefits', ['benefitsText']],
+      ['Benefits', ['benefitDetails']],
       ['Members', ['members', 'trialing']],
       ['Last change', ['updatedByName', 'updatedAt']]
     ],
@@ -975,6 +976,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         r.fields.monthlyPriceMinor = Math.round(num(v.monthlyPrice) * 100);
         r.fields.yearlyPriceMinor = Math.round(num(v.yearlyPrice) * 100);
         r.fields.benefitsText = TIER_BENEFITS.filter(([k]) => r.fields[k] === true).map(([, label]) => label).join(', ') || 'None';
+        r.fields.benefitDetails = tierBenefitDetails(r.fields);
         r.fields.version = num(r.fields.version) + 1;
         r.fields.updatedByName = ctx?.actor ?? 'Platform Admin';
         r.fields.updatedAt = (ctx?.now ?? new Date()).toISOString();
@@ -993,6 +995,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         for (const k of ['freeDeliveryMin', 'freeDeliveryCap', 'freeShippingMin', 'freeShippingCap', 'cashbackPercent', 'cashbackMin', 'cashbackCap', 'earlyAccessHours', 'boostedPercent', 'monthlyCreditAmount']) fields[k] = num(v[k]);
         for (const k of ['freeDelivery', 'freeShipping', 'cashback', 'memberPrices', 'earlyAccess', 'prioritySupport', 'freeReturns', 'boostedRewards', 'monthlyCredit']) fields[k] = v[k] === true;
         fields.benefitsText = TIER_BENEFITS.filter(([k]) => fields[k] === true).map(([, label]) => label).join(', ') || 'None';
+        fields.benefitDetails = tierBenefitDetails(fields);
         return { id: str(v.code) || id, fields, activity: [], lines: [{ id: 'th-1', changedAt: ctx.now.toISOString(), changedByName: ctx.actor, action: 'Created', reason: str(v.reason) }] };
       }
     }

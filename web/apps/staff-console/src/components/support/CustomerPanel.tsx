@@ -72,6 +72,13 @@ export function CustomerPanel({ customerId, caseId }: { customerId: string; case
         <p className="m-0 text-sm text-muted">
           {c.customer.email} · {c.customer.enabled ? 'Active' : 'Disabled'} · email {c.customer.emailVerified ? 'verified' : 'not verified'}
         </p>
+        {c.membership ? (
+          <p className="m-0 flex flex-wrap items-center gap-2 text-sm" data-testid="support-membership">
+            <StatusPill tone="brand">{c.membership.tierName} member</StatusPill>
+            {c.membership.prioritySupport ? <StatusPill tone="good">Priority support: handle first</StatusPill> : null}
+            {c.membership.freeReturns ? <StatusPill tone="info">Free returns</StatusPill> : null}
+          </p>
+        ) : null}
         <p className="m-0 text-xs text-muted">
           Refund limit: {c.refundLimitMinor === null ? 'no limit' : c.refundLimitMinor === 0 ? 'your roles may not refund' : money(c.refundLimitMinor)} · every action is recorded in the audit log by the service that performs it.
         </p>

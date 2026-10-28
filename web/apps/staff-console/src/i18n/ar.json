@@ -1555,5 +1555,11 @@
   "st.runs.adv.featured.add": "Add",
   "st.runs.adv.featured.seller": "from {seller}",
   "st.runs.adv.featured.max": "Feature at most {max} products.",
-  "st.runs.adv.featured.on": "Features: {names}"
+  "st.runs.adv.featured.on": "Features: {names}",
+  "st.settings.membership.label": "العضوية",
+  "st.settings.membership.description": "المستويات التي يمكن للعملاء الانضمام إليها: السعر والتجربة المجانية والمزايا، إضافة إلى قواعد الاسترداد وإعادة المحاولة. يُحفظ كل تغيير مع سببه.",
+  "st.settings.membership.intro": "حدّد كل مستوى هنا: السعر الشهري والسنوي والتجربة المجانية والنشر أو السحب والمزايا من القائمة. يحتفظ الأعضاء بالسعر الذي اشتركوا به. الرصيد الذي تمنحه العضوية يشتري المنتجات والخدمات فقط.",
+  "st.settings.membership.reportLink": "الأعضاء ومعدل المغادرة وتكلفة المزايا والإيرادات المتكررة",
+  "st.settings.membership.tiers": "المستويات",
+  "st.settings.membership.rules": "قواعد الفوترة"
 }

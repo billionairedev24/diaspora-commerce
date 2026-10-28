@@ -91,6 +91,8 @@ export const MODULE_TABLES: Partial<Record<StaffModuleKey, { resource: ResourceK
     { resource: 'credit-adjustments', label: 'Credit adjustments' },
     { resource: 'gift-cards', label: 'Gift cards' },
     { resource: 'credit-liabilities', label: 'Credit & gift card liability' },
+    { resource: 'memberships', label: 'Members' },
+    { resource: 'membership-report', label: 'Membership report' },
     { resource: 'reconciliation-runs', label: 'Daily runs' },
     { resource: 'stripe-lookup', label: 'Stripe lookup' }
   ],

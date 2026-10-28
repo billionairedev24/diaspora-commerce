@@ -1548,5 +1548,11 @@
   "st.runs.adv.featured.add": "Add",
   "st.runs.adv.featured.seller": "from {seller}",
   "st.runs.adv.featured.max": "Feature at most {max} products.",
-  "st.runs.adv.featured.on": "Features: {names}"
+  "st.runs.adv.featured.on": "Features: {names}",
+  "st.settings.membership.label": "Membership",
+  "st.settings.membership.description": "The tiers shoppers can join: price, free trial and the benefits each gives, plus the refund and retry rules. Every change is kept with its reason.",
+  "st.settings.membership.intro": "Define each tier here: monthly and yearly price, free trial, publish or retire, and which benefits it gives from the menu. Members keep the price they signed up at. Credit a membership grants only buys products and services.",
+  "st.settings.membership.reportLink": "Members, churn, the cost of the benefits and recurring revenue",
+  "st.settings.membership.tiers": "Tiers",
+  "st.settings.membership.rules": "Billing rules"
 }

@@ -1555,5 +1555,11 @@
   "st.runs.adv.featured.add": "Añadir",
   "st.runs.adv.featured.seller": "de {seller}",
   "st.runs.adv.featured.max": "Destaque como máximo {max} productos.",
-  "st.runs.adv.featured.on": "Destaca: {names}"
+  "st.runs.adv.featured.on": "Destaca: {names}",
+  "st.settings.membership.label": "Membresía",
+  "st.settings.membership.description": "Los niveles a los que pueden unirse los clientes: precio, prueba gratis y ventajas de cada uno, además de las reglas de reembolso y reintento. Cada cambio se guarda con su motivo.",
+  "st.settings.membership.intro": "Define aquí cada nivel: precio mensual y anual, prueba gratis, publicar o retirar, y las ventajas del menú. Los miembros conservan el precio con el que se unieron. El crédito que otorga una membresía solo compra productos y servicios.",
+  "st.settings.membership.reportLink": "Miembros, bajas, coste de las ventajas e ingresos recurrentes",
+  "st.settings.membership.tiers": "Niveles",
+  "st.settings.membership.rules": "Reglas de facturación"
 }

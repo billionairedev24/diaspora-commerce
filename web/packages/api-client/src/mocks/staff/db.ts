@@ -9,6 +9,7 @@ import { type MockFeeRatesState, seedFeeRates } from './fee-rates';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { seedIdentityAdmin } from './identity';
 import { type MockMarketsState, seedMarkets } from './markets';
+import { tierBenefitDetails } from './membership-tiers';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
@@ -518,6 +519,7 @@ function seed(now: Date): MockStaffDb {
       { id: 'th-3', changedAt: ago(2, 0), changedByName: 'Platform Admin', action: 'Created', reason: 'A bigger tier for large households' }
     ])
   ];
+  membershipTiers.forEach((r) => { r.fields.benefitDetails = tierBenefitDetails(r.fields); });
   const memberships = [
     rec('mem-1', { customerId: customers[0]?.id ?? 'cus-1000', customerName: customers[0]?.name ?? 'Amara Nwosu', tierCode: 'plus', tierName: 'Plus', status: 'ACTIVE', interval: 'Monthly', priceMinor: 999, source: 'Paid', startedAt: ago(40, 0), periodEnd: ago(-5, 0), cancelAtPeriodEnd: 'No', refundPossible: 'No', refundWhy: 'Window passed' }, [], [
       { id: 'mc-1', createdAt: ago(40, 0), kind: 'Join', amountMinor: 999, status: 'SUCCEEDED', refundedMinor: 0 },
