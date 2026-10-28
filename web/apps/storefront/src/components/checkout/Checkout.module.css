@@ -176,6 +176,7 @@
 .paymentTitle { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
 .payment { display: flex; flex-direction: column; gap: var(--at-space-3); min-width: 0; }
 .newMethod, .newMethodOn { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.newMethod[hidden], .newMethodOn[hidden] { display: none; }
 .save { display: flex; gap: var(--at-space-2); align-items: flex-start; font-size: var(--at-text-sm); cursor: pointer; }
 .save input { margin-top: 3px; accent-color: var(--at-color-action-secondary); }
 .save small { display: block; color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
