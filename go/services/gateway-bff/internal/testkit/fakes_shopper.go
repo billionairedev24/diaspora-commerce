@@ -152,6 +152,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 	}))
 
 	u.creditRoutes(mux)
+	u.referralRoutes(mux)
 
 	mux.HandleFunc("GET /v1/payments", authed(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("orderId") != ShopperOrderID {

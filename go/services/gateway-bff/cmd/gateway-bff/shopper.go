@@ -49,5 +49,6 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
 		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey),
 		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", up.Seller)), d.Bookings, s.Search),
-		Credit:        app.NewCreditService(d.Credit, d.Orders, cfg.Stripe.PublishableKey)}
+		Credit:        app.NewCreditService(d.Credit, d.Orders, cfg.Stripe.PublishableKey),
+		Referral:      app.NewReferralService(upstreams.NewReferral(sc.payments), cfg.Web.PublicOrigin)}
 }

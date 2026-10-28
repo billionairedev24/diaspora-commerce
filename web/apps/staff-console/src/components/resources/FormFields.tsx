@@ -2,7 +2,7 @@
 
 import { type FieldValue, type FormField, type StaffForm, validateStaffForm } from '@afrotransact/api-client';
 import { Button, Checkbox, Field, fieldStyles, Select, TextField } from '@afrotransact/ui';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, Fragment, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
 import { toLocalInput, toMinor } from '@/lib/format';
@@ -153,8 +153,11 @@ export function FormFields({
     <form noValidate onSubmit={submit} className="flex flex-col gap-3">
       {form.intro ? <p className="m-0 text-sm text-muted">{form.intro}</p> : null}
       <FormErrors errors={shown} ids={Object.fromEntries(form.fields.map((f) => [f.key, fieldId(f.key)]))} submitCount={attempts} />
-      {form.fields.map((f) => (
-        <Input key={f.key} f={f} value={draft[f.key]} error={shown[f.key]} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} />
+      {form.fields.map((f, i) => (
+        <Fragment key={f.key}>
+          {f.section && f.section !== form.fields[i - 1]?.section ? <h3 className="m-0 mt-2 border-b border-border pb-1 text-sm font-semibold">{f.section}</h3> : null}
+          <Input f={f} value={draft[f.key]} error={shown[f.key]} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} />
+        </Fragment>
       ))}
       {error ? (
         <Notice tone="danger" title="Not saved." role="alert">

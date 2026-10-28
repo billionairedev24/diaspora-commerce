@@ -889,6 +889,104 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       }
     }
   },
+  referrals: {
+    title: 'Referrals',
+    columns: [col('referrerName', 'Referrer', 'strong', 17), col('referredName', 'Friend', 'text', 17), col('status', 'Status', 'status', 12), col('flagsText', 'Held for', 'text', 14), col('rewardsText', 'Rewards', 'text', 20), col('costMinor', 'Paid by AfroTransact', 'money', 10), col('signedUpAt', 'Signed up', 'date', 10)],
+    statusKey: 'status',
+    facets: facets('IN_REVIEW', 'PENDING', 'WAITING', 'PARTIALLY_REWARDED', 'REWARDED', 'REJECTED', 'EXPIRED'),
+    exportable: true,
+    ids: { referrerId: 'Referrer', referredId: 'Friend' },
+    titleOf: (r) => `${str(r.fields.referrerName)} referred ${str(r.fields.referredName)}`,
+    subtitleOf: (r) => `${humanize(str(r.fields.status))} · $${(num(r.fields.costMinor) / 100).toFixed(2)} paid`,
+    sections: [
+      ['The referral', ['referrerName', 'referredName', 'status', 'signedUpAt', 'expiresAt', 'costMinor']],
+      ['The qualifying order', ['qualifyingOrderId', 'qualifyingMinor', 'deliveredAt', 'eligibleAt']],
+      ['Checks and decision', ['flagsText', 'decision', 'decisionReason', 'decidedByName', 'decidedAt']]
+    ],
+    linesTitle: 'Rewards',
+    lineColumns: [col('who', 'Who', 'strong', 24), col('side', 'As', 'text', 16), col('reward', 'Reward', 'text', 24), col('status', 'Status', 'status', 16), col('grantedAt', 'Granted', 'datetime', 20)],
+    actions: [
+      {
+        key: 'approve', label: 'Approve', tone: 'primary', permission: 'ledger:adjust', confirm: 'The checks found something shared between the referrer and the friend. Approving says it is fine: the rewards are then granted after the return window.',
+        when: (r) => stateReason(r, 'IN_REVIEW'),
+        form: () => form('Why is it fine?', 'Approve', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The reason is kept with your name. If the return window has passed, both rewards are granted now.'),
+        apply: (r, v, ctx) => { if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)'); r.fields.status = 'WAITING'; r.fields.flagsText = ''; r.fields.decision = 'APPROVED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Approved — ${str(v.reason)}`); }
+      },
+      {
+        key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:adjust', when: (r) => stateReason(r, 'IN_REVIEW', 'WAITING'),
+        form: () => form('Why is it rejected?', 'Reject', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'No reward is granted to either side. The reason is kept with your name.'),
+        apply: (r, v, ctx) => { if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)'); r.fields.status = 'REJECTED'; r.fields.decision = 'REJECTED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Rejected — ${str(v.reason)}`); }
+      }
+    ]
+  },
+  'referral-settings': {
+    title: 'Referral program',
+    columns: [col('stateText', 'Program', 'status', 10), col('referrerText', 'Referrer earns', 'text', 22), col('referredText', 'Friend earns', 'text', 22), col('minOrderMinor', 'Smallest order', 'money', 14), col('returnWindowDays', 'Return window (days)', 'text', 12), col('updatedByName', 'Last changed by', 'text', 20)],
+    statusKey: 'stateText',
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Referral program',
+    subtitleOf: (r) => `${str(r.fields.stateText)} · version ${str(r.fields.version)} · ${str(r.fields.updatedByName)}`,
+    sections: [
+      ['The offer', ['stateText', 'referrerText', 'referredText']],
+      ['The rules', ['qualifyingEvent', 'minOrderMinor', 'returnWindowDays', 'maxRewardedPerReferrer', 'maxCreditPerCustomerMinor', 'validityDays']],
+      ['What the program has cost so far', ['costMinor', 'pendingMinor', 'membershipDaysGranted', 'countsText']],
+      ['Last change', ['updatedByName', 'updatedAt']]
+    ],
+    linesTitle: 'Who changed it and why',
+    lineColumns: [col('changedAt', 'When', 'datetime', 20), col('changedByName', 'Who', 'text', 24), col('reason', 'Why', 'text', 56)],
+    actions: [],
+    edit: {
+      permission: 'payments:configure',
+      form: (r) => {
+        const rewardTypes = [{ value: 'CREDIT', label: 'AfroTransact credit' }, { value: 'MEMBERSHIP_DAYS', label: 'Free membership days' }];
+        const sharer = 'What the customer who shares earns';
+        const friend = 'What the friend who joins earns';
+        const rules = 'When it is earned';
+        const limits = 'Limits';
+        return form('Change the referral program', 'Save', [
+          field('enabled', 'Program on (off stops new referrals and pauses granting)', 'toggle', false, { value: r.fields.enabled === true, section: 'The program' }),
+          field('referrerType', 'Reward', 'select', true, { options: rewardTypes, value: str(r.fields.referrerType) || 'CREDIT', section: sharer }),
+          field('referrerCredit', 'Credit (dollars, when the reward is credit)', 'number', false, { min: 0, max: 1000, value: num(r.fields.referrerCreditMinor) / 100, section: sharer }),
+          field('referrerDays', 'Membership days (when the reward is membership)', 'number', false, { min: 0, max: 366, value: num(r.fields.referrerDays), section: sharer }),
+          field('referredType', 'Reward', 'select', true, { options: rewardTypes, value: str(r.fields.referredType) || 'CREDIT', section: friend }),
+          field('referredCredit', 'Credit (dollars, when the reward is credit)', 'number', false, { min: 0, max: 1000, value: num(r.fields.referredCreditMinor) / 100, section: friend }),
+          field('referredDays', 'Membership days (when the reward is membership)', 'number', false, { min: 0, max: 366, value: num(r.fields.referredDays), section: friend }),
+          field('qualifyingEvent', 'Qualifying event', 'select', true, { options: [{ value: 'FIRST_ORDER_DELIVERED', label: "The friend's first order is delivered" }], value: 'FIRST_ORDER_DELIVERED', section: rules }),
+          field('minOrder', 'Smallest order that qualifies (dollars)', 'number', true, { min: 0, max: 10_000, value: num(r.fields.minOrderMinor) / 100, section: rules }),
+          field('returnWindowDays', 'Grant the rewards this many days after delivery (the return window)', 'number', true, { min: 0, max: 180, value: num(r.fields.returnWindowDays), section: rules }),
+          field('validityDays', 'A friend can qualify for this many days after signing up', 'number', true, { min: 0, max: 730, value: num(r.fields.validityDays), section: rules }),
+          field('maxRewarded', 'Most rewarded referrals per customer (0 = no limit)', 'number', true, { min: 0, max: 10_000, value: num(r.fields.maxRewardedPerReferrer), section: limits }),
+          field('maxCredit', 'Most referral credit one customer can earn (dollars, 0 = no limit)', 'number', true, { min: 0, max: 1_000_000, value: num(r.fields.maxCreditPerCustomerMinor) / 100, section: limits }),
+          field('reason', 'Why it changes (at least 15 characters)', 'textarea', true, { maxLength: 500, value: '', section: 'Why' })
+        ], 'AfroTransact pays the rewards. Each side is set on its own. Credit only buys products and services and is never cash. A change applies to new sign-ups and to referrals that qualify afterwards; rewards already promised keep their amounts. Every change is kept with who made it and why.',
+        ['enabled', 'referrerType', 'referrerCredit', 'referrerDays', 'referredType', 'referredCredit', 'referredDays', 'qualifyingEvent', 'minOrder', 'returnWindowDays', 'validityDays', 'maxRewarded', 'maxCredit']);
+      },
+      apply: (r, v, ctx) => {
+        if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)');
+        const text = (type: string, credit: number, days: number) => (type === 'MEMBERSHIP_DAYS' ? `${days} membership days` : `$${credit.toFixed(2)} credit`);
+        r.fields.enabled = v.enabled === true;
+        r.fields.stateText = v.enabled === true ? 'On' : 'Off';
+        r.fields.referrerType = str(v.referrerType);
+        r.fields.referrerCreditMinor = str(v.referrerType) === 'MEMBERSHIP_DAYS' ? 0 : Math.round(num(v.referrerCredit) * 100);
+        r.fields.referrerDays = str(v.referrerType) === 'MEMBERSHIP_DAYS' ? num(v.referrerDays) : 0;
+        r.fields.referredType = str(v.referredType);
+        r.fields.referredCreditMinor = str(v.referredType) === 'MEMBERSHIP_DAYS' ? 0 : Math.round(num(v.referredCredit) * 100);
+        r.fields.referredDays = str(v.referredType) === 'MEMBERSHIP_DAYS' ? num(v.referredDays) : 0;
+        r.fields.referrerText = text(str(v.referrerType), num(r.fields.referrerCreditMinor) / 100, num(r.fields.referrerDays));
+        r.fields.referredText = text(str(v.referredType), num(r.fields.referredCreditMinor) / 100, num(r.fields.referredDays));
+        r.fields.minOrderMinor = Math.round(num(v.minOrder) * 100);
+        r.fields.returnWindowDays = num(v.returnWindowDays);
+        r.fields.validityDays = num(v.validityDays);
+        r.fields.maxRewardedPerReferrer = num(v.maxRewarded);
+        r.fields.maxCreditPerCustomerMinor = Math.round(num(v.maxCredit) * 100);
+        r.fields.version = num(r.fields.version) + 1;
+        r.fields.updatedByName = ctx?.actor ?? 'Platform Admin';
+        r.fields.updatedAt = (ctx?.now ?? new Date()).toISOString();
+        r.lines = [{ id: `rh-${num(r.fields.version)}`, changedAt: str(r.fields.updatedAt), changedByName: str(r.fields.updatedByName), reason: str(v.reason) }, ...(r.lines ?? [])];
+      }
+    }
+  },
   'stripe-lookup': {
     title: 'Stripe lookup',
     columns: [col('ref', 'Stripe id', 'mono', 30), col('kind', 'What it is', 'text', 20), col('stripeStatus', 'Status at Stripe', 'status', 20), col('amountMinor', 'Amount', 'money', 14), col('created', 'Created', 'datetime', 16)],

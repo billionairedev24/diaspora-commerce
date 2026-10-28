@@ -32,7 +32,10 @@ final class AccountDtos {
             String intent,
             @Schema(description = "Organisation invitation token from the invite link (token query parameter). The email "
                     + "must be the invited one; the account starts verified and joins the organisation.")
-            @Size(max = 200) String invitationToken) {
+            @Size(max = 200) String invitationToken,
+            @Schema(description = "Referral code of the friend who shared AfroTransact, as in their link (S322). Optional; "
+                    + "a code nobody owns is ignored, the account is created either way.")
+            @Size(max = 20) String referralCode) {
     }
 
     @Schema(name = "SignUpResponse")

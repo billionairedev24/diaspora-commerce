@@ -50,6 +50,13 @@ tags:
 - name: Credit
   description: 'AfroTransact credit: a per-customer append-only ledger (grant, spend, refund, adjustment). Credit only buys
     products and services; there is no cash-out, payout, card refund or transfer of credit anywhere in this API (ADR 0006).'
+- name: Referrals
+  description: 'The referral program (S322): every customer has a code; when a friend who signed up with it has a first order
+    delivered (and its return window passed) both are rewarded by AfroTransact, as credit or membership days. Flagged referrals
+    wait for staff.'
+- name: Referral settings
+  description: 'Staff-configurable referral program (Settings, Money or Growth): each side''s reward, the qualifying event,
+    minimum order, return-window delay, caps, validity and on/off. Each change has a reason and is kept in a history.'
 paths:
   /v1/connected-accounts/{orgId}:
     get:
@@ -2548,6 +2555,228 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/CreditBalance'
+  /v1/referral-settings:
+    get:
+      tags:
+      - Referral settings
+      summary: Referral settings in force (payments:read)
+      operationId: getReferralSettings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralSettings'
+    put:
+      tags:
+      - Referral settings
+      summary: Change the referral settings with a reason (payments:configure)
+      description: Takes effect at once for new sign-ups and for referrals that qualify afterwards; rewards already promised
+        keep their amounts. A concurrent change is 409 payments.referral-settings-changed.
+      operationId: updateReferralSettings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralSettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralSettings'
+  /v1/referrals/{id}/reject:
+    post:
+      tags:
+      - Referrals
+      summary: Reject a flagged or waiting referral (ledger:adjust)
+      description: No reward is granted. Needs a reason of at least 15 characters.
+      operationId: rejectReferral
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Referral'
+  /v1/referrals/{id}/approve:
+    post:
+      tags:
+      - Referrals
+      summary: Clear a flagged referral (ledger:adjust)
+      description: It then waits for the return window like any other, and its rewards are granted at once if that has passed.
+        Needs a reason of at least 15 characters.
+      operationId: approveReferral
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralDecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Referral'
+  /v1/referrals:
+    get:
+      tags:
+      - Referrals
+      summary: Referrals, newest first (payments:read)
+      operationId: listReferrals
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - WAITING
+          - IN_REVIEW
+          - PARTIALLY_REWARDED
+          - REWARDED
+          - REJECTED
+          - EXPIRED
+      - name: customerId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Referral'
+  /v1/referrals/{id}:
+    get:
+      tags:
+      - Referrals
+      summary: One referral with its rewards (payments:read)
+      operationId: getReferral
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Referral'
+  /v1/referrals/summary:
+    get:
+      tags:
+      - Referrals
+      summary: What the program has cost and referrals per status (payments:read)
+      operationId: referralSummary
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralSummary'
+  /v1/referrals/me:
+    get:
+      tags:
+      - Referrals
+      summary: The signed-in customer's referral code, the offer and their earnings (customer)
+      description: The code is created on first use and never changes.
+      operationId: getMyReferral
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReferralOverview'
+  /v1/referrals/me/friends:
+    get:
+      tags:
+      - Referrals
+      summary: Friends the signed-in customer referred, newest first, with what they earned from each (customer)
+      operationId: listMyReferrals
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MyReferral'
+  /v1/referral-settings/history:
+    get:
+      tags:
+      - Referral settings
+      summary: Who changed the referral settings, when and why (payments:read)
+      operationId: referralSettingsHistory
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReferralSettingsChange'
 components:
   schemas:
     PaymentsSetting:
@@ -5349,6 +5578,367 @@ components:
       - giftCardTerms
       - reason
       - version
+    MyReferral:
+      type: object
+      description: A friend the customer invited, or the customer's own referral
+      properties:
+        id:
+          type: string
+          format: uuid
+        friendName:
+          type: string
+          description: First name and last initial
+        status:
+          type: string
+          enum:
+          - PENDING
+          - WAITING
+          - REWARDED
+          - EXPIRED
+          - CLOSED
+        signedUpAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        eligibleAt:
+          type: string
+          format: date-time
+        reward:
+          $ref: '#/components/schemas/MyReferralReward'
+          description: What the customer earns from this referral; null when nothing
+    MyReferralReward:
+      type: object
+      properties:
+        terms:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        granted:
+          type: boolean
+        grantedAt:
+          type: string
+          format: date-time
+    Referral:
+      type: object
+      description: A referral as staff see it
+      properties:
+        id:
+          type: string
+          format: uuid
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        referredName:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - WAITING
+          - IN_REVIEW
+          - PARTIALLY_REWARDED
+          - REWARDED
+          - REJECTED
+          - EXPIRED
+        flags:
+          type: array
+          description: Abuse checks that fired (SAME_DEVICE, SAME_NETWORK, SAME_ADDRESS, SAME_PAYMENT_METHOD)
+          items:
+            type: string
+        signedUpAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        qualifyingOrderId:
+          type: string
+        qualifyingMinor:
+          type: integer
+          format: int64
+        deliveredAt:
+          type: string
+          format: date-time
+        eligibleAt:
+          type: string
+          format: date-time
+        decision:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+          - SYSTEM
+        decisionReason:
+          type: string
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        rewards:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferralRewardLine'
+        costMinor:
+          type: integer
+          format: int64
+          description: Credit AfroTransact has paid for this referral, both sides
+        createdAt:
+          type: string
+          format: date-time
+    ReferralDecisionRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    ReferralEarnings:
+      type: object
+      properties:
+        invited:
+          type: integer
+          format: int32
+        open:
+          type: integer
+          format: int32
+        rewarded:
+          type: integer
+          format: int32
+        earnedMinor:
+          type: integer
+          format: int64
+        membershipDays:
+          type: integer
+          format: int32
+        pendingMinor:
+          type: integer
+          format: int64
+    ReferralOverview:
+      type: object
+      properties:
+        code:
+          type: string
+        displayCode:
+          type: string
+        program:
+          $ref: '#/components/schemas/ReferralProgramTerms'
+        earnings:
+          $ref: '#/components/schemas/ReferralEarnings'
+        asFriend:
+          $ref: '#/components/schemas/MyReferral'
+          description: The customer's own referral when someone referred them; else null
+    ReferralProgramTerms:
+      type: object
+      description: The offer in force
+      properties:
+        enabled:
+          type: boolean
+        referrerReward:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        referredReward:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        minOrderMinor:
+          type: integer
+          format: int64
+        returnWindowDays:
+          type: integer
+          format: int32
+        validityDays:
+          type: integer
+          format: int32
+        currency:
+          type: string
+    ReferralRewardLine:
+      type: object
+      description: One side's reward of a referral (staff)
+      properties:
+        side:
+          type: string
+          enum:
+          - REFERRER
+          - REFERRED
+        customerId:
+          type: string
+        terms:
+          $ref: '#/components/schemas/ReferralRewardTerms'
+        currency:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - GRANTED
+          - DEFERRED
+          - CAPPED
+          - VOID
+        grantedAt:
+          type: string
+          format: date-time
+    ReferralRewardSetting:
+      type: object
+      description: 'What one side earns: credit or free membership days'
+      properties:
+        type:
+          type: string
+          enum:
+          - CREDIT
+          - MEMBERSHIP_DAYS
+        creditMinor:
+          type: integer
+          format: int64
+          description: Credit in minor units; 0 unless type is CREDIT
+        membershipDays:
+          type: integer
+          format: int32
+          description: Free membership days; 0 unless type is MEMBERSHIP_DAYS
+      required:
+      - type
+    ReferralRewardTerms:
+      type: object
+      description: What one side earns
+      properties:
+        type:
+          type: string
+          enum:
+          - CREDIT
+          - MEMBERSHIP_DAYS
+        creditMinor:
+          type: integer
+          format: int64
+        membershipDays:
+          type: integer
+          format: int32
+    ReferralSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        referrer:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        referred:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        qualifyingEvent:
+          type: string
+          enum:
+          - FIRST_ORDER_DELIVERED
+        minOrderMinor:
+          type: integer
+          format: int64
+        returnWindowDays:
+          type: integer
+          format: int32
+        maxRewardedPerReferrer:
+          type: integer
+          format: int32
+          description: Rewarded referrals one customer can have; 0 is no limit
+        maxCreditPerCustomerMinor:
+          type: integer
+          format: int64
+          description: Referral credit one customer can earn in all; 0 is no limit
+        validityDays:
+          type: integer
+          format: int32
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+          description: Send it back with the next change; a concurrent change is 409
+    ReferralSettingsChange:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        changedBy:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        before:
+          type: string
+        after:
+          type: string
+    ReferralSettingsUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        referrer:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        referred:
+          $ref: '#/components/schemas/ReferralRewardSetting'
+        qualifyingEvent:
+          type: string
+          enum:
+          - FIRST_ORDER_DELIVERED
+        minOrderMinor:
+          type: integer
+          format: int64
+        returnWindowDays:
+          type: integer
+          format: int32
+        maxRewardedPerReferrer:
+          type: integer
+          format: int32
+        maxCreditPerCustomerMinor:
+          type: integer
+          format: int64
+        validityDays:
+          type: integer
+          format: int32
+        reason:
+          type: string
+          description: At least 15 characters
+          maxLength: 500
+          minLength: 0
+        version:
+          type: integer
+          format: int64
+      required:
+      - enabled
+      - maxCreditPerCustomerMinor
+      - maxRewardedPerReferrer
+      - minOrderMinor
+      - qualifyingEvent
+      - reason
+      - referred
+      - referrer
+      - returnWindowDays
+      - validityDays
+      - version
+    ReferralSummary:
+      type: object
+      description: What the program has cost (staff)
+      properties:
+        costMinor:
+          type: integer
+          format: int64
+        membershipDays:
+          type: integer
+          format: int32
+        pendingMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        byStatus:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        enabled:
+          type: boolean
   securitySchemes:
     bearer:
       type: http

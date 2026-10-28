@@ -48,6 +48,8 @@ type LoginRequest struct {
 	LoginHint string
 	// Invitation is an organisation invitation token: the account created on identity's sign-up page joins it.
 	Invitation string
+	// Referral is a friend's referral code from a share link (S322): identity's sign-up page shows it filled in.
+	Referral string
 	// Intent is the Seller Center entry point: "sell" (Start selling) or "provide" (Offer your services). Identity
 	// brands its pages for it and adds the applicant role to an account created there; other values are dropped.
 	Intent string
@@ -134,6 +136,7 @@ var socialProviders = map[string]bool{"google": true, "apple": true, "facebook":
 const (
 	maxLoginHint  = 254
 	maxInvitation = 200
+	maxReferral   = 20
 	maxReturnTo   = 2048
 	appStorefront = "storefront"
 	// signedOutPath is the post-logout landing under BFFPath (config.SignedOutPath).
@@ -226,6 +229,9 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, in
 	if inv := strings.TrimSpace(in.Invitation); inv != "" && len(inv) <= maxInvitation {
 		q.Set("invitation", inv)
 	}
+	if code := strings.TrimSpace(in.Referral); code != "" && len(code) <= maxReferral && referralLike(code) {
+		q.Set("referral", code)
+	}
 	if in.Intent == "sell" || in.Intent == "provide" {
 		q.Set("intent", in.Intent)
 	}
@@ -233,6 +239,16 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, in
 		q.Set("notice", "signed_out")
 	}
 	return strings.TrimSuffix(a.o.IdentityPublicURL, "/") + "/oauth2/authorize?" + q.Encode(), nil
+}
+
+// referralLike accepts what a referral code is made of (letters, digits, a dash or space) and nothing else.
+func referralLike(v string) bool {
+	for _, r := range v {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '-' && r != ' ' {
+			return false
+		}
+	}
+	return true
 }
 
 func emailLike(v string) bool {

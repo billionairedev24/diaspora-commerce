@@ -283,7 +283,7 @@ func RefundLimitProblem(limit int64) *Problem {
 var ResourceKeys = []string{"users", "roles", "applications", "organisations", "connect-accounts", "orders", "products", "moderation", "claims", "returns", "payouts",
 	"inventory", "purchase-orders", "routes", "support-cases", "audit", "markets", "site-settings", "legal-documents", "help-articles", "privacy-requests", "announcements",
 	"placements", "identity-providers", "fee-schedules", "tax-rates", "tax-codes", "tax-rules", "tax-review", "dispatch-shipments", "sos-alerts", "vehicle-defects", "driver-events", "pickup-locations", "coupons",
-	"reconciliation", "reconciliation-runs", "ledger-adjustments", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
+	"reconciliation", "reconciliation-runs", "ledger-adjustments", "credit-adjustments", "gift-cards", "credit-liabilities", "money-settings", "referrals", "referral-settings", "stripe-lookup", "payment-settings", "tax-settings", "maintenance", "tax-filings", "tax-nexus",
 	"oauth-clients", "identity-sessions", "signing-keys", "auth-settings", "exchange-rates"}
 
 // Column is one table column; Width is its share of the table in percent.
@@ -333,6 +333,9 @@ type FormField struct {
 	Value       any           `json:"value,omitempty"`
 	// Lookup makes the field a searchable picker (drivers, sellers): staff pick by name, the form sends the id.
 	Lookup string `json:"lookup,omitempty"`
+	// Section names the group the field belongs to: the form shows a heading when it changes from one field to the next
+	// (the referral program's two reward sections).
+	Section string `json:"section,omitempty"`
 }
 
 // LookupHit is one match of a picker: the id the form sends, the name staff read and a second line.

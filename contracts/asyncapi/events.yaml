@@ -511,12 +511,15 @@ channels:
   notificationsPaymentEvents:
     address: at.payment.events
     description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity),
-      and the gift card recipient on the send date (payload email).
+      the gift card recipient on the send date (payload email), and both sides of a referral when their reward is granted
+      (customerId resolved through identity).
     messages:
       notificationsPaymentIntentActionRequired:
         $ref: '#/components/messages/paymentsIntentActionRequired'
       notificationsPaymentGiftCardDeliver:
         $ref: '#/components/messages/paymentsGiftCardDeliver'
+      notificationsPaymentReferralRewarded:
+        $ref: '#/components/messages/paymentsReferralRewarded'
   notificationsTrustOpsEvents:
     address: at.trustops.events
     description: trust-ops (S230) → the customer (customerId resolved through identity) and every owner of the seller organisation
@@ -648,6 +651,12 @@ channels:
         $ref: '#/components/messages/paymentsGiftCardResent'
       paymentsCreditAdjusted:
         $ref: '#/components/messages/paymentsCreditAdjusted'
+      paymentsReferralRewarded:
+        $ref: '#/components/messages/paymentsReferralRewarded'
+      paymentsReferralFlagged:
+        $ref: '#/components/messages/paymentsReferralFlagged'
+      paymentsReferralDecided:
+        $ref: '#/components/messages/paymentsReferralDecided'
   paymentsPayoutEvents:
     address: at.payout.events
     description: Payout requests on manual Connect payout schedules and provider fees debited from connected accounts (key
@@ -2203,6 +2212,27 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PaymentsCreditAdjusted'
+    paymentsReferralRewarded:
+      name: payments.referral.rewarded
+      title: A referral reward was granted to one side, as credit or membership days (S322; key = customer id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsReferralRewarded'
+    paymentsReferralFlagged:
+      name: payments.referral.flagged
+      title: Abuse checks hold a referral for staff review (audit; key = referral id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsReferralFlagged'
+    paymentsReferralDecided:
+      name: payments.referral.decided
+      title: Staff approved or rejected a referral, or the system rejected it (audit; key = referral id)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsReferralDecided'
     paymentsPayoutRequested:
       name: payments.payout.requested
       title: Seller / provider requested a payout
@@ -5774,6 +5804,26 @@ components:
         registeredAt:
           type: string
           format: date-time
+        referralCode:
+          type:
+          - string
+          - 'null'
+          maxLength: 20
+          description: Referral code from the friend's link or typed on the sign-up form (S322), as given; payments attaches
+            it when it owns the code
+        deviceHash:
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+          description: HMAC of the sign-up browser's device cookie (S322); only compared for equality by the referral abuse
+            checks
+        networkHash:
+          type:
+          - string
+          - 'null'
+          pattern: ^[0-9a-f]{64}$
+          description: HMAC of the sign-up network, IPv4 /24 or IPv6 /64 (S322)
     IdentityUserEmailVerified:
       type: object
       required:
@@ -8412,6 +8462,100 @@ components:
         decidedBy:
           type: string
           description: The approver, or the proposer when it was within the staff-set limit
+    PaymentsReferralRewarded:
+      type: object
+      required:
+      - referralId
+      - customerId
+      - side
+      - rewardType
+      - creditMinor
+      - currency
+      - membershipDays
+      properties:
+        referralId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          description: The side that earned the reward
+        side:
+          type: string
+          enum:
+          - REFERRER
+          - REFERRED
+        rewardType:
+          type: string
+          enum:
+          - CREDIT
+          - MEMBERSHIP_DAYS
+        creditMinor:
+          type: integer
+          format: int64
+          description: Credit granted; 0 for membership days
+        currency:
+          type: string
+        membershipDays:
+          type: integer
+          description: Free membership days granted; 0 for credit
+        friendName:
+          type:
+          - string
+          - 'null'
+          description: First name and last initial of the friend, for the referrer's message; null for the friend
+    PaymentsReferralFlagged:
+      type: object
+      required:
+      - referralId
+      - referrerId
+      - referredId
+      - flags
+      properties:
+        referralId:
+          type: string
+          format: uuid
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        flags:
+          type: array
+          items:
+            type: string
+            enum:
+            - SAME_DEVICE
+            - SAME_NETWORK
+            - SAME_ADDRESS
+            - SAME_PAYMENT_METHOD
+    PaymentsReferralDecided:
+      type: object
+      required:
+      - referralId
+      - referrerId
+      - referredId
+      - decision
+      - reason
+      - decidedBy
+      properties:
+        referralId:
+          type: string
+          format: uuid
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        decision:
+          type: string
+          enum:
+          - APPROVED
+          - REJECTED
+          - SYSTEM
+        reason:
+          type: string
+        decidedBy:
+          type: string
+          description: The staff member
+          or system: null
     PaymentsIntentActionRequired:
       type: object
       required:
@@ -11325,7 +11469,8 @@ operations:
     summary: '>- payments.intent.action_required with a customerId → payment.authentication_required to the customer (email,
       push; link to the booking for BK- references, else the orders page). payments.gift_card.deliver → payment.gift_card.delivered
       to the recipient''s email in the language the buyer chose (en, fr, es, ar, yo); the code is in the email and nowhere
-      else. Other payment events are ignored.'
+      else. payments.referral.rewarded → payment.referral.rewarded to the customer who earned it (email, push), in their language.
+      Other payment events are ignored.'
   consumeNotificationsTrustOpsEvents:
     action: receive
     channel:
@@ -11454,6 +11599,23 @@ operations:
       or packed move to ready with actor PICKUP_POINT and source carrier (which also triggers the pickup capture); shipments
       already ready or further along are left as they are. Every transition is published as orders.shipment.status_changed
       and pushed to GET /v1/shipments/stream on every replica through Valkey pub/sub (channel at:orders:shipment-status).'
+  consumePaymentsReferralIdentityEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/identityEvents'
+    summary: 'payments-service (consumer group payments-service-referral, listener payments-referral-identity-events) feeds
+      the referral program (S322) from identity.user.registered: the sign-up device and network hashes are kept for the abuse
+      checks, and a referralCode the program owns attaches the new customer to the code''s owner (one referral per customer;
+      own code, unknown code, staff sign-ups and a program that is off attach nothing). Other events are ignored.'
+  consumePaymentsReferralOrderEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/ordersOrderEvents'
+    summary: 'payments-service (listener payments-referral-order-events) feeds the referral program (S322): orders.order.placed
+      keeps a hash of the delivery address and, for a referred customer waiting for a first order, tracks the order''s shipments;
+      orders.shipment.delivered / orders.shipment.cancelled end them. When every shipment ended and the delivered value reaches
+      the program''s minimum the referral qualifies; the rewards are granted through the credit ledger once the return window
+      has passed. Other events are ignored.'
   consumePaymentsSellerComplianceEvents:
     action: receive
     channel:

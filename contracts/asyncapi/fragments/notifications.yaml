@@ -76,10 +76,11 @@ channels:
       notificationsNewsletterConfirmationRequested: {$ref: '#/components/messages/contentNewsletterConfirmationRequested'}
   notificationsPaymentEvents:
     address: at.payment.events
-    description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity), and the gift card recipient on the send date (payload email).
+    description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity), the gift card recipient on the send date (payload email), and both sides of a referral when their reward is granted (customerId resolved through identity).
     messages:
       notificationsPaymentIntentActionRequired: {$ref: '#/components/messages/paymentsIntentActionRequired'}
       notificationsPaymentGiftCardDeliver: {$ref: '#/components/messages/paymentsGiftCardDeliver'}
+      notificationsPaymentReferralRewarded: {$ref: '#/components/messages/paymentsReferralRewarded'}
   notificationsTrustOpsEvents:
     address: at.trustops.events
     description: >-
@@ -192,6 +193,7 @@ operations:
       payments.intent.action_required with a customerId → payment.authentication_required to the customer (email,
       push; link to the booking for BK- references, else the orders page). payments.gift_card.deliver → payment.gift_card.delivered
       to the recipient's email in the language the buyer chose (en, fr, es, ar, yo); the code is in the email and nowhere else.
+      payments.referral.rewarded → payment.referral.rewarded to the customer who earned it (email, push), in their language.
       Other payment events are ignored.
   consumeNotificationsTrustOpsEvents:
     action: receive

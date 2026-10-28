@@ -33,6 +33,8 @@ type ShopperServices struct {
 	BusinessPages app.BusinessPageService
 	// Credit is AfroTransact credit and gift cards (S320, S321; optional).
 	Credit app.CreditService
+	// Referral is "Refer a friend" (S322; optional).
+	Referral app.ReferralService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -60,6 +62,9 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	}
 	if h.s.Shopper.Credit != nil {
 		h.registerCredit(route)
+	}
+	if h.s.Shopper.Referral != nil {
+		h.registerReferral(route)
 	}
 	// Pay-now page of late pre-order adds (no session: the signed token is the credential; rate-limited per IP)
 	if h.s.Shopper.PayLinks != nil {

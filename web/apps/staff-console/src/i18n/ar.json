@@ -1555,5 +1555,10 @@
   "st.runs.adv.featured.add": "Add",
   "st.runs.adv.featured.seller": "from {seller}",
   "st.runs.adv.featured.max": "Feature at most {max} products.",
-  "st.runs.adv.featured.on": "Features: {names}"
+  "st.runs.adv.featured.on": "Features: {names}",
+  "st.settings.referrals.label": "برنامج الدعوات",
+  "st.settings.referrals.description": "ما يربحه العميل الذي يشارك والصديق الذي ينضم، ومتى يربحه، والحدود، وكل دعوة مع تلك المحتجزة للمراجعة. يُحفظ كل تغيير مع سببه.",
+  "st.settings.referrals.intro": "تدفع أفروترانزاكت المكافآت: رصيدًا (وليس نقدًا أبدًا) أو أيامًا مجانية من العضوية، تُضبط كل منهما على حدة للعميل الذي يشارك والصديق الذي ينضم. يتأهل الصديق عند تسليم أول طلب له بقيمة الحد الأدنى على الأقل، وتُمنح المكافآت بعد مرور مهلة الإرجاع. الدعوات التي تتشارك جهازًا أو شبكة أو عنوان توصيل أو بطاقة تنتظر هنا المراجعة.",
+  "st.settings.referrals.listTitle": "الدعوات وقائمة المراجعة",
+  "st.resourceTable.allStatuses": "الكل"
 }
