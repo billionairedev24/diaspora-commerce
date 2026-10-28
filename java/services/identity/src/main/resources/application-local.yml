@@ -180,7 +180,7 @@ at:
         type: confidential
         secret: ${CATALOG_CLIENT_SECRET:local-catalog-service-secret}
         grant-types: [client_credentials]
-        scopes: ["media:import"]
+        scopes: ["media:import", "orders:purchase-check"]
       - client-id: retail-service
         name: AfroTransact Retail service
         type: confidential

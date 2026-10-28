@@ -7,6 +7,11 @@ public final class OrdersPermissions {
     public static final String READ = "orders:read";
     /** Service-to-service order lookup (tax-returns-service, trust-ops-service client scope). */
     public static final String LOOKUP = "orders:lookup";
+    /**
+     * Verified-purchase check (S324): catalog-service asks whether a customer received a product. A narrow scope: it
+     * answers yes or no with the delivering order, never the order's contents or address.
+     */
+    public static final String PURCHASE_CHECK = "orders:purchase-check";
     /** Seller-fulfilled status steps (sellers) and admin oversight steps (support). */
     public static final String UPDATE_STATUS = "orders:update-status";
     /** AfroTransact-fulfilled shipments, cancellations and reroutes (operations, dispatch). */

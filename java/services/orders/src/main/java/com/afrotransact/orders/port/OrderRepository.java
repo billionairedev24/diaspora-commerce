@@ -47,6 +47,23 @@ public interface OrderRepository {
     Page<Order> search(Search criteria, int offset, int limit);
 
     /**
+     * S324: the most recent delivered shipment of {@code customerId} with a line for the product ATIN, if any. A
+     * shipment counts once its status is DELIVERED (returned and cancelled shipments do not).
+     */
+    Optional<DeliveredPurchase> deliveredPurchase(String customerId, String productAtin);
+
+    /**
+     * S324: a delivered purchase of a product.
+     *
+     * @param orderId     the order that delivered it
+     * @param orderNumber the order number shown to the customer
+     * @param shipmentId  the delivered shipment
+     * @param deliveredAt when the shipment was delivered (null for rows delivered before the time was kept)
+     */
+    record DeliveredPurchase(String orderId, String orderNumber, String shipmentId, Instant deliveredAt) {
+    }
+
+    /**
      * S272: ids of placed PREORDER shipments whose delivery date ({@code promisedBy}) is before {@code today}, not
      * delivered, returned or cancelled and not yet flagged as missed.
      */

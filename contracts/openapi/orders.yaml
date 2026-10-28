@@ -209,6 +209,35 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrderLookup'
+  /v1/lookup/customers/{customerId}/purchases/{atin}:
+    get:
+      tags:
+      - Order lookup
+      summary: Did the customer receive this product? (SERVICE with orders:purchase-check)
+      description: 'S324 verified-purchase reviews: catalog-service asks before it accepts a review. delivered is true when
+        a shipment of the customer''s with a line for the product ATIN is DELIVERED (returned and cancelled shipments do not
+        count); the delivering order is returned, never its contents or address. Also open to SERVICE principals with orders:lookup
+        and to staff with orders:read; 403 orders.lookup-forbidden for anyone else.'
+      operationId: purchase
+      parameters:
+      - name: customerId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: atin
+        in: path
+        description: Product ATIN (case-insensitive)
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseCheck'
   /v1/orders:
     get:
       tags:
@@ -1878,6 +1907,22 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Recipient'
+    PurchaseCheck:
+      type: object
+      description: Whether a customer received a product (S324)
+      properties:
+        delivered:
+          type: boolean
+        orderId:
+          type: string
+          description: The delivering order (null when not delivered)
+        orderNumber:
+          type: string
+        shipmentId:
+          type: string
+        deliveredAt:
+          type: string
+          format: date-time
     OrderLookup:
       type: object
       properties:
