@@ -128,6 +128,14 @@ class JdbcGiftCardRepository implements GiftCardRepository {
     }
 
     @Override
+    public int scrubPublishedDeliveryCodes() {
+        return jdbc.sql("""
+                update platform_outbox set payload = payload - 'code'
+                where type = 'payments.gift_card.deliver' and published_at is not null and jsonb_exists(payload, 'code')
+                """).update();
+    }
+
+    @Override
     public Map<GiftCard.Status, long[]> totalsByStatus() {
         Map<GiftCard.Status, long[]> out = new EnumMap<>(GiftCard.Status.class);
         for (GiftCard.Status s : GiftCard.Status.values()) {

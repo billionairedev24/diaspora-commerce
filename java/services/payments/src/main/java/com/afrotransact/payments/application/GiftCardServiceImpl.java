@@ -220,6 +220,11 @@ class GiftCardServiceImpl implements GiftCardService {
         });
     }
 
+    @Override
+    public int scrubDeliveredCodes() {
+        return tx.serializable(cards::scrubPublishedDeliveryCodes);
+    }
+
     /** Generates the code (a resend replaces the old one) and hands the email to notifications. */
     private GiftCard deliver(GiftCard card) {
         Instant now = Instant.now(clock);

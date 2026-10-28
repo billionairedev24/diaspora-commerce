@@ -67,6 +67,12 @@ public interface GiftCardService {
     int deliverDue();
 
     /**
+     * Drops the plain codes from delivery events that were already relayed, so the database keeps only the hash
+     * (S321: codes are stored hashed). Safe to repeat.
+     */
+    int scrubDeliveredCodes();
+
+    /**
      * @param presetsMinor amounts offered as buttons
      * @param terms        staff terms for the customer's language, or null (the page shows its built-in terms)
      */

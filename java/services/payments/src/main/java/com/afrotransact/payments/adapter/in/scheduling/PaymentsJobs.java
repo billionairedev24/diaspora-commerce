@@ -102,6 +102,8 @@ class PaymentsJobs {
             if (sent > 0) {
                 LOG.info("Handed {} gift cards to notifications", sent);
             }
+            // The code travels in the event only; once relayed it is removed, so the database holds the hash alone.
+            giftCards.scrubDeliveredCodes();
         });
     }
 
