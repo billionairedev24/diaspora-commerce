@@ -94,6 +94,7 @@
       "status":        { "type": "keyword" },
       "embedding":     { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" },
       "version":       { "type": "long" },
+      "rating_version": { "type": "long" },
       "updated_at":    { "type": "date" }
     }
   }

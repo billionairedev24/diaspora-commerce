@@ -19,7 +19,16 @@ import (
 
 var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 
+type ratingCall struct {
+	atin    string
+	average float64
+	count   int
+	version int64
+}
+
 type fakeIndex struct {
+	ratings []ratingCall
+	unknown map[string]bool
 	docs    []searchindex.ProductDocument
 	opts    []port.UpsertOptions
 	avail   []string
@@ -52,6 +61,15 @@ func (f *fakeIndex) ApplyAvailability(_ context.Context, _, sku, node string, qt
 	f.avail = append(f.avail, sku+"@"+node)
 	f.qtys = append(f.qtys, qty)
 	return true, nil
+}
+
+func (f *fakeIndex) ApplyRating(_ context.Context, _, atin string, average float64, count int, version int64) (bool, error) {
+	if f.fail > 0 {
+		f.fail--
+		return false, errors.New("es down")
+	}
+	f.ratings = append(f.ratings, ratingCall{atin, average, count, version})
+	return !f.unknown[atin], nil
 }
 
 func (f *fakeIndex) Ping(context.Context) error { return nil }
@@ -344,5 +362,76 @@ func TestBuyBoxChangeSetsTheVariantQuantity(t *testing.T) {
 	}
 	if len(idx.avail) != 2 || idx.avail[0] != "AT0000000A@BUYBOX" || idx.qtys[0] != 95 || idx.qtys[1] != 0 {
 		t.Fatalf("buy box availability = %v %v, want two BUYBOX entries 95 then 0", idx.avail, idx.qtys)
+	}
+}
+
+func ratingEnvelope(t *testing.T, at time.Time, payload any) events.Envelope {
+	t.Helper()
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return events.Envelope{ID: "r1", Type: domain.RatingChanged, Payload: raw, OccurredAt: at}
+}
+
+func TestRatingChangedSetsTheProductsRatingAndReviewCount(t *testing.T) {
+	idx := &fakeIndex{}
+	p := app.NewProjector(idx, fakeCatalog{}, fakeSellers{}, "us", quiet)
+	at := time.Date(2026, 10, 28, 12, 0, 0, 0, time.UTC)
+	env := ratingEnvelope(t, at, domain.RatingEvent{ProductID: "p1", ATIN: "AT00000001", OwnerOrgID: "org_a", Average: 4.33,
+		Count: 3, Breakdown: []int{0, 0, 0, 2, 1}})
+	if err := p.Handle(context.Background(), env); err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.ratings) != 1 || len(idx.docs) != 0 {
+		t.Fatalf("expected one rating write and no upsert, got %+v / %d docs", idx.ratings, len(idx.docs))
+	}
+	got := idx.ratings[0]
+	if got.atin != "AT00000001" || got.average != 4.33 || got.count != 3 || got.version != domain.VersionOf(at) {
+		t.Fatalf("unexpected rating write %+v", got)
+	}
+}
+
+func TestRatingToZeroWhenTheLastReviewGoes(t *testing.T) {
+	idx := &fakeIndex{}
+	p := app.NewProjector(idx, fakeCatalog{}, fakeSellers{}, "us", quiet)
+	env := ratingEnvelope(t, time.Now(), map[string]any{"atin": "AT00000002", "average": 0, "count": 0,
+		"breakdown": []int{0, 0, 0, 0, 0}})
+	if err := p.Handle(context.Background(), env); err != nil {
+		t.Fatal(err)
+	}
+	if len(idx.ratings) != 1 || idx.ratings[0].average != 0 || idx.ratings[0].count != 0 {
+		t.Fatalf("a product that lost its last review goes back to no rating: %+v", idx.ratings)
+	}
+}
+
+func TestRatingForAnUnindexedProductAndMalformedRatingsAreSkipped(t *testing.T) {
+	idx := &fakeIndex{unknown: map[string]bool{"AT00000003": true}}
+	p := app.NewProjector(idx, fakeCatalog{}, fakeSellers{}, "us", quiet)
+	for _, e := range []events.Envelope{
+		ratingEnvelope(t, time.Now(), map[string]any{"atin": "AT00000003", "average": 5, "count": 1}),
+		{ID: "bad", Type: domain.RatingChanged, Payload: []byte("{not json")},
+		{ID: "noatin", Type: domain.RatingChanged, Payload: []byte(`{"average":4,"count":2}`)},
+	} {
+		if err := p.Handle(context.Background(), e); err != nil {
+			t.Fatalf("expected skip, got %v", err)
+		}
+	}
+	if len(idx.ratings) != 1 {
+		t.Fatalf("only the well-formed event reaches the index, got %+v", idx.ratings)
+	}
+}
+
+func TestRatingWriteFailuresAreRetriedThenDeadLettered(t *testing.T) {
+	idx := &fakeIndex{fail: 10}
+	dlq := &fakeDLQ{}
+	h := app.NewRetryingHandler(app.NewProjector(idx, fakeCatalog{}, fakeSellers{}, "us", quiet), dlq, 3,
+		time.Millisecond, quiet)
+	env := ratingEnvelope(t, time.Now(), map[string]any{"atin": "AT00000004", "average": 4, "count": 1})
+	if err := h.Handle(context.Background(), env); err != nil {
+		t.Fatal(err)
+	}
+	if len(dlq.got) != 1 || len(idx.ratings) != 0 {
+		t.Fatalf("expected one dead letter and no rating, got %d / %+v", len(dlq.got), idx.ratings)
 	}
 }

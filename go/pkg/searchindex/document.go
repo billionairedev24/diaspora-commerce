@@ -88,4 +88,4 @@ type GeoPoint struct {
 
 // LateMappings are the fields added to the mapping after the first release (strict mapping rejects unknown fields), put
 // onto an existing index so it accepts them without a reindex. Documents indexed earlier simply lack them.
-const LateMappings = `{"properties":{"keywords":{"type":"text","analyzer":"product_index","search_analyzer":"product_search"}}}`
+const LateMappings = `{"properties":{"keywords":{"type":"text","analyzer":"product_index","search_analyzer":"product_search"},"rating_version":{"type":"long"}}}`

@@ -171,3 +171,51 @@ func TestEmbeddingBackfillIsGuardedByVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRatingIsSetGuardedByVersionAndSurvivesProductUpserts(t *testing.T) {
+	idx, c, market := setup(t)
+	ctx := t.Context()
+	fresh := product("P9", 1)
+	fresh.Rating, fresh.ReviewCount = 0, 0
+	if err := idx.UpsertProduct(ctx, market, fresh, 1, port.UpsertOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := idx.ApplyRating(ctx, market, "P9", 4.33, 3, 10); err != nil || !ok {
+		t.Fatalf("rating: %v %v", ok, err)
+	}
+	d := get(t, c, market, "P9")
+	if searchindex.MeiliNum(d["rating"]) != 4.33 || searchindex.MeiliNum(d["review_count"]) != 3 {
+		t.Fatalf("rating applied: %v", d)
+	}
+	boost := searchindex.MeiliNum(d["rank_boost"])
+	// A product update (which carries rating 0 in its document) keeps the rating.
+	again := product("P9", 11)
+	again.Rating, again.ReviewCount = 0, 0
+	again.Title = "Gari Premium"
+	if err := idx.UpsertProduct(ctx, market, again, 11, port.UpsertOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	d = get(t, c, market, "P9")
+	if searchindex.MeiliNum(d["rating"]) != 4.33 || searchindex.MeiliNum(d["review_count"]) != 3 || d["title"] != "Gari Premium" {
+		t.Fatalf("an upsert must not reset the rating: %v", d)
+	}
+	if searchindex.MeiliNum(d["rank_boost"]) != boost {
+		t.Fatalf("rank boost follows the rating: %v vs %v", d["rank_boost"], boost)
+	}
+	// An older rating is ignored, a newer one wins, and an unknown product reports false.
+	if _, err := idx.ApplyRating(ctx, market, "P9", 1, 1, 5); err != nil {
+		t.Fatal(err)
+	}
+	if got := searchindex.MeiliNum(get(t, c, market, "P9")["rating"]); got != 4.33 {
+		t.Fatalf("an older rating must not win, got %v", got)
+	}
+	if _, err := idx.ApplyRating(ctx, market, "P9", 0, 0, 20); err != nil {
+		t.Fatal(err)
+	}
+	if got := searchindex.MeiliNum(get(t, c, market, "P9")["review_count"]); got != 0 {
+		t.Fatalf("a product that lost its last review has none, got %v", got)
+	}
+	if ok, err := idx.ApplyRating(ctx, market, "NOPE", 5, 1, 1); err != nil || ok {
+		t.Fatalf("unknown product reports false: %v %v", ok, err)
+	}
+}

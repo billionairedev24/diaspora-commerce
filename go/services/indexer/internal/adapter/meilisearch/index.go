@@ -28,8 +28,9 @@ var _ port.ProductIndex = (*indexImpl)(nil)
 // NewIndex returns a ProductIndex over a Meilisearch client.
 func NewIndex(c *meili.Client) port.ProductIndex { return &indexImpl{c: c, now: time.Now} }
 
-// managed fields are owned by the index (availability) and never overwritten by product upserts.
-var managed = []string{"available_qty", "in_stock", "variant_qty", "variant_qty_version", "version", "updated_at"}
+// managed fields are owned by the index (availability, ratings) and never overwritten by product upserts.
+var managed = []string{"available_qty", "in_stock", "variant_qty", "variant_qty_version", "version", "updated_at",
+	"rating", "review_count", "rating_version"}
 
 func (i *indexImpl) uid(market string) string { return searchindex.MeiliIndexUID(market) }
 
@@ -72,6 +73,9 @@ func (i *indexImpl) UpsertProduct(ctx context.Context, market string, doc search
 		merged[k] = v
 	}
 	merged["version"] = version
+	if _, ok := merged["rating"]; !ok {
+		merged["rating"], merged["review_count"] = 0, 0 // a new product has no reviews yet
+	}
 	recompute(merged)
 	i.stamp(merged)
 	searchindex.MeiliDerive(merged)
@@ -120,6 +124,28 @@ func stringsOf(v any) []string {
 		}
 	}
 	return out
+}
+
+func (i *indexImpl) ApplyRating(ctx context.Context, market, atin string, average float64, count int, version int64) (bool, error) {
+	uid := i.uid(market)
+	d, err := i.c.Get(ctx, uid, atin, "id", "fulfilment", "delivery_days", "rating_version")
+	if err != nil {
+		return false, fmt.Errorf("read %s: %w", atin, err)
+	}
+	if d == nil {
+		return false, nil
+	}
+	if int64(searchindex.MeiliNum(d["rating_version"])) > version {
+		return true, nil // a newer rating is already applied
+	}
+	d["rating"], d["review_count"] = average, count
+	searchindex.MeiliDerive(d)
+	// Only the rating fields and the ranking helper that depends on them change.
+	if err := i.c.Put(ctx, uid, []map[string]any{{"id": atin, "rating": average, "review_count": count,
+		"rating_version": version, "rank_boost": d["rank_boost"]}}); err != nil {
+		return true, fmt.Errorf("rating %s: %w", atin, err)
+	}
+	return true, nil
 }
 
 func (i *indexImpl) ApplyAvailability(ctx context.Context, market, variantATIN, node string, qty int, version int64) (bool, error) {
