@@ -44,3 +44,7 @@ One shopper **credit ledger** is the base of everything; the other three program
 - One ledger gives finance a single liability figure and gives every program one audit trail.
 - Maker-checker applies to staff grants above a limit, as for ledger adjustments.
 - Numbers (rewards, limits, prices, minimums, tier benefits) live in staff settings, not code.
+
+## Implementation notes
+
+- Membership (S323) is built in payments; see [docs/engineering/membership.md](../engineering/membership.md) for the model, the refund rule, billing and retries, what is not built (member prices, free returns hook, annual fee deferral).
