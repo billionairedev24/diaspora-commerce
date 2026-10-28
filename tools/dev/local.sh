@@ -423,6 +423,10 @@ build() {
   mkdir -p "$BIN"
   if [[ -n "$java" ]]; then
     echo "==> building Java: ${java//services\//}"
+    # Maven copies resources but never deletes one that was renamed or removed, so a migration renumbered in git would
+    # live on in target/classes and Flyway would see two files with the same version: drop the copied migrations.
+    local s
+    for s in ${java//,/ }; do rm -rf "$ROOT/java/$s/target/classes/db/migration" 2>/dev/null || true; done
     (cd "$ROOT/java" && ./mvnw -q -B -DskipTests -pl "$java" -am package)
   fi
   for svc in $go; do
