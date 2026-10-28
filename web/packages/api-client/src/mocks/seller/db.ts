@@ -1,6 +1,7 @@
 /* In-memory state of the mock Seller Center BFF (stored on globalThis so route handlers, server components and tests
    share it). Seeded from the design prototype (backoffice-data.js, at-bookings.js, at-plans.js) relative to today. */
 import { type ExportJob } from '../../schemas/exports';
+import { type SellerReview } from '../../schemas/reviews';
 import {
   type Availability,
   type BillingPaymentMethod,
@@ -91,6 +92,8 @@ export interface MockSellerDb {
   offers: SellerOffer[];
   /** Seller-funded coupons (offers-service). */
   coupons: SellerCoupon[];
+  /** Published verified-purchase reviews of the organisation's products (catalog; S324). The customer is never identified. */
+  reviews: SellerReview[];
   /** Returns customers started on the organisation's orders (tax-returns). */
   returns: SellerReturn[];
   /** Disputes and A-to-z claims against the organisation (trust-ops). */
@@ -588,6 +591,13 @@ function freshDb(now: Date): MockSellerDb {
     },
     offers: [],
     coupons: [],
+    reviews: [
+      { id: '7a1b2c3d-0000-4000-8000-0000000000b1', atin: 'ATGARI0001', productTitle: 'Garri 2kg', reviewerName: 'Amara O.', rating: 5, title: 'Crisp and clean', text: 'Swallows beautifully, no grit.',
+        photos: [], verifiedPurchase: true, createdAt: iso(new Date(now.getTime() - 4 * DAY)), reportCount: 0, reply: null },
+      { id: '7a1b2c3d-0000-4000-8000-0000000000b2', atin: 'ATEGUS0001', productTitle: 'Egusi 500g', reviewerName: 'Kofi B.', rating: 3, title: 'Good, slow delivery', text: 'The egusi is fresh but it took nine days to arrive.',
+        photos: [], verifiedPurchase: true, createdAt: iso(new Date(now.getTime() - 9 * DAY)), reportCount: 0,
+        reply: { text: 'Thank you, Kofi. We have moved this product to faster shipping.', at: iso(new Date(now.getTime() - 8 * DAY)) } }
+    ],
     returns: [
       { number: 'RMA-5E11E5A1', orderNumber: 'AT-2026-000123', title: 'Garri 2kg', status: 'RECEIVED', statusLabel: 'Received', method: 'DROP_OFF', refundMinor: 1798,
         currency: 'USD', refundState: 'PENDING', items: [{ title: 'Garri 2kg', quantity: 2, reason: 'DAMAGED' }], carrier: 'UPS', trackingNumber: '1Z999AA10123456784',

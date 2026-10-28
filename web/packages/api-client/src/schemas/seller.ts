@@ -19,7 +19,7 @@ export type Portal = z.infer<typeof PortalSchema>;
 export const AccessLevelSchema = z.enum(['VIEW', 'EDIT', 'APPROVE', 'FULL']);
 export type AccessLevel = z.infer<typeof AccessLevelSchema>;
 export const ModuleKeySchema = z.enum([
-  'onboarding', 'home', 'orders', 'returns', 'disputes', 'listings', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
+  'onboarding', 'home', 'orders', 'returns', 'disputes', 'listings', 'reviews', 'inventory', 'coupons', 'calendar', 'requests', 'hours', 'services', 'policy',
   'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
 ]);
 export type ModuleKey = z.infer<typeof ModuleKeySchema>;

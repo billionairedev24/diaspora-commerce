@@ -9,6 +9,7 @@ import { type BookingTakeHome, type SellerRateCard } from '../../fee-rates';
 import { applyBps } from '../../fees';
 import { bffProblemType } from '../../problem-types';
 import { ExportColumnKindSchema, ExportFormatSchema, type ExportJob } from '../../schemas/exports';
+import { REVIEW_REASON_CODES, SELLER_REPLY_MAX } from '../../schemas/reviews';
 import {
   AvailabilityFormSchema,
   type BookingAction,
@@ -236,7 +237,7 @@ function require(ctx: Ctx, module: ModuleKey | null, level: 'VIEW' | 'EDIT', kin
 
 type Resolver = (ctx: Ctx, params: Record<string, string>) => Promise<unknown> | unknown;
 
-function route(fn: Resolver, status = 200) {
+function route(fn: Resolver, status: number | ((out: unknown) => number) = 200) {
   return async ({ request, params }: { request: Request; params: Record<string, string | readonly string[] | undefined> }) => {
     const flat: Record<string, string> = {};
     Object.entries(params).forEach(([k, v]) => {
@@ -244,8 +245,9 @@ function route(fn: Resolver, status = 200) {
     });
     try {
       const out = await fn(context(request), flat);
-      if (status === 204) return new HttpResponse(null, { status });
-      return HttpResponse.json(out as JsonBodyType, { status });
+      const code = typeof status === 'function' ? status(out) : status;
+      if (code === 204) return new HttpResponse(null, { status: code });
+      return HttpResponse.json(out as JsonBodyType, { status: code });
     } catch (e) {
       if (e instanceof SellerProblem) return problemResponse(e);
       throw e;
@@ -630,6 +632,8 @@ const TEAM_TITLES: Record<string, string> = {
 const teamProblem = (status: number, code: string) => new SellerProblem(status, code, TEAM_TITLES[code] ?? code, TEAM_ERROR_MESSAGES[code] ?? code);
 
 const W = '*/v1/seller';
+/** Reviews this mock member has already reported (one report per member and review). */
+const reported = new WeakMap<MockSellerDb, Set<string>>();
 const query = (ctx: Ctx) => new URL(ctx.request.url).searchParams;
 const nextId = (db: MockSellerDb, prefix: string) => `${prefix}-${++db.seq}`;
 
@@ -2222,6 +2226,37 @@ export const sellerHandlers = [
     ctx.db.coupons.splice(idx, 1);
     return new HttpResponse(null, { status: 204 });
   })),
+  /* Reviews (S324): read, one public reply, report. There is deliberately no route to edit, hide or delete a review. */
+  http.get(`${W}/reviews`, route((ctx) => {
+    require(ctx, 'reviews', 'VIEW', 'SELLER');
+    const q = query(ctx);
+    const page = Math.max(0, Number(q.get('page') ?? 0) || 0);
+    const size = Math.min(100, Math.max(1, Number(q.get('size') ?? 20) || 20));
+    const all = ctx.db.reviews.filter((r) => q.get('unanswered') !== 'true' || r.reply === null).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return { items: all.slice(page * size, page * size + size), total: all.length, page, size };
+  })),
+  http.post(`${W}/reviews/:reviewId/reply`, route(async (ctx, p) => {
+    require(ctx, 'reviews', 'EDIT', 'SELLER');
+    const { text } = await body(ctx.request, z.object({ text: z.string().trim().min(1, 'Write your reply').max(SELLER_REPLY_MAX, `At most ${SELLER_REPLY_MAX} characters`) }));
+    const row = ctx.db.reviews.find((r) => r.id === p.reviewId);
+    if (!row) throw notFound('No such review.');
+    if (row.reply) throw new SellerProblem(409, 'ALREADY_DONE', 'Already replied', 'You have already replied to this review. A reply cannot be edited.');
+    row.reply = { text, at: new Date().toISOString() };
+    return row;
+  })),
+  http.post(`${W}/reviews/:reviewId/reports`, route(async (ctx, p) => {
+    require(ctx, 'reviews', 'EDIT', 'SELLER');
+    const input = await body(ctx.request, z.object({ reasonCode: z.enum(REVIEW_REASON_CODES), details: z.string().max(500).optional() }));
+    if (input.reasonCode === 'OTHER' && !input.details?.trim()) throw invalid({ details: 'Tell us what is wrong' });
+    const row = ctx.db.reviews.find((r) => r.id === p.reviewId);
+    if (!row) throw notFound('No such review.');
+    const seen = reported.get(ctx.db) ?? new Set<string>();
+    reported.set(ctx.db, seen);
+    const created = !seen.has(row.id);
+    seen.add(row.id);
+    if (created) row.reportCount += 1;
+    return { created };
+  }, (out) => ((out as { created: boolean }).created ? 201 : 200))),
   /* Send to AfroTransact (S281) */
   ...sellerFbaHandlers(W, fbaGate),
   /* Anything else under /v1/seller is not part of the contract. */

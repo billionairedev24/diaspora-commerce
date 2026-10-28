@@ -22,6 +22,7 @@ import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
 import { preorderHandlers } from './preorder-handlers';
 import { referralHandlers } from './referral';
+import { reviewHandlers } from './reviews';
 import {
   addToCart,
   buildCart,
@@ -268,6 +269,7 @@ export const handlers = [
   ...shopperHandlers,
   ...creditHandlers,
   ...referralHandlers,
+  ...reviewHandlers,
   ...preorderHandlers,
   ...deliveryRunHandlers,
   ...legalHandlers,

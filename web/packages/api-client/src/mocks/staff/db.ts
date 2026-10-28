@@ -195,6 +195,22 @@ function seed(now: Date): MockStaffDb {
     })
   );
 
+  /* Verified-purchase product reviews (S324): staff see people and products by name, never by id. */
+  const productReviews = Array.from({ length: 8 }, (_, i) =>
+    rec(`rev-${700 + i}`, {
+      atin: `AT${String(80_000_000 + i * 977)}`,
+      productTitle: pick(['Shea butter, raw 500 g', 'Kente print tote', 'Black soap bar', 'Palm oil 1 L']),
+      seller: pick(SELLERS),
+      reviewerName: pick(['Amara O.', 'Kofi B.', 'Zainab K.', 'Chidi E.']),
+      rating: (['5', '4', '1', '5', '3', '2', '5', '4'] as const).map(Number)[i] ?? 5,
+      title: pick(['Smooth and pure', 'Slow delivery', 'Not as described', null]),
+      text: pick(['Absorbs fast, no smell.', 'Arrived late but fine.', 'Not what the photos showed.']),
+      status: (['PUBLISHED', 'PUBLISHED', 'PENDING', 'PUBLISHED', 'PUBLISHED', 'REMOVED', 'PUBLISHED', 'REJECTED'] as const)[i] ?? 'PUBLISHED',
+      reportCount: i === 2 ? 2 : 0,
+      createdAt: ago(10 - i)
+    })
+  );
+
   const claimStatus = ['UNDER_REVIEW', 'AWAITING_SELLER', 'ESCALATED', 'UNDER_REVIEW', 'RESOLVED_REFUND', 'RESOLVED_DENIED', 'UNDER_REVIEW'];
   const claims = claimStatus.map((status, i) => {
     const o = orders[i * 3];
@@ -565,7 +581,7 @@ function seed(now: Date): MockStaffDb {
     lolaUsed: 0,
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
-      users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
+      users, roles, applications, organisations: [], 'connect-accounts': [], orders, products, moderation, 'product-reviews': productReviews, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates, 'tax-codes': taxCodes, 'tax-rules': taxRules, 'tax-review': taxReview, coupons, reconciliation, 'reconciliation-runs': reconciliationRuns, 'ledger-adjustments': ledgerAdjustments, 'credit-adjustments': creditAdjustments, 'gift-cards': giftCards, 'credit-liabilities': creditLiabilities, 'money-settings': moneySettings, referrals, 'referral-settings': referralSettings, 'stripe-lookup': stripeLookup, 'payment-settings': paymentSettings, 'tax-settings': taxSettings, maintenance, 'tax-filings': taxFilings, 'tax-nexus': taxNexus,
       'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents,

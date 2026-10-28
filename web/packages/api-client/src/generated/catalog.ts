@@ -407,6 +407,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/product-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Product reviews by state, newest first (catalog:moderate) */
+        get: operations["listProductReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-reviews/{reviewId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One product review (catalog:moderate) */
+        get: operations["getProductReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-reviews/{reviewId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a review
+         * @description A pending review becomes public and counts in the rating; also reinstates a rejected or removed one. Approving a published review changes nothing. catalog.review.published.
+         */
+        post: operations["approveProductReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-reviews/{reviewId}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a review that is waiting for moderation
+         * @description The customer sees the reason and may edit the review (which goes back to moderation). 409 catalog.review-not-pending for a published review - remove it instead. 422 without a note for reasonCode OTHER. catalog.review.rejected.
+         */
+        post: operations["rejectProductReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-reviews/{reviewId}/remove": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take a review down, published or not
+         * @description It stops being public and counting in the rating; the customer sees the reason. catalog.review.removed.
+         */
+        post: operations["removeProductReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-reviews/{reviewId}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reply to a published review, once (catalog:write, members of the owning organisation)
+         * @description 409 catalog.review-not-published before approval, 409 catalog.review-already-replied the second time; catalog.review.replied. The reply is public and cannot be edited.
+         */
+        post: operations["replyToProductReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/product-reviews/{reviewId}/reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a published review (signed-in customer, or a member of the product's seller)
+         * @description One report per reporter and review: a repeated report returns 200 with created=false. The first report of a text queues the review in trust-ops (catalog.review.reported); sellers can report but never edit or hide a review.
+         */
+        post: operations["reportProductReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/product-types": {
         parameters: {
             query?: never;
@@ -474,6 +608,54 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{atin}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review a product I received (signed-in customer)
+         * @description 403 catalog.review-not-verified-purchase without a delivered order line for the product; 409 catalog.review-already-exists the second time. The review is published at once or, when the automatic checks (profanity, links, personal data) flag it, waits for moderation (status PENDING). Publishes catalog.review.published or catalog.review.submitted.
+         */
+        post: operations["writeProductReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/products/{atin}/reviews/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My standing with a product: may I review it, and my review (signed-in customer)
+         * @description eligible is true when orders-service says the customer received the product and they have no live review yet. A review in any state is returned, with the moderation reason when it was refused or removed. 503 catalog.purchase-check-unavailable when orders cannot answer.
+         */
+        get: operations["myProductReview"];
+        /**
+         * Edit my review within 30 days (signed-in customer)
+         * @description The checks run again. 409 catalog.review-edit-window-closed after the window. An edit of a rejected or removed review always goes back to moderation.
+         */
+        put: operations["editProductReview"];
+        post?: never;
+        /**
+         * Delete my review (signed-in customer)
+         * @description Any time. The rating is recomputed; the customer can review the product again.
+         */
+        delete: operations["deleteProductReview"];
         options?: never;
         head?: never;
         patch?: never;
@@ -665,6 +847,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/public/products/{atin}/rating": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A live product's rating: average, count and star breakdown */
+        get: operations["productRating"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public/products/{atin}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Published reviews of a live product, with its rating
+         * @description Sorted NEWEST (default), HIGHEST or LOWEST, optionally only reviews with the given stars. Reviewers show as first name and last initial, always Verified purchase.
+         */
+        get: operations["publicProductReviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/public/products/{atin}/reports": {
         parameters: {
             query?: never;
@@ -694,6 +913,26 @@ export interface paths {
         };
         /** A live variant (with its product) by variant ATIN — used by cart and checkout */
         get: operations["variant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Published reviews of my products, newest first (catalog:write)
+         * @description Sellers see their own organisation; staff name it with orgId. The customer's identity is left out. unanswered=true lists reviews without a reply.
+         */
+        get: operations["listSellerReviews"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1142,6 +1381,201 @@ export interface components {
             variants?: components["schemas"]["Variant"][];
             preorderEligible?: boolean;
             shipsNow?: boolean;
+            rating?: components["schemas"]["ProductRating"];
+        };
+        /** @description A review photo: the public https URL media-service gave the uploaded, moderated image */
+        ReviewPhoto: {
+            url: string;
+        };
+        /** @description Stars are required; title, text and up to 5 photos are optional. reviewerName is the shopper's account name: only the first name and last initial are kept */
+        WriteReviewRequest: {
+            reviewerName?: string;
+            /** Format: int32 */
+            rating: number;
+            title?: string;
+            text?: string;
+            photos?: components["schemas"]["ReviewPhoto"][];
+        };
+        /** @description The whole review again (stars, title, text, photos) */
+        EditReviewRequest: {
+            /** Format: int32 */
+            rating: number;
+            title?: string;
+            text?: string;
+            photos?: components["schemas"]["ReviewPhoto"][];
+        };
+        /** @description Report a published review */
+        ReviewReportRequest: {
+            reasonCode: components["schemas"]["ReviewReasonCode"];
+            details?: string;
+        };
+        /**
+         * @description Why a review is reported or removed (OTHER needs a note when removing)
+         * @enum {string}
+         */
+        ReviewReasonCode: "ABUSIVE" | "PERSONAL_INFORMATION" | "SPAM" | "OFF_TOPIC" | "CONFLICT_OF_INTEREST" | "OTHER";
+        ReviewReportResult: {
+            created: boolean;
+            /** Format: int32 */
+            reports: number;
+        };
+        /** @description The product owner's single public reply */
+        ReviewReplyRequest: {
+            text: string;
+        };
+        ReviewApproveRequest: {
+            note?: string;
+        };
+        /** @description reasonCode is required; note is required for OTHER */
+        ReviewRemoveRequest: {
+            reasonCode: components["schemas"]["ReviewReasonCode"];
+            note?: string;
+        };
+        /** @description Average stars over published reviews, the count and how many reviews gave 1, 2, 3, 4 and 5 stars */
+        ProductRating: {
+            /** @description Two decimals; 0 without reviews */
+            average: number;
+            /** Format: int32 */
+            count: number;
+            /** @description Counts for 1, 2, 3, 4 and 5 stars, in that order */
+            breakdown: number[];
+        };
+        ReviewReply: {
+            text: string;
+            /** Format: date-time */
+            at: string;
+        };
+        /** @description The last moderation decision: why a review was refused or removed */
+        ReviewModeration: {
+            by?: string;
+            /** Format: date-time */
+            at?: string;
+            reasonCode?: components["schemas"]["ReviewReasonCode"];
+            note?: string;
+        };
+        /** @description A published review as shoppers see it - Verified purchase, the reviewer's first name and last initial only */
+        PublicReview: {
+            /** Format: uuid */
+            id: string;
+            reviewerName: string;
+            /** Format: int32 */
+            rating: number;
+            title?: string;
+            text?: string;
+            photos: components["schemas"]["ReviewPhoto"][];
+            verifiedPurchase: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            reply?: components["schemas"]["ReviewReply"];
+        };
+        /** @description One page of published reviews and the product's rating */
+        PublicReviewPage: {
+            rating: components["schemas"]["ProductRating"];
+            items: components["schemas"]["PublicReview"][];
+            /** Format: int64 */
+            total: number;
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            size: number;
+        };
+        /** @description The customer's own review in any state; moderation says why it was refused */
+        OwnReview: {
+            /** Format: uuid */
+            id: string;
+            atin: string;
+            productTitle: string;
+            reviewerName: string;
+            /** Format: int32 */
+            rating: number;
+            title?: string;
+            text?: string;
+            photos: components["schemas"]["ReviewPhoto"][];
+            /** @enum {string} */
+            status: "PENDING" | "PUBLISHED" | "REJECTED" | "REMOVED" | "DELETED";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            editableUntil: string;
+            editable: boolean;
+            moderation?: components["schemas"]["ReviewModeration"];
+            reply?: components["schemas"]["ReviewReply"];
+        };
+        /** @description What the signed-in customer can do about a product: eligible means they received it and have not reviewed it yet; reason says why not (not-purchased, already-reviewed) */
+        MyReview: {
+            eligible: boolean;
+            reason?: string;
+            review?: components["schemas"]["OwnReview"];
+        };
+        /** @description A published review of the organisation's product, with the customer's identity left out */
+        SellerReview: {
+            /** Format: uuid */
+            id: string;
+            atin: string;
+            productTitle: string;
+            reviewerName: string;
+            /** Format: int32 */
+            rating: number;
+            title?: string;
+            text?: string;
+            photos: components["schemas"]["ReviewPhoto"][];
+            verifiedPurchase: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int32 */
+            reportCount: number;
+            reply?: components["schemas"]["ReviewReply"];
+        };
+        SellerReviewPage: {
+            items: components["schemas"]["SellerReview"][];
+            /** Format: int64 */
+            total: number;
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            size: number;
+        };
+        /** @description A review for moderation - the author's id, the delivering order, what the automatic checks found and the decision */
+        ProductReview: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            productId: string;
+            atin: string;
+            productTitle: string;
+            sellerOrgId: string;
+            customerId: string;
+            reviewerName: string;
+            orderNumber: string;
+            /** Format: int32 */
+            rating: number;
+            title?: string;
+            text?: string;
+            photos: components["schemas"]["ReviewPhoto"][];
+            /** @enum {string} */
+            status: "PENDING" | "PUBLISHED" | "REJECTED" | "REMOVED" | "DELETED";
+            flags: ("PROFANITY" | "LINK" | "EMAIL" | "PHONE")[];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: int32 */
+            reportCount: number;
+            moderation?: components["schemas"]["ReviewModeration"];
+            reply?: components["schemas"]["ReviewReply"];
+            /** Format: int64 */
+            version: number;
+        };
+        ProductReviewPage: {
+            items: components["schemas"]["ProductReview"][];
+            /** Format: int64 */
+            total: number;
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            size: number;
         };
         PublicVariant: {
             product?: components["schemas"]["PublicProduct"];
@@ -1993,6 +2427,183 @@ export interface operations {
             };
         };
     };
+    listProductReviews: {
+        parameters: {
+            query?: {
+                status?: "PENDING" | "PUBLISHED" | "REJECTED" | "REMOVED" | "DELETED";
+                atin?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductReviewPage"];
+                };
+            };
+        };
+    };
+    getProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductReview"];
+                };
+            };
+        };
+    };
+    approveProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReviewApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductReview"];
+                };
+            };
+        };
+    };
+    rejectProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRemoveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductReview"];
+                };
+            };
+        };
+    };
+    removeProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewRemoveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductReview"];
+                };
+            };
+        };
+    };
+    replyToProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewReplyRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SellerReview"];
+                };
+            };
+        };
+    };
+    reportProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewReportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReviewReportResult"];
+                };
+            };
+        };
+    };
     productTypes: {
         parameters: {
             query?: never;
@@ -2104,6 +2715,100 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["Product"];
                 };
+            };
+        };
+    };
+    writeProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["OwnReview"];
+                };
+            };
+        };
+    };
+    myProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["MyReview"];
+                };
+            };
+        };
+    };
+    editProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EditReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["OwnReview"];
+                };
+            };
+        };
+    };
+    deleteProductReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -2373,6 +3078,55 @@ export interface operations {
             };
         };
     };
+    productRating: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ProductRating"];
+                };
+            };
+        };
+    };
+    publicProductReviews: {
+        parameters: {
+            query?: {
+                stars?: number;
+                sort?: "NEWEST" | "HIGHEST" | "LOWEST";
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                atin: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PublicReviewPage"];
+                };
+            };
+        };
+    };
     reportListing: {
         parameters: {
             query?: never;
@@ -2417,6 +3171,31 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["PublicVariant"];
+                };
+            };
+        };
+    };
+    listSellerReviews: {
+        parameters: {
+            query?: {
+                orgId?: string;
+                unanswered?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SellerReviewPage"];
                 };
             };
         };
