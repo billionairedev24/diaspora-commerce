@@ -533,7 +533,7 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(p, "/v1/memberships/customers/"):
 		writeJ(w, 200, map[string]any{"membership": membershipFake(now), "tier": membershipTierFake(now), "pendingTier": nil, "usage": []any{map[string]any{"benefit": "FREE_DELIVERY", "uses": 2, "amountMinor": 1198, "currency": "USD"}},
 			"charges": []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "kind": "JOIN", "amountMinor": 999, "currency": "USD", "status": "SUCCEEDED", "refundedMinor": 0, "createdAt": now}},
-			"refund": map[string]any{"eligible": true, "reason": "OK", "amountMinor": 999, "currency": "USD"}, "trialAvailable": false, "refundWindowDays": 7,
+			"refund":  map[string]any{"eligible": true, "reason": "OK", "amountMinor": 999, "currency": "USD"}, "trialAvailable": false, "refundWindowDays": 7,
 			"card": map[string]any{"brand": "visa", "last4": "4242"}})
 	case strings.HasSuffix(p, "/refund") && strings.HasPrefix(p, "/v1/memberships/admin/charges/"):
 		writeJ(w, 200, map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "status": "REFUNDED", "refundedMinor": 999})

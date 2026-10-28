@@ -154,11 +154,15 @@ export function membershipQuote(s: MockMembershipState, packages: CheckoutPackag
     waivers.push({ packageId: p.packageId, seller: p.seller.name, benefit: benefit as MembershipWaiver['benefit'], waivedMinor: waived });
   }
   const total = waivers.reduce((sum, w) => sum + w.waivedMinor, 0);
+  // Cashback is a credit benefit: it starts with the first paid period, never in a trial; it is earned on delivery.
+  const cashback = member && s.membership?.status === 'ACTIVE' ? tier?.benefits.find((b) => b.code === 'CASHBACK') : undefined;
+  const earned = cashback && items >= (cashback.minOrderMinor ?? 0) ? Math.min(Math.floor((items * (cashback.percentBps ?? 0)) / 10_000), cashback.capMinor ?? Number.MAX_SAFE_INTEGER) : 0;
   return {
     member,
     tierName: member ? (tier?.name ?? null) : null,
     waivers: member ? waivers : [],
     totalWaivedMinor: member ? total : 0,
+    cashbackMinor: earned,
     upsell: !member && tier && total > 0
       ? { tierCode: tier.code, tierName: tier.name, monthlyPriceMinor: tier.monthlyPriceMinor, yearlyPriceMinor: tier.yearlyPriceMinor, trialDays: tier.trialDays, savingMinor: total, currency: 'USD' }
       : null

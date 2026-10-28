@@ -317,6 +317,7 @@ func quoteMembership(ctx context.Context, client port.MembershipClient, c *domai
 	out.Member = q.Member
 	if q.Member {
 		out.TierName = ptr(firstNonEmpty(q.TierName, q.TierCode))
+		out.CashbackMinor = q.CashbackMinor
 	}
 	for _, w := range q.Waivers {
 		out.Waivers = append(out.Waivers, domain.MembershipWaiver{PackageID: w.Key, Seller: seller[w.Key], Benefit: w.Benefit, WaivedMinor: w.WaivedMinor})

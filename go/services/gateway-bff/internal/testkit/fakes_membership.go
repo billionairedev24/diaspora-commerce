@@ -110,7 +110,11 @@ func (u *Upstreams) membershipRoutes(mux *http.ServeMux) {
 			st.joined[key] = true
 			switch {
 			case join:
+				// A monthly join starts the trial; a yearly one is charged at once (so the fake has both states).
 				st.status, st.tier, st.interval = "TRIALING", code, interval
+				if interval == "YEARLY" {
+					st.status = "ACTIVE"
+				}
 			case code == st.tier && interval == st.interval:
 				st.pending = ""
 			default:
@@ -173,6 +177,8 @@ func (u *Upstreams) membershipRoutes(mux *http.ServeMux) {
 		fees, _ := body["fees"].([]any)
 		st.mu.Lock()
 		member := st.status != ""
+		// Cashback is a credit benefit: it starts with the first paid period, never in a trial.
+		paying := st.status == "ACTIVE"
 		st.mu.Unlock()
 		waivers, total := []map[string]any{}, int64(0)
 		if items >= MembershipFreeFromMinor {
@@ -188,9 +194,12 @@ func (u *Upstreams) membershipRoutes(mux *http.ServeMux) {
 				total += int64(amount)
 			}
 		}
-		out := map[string]any{"member": member, "tierCode": "", "tierName": "", "waivers": []map[string]any{}, "totalWaivedMinor": 0, "upsell": nil}
+		out := map[string]any{"member": member, "tierCode": "", "tierName": "", "waivers": []map[string]any{}, "totalWaivedMinor": 0, "cashbackMinor": 0, "upsell": nil}
 		if member {
 			out["tierCode"], out["tierName"], out["waivers"], out["totalWaivedMinor"] = "plus", "Plus", waivers, total
+			if paying {
+				out["cashbackMinor"] = int64(items) * 2 / 100
+			}
 		} else if total > 0 {
 			out["upsell"] = map[string]any{"tierCode": "plus", "tierName": "Plus", "monthlyPriceMinor": MembershipMonthlyMinor, "yearlyPriceMinor": MembershipYearlyMinor,
 				"trialDays": 14, "savingMinor": total, "currency": "USD"}

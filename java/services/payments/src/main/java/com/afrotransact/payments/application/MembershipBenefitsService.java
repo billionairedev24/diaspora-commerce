@@ -66,9 +66,12 @@ public interface MembershipBenefitsService {
      * Fees waived on an order and, for a shopper who is not a member, what joining would save.
      *
      * @param tierCode / tierName the member's tier when {@code member}
+     * @param cashbackMinor the credit the member earns on this order once it is delivered ("credit earned"): 0 without
+     *                      the benefit, under its order minimum, or during a trial (credit benefits start with the first
+     *                      paid period)
      */
     record WaiverQuote(boolean member, String tierCode, String tierName, List<FeeWaivers.Waiver> waivers,
-                       long totalWaivedMinor, Upsell upsell) {
+                       long totalWaivedMinor, long cashbackMinor, Upsell upsell) {
     }
 
     /** "Join Plus to save $X on this order". */

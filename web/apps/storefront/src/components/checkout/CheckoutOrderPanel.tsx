@@ -256,6 +256,11 @@ export function CheckoutOrderPanel(props: Props) {
             </div>
           )}
         </dl>
+        {(s.membership?.cashbackMinor ?? 0) > 0 && (
+          <p className={styles.fine} data-testid="checkout-membership-earn">
+            {t('co.mem.earn', { amount: fmt.money(s.membership?.cashbackMinor ?? 0) })}
+          </p>
+        )}
 
         {s.membership?.upsell && (
           <div className={styles.promoWrap}>

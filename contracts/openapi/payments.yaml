@@ -6763,6 +6763,11 @@ components:
         totalWaivedMinor:
           type: integer
           format: int64
+        cashbackMinor:
+          type: integer
+          format: int64
+          description: The credit the member earns on this order once it is delivered; 0 without cashback, under its minimum
+            or during a trial
         upsell:
           $ref: '#/components/schemas/MembershipUpsell'
     MembershipWaiversRequest:

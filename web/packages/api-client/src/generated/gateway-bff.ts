@@ -4164,6 +4164,11 @@ export interface components {
             waivers: components["schemas"]["MembershipWaiver"][];
             /** Format: int64 */
             totalWaivedMinor: number;
+            /**
+             * Format: int64
+             * @description The credit I earn on this order once it is delivered (cashback); 0 without cashback or during a trial. Credit only buys products and services.
+             */
+            cashbackMinor: number;
             upsell: components["schemas"]["MembershipUpsell"] | null;
         };
         /** @description The shipping fee the shopper's membership waived on this shipment, with the tier and benefit */

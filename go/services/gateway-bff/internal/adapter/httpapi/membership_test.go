@@ -152,10 +152,46 @@ func TestMembershipRoutesConformAndApplyBenefits(t *testing.T) {
 		t.Fatalf("order waiver = %v", ship["membershipWaiver"])
 	}
 
+	// Credit earned: cashback is shown to a member who pays (not during a trial) and only buys products and services.
+	mustStatus(t, b.do("POST", "/v1/account/membership/cancel", nil), 200)
+	if cs := b.do("GET", "/v1/cart/membership", nil).json(t); num(cs, "cashbackMinor") != 0 {
+		t.Fatalf("no cashback during the trial: %v", cs)
+	}
+
 	for _, op := range []string{"getMembershipOffer", "getAccountMembership", "joinAccountMembership", "changeAccountMembership",
 		"cancelAccountMembership", "resumeAccountMembership", "listAccountMembershipBenefits", "getCartMembershipSavings"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
 		}
+	}
+}
+
+// TestMembershipCashbackIsShownToPayingMembers checks the "credit earned" line of the cart and checkout: 2% of the goods
+// for a member whose first paid period has begun, none for a visitor, a non-member or a member on a trial.
+func TestMembershipCashbackIsShownToPayingMembers(t *testing.T) {
+	bff, b := setup(t, testkit.Options{Content: true, Payments: true, Promise: true, Offers: true, Notifications: true})
+	validated := validateAll(t, b)
+	mustStatus(t, signIn(t, bff, b, "/"), 302)
+	mustStatus(t, b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEA0001", "quantity": 3}), 200)
+	if cs := b.do("GET", "/v1/cart/membership", nil).json(t); num(cs, "cashbackMinor") != 0 {
+		t.Fatalf("a non-member earns nothing: %v", cs)
+	}
+	b.headers = map[string]string{"Idempotency-Key": "membership-yearly-0001"}
+	mustStatus(t, b.do("POST", "/v1/account/membership", map[string]any{"tierCode": "plus", "interval": "YEARLY"}), 201)
+	b.headers = nil
+	r := b.do("GET", "/v1/cart/membership", nil)
+	mustStatus(t, r, 200)
+	cs := r.json(t)
+	if cs["member"] != true || num(cs, "cashbackMinor") != 75 { // 2% of 37.50
+		t.Fatalf("cart savings = %s", r.body)
+	}
+	mustStatus(t, b.do("POST", "/v1/account/addresses", map[string]any{"name": "Adaeze Nwosu", "phone": "+17135550142", "line1": "9800 Westheimer Rd",
+		"city": "Houston", "state": "TX", "zip": "77042"}), 201)
+	sum := b.do("GET", "/v1/checkout/summary", nil).json(t)
+	if mem, _ := sum["membership"].(map[string]any); mem == nil || num(mem, "cashbackMinor") != 75 {
+		t.Fatalf("checkout membership = %v", sum["membership"])
+	}
+	if validated["getCartMembershipSavings"] == 0 {
+		t.Fatal("the cart savings were not validated against the contract")
 	}
 }

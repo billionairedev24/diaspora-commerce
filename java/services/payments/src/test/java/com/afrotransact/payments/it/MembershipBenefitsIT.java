@@ -95,6 +95,26 @@ class MembershipBenefitsIT extends MembershipSupport {
     }
 
     @Test
+    void theQuoteShowsTheCashbackAPayingMemberWillEarnOnThisOrder() {
+        String tier = tierCode("earn");
+        tier(tier, 10, 999, 9900, 0, List.of(benefit("CASHBACK", Map.of("percentBps", 500, "minOrderMinor", 2500,
+                "capMinor", 200))));
+        String customer = member(tier);
+        List<Map<String, Object>> noFees = List.of();
+        assertThat(waivers(customer, 3000, noFees).path("cashbackMinor").asLong()).as("5% of 30.00").isEqualTo(150);
+        assertThat(waivers(customer, 5000, noFees).path("cashbackMinor").asLong()).as("capped at 2.00").isEqualTo(200);
+        assertThat(waivers(customer, 2000, noFees).path("cashbackMinor").asLong()).as("under the minimum").isZero();
+        assertThat(waivers(shopperWithCard(), 3000, noFees).path("cashbackMinor").asLong()).as("a non-member").isZero();
+
+        String trialTier = tierCode("trialearn");
+        tier(trialTier, 20, 999, 9900, 14, List.of(benefit("CASHBACK", Map.of("percentBps", 500))));
+        String trialling = shopperWithCard();
+        join(trialling, trialTier, "MONTHLY");
+        assertThat(waivers(trialling, 3000, noFees).path("cashbackMinor").asLong())
+                .as("credit benefits start with the first paid period").isZero();
+    }
+
+    @Test
     void aShopperWhoIsNotAMemberSeesWhatJoiningWouldSave() {
         String customer = shopperWithCard();
         JsonNode none = waivers(customer, 5000, List.of(fee("s1", "AFROTRANSACT_DELIVERY", 799)));

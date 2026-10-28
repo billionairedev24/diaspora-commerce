@@ -1497,5 +1497,7 @@
   "co.mem.upsellTrial": "Dán an wò lọ́fẹ̀ẹ́ fún ọjọ́ {days}, lẹ́yìn náà {price} ní oṣooṣù. Ìfijiṣẹ́ ọ̀fẹ́ àti ìyókù lórí gbogbo ìbéèrè.",
   "co.mem.upsellNoTrial": "{price} ní oṣooṣù. Ìfijiṣẹ́ ọ̀fẹ́ àti ìyókù lórí gbogbo ìbéèrè.",
   "co.mem.upsellLink": "Wo ẹ̀tọ́ ọmọ ẹgbẹ́",
-  "ord.mem.waived": "Ọmọ ẹgbẹ́ {tier}: {benefit} fi {amount} pamọ́ fún yín lórí ìfiránṣẹ́ yìí"
+  "ord.mem.waived": "Ọmọ ẹgbẹ́ {tier}: {benefit} fi {amount} pamọ́ fún yín lórí ìfiránṣẹ́ yìí",
+  "co.mem.earn": "Ẹ ó jèrè {amount} owó ìrànwọ́ AfroTransact nígbà tí a bá fi ìbéèrè yìí jiṣẹ́.",
+  "co.mem.joinNow": "Darapọ̀ báyìí"
 }

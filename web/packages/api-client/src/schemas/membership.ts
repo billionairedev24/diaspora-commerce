@@ -175,6 +175,8 @@ export const MembershipSavingsSchema = z.object({
   tierName: nullableString,
   waivers: z.array(MembershipWaiverSchema),
   totalWaivedMinor: MinorSchema,
+  /** The credit earned on this order once it is delivered (cashback); 0 without cashback or during a trial. */
+  cashbackMinor: MinorSchema,
   upsell: MembershipUpsellSchema.nullable()
 });
 export type MembershipSavings = z.infer<typeof MembershipSavingsSchema>;

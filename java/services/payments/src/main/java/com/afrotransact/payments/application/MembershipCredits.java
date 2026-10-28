@@ -42,6 +42,22 @@ class MembershipCredits {
                 now.atZone(ZoneOffset.UTC)));
     }
 
+    /**
+     * The cashback the tier gives on goods of this value: the share of the goods, capped, and nothing under the order
+     * minimum or without the benefit. Used by the grant and by the cart's "credit earned" preview.
+     */
+    static long cashbackOf(MembershipTier tier, long goodsMinor) {
+        Optional<TierBenefit> benefit = tier.benefit(BenefitCode.CASHBACK);
+        if (benefit.isEmpty() || goodsMinor < benefit.get().minOrder()) {
+            return 0;
+        }
+        long amountMinor = Math.multiplyExact(goodsMinor, (long) benefit.get().percentBps()) / 10_000L;
+        if (benefit.get().capMinor() != null) {
+            amountMinor = Math.min(amountMinor, benefit.get().capMinor());
+        }
+        return Math.max(0, amountMinor);
+    }
+
     /** The monthly credit of this month, once. Returns the amount granted, empty when none was due. */
     Optional<Money> monthly(Membership m, MembershipTier tier, Instant now) {
         Optional<TierBenefit> benefit = tier.benefit(BenefitCode.MONTHLY_CREDIT);
@@ -68,14 +84,8 @@ class MembershipCredits {
      */
     Optional<Money> cashback(Membership m, MembershipTier tier, String orderId, long goodsMinor, Instant now) {
         Optional<TierBenefit> benefit = tier.benefit(BenefitCode.CASHBACK);
-        if (benefit.isEmpty() || !m.creditBenefitsActive() || goodsMinor < benefit.get().minOrder()) {
-            return Optional.empty();
-        }
-        long amountMinor = Math.multiplyExact(goodsMinor, (long) benefit.get().percentBps()) / 10_000L;
-        if (benefit.get().capMinor() != null) {
-            amountMinor = Math.min(amountMinor, benefit.get().capMinor());
-        }
-        if (amountMinor < 1) {
+        long amountMinor = m.creditBenefitsActive() ? cashbackOf(tier, goodsMinor) : 0;
+        if (benefit.isEmpty() || amountMinor < 1) {
             return Optional.empty();
         }
         Money amount = Money.of(amountMinor, tier.currency());

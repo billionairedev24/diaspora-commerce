@@ -1497,5 +1497,7 @@
   "co.mem.upsellTrial": "Pruébalo gratis durante {days} días y después {price} al mes. Entrega gratis y más en cada pedido.",
   "co.mem.upsellNoTrial": "{price} al mes. Entrega gratis y más en cada pedido.",
   "co.mem.upsellLink": "Ver la membresía",
-  "ord.mem.waived": "Miembro {tier}: {benefit} te ahorró {amount} en este envío"
+  "ord.mem.waived": "Miembro {tier}: {benefit} te ahorró {amount} en este envío",
+  "co.mem.earn": "Ganarás {amount} de crédito AfroTransact cuando se entregue este pedido.",
+  "co.mem.joinNow": "Unirme ahora"
 }

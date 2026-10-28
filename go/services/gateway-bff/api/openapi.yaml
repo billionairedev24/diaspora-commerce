@@ -4786,12 +4786,13 @@ components:
         currency: {type: string}
     MembershipSavings:
       type: object
-      required: [member, tierName, waivers, totalWaivedMinor, upsell]
+      required: [member, tierName, waivers, totalWaivedMinor, cashbackMinor, upsell]
       properties:
         member: {type: boolean}
         tierName: {type: [string, 'null']}
         waivers: {type: array, items: {$ref: '#/components/schemas/MembershipWaiver'}}
         totalWaivedMinor: {type: integer, format: int64}
+        cashbackMinor: {type: integer, format: int64, description: 'The credit I earn on this order once it is delivered (cashback); 0 without cashback or during a trial. Credit only buys products and services.'}
         upsell: {oneOf: [{$ref: '#/components/schemas/MembershipUpsell'}, {type: 'null'}]}
     OrderMembershipWaiver:
       type: object

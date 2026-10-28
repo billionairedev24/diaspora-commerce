@@ -156,7 +156,9 @@ type UpMembershipWaiverQuote struct {
 	TierName         string               `json:"tierName"`
 	Waivers          []UpMembershipWaiver `json:"waivers"`
 	TotalWaivedMinor int64                `json:"totalWaivedMinor"`
-	Upsell           *UpMembershipUpsell  `json:"upsell"`
+	// CashbackMinor is the credit the member earns on this order once it is delivered (0 without cashback or in a trial).
+	CashbackMinor int64               `json:"cashbackMinor"`
+	Upsell        *UpMembershipUpsell `json:"upsell"`
 }
 
 // MembershipClient calls payments for the shopper's membership with the shopper's own token (Tiers also with the BFF's

@@ -109,11 +109,12 @@ class MembershipBenefitsServiceImpl implements MembershipBenefitsService {
             Optional<MembershipTier> tier = tiers.find(m.tierCode());
             if (tier.isPresent()) {
                 List<FeeWaivers.Waiver> waived = FeeWaivers.resolve(tier.get(), itemsMinor, fees);
+                long cashback = m.creditBenefitsActive() ? MembershipCredits.cashbackOf(tier.get(), itemsMinor) : 0;
                 return new WaiverQuote(true, tier.get().code(), tier.get().name(), waived, FeeWaivers.total(waived),
-                        null);
+                        cashback, null);
             }
         }
-        return new WaiverQuote(false, null, null, List.of(), 0, withUpsell ? upsell(itemsMinor, fees) : null);
+        return new WaiverQuote(false, null, null, List.of(), 0, 0, withUpsell ? upsell(itemsMinor, fees) : null);
     }
 
     /** The cheapest published tier that would waive something on this order, and what it would save. */

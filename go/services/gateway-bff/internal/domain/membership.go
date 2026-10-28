@@ -195,7 +195,9 @@ type MembershipSavings struct {
 	TierName         *string            `json:"tierName"`
 	Waivers          []MembershipWaiver `json:"waivers"`
 	TotalWaivedMinor int64              `json:"totalWaivedMinor"`
-	Upsell           *MembershipUpsell  `json:"upsell"`
+	// CashbackMinor is the credit the member earns on this order once it is delivered ("credit earned"); 0 when none.
+	CashbackMinor int64             `json:"cashbackMinor"`
+	Upsell        *MembershipUpsell `json:"upsell"`
 }
 
 // OrderMembershipWaiver is a shipping fee the shopper's membership waived on an order shipment.

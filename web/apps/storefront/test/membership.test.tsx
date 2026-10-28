@@ -165,6 +165,31 @@ describe('membership at the cart and the checkout (S323)', () => {
     expect(within(screen.getByTestId('order-summary')).getByText('FREE')).toBeInTheDocument();
   });
 
+  it('joins from the checkout itself: the upsell goes away and the fee is waived at once', async () => {
+    const api = await cartWithSellerShipping();
+    const user = userEvent.setup();
+    renderWithProviders(<CheckoutView />);
+    const upsell = await screen.findByTestId('membership-upsell');
+    await user.click(within(upsell).getByTestId('membership-upsell-join'));
+    expect(await screen.findByTestId('checkout-membership-waived')).toHaveTextContent('−$5.99');
+    await waitFor(() => expect(screen.queryByTestId('membership-upsell')).not.toBeInTheDocument());
+    expect((await api.getAccountMembership()).membership).toMatchObject({ status: 'TRIALING', tierName: 'Plus' });
+    expect(screen.queryByTestId('checkout-membership-earn')).not.toBeInTheDocument(); // a trial earns no credit
+  });
+
+  it('shows the credit a paying member earns, in the cart and at checkout', async () => {
+    const api = await cartWithSellerShipping();
+    markTrialUsed('u_adaeze');
+    await api.joinAccountMembership({ tierCode: 'plus', interval: 'MONTHLY' }, 'membership-ui-0000008');
+    const { unmount } = renderWithProviders(<CartView />);
+    const note = await screen.findByTestId('membership-savings');
+    expect(note).toHaveTextContent(/Fee waived: membership: Plus · Free standard shipping: \$5\.99 off/);
+    expect(within(note).getByTestId('membership-earn')).toHaveTextContent('You’ll earn $0.76 in AfroTransact credit when this order is delivered.');
+    unmount();
+    renderWithProviders(<CheckoutView />);
+    expect(await screen.findByTestId('checkout-membership-earn')).toHaveTextContent('$0.76');
+  });
+
   it('the placed order records the waiver, names the tier and the benefit, and shows it', async () => {
     const api = await cartWithSellerShipping();
     await api.joinAccountMembership({ tierCode: 'plus', interval: 'MONTHLY' }, 'membership-ui-0000007');

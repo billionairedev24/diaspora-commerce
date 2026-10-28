@@ -139,7 +139,7 @@ describe('mock BFF — membership', () => {
     expect(after.membership).toMatchObject({ member: true, tierName: 'Plus', totalWaivedMinor: 499, upsell: null });
     expect(after.membership?.waivers[0]).toMatchObject({ benefit: 'FREE_DELIVERY', waivedMinor: 499, packageId: pkg });
     expect(after.packages[0]?.membershipWaivedMinor).toBe(499);
-    expect(await api.getCartMembershipSavings()).toMatchObject({ member: true, tierName: 'Plus' });
+    expect(await api.getCartMembershipSavings()).toMatchObject({ member: true, tierName: 'Plus', cashbackMinor: 0 }); // a trial earns no credit
 
     // The order records the waiver with the tier and the benefit, and the benefit is then used.
     const conf = await api.placeOrder({ addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: pkg, option: 'afrotransact_delivery' }] }, 'checkout-membership-01');

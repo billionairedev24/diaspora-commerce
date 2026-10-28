@@ -298,11 +298,15 @@ final class MembershipDtos {
     @Schema(name = "MembershipWaiverQuote", description = "The fees the membership waives on an order; upsell is "
             + "present for a shopper who is not a member and would save by joining")
     record WaiverQuoteDto(boolean member, String tierCode, String tierName, List<WaiverDto> waivers,
-                          long totalWaivedMinor, UpsellDto upsell) {
+                          long totalWaivedMinor,
+                          @Schema(description = "The credit the member earns on this order once it is delivered; 0 "
+                                  + "without cashback, under its minimum or during a trial") long cashbackMinor,
+                          UpsellDto upsell) {
 
         static WaiverQuoteDto of(WaiverQuote q) {
             return new WaiverQuoteDto(q.member(), q.tierCode(), q.tierName(),
-                    q.waivers().stream().map(WaiverDto::of).toList(), q.totalWaivedMinor(), UpsellDto.of(q.upsell()));
+                    q.waivers().stream().map(WaiverDto::of).toList(), q.totalWaivedMinor(), q.cashbackMinor(),
+                    UpsellDto.of(q.upsell()));
         }
     }
 
