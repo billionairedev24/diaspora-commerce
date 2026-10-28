@@ -1182,3 +1182,11 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Failed renewals retry then lapse; trial abuse guarded; refund rule for the membership fee is clear
 - Staff see members per tier, churn and the cost of the benefits; finance sees recurring revenue and credit granted
 - Contracts first, tests incl. upgrade, downgrade, cancel and lapse","E35","","Medium","13","membership","payments","To Do"
+"S324","Story","Verified-purchase product ratings and reviews","Customers who received a product can rate it 1 to 5 stars and write a review with photos. Today the product page always shows no rating (the BFF sends 0), so nothing a customer bought can be rated. Only delivered purchases count, one review per customer per product, moderated, with a public seller reply.","- Only a customer with a delivered order line for the product (ATIN) can review it; others get a clear message; one review per customer per product, editable for 30 days, deletable
+- Stars (required), title, text and up to 5 photos; shown as Verified purchase with the reviewer's first name and initial only
+- From the order page and the Your orders list a delivered item offers Rate this item; the product page shows the average, count, star breakdown, a sorted and paged list and the reviewer's own review
+- New reviews pass automatic checks (profanity, links, personal data) then publish or go to the staff moderation queue in trust-ops; staff approve, reject with a reason, and remove; customers and sellers can report a review
+- Seller can reply once per review from Seller Center; sellers cannot edit or hide reviews
+- Average and count flow to catalog, search (rating filter and sort) and listing cards; booking reviews keep working
+- Customer mobile app can rate a delivered item
+- Contracts first, tests, i18n in all five locales, docs","E05","","High","13","reviews ratings","catalog orders trust-ops","To Do"
