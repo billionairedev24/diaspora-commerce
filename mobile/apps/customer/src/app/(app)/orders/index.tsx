@@ -1,10 +1,13 @@
-/* Your orders (design: ORDERS): track, return items, buy again. */
+/* Your orders (design: ORDERS): track, get help with an order, buy again. A delivered order has no self-service return:
+   "Get help" opens the storefront's help flow (describe the problem, add photos) and staff resolve it. */
 import { formatMoney } from '@afrotransact/api-client';
 import { useRouter } from 'expo-router';
-import { ArrowUUpLeftIcon as ArrowUUpLeft, CheckCircleIcon as CheckCircle, ReceiptIcon as Receipt, TruckIcon as Truck } from 'phosphor-react-native';
+import * as WebBrowser from 'expo-web-browser';
+import { CheckCircleIcon as CheckCircle, ReceiptIcon as Receipt, TruckIcon as Truck } from 'phosphor-react-native';
 import { FlatList, StyleSheet, View } from 'react-native';
 
-import { useOrders, useReturns } from '@/api/queries';
+import { useOrders } from '@/api/queries';
+import { env } from '@/config/env';
 import { stepIndex } from '@/domain/tracking';
 import { c, sp } from '@/theme';
 import { AppText, Button, Card, Empty, Loading } from '@/ui/primitives';
@@ -13,7 +16,6 @@ import { Screen, SubHeader } from '@/ui/Screen';
 export default function Orders() {
   const router = useRouter();
   const orders = useOrders();
-  const returns = useReturns();
   return (
     <Screen header={<SubHeader title="Your orders" />} body="fixed">
       <FlatList
@@ -25,13 +27,12 @@ export default function Orders() {
         renderItem={({ item: o }) => {
           const delivered = o.shipments.every((s) => stepIndex(s.status) >= 4);
           const refunded = o.status === 'refunded';
-          const ret = returns.data?.find((r) => r.orderNumber === o.orderNumber);
-          const StatusIcon = refunded || ret ? ArrowUUpLeft : delivered ? CheckCircle : Truck;
-          const status = refunded ? 'Refunded' : ret ? 'Return started' : delivered ? `Delivered ${new Date(o.placedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'On the way';
+          const StatusIcon = delivered ? CheckCircle : Truck;
+          const status = refunded ? 'Refunded' : delivered ? `Delivered ${new Date(o.placedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'On the way';
           return (
             <Card>
               <View style={styles.row}>
-                <StatusIcon size={24} weight={delivered && !ret && !refunded ? 'fill' : 'regular'} color={delivered && !ret && !refunded ? c.success : ret ? c.warning : c.text} />
+                <StatusIcon size={24} weight={delivered && !refunded ? 'fill' : 'regular'} color={delivered && !refunded ? c.success : c.text} />
                 <View style={{ flex: 1 }}>
                   <AppText variant="bodyStrong">{status}</AppText>
                   <AppText variant="small" color={c.textMuted}>{o.orderNumber} · {formatMoney(o.totalMinor, o.currency)}</AppText>
@@ -40,7 +41,7 @@ export default function Orders() {
               <AppText variant="small" numberOfLines={2}>{o.shipments.map((s) => s.items).join(' · ')}</AppText>
               <View style={styles.actions}>
                 {!delivered && !refunded ? <Button size="md" label="Track package" onPress={() => router.push(`/orders/${o.orderNumber}`)} /> : null}
-                {delivered && !refunded ? <Button size="md" kind="outline" label={ret ? 'View return QR' : 'Return items'} onPress={() => router.push(`/returns/${o.orderNumber}`)} /> : null}
+                {delivered && !refunded ? <Button size="md" kind="outline" label="Get help" onPress={() => void WebBrowser.openBrowserAsync(`${env.webUrl}/account/help/new?order=${encodeURIComponent(o.orderNumber)}`)} /> : null}
                 {delivered || refunded ? <Button size="md" kind="outline" label="Order details" onPress={() => router.push(`/orders/${o.orderNumber}`)} /> : null}
               </View>
             </Card>

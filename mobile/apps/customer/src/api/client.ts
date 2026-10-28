@@ -29,8 +29,7 @@ import {
   type PublicService,
   type PublicServiceSearch,
   type RegisterDeviceRequest,
-  type SetupIntent,
-  type StartReturnRequest
+  type SetupIntent
 } from './types';
 
 export function createCustomerApi(tokens: TokenSource, network: FetchLike = (r) => fetch(r)) {
@@ -53,7 +52,6 @@ export function createCustomerApi(tokens: TokenSource, network: FetchLike = (r) 
     account: {
       createSetupIntent: () => bffJson<SetupIntent>('/v1/account/payment-methods/setup-intents', { method: 'POST' }),
       deletePaymentMethod: (id: string) => bffJson<void>(`/v1/account/payment-methods/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-      startReturn: (body: StartReturnRequest) => bffJson<{ rmaId: string; orderNumber: string; title: string; status: string; refundMinor: number }>('/v1/account/returns', { method: 'POST', body }),
       /** Proposed BFF route (see OrderTracking). */
       tracking: (orderNumber: string) => bffJson<OrderTracking>(`/v1/account/orders/${encodeURIComponent(orderNumber)}/tracking`)
     },

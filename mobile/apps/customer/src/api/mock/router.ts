@@ -252,7 +252,7 @@ const LABEL: Record<string, string> = { REQUESTED: 'Awaiting provider', CONFIRME
 /* ── Routes ────────────────────────────────────────────────────────────────── */
 
 const ROUTES: Array<[string, string, Handler]> = [
-  ['GET', '/v1/me', () => json({ authenticated: true, user: { id: USER.id, firstName: USER.firstName, lastName: USER.lastName, email: USER.email, initials: 'AO', roles: ['account.customer'] }, counts: { orders: mockDb().orders.length, returns: mockDb().returns.length, addresses: mockDb().addresses.length, paymentMethods: mockDb().paymentMethods.length } })],
+  ['GET', '/v1/me', () => json({ authenticated: true, user: { id: USER.id, firstName: USER.firstName, lastName: USER.lastName, email: USER.email, initials: 'AO', roles: ['account.customer'] }, counts: { orders: mockDb().orders.length, addresses: mockDb().addresses.length, paymentMethods: mockDb().paymentMethods.length } })],
   ['GET', '/v1/search', ({ url }) => json(search(url.searchParams.get('q') ?? '', Number(url.searchParams.get('page') ?? 0), Number(url.searchParams.get('size') ?? 24)))],
   ['GET', '/v1/products/:atin', ({ params }) => { const p = productByAtin(params.atin ?? ''); return p ? json(detailOf(p)) : problem(404, 'Product not found', 'NOT_FOUND'); }],
   ['GET', '/v1/cart', () => json(buildCart())],
@@ -285,16 +285,6 @@ const ROUTES: Array<[string, string, Handler]> = [
   ['DELETE', '/v1/account/payment-methods/:id', ({ params }) => { const db = mockDb(); db.paymentMethods = db.paymentMethods.filter((m) => m.id !== params.id); return noContent(); }],
   ['GET', '/v1/account/orders', () => json({ items: mockDb().orders.map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: 'USD', shipTo: o.shipTo, status: o.status, shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.status, items: s.items.map((it) => `${productByAtin(it.atin)?.title ?? it.atin}${it.quantity > 1 ? ` ×${it.quantity}` : ''}`).join(', ') })) })), nextCursor: null })],
   ['GET', '/v1/account/orders/:orderNumber/tracking', ({ params }) => { const t = tracking(params.orderNumber ?? ''); return t ? json(t) : problem(404, 'Order not found', 'NOT_FOUND'); }],
-  ['GET', '/v1/account/returns', () => json({ items: mockDb().returns, nextCursor: null })],
-  ['POST', '/v1/account/returns', ({ body }) => {
-    const b = body as { orderNumber: string; atin: string; reason: string };
-    const p = productByAtin(b.atin);
-    if (!p) return problem(422, 'Unknown item', 'VALIDATION');
-    const r = { rmaId: `RMA-${100000 + mockDb().seq}`, orderNumber: b.orderNumber, title: p.title, status: 'started', refundMinor: p.priceMinor, atin: b.atin };
-    nextId('r');
-    mockDb().returns.push(r);
-    return json(r, 201);
-  }],
   ['GET', '/v1/checkout/summary', () => { const s = checkoutSummary(); return s ? json(s) : problem(409, 'Your cart is empty', 'CART_EMPTY'); }],
   ['POST', '/v1/checkout/orders', ({ body }) => placeOrder(body as Parameters<typeof placeOrder>[0])],
   /* identity */

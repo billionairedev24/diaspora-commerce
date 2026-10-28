@@ -8,7 +8,7 @@ Design source: `design/AfroTransact Mobile App.dc.html` (+ `design/ios-frame.jsx
 | S163 Sign-in, Face ID, passcode | Opens on sign-in (no guest mode). OIDC authorization code + PKCE (S256) against identity with `expo-auth-session` (public client `customer-app`). After the first sign-in: Face ID (`expo-local-authentication`) → 6-digit passcode (create + confirm, salted SHA-256 in `expo-secure-store`) → notifications. Re-opening (cold start, or > 30 s in background) shows the unlock screen over the app, so unlocking returns you where you were. Five wrong passcodes force a full sign-in; sign-out removes tokens, Face ID and passcode from the device. Logo on sign-in, unlock and home. |
 | S164 Layout | `ui/Screen.tsx`: solid status strip, fixed header, fixed footer/tab bar; only the inner `ScrollView`/`FlatList` scrolls, vertically. Inner pages pin title + back (`SubHeader`). |
 | S165 Shopping | Home, browse/search, product, cart grouped by shipper, checkout from `GET /v1/checkout/summary` (per-package delivery option, AfroTransact Delivery preferences, pickup points). Saved card → `POST /v1/checkout/orders` (+ `handleNextAction` for 3-D Secure); Apple Pay / Google Pay / new card / US bank → Stripe **PaymentSheet in deferred-intent mode built from the summary total**, whose confirm handler places the order with the PaymentMethod and returns the PaymentIntent client secret. Add payment method = SetupIntent + PaymentSheet (card with ZIP, US bank account via Financial Connections). Orders over $100 and wallet payments ask for Face ID (or the app passcode). |
-| S166 Orders | Orders list, tracking (steps, driver, 4-digit delivery code for hand-delivery / perishables), buy again, returns (items, reason, method) → RMA + QR code. |
+| S166 Orders | Orders list, tracking (steps, driver, 4-digit delivery code for hand-delivery / perishables), buy again, "Get help" on a delivered order (opens the storefront help flow: describe the problem, add photos; staff resolve it — there is no self-service return or refund). |
 | S167 Bookings | Book a pro: providers, services, days/slots from the provider calendar, deposit via PaymentSheet on the bookings-service PaymentIntent, bookings list, appointment detail (accept/decline proposed time, reschedule, cancel with the **exact refund quoted before cancelling**, history). |
 | S168 Push | Device token registered with identity on every start and token refresh (`POST /v1/me/devices`, `app: customer`, `provider: apns` on iOS / `fcm` on Android), unregistered on sign-out (`DELETE /v1/me/devices`). Taps deep-link to the right screen; foreground pushes respect per-category switches + identity's `GET/PUT /v1/me/notification-preferences`. `com.afrotransact.customer://…` and the environment's universal links `<EXPO_PUBLIC_WEB_URL>/app/…` route in-app. |
 
@@ -83,8 +83,8 @@ on the hosted login page (the app sends them; today they are ignored).
 
 ```
 src/app/            expo-router routes: sign-in, setup, (app)/(tabs)/{index,search,lola,cart,account}, product, checkout,
-                    orders, returns, payments, addresses, services, book, bookings, inbox, settings, +native-intent
-src/domain/         plain TS rules (unit-tested): passcode, lock policy, checkout, tracking, returns, bookings,
+                    orders, payments, addresses, services, book, bookings, inbox, settings, +native-intent
+src/domain/         plain TS rules (unit-tested): passcode, lock policy, checkout, tracking, bookings,
                     notifications/deep links, payment form, jwt, lola
 src/api/            bearer fetch + refresh, BFF client (@afrotransact/api-client), bookings/identity requesters,
                     TanStack Query key factories + hooks, generated contract types, dev mock router
