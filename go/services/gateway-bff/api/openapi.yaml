@@ -1402,29 +1402,6 @@ paths:
               schema: {$ref: '#/components/schemas/AccountReferral'}
         '401': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/account/orders/{orderNumber}/credit-refunds:
-    post:
-      tags: [Credit]
-      operationId: chooseCreditRefunds
-      summary: Take the card part of my order's refunds as credit (one way)
-      description: |
-        A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
-        with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
-        way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
-        409 `NO_CARD_PORTION` when the order was paid with credit only.
-      security: [{sessionCookie: []}, {bearer: []}]
-      parameters:
-        - {name: orderNumber, in: path, required: true, schema: {type: string}}
-      responses:
-        '200':
-          description: Chosen
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/CreditRefundChoice'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-        '409': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
   /v1/gift-cards/config:
     get:
       tags: [Credit]
@@ -4625,14 +4602,6 @@ components:
         friends: {type: array, items: {$ref: '#/components/schemas/ReferralFriend'}}
         asFriend:
           oneOf: [{$ref: '#/components/schemas/ReferralFriend'}, {type: 'null'}]
-    CreditRefundChoice:
-      type: object
-      required: [orderNumber, cardRefundsAsCredit, cardPartMinor, currency]
-      properties:
-        orderNumber: {type: string}
-        cardRefundsAsCredit: {type: boolean}
-        cardPartMinor: {type: integer, format: int64, description: What the card paid for the order}
-        currency: {type: string}
     GiftCardConfig:
       type: object
       required: [minMinor, maxMinor, currency, presetsMinor, terms, publishableKey]
@@ -4815,7 +4784,7 @@ components:
         refundableMinor: {type: integer}
         shippingTaxMinor: {type: integer}
         creditMinor: {type: integer, format: int64, description: The part of the order paid with AfroTransact credit (S320); the card paid the rest}
-        cardRefundsAsCredit: {type: boolean, description: The card part of this order's refunds comes back as credit (the shopper's one-way choice)}
+        cardRefundsAsCredit: {type: boolean, description: "Staff chose credit, with a reason, for the card part of this order's refunds (customers cannot choose); otherwise the card part goes back to the card"}
     OrderDetail:
       type: object
       required: [orderNumber, placedAt, status, currency, itemsMinor, shippingMinor, taxMinor, discountMinor, totalMinor, shipTo, shippingAddress, shipments]

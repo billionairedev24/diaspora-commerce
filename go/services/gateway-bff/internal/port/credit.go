@@ -72,16 +72,7 @@ type UpGiftCardRedemption struct {
 	Currency      string `json:"currency"`
 }
 
-// UpCreditRefundChoice is payments' CreditRefundChoice.
-type UpCreditRefundChoice struct {
-	OrderID             string `json:"orderId"`
-	CardRefundsAsCredit bool   `json:"cardRefundsAsCredit"`
-	CardPartMinor       int64  `json:"cardPartMinor"`
-	Currency            string `json:"currency"`
-}
-
-// CreditClient calls payments with the shopper's token: the credit balance and history, gift cards and the choice of
-// credit for an order's card refunds. There is deliberately no call that moves credit out.
+// CreditClient calls payments with the shopper's token: the credit balance and history, gift cards. There is deliberately no call that moves credit out.
 type CreditClient interface {
 	Balance(ctx context.Context, bearer string) (UpCreditBalance, error)
 	Entries(ctx context.Context, bearer string, before time.Time, limit int) ([]UpCreditEntry, error)
@@ -92,5 +83,4 @@ type CreditClient interface {
 	ConfirmGiftCard(ctx context.Context, bearer, id string) (UpGiftCard, error)
 	// Redeem adds a card's value to the shopper's credit; clientAddress is the caller's network address (rate limits).
 	Redeem(ctx context.Context, bearer, code, clientAddress string) (UpGiftCardRedemption, error)
-	ChooseCreditRefunds(ctx context.Context, bearer, orderID string) (UpCreditRefundChoice, error)
 }

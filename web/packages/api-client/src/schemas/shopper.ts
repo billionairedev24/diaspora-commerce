@@ -125,7 +125,7 @@ export const OrderDetailSchema = z.object({
     .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema,
       /** The part paid with AfroTransact credit; the card paid the rest (S320). */
       creditMinor: MinorSchema.default(0),
-      /** The card part of this order's refunds comes back as credit (the shopper's one-way choice). */
+      /** The card part of this order's refunds comes back as credit (staff chose it, with a reason; customers cannot choose). */
       cardRefundsAsCredit: z.boolean().default(false) })
     .optional()
 });

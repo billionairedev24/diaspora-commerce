@@ -1158,7 +1158,7 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 "S320","Story","AfroTransact credit: shopper balance ledger, spend at checkout, refund to credit","Each customer has a USD credit balance kept as an append-only ledger, spendable at checkout before the card. Store credit can only be used to buy products and services: it can never be converted to cash, paid out, refunded to a card or transferred. Staff grant and adjust it with a reason.","- Balance is the sum of an append-only ledger; every entry has a reason and an actor
 - Credit can only be spent on purchases: no cash-out, payout, card refund of credit or transfer anywhere in the product or API
 - Checkout applies credit first (partial or full) and charges the card for the rest; a full credit order needs no card
-- A refund of an order goes back to the methods that paid it (credit portion as credit, card portion to the card); a customer or staff can choose credit for the card portion (one way, never back to cash)
+- A refund of an order goes back to the methods that paid it (credit portion as credit, card portion to the card); the card portion goes to the card; only staff, with a reason and inside a support resolution, can send it to credit instead (one way, never back to cash); customers cannot choose, and a delivered order has no self-service refund
 - Staff grant or adjust credit with a reason; amounts above a staff-set limit need a second approver
 - Customer sees balance and history in the storefront and the app; finance sees totals and liabilities
 - Idempotent: a retried order never spends twice; concurrent orders cannot overspend

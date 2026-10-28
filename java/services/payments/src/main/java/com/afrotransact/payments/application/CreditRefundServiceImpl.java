@@ -5,7 +5,6 @@ import java.time.Instant;
 import java.util.Map;
 
 import com.afrotransact.payments.domain.Payment;
-import com.afrotransact.payments.domain.PaymentsForbidden;
 import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.PaymentsStateConflict;
 import com.afrotransact.payments.port.PaymentRepository;
@@ -31,29 +30,20 @@ class CreditRefundServiceImpl implements CreditRefundService {
     }
 
     @Override
-    public Choice chooseAsShopper(String orderId) {
-        Actor customer = access.customer();
-        return choose(orderId, customer.subject(), "Chosen by the shopper", true);
-    }
-
-    @Override
     public Choice chooseAsStaff(String orderId, String reason) {
         Actor staff = access.adjuster();
         if (reason == null || reason.trim().length() < MIN_REASON) {
             throw new PaymentsRuleViolation("payments.reason-required", "Say why (at least " + MIN_REASON
                     + " characters)", Map.of("reason", "Required"));
         }
-        return choose(orderId, staff.subject(), reason.trim(), false);
+        return choose(orderId, staff.subject(), reason.trim());
     }
 
-    private Choice choose(String orderId, String by, String reason, boolean shopper) {
+    private Choice choose(String orderId, String by, String reason) {
         return tx.serializable(() -> {
             Payment found = payments.findByOrderId(orderId).orElseThrow(() -> new NotFoundException(
                     "payments.payment-not-found", "No payment for order " + orderId));
             Payment p = payments.lockById(found.id()).orElseThrow();
-            if (shopper && !by.equals(owner(p))) {
-                throw new PaymentsForbidden("payments.not-your-order", "This order belongs to another customer");
-            }
             if (owner(p) == null) {
                 throw new PaymentsRuleViolation("payments.no-credit-account", "This order was not paid by a "
                         + "signed-in shopper, so there is no credit account to refund to");

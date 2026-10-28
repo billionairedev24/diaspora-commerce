@@ -159,8 +159,8 @@ final class PaymentsDtos {
                            @Schema(description = "The part of amountMinor paid with AfroTransact credit; the card "
                                    + "pays amountMinor minus this (no PaymentIntent when it is all of it)")
                            long creditMinor,
-                           @Schema(description = "The shopper or staff chose credit for the card part of this "
-                                   + "order's refunds (one way)") boolean cardRefundsAsCredit) {
+                           @Schema(description = "Staff chose credit, with a reason, for the card part of this "
+                                   + "order's refunds (one way); customers cannot choose. Otherwise the card part goes to the card") boolean cardRefundsAsCredit) {
 
         static PaymentResponse of(Payment p, boolean replayed) {
             return new PaymentResponse(p.id(), p.orderId(), p.status().name(), p.stripePaymentIntentId(),
@@ -261,11 +261,11 @@ final class PaymentsDtos {
                                  + "(default) keeps the seller's delivery fee; CUSTOMER returns it pro rata and the "
                                  + "delivery charge is not refundable") RefundFault fault,
                          @Schema(description = "S320: take the part that was paid with the card as AfroTransact "
-                                 + "credit instead of a card refund. One way: credit never goes back to a card or "
+                                 + "credit instead of a card refund (staff, with a reason, inside a support resolution; customers cannot choose). One way: credit never goes back to a card or "
                                  + "to cash. The credit part of an order always comes back as credit")
                          Boolean cardAsCredit,
-                         @Size(max = 120) @Schema(description = "Who chose credit (the customer, or the staff "
-                                 + "member who did so for them with a reason); kept on the credit entry")
+                         @Size(max = 120) @Schema(description = "The staff member who chose credit, with a reason; "
+                                 + "kept on the credit entry")
                          String chosenBy) {
     }
 
@@ -291,7 +291,7 @@ final class PaymentsDtos {
                           List<RefundResult.Reversal> transferReversals, Instant createdAt, Instant settledAt,
                           boolean replayed,
                           @Schema(description = "S320: the part returned as AfroTransact credit (the credit the "
-                                  + "order used, plus the card part when the shopper or staff chose credit)")
+                                  + "order used, plus the card part when staff chose credit)")
                           long creditMinor,
                           @Schema(description = "The part that goes back to the card through Stripe")
                           long cardMinor) {

@@ -18,8 +18,10 @@ One shopper **credit ledger** is the base of everything; the other three program
    adjustment). The balance is the sum of entries; nothing is updated in place. Spending is atomic and idempotent per order.
    **Store credit can never be converted to cash**: it can only buy products and services. No cash-out, payout, card refund of
    credit or transfer exists in the product or the API; credit does not expire. A refund returns each part to what paid it
-   (credit portion as credit, card portion to the card); the customer, or staff with a reason, may choose credit for the card
-   portion, which is one way.
+   (credit portion as credit, card portion to the card). Customers cannot choose: a delivered order has no self-service
+   refund, so there is no customer-facing "refund the card part as credit" option. Only staff, with a reason (at least 15
+   characters, kept in the audit trail) and inside a support resolution, may send the card portion to credit instead, which
+   is one way.
 2. **Gift cards** are bought with the normal payment, delivered by email on a chosen date, and redeemed into the recipient's
    credit (one redemption, hashed codes, rate limits). Amounts $10–$500, no expiry. Unredeemed cards are a liability, not
    revenue.

@@ -28,10 +28,9 @@ type creditState struct {
 	mu        sync.Mutex
 	redeemed  bool
 	purchases map[string]map[string]any // Idempotency-Key → card
-	chosen    bool
 }
 
-// creditRoutes serves payments' credit, gift card and refund-choice routes for the shopper fakes.
+// creditRoutes serves payments' credit and gift card routes for the shopper fakes.
 func (u *Upstreams) creditRoutes(mux *http.ServeMux) {
 	st := &creditState{purchases: map[string]map[string]any{}}
 	entry := func(i int, kind, source string, amount, after int64) map[string]any {
@@ -117,20 +116,6 @@ func (u *Upstreams) creditRoutes(mux *http.ServeMux) {
 		default:
 			st.redeemed = true
 			writeJSON(w, 200, map[string]any{"redeemedMinor": CreditGiftCardMinor, "balanceMinor": CreditBalanceMinor + CreditGiftCardMinor, "currency": "USD"})
-		}
-	}))
-	mux.HandleFunc("POST /v1/customers/me/orders/{orderId}/credit-refunds", customerOnly("payments.customer-only", func(w http.ResponseWriter, r *http.Request) {
-		switch r.PathValue("orderId") {
-		case CreditPaidOrderID:
-			st.mu.Lock()
-			st.chosen = true
-			st.mu.Unlock()
-			writeJSON(w, 200, map[string]any{"orderId": CreditPaidOrderID, "cardRefundsAsCredit": true, "cardPartMinor": 1353, "currency": "USD",
-				"chosenBy": "cust", "chosenAt": "2026-10-27T10:00:00Z"})
-		case CreditOnlyOrderID:
-			problem(w, 409, "payments.no-card-portion", "Order was paid with credit only", nil)
-		default:
-			problem(w, 404, "payments.payment-not-found", "No payment for order", nil)
 		}
 	}))
 }

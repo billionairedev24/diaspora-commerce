@@ -18,7 +18,7 @@ export interface MockOrder extends OrderDetail {
   perishable: Set<string>;
   /** The part of the total paid with credit (S320). */
   creditMinor?: number;
-  /** The card part of refunds comes back as credit (S320, the shopper's one-way choice). */
+  /** The card part of refunds comes back as credit (S320): staff, with a reason, chose credit; customers cannot. */
   cardRefundsAsCredit?: boolean;
 }
 
