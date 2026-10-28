@@ -1175,6 +1175,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/membership/tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The membership tiers a shopper can join (public)
+         * @description payments `GET /v1/memberships/tiers`; only published tiers, entry tier first.
+         */
+        get: operations["getMembershipOffer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My membership, what it gives, what I used and the refund rule */
+        get: operations["getAccountMembership"];
+        /**
+         * Change my plan (upgrade now with proration; a lower tier or another interval at the end of the period)
+         * @description Requires `Idempotency-Key`. Naming my current plan takes a scheduled change back. 404 `MEMBERSHIP_NOT_FOUND`;
+         *     409 `MEMBERSHIP_PAST_DUE`, `MEMBERSHIP_NO_CHANGE`, `MEMBERSHIP_COMPLIMENTARY`.
+         */
+        put: operations["changeAccountMembership"];
+        /**
+         * Join a tier on a saved card (a trial first when I am eligible)
+         * @description Requires `Idempotency-Key` (16 to 64 characters); replaying it returns the original result. A first-time member
+         *     on a card that never had a trial starts the tier's trial and pays nothing now; otherwise the first period is
+         *     charged. 409 `MEMBERSHIP_EXISTS` when already a member, `MEMBERSHIP_TIER_UNAVAILABLE`; 422 `MEMBERSHIP_NO_CARD`,
+         *     `MEMBERSHIP_CHARGE_FAILED` (nothing was charged).
+         */
+        post: operations["joinAccountMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel my membership (benefits run to the end of the period) or cancel with a refund
+         * @description The refund rule: a full refund to the card when canceling within the window after a charge and before any benefit
+         *     was used (the account's `refund` says whether it applies); the membership then ends now. Otherwise 409
+         *     `MEMBERSHIP_REFUND_NOT_ELIGIBLE` and nothing changes. Without `refund` the membership stops renewing and the
+         *     benefits last to the end of the paid period.
+         */
+        post: operations["cancelAccountMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Take back a cancellation or a scheduled change */
+        post: operations["resumeAccountMembership"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/membership/benefits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The benefits I used (fees waived, cashback, monthly credit), newest first */
+        get: operations["listAccountMembershipBenefits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/cart/membership": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What membership does for my cart; if I am not a member, "Join Plus to save $X on this order"
+         * @description Priced by payments with the delivery options the shopper would get. Delivery fees are waived by the tier's rules
+         *     (order minimum, per-order cap); pickup and express never are. Best effort: without an answer `waivers` is empty
+         *     and there is no `upsell`.
+         */
+        get: operations["getCartMembershipSavings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/gift-cards/config": {
         parameters: {
             query?: never;
@@ -2711,7 +2839,7 @@ export interface components {
             ordersLeft?: number | null;
             /** @description No room left; checkout offers the next run */
             full: boolean;
-            /** @description Link to the run on the location page */
+            /** @description Link to the run on the location page, with attribution */
             runUrl?: string;
         };
         RunLocationPage: {
@@ -2730,7 +2858,7 @@ export interface components {
             granted: boolean;
             /** Format: date-time */
             consentedAt?: string | null;
-            /** @description Where the consent was given (location-page */
+            /** @description Where the consent was given (location-page, account, ...) */
             source?: string | null;
             /** Format: date-time */
             withdrawnAt?: string | null;
@@ -2790,7 +2918,7 @@ export interface components {
         RunVisitRequest: {
             /**
              * Format: uuid
-             * @description The run the visitor was looking at
+             * @description The run the visitor was looking at, if any
              */
             runId?: string;
             /** @example whatsapp */
@@ -3536,6 +3664,11 @@ export interface components {
         };
         CheckoutSummary: {
             packages: (components["schemas"]["CartPackage"] & {
+                /**
+                 * Format: int64
+                 * @description The part of this package's delivery fee the membership waives (S323)
+                 */
+                membershipWaivedMinor: number;
                 localDelivery?: components["schemas"]["CheckoutLocalDelivery"];
                 pickupPoints?: {
                     id: string;
@@ -3575,6 +3708,13 @@ export interface components {
             crossSell?: components["schemas"]["Rail"];
             /** @description What my AfroTransact credit would pay of this order (S320); absent when I have no credit */
             credit?: components["schemas"]["CheckoutCredit"];
+            /**
+             * Format: int64
+             * @description The delivery fee my membership waives on this order (S323): shippingMinor stays the fees as priced and totalMinor is lower by this amount
+             */
+            membershipWaivedMinor: number;
+            /** @description Which fees were waived ("fee waived: membership") or, when I am not a member, the upsell "Join Plus to save $X on this order"; absent when there is nothing to say */
+            membership?: components["schemas"]["MembershipSavings"];
         };
         /**
          * @description AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the
@@ -3833,6 +3973,205 @@ export interface components {
             entries: components["schemas"]["CreditEntry"][];
             /** @description Pass as `before` for older entries; null on the last page */
             nextBefore: string | null;
+        };
+        /** @description One benefit of a tier. Only the numbers the benefit takes are set. */
+        MembershipBenefit: {
+            /** @enum {string} */
+            code: "FREE_DELIVERY" | "FREE_SHIPPING" | "CASHBACK" | "MEMBER_PRICES" | "EARLY_ACCESS" | "PRIORITY_SUPPORT" | "FREE_RETURNS" | "BOOSTED_REWARDS" | "MONTHLY_CREDIT";
+            /**
+             * Format: int64
+             * @description Goods subtotal an order needs (free delivery
+             */
+            minOrderMinor: number | null;
+            /**
+             * Format: int64
+             * @description The most the benefit is worth on one order; null for no cap
+             */
+            capMinor: number | null;
+            /** @description Hundredths of a percent (cashback share */
+            percentBps: number | null;
+            /** @description Hours before everyone else a member can order from pre-order windows and delivery runs */
+            hours: number | null;
+            /**
+             * Format: int64
+             * @description Credit granted each month
+             */
+            amountMinor: number | null;
+        };
+        MembershipTier: {
+            code: string;
+            /** @example Plus */
+            name: string;
+            description: string;
+            /** @description Lower is the entry tier; a higher order is an upgrade */
+            sortOrder: number;
+            currency: string;
+            /** Format: int64 */
+            monthlyPriceMinor: number;
+            /** Format: int64 */
+            yearlyPriceMinor: number;
+            trialDays: number;
+            benefits: components["schemas"]["MembershipBenefit"][];
+        };
+        MembershipOffer: {
+            tiers: components["schemas"]["MembershipTier"][];
+        };
+        MembershipSummary: {
+            /**
+             * @description PAST_DUE: a renewal failed and retries run; the benefits stay until it lapses
+             * @enum {string}
+             */
+            status: "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "LAPSED" | "EXPIRED";
+            /** @enum {string} */
+            source: "PAID" | "COMPLIMENTARY";
+            tierCode: string;
+            tierName: string;
+            /** @enum {string} */
+            interval: "MONTHLY" | "YEARLY";
+            /**
+             * Format: int64
+             * @description What I pay each period
+             */
+            priceMinor: number;
+            currency: string;
+            /** Format: date-time */
+            startedAt: string;
+            /**
+             * Format: date-time
+             * @description The renewal date
+             */
+            periodEnd: string;
+            /** Format: date-time */
+            trialEnd: string | null;
+            cancelAtPeriodEnd: boolean;
+            /** Format: date-time */
+            endedAt: string | null;
+            pendingTierCode: string | null;
+            pendingTierName: string | null;
+            /** @enum {string|null} */
+            pendingInterval: "MONTHLY" | "YEARLY" | null;
+            /** Format: date-time */
+            nextRetryAt: string | null;
+            freeDaysGranted: number;
+        };
+        MembershipCharge: {
+            /** @enum {string} */
+            kind: "JOIN" | "RENEWAL" | "UPGRADE";
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** @enum {string} */
+            status: "SUCCEEDED" | "FAILED" | "REFUNDED";
+            /** Format: int64 */
+            refundedMinor: number;
+            /** Format: date-time */
+            periodEnd: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MembershipUsage: {
+            benefit: string;
+            /** Format: int64 */
+            uses: number;
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+        };
+        /** @description A full refund to the card when canceling within the window after a charge and before any benefit was used */
+        MembershipRefundRule: {
+            eligible: boolean;
+            /** @enum {string} */
+            reason: "OK" | "NOT_PAID" | "WINDOW_PASSED" | "BENEFIT_USED" | "DISABLED";
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** Format: date-time */
+            until: string | null;
+            windowDays: number;
+        };
+        /** @description The saved card that is billed (display data only) */
+        MembershipCard: {
+            brand: string | null;
+            last4: string | null;
+            expMonth: number | null;
+            expYear: number | null;
+        };
+        MembershipAccount: {
+            /** @description I have the benefits now (trialing */
+            member: boolean;
+            membership: components["schemas"]["MembershipSummary"] | null;
+            tier: components["schemas"]["MembershipTier"] | null;
+            /** @description The tier a scheduled change moves to at the end of the period */
+            pendingTier: components["schemas"]["MembershipTier"] | null;
+            charges: components["schemas"]["MembershipCharge"][];
+            usage: components["schemas"]["MembershipUsage"][];
+            refund: components["schemas"]["MembershipRefundRule"];
+            /** @description Joining a tier with a trial starts one */
+            trialAvailable: boolean;
+            card: components["schemas"]["MembershipCard"] | null;
+            /** @description The tiers I can join or move to */
+            tiers: components["schemas"]["MembershipTier"][];
+        };
+        MembershipPlanRequest: {
+            tierCode: string;
+            /** @enum {string} */
+            interval: "MONTHLY" | "YEARLY";
+            /** @description The saved card to bill; the default card when absent */
+            paymentMethodId?: string;
+        };
+        MembershipCancelRequest: {
+            /** @description Also refund the latest fee and end the membership now (only when the refund rule allows it) */
+            refund?: boolean;
+        };
+        MembershipBenefitUse: {
+            benefit: string;
+            tierName: string;
+            /** Format: int64 */
+            amountMinor: number;
+            currency: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        MembershipBenefitUsePage: {
+            items: components["schemas"]["MembershipBenefitUse"][];
+            nextCursor: string | null;
+        };
+        /** @description A delivery fee the membership waived on one package ("fee waived: membership") */
+        MembershipWaiver: {
+            packageId: string;
+            seller: string;
+            /** @enum {string} */
+            benefit: "FREE_DELIVERY" | "FREE_SHIPPING";
+            /** Format: int64 */
+            waivedMinor: number;
+        };
+        /** @description "Join Plus to save $X on this order" */
+        MembershipUpsell: {
+            tierCode: string;
+            tierName: string;
+            /** Format: int64 */
+            monthlyPriceMinor: number;
+            /** Format: int64 */
+            yearlyPriceMinor: number;
+            trialDays: number;
+            /** Format: int64 */
+            savingMinor: number;
+            currency: string;
+        };
+        MembershipSavings: {
+            member: boolean;
+            tierName: string | null;
+            waivers: components["schemas"]["MembershipWaiver"][];
+            /** Format: int64 */
+            totalWaivedMinor: number;
+            upsell: components["schemas"]["MembershipUpsell"] | null;
+        };
+        /** @description The shipping fee the shopper's membership waived on this shipment, with the tier and benefit */
+        OrderMembershipWaiver: {
+            tierName: string;
+            benefit: string;
+            /** Format: int64 */
+            waivedMinor: number;
         };
         /** @description What the shopper's credit would pay of this order if used (payments decides when the order is placed) */
         CheckoutCredit: {
@@ -4139,6 +4478,8 @@ export interface components {
                  *     seller's store (see localDelivery).
                  */
                 deliveryFeeRule?: components["schemas"]["DeliveryFeeRuleRef"] | null;
+                /** @description The shipping fee the shopper's membership waived on this shipment, with tier and benefit (S323); null when none */
+                membershipWaiver?: components["schemas"]["OrderMembershipWaiver"] | null;
                 /** @description Where a pickup shipment is collected (carrier-gateway pickup location); null for other shipments */
                 pickup?: null | {
                     id: string;
@@ -6075,7 +6416,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Counted */
+            /** @description Counted, or nothing to count */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -6297,7 +6638,7 @@ export interface operations {
                 country?: string;
                 region?: string;
                 city?: string;
-                /** @description An anonymous id the storefront keeps per browser */
+                /** @description An anonymous id the storefront keeps per browser, so A/B variants stay stable */
                 visitor?: string;
                 limit?: number;
             };
@@ -6404,6 +6745,209 @@ export interface operations {
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getMembershipOffer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tiers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipOffer"];
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
+    getAccountMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description My membership (`member` false and `membership` null when I am not a member) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    changeAccountMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Changed or scheduled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    joinAccountMembership: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MembershipPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Joined */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelAccountMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MembershipCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Canceled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resumeAccountMembership: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipAccount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listAccountMembershipBenefits: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Benefits used */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipBenefitUsePage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getCartMembershipSavings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Savings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MembershipSavings"];
+                };
+            };
+            401: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
