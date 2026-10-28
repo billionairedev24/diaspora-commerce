@@ -15,6 +15,17 @@ sidebar_position: 1
 Open **Your orders** (`/orders`). Each shipment shows live status from the carrier or AfroTransact Delivery.
 AfroTransact Delivery drops come with a photo and a one-time code you give the driver.
 
+## Rate an item you received
+
+Once an item is delivered, **Your orders** and the order page offer **Rate this item** (so does the customer app). Give
+1 to 5 stars and, if you like, a title, your thoughts (up to 4000 characters) and up to 5 photos. Only customers who
+received the item can review it. Your review is shown as **Verified purchase** with your first name and last initial only.
+
+- You can have one review per product. Edit it within 30 days; you can delete it at any time.
+- Reviews with a link, an e-mail address, a phone number or offensive words are checked by our team before they are shown.
+- The product page shows the average, the number of ratings, how many gave each star rating, and the reviews. Sort them
+  by most recent, highest or lowest, or tap a star row to see only those. **Report** a review that breaks our rules.
+
 ## Return an item and get a refund
 
 1. Go to **Account → Returns & refunds**.

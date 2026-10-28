@@ -115,6 +115,15 @@ Validation of a submission (`DefaultProductDraftPolicy`) returns every failing f
 with a main image ≥ 1000×1000, variation values from the theme, unique SKUs, valid GTIN check digit (with a
 suggested correction) or exemption, ISBN-13 for books, price > 0.
 
+- **Verified-purchase product reviews (S324).** A customer with a delivered order line for the ATIN (asked from
+  orders-service through the `PurchaseVerifier` port, `HttpPurchaseVerifier`) rates it 1–5 stars with a title, text and up
+  to 5 photos: one review per customer and product, editable for 30 days, deletable. `DefaultReviewContentPolicy`
+  (profanity, links, e-mail, phone) publishes a clean review or holds it `PENDING` for trust-ops; staff approve, reject
+  with a reason or remove (`/v1/product-reviews/{id}/approve|reject|remove`); customers and sellers report; the seller
+  replies once (`/v1/seller/reviews`). `product_rating` (average, count, 1–5 breakdown) is rewritten in the transaction of
+  every status change and published as `catalog.product.rating_changed`. Public: `/v1/public/products/{atin}/rating|reviews`.
+  See [docs/engineering/product-reviews.md](../../../docs/engineering/product-reviews.md).
+
 ## API
 
 | Method | Path | Permission |
@@ -169,6 +178,7 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 
 `catalog.product.created|updated|terms_changed|resubmitted|approved|rejected|paused|resumed|hidden|restored|flagged|taken_down|reinstated`,
 `catalog.import.completed` (on `at.product-import.events`),
+`catalog.product.rating_changed` and `catalog.review.submitted|published|updated|rejected|removed|deleted|reported|replied` (S324; the review events are on `at.product-review.events`),
 `catalog.category-request.created|approved|rejected` —
 see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fragments/catalog.yaml). Product payloads
 carry `sellerHidden` (true while the owner's listings are hidden).

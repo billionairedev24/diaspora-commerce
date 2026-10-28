@@ -90,6 +90,19 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
 | `GET /v1/careers/jobs`, `POST /v1/careers/jobs/{id}/applications` | content careers (open roles only; `resumeAssetId` required, `CAR-######` receipts) | live |
 | `POST /v1/careers/uploads`, `POST /v1/careers/uploads/{assetId}/complete` | media `POST /v1/uploads`, `POST /v1/assets/{id}/complete` (PDF ≤ 5 MB; guests use the BFF's client-credentials token; purpose `kyc-document` until media adds a résumé purpose) | live |
 
+### Product reviews (S324)
+
+| BFF operation | Upstream(s) |
+|---|---|
+| `GET /v1/products/{atin}/reviews` (public, sorted, paged, with the rating) | catalog `GET /v1/public/products/{atin}/reviews` |
+| `GET\|POST /v1/products/{atin}/reviews`, `GET\|PUT\|DELETE .../reviews/mine` | catalog `/v1/products/{atin}/reviews[/mine]` with the customer's token; the reviewer name comes from the session |
+| `POST /v1/reviews/{reviewId}/reports` | catalog `POST /v1/product-reviews/{id}/reports` |
+| `POST /v1/review-photos/uploads[/{assetId}/complete]` | media `POST /v1/uploads` (purpose `storefront`) and `.../complete`; a review only accepts `READY` assets or photos it already has |
+| Seller Center `GET /v1/seller/reviews`, `POST .../{id}/reply`, `.../reports` | catalog `/v1/seller/reviews`, `/v1/product-reviews/{id}/reply|reports` (module key `reviews`, identity `sListings`) |
+| Staff resource `product-reviews` and the moderation queue | catalog `/v1/product-reviews`, trust-ops `/v1/moderation/items` |
+
+`ProductDetail.product.rating` and `reviewCount` come from catalog's rating. Details: [docs/engineering/product-reviews.md](../../../docs/engineering/product-reviews.md).
+
 ## Seller Center & Provider Hub endpoints → upstreams
 
 Every route relays the member's access token, resolves the active organisation from identity `GET /v1/me` (`orgId`,
