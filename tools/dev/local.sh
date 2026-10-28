@@ -821,7 +821,9 @@ docs_up() {
   echo "==> starting the developer portal (Docusaurus; the first build takes a minute or two)"
   : >"$LOGS/docs-portal.log"
   (cd "$ROOT/docs/portal" || exit 1
-    node scripts/sync-contracts.mjs >>"$LOGS/docs-portal.log" 2>&1
+    if ! node scripts/sync-contracts.mjs >>"$LOGS/docs-portal.log" 2>&1; then
+      echo "  ✗ docs portal: contract sync failed, so the portal is not started; last log lines:" >&2; tail -n 15 "$LOGS/docs-portal.log" >&2; exit 0
+    fi
     nohup ./node_modules/.bin/docusaurus start --port "$port" --host localhost --no-open >>"$LOGS/docs-portal.log" 2>&1 &
     echo $! >"$PIDS/docs-portal.pid")
   for ((i = 0; i < 240; i += 3)); do

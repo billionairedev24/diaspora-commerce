@@ -11262,9 +11262,9 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/notificationsIdentityEvents'
-    summary: 'identity.verification.requested → identity.verification (email, or the payload''s channel; security, never resolved
-      through identity), identity.verification.phone for purpose PHONE_VERIFICATION (sms), or identity.password_reset for
-      purpose PASSWORD_RESET (the payload''s channel: email, or sms to a verified phone); identity.password-reset.federated
+    summary: '>- identity.verification.requested → identity.verification (email, or the payload''s channel; security, never
+      resolved through identity), identity.verification.phone for purpose PHONE_VERIFICATION (sms), or identity.password_reset
+      for purpose PASSWORD_RESET (the payload''s channel: email, or sms to a verified phone); identity.password-reset.federated
       → identity.password_reset.federated (email: sign in with the linked provider); identity.password.changed → identity.password_changed
       (email); identity.invitation.created → org.invitation (email to recipient.email only, never resolved through identity:
       the invitee may have no account); identity.user.registered → account.welcome (email; not for STAFF); identity.user.phone-verified
@@ -11273,22 +11273,22 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/notificationsOrderEvents'
-    summary: orders.order.placed → order.confirmed (email, sms, push); orders.order.cancelled with wasPlaced=true → order.cancelled
+    summary: '>- orders.order.placed → order.confirmed (email, sms, push); orders.order.cancelled with wasPlaced=true → order.cancelled
       (email, push); orders.shipment.status_changed → shipment.shipped (picked_up, or in_transit without a pickup scan; email,
       push), shipment.out_for_delivery (sms, push, email), shipment.ready_for_pickup (ready + PICKUP; email, sms, push), shipment.delivery_failed
       (email, sms, push); orders.shipment.delivered → shipment.delivered (email, push); orders.shipment.cancelled → shipment.cancelled
-      (email, push).
+      (email, push).'
   consumeNotificationsSellerApplicationEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsSellerApplicationEvents'
-    summary: seller.application.submitted → seller.application.submitted (email); info_requested → seller.application.info_requested
-      (email, sms); approved → seller.application.approved (email, sms, push); rejected → seller.application.rejected (email).
+    summary: '>- seller.application.submitted → seller.application.submitted (email); info_requested → seller.application.info_requested
+      (email, sms); approved → seller.application.approved (email, sms, push); rejected → seller.application.rejected (email).'
   consumeNotificationsSellerComplianceEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsSellerComplianceEvents'
-    summary: 'seller.compliance.reminder → seller.compliance.reminder and seller.compliance.changed (new items, or status
+    summary: '>- seller.compliance.reminder → seller.compliance.reminder and seller.compliance.changed (new items, or status
       moved to RESTRICTED_SOON / RESTRICTED) → seller.compliance.action_needed, on the payload''s channels (in_app → push;
       reminder category: preferences and quiet hours apply); seller.payouts.paused / resumed and seller.listings.hidden /
       restored → matching templates (email, plus sms when paused / hidden); with reason SUSPENDED / REINSTATED (Trust and
@@ -11303,35 +11303,34 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/notificationsBookingsEvents'
-    summary: 'booking.confirmed / cancelled / rescheduled → matching templates (email, sms, push); booking.declined → booking.declined
+    summary: '>- booking.confirmed / cancelled / rescheduled → matching templates (email, sms, push); booking.declined → booking.declined
       (email, push); booking.balance_unpaid → booking.balance_unpaid to the customer (email, push: update the card or authenticate).
       booking.reminder has a template but no event yet: bookings can send it with notification.requested (templateKey booking.reminder).'
   consumeNotificationsCatalogImportEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsCatalogImportEvents'
-    summary: 'catalog.import.completed with notifySeller=true (large uploads) → catalog.import_completed to the uploader (email,
-      push): created, updated and failed counts and a link to the upload''s report.'
+    summary: '>- catalog.import.completed with notifySeller=true (large uploads) → catalog.import_completed to the uploader
+      (email, push): created, updated and failed counts and a link to the upload''s report.'
   consumeNotificationsContentEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsContentEvents'
-    summary: content.career-application.received → careers.application_received (email); content.newsletter.confirmation_requested
-      → newsletter.confirm (email).
+    summary: '>- content.career-application.received → careers.application_received (email); content.newsletter.confirmation_requested
+      → newsletter.confirm (email).'
   consumeNotificationsPaymentEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsPaymentEvents'
-    summary: payments.intent.action_required with a customerId → payment.authentication_required to the customer (email, push;
-      link to the booking for BK- references, else the orders page). payments.gift_card.deliver → payment.gift_card.delivered
-      to the recipient's email in the language the buyer chose (en, fr, es, ar, yo); the code is in the email and nowhere
-      else: payments removes it from the outbox once the event is relayed and notifications masks it in the stored copy
-      once the email is sent. Other payment events are ignored.
+    summary: '>- payments.intent.action_required with a customerId → payment.authentication_required to the customer (email,
+      push; link to the booking for BK- references, else the orders page). payments.gift_card.deliver → payment.gift_card.delivered
+      to the recipient''s email in the language the buyer chose (en, fr, es, ar, yo); the code is in the email and nowhere
+      else. Other payment events are ignored.'
   consumeNotificationsTrustOpsEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsTrustOpsEvents'
-    summary: trustops.claim.opened → claim.opened to the customer (email, push) and, while AWAITING_SELLER, claim.seller_response_due
+    summary: '>- trustops.claim.opened → claim.opened to the customer (email, push) and, while AWAITING_SELLER, claim.seller_response_due
       to the seller owners (email, sms; deadline = dueAt); trustops.claim.decided → claim.decided to the customer (email,
       push) and claim.decided.seller to the seller owners (email); trustops.claim.withdrawn → claim.withdrawn to the seller
       owners (email); trustops.claim.response_due_soon → claim.seller_response_reminder (email, sms) and trustops.claim.response_lapsed
@@ -11339,19 +11338,19 @@ operations:
       (NEW_LISTING; email) or listing.taken_down (LIVE_LISTING; email, sms) to the seller owners; trustops.seller.suspended
       → seller.suspended (email, sms) and trustops.seller.reinstated → seller.reinstated (email) to the seller owners. notification.requested
       with templateKey claim.opened, claim.decided or claim.withdrawn is ignored (the typed claim events above cover both
-      parties).
+      parties).'
   consumeNotificationsInventoryEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsInventoryEvents'
-    summary: inventory.availability.changed with available > 0 claims every active stock alert for the SKU (= variant ATIN)
-      and sends stock.back_in_stock (email, push) once; redeliveries re-claim the same alerts and the inbox stops a second
-      send.
+    summary: '>- inventory.availability.changed with available > 0 claims every active stock alert for the SKU (= variant
+      ATIN) and sends stock.back_in_stock (email, push) once; redeliveries re-claim the same alerts and the inbox stops a
+      second send.'
   consumeNotificationsRetailEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsRetailEvents'
-    summary: 'notification.requested with templateKey retail.purchase_order.sent → the supplier PO email (email, to recipient.email
+    summary: '>- notification.requested with templateKey retail.purchase_order.sent → the supplier PO email (email, to recipient.email
       only; transactional). Fields: contactName, poNumber, supplierName, orderDate, deliverBy, incoterm, paymentTerms, total
       (else totalMinor + currency), documentUrl, documentExpiresAt; nulls render as empty and the optional rows are dropped.
       data.attachments (the PO PDF as a media asset reference) is fetched from an allow-listed host within the size limit
