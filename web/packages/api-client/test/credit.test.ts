@@ -104,18 +104,4 @@ describe('mock BFF — credit and gift cards', () => {
     const placed = await api.confirmCheckoutPayment(conf.orderNumber);
     expect((await api.getOrder(placed.orderNumber)).payment?.creditMinor).toBe(conf.creditMinor);
   });
-
-  it('takes the card part of refunds as credit, one way, and refuses it when credit paid everything', async () => {
-    const api = await signedIn();
-    await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 12 });
-    const sum = await api.getCheckoutSummary();
-    const selection = [{ packageId: sum.packages[0]?.packageId ?? '', option: 'carrier' as const }];
-    const conf = await api.placeOrder({ addressId: 'ad1', useCredit: true, paymentMethodId: 'pm_visa4242', deliverySelections: selection }, 'checkout-credit-0003');
-    await api.confirmCheckoutPayment(conf.orderNumber);
-    const choice = await api.chooseCreditRefunds(conf.orderNumber);
-    expect(choice).toMatchObject({ orderNumber: conf.orderNumber, cardRefundsAsCredit: true });
-    expect(choice.cardPartMinor).toBe(conf.totalMinor - (conf.creditMinor ?? 0));
-    expect((await api.getOrder(conf.orderNumber)).payment?.cardRefundsAsCredit).toBe(true);
-    await expect(api.chooseCreditRefunds('AT-2026-NOPE')).rejects.toSatisfy(refusal(404));
-  });
 });

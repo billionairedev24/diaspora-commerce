@@ -2,8 +2,6 @@ import { type Requester } from './http';
 import {
   type CreditAccount,
   CreditAccountSchema,
-  type CreditRefundChoice,
-  CreditRefundChoiceSchema,
   type GiftCard,
   type GiftCardConfig,
   GiftCardConfigSchema,
@@ -34,10 +32,6 @@ export function creditMethods(request: Requester) {
     /** My credit balance and history, newest first. */
     getAccountCredit: (q: CreditHistoryQuery = {}, signal?: AbortSignal): Promise<CreditAccount> =>
       request('/v1/account/credit', CreditAccountSchema, { query: { before: q.before, limit: q.limit === undefined ? undefined : String(q.limit) }, signal }),
-
-    /** Take the card part of an order's refunds as credit (one way). */
-    chooseCreditRefunds: (orderNumber: string): Promise<CreditRefundChoice> =>
-      request(`/v1/account/orders/${enc(orderNumber)}/credit-refunds`, CreditRefundChoiceSchema, { method: 'POST' }),
 
     /** Limits, preset amounts and terms for the buy page (staff settings). */
     getGiftCardConfig: (signal?: AbortSignal): Promise<GiftCardConfig> => request('/v1/gift-cards/config', GiftCardConfigSchema, { signal }),

@@ -149,17 +149,6 @@ export const creditHandlers = [
     s.balanceMinor += MOCK_GIFT_AMOUNT_MINOR;
     s.entries.unshift({ id: `cr-gc-${ctx.now.getTime()}`, kind: 'GRANT', source: 'GIFT_CARD', amountMinor: MOCK_GIFT_AMOUNT_MINOR, currency: 'USD', balanceAfterMinor: s.balanceMinor, createdAt: ctx.now.toISOString() });
     return json({ redeemedMinor: MOCK_GIFT_AMOUNT_MINOR, balanceMinor: s.balanceMinor, currency: 'USD' });
-  })),
-
-  http.post('*/v1/account/orders/:orderNumber/credit-refunds', route((ctx, p) => {
-    const a = account(requireUser(ctx).id);
-    const order = a.orders.find((o) => o.orderNumber === p.orderNumber);
-    if (!order) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', "We couldn't find that order.");
-    const credit = order.creditMinor ?? 0;
-    const cardPart = order.totalMinor - credit;
-    if (cardPart <= 0) throw new MockProblem(409, 'NO_CARD_PORTION', 'Nothing to change', 'This order was paid with credit only, so its refunds already come back as credit.');
-    order.cardRefundsAsCredit = true;
-    return json({ orderNumber: order.orderNumber, cardRefundsAsCredit: true, cardPartMinor: cardPart, currency: 'USD' });
   }))
 ];
 

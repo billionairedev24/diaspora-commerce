@@ -1157,29 +1157,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/orders/{orderNumber}/credit-refunds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Take the card part of my order's refunds as credit (one way)
-         * @description A refund goes back to what paid each part: the part paid with credit comes back as credit and the part paid
-         *     with the card to the card. This chooses credit for the card part of every later refund of the order. It is one
-         *     way: credit never goes back to a card or to cash, and refunds already sent to the card stay there.
-         *     409 `NO_CARD_PORTION` when the order was paid with credit only.
-         */
-        post: operations["chooseCreditRefunds"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/gift-cards/config": {
         parameters: {
             query?: never;
@@ -4020,16 +3997,6 @@ export interface components {
             friends: components["schemas"]["ReferralFriend"][];
             asFriend: components["schemas"]["ReferralFriend"] | null;
         };
-        CreditRefundChoice: {
-            orderNumber: string;
-            cardRefundsAsCredit: boolean;
-            /**
-             * Format: int64
-             * @description What the card paid for the order
-             */
-            cardPartMinor: number;
-            currency: string;
-        };
         GiftCardConfig: {
             /** Format: int64 */
             minMinor: number;
@@ -4247,7 +4214,7 @@ export interface components {
              * @description The part of the order paid with AfroTransact credit (S320); the card paid the rest
              */
             creditMinor: number;
-            /** @description The card part of this order's refunds comes back as credit (the shopper's one-way choice) */
+            /** @description Staff chose credit, with a reason, for the card part of this order's refunds (customers cannot choose); otherwise the card part goes back to the card */
             cardRefundsAsCredit: boolean;
         };
         OrderDetail: {
@@ -6448,32 +6415,6 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
-    chooseCreditRefunds: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                orderNumber: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Chosen */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CreditRefundChoice"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

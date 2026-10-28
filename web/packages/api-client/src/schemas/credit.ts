@@ -39,14 +39,6 @@ export const CheckoutCreditSchema = z.object({
 });
 export type CheckoutCredit = z.infer<typeof CheckoutCreditSchema>;
 
-export const CreditRefundChoiceSchema = z.object({
-  orderNumber: z.string(),
-  cardRefundsAsCredit: z.boolean(),
-  cardPartMinor: MinorSchema,
-  currency: z.string()
-});
-export type CreditRefundChoice = z.infer<typeof CreditRefundChoiceSchema>;
-
 export const GiftCardConfigSchema = z.object({
   minMinor: MinorSchema,
   maxMinor: MinorSchema,
