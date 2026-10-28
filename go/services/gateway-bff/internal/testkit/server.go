@@ -162,7 +162,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 			Renderer: exportfiles.NewRenderer(), BasePath: "/api/bff", Background: func(fn func()) { fn() }})
 		services.SellerExportFiles = files
 	}
-	services.Shopper = shopperServices(u, client, identity, services, clock, log)
+	services.Shopper = shopperServices(u, client, identity, store, services, clock, log)
 	mux := http.NewServeMux()
 	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin}, CookieName: "at_session",
 		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000}, log).Register(mux)

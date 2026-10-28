@@ -184,31 +184,6 @@ func (h *handlersImpl) cancelShipment(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
-func (h *handlersImpl) returns(w http.ResponseWriter, r *http.Request) {
-	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Returns.List(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("orderNumber"))
-		h.reply(w, r, http.StatusOK, v, err)
-		return
-	}
-	v, err := h.s.Account.Returns(r.Context(), callerFrom(r.Context()))
-	h.reply(w, r, http.StatusOK, v, err)
-}
-
-func (h *handlersImpl) startReturn(w http.ResponseWriter, r *http.Request) {
-	var b domain.StartReturn
-	if err := decode(r, &b, false); err != nil {
-		h.reply(w, r, 0, nil, err)
-		return
-	}
-	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Returns.Start(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"), b)
-		h.reply(w, r, http.StatusCreated, v, err)
-		return
-	}
-	v, err := h.s.Account.StartReturn(r.Context(), callerFrom(r.Context()), b)
-	h.reply(w, r, http.StatusCreated, v, err)
-}
-
 // ---------------------------------------------------------------- checkout
 
 func (h *handlersImpl) checkoutSummary(w http.ResponseWriter, r *http.Request) {

@@ -122,65 +122,6 @@ func (o *customerOrdersImpl) ConfirmPayment(ctx context.Context, bearer, number 
 	return out, err
 }
 
-// ---------------------------------------------------------------- tax-returns
-
-type returnsImpl struct{ c httpclient.Client }
-
-var _ port.ReturnsClient = (*returnsImpl)(nil)
-
-// NewReturns returns the tax-returns client (customer returns: eligibility, RMAs, refund quotes).
-func NewReturns(c httpclient.Client) port.ReturnsClient { return &returnsImpl{c: c} }
-
-func (r *returnsImpl) Eligibility(ctx context.Context, bearer, orderID string) (port.UpReturnEligibility, error) {
-	var out port.UpReturnEligibility
-	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns/eligibility", Query: url.Values{"orderId": {orderID}}, Bearer: bearer}, &out)
-	return out, err
-}
-
-func (r *returnsImpl) Create(ctx context.Context, bearer, key string, req port.UpCreateReturn) (port.UpRma, error) {
-	var out port.UpRma
-	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/returns", Bearer: bearer, JSON: req,
-		Header: idem(key), RetryUnsafe: true}, &out)
-	return out, err
-}
-
-func (r *returnsImpl) List(ctx context.Context, bearer, orderID string) ([]port.UpRma, error) {
-	q := url.Values{"limit": {"50"}}
-	if orderID != "" {
-		q.Set("orderId", orderID)
-	}
-	res, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns", Query: q, Bearer: bearer}, nil)
-	if err != nil {
-		return nil, err
-	}
-	items, _, err := itemsOf[port.UpRma](res.Body)
-	return items, err
-}
-
-func (r *returnsImpl) ByNumber(ctx context.Context, bearer, number string) (port.UpRma, error) {
-	var out port.UpRma
-	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns/number/" + esc(number), Bearer: bearer}, &out)
-	return out, err
-}
-
-func (r *returnsImpl) Get(ctx context.Context, bearer, id string) (port.UpRma, error) {
-	var out port.UpRma
-	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns/" + esc(id), Bearer: bearer}, &out)
-	return out, err
-}
-
-func (r *returnsImpl) Cancel(ctx context.Context, bearer, id string) (port.UpRma, error) {
-	var out port.UpRma
-	_, err := call(ctx, r.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/returns/" + esc(id) + "/cancel", Bearer: bearer}, &out)
-	return out, err
-}
-
-func (r *returnsImpl) Quote(ctx context.Context, bearer, id string) (domain.RefundQuote, error) {
-	var out domain.RefundQuote
-	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns/" + esc(id) + "/refund-quote", Bearer: bearer}, &out)
-	return out, err
-}
-
 // ---------------------------------------------------------------- identity security
 
 type securityImpl struct{ c httpclient.Client }

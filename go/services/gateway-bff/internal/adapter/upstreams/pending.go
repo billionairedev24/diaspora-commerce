@@ -310,21 +310,6 @@ func (o *ordersImpl) CancelShipment(ctx context.Context, bearer, order, shipment
 	return out, err
 }
 
-func (o *ordersImpl) Returns(ctx context.Context, bearer string) (domain.Page[domain.ReturnSummary], error) {
-	res, err := call(ctx, o.c, httpclient.Request{Path: "/v1/returns", Query: url.Values{"customer": {"me"}}, Bearer: bearer}, nil)
-	if err != nil {
-		return domain.Page[domain.ReturnSummary]{}, err
-	}
-	items, next, err := itemsOf[domain.ReturnSummary](res.Body)
-	return domain.Page[domain.ReturnSummary]{Items: items, NextCursor: next}, err
-}
-
-func (o *ordersImpl) StartReturn(ctx context.Context, bearer string, r domain.StartReturn) (domain.ReturnSummary, error) {
-	var out domain.ReturnSummary
-	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/returns", Bearer: bearer, JSON: r}, &out)
-	return out, err
-}
-
 // ---------------------------------------------------------------- notifications (contracts/openapi/notifications.yaml)
 
 type notificationsImpl struct{ c httpclient.Client }

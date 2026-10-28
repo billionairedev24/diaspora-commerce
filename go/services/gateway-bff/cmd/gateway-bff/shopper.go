@@ -18,6 +18,8 @@ type shopperClients struct {
 	identityAPI                port.IdentityClient
 	offers                     port.StorefrontOffersClient
 	serviceTokens              port.ServiceTokens
+	media                      port.MediaClient
+	receipts                   port.ReceiptStore
 }
 
 // shopperServices wires the storefront's account, checkout payment, services & bookings and Lola use cases.
@@ -27,7 +29,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	ai := client("ai-gateway", up.AIGateway)
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(sc.payments), Orders: upstreams.NewCustomerOrders(sc.orders),
-		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns)), Payments: upstreams.NewOrderPayments(sc.payments),
+		Payments: upstreams.NewOrderPayments(sc.payments),
 		Security: upstreams.NewSecurity(sc.identity), Bookings: upstreams.NewCustomerBookings(client("bookings", up.Bookings)),
 		Pages: upstreams.NewPublishedPages(client("storefront", up.Storefront)),
 		Lola:  upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
@@ -40,8 +42,10 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	}
 	settings := app.NewAccountSettingsService(app.AccountSettingsDeps{Identity: upstreams.NewAccountSettings(sc.identity),
 		Alerts: upstreams.NewAlertPreferences(client("notifications", up.Notifications))})
-	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
-		Checkout: app.NewCheckoutPaymentService(d), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d), Settings: settings,
+	help := app.NewHelpRequestsService(app.HelpRequestsDeps{Orders: d.Orders, Claims: upstreams.NewHelpRequests(client("trust-ops", up.TrustOps)),
+		Media: sc.media, Receipts: sc.receipts})
+	return httpapi.ShopperServices{HelpRequests: help, Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
+		Checkout: app.NewCheckoutPaymentService(d), Security: app.NewSecurityService(d), Settings: settings,
 		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
 		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
 		PayLinks:     app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey)}

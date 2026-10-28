@@ -295,9 +295,12 @@ func TestAccountAddresses(t *testing.T) {
 		t.Fatalf("payment methods = %v", pms)
 	}
 	mustStatus(t, b.do("POST", "/v1/account/payment-methods/setup-intents", nil), 201)
-	// Orders (orders service) and returns (tax-returns) are served.
-	for _, p := range []string{"/v1/account/orders", "/v1/account/returns"} {
-		mustStatus(t, b.do("GET", p, nil), 200)
+	// Orders (orders service) are served; the old self-service returns routes are gone.
+	mustStatus(t, b.do("GET", "/v1/account/orders", nil), 200)
+	for _, p := range []string{"/v1/account/returns", "/v1/account/returns/RMA-0000ABCD", "/v1/account/orders/" + testkit.ShopperOrderNumber + "/returnable"} {
+		if st := b.do("GET", p, nil).status; st != 404 && st != 405 {
+			t.Fatalf("%s should be gone, got %d", p, st)
+		}
 	}
 	// Checkout summary composes cart + addresses + payment methods.
 	mustStatus(t, b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEAV001", "quantity": 2}), 200)

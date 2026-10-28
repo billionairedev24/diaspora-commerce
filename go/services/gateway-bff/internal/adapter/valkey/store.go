@@ -27,6 +27,7 @@ type Store interface {
 	port.SessionStore
 	port.EphemeralStore
 	port.SelectionStore
+	port.ReceiptStore
 	port.RateLimiter
 	Ping(ctx context.Context) error
 }
@@ -237,6 +238,26 @@ func (s *storeImpl) SetSelected(ctx context.Context, owner string, atins []strin
 	pipe.Expire(ctx, k, selectionTTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("set selection: %w", err)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------- receipts
+
+func (s *storeImpl) Recall(ctx context.Context, key string) (string, bool, error) {
+	v, err := s.rdb.Get(ctx, prefix+"receipt:"+key).Result()
+	if errors.Is(err, redis.Nil) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("recall: %w", err)
+	}
+	return v, true, nil
+}
+
+func (s *storeImpl) Remember(ctx context.Context, key, value string, ttl time.Duration) error {
+	if err := s.rdb.Set(ctx, prefix+"receipt:"+key, value, ttl).Err(); err != nil {
+		return fmt.Errorf("remember: %w", err)
 	}
 	return nil
 }
