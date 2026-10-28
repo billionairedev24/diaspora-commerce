@@ -13,6 +13,9 @@ import (
 // TestPublishableKey is the Stripe publishable key the test BFF hands out.
 const TestPublishableKey = "pk_test_bff"
 
+// TestStorefrontOrigin is where the test BFF's share links open.
+const TestStorefrontOrigin = "https://shop.test"
+
 // shopperServices wires the storefront account/checkout/services/Lola use cases against the shopper fakes.
 func shopperServices(u *Upstreams, client func(name, url string) httpclient.Client, identity port.IdentityClient, s httpapi.Services,
 	clock *Clock, log *slog.Logger) httpapi.ShopperServices {
@@ -36,5 +39,6 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", u.URL())), "us"),
 		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(client("orders", base), tokens), TestPublishableKey),
 		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", base)), d.Bookings, s.Search),
-		Credit:        app.NewCreditService(d.Credit, d.Orders, TestPublishableKey)}
+		Credit:        app.NewCreditService(d.Credit, d.Orders, TestPublishableKey),
+		Referral:      app.NewReferralService(upstreams.NewReferral(client("payments", base)), TestStorefrontOrigin)}
 }

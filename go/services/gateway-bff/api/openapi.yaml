@@ -72,6 +72,11 @@ tags:
     description: Addresses, payment methods, orders and returns
   - name: Checkout
     description: Checkout summary and order placement
+  - name: Referral
+    description: |
+      Refer a friend (S322, ADR 0006). Every customer has a code and a share link. When a friend signs up with it and
+      their first order is delivered (and its return window has passed), AfroTransact rewards both, as credit or free
+      membership days, as configured by staff. AfroTransact pays; nothing here is cash.
   - name: Credit
     description: |
       AfroTransact credit and gift cards (S320, S321, ADR 0006). Credit is a balance the shopper spends at checkout
@@ -625,6 +630,10 @@ paths:
           in: query
           description: Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code.
           schema: {type: string, maxLength: 200}
+        - name: referral
+          in: query
+          description: Referral code from a friend's share link (S322); identity's sign-up page shows it filled in, and both are rewarded after the new customer's first delivered order.
+          schema: {type: string, maxLength: 20}
         - name: intent
           in: query
           description: |
@@ -1409,6 +1418,25 @@ paths:
               schema: {$ref: '#/components/schemas/CreditAccount'}
         '401': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/referral:
+    get:
+      tags: [Referral]
+      operationId: getAccountReferral
+      summary: My referral code, share link, the offer, my friends and what I earned
+      description: |
+        payments `GET /v1/referrals/me` and `/v1/referrals/me/friends` with the shopper's token. The code is created on
+        first use and never changes; `shareUrl` is the storefront link that opens sign-up with the code filled in.
+        Friends are shown by first name and last initial. A referral held for a check shows as `WAITING`: the shopper
+        never sees the check or a staff decision. `asFriend` is the shopper's own referral when someone referred them.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: The referral page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AccountReferral'}
+        '401': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/account/orders/{orderNumber}/credit-refunds:
     post:
@@ -4464,6 +4492,67 @@ components:
         availableMinor: {type: integer, format: int64}
         appliedMinor: {type: integer, format: int64, description: The balance up to the total, leaving at least 0.50 for the card or paying everything}
         cardDueMinor: {type: integer, format: int64, description: What the card pays then; 0 means no payment method is needed}
+    ReferralRewardTerms:
+      type: object
+      description: What one side earns
+      required: [type, creditMinor, membershipDays]
+      properties:
+        type: {type: string, enum: [CREDIT, MEMBERSHIP_DAYS]}
+        creditMinor: {type: integer, format: int64, description: Credit in minor units; 0 for membership days}
+        membershipDays: {type: integer, description: Free membership days; 0 for credit}
+    ReferralProgram:
+      type: object
+      description: The offer in force. AfroTransact pays both sides; credit only buys products and services.
+      required: [enabled, referrerReward, referredReward, minOrderMinor, returnWindowDays, validityDays, currency]
+      properties:
+        enabled: {type: boolean, description: false while staff have switched the program off}
+        referrerReward: {$ref: '#/components/schemas/ReferralRewardTerms'}
+        referredReward: {$ref: '#/components/schemas/ReferralRewardTerms'}
+        minOrderMinor: {type: integer, format: int64, description: The friend's delivered order must be worth at least this}
+        returnWindowDays: {type: integer, description: Rewards are granted this many days after delivery}
+        validityDays: {type: integer, description: Days after sign-up in which the friend can still qualify}
+        currency: {type: string}
+    ReferralEarnings:
+      type: object
+      required: [invited, open, rewarded, earnedMinor, membershipDays, pendingMinor]
+      properties:
+        invited: {type: integer, description: Friends who signed up with my code}
+        open: {type: integer, description: Referrals not finished yet}
+        rewarded: {type: integer, description: Referrals that paid me a reward}
+        earnedMinor: {type: integer, format: int64, description: Credit I earned from referrals}
+        membershipDays: {type: integer, description: Free membership days I earned from referrals}
+        pendingMinor: {type: integer, format: int64, description: Credit promised for friends who qualified, granted after the return window}
+    ReferralFriend:
+      type: object
+      required: [id, friendName, status, signedUpAt, expiresAt, eligibleAt, reward]
+      properties:
+        id: {type: string, format: uuid}
+        friendName: {type: [string, 'null'], description: First name and last initial; null on my own referral}
+        status: {type: string, enum: [PENDING, WAITING, REWARDED, EXPIRED, CLOSED], description: 'PENDING: no qualifying order yet. WAITING: qualified, rewards after the return window (or under a check). CLOSED: not eligible.'}
+        signedUpAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        eligibleAt: {type: [string, 'null'], format: date-time, description: When the reward is due, once the friend qualified}
+        reward:
+          oneOf: [{$ref: '#/components/schemas/ReferralFriendReward'}, {type: 'null'}]
+    ReferralFriendReward:
+      type: object
+      required: [terms, granted, grantedAt]
+      properties:
+        terms: {$ref: '#/components/schemas/ReferralRewardTerms'}
+        granted: {type: boolean}
+        grantedAt: {type: [string, 'null'], format: date-time}
+    AccountReferral:
+      type: object
+      required: [code, displayCode, shareUrl, program, earnings, friends, asFriend]
+      properties:
+        code: {type: string, description: 'Eight characters, for example KDM7XR3Q'}
+        displayCode: {type: string, description: 'The same as shown, KDM7-XR3Q'}
+        shareUrl: {type: string, format: uri, description: The storefront link that opens sign-up with the code filled in}
+        program: {$ref: '#/components/schemas/ReferralProgram'}
+        earnings: {$ref: '#/components/schemas/ReferralEarnings'}
+        friends: {type: array, items: {$ref: '#/components/schemas/ReferralFriend'}}
+        asFriend:
+          oneOf: [{$ref: '#/components/schemas/ReferralFriend'}, {type: 'null'}]
     CreditRefundChoice:
       type: object
       required: [orderNumber, cardRefundsAsCredit, cardPartMinor, currency]
