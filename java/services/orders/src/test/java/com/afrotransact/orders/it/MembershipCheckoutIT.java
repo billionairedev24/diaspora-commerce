@@ -2,6 +2,9 @@ package com.afrotransact.orders.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import com.afrotransact.orders.application.PaymentEventService;
@@ -155,5 +158,91 @@ class MembershipCheckoutIT extends OrdersIntegrationTest {
         JsonNode created = checkout(customer, bearer, sellerPackage);
         assertThat(created.path("status").asString()).isEqualTo("awaiting_payment");
         assertThat(created.path("totalMinor").asLong()).as("the customer pays the fee").isGreaterThan(3000 + 599);
+    }
+
+    // ------------------------------------------------------------------ pre-order windows
+
+    private static String windowLine(String atin, String windowId, String stage) {
+        return "{\"atin\":\"" + atin + "\",\"preorder\":true,\"windowId\":\"" + windowId + "\",\"stage\":\"" + stage
+                + "\",\"deliversOn\":\"" + LocalDate.now().plusDays(12) + "\",\"closesAt\":\""
+                + Instant.now().plus(9, ChronoUnit.DAYS) + "\",\"door\":true,\"pickup\":false,"
+                + "\"windowCode\":\"LBK-7\",\"windowName\":\"Lubbock Pre-order #7\"}";
+    }
+
+    private void entitlements(String customer, int earlyAccessHours) {
+        UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/memberships/customers/" + customer
+                + "/entitlements")), 200, "{\"member\":true,\"customerId\":\"" + customer
+                + "\",\"tierCode\":\"plus\",\"tierName\":\"Plus\",\"earlyAccessHours\":" + earlyAccessHours + "}");
+    }
+
+    @Test
+    void aMembersEarlyAccessHoursOpenAnUpcomingWindowForThemOnly() {
+        String atin = id("ATU");
+        String org = id("org-u");
+        // delivery-runs says UPCOMING to everyone, and OPEN to a request that names the member's early access hours
+        UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility"))
+                .withQueryParam("atins", WireMock.containing(atin)), 200, "{\"items\":["
+                + windowLine(atin, "win-early", "UPCOMING") + "]}");
+        UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility"))
+                .withQueryParam("atins", WireMock.containing(atin))
+                .withQueryParam("earlyAccessHours", WireMock.equalTo("24")).atPriority(1), 200, "{\"items\":["
+                + windowLine(atin, "win-early", "OPEN") + "]}");
+
+        String shopper = id("cust");
+        String shopperBearer = "tok-" + shopper;
+        UPSTREAMS.cart(shopperBearer, Upstreams.pkg(org, "Mama Tee", "SELLER", Upstreams.line(atin, org, "SELLER", 900,
+                1)));
+        UPSTREAMS.addresses(shopperBearer, "addr-1", "TX");
+        TestSupport.as(TestSupport.customer(shopper));
+        problem(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key", "idem-" + shopper,
+                "Authorization", "Bearer " + shopperBearer), 422, "orders.preorder-not-open");
+
+        String member = id("cust");
+        String memberBearer = "tok-" + member;
+        UPSTREAMS.cart(memberBearer, Upstreams.pkg(org, "Mama Tee", "SELLER", Upstreams.line(atin, org, "SELLER", 900,
+                1)));
+        UPSTREAMS.addresses(memberBearer, "addr-1", "TX");
+        UPSTREAMS.paymentIntent(member, UUID.randomUUID().toString());
+        entitlements(member, 24);
+        TestSupport.as(TestSupport.customer(member));
+        JsonNode created = ok(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key",
+                "idem-" + member, "Authorization", "Bearer " + memberBearer), 201);
+        assertThat(created.path("shipments").get(0).path("fulfilmentType").asString()).isEqualTo("PREORDER");
+        WIREMOCK.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility"))
+                .withQueryParam("earlyAccessHours", WireMock.equalTo("24")));
+    }
+
+    @Test
+    void aMembersPreorderDoorFeeIsWaivedLikeAnyOtherDeliveryFee() {
+        String atin = id("ATW");
+        String org = id("org-w");
+        UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility"))
+                .withQueryParam("atins", WireMock.containing(atin)), 200, "{\"items\":["
+                + windowLine(atin, "win-fee", "OPEN") + "]}");
+        String customer = id("cust");
+        String bearer = "tok-" + customer;
+        UPSTREAMS.cart(bearer, Upstreams.pkg(org, "Mama Tee", "SELLER", Upstreams.line(atin, org, "SELLER", 3000,
+                1)));
+        UPSTREAMS.addresses(bearer, "addr-1", "TX");
+        UPSTREAMS.paymentIntent(customer, UUID.randomUUID().toString());
+        WIREMOCK.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/memberships/waivers"))
+                .withRequestBody(WireMock.matchingJsonPath("$.customerId", WireMock.equalTo(customer)))
+                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"member\":true,\"tierCode\":\"plus\",\"tierName\":\"Plus\",\"waivers\":["
+                                + "{\"key\":\"1\",\"benefit\":\"FREE_DELIVERY\",\"waivedMinor\":799}],"
+                                + "\"totalWaivedMinor\":799}")));
+        TestSupport.as(TestSupport.customer(customer));
+        JsonNode created = ok(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key",
+                "idem-" + customer, "Authorization", "Bearer " + bearer), 201);
+        // the window's door fee (7.99 by default) went to payments as an AfroTransact delivery fee and came back waived
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/memberships/waivers"))
+                .withRequestBody(WireMock.matchingJsonPath("$.fees[0].kind", WireMock.equalTo("AFROTRANSACT_DELIVERY")))
+                .withRequestBody(WireMock.matchingJsonPath("$.fees[0].feeMinor", WireMock.equalTo("799"))));
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(created.path("orderId").asString()))
+                .withRequestBody(WireMock.matchingJsonPath("$.membershipWaivers[0].benefit",
+                        WireMock.equalTo("FREE_DELIVERY")))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[0].shippingMinor", WireMock.equalTo("0"))));
+        assertThat(created.path("shipments").get(0).path("shippingMinor").asLong()).isZero();
     }
 }
