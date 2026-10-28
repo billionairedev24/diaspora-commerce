@@ -6,8 +6,8 @@ import java.util.UUID;
 
 /**
  * A line-level (possibly partial) refund of captured lines. Each part goes back to what paid it: the card portion to
- * the card (a Stripe refund), the credit portion as credit. {@code cardAsCredit} is the one-way choice of the shopper
- * or staff to take the card portion as credit as well; it is never converted back to cash.
+ * the card (a Stripe refund), the credit portion as credit. {@code cardAsCredit} is the one-way choice of staff (with a reason)
+ * to take the card portion as credit as well; it is never converted back to cash.
  *
  * @param credit       the part of the refund that was paid with credit (it goes back as credit)
  * @param cardAsCredit the part that was paid with the card was returned as credit by choice

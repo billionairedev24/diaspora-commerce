@@ -2010,7 +2010,10 @@ paths:
       tags:
       - Credit
       summary: Take the card part of an order's refunds as credit, for the customer, with a reason (ledger:adjust)
-      description: The same one-way choice made by staff; the reason and the staff member are kept.
+      description: 'A support resolution may send the card part of an order''s refunds back as credit instead of to the card.
+        Staff only, with a reason (at least 15 characters); customers cannot choose. One way: credit never goes back to a card
+        or to cash. The reason and the staff member are kept. 409 payments.no-card-portion when the order was paid with credit
+        only.'
       operationId: chooseCreditRefundsAsStaff
       parameters:
       - name: orderId
@@ -2223,28 +2226,6 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/GiftCardPurchase'
-  /v1/customers/me/orders/{orderId}/credit-refunds:
-    post:
-      tags:
-      - Credit
-      summary: Take the card part of this order's refunds as credit (the shopper's own order)
-      description: 'One way: credit never goes back to a card or to cash. Refunds already sent to the card stay there. 409 payments.no-card-portion
-        when the order was paid with credit only (its refunds already come back as credit); 403 payments.not-your-order for
-        another shopper''s order.'
-      operationId: chooseCreditRefundsAsShopper
-      parameters:
-      - name: orderId
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: OK
-          content:
-            '*/*':
-              schema:
-                $ref: '#/components/schemas/CreditRefundChoice'
   /v1/credit/grants:
     post:
       tags:
@@ -3496,7 +3477,8 @@ components:
             when it is all of it)
         cardRefundsAsCredit:
           type: boolean
-          description: The shopper or staff chose credit for the card part of this order's refunds (one way)
+          description: 'Staff chose credit, with a reason, for the card part of this order''s refunds (one way); customers cannot
+            choose. Otherwise the card part goes to the card'
     ReleaseRequest:
       type: object
       description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
@@ -3548,12 +3530,12 @@ components:
           - CUSTOMER
         cardAsCredit:
           type: boolean
-          description: 'S320: take the part that was paid with the card as AfroTransact credit instead of a card refund. One way:
-            credit never goes back to a card or to cash. The credit part of an order always comes back as credit'
+          description: 'S320: take the part that was paid with the card as AfroTransact credit instead of a card refund (staff,
+            with a reason, inside a support resolution; customers cannot choose). One way: credit never goes back to a card
+            or to cash. The credit part of an order always comes back as credit'
         chosenBy:
           type: string
-          description: Who chose credit (the customer, or the staff member who did so for them with a reason); kept on the credit
-            entry
+          description: The staff member who chose credit, with a reason; kept on the credit entry
           maxLength: 120
           minLength: 0
       required:
@@ -3625,8 +3607,8 @@ components:
         creditMinor:
           type: integer
           format: int64
-          description: 'S320: the part returned as AfroTransact credit (the credit the order used, plus the card part when the
-            shopper or staff chose credit)'
+          description: 'S320: the part returned as AfroTransact credit (the credit the order used, plus the card part when
+            staff chose credit)'
         cardMinor:
           type: integer
           format: int64
@@ -5214,7 +5196,7 @@ components:
           type: string
         cardRefundsAsCredit:
           type: boolean
-          description: From now on the card part of every refund of this order comes back as AfroTransact credit
+          description: Staff chose, with a reason, that the card part of every refund of this order comes back as AfroTransact credit
         cardPartMinor:
           type: integer
           format: int64

@@ -15,7 +15,7 @@ import java.util.UUID;
  * @param credit       the part of {@code amount} paid with AfroTransact credit (S320); the PaymentIntent is for
  *                     {@code amount - credit}, and there is none when credit pays everything
  * @param shopperId    the customer whose credit paid it (token subject), null without credit
- * @param cardRefundsAsCredit the shopper (or staff, with a reason) chose credit for the card part of every refund of
+ * @param cardRefundsAsCredit staff chose, with a reason, credit for the card part of every refund of
  *                     this order: one way, never turned back into a card refund (S320)
  * @param multicapture the PaymentIntent allows several partial captures (Stripe multicapture). A single-capture
  *                     intent's first capture is final: Stripe releases whatever is not captured with it

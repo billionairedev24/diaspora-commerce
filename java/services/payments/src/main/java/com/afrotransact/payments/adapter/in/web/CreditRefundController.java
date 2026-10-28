@@ -29,8 +29,8 @@ class CreditRefundController {
 
     @Schema(name = "CreditRefundChoice")
     record ChoiceResponse(String orderId,
-                          @Schema(description = "From now on the card part of every refund of this order comes back "
-                                  + "as AfroTransact credit") boolean cardRefundsAsCredit,
+                          @Schema(description = "Staff chose, with a reason, that the card part of every refund of this "
+                                  + "order comes back as AfroTransact credit") boolean cardRefundsAsCredit,
                           @Schema(description = "What the card paid for the order") long cardPartMinor,
                           String currency, String chosenBy, Instant chosenAt) {
 
@@ -45,19 +45,12 @@ class CreditRefundController {
             + "audit trail") String reason) {
     }
 
-    @Operation(operationId = "chooseCreditRefundsAsShopper", summary = "Take the card part of this order's refunds "
-            + "as credit (the shopper's own order)",
-            description = "One way: credit never goes back to a card or to cash. Refunds already sent to the card "
-                    + "stay there. 409 payments.no-card-portion when the order was paid with credit only (its "
-                    + "refunds already come back as credit); 403 payments.not-your-order for another shopper's order.")
-    @PostMapping("/v1/customers/me/orders/{orderId}/credit-refunds")
-    ChoiceResponse shopper(@PathVariable String orderId) {
-        return ChoiceResponse.of(choices.chooseAsShopper(orderId));
-    }
-
     @Operation(operationId = "chooseCreditRefundsAsStaff", summary = "Take the card part of an order's refunds as "
             + "credit, for the customer, with a reason (ledger:adjust)",
-            description = "The same one-way choice made by staff; the reason and the staff member are kept.")
+            description = "A support resolution may send the card part of an order's refunds back as credit instead of to the "
+                    + "card. Staff only, with a reason (at least 15 characters); customers cannot choose. One way: credit never "
+                    + "goes back to a card or to cash. The reason and the staff member are kept. 409 payments.no-card-portion "
+                    + "when the order was paid with credit only.")
     @PostMapping("/v1/orders/{orderId}/credit-refunds")
     ChoiceResponse staff(@PathVariable String orderId, @Valid @RequestBody StaffChoiceRequest body) {
         return ChoiceResponse.of(choices.chooseAsStaff(orderId, body.reason()));
