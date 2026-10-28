@@ -145,6 +145,10 @@ class PaymentServiceImpl implements PaymentService {
             List<OrderLine> priced = lineRates.snapshot(schedule, cmd.lines(), placedAt, plans);
             Payment payment = Payment.create(paymentId, cmd.orderId(), stripeCustomer, cmd.amount(), schedule.id(),
                     placedAt, cmd.metadata(), priced, now);
+            if (cmd.shopperId() != null && !cmd.shopperId().isBlank()) {
+                // the shopper who placed the order, kept for credit refunds and the membership cashback (S323)
+                payment = payment.withCredit(Money.zero(cmd.amount().currency()), cmd.shopperId());
+            }
             if (!payments.claim(payment)) {
                 throw new PaymentsStateConflict("payments.payment-in-flight", "The payment of order "
                         + cmd.orderId() + " is being created; retry");

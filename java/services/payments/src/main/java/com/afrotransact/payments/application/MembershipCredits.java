@@ -51,7 +51,7 @@ class MembershipCredits {
         long index = monthIndex(m, now);
         Money amount = Money.of(benefit.get().amountMinor(), tier.currency());
         MembershipBenefitUse use = new MembershipBenefitUse(UUID.randomUUID(), m.id(), m.customerId(), tier.code(),
-                BenefitCode.MONTHLY_CREDIT, null, "month-" + index, amount, "Monthly credit, month " + (index + 1),
+                BenefitCode.MONTHLY_CREDIT, null, m.id() + ":month-" + index, amount, "Monthly credit, month " + (index + 1),
                 now);
         if (!activity.insertUse(use)) {
             return Optional.empty();
