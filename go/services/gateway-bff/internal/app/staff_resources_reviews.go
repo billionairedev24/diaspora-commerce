@@ -77,21 +77,37 @@ func reviewFields(o jobj, prefix string, extra ...domain.DetailField) []domain.D
 		}
 		fields = append(fields, domain.DetailField{Label: "Automatic checks found", Value: strings.Join(names, ", "), Kind: "text"})
 	}
-	if photos, ok := at(o, key("photoUrls")).([]any); ok {
-		for i, p := range photos {
-			if u, ok := p.(string); ok && strings.HasPrefix(u, "https://") {
-				fields = append(fields, domain.DetailField{Label: "Photo " + strconv.Itoa(i+1), Value: u, Kind: "image"})
-			}
-		}
-	}
-	if photos := objs(o, key("photos")); len(photos) > 0 {
-		for i, p := range photos {
-			if u := jstr(p, "url"); strings.HasPrefix(u, "https://") {
-				fields = append(fields, domain.DetailField{Label: "Photo " + strconv.Itoa(i+1), Value: u, Kind: "image"})
-			}
-		}
-	}
 	return append(fields, extra...)
+}
+
+// reviewPhotos lists the review's photos in a section of their own: the console shows a section made only of images as a
+// gallery (https URLs only). Nil when there are none.
+func reviewPhotos(o jobj, prefix string) *domain.DetailSection {
+	key := "photos"
+	urlKey := "photoUrls"
+	if prefix != "" {
+		key, urlKey = prefix+".photos", prefix+".photoUrls"
+	}
+	var fields []domain.DetailField
+	add := func(u string) {
+		if strings.HasPrefix(u, "https://") {
+			fields = append(fields, domain.DetailField{Label: "Photo " + strconv.Itoa(len(fields)+1), Value: u, Kind: "image"})
+		}
+	}
+	if urls, ok := at(o, urlKey).([]any); ok {
+		for _, p := range urls {
+			if u, ok := p.(string); ok {
+				add(u)
+			}
+		}
+	}
+	for _, p := range objs(o, key) {
+		add(jstr(p, "url"))
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return &domain.DetailSection{Title: "Photos", Fields: fields}
 }
 
 var reviewFlagLabels = map[string]string{"PROFANITY": "profanity", "LINK": "a link", "EMAIL": "an e-mail address", "PHONE": "a phone number"}
@@ -111,7 +127,11 @@ func reviewItemSections(o jobj) []domain.DetailSection {
 	if serviceName := jstr(o, "review.serviceName"); serviceName != "" {
 		review.Fields = append([]domain.DetailField{{Label: what, Value: serviceName, Kind: "text"}}, review.Fields...)
 	}
-	return append([]domain.DetailSection{review}, autoSections(o, "status", "review", "report", "title", "atin", "productId", "ownerKind", "productTypeCode")...)
+	secs := []domain.DetailSection{review}
+	if photos := reviewPhotos(o, "review"); photos != nil {
+		secs = append(secs, *photos)
+	}
+	return append(secs, autoSections(o, "status", "review", "report", "title", "atin", "productId", "ownerKind", "productTypeCode")...)
 }
 
 // productReviewsResource is the Product reviews table (catalog-service): every review in any state but deleted.
@@ -148,6 +168,9 @@ func productReviewsResource() *staffResource {
 		version:    func(o jobj) string { return jstr(o, "version") },
 		sections: func(o jobj) []domain.DetailSection {
 			secs := []domain.DetailSection{{Title: "Review", Fields: reviewFields(o, "", domain.DetailField{Label: "Order", Value: jstr(o, "orderNumber"), Kind: "mono"})}}
+			if photos := reviewPhotos(o, ""); photos != nil {
+				secs = append(secs, *photos)
+			}
 			if reply := jstr(o, "reply.text"); reply != "" {
 				secs = append(secs, domain.DetailSection{Title: "Seller reply", Fields: []domain.DetailField{{Label: "Reply", Value: reply, Kind: "text"}}})
 			}
