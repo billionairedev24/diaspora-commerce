@@ -1,8 +1,8 @@
 -- S262 (ADR 0005): fr, es, ar and yo for the delivery run (run.*) and pre-order (preorder.*) messages that 0009, 0011,
 -- 0013 and 0019 seeded in English only. Same keys, channels, categories and placeholders as the English rows: the
 -- locale-parity test (TestRunAndPreorderTemplatesExistInEveryLocale) fails when a locale, a channel or a placeholder
--- is missing. The customer's language comes from identity (subscribers carry the locale they signed up in); a
--- language without a row falls back to English.
+-- is missing. The language is the event's locale, else the signed-in customer's language from identity; email-only
+-- subscribers have none yet, so they get English. A language without a row falls back to English.
 -- SMS: fr and es stay in one GSM-7 segment (no characters outside the GSM 03.38 alphabet); ar and yo cannot (Arabic
 -- script, Yoruba tone marks and dots), so they are UCS-2 and may take more segments.
 -- WhatsApp (channel chat) rows carry the same Meta template name as English in the subject and the same positional
