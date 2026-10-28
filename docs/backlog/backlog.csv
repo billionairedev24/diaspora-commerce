@@ -1181,4 +1181,4 @@ Measured first: tests/e2e/specs/*.responsive.spec.ts audit every route of the th
 - Cart and checkout show each benefit applied (fee waived, credit earned) and orders record which tier and benefit applied
 - Failed renewals retry then lapse; trial abuse guarded; refund rule for the membership fee is clear
 - Staff see members per tier, churn and the cost of the benefits; finance sees recurring revenue and credit granted
-- Contracts first, tests incl. upgrade, downgrade, cancel and lapse","E35","","Medium","13","membership","payments","To Do"
+- Contracts first, tests incl. upgrade, downgrade, cancel and lapse","E35","","Medium","13","membership","payments","Done"
