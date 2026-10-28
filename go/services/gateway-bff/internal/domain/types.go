@@ -532,6 +532,8 @@ func HaversineMiles(lat1, lng1, lat2, lng2 float64) float64 {
 // CheckoutPackage is a cart package with pickup points.
 type CheckoutPackage struct {
 	CartPackage
+	// MembershipWaivedMinor is the part of this package's delivery fee the shopper's membership waives (S323).
+	MembershipWaivedMinor int64 `json:"membershipWaivedMinor"`
 	// LocalDelivery is the quote of AfroTransact Delivery from the seller's store (S255); AFROTRANSACT_DELIVERY packages only.
 	LocalDelivery *CheckoutLocalDelivery `json:"localDelivery,omitempty"`
 	PickupPoints  []PickupPoint          `json:"pickupPoints"`
@@ -621,6 +623,12 @@ type CheckoutSummary struct {
 	CrossSell *Rail `json:"crossSell,omitempty"`
 	// Credit is what the shopper's AfroTransact credit would pay of this order (S320); absent without credit.
 	Credit *CheckoutCredit `json:"credit,omitempty"`
+	// MembershipWaivedMinor is the delivery fee the shopper's membership waives on this order (S323): ShippingMinor
+	// stays the fees as priced, the total is lower by this amount.
+	MembershipWaivedMinor int64 `json:"membershipWaivedMinor"`
+	// Membership says which fees were waived ("fee waived: membership") or, for a shopper who is not a member, what
+	// joining would save on this order; absent when there is nothing to say.
+	Membership *MembershipSavings `json:"membership,omitempty"`
 }
 
 // PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).

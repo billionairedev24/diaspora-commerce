@@ -38,6 +38,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		ProofLinks:    sc.proofLinks,
 		Coupons:       upstreams.NewCheckoutCoupons(client("offers", up.Offers)),
 		Credit:        upstreams.NewCredit(sc.payments),
+		Membership:    upstreams.NewMembership(sc.payments),
 		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
@@ -49,5 +50,6 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		SearchClicks:  app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market),
 		PayLinks:      app.NewPayLinkService(upstreams.NewPayLinks(sc.orders, sc.serviceTokens), cfg.Stripe.PublishableKey),
 		BusinessPages: app.NewBusinessPageService(upstreams.NewBusinessPages(client("seller", up.Seller)), d.Bookings, s.Search),
-		Credit:        app.NewCreditService(d.Credit, d.Orders, cfg.Stripe.PublishableKey)}
+		Credit:        app.NewCreditService(d.Credit, d.Orders, cfg.Stripe.PublishableKey),
+		Membership:    app.NewMembershipService(d.Membership, sc.serviceTokens, s.Cart)}
 }

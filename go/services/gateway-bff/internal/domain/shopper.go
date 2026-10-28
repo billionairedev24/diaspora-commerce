@@ -71,6 +71,8 @@ type ShipmentDetail struct {
 	// DeliveryFeeRule is the delivery fee rule the shipping was charged by, as it was when the order was placed: later
 	// edits of the rule never change it. Null for flat rates and AfroTransact Delivery from a seller's store.
 	DeliveryFeeRule *FeeRuleRef `json:"deliveryFeeRule"`
+	// MembershipWaiver is the shipping fee the shopper's membership waived on this shipment (S323); null when none.
+	MembershipWaiver *OrderMembershipWaiver `json:"membershipWaiver"`
 }
 
 // OrderPickup is the pickup point of a pickup shipment as the order page shows it.

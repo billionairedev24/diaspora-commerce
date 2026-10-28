@@ -280,6 +280,7 @@ func (s *checkoutPaymentServiceImpl) summary(ctx context.Context, c *domain.Call
 		}
 	}
 	applyCheckoutShipping(&sum, packageDelivery)
+	s.priceMembership(ctx, c, &sum, packageDelivery)
 	s.priceCoupon(ctx, c, &sum, packageDelivery, couponCode)
 	s.priceTax(ctx, &sum, addr, packageDelivery)
 	recalcCheckoutTotal(&sum)
@@ -375,7 +376,7 @@ func (s *checkoutPaymentServiceImpl) priceTax(ctx context.Context, sum *domain.C
 	shipDiscLeft := sum.ShippingDiscountMinor
 	lines := make([]port.UpTaxQuoteLine, 0)
 	for _, p := range sum.Packages {
-		ship := packageShippingFee(p, packageDelivery)
+		ship := max(0, packageShippingFee(p, packageDelivery)-p.MembershipWaivedMinor)
 		if off := min(shipDiscLeft, ship); off > 0 {
 			ship -= off
 			shipDiscLeft -= off

@@ -123,6 +123,16 @@ type UpShipment struct {
 	PickupLocationID string `json:"pickupLocationId"`
 	// DeliveryFeeRule is the staff delivery fee rule the shipping was charged by, as it was at checkout (ADR 0005 §3).
 	DeliveryFeeRule *domain.FeeRuleRef `json:"deliveryFeeRule"`
+	// MembershipWaiver is the shipping fee the shopper's membership waived (S323).
+	MembershipWaiver *UpMembershipWaiverRef `json:"membershipWaiver"`
+}
+
+// UpMembershipWaiverRef is orders' MembershipWaiverView.
+type UpMembershipWaiverRef struct {
+	TierCode    string `json:"tierCode"`
+	TierName    string `json:"tierName"`
+	Benefit     string `json:"benefit"`
+	WaivedMinor int64  `json:"waivedMinor"`
 }
 
 // UpShipTo is orders' ShipTo snapshot.
