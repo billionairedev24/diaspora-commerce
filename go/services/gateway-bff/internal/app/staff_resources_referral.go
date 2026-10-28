@@ -226,10 +226,12 @@ func referralSettingsResource() *staffResource {
 			one := int64(1)
 			return staffList{items: []jobj{o}, total: &one}, nil
 		},
-		get:        withExtras,
-		titleOf:    func(jobj) string { return "Referral program" },
-		subtitleOf: func(o jobj) string { return o["stateText"].(string) + " · version " + jstr(o, "version") + " · " + jstr(o, "updatedByName") },
-		version:    func(o jobj) string { return jstr(o, "version") },
+		get:     withExtras,
+		titleOf: func(jobj) string { return "Referral program" },
+		subtitleOf: func(o jobj) string {
+			return o["stateText"].(string) + " · version " + jstr(o, "version") + " · " + jstr(o, "updatedByName")
+		},
+		version: func(o jobj) string { return jstr(o, "version") },
 		sections: func(o jobj) []domain.DetailSection {
 			return []domain.DetailSection{
 				{Title: "The offer", Fields: []domain.DetailField{
