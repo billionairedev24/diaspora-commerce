@@ -6,6 +6,9 @@ import { Button, CheckCircle, Circle, CircleNotch, ImagePlaceholder, LockSimple,
 import Link from 'next/link';
 import { type FormEvent } from 'react';
 
+import memberStyles from '@/components/membership/Membership.module.css';
+import { MembershipUpsell } from '@/components/membership/MembershipUpsell';
+import { benefitName } from '@/components/membership/memberText';
 import { RunNote } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
 
@@ -80,7 +83,8 @@ export function CheckoutOrderPanel(props: Props) {
 
   const coupon = s.coupon;
   const couponOk = coupon?.applicable;
-  const netShipping = Math.max(0, shippingMinor - s.shippingDiscountMinor);
+  const waivedMinor = s.membershipWaivedMinor ?? 0;
+  const netShipping = Math.max(0, shippingMinor - s.shippingDiscountMinor - waivedMinor);
 
   const applyCoupon = (e: FormEvent) => {
     e.preventDefault();
@@ -229,6 +233,17 @@ export function CheckoutOrderPanel(props: Props) {
             </dd>
             {pickups > 0 && <dd className={styles.rowNote}>{t('co.pickupNote', { n: pickups })}</dd>}
           </div>
+          {waivedMinor > 0 && (
+            <div className={styles.row} data-testid="checkout-membership-waived">
+              <dt>{t('co.mem.waivedRow')}</dt>
+              <dd className={memberStyles.waived}>−{fmt.money(waivedMinor)}</dd>
+              {s.membership?.waivers.map((w) => (
+                <dd key={w.packageId} className={`${styles.rowNote} ${memberStyles.waivedNote}`}>
+                  {t('co.mem.waivedNote', { tier: s.membership?.tierName ?? '', benefit: benefitName(t, fmt, w.benefit), amount: fmt.money(w.waivedMinor) })} · {w.seller}
+                </dd>
+              ))}
+            </div>
+          )}
           <div className={styles.row}>
             <dt>{t('co.taxShort')}</dt>
             <dd>{s.taxMinor ? fmt.money(s.taxMinor) : '—'}</dd>
@@ -241,6 +256,12 @@ export function CheckoutOrderPanel(props: Props) {
             </div>
           )}
         </dl>
+
+        {s.membership?.upsell && (
+          <div className={styles.promoWrap}>
+            <MembershipUpsell upsell={s.membership.upsell} />
+          </div>
+        )}
 
         <div className={styles.legalBlock}>
           <p className={styles.fine}>

@@ -278,5 +278,7 @@
   "hub.deliveryAlerts": "Alertes de livraison",
   "hub.deliveryAlertsSub": "Tournées de livraison et précommandes de votre région, par e-mail, SMS, application ou WhatsApp",
   "hub.credit": "Crédit AfroTransact",
-  "hub.creditSub": "Solde, historique et cartes cadeaux"
+  "hub.creditSub": "Solde, historique et cartes cadeaux",
+  "hub.membership": "Abonnement",
+  "hub.membershipSub": "Formule, avantages et facturation"
 }

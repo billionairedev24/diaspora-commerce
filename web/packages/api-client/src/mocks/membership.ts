@@ -115,6 +115,11 @@ function accountView(a: AccountState, now: Date): MembershipAccount {
   };
 }
 
+/** Test and demo helper: the account had its free trial already, so joining charges the first fee at once. */
+export function markTrialUsed(userId: string): void {
+  membershipState(account(userId)).trialUsed = true;
+}
+
 /* ── What a membership does for an order's fees ─────────────────── */
 
 function packageDeliveryMap(raw: string | null | undefined): Map<string, string> {

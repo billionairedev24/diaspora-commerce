@@ -10,7 +10,7 @@ import { AttributionCapture } from '@/components/preorder/AttributionCapture';
 import { PREORDER_PATH, PreorderBanners } from '@/components/preorder/PreorderBanners';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
-import { accountQueries, cartQueries, DEPARTMENTS_LIST, searchHref, siteQueries } from '@/lib/api/queries';
+import { accountQueries, cartQueries, DEPARTMENTS_LIST, membershipQueries, searchHref, siteQueries } from '@/lib/api/queries';
 import { setAttribution } from '@/lib/preorder/attribution';
 import { useOpenPreorders, usePreorderResolution } from '@/lib/preorder/usePreorder';
 
@@ -90,6 +90,8 @@ export function Header() {
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
   const { data: cart } = useQuery(cartQueries.current(api));
   const { data: me } = useQuery(accountQueries.me(api));
+  // The member badge (S323): the tier's name, only for a signed-in shopper who has the benefits now.
+  const { data: member } = useQuery({ ...membershipQueries.account(api), enabled: me?.authenticated === true });
   const [locOpen, setLocOpen] = useState(false);
   const lola = useLolaLauncher();
   const pathname = usePathname();
@@ -124,7 +126,7 @@ export function Header() {
             <Sparkle size={20} weight="fill" className={styles.sparkle} aria-hidden />
             <span className={styles.lolaLabel}>{t('header.lola')}</span>
           </button>
-          <AccountMenu me={me} onAskLola={() => lola.open()} />
+          <AccountMenu me={me} onAskLola={() => lola.open()} memberTier={member?.member ? (member.tier?.name ?? null) : null} />
           <Link href="/cart" className={styles.chromeBtn} aria-label={t('header.cartAria', { count })}>
             <span className={styles.cartIcon}>
               <ShoppingCart size={30} aria-hidden />

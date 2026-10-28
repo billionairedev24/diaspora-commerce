@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 
 import pageStyles from '@/components/account/Pages.module.css';
+import { benefitName } from '@/components/membership/memberText';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
@@ -118,6 +119,11 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                   {s.deliveryFeeRule && (
                     <p className={pageStyles.muted} data-testid="order-fee-rule">
                       {t('ord.deliveryFee', { amount: fmt.money(s.deliveryFeeRule.amountMinor), note: feeRuleNote(t, s.deliveryFeeRule) })}
+                    </p>
+                  )}
+                  {s.membershipWaiver && (
+                    <p className={pageStyles.muted} data-testid="order-membership-waiver">
+                      {t('ord.mem.waived', { tier: s.membershipWaiver.tierName, benefit: benefitName(t, fmt, s.membershipWaiver.benefit), amount: fmt.money(s.membershipWaiver.waivedMinor) })}
                     </p>
                   )}
                   {s.pickup && <PickupDetails pickup={s.pickup} />}
