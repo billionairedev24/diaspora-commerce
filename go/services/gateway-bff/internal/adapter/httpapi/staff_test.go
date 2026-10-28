@@ -527,6 +527,9 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, []any{membershipFake(now)})
 	case strings.HasSuffix(p, "/events") && strings.HasPrefix(p, "/v1/memberships/admin/members/"):
 		writeJ(w, 200, []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000e2", "type": "JOINED", "tierCode": "plus", "actor": "cus-1", "detail": "Started a 14 day trial", "occurredAt": now}})
+	case strings.HasSuffix(p, "/entitlements") && strings.HasPrefix(p, "/v1/memberships/customers/"):
+		writeJ(w, 200, map[string]any{"member": true, "customerId": "cus-1", "tierCode": "plus", "tierName": "Plus", "status": "ACTIVE", "benefits": []any{}, "prioritySupport": true,
+			"freeReturns": false, "memberPrices": false, "earlyAccessHours": 0, "rewardBoostBps": 0})
 	case strings.HasPrefix(p, "/v1/memberships/customers/"):
 		writeJ(w, 200, map[string]any{"membership": membershipFake(now), "tier": membershipTierFake(now), "pendingTier": nil, "usage": []any{map[string]any{"benefit": "FREE_DELIVERY", "uses": 2, "amountMinor": 1198, "currency": "USD"}},
 			"charges": []any{map[string]any{"id": "0f0f0f0f-0000-4000-8000-0000000000f1", "kind": "JOIN", "amountMinor": 999, "currency": "USD", "status": "SUCCEEDED", "refundedMinor": 0, "createdAt": now}},
@@ -1194,6 +1197,9 @@ func TestStaffContractConformance(t *testing.T) {
 	c360 := do("support", "GET", "/v1/staff/support/customers/cus-1", nil, 200)
 	if len(c360["orders"].([]any)) != 2 || len(c360["claims"].([]any)) == 0 || !strings.Contains(fmt.Sprint(c360["unavailable"]), "bookings") {
 		t.Fatalf("customer 360 = %v", c360)
+	}
+	if m, _ := c360["membership"].(map[string]any); m == nil || m["tierName"] != "Plus" || m["prioritySupport"] != true || m["freeReturns"] != false {
+		t.Fatalf("customer 360 membership = %v", c360["membership"])
 	}
 	refund := map[string]any{"customerId": "cus-1", "orderNumber": "AT-000001", "amountMinor": 30000, "reason": "Late delivery", "via": "ORDER"}
 	if c := do("support", "POST", "/v1/staff/support/refunds", refund, 403, "Idempotency-Key", "refund-000001")["code"]; c != domain.CodeRefundLimit {

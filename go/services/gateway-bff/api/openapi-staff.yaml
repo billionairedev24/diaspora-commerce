@@ -6819,11 +6819,22 @@ components:
         refund: {type: boolean}
         resend: {type: boolean}
         cancelShipment: {type: boolean}
+    SupportMembership:
+      type: object
+      required: [tierName, status, prioritySupport, freeReturns]
+      properties:
+        tierName: {type: string, examples: [Plus]}
+        status: {type: string, enum: [TRIALING, ACTIVE, PAST_DUE]}
+        prioritySupport: {type: boolean, description: Handle this customer's cases first}
+        freeReturns: {type: boolean, description: Returns cost this customer nothing}
     Customer360:
       type: object
-      required: [customer, orders, bookings, claims, returns, notifications, cases, audit, refundLimitMinor, can, unavailable]
+      required: [customer, membership, orders, bookings, claims, returns, notifications, cases, audit, refundLimitMinor, can, unavailable]
       properties:
         customer: {$ref: '#/components/schemas/SupportCustomer'}
+        membership:
+          oneOf: [{$ref: '#/components/schemas/SupportMembership'}, {type: 'null'}]
+          description: 'The customer''s membership (S323): the priority-support flag and free returns; null when the customer is not a member'
         orders: {type: array, items: {$ref: '#/components/schemas/SupportOrder'}}
         bookings: {type: array, items: {$ref: '#/components/schemas/SupportBooking'}}
         claims: {type: array, items: {$ref: '#/components/schemas/SupportClaim'}}

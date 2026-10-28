@@ -772,7 +772,10 @@ type SupportPermissions struct {
 
 // Customer360 is GET /v1/staff/support/customers/{id}.
 type Customer360 struct {
-	Customer         SupportCustomer       `json:"customer"`
+	Customer SupportCustomer `json:"customer"`
+	// Membership is the customer's AfroTransact membership (S323): support tools show the priority-support flag and the
+	// free-returns benefit; null when the customer is not a member.
+	Membership       *SupportMembership    `json:"membership"`
 	Orders           []SupportOrder        `json:"orders"`
 	Bookings         []SupportBooking      `json:"bookings"`
 	Claims           []SupportClaim        `json:"claims"`
@@ -783,6 +786,14 @@ type Customer360 struct {
 	RefundLimitMinor *int64                `json:"refundLimitMinor"`
 	Can              SupportPermissions    `json:"can"`
 	Unavailable      []string              `json:"unavailable"`
+}
+
+// SupportMembership is what a customer's membership gives support: priority handling and free returns (names, not ids).
+type SupportMembership struct {
+	TierName        string `json:"tierName"`
+	Status          string `json:"status"`
+	PrioritySupport bool   `json:"prioritySupport"`
+	FreeReturns     bool   `json:"freeReturns"`
 }
 
 // SupportActionResult answers support actions.
