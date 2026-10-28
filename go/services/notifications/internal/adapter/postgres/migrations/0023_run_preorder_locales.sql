@@ -277,4 +277,271 @@ Vous n’êtes pas à l’origine de cette demande ? Ignorez cet e-mail et rien 
  'Bonjour {{.firstName}}, nous vous préviendrons par {{.channelList}} quand une tournée de livraison vers {{.town}} ouvre, quand elle va bientôt se terminer et quand nous sommes en route.
 Voir les prochaines tournées : {{.locationUrl}}{{if .hasWhatsappCommunity}}
 Rejoindre la communauté WhatsApp de {{.town}} : {{.whatsappInviteUrl}}{{end}}
-Se désabonner à tout moment : {{.unsubscribeUrl}}');
+Se désabonner à tout moment : {{.unsubscribeUrl}}'),
+('preorder.announce', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'es' AND t.channel = 'email'), 'reminder',
+ '{{.name}} está abierta: pide antes del {{.closesDisplay}}',
+ '{{define "preheader"}}Pide antes del {{.closesDisplay}}, entrega el {{.deliversDisplay}}.{{end}}
+{{badge "warning" "Preventa abierta"}}
+<h1>{{if .headline}}{{.headline}}{{else}}La preventa está abierta en {{.where}}{{end}}</h1>
+<p>Hola {{.firstName}}, <strong>{{.name}}</strong> está abierta. Pide junto a tus vecinos y entregamos todo en un solo día.</p>
+{{facts "Pide antes del" .closesDisplay "Entrega" .deliversDisplay "Entrega a domicilio" .doorFee "Recogida" .pickupFee "Horario de recogida" .pickupWindow}}
+{{button .emailUrl "Reservar ahora"}}
+<p><small>El cobro se hace al pagar y puedes cambiar o cancelar los artículos de la preventa con reembolso total hasta que se cierre.</small></p>',
+ 'Hola {{.firstName}}, {{.name}} está abierta. Pide antes del {{.closesDisplay}} y entregamos el {{.deliversDisplay}}.
+{{if .doorFee}}Entrega a domicilio: {{.doorFee}} tarifa fija.
+{{end}}{{if .pickupFee}}Recogida: {{.pickupFee}}{{if .pickupWindow}}, {{.pickupWindow}}{{end}}.
+{{end}}El cobro se hace al pagar y puedes cambiar o cancelar los artículos de la preventa con reembolso total hasta que se cierre.
+Reservar ahora: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Cancelar las alertas de preventa de {{.where}}: {{.unsubscribeUrl}}{{end}}'),
+('preorder.announce', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'es' AND t.channel = 'push'), 'reminder',
+ 'Preventa abierta en {{.where}}',
+ '',
+ 'Pide antes del {{.closesDisplay}}, entrega el {{.deliversDisplay}}.{{if .doorFee}} Entrega a domicilio {{.doorFee}}.{{end}}'),
+('preorder.announce', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.announce' AND t.locale = 'es' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ '{{.smsCopy}}'),
+('preorder.closed', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.closed' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ '{{.name}} está cerrada: entrega el {{.deliversDisplay}}',
+ '{{define "preheader"}}Tu preventa está asegurada para el {{.deliversDisplay}}.{{end}}
+{{badge "success" "Asegurada"}}
+<h1>Tu preventa está asegurada</h1>
+<p>Hola {{.firstName}}, <strong>{{.name}}</strong> ya está cerrada. Entregamos tu preventa el <strong>{{.deliversDisplay}}</strong>{{if .pickupWindow}} (recogida {{.pickupWindow}}){{end}}.</p>
+{{button .emailUrl "Ver tu preventa"}}
+<p><small>Si aceptaste los mensajes de texto, te escribiremos cuando salga a reparto.</small></p>',
+ 'Hola {{.firstName}}, {{.name}} ya está cerrada. Entregamos tu preventa el {{.deliversDisplay}}{{if .pickupWindow}} (recogida {{.pickupWindow}}){{end}}. Si aceptaste los mensajes de texto, te escribiremos cuando salga a reparto. {{.emailUrl}}'),
+('preorder.confirmed', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.confirmed' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ 'Ya estás dentro: {{.name}}',
+ '{{define "preheader"}}Preventa {{.preorderNumber}}, entrega el {{.deliversDisplay}}. Cobrado: {{.total}}.{{end}}
+{{badge "success" "Ya estás dentro"}}
+<h1>Ya estás dentro: {{.name}}</h1>
+<p>Hola {{.firstName}}, gracias por tu preventa. La entregamos junto con las de la comunidad el <strong>{{.deliversDisplay}}</strong>.</p>
+{{facts "Número de preventa" .preorderNumber "Entrega" .deliversDisplay .fulfilmentText (or .doorFee .pickupFee) "Cobrado" .total}}
+{{button .emailUrl "Ver tu preventa"}}
+{{template "packages" (index . "packages")}}
+{{template "totals" (index . "totals")}}
+{{template "address" (index . "shipTo")}}
+{{callout "info" (printf "%sLos artículos de la preventa se pueden cambiar o cancelar con reembolso total hasta el %s." (or .nowNote "") .cancelUntil)}}
+{{with index . "helpUrl"}}<p><small>¿Necesitas ayuda con este pedido? Visita el <a href="{{.}}">Centro de ayuda</a> o responde a este correo.</small></p>{{end}}',
+ 'Hola {{.firstName}}, ya estás dentro: {{.name}}.
+Preventa n.º: {{.preorderNumber}}
+Entrega: {{.deliversDisplay}}
+{{.fulfilmentText}}: {{if .doorFee}}{{.doorFee}}{{else}}{{.pickupFee}}{{if .pickupWindow}}, {{.pickupWindow}}{{end}}{{end}}
+Cobrado: {{.total}}
+{{if .nowNote}}{{.nowNote}} {{end}}Los artículos de la preventa se pueden cambiar o cancelar con reembolso total hasta el {{.cancelUntil}}. Si aceptaste los mensajes de texto, te escribiremos el día de la entrega.
+{{.emailUrl}}'),
+('preorder.delivery_missed', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.delivery_missed' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ 'No pudimos entregarte: {{.name}}',
+ '{{define "preheader"}}Lo sentimos. Elige una nueva fecha o un reembolso total.{{end}}
+{{badge "danger" "Entrega fallida"}}
+<h1>Lo sentimos, no pudimos entregar tu pedido</h1>
+<p>Hola {{.firstName}}, no pudimos entregar <strong>{{.name}}</strong> (pedido {{.orderNumber}}) el {{.missedDisplay}}. Elige lo que prefieras:</p>
+{{if .newDateUrl}}{{button .newDateUrl (printf "Entregar el %s" .newDateDisplay)}}{{end}}
+{{if .refundUrl}}{{secondaryButton .refundUrl (printf "Recibir un reembolso total de %s" .total)}}{{end}}
+{{template "packages" (index . "packages")}}
+{{with index . "helpUrl"}}<p><small>¿Necesitas ayuda con este pedido? Visita el <a href="{{.}}">Centro de ayuda</a> o responde a este correo.</small></p>{{end}}',
+ 'Hola {{.firstName}}, lo sentimos: no pudimos entregar {{.name}} (pedido {{.orderNumber}}) el {{.missedDisplay}}. Elige lo que prefieras:
+{{if .newDateUrl}}Entregar el {{.newDateDisplay}}: {{.newDateUrl}}
+{{end}}{{if .refundUrl}}Recibir un reembolso total de {{.total}}: {{.refundUrl}}
+{{end}}Tus pedidos: {{.orderUrl}}'),
+('preorder.last_call', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.last_call' AND t.locale = 'es' AND t.channel = 'push'), 'reminder',
+ 'Última llamada: {{.name}}',
+ '',
+ 'La preventa cierra el {{.closesDisplay}}. Entrega el {{.deliversDisplay}}.'),
+('preorder.last_call', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.last_call' AND t.locale = 'es' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: ultimo aviso! {{.name}} cierra {{.closesDisplay}}. {{.smsUrl}} STOP para salir'),
+('preorder.late_order.payment_link', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.late_order.payment_link' AND t.locale = 'es' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: paga {{.total}} por tu preventa: {{.paymentUrl}} Responde STOP para salir'),
+('preorder.out_for_delivery', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.out_for_delivery' AND t.locale = 'es' AND t.channel = 'push'), 'transactional',
+ 'Tu preventa sale a reparto',
+ '',
+ '{{.name}} llega hoy{{if .deliveryWindow}}, {{.deliveryWindow}}{{end}}.'),
+('preorder.out_for_delivery', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.out_for_delivery' AND t.locale = 'es' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: {{.name}} sale a reparto hoy{{if .deliveryWindow}}, {{.deliveryWindow}}{{end}}. {{.smsUrl}} Responde STOP para salir'),
+('preorder.reminder', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.reminder' AND t.locale = 'es' AND t.channel = 'email'), 'reminder',
+ 'Quedan 48 horas: {{.name}} cierra el {{.closesDisplay}}',
+ '{{define "preheader"}}Pide antes del {{.closesDisplay}} para recibirlo el {{.deliversDisplay}}.{{end}}
+{{badge "warning" "Quedan 48 horas"}}
+<h1>Quedan 48 horas para reservar</h1>
+<p>Hola {{.firstName}}, <strong>{{.name}}</strong> cierra el <strong>{{.closesDisplay}}</strong>. Todo lo pedido hasta entonces llega el <strong>{{.deliversDisplay}}</strong>.</p>
+{{facts "Pide antes del" .closesDisplay "Entrega" .deliversDisplay "Entrega a domicilio" .doorFee "Recogida" .pickupFee "Horario de recogida" .pickupWindow}}
+{{button .emailUrl "Terminar tu preventa"}}',
+ 'Hola {{.firstName}}, {{.name}} cierra el {{.closesDisplay}}. Todo lo pedido hasta entonces llega el {{.deliversDisplay}}{{if .doorFee}} con entrega a domicilio por {{.doorFee}}{{end}}{{if .pickupFee}}{{if .doorFee}} o{{else}} con{{end}} recogida ({{.pickupFee}}){{end}}.
+Terminar tu preventa: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Cancelar la suscripción: {{.unsubscribeUrl}}{{end}}'),
+('preorder.reminder', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.reminder' AND t.locale = 'es' AND t.channel = 'push'), 'reminder',
+ 'Quedan 48 horas para reservar',
+ '',
+ '{{.name}} cierra el {{.closesDisplay}}. Entrega el {{.deliversDisplay}}.'),
+('preorder.waitlist.opened', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'preorder.waitlist.opened' AND t.locale = 'es' AND t.channel = 'email'), 'reminder',
+ 'La preventa está abierta en {{.where}}',
+ '{{define "preheader"}}{{.name}} está abierta hasta el {{.closesDisplay}}.{{end}}
+{{badge "warning" "Lo pediste, ya estamos aquí"}}
+<h1>Entregamos en {{.where}}</h1>
+<p>Hola {{.firstName}}, nos pediste que te avisáramos cuando abriera una preventa en {{.where}}. <strong>{{.name}}</strong> está abierta ahora.</p>
+{{facts "Pide antes del" .closesDisplay "Entrega" .deliversDisplay "Entrega a domicilio" .doorFee "Recogida" .pickupFee "Horario de recogida" .pickupWindow}}
+{{button .emailUrl "Ver qué hay en la preventa"}}',
+ 'Hola {{.firstName}}, nos pediste que te avisáramos cuando abriera una preventa en {{.where}}. {{.name}} está abierta hasta el {{.closesDisplay}}, con entrega el {{.deliversDisplay}}.{{if .doorFee}} La entrega a domicilio cuesta {{.doorFee}} de tarifa fija.{{end}}{{if .pickupFee}} La recogida cuesta {{.pickupFee}}{{if .pickupWindow}}, {{.pickupWindow}}{{end}}.{{end}}
+Ver qué hay en la preventa: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Salir de la lista de espera: {{.unsubscribeUrl}}{{end}}'),
+('run.announced', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.announced' AND t.locale = 'es' AND t.channel = 'email'), 'reminder',
+ 'Una ruta de entrega a {{.town}} el {{.deliveryDay}}',
+ '{{define "preheader"}}Vamos a {{.town}} el {{.deliveryDay}}. Los pedidos abren pronto.{{end}}
+{{badge "info" "Ruta de entrega anunciada"}}
+<h1>Vamos a {{.town}}</h1>
+<p>Hola {{.firstName}}, una ruta de entrega de AfroTransact a <strong>{{.town}}</strong> está prevista para el <strong>{{.deliveryDay}}</strong>. Te avisaremos en cuanto abran los pedidos.</p>
+{{facts "Día de entrega" .deliveryDay "Horario de entrega" .windowDisplay "Pide antes del" .cutoffDisplay "Costo de entrega" .feeDisplay "Cómo" .dropText}}
+{{button .emailUrl "Ver la ruta"}}
+{{if .whatsappInviteUrl}}<p><small>Únete a la comunidad de WhatsApp de {{.town}} para recibir noticias de tus vecinos y de nuestros conductores: <a href="{{.whatsappInviteUrl}}">unirme</a>.</small></p>{{end}}',
+ 'Hola {{.firstName}}, una ruta de entrega de AfroTransact a {{.town}} está prevista para el {{.deliveryDay}} ({{.windowDisplay}}). Pide antes del {{.cutoffDisplay}}; la entrega cuesta {{.feeDisplay}}. {{.dropText}}.
+Te avisaremos en cuanto abran los pedidos.
+Ver la ruta: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Cancelar las alertas de rutas a {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.announced', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.announced' AND t.locale = 'es' AND t.channel = 'push'), 'reminder',
+ 'Ruta de entrega a {{.town}}',
+ '',
+ 'Vamos a {{.town}} el {{.deliveryDay}}. Los pedidos abren pronto.'),
+('run.cancelled', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ 'La ruta de entrega a {{.town}} del {{.deliveryDay}} se canceló',
+ '{{define "preheader"}}Te reembolsamos el total, incluido el costo de entrega.{{end}}
+{{badge "danger" "Ruta cancelada"}}
+<h1>Cancelamos la ruta a {{.town}}</h1>
+<p>Hola {{.firstName}}, lo sentimos: la ruta de entrega a {{.town}} prevista para el <strong>{{.deliveryDay}}</strong> no se realizará. {{.reasonText}}</p>
+{{callout "info" .refundNote}}
+{{button .locationUrl "Ver la próxima ruta"}}',
+ 'Hola {{.firstName}}, lo sentimos: la ruta de entrega a {{.town}} prevista para el {{.deliveryDay}} no se realizará. {{.reasonText}}
+{{.refundNote}}
+Ver la próxima ruta: {{.locationUrl}}'),
+('run.cancelled', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'es' AND t.channel = 'push'), 'transactional',
+ 'La ruta a {{.town}} se canceló',
+ '',
+ 'Te reembolsamos el total, incluido el costo de entrega.'),
+('run.cancelled', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cancelled' AND t.locale = 'es' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: cancelamos la ruta a {{.town}} del {{.deliveryDay}}. Tu pedido se reembolsa por completo, costo de entrega incluido. Responde STOP para salir'),
+('run.confirmed', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.confirmed' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ 'La ruta a {{.town}} va: entrega el {{.deliveryDay}}',
+ '{{define "preheader"}}Tu pedido está confirmado para el {{.deliveryDay}}, {{.windowText}}.{{end}}
+{{badge "success" "Ruta confirmada"}}
+<h1>La ruta a {{.town}} va</h1>
+<p>Hola {{.firstName}}, llegaron suficientes pedidos, así que la ruta a {{.town}} sigue adelante. Tu pedido está confirmado para el <strong>{{.deliveryDay}}</strong>.</p>
+{{facts "Día de entrega" .deliveryDay "Horario de entrega" .windowDisplay "Cómo" .dropText "Código de entrega" .handoverCode}}
+{{button .emailUrl "Ver la ruta"}}',
+ 'Hola {{.firstName}}, la ruta a {{.town}} sigue adelante. Tu pedido está confirmado para el {{.deliveryDay}} ({{.windowDisplay}}). {{.dropText}}.{{if .handoverCode}} Código de entrega: {{.handoverCode}}.{{end}}
+Ver la ruta: {{.emailUrl}}'),
+('run.confirmed', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.confirmed' AND t.locale = 'es' AND t.channel = 'push'), 'transactional',
+ 'La ruta a {{.town}} va',
+ '',
+ 'Tu pedido está confirmado para el {{.deliveryDay}}, {{.windowText}}.'),
+('run.cutoff_reminder', 'es', 'chat', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'es' AND t.channel = 'chat'), 'reminder',
+ 'afrotransact_run_cutoff_reminder',
+ '',
+ '{{.town}}
+{{.deliveryDay}}
+{{.cutoffText}}
+{{.feeDisplay}}
+{{.whatsappUrl}}'),
+('run.cutoff_reminder', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'es' AND t.channel = 'email'), 'reminder',
+ 'Última oportunidad para la ruta a {{.town}}: pide antes del {{.cutoffText}}',
+ '{{define "preheader"}}La ruta a {{.town}} cierra el {{.cutoffText}}. Entregamos el {{.deliveryDay}}.{{end}}
+{{badge "warning" "Cierra pronto"}}
+<h1>La ruta a {{.town}} cierra pronto</h1>
+<p>Hola {{.firstName}}, los pedidos para la ruta de entrega a {{.town}} cierran el <strong>{{.cutoffDisplay}}</strong>. Entregamos el <strong>{{.deliveryDay}}</strong>.</p>
+{{facts "Pide antes del" .cutoffDisplay "Día de entrega" .deliveryDay "Horario de entrega" .windowDisplay "Costo de entrega" .feeDisplay "Cómo" .dropText "Pedidos hasta ahora" .minimumText}}
+{{button .emailUrl "Ver la ruta"}}',
+ 'Hola {{.firstName}}, los pedidos para la ruta de entrega a {{.town}} cierran el {{.cutoffDisplay}}. Entregamos el {{.deliveryDay}} ({{.windowDisplay}}); la entrega cuesta {{.feeDisplay}}.
+Ver la ruta: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Cancelar las alertas de rutas a {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.cutoff_reminder', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'es' AND t.channel = 'push'), 'reminder',
+ 'Última oportunidad para la ruta a {{.town}}',
+ '',
+ 'Pide antes del {{.cutoffText}}. Entrega el {{.deliveryDay}}.'),
+('run.cutoff_reminder', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.cutoff_reminder' AND t.locale = 'es' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: ultima oportunidad, ruta a {{.town}}. Pide antes de {{.cutoffText}}. Entrega {{.deliveryDay}}. {{.smsUrl}} Responde STOP para salir'),
+('run.opened', 'es', 'chat', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'es' AND t.channel = 'chat'), 'reminder',
+ 'afrotransact_run_opened',
+ '',
+ '{{.town}}
+{{.deliveryDay}}
+{{.cutoffText}}
+{{.feeDisplay}}
+{{.whatsappUrl}}'),
+('run.opened', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'es' AND t.channel = 'email'), 'reminder',
+ 'La ruta de entrega a {{.town}} está abierta: pide antes del {{.cutoffText}}',
+ '{{define "preheader"}}Pide antes del {{.cutoffText}}. Entregamos el {{.deliveryDay}}, {{.windowText}}.{{end}}
+{{badge "warning" "Ruta abierta"}}
+<h1>La ruta de entrega a {{.town}} está abierta</h1>
+<p>Hola {{.firstName}}, llevamos pedidos de AfroTransact a {{.town}} el <strong>{{.deliveryDay}}</strong>. Pide antes del cierre y el tuyo va en el mismo viaje.</p>
+{{facts "Día de entrega" .deliveryDay "Horario de entrega" .windowDisplay "Pide antes del" .cutoffDisplay "Costo de entrega" .feeDisplay "Cómo" .dropText "Pedidos hasta ahora" .minimumText}}
+{{button .emailUrl "Ver la ruta"}}
+{{if .whatsappInviteUrl}}<p><small>Únete a la comunidad de WhatsApp de {{.town}} para recibir noticias de tus vecinos y de nuestros conductores: <a href="{{.whatsappInviteUrl}}">unirme</a>.</small></p>{{end}}',
+ 'Hola {{.firstName}}, la ruta de entrega a {{.town}} está abierta. Entregamos el {{.deliveryDay}} ({{.windowDisplay}}). Pide antes del {{.cutoffDisplay}}; la entrega cuesta {{.feeDisplay}}. {{.dropText}}.
+Ver la ruta: {{.emailUrl}}{{if .unsubscribeUrl}}
+
+Cancelar las alertas de rutas a {{.town}}: {{.unsubscribeUrl}}{{end}}'),
+('run.opened', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'es' AND t.channel = 'push'), 'reminder',
+ 'La ruta de entrega a {{.town}} está abierta',
+ '',
+ 'Pide antes del {{.cutoffText}}. Entrega el {{.deliveryDay}}.{{if .feeDisplay}} Entrega {{.feeDisplay}}.{{end}}'),
+('run.opened', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.opened' AND t.locale = 'es' AND t.channel = 'sms'), 'reminder',
+ '',
+ '',
+ 'AfroTransact: ruta a {{.town}} abierta. Entrega {{.deliveryDay}}. Pide antes de {{.cutoffText}}. {{.smsUrl}} Responde STOP para salir'),
+('run.out_for_delivery', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ 'Tu entrega en {{.town}} va en camino hoy',
+ '{{define "preheader"}}Salimos hacia {{.town}}. Horario de entrega {{.windowText}}.{{end}}
+{{badge "success" "En camino"}}
+<h1>Vamos en camino a {{.town}}</h1>
+<p>Hola {{.firstName}}, la ruta de entrega a {{.town}} ya salió. Tu pedido llega hoy, {{.windowDisplay}}.</p>
+{{facts "Horario de entrega" .windowDisplay "Cómo" .dropText "Código de entrega" .handoverCode}}
+{{if .handoverCode}}<p>Muestra este código al recoger tu pedido: <strong>{{.handoverCode}}</strong>.</p>{{end}}
+{{button .emailUrl "Seguir la ruta"}}',
+ 'Hola {{.firstName}}, la ruta de entrega a {{.town}} ya salió. Tu pedido llega hoy, {{.windowDisplay}}. {{.dropText}}.{{if .handoverCode}} Código de entrega: {{.handoverCode}}.{{end}}
+Seguir la ruta: {{.emailUrl}}'),
+('run.out_for_delivery', 'es', 'push', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'es' AND t.channel = 'push'), 'transactional',
+ 'Tu pedido a {{.town}} va en camino',
+ '',
+ 'Llega hoy, {{.windowText}}.{{if .handoverCode}} Código de entrega {{.handoverCode}}.{{end}}'),
+('run.out_for_delivery', 'es', 'sms', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.out_for_delivery' AND t.locale = 'es' AND t.channel = 'sms'), 'transactional',
+ '',
+ '',
+ 'AfroTransact: tu pedido a {{.town}} sale a reparto hoy, {{.windowText}}.{{if .handoverCode}} Codigo de entrega {{.handoverCode}}.{{end}} Responde STOP para salir'),
+('run.subscription.confirm', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.subscription.confirm' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ 'Confirma tus alertas de rutas a {{.town}}',
+ '{{define "preheader"}}Un clic y te avisaremos cuando abra una ruta a {{.town}}.{{end}}
+<h1>Un último paso</h1>
+<p>Confirma tu correo para enterarte primero cuando AfroTransact abra una ruta de entrega a <strong>{{.town}}</strong>: cuando abran los pedidos, cuando estén por cerrar y cuando vayamos en camino. No enviaremos nada hasta que confirmes.</p>
+{{button .confirmUrl "Confirmar mis alertas"}}
+<p><small>¿No lo pediste? Ignora este correo y no se enviará nada.</small></p>',
+ 'Confirma tu correo para enterarte primero cuando AfroTransact abra una ruta de entrega a {{.town}}: cuando abran los pedidos, cuando estén por cerrar y cuando vayamos en camino. No enviaremos nada hasta que confirmes.
+
+Confirmar mis alertas: {{.confirmUrl}}
+
+¿No lo pediste? Ignora este correo y no se enviará nada.'),
+('run.subscription.welcome', 'es', 'email', (SELECT coalesce(max(version), 0) + 1 FROM template t WHERE t.key = 'run.subscription.welcome' AND t.locale = 'es' AND t.channel = 'email'), 'transactional',
+ 'Serás el primero en saber de las rutas a {{.town}}',
+ '{{define "preheader"}}Estás suscrito a las alertas de rutas a {{.town}} por {{.channelList}}.{{end}}
+{{badge "success" "Suscrito"}}
+<h1>Estás en la lista de {{.town}}</h1>
+<p>Hola {{.firstName}}, te avisaremos por {{.channelList}} cuando abra una ruta de entrega a <strong>{{.town}}</strong>, cuando esté por cerrar y cuando vayamos en camino.</p>
+{{button .locationUrl "Ver próximas rutas"}}
+{{if .hasWhatsappCommunity}}<p>Tus vecinos y nuestros conductores comparten novedades en la comunidad de WhatsApp de {{.town}}: <a href="{{.whatsappInviteUrl}}">unirme a la comunidad</a>.</p>{{end}}
+<p><small>Puedes cambiar esto o darte de baja cuando quieras desde tu cuenta, o con el enlace de baja que incluye cada mensaje.</small></p>',
+ 'Hola {{.firstName}}, te avisaremos por {{.channelList}} cuando abra una ruta de entrega a {{.town}}, cuando esté por cerrar y cuando vayamos en camino.
+Ver próximas rutas: {{.locationUrl}}{{if .hasWhatsappCommunity}}
+Unirme a la comunidad de WhatsApp de {{.town}}: {{.whatsappInviteUrl}}{{end}}
+Darte de baja cuando quieras: {{.unsubscribeUrl}}');
