@@ -4490,7 +4490,7 @@ components:
       required: [availableMinor, appliedMinor, cardDueMinor]
       properties:
         availableMinor: {type: integer, format: int64}
-        appliedMinor: {type: integer, format: int64, description: The balance up to the total, leaving at least 0.50 for the card or paying everything}
+        appliedMinor: {type: integer, format: int64, description: 'The balance up to the total, leaving at least 0.50 for the card or paying everything'}
         cardDueMinor: {type: integer, format: int64, description: What the card pays then; 0 means no payment method is needed}
     ReferralRewardTerms:
       type: object
@@ -4521,7 +4521,7 @@ components:
         rewarded: {type: integer, description: Referrals that paid me a reward}
         earnedMinor: {type: integer, format: int64, description: Credit I earned from referrals}
         membershipDays: {type: integer, description: Free membership days I earned from referrals}
-        pendingMinor: {type: integer, format: int64, description: Credit promised for friends who qualified, granted after the return window}
+        pendingMinor: {type: integer, format: int64, description: 'Credit promised for friends who qualified, granted after the return window'}
     ReferralFriend:
       type: object
       required: [id, friendName, status, signedUpAt, expiresAt, eligibleAt, reward]
@@ -4531,7 +4531,7 @@ components:
         status: {type: string, enum: [PENDING, WAITING, REWARDED, EXPIRED, CLOSED], description: 'PENDING: no qualifying order yet. WAITING: qualified, rewards after the return window (or under a check). CLOSED: not eligible.'}
         signedUpAt: {type: string, format: date-time}
         expiresAt: {type: string, format: date-time}
-        eligibleAt: {type: [string, 'null'], format: date-time, description: When the reward is due, once the friend qualified}
+        eligibleAt: {type: [string, 'null'], format: date-time, description: 'When the reward is due, once the friend qualified'}
         reward:
           oneOf: [{$ref: '#/components/schemas/ReferralFriendReward'}, {type: 'null'}]
     ReferralFriendReward:

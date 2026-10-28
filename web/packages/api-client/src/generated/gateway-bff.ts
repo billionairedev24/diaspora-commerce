@@ -3863,7 +3863,7 @@ export interface components {
             availableMinor: number;
             /**
              * Format: int64
-             * @description The balance up to the total
+             * @description The balance up to the total, leaving at least 0.50 for the card or paying everything
              */
             appliedMinor: number;
             /**
@@ -3917,7 +3917,7 @@ export interface components {
             membershipDays: number;
             /**
              * Format: int64
-             * @description Credit promised for friends who qualified
+             * @description Credit promised for friends who qualified, granted after the return window
              */
             pendingMinor: number;
         };
@@ -3937,7 +3937,7 @@ export interface components {
             expiresAt: string;
             /**
              * Format: date-time
-             * @description When the reward is due
+             * @description When the reward is due, once the friend qualified
              */
             eligibleAt: string | null;
             reward: components["schemas"]["ReferralFriendReward"] | null;
