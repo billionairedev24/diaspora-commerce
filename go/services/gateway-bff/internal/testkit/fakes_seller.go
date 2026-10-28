@@ -19,6 +19,9 @@ const (
 	PendingOrgID = "33333333-3333-3333-3333-333333333333"
 )
 
+// HeldAssetID is an image media is still checking or refused (status FLAGGED, no public URL).
+const HeldAssetID = "asset-held"
+
 // MissingAssetID is an upload media does not know (POST /v1/assets/{id}/complete answers 404).
 const MissingAssetID = "asset-missing"
 
@@ -903,6 +906,17 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		u.mu.Unlock()
 		writeJSON(w, 201, map[string]any{"asset": map[string]any{"id": "asset-1", "status": "PENDING"}, "upload": map[string]any{"method": "PUT",
 			"url": "https://uploads.example/asset-1", "headers": map[string]string{"Content-Type": "image/webp"}, "publicUrl": "https://img.example/asset-1.webp", "expiresAt": "2026-10-10T12:15:00Z"}})
+	})
+	mux.HandleFunc("GET /v1/assets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		switch r.PathValue("id") {
+		case MissingAssetID:
+			problem(w, 404, "media.asset-not-found", "No such upload", nil)
+		case HeldAssetID:
+			writeJSON(w, 200, map[string]any{"id": HeldAssetID, "purpose": "storefront", "contentType": "image/webp", "status": "FLAGGED"})
+		default:
+			writeJSON(w, 200, map[string]any{"id": r.PathValue("id"), "url": ReviewPhotoURL, "purpose": "storefront", "contentType": "image/webp",
+				"bytes": 182000, "width": 1600, "height": 1600, "status": "READY"})
+		}
 	})
 	mux.HandleFunc("POST /v1/assets/{id}/complete", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") == MissingAssetID {

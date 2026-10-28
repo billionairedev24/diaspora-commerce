@@ -120,6 +120,7 @@ func run() error {
 		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient), TaxStatements: upstreams.NewTaxStatements(client("tax-returns", up.TaxReturns)),
 		Fees:     upstreams.NewFees(paymentsClient, serviceTokens),
 		Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
+		Reviews:  upstreams.NewReviews(catalogClient),
 		Cache:    cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log, PublishableKey: cfg.Stripe.PublishableKey,
 
 		// S307/S308: product edits, form drafts and bulk uploads at catalog; the AI listing writer at ai-gateway.
@@ -192,6 +193,7 @@ func run() error {
 		SellerOffers:       app.NewSellerOffersService(sellerDeps),
 		SellerCoupons:      app.NewSellerCouponsService(sellerDeps),
 		SellerCases:        app.NewSellerCasesService(sellerDeps),
+		SellerReviews:      app.NewSellerReviewsService(sellerDeps),
 		SellerTax:          app.NewSellerTaxService(sellerDeps),
 		SellerFba:          app.NewSellerFbaService(sellerDeps),
 	}

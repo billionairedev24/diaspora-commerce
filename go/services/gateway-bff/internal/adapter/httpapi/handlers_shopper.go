@@ -35,6 +35,8 @@ type ShopperServices struct {
 	Credit app.CreditService
 	// Referral is "Refer a friend" (S322; optional).
 	Referral app.ReferralService
+	// Reviews is verified-purchase product reviews and ratings (S324; optional).
+	Reviews app.ProductReviewService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -65,6 +67,9 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	}
 	if h.s.Shopper.Referral != nil {
 		h.registerReferral(route)
+	}
+	if h.s.Shopper.Reviews != nil {
+		h.registerReviews(route)
 	}
 	// Pay-now page of late pre-order adds (no session: the signed token is the credential; rate-limited per IP)
 	if h.s.Shopper.PayLinks != nil {

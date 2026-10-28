@@ -320,6 +320,7 @@ func publicProduct(p Product) map[string]any {
 }
 
 func (u *Upstreams) routes(mux *http.ServeMux) {
+	u.reviewRoutes(mux)
 	// ---- catalog
 	mux.HandleFunc("GET /v1/public/products/{atin}", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
@@ -330,7 +331,7 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 			return
 		}
 		w.Header().Set("Cache-Control", "max-age=60, public")
-		writeJSON(w, 200, publicProduct(p))
+		writeJSON(w, 200, u.withRating(publicProduct(p)))
 	})
 	mux.HandleFunc("GET /v1/public/variants/{atin}", func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
@@ -341,7 +342,7 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 			return
 		}
 		w.Header().Set("Cache-Control", "max-age=60, public")
-		writeJSON(w, 200, map[string]any{"product": publicProduct(p), "variant": map[string]any{"atin": v.ATIN, "options": v.Options, "priceMinor": v.PriceMinor, "currency": "usd"}})
+		writeJSON(w, 200, map[string]any{"product": u.withRating(publicProduct(p)), "variant": map[string]any{"atin": v.ATIN, "options": v.Options, "priceMinor": v.PriceMinor, "currency": "usd"}})
 	})
 	mux.HandleFunc("GET /v1/categories", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, categories) })
 	// ---- inventory

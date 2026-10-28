@@ -233,7 +233,7 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 			ATIN: productATIN, Title: p.Title, Brand: attr(p.Attributes, "brand"),
 			Community: attr(p.Attributes, "community", "communities", "cuisine"), Department: department, Unit: unit,
 			Origin: attr(p.Attributes, "origin", "countryOfOrigin", "country_of_origin"), Bullets: bulletsOf(p.Attributes),
-			Rating: 0, ReviewCount: 0, Images: images, Variants: variants,
+			Rating: p.Rating.Average, ReviewCount: p.Rating.Count, Images: images, Variants: variants,
 		},
 		BuyBox:         buyBox,
 		OtherOffers:    otherOffers,

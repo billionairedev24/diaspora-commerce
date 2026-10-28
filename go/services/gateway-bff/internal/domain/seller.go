@@ -141,6 +141,7 @@ var SellerModules = []ModuleDef{
 	{"sOrders", "returns", "Returns", "commerce", "customer returns and their refunds"},
 	{"sOrders", "disputes", "Disputes", "commerce", "disputes and A-to-z claims against you"},
 	{"sListings", "listings", "Listings", "commerce", "product listings"},
+	{"sListings", "reviews", "Reviews", "commerce", "customer reviews of your products and your replies"},
 	{"sInventory", "inventory", "Inventory & FBA", "commerce", "stock levels"},
 	{"sAds", "coupons", "Coupons", "growth", "promotional codes for your listings"},
 	{"sPayouts", "payouts", "Payouts", "finance", "payouts and balances"},

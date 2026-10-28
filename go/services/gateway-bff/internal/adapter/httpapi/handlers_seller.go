@@ -69,6 +69,9 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/returns", h.sellerReturns)
 		route("GET /v1/seller/disputes", h.sellerDisputes)
 	}
+	if h.s.SellerReviews != nil {
+		h.registerSellerReviews(route)
+	}
 	if h.s.SellerTax != nil {
 		route("GET /v1/seller/tax/statement", h.sellerTaxStatement)
 		route("GET /v1/seller/tax/statement/export", h.sellerTaxStatementExport)

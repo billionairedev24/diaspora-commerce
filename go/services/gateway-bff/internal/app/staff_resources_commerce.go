@@ -321,25 +321,29 @@ func moderationResource() *staffResource {
 	}
 	return &staffResource{
 		key: "moderation", module: "catalog", title: "Moderation queue", statusKey: "status", exportable: true,
-		columns: []domain.Column{col("title", "Listing", "strong", 28), col("sellerOrgName", "Seller", "text", 16), col("type", "Type", "text", 14),
+		columns: []domain.Column{col("title", "Item", "strong", 28), col("sellerOrgName", "Seller", "text", 16), col("type", "Type", "text", 14),
 			col("priority", "Priority", "text", 10), col("sla.dueAt", "Due", "datetime", 14), col("assigneeName", "Assignee", "text", 12), col("status", "Status", "status", 10)},
-		facets:     domain.StaffFacets("PENDING", "ESCALATED", "APPROVED", "REJECTED", "CLOSED"),
-		list:       listPaged("/v1/moderation/items", upTrustOps, nil),
-		get:        getByPath("/v1/moderation/items/", upTrustOps),
-		names:      []nameRef{sellerRef("sellerOrgId"), personRef("assignee", "Assignee"), personRef("decidedBy", "Decided by")},
+		facets: domain.StaffFacets("PENDING", "ESCALATED", "APPROVED", "REJECTED", "CLOSED"),
+		list:   liftedList(listPaged("/v1/moderation/items", upTrustOps, nil)),
+		get:    liftedGet(getByPath("/v1/moderation/items/", upTrustOps)),
+		// Reviews (booking and product) show their author by name: liftReviewAuthor puts the id where the console resolves it.
+		names: []nameRef{sellerRef("sellerOrgId"), customerRef("customerId"), personRef("assignee", "Assignee"), personRef("decidedBy", "Decided by")},
+		sections: func(o jobj) []domain.DetailSection {
+			if jstr(o, "review.reviewerName") != "" {
+				return reviewItemSections(o)
+			}
+			return autoSections(o, "status")
+		},
 		titleOf:    func(o jobj) string { return jstr(o, "title") },
 		subtitleOf: func(o jobj) string { return domain.Humanize(jstr(o, "type")) + " · " + jstr(o, "atin") },
 		actions: []staffAction{
 			{key: "assign", label: "Assign to me", tone: "neutral", permission: "catalog:moderate", confirm: "Take this item?", when: inState("PENDING", "ESCALATED"),
 				run: act("/assign", func(jobj) jobj { return jobj{} })},
-			{key: "approve", label: "Allow", tone: "primary", permission: "catalog:moderate", level: domain.LevelApprove, form: noteForm("Allow the listing", "Allow", false), when: inState("PENDING", "ESCALATED"),
+			{key: "approve", label: "Allow", tone: "primary", permission: "catalog:moderate", level: domain.LevelApprove, form: moderationNoteForm, when: inState("PENDING", "ESCALATED"),
 				run: act("/approve", func(v jobj) jobj { return omitEmpty(jobj{"note": vs(v, "note")}) })},
 			{key: "reject", label: "Remove", tone: "danger", permission: "catalog:moderate", level: domain.LevelApprove, when: inState("PENDING", "ESCALATED"),
-				form: func(context.Context, staffCtx, jobj) *domain.Form {
-					return &domain.Form{Title: "Remove the listing", SubmitLabel: "Remove", Fields: []domain.FormField{
-						withOptions(ff("reasonCode", "Reason", "select", true), moderationReasonCodes), withMax(ff("note", "Note", "textarea", false), 1000)}}
-				},
-				run: act("/reject", func(v jobj) jobj { return omitEmpty(jobj{"reasonCode": vs(v, "reasonCode"), "note": vs(v, "note")}) })},
+				form: moderationRemoveForm,
+				run:  act("/reject", func(v jobj) jobj { return omitEmpty(jobj{"reasonCode": vs(v, "reasonCode"), "note": vs(v, "note")}) })},
 			{key: "escalate", label: "Escalate", tone: "neutral", permission: "catalog:moderate", form: reasonForm("Escalate to senior review", "Escalate"), when: inState("PENDING"),
 				run: act("/escalate", func(v jobj) jobj { return jobj{"reason": vs(v, "reason")} })},
 		},
@@ -509,4 +513,24 @@ func proofSummary(t jobj) string {
 		parts = append(parts, "signature")
 	}
 	return strings.Join(parts, ", ")
+}
+
+// moderationNoteForm asks for the optional note of "Allow"; the title says what is allowed.
+func moderationNoteForm(ctx context.Context, sc staffCtx, o jobj) *domain.Form {
+	title := "Allow the listing"
+	if strings.HasSuffix(jstr(o, "type"), "_REVIEW") {
+		title = "Allow the review"
+	}
+	return noteForm(title, "Allow", false)(ctx, sc, o)
+}
+
+// moderationRemoveForm asks why an item is removed: listing codes for listings, review codes for reviews (trust-ops
+// refuses a code that does not fit the kind of item).
+func moderationRemoveForm(_ context.Context, _ staffCtx, o jobj) *domain.Form {
+	title, codes := "Remove the listing", moderationReasonCodes
+	if strings.HasSuffix(jstr(o, "type"), "_REVIEW") {
+		title, codes = "Remove the review", reviewReasonCodes
+	}
+	return &domain.Form{Title: title, SubmitLabel: "Remove", Fields: []domain.FormField{
+		withOptions(ff("reasonCode", "Reason", "select", true), codes), withMax(ff("note", "Note", "textarea", false), 1000)}}
 }
