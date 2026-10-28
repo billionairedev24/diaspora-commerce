@@ -314,6 +314,8 @@ export type AuditLine = z.infer<typeof AuditLineSchema>;
 
 export const Customer360Schema = z.object({
   customer: z.object({ id: z.string(), name: z.string(), email: z.string(), enabled: z.boolean(), emailVerified: z.boolean(), roles: z.array(z.string()) }),
+  /** The customer's membership (S323): priority support and free returns; null when not a member. */
+  membership: z.object({ tierName: z.string(), status: z.enum(['TRIALING', 'ACTIVE', 'PAST_DUE']), prioritySupport: z.boolean(), freeReturns: z.boolean() }).nullable(),
   orders: z.array(SupportOrderSchema),
   bookings: z.array(SupportBookingSchema),
   claims: z.array(SupportClaimSchema),

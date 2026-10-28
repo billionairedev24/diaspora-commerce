@@ -7,6 +7,7 @@ import { ProductSummarySchema } from './catalog';
 import { DeliveryFeeRuleRefSchema, MinorSchema } from './common';
 import { CheckoutCreditSchema } from './credit';
 import { RailSchema } from './home';
+import { MembershipSavingsSchema, OrderMembershipWaiverSchema } from './membership';
 
 /* Storefront account (address input, order detail & tracking, returns, login & security), checkout, services &
    bookings and Lola — contracts/openapi/gateway-bff.yaml. */
@@ -102,6 +103,8 @@ export const ShipmentDetailSchema = z.object({
   localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional(),
   /** The delivery fee rule the shipping was charged by when the order was placed (later edits never change it). */
   deliveryFeeRule: DeliveryFeeRuleRefSchema.nullable().optional(),
+  /** The shipping fee the shopper's membership waived on this shipment, with the tier and benefit (S323). */
+  membershipWaiver: OrderMembershipWaiverSchema.nullable().optional(),
   /** Pickup shipments: where to collect it. */
   pickup: OrderPickupSchema.nullable().optional()
 });
@@ -277,7 +280,9 @@ export type CheckoutLocalDelivery = z.infer<typeof CheckoutLocalDeliverySchema>;
 
 export const CheckoutPackageSchema = CartPackageSchema.extend({
   pickupPoints: z.array(PickupPointSchema).optional(),
-  localDelivery: CheckoutLocalDeliverySchema.optional()
+  localDelivery: CheckoutLocalDeliverySchema.optional(),
+  /** The part of this package's delivery fee the shopper's membership waives (S323); 0 or absent for none. */
+  membershipWaivedMinor: MinorSchema.optional()
 });
 export type CheckoutPackage = z.infer<typeof CheckoutPackageSchema>;
 
@@ -323,7 +328,11 @@ export const CheckoutSummarySchema = z.object({
   stripeCustomerId: z.string().optional(),
   crossSell: RailSchema.nullish(),
   /** What the shopper's AfroTransact credit would pay of this order; absent without credit (S320). */
-  credit: CheckoutCreditSchema.nullish()
+  credit: CheckoutCreditSchema.nullish(),
+  /** The delivery fee the membership waives on this order: shippingMinor stays as priced, totalMinor is lower by this (S323). */
+  membershipWaivedMinor: MinorSchema.default(0),
+  /** "Fee waived: membership", or for a shopper who is not a member "Join Plus to save $X on this order"; absent when there is nothing to say. */
+  membership: MembershipSavingsSchema.nullish()
 });
 export type CheckoutSummary = z.infer<typeof CheckoutSummarySchema>;
 

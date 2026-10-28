@@ -76,6 +76,53 @@ export interface MockResource {
   create?: { permission: string; form: StaffForm; build: (values: Record<string, FieldValue>, id: string, ctx: ActionCtx) => MockRecord };
 }
 
+/* Membership tier editor (S323): the plan, then a toggle per benefit of the menu with the numbers it takes. */
+const TIER_BENEFITS: [string, string][] = [
+  ['freeDelivery', 'Free AfroTransact delivery'], ['freeShipping', 'Free carrier shipping'], ['cashback', 'Cashback as credit'], ['memberPrices', 'Member prices and deals'],
+  ['earlyAccess', 'Early access to pre-orders and runs'], ['prioritySupport', 'Priority support'], ['freeReturns', 'Free returns'], ['boostedRewards', 'Bigger referral and gift rewards'], ['monthlyCredit', 'Monthly credit']
+];
+const TIER_CHANGE_KEYS = ['name', 'description', 'status', 'sortOrder', 'monthlyPrice', 'yearlyPrice', 'trialDays', 'freeDelivery', 'freeDeliveryMin', 'freeDeliveryCap', 'freeShipping', 'freeShippingMin', 'freeShippingCap', 'cashback', 'cashbackPercent', 'cashbackMin', 'cashbackCap',
+  'memberPrices', 'earlyAccess', 'earlyAccessHours', 'prioritySupport', 'freeReturns', 'boostedRewards', 'boostedPercent', 'monthlyCredit', 'monthlyCreditAmount'];
+const TIER_STATUS_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  DRAFT: [{ value: 'DRAFT', label: 'Draft (not for sale)' }, { value: 'PUBLISHED', label: 'Published' }, { value: 'RETIRED', label: 'Retired' }],
+  PUBLISHED: [{ value: 'PUBLISHED', label: 'Published' }, { value: 'RETIRED', label: 'Retired (no new members)' }],
+  RETIRED: [{ value: 'PUBLISHED', label: 'Published' }, { value: 'RETIRED', label: 'Retired (no new members)' }]
+};
+function tierFields(r: MockRecord | undefined): FormField[] {
+  const f = r?.fields ?? {};
+  const status = str(f.status) || 'DRAFT';
+  const on = (k: string) => f[k] === true;
+  const n = (k: string, fallback = 0) => (r ? num(f[k]) : fallback);
+  return [
+    field('name', 'Name shoppers see (Plus, Premium)', 'text', true, { maxLength: 80, value: str(f.name) }),
+    field('description', 'Short description', 'textarea', false, { maxLength: 500, value: str(f.description) }),
+    field('status', 'Status', 'select', true, { options: TIER_STATUS_OPTIONS[status], value: status }),
+    field('sortOrder', 'Order (lower is the entry tier; a higher tier is an upgrade)', 'number', true, { min: 0, max: 1000, value: n('sortOrder', 10) }),
+    field('monthlyPrice', 'Monthly price (dollars)', 'number', true, { min: 0, max: 1000, value: r ? num(f.monthlyPriceMinor) / 100 : 0 }),
+    field('yearlyPrice', 'Yearly price (dollars)', 'number', true, { min: 0, max: 10_000, value: r ? num(f.yearlyPriceMinor) / 100 : 0 }),
+    field('trialDays', 'Free trial (days, 0 for none)', 'number', true, { min: 0, max: 90, value: n('trialDays', 14) }),
+    field('freeDelivery', 'Free AfroTransact delivery', 'toggle', false, { value: on('freeDelivery') }),
+    field('freeDeliveryMin', 'Free delivery: order minimum (dollars)', 'number', false, { min: 0, max: 10_000, value: n('freeDeliveryMin') }),
+    field('freeDeliveryCap', 'Free delivery: most waived per order (dollars, 0 for no cap)', 'number', false, { min: 0, max: 10_000, value: n('freeDeliveryCap') }),
+    field('freeShipping', 'Free carrier shipping', 'toggle', false, { value: on('freeShipping') }),
+    field('freeShippingMin', 'Free shipping: order minimum (dollars)', 'number', false, { min: 0, max: 10_000, value: n('freeShippingMin') }),
+    field('freeShippingCap', 'Free shipping: most waived per order (dollars, 0 for no cap)', 'number', false, { min: 0, max: 10_000, value: n('freeShippingCap') }),
+    field('cashback', 'Cashback as credit on delivered orders', 'toggle', false, { value: on('cashback') }),
+    field('cashbackPercent', 'Cashback: percent of the goods (0.01 to 25)', 'number', false, { min: 0, max: 25, value: n('cashbackPercent') }),
+    field('cashbackMin', 'Cashback: order minimum (dollars)', 'number', false, { min: 0, max: 10_000, value: n('cashbackMin') }),
+    field('cashbackCap', 'Cashback: most per order (dollars, 0 for no cap)', 'number', false, { min: 0, max: 10_000, value: n('cashbackCap') }),
+    field('memberPrices', 'Member prices and deals', 'toggle', false, { value: on('memberPrices') }),
+    field('earlyAccess', 'Early access to pre-order windows and delivery runs', 'toggle', false, { value: on('earlyAccess') }),
+    field('earlyAccessHours', 'Early access: hours before everyone else (1 to 720)', 'number', false, { min: 0, max: 720, value: n('earlyAccessHours') }),
+    field('prioritySupport', 'Priority support', 'toggle', false, { value: on('prioritySupport') }),
+    field('freeReturns', 'Free returns', 'toggle', false, { value: on('freeReturns') }),
+    field('boostedRewards', 'Bigger referral and gift rewards', 'toggle', false, { value: on('boostedRewards') }),
+    field('boostedPercent', 'Bigger rewards: extra percent (0.01 to 100)', 'number', false, { min: 0, max: 100, value: n('boostedPercent') }),
+    field('monthlyCredit', 'A credit every month', 'toggle', false, { value: on('monthlyCredit') }),
+    field('monthlyCreditAmount', 'Monthly credit (dollars)', 'number', false, { min: 0, max: 1000, value: n('monthlyCreditAmount') })
+  ];
+}
+
 const MARKET_ORDER: Record<string, number> = { LIVE: 0, COMING_SOON: 1, PAUSED: 2, PLANNED: 3 };
 const col = (key: string, label: string, kind: ColumnKind, width: number): ResourceColumn => ({ key, label, kind, width });
 const facets = (...values: string[]): ResourceFacet[] => values.map((v) => ({ value: v, label: humanize(v) }));
@@ -888,6 +935,141 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         r.lines = [{ id: `mh-${num(r.fields.version)}`, changedAt: str(r.fields.updatedAt), changedByName: str(r.fields.updatedByName), reason: str(v.reason) }, ...(r.lines ?? [])];
       }
     }
+  },
+  'membership-tiers': {
+    title: 'Membership tiers',
+    columns: [col('name', 'Tier', 'strong', 14), col('status', 'Status', 'status', 10), col('monthlyPriceMinor', 'Monthly', 'money', 9), col('yearlyPriceMinor', 'Yearly', 'money', 9), col('trialDays', 'Trial days', 'number', 8), col('members', 'Members', 'number', 8), col('trialing', 'On a trial', 'number', 8), col('benefitsText', 'Benefits', 'text', 34)],
+    statusKey: 'status',
+    facets: facets('DRAFT', 'PUBLISHED', 'RETIRED'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.name)} membership`,
+    subtitleOf: (r) => `${humanize(str(r.fields.status))} · $${(num(r.fields.monthlyPriceMinor) / 100).toFixed(2)} a month or $${(num(r.fields.yearlyPriceMinor) / 100).toFixed(2)} a year · ${str(r.fields.members)} members`,
+    sections: [
+      ['The plan', ['name', 'code', 'description', 'status', 'sortOrder', 'monthlyPriceMinor', 'yearlyPriceMinor', 'trialDays']],
+      ['Benefits', ['benefitsText']],
+      ['Members', ['members', 'trialing']],
+      ['Last change', ['updatedByName', 'updatedAt']]
+    ],
+    linesTitle: 'Who changed it and why',
+    lineColumns: [col('changedAt', 'When', 'datetime', 20), col('changedByName', 'Who', 'text', 20), col('action', 'What', 'text', 14), col('reason', 'Why', 'text', 46)],
+    actions: [
+      {
+        key: 'publish', label: 'Publish', tone: 'primary', permission: 'payments:configure', when: (r) => stateReason(r, 'DRAFT', 'RETIRED'),
+        form: () => form('Why?', 'Publish', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'Shoppers can join this tier at once. A published tier never goes back to a draft.'),
+        apply: (r, v, ctx) => { r.fields.status = 'PUBLISHED'; r.fields.version = num(r.fields.version) + 1; r.lines = [{ id: `th-${num(r.fields.version)}`, changedAt: ctx.now.toISOString(), changedByName: ctx.actor, action: 'Published', reason: str(v.reason) }, ...(r.lines ?? [])]; log(r, ctx, `Published — ${str(v.reason)}`); }
+      },
+      {
+        key: 'retire', label: 'Retire', tone: 'danger', permission: 'payments:configure', when: (r) => stateReason(r, 'PUBLISHED'),
+        form: () => form('Why?', 'Retire', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'Stops new sign-ups. Current members keep their benefits and their price and can stay for as long as they like.'),
+        apply: (r, v, ctx) => { r.fields.status = 'RETIRED'; r.fields.version = num(r.fields.version) + 1; r.lines = [{ id: `th-${num(r.fields.version)}`, changedAt: ctx.now.toISOString(), changedByName: ctx.actor, action: 'Retired', reason: str(v.reason) }, ...(r.lines ?? [])]; log(r, ctx, `Retired — ${str(v.reason)}`); }
+      }
+    ],
+    edit: {
+      permission: 'payments:configure',
+      form: (r) => form(`Change the ${str(r.fields.name)} tier`, 'Save', [...tierFields(r), field('reason', 'Why it changes (at least 15 characters; kept in the history)', 'textarea', true, { maxLength: 500, value: '' })],
+        'Benefit changes apply to every member at once. Members keep the price they signed up at. A reason is required and is kept with who made the change.', TIER_CHANGE_KEYS),
+      apply: (r, v, ctx) => {
+        for (const k of ['name', 'description', 'status']) r.fields[k] = str(v[k]);
+        for (const k of ['sortOrder', 'trialDays', 'freeDeliveryMin', 'freeDeliveryCap', 'freeShippingMin', 'freeShippingCap', 'cashbackPercent', 'cashbackMin', 'cashbackCap', 'earlyAccessHours', 'boostedPercent', 'monthlyCreditAmount']) r.fields[k] = num(v[k]);
+        for (const k of ['freeDelivery', 'freeShipping', 'cashback', 'memberPrices', 'earlyAccess', 'prioritySupport', 'freeReturns', 'boostedRewards', 'monthlyCredit']) r.fields[k] = v[k] === true;
+        r.fields.monthlyPriceMinor = Math.round(num(v.monthlyPrice) * 100);
+        r.fields.yearlyPriceMinor = Math.round(num(v.yearlyPrice) * 100);
+        r.fields.benefitsText = TIER_BENEFITS.filter(([k]) => r.fields[k] === true).map(([, label]) => label).join(', ') || 'None';
+        r.fields.version = num(r.fields.version) + 1;
+        r.fields.updatedByName = ctx?.actor ?? 'Platform Admin';
+        r.fields.updatedAt = (ctx?.now ?? new Date()).toISOString();
+        r.lines = [{ id: `th-${num(r.fields.version)}`, changedAt: str(r.fields.updatedAt), changedByName: str(r.fields.updatedByName), action: 'Updated', reason: str(v.reason) }, ...(r.lines ?? [])];
+      }
+    },
+    create: {
+      permission: 'payments:configure',
+      form: form('Add a membership tier', 'Add tier', [
+        field('code', 'Code (lower case letters, numbers and dashes; cannot change later)', 'text', true, { maxLength: 40, pattern: '^[a-z][a-z0-9-]{1,39}$', help: 'Use 2 to 40 lower case letters, numbers or dashes, starting with a letter' }),
+        ...tierFields(undefined),
+        field('reason', 'Why this tier is added (at least 15 characters)', 'textarea', true, { maxLength: 500, value: '' })
+      ], 'Define the price, the trial and the benefits from the menu. Start it as a draft to review it, or publish it to open it to shoppers at once.'),
+      build: (v, id, ctx) => {
+        const fields: MockRecord['fields'] = { code: str(v.code), name: str(v.name), description: str(v.description), status: str(v.status) || 'DRAFT', sortOrder: num(v.sortOrder), monthlyPriceMinor: Math.round(num(v.monthlyPrice) * 100), yearlyPriceMinor: Math.round(num(v.yearlyPrice) * 100), trialDays: num(v.trialDays), members: 0, trialing: 0, updatedByName: ctx.actor, updatedAt: ctx.now.toISOString(), version: 1 };
+        for (const k of ['freeDeliveryMin', 'freeDeliveryCap', 'freeShippingMin', 'freeShippingCap', 'cashbackPercent', 'cashbackMin', 'cashbackCap', 'earlyAccessHours', 'boostedPercent', 'monthlyCreditAmount']) fields[k] = num(v[k]);
+        for (const k of ['freeDelivery', 'freeShipping', 'cashback', 'memberPrices', 'earlyAccess', 'prioritySupport', 'freeReturns', 'boostedRewards', 'monthlyCredit']) fields[k] = v[k] === true;
+        fields.benefitsText = TIER_BENEFITS.filter(([k]) => fields[k] === true).map(([, label]) => label).join(', ') || 'None';
+        return { id: str(v.code) || id, fields, activity: [], lines: [{ id: 'th-1', changedAt: ctx.now.toISOString(), changedByName: ctx.actor, action: 'Created', reason: str(v.reason) }] };
+      }
+    }
+  },
+  memberships: {
+    title: 'Members',
+    columns: [col('customerName', 'Member', 'strong', 20), col('tierName', 'Tier', 'text', 12), col('status', 'Status', 'status', 11), col('interval', 'Billed', 'text', 9), col('priceMinor', 'Price', 'money', 9), col('source', 'Source', 'text', 11), col('startedAt', 'Joined', 'date', 12), col('periodEnd', 'Renews or ends', 'date', 14)],
+    statusKey: 'status',
+    facets: facets('TRIALING', 'ACTIVE', 'PAST_DUE', 'CANCELED', 'LAPSED', 'EXPIRED'),
+    searchPlaceholder: 'Member, tier or status',
+    exportable: true,
+    ids: { customerId: 'Customer' },
+    titleOf: (r) => `${str(r.fields.customerName)} · ${str(r.fields.tierName)}`,
+    subtitleOf: (r) => `${humanize(str(r.fields.status))} · $${(num(r.fields.priceMinor) / 100).toFixed(2)} ${str(r.fields.interval).toLowerCase()}`,
+    sections: [
+      ['Membership', ['customerName', 'tierName', 'status', 'source', 'interval', 'priceMinor', 'startedAt', 'periodEnd']],
+      ['Cancellation, changes and retries', ['cancelAtPeriodEnd']],
+      ['Refund rule', ['refundPossible', 'refundWhy']]
+    ],
+    linesTitle: 'Charges',
+    lineColumns: [col('createdAt', 'When', 'datetime', 24), col('kind', 'Kind', 'text', 16), col('amountMinor', 'Amount', 'money', 16), col('status', 'Status', 'status', 16), col('refundedMinor', 'Refunded', 'money', 16)],
+    actions: [
+      {
+        key: 'refund', label: 'Refund the latest fee to the card', tone: 'danger', permission: 'payments:configure',
+        confirm: 'Refund the whole fee to the card it was charged on? When it paid the current period of a live membership, the membership ends now. Credit is never refunded to a card.',
+        when: (r) => ((r.lines ?? []).some((l) => l.status === 'SUCCEEDED' && num(l.amountMinor) > 0 && num(l.refundedMinor) === 0) ? null : 'There is no fee to refund.'),
+        form: () => form('Why is the fee refunded?', 'Refund', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The reason is kept on the charge and in the audit log.'),
+        apply: (r, v, ctx) => {
+          const last = (r.lines ?? []).find((l) => l.status === 'SUCCEEDED' && num(l.amountMinor) > 0 && num(l.refundedMinor) === 0);
+          if (last) { last.status = 'REFUNDED'; last.refundedMinor = num(last.amountMinor); }
+          r.fields.status = 'CANCELED';
+          log(r, ctx, `Fee refunded — ${str(v.reason)}`);
+        }
+      }
+    ]
+  },
+  'membership-settings': {
+    title: 'Membership billing rules',
+    columns: [col('refundWindowDays', 'Refund window (days)', 'number', 20), col('retryText', 'Retries after a failed renewal (days)', 'text', 30), col('updatedByName', 'Last changed by', 'text', 24), col('updatedAt', 'Changed', 'datetime', 20)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Membership billing rules',
+    subtitleOf: (r) => `Version ${str(r.fields.version)} · ${str(r.fields.updatedByName)}`,
+    sections: [
+      ['Refund rule', ['refundWindowDays']],
+      ['When a renewal fails', ['retryText']],
+      ['Last change', ['updatedByName', 'updatedAt']]
+    ],
+    linesTitle: 'Who changed it and why',
+    lineColumns: [col('changedAt', 'When', 'datetime', 20), col('changedByName', 'Who', 'text', 24), col('reason', 'Why', 'text', 56)],
+    actions: [],
+    edit: {
+      permission: 'payments:configure',
+      form: (r) => form('Change the membership billing rules', 'Save', [
+        field('refundWindowDays', 'Full refund when canceling within (days; 0 turns the refund off)', 'number', true, { min: 0, max: 60, value: num(r.fields.refundWindowDays) }),
+        field('retryDays', 'Retry a failed renewal after these many days (up to 6, like 1, 3, 5)', 'text', false, { maxLength: 40, pattern: '^\\s*\\d{1,2}(\\s*,\\s*\\d{1,2}){0,5}\\s*$', help: 'For example 1, 3, 5', value: str(r.fields.retryText) }),
+        field('reason', 'Why it changes (at least 15 characters; kept in the history)', 'textarea', true, { maxLength: 500, value: '' })
+      ], 'Takes effect at once. Every change is kept with who made it and why.', ['refundWindowDays', 'retryDays']),
+      apply: (r, v, ctx) => {
+        r.fields.refundWindowDays = num(v.refundWindowDays);
+        r.fields.retryText = str(v.retryDays);
+        r.fields.version = num(r.fields.version) + 1;
+        r.fields.updatedByName = ctx?.actor ?? 'Platform Admin';
+        r.fields.updatedAt = (ctx?.now ?? new Date()).toISOString();
+        r.lines = [{ id: `sh-${num(r.fields.version)}`, changedAt: str(r.fields.updatedAt), changedByName: str(r.fields.updatedByName), reason: str(v.reason) }, ...(r.lines ?? [])];
+      }
+    }
+  },
+  'membership-report': {
+    title: 'Membership: members, churn, cost and revenue',
+    columns: [col('item', 'What', 'strong', 32), col('amountMinor', 'Amount', 'money', 14), col('count', 'Count', 'number', 10), col('note', 'What it means', 'text', 44)],
+    facets: [],
+    exportable: true,
+    titleOf: (r) => str(r.fields.item),
+    subtitleOf: (r) => str(r.fields.note),
+    sections: [['This line', ['item', 'amountMinor', 'count', 'note']]],
+    actions: []
   },
   'stripe-lookup': {
     title: 'Stripe lookup',

@@ -7,6 +7,7 @@ export { DEMO_ACCOUNTS, DEMO_CODE, JOBS, PLACEMENTS, SITE_CONFIG } from './fixtu
 export { ADDRESSES, STREETS, US_STATES } from './fixtures/geo';
 export { handlers, SESSION_COOKIE } from './handlers';
 export { completePhrases, levenshtein, matchScore, PHRASES, SYNONYMS, words } from './matching';
+export { MOCK_DECLINED_CARD, MOCK_MEMBERSHIP_TIERS } from './membership';
 export { handleMockRequest } from './runtime';
 export { buildCart, productDetail, search, suggest } from './service';
 export { MOCK_STRIPE_KEY_COOKIE } from './shopper';

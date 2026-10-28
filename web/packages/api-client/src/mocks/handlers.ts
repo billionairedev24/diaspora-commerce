@@ -20,6 +20,7 @@ import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { helpHandlers } from './help-handlers';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
+import { membershipHandlers } from './membership';
 import { preorderHandlers } from './preorder-handlers';
 import {
   addToCart,
@@ -266,6 +267,7 @@ export const handlers = [
   /* Addresses, payments, orders, returns, checkout, services & bookings, Lola */
   ...shopperHandlers,
   ...creditHandlers,
+  ...membershipHandlers,
   ...preorderHandlers,
   ...deliveryRunHandlers,
   ...legalHandlers,
