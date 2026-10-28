@@ -1,6 +1,6 @@
 /* TanStack Query hooks. Keys come from the factories in ./keys (BFF keys shared with the web via api-client). */
-import { type Cart, type SearchQuery, SearchQuerySchema } from '@afrotransact/api-client';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type Cart, creditQueries, type SearchQuery, SearchQuerySchema } from '@afrotransact/api-client';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApi } from './ApiProvider';
 import { accountKeys, bookingKeys, cartKeys, checkoutKeys, identityKeys, orderKeys, productKeys, searchKeys } from './keys';
@@ -67,6 +67,12 @@ export function useTracking(orderNumber: string) {
 export function useAddresses() {
   const api = useApi();
   return useQuery({ queryKey: accountKeys.addresses(), queryFn: () => api.bff.getAddresses() });
+}
+
+/** AfroTransact credit balance and history, newest first (S320). Read only: credit is spent at checkout, never paid out. */
+export function useCreditAccount() {
+  const api = useApi();
+  return useInfiniteQuery(creditQueries.account(api.bff));
 }
 
 export function usePaymentMethods() {

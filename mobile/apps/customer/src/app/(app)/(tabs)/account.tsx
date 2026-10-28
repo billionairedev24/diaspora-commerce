@@ -2,7 +2,7 @@
 import { localeInfo } from '@afrotransact/i18n';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { BellIcon as Bell, CalendarIcon as Calendar, CaretRightIcon as CaretRight, CheckCircleIcon as CheckCircle, DesktopIcon as Desktop, GlobeIcon as Globe, type Icon, LockSimpleIcon as LockSimple, MapPinIcon as MapPin, QuestionIcon as Question, ReceiptIcon as Receipt, ShieldCheckIcon as ShieldCheck, SignOutIcon as SignOut, StorefrontIcon as Storefront, TruckIcon as Truck, WalletIcon as Wallet } from 'phosphor-react-native';
+import { BellIcon as Bell, CalendarIcon as Calendar, CaretRightIcon as CaretRight, CheckCircleIcon as CheckCircle, DesktopIcon as Desktop, GiftIcon as Gift, GlobeIcon as Globe, type Icon, LockSimpleIcon as LockSimple, MapPinIcon as MapPin, QuestionIcon as Question, ReceiptIcon as Receipt, ShieldCheckIcon as ShieldCheck, SignOutIcon as SignOut, StorefrontIcon as Storefront, TruckIcon as Truck, WalletIcon as Wallet } from 'phosphor-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -84,6 +84,7 @@ export default function Account() {
       <View style={styles.group}>
         <SectionLabel>{tr('cu.account.profile')}</SectionLabel>
         <Row icon={MapPin} label={tr('cu.account.addresses')} value={String(addresses.data?.length ?? '')} onPress={() => router.push('/addresses')} />
+        <Row icon={Gift} label={tr('cu.account.credit')} onPress={() => router.push('/credit')} />
         <Row icon={Wallet} label={tr('cu.account.paymentMethods')} value={String(pms.data?.length ?? '')} onPress={() => router.push('/payments')} />
       </View>
       {backOffices.length > 0 ? (

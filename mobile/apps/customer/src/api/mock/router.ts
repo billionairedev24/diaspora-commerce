@@ -15,6 +15,14 @@ const noContent = () => new Response(null, { status: 204 });
 const problem = (status: number, title: string, code: string, detail?: string) =>
   new Response(JSON.stringify({ type: bffProblemType(code), title, status, code, detail: detail ?? title }), { status, headers: { 'Content-Type': 'application/problem+json' } });
 
+/** The signed-in shopper's credit ledger, newest first: a gift card redeemed, then part of an order paid with it. */
+function mockCreditEntries() {
+  return [
+    { id: 'cre_2', kind: 'SPEND', source: 'ORDER', amountMinor: -1250, currency: 'USD', balanceAfterMinor: 3750, createdAt: '2026-10-20T15:04:00Z' },
+    { id: 'cre_1', kind: 'GRANT', source: 'GIFT_CARD', amountMinor: 5000, currency: 'USD', balanceAfterMinor: 5000, createdAt: '2026-10-12T09:30:00Z' }
+  ];
+}
+
 const TAX_RATE = 0.0825;
 const FREE_THRESHOLD = 3500;
 const SELLER_SHIPPING = 599;
@@ -314,6 +322,14 @@ const ROUTES: Array<[string, string, Handler]> = [
     db.addresses = db.addresses.filter((x) => x.id !== params.id);
     if (db.addresses.length && !db.addresses.some((x) => x.isDefault)) db.addresses[0]!.isDefault = true;
     return noContent();
+  }],
+  ['GET', '/v1/account/credit', ({ url }) => {
+    const entries = mockCreditEntries();
+    const before = url.searchParams.get('before');
+    const from = before ? entries.findIndex((e) => e.id === before) + 1 : 0;
+    const page = entries.slice(from, from + 20);
+    const next = from + 20 < entries.length ? page[page.length - 1]!.id : null;
+    return json({ balanceMinor: entries[0]?.balanceAfterMinor ?? 0, currency: 'USD', entries: page, nextBefore: next });
   }],
   ['GET', '/v1/account/payment-methods', () => json({ items: mockDb().paymentMethods, nextCursor: null })],
   ['POST', '/v1/account/payment-methods/setup-intents', () => json({ clientSecret: `seti_mock_${nextId('')}_secret_mock`, publishableKey: 'pk_test_mock' }, 201)],

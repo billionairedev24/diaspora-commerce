@@ -130,5 +130,20 @@
   "cu.mfa.textAgain": "Text me a new code",
   "cu.mfa.useAuthenticator": "Use my authenticator app",
   "cu.mfa.useRecovery": "Use a recovery code",
-  "cu.mfa.back": "Back"
+  "cu.mfa.back": "Back",
+  "cu.account.credit": "رصيد AfroTransact",
+  "cu.credit.title": "رصيد AfroTransact",
+  "cu.credit.balance": "رصيدك",
+  "cu.credit.intro": "يُستخدم الرصيد للدفع مقابل المنتجات والخدمات على AfroTransact ولا تنتهي صلاحيته. لا يمكن سحبه أو صرفه نقدًا أو إعادته إلى بطاقة أو إرساله إلى شخص آخر.",
+  "cu.credit.history": "السجل",
+  "cu.credit.none": "لا يوجد نشاط للرصيد بعد.",
+  "cu.credit.loadMore": "عرض النشاط الأقدم",
+  "cu.credit.after": "الرصيد {amount}",
+  "cu.credit.src.REFERRAL": "مكافأة الإحالة",
+  "cu.credit.src.GIFT_CARD": "بطاقة هدية",
+  "cu.credit.src.MEMBERSHIP": "العضوية",
+  "cu.credit.src.REFUND": "استرداد",
+  "cu.credit.src.STAFF": "من AfroTransact",
+  "cu.credit.src.PROMO": "عرض ترويجي",
+  "cu.credit.src.ORDER": "طلب"
 }
