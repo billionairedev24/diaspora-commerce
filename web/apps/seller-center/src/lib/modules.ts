@@ -15,6 +15,7 @@ import {
   Scissors,
   ShieldCheck,
   ShieldWarning,
+  Star,
   Tag,
   Ticket,
   Tray,
@@ -25,7 +26,7 @@ import {
 import { type MessageKey, type Translator } from '@/i18n/t';
 
 export const MODULE_ICONS: Record<ModuleKey, Icon> = {
-  onboarding: ListChecks, home: House, orders: Receipt, returns: ArrowUUpLeft, disputes: Gavel, listings: Tag, inventory: Warehouse, coupons: Ticket, calendar: CalendarBlank,
+  onboarding: ListChecks, home: House, orders: Receipt, returns: ArrowUUpLeft, disputes: Gavel, listings: Tag, reviews: Star, inventory: Warehouse, coupons: Ticket, calendar: CalendarBlank,
   requests: Tray, hours: Clock, services: Scissors, policy: ShieldCheck, earnings: CurrencyDollar, payouts: Bank, fees: Percent,
   billing: CreditCard, 'account-health': ShieldWarning, team: UsersThree
 };
