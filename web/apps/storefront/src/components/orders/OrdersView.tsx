@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import pageStyles from '@/components/account/Pages.module.css';
 import { PlacedConfirmation } from '@/components/preorder/PreorderConfirmation';
+import { RateItemButton } from '@/components/reviews/ReviewSheet';
 import { useLolaLauncher } from '@/components/shell/LolaLauncher';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
@@ -90,6 +91,7 @@ function ShipmentItems({ shipment }: { shipment: OrderSummary['shipments'][numbe
             {l.imageUrl ? <img src={l.imageUrl} alt="" loading="lazy" className={styles.thumb} /> : <span className={styles.thumb} aria-hidden />}
             <span className={styles.itemTitle}>{l.title}</span>
             {l.quantity > 1 && <span className={pageStyles.muted}>{t('ord.qty', { count: l.quantity })}</span>}
+            {shipment.deliveredAt && l.productAtin && <RateItemButton atin={l.productAtin} title={l.title} imageUrl={l.imageUrl} />}
           </li>
         ))}
       </ul>
