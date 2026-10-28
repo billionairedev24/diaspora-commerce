@@ -19,6 +19,7 @@ import com.afrotransact.payments.application.RefundResult;
 import com.afrotransact.payments.application.WalletMethod;
 import com.afrotransact.payments.domain.AccountBalance;
 import com.afrotransact.payments.domain.AppliedRate;
+import com.afrotransact.payments.domain.BenefitCode;
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.CommissionOverride;
 import com.afrotransact.payments.domain.DeliveryMode;
@@ -104,7 +105,19 @@ final class PaymentsDtos {
             @Schema(description = "S320: pay with the shopper's AfroTransact credit first (shopperId required). The "
                     + "PaymentIntent is for amountMinor minus the credit applied, and there is none when credit "
                     + "pays everything (the payment is AUTHORIZED at once). Credit leaves at least 0.50 for the card "
-                    + "or pays the whole order") Boolean useCredit) {
+                    + "or pays the whole order") Boolean useCredit,
+            @Schema(description = "S323: the delivery fees the shopper's membership waived on this order, recorded as "
+                    + "the benefits used (and counted in the cost of the membership benefits). Needs shopperId")
+            @Size(max = 50) List<@Valid PaymentMembershipWaiver> membershipWaivers) {
+    }
+
+    @Schema(description = "A delivery fee the shopper's membership waived on one shipment of the order")
+    record PaymentMembershipWaiver(
+            @NotBlank @Size(max = 120) @Schema(description = "The shipment (or other part of the order) the fee "
+                    + "belonged to") String ref,
+            @NotNull @Schema(allowableValues = {"FREE_DELIVERY", "FREE_SHIPPING"}) BenefitCode benefit,
+            @NotNull @Min(1) Long amountMinor,
+            @NotBlank @Size(max = 40) String tierCode) {
     }
 
     @Schema(description = "One order line: who sells it and what the shopper pays for it")

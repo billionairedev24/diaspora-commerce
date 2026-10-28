@@ -52,6 +52,10 @@ public final class PaymentsEvents {
     public static final String GIFT_CARD_PURCHASED = "payments.gift_card.purchased";
     /** A staff grant or correction of credit was posted (key = customer id), S320. */
     public static final String CREDIT_ADJUSTED = "payments.credit.adjusted";
+    /** A shopper's membership started, renewed, failed, lapsed, ended, changed or got free days (key = customer id). */
+    public static final String MEMBERSHIP_CHANGED = "payments.membership.changed";
+    /** Staff changed a membership tier or the billing rules, with the reason (audit; key = tier code). */
+    public static final String MEMBERSHIP_TIER_CHANGED = "payments.membership.tier_changed";
 
     private PaymentsEvents() {
     }

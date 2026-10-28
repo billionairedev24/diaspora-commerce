@@ -370,6 +370,27 @@ public final class Postings {
                 .credit(LedgerAccount.of(Chart.GIFT_CARD_LIABILITY), card.amount()).build(id, at);
     }
 
+    /**
+     * A membership fee charged to the member's card (S323). Dr 1000 (charge less fee), Dr 5000 (fee) / Cr 4700. Matched
+     * to the charge by reconciliation.
+     */
+    public static Journal membershipCharged(UUID id, Instant at, String key, MembershipCharge charge, Money fee) {
+        return Journal.builder(JournalType.MEMBERSHIP_CHARGE, key).stripeRef(charge.chargeId())
+                .description("Membership " + charge.tierCode() + " fee of " + charge.customerId())
+                .debit(LedgerAccount.of(Chart.STRIPE_CLEARING), charge.amount().minus(fee))
+                .debit(LedgerAccount.of(Chart.STRIPE_FEES), fee)
+                .credit(LedgerAccount.of(Chart.MEMBERSHIP_REVENUE), charge.amount()).build(id, at);
+    }
+
+    /** A membership fee refunded to the card, matched to the Stripe refund. Dr 4700 / Cr 1000. */
+    public static Journal membershipRefunded(UUID id, Instant at, String key, MembershipCharge charge,
+                                             String refundId) {
+        return Journal.builder(JournalType.MEMBERSHIP_REFUND, key).stripeRef(refundId)
+                .description("Membership " + charge.tierCode() + " fee of " + charge.customerId() + " refunded")
+                .debit(LedgerAccount.of(Chart.MEMBERSHIP_REVENUE), charge.amount())
+                .credit(LedgerAccount.of(Chart.STRIPE_CLEARING), charge.amount()).build(id, at);
+    }
+
     /** A gift card issued by staff. Dr 5200 / Cr 2650. */
     public static Journal giftCardIssued(UUID id, Instant at, String key, GiftCard card) {
         return Journal.builder(JournalType.GIFT_CARD_ISSUED, key).description("Gift card " + card.id()

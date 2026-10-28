@@ -86,6 +86,7 @@ class PaymentServiceImpl implements PaymentService {
     private final OrgPlanService orgPlans;
     private final LineRates lineRates;
     private final CreditLedger credit;
+    private final MembershipBenefitsService membership;
     private final Clock clock;
 
     PaymentServiceImpl(PaymentRepository payments, FeeScheduleRepository feeSchedules,
@@ -93,7 +94,8 @@ class PaymentServiceImpl implements PaymentService {
                        LedgerPoster ledger, IdempotencyStore idempotency, PaymentStatusUpdater statuses,
                        WalletSync wallet, WalletRepository savedMethods, MoneyTransactions tx, PaymentsAccess access,
                        DomainEventPublisher events, PaymentsSettings settings, OrgPlanService orgPlans,
-                       LineRates lineRates, CreditLedger credit, Clock clock) {
+                       LineRates lineRates, CreditLedger credit, MembershipBenefitsService membership,
+                       Clock clock) {
         this.payments = payments;
         this.feeSchedules = feeSchedules;
         this.settlements = settlements;
@@ -111,6 +113,7 @@ class PaymentServiceImpl implements PaymentService {
         this.orgPlans = orgPlans;
         this.lineRates = lineRates;
         this.credit = credit;
+        this.membership = membership;
         this.clock = clock;
     }
 
@@ -152,6 +155,8 @@ class PaymentServiceImpl implements PaymentService {
             if (cmd.shopperId() != null && !cmd.shopperId().isBlank()) {
                 metadata.put("afrotransact_customer_id", cmd.shopperId());
             }
+            // the delivery fees the shopper's membership waived are the benefits used on this order (S323)
+            membership.recordWaivers(cmd.shopperId(), cmd.orderId(), cmd.amount().currency(), cmd.membershipWaivers());
             if (saved != null) {
                 return offSessionCreate(payment, saved, metadata, idempotencyKey, now);
             }
@@ -712,7 +717,7 @@ class PaymentServiceImpl implements PaymentService {
         return new CreatePaymentCommand(cmd.orderId().trim(), cmd.customerId(), cmd.amount(),
                 cmd.paymentMethodTypes(), cmd.placedAt(), cmd.metadata(), cmd.lines(),
                 cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession(), cmd.offSession(),
-                cmd.useCredit());
+                cmd.useCredit(), cmd.membershipWaivers());
     }
 
     private static NotFoundException notFound(String what) {
