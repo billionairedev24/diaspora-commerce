@@ -1555,5 +1555,10 @@
   "st.runs.adv.featured.add": "Add",
   "st.runs.adv.featured.seller": "from {seller}",
   "st.runs.adv.featured.max": "Feature at most {max} products.",
-  "st.runs.adv.featured.on": "Features: {names}"
+  "st.runs.adv.featured.on": "Features: {names}",
+  "st.settings.referrals.label": "Ètò ìpè ọ̀rẹ́",
+  "st.settings.referrals.description": "Ohun tí oníbàárà tó ń pín àti ọ̀rẹ́ tó ń darapọ̀ ń gbà, nígbà tí wọ́n bá gbà á, àwọn ààlà, àti gbogbo ìpè pẹ̀lú àwọn tí a dúró fún àyẹ̀wò. A tọ́jú gbogbo àyípadà pẹ̀lú ìdí rẹ̀.",
+  "st.settings.referrals.intro": "AfroTransact ni ó ń san àwọn ẹ̀bùn: owó ìdókòwò (kì í ṣe owó ọwọ́ láéláé) tàbí ọjọ́ ọ̀fẹ́ ti ẹgbẹ́, a sì ń ṣètò wọn lọ́tọ̀ọ̀tọ̀ fún oníbàárà tó ń pín àti ọ̀rẹ́ tó ń darapọ̀. Ọ̀rẹ́ kan tóótun nígbà tí a bá kó àṣẹ àkọ́kọ́ rẹ̀ tó tó iye tó kéré jù dé, a sì ń fún àwọn ẹ̀bùn lẹ́yìn tí ọjọ́ ìdápadà bá parí. Àwọn ìpè tó ń pín ẹ̀rọ, nẹ́tíwọ́kì, àdírẹ́sì ìkó-ọjà-dé tàbí káàdì ń dúró níbí fún àyẹ̀wò.",
+  "st.settings.referrals.listTitle": "Àwọn ìpè àti àtòjọ àyẹ̀wò",
+  "st.resourceTable.allStatuses": "Gbogbo"
 }

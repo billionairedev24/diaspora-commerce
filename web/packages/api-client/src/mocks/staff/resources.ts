@@ -910,12 +910,12 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         key: 'approve', label: 'Approve', tone: 'primary', permission: 'ledger:adjust', confirm: 'The checks found something shared between the referrer and the friend. Approving says it is fine: the rewards are then granted after the return window.',
         when: (r) => stateReason(r, 'IN_REVIEW'),
         form: () => form('Why is it fine?', 'Approve', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'The reason is kept with your name. If the return window has passed, both rewards are granted now.'),
-        apply: (r, v, ctx) => { r.fields.status = 'WAITING'; r.fields.flagsText = ''; r.fields.decision = 'APPROVED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Approved — ${str(v.reason)}`); }
+        apply: (r, v, ctx) => { if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)'); r.fields.status = 'WAITING'; r.fields.flagsText = ''; r.fields.decision = 'APPROVED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Approved — ${str(v.reason)}`); }
       },
       {
         key: 'reject', label: 'Reject', tone: 'danger', permission: 'ledger:adjust', when: (r) => stateReason(r, 'IN_REVIEW', 'WAITING'),
         form: () => form('Why is it rejected?', 'Reject', [field('reason', 'Reason (at least 15 characters)', 'textarea', true, { maxLength: 500 })], 'No reward is granted to either side. The reason is kept with your name.'),
-        apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.decision = 'REJECTED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Rejected — ${str(v.reason)}`); }
+        apply: (r, v, ctx) => { if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)'); r.fields.status = 'REJECTED'; r.fields.decision = 'REJECTED'; r.fields.decisionReason = str(v.reason); r.fields.decidedByName = ctx.actor; r.fields.decidedAt = ctx.now.toISOString(); log(r, ctx, `Rejected — ${str(v.reason)}`); }
       }
     ]
   },
@@ -963,6 +963,7 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         ['enabled', 'referrerType', 'referrerCredit', 'referrerDays', 'referredType', 'referredCredit', 'referredDays', 'qualifyingEvent', 'minOrder', 'returnWindowDays', 'validityDays', 'maxRewarded', 'maxCredit']);
       },
       apply: (r, v, ctx) => {
+        if (str(v.reason).trim().length < 15) throw new Error('Say why (at least 15 characters)');
         const text = (type: string, credit: number, days: number) => (type === 'MEMBERSHIP_DAYS' ? `${days} membership days` : `$${credit.toFixed(2)} credit`);
         r.fields.enabled = v.enabled === true;
         r.fields.stateText = v.enabled === true ? 'On' : 'Off';

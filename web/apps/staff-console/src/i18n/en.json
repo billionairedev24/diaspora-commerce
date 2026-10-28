@@ -1548,5 +1548,10 @@
   "st.runs.adv.featured.add": "Add",
   "st.runs.adv.featured.seller": "from {seller}",
   "st.runs.adv.featured.max": "Feature at most {max} products.",
-  "st.runs.adv.featured.on": "Features: {names}"
+  "st.runs.adv.featured.on": "Features: {names}",
+  "st.settings.referrals.label": "Referral program",
+  "st.settings.referrals.description": "What the customer who shares and the friend who joins each earn, when it is earned, the limits, and every referral with the ones held for review. Every change is kept with its reason.",
+  "st.settings.referrals.intro": "AfroTransact pays the rewards: credit (never cash) or free membership days, set separately for the customer who shares and the friend who joins. A friend qualifies when their first order of at least the minimum is delivered, and the rewards are granted once the return window has passed. Referrals that share a device, network, delivery address or card wait here for review.",
+  "st.settings.referrals.listTitle": "Referrals and the review queue",
+  "st.resourceTable.allStatuses": "All"
 }
