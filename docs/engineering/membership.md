@@ -34,7 +34,7 @@ shipping on orders of at least $25.00. Everything is editable without a release.
 | `FREE_DELIVERY`, `FREE_SHIPPING` | order minimum, per-order cap | The fee rules produce the fee (ADR 0005); `FeeWaivers` removes it when the order's goods reach the minimum, capped per order. Pickup and express are never waived. Applies from the first day, trial included. |
 | `CASHBACK` | percent (basis points), optional minimum and cap | Credit on a delivered order, once per order. Hooked on settlement `markDelivered`; a 2-day sweep picks up any miss. |
 | `MONTHLY_CREDIT` | amount | Granted once a month by the hourly job, from the first paid period. |
-| `BOOSTED_REWARDS` | percent | Exposed in the entitlements; the referral program and gift cards multiply their reward by it. |
+| `BOOSTED_REWARDS` | percent | Exposed as `rewardBoostBps` in the entitlements (and the BFF/support tools). The referral program (S322) is the consumer; gift cards do not read it yet. |
 | `EARLY_ACCESS` | hours | Pre-order windows (eligibility) and delivery runs (availability and slot reservation) open this many hours earlier for members. |
 | `PRIORITY_SUPPORT`, `FREE_RETURNS` | none | Flags in the entitlements; the staff Customer 360 shows them. |
 | `MEMBER_PRICES` | none | A flag only. Catalog and search do not read it yet: see "Not built". |
@@ -75,7 +75,7 @@ Checkout (orders) asks `POST /v1/memberships/waivers` for the waivers of the shi
 payments records them on the order snapshot with **tier and benefit** (`orders.shipment.membership_waiver`, V9). The order
 total is lower by the waiver; the fee as priced stays visible. The BFF previews the same with
 `POST /v1/memberships/me/savings` (cart and checkout), and for a shopper who is not a member returns the upsell "Join Plus to save $X on this order".
-Orders fails open: if payments cannot answer, the fee is charged as priced and never wrongly waived.
+The same quote returns `cashbackMinor`, the credit the member will earn when the order is delivered (0 during a trial), which the cart and checkout show as "credit earned"; the shopper can join from the upsell box without leaving the page. Orders fails open: if payments cannot answer, the fee is charged as priced and never wrongly waived.
 
 ## Early access
 
@@ -106,6 +106,7 @@ BFF (contract `gateway-bff.yaml`, tag Membership): `getMembershipOffer`, `getAcc
 ## Not built (documented gaps)
 
 - **Member prices**: the benefit can be switched on and is in the entitlements, but catalog, search and the cart do not apply a member price yet. It needs a price list per offer.
+- **Bigger referral and gift rewards**: the boost is exposed in the entitlements, but nothing in the referral or gift card flows applies it yet.
 - **Free returns**: exposed as a flag to support and returns tooling; the return label and refund flow do not read it yet.
 - **Annual fee deferral**: a yearly fee is booked as revenue when charged, not spread over twelve months.
 - **Mobile apps** have no membership screens.
