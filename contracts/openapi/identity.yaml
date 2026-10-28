@@ -3479,6 +3479,12 @@ components:
             one; the account starts verified and joins the organisation.
           maxLength: 200
           minLength: 0
+        referralCode:
+          type: string
+          description: Referral code of the friend who shared AfroTransact, as in their link (S322). Optional; a code nobody
+            owns is ignored, the account is created either way.
+          maxLength: 20
+          minLength: 0
       required:
       - confirmPassword
       - email

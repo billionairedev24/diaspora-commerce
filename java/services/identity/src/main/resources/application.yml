@@ -91,6 +91,9 @@ at:
     # STAFF_CONSOLE_URL, API_BASE_URL and PLATFORM_DOMAIN are injected per environment by the Helm library chart.
     issuer: ${AUTH_ISSUER_URL:http://localhost:8100}
     home-url: ${HOME_URL:${PUBLIC_WEB_URL:http://localhost:3000}}
+    # S322: sign-up device and network are published as keyed hashes (never raw) for the referral program's abuse checks.
+    signup:
+      fingerprint-key: ${SIGNUP_FINGERPRINT_KEY:identity-signup-fingerprints}
     # Reconciles identity's copy of seller and provider organisations with the seller service (the source of truth):
     # on start-up after initial-delay, then every interval, and on demand (POST /v1/orgs/{id}/sync, /v1/internal/orgs/reconcile).
     seller-sync:

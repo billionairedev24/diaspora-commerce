@@ -23,6 +23,7 @@ class HostedPageContextResolverImpl implements HostedPageContextResolver {
 
     private static final int MAX_HINT = 254;
     private static final int MAX_INVITATION = 200;
+    private static final int MAX_REFERRAL = 20;
 
     private final RequestCache requestCache;
     private final LoginPageSettings settings;
@@ -46,7 +47,8 @@ class HostedPageContextResolverImpl implements HostedPageContextResolver {
         String hint = cut(param(saved, "login_hint"), MAX_HINT);
         String invitation = cut(param(saved, "invitation"), MAX_INVITATION);
         return new HostedPageContext(app, clientId, appUrl, hint, invitation, saved != null,
-                intent(app, param(saved, "intent")), HostedPageContext.SIGNED_OUT.equals(param(saved, "notice")));
+                intent(app, param(saved, "intent")), HostedPageContext.SIGNED_OUT.equals(param(saved, "notice")),
+                cut(param(saved, "referral"), MAX_REFERRAL));
     }
 
     /** "Start selling" / "Offer your services": only for Seller Center requests, other values are dropped. */

@@ -25,6 +25,9 @@ channels:
       paymentsGiftCardVoided: {$ref: '#/components/messages/paymentsGiftCardVoided'}
       paymentsGiftCardResent: {$ref: '#/components/messages/paymentsGiftCardResent'}
       paymentsCreditAdjusted: {$ref: '#/components/messages/paymentsCreditAdjusted'}
+      paymentsReferralRewarded: {$ref: '#/components/messages/paymentsReferralRewarded'}
+      paymentsReferralFlagged: {$ref: '#/components/messages/paymentsReferralFlagged'}
+      paymentsReferralDecided: {$ref: '#/components/messages/paymentsReferralDecided'}
   paymentsPayoutEvents:
     address: at.payout.events
     description: >-
@@ -41,6 +44,24 @@ channels:
       paymentsSupplierPaymentPaid: {$ref: '#/components/messages/paymentsSupplierPaymentPaid'}
       paymentsSupplierPaymentUpdated: {$ref: '#/components/messages/paymentsSupplierPaymentUpdated'}
 operations:
+  consumePaymentsReferralIdentityEvents:
+    action: receive
+    channel: {$ref: '#/channels/identityEvents'}
+    summary: >-
+      payments-service (consumer group payments-service-referral, listener payments-referral-identity-events) feeds the
+      referral program (S322) from identity.user.registered: the sign-up device and network hashes are kept for the abuse
+      checks, and a referralCode the program owns attaches the new customer to the code's owner (one referral per
+      customer; own code, unknown code, staff sign-ups and a program that is off attach nothing). Other events are
+      ignored.
+  consumePaymentsReferralOrderEvents:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      payments-service (listener payments-referral-order-events) feeds the referral program (S322): orders.order.placed
+      keeps a hash of the delivery address and, for a referred customer waiting for a first order, tracks the order's
+      shipments; orders.shipment.delivered / orders.shipment.cancelled end them. When every shipment ended and the delivered
+      value reaches the program's minimum the referral qualifies; the rewards are granted through the credit ledger once
+      the return window has passed. Other events are ignored.
   consumePaymentsSellerComplianceEvents:
     action: receive
     channel: {$ref: '#/channels/sellerComplianceEvents'}
@@ -199,6 +220,21 @@ components:
       title: 'A staff grant or correction of a customer''s credit was posted (audit; key = customer id)'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PaymentsCreditAdjusted'}
+    paymentsReferralRewarded:
+      name: payments.referral.rewarded
+      title: 'A referral reward was granted to one side, as credit or membership days (S322; key = customer id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsReferralRewarded'}
+    paymentsReferralFlagged:
+      name: payments.referral.flagged
+      title: 'Abuse checks hold a referral for staff review (audit; key = referral id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsReferralFlagged'}
+    paymentsReferralDecided:
+      name: payments.referral.decided
+      title: 'Staff approved or rejected a referral, or the system rejected it (audit; key = referral id)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsReferralDecided'}
     paymentsPayoutRequested:
       name: payments.payout.requested
       title: 'Seller / provider requested a payout'
@@ -308,6 +344,38 @@ components:
         reason: {type: string}
         proposedBy: {type: string}
         decidedBy: {type: string, description: 'The approver, or the proposer when it was within the staff-set limit'}
+    PaymentsReferralRewarded:
+      type: object
+      required: [referralId, customerId, side, rewardType, creditMinor, currency, membershipDays]
+      properties:
+        referralId: {type: string, format: uuid}
+        customerId: {type: string, description: The side that earned the reward}
+        side: {type: string, enum: [REFERRER, REFERRED]}
+        rewardType: {type: string, enum: [CREDIT, MEMBERSHIP_DAYS]}
+        creditMinor: {type: integer, format: int64, description: Credit granted; 0 for membership days}
+        currency: {type: string}
+        membershipDays: {type: integer, description: Free membership days granted; 0 for credit}
+        friendName: {type: [string, 'null'], description: 'First name and last initial of the friend, for the referrer''s message; null for the friend'}
+    PaymentsReferralFlagged:
+      type: object
+      required: [referralId, referrerId, referredId, flags]
+      properties:
+        referralId: {type: string, format: uuid}
+        referrerId: {type: string}
+        referredId: {type: string}
+        flags:
+          type: array
+          items: {type: string, enum: [SAME_DEVICE, SAME_NETWORK, SAME_ADDRESS, SAME_PAYMENT_METHOD]}
+    PaymentsReferralDecided:
+      type: object
+      required: [referralId, referrerId, referredId, decision, reason, decidedBy]
+      properties:
+        referralId: {type: string, format: uuid}
+        referrerId: {type: string}
+        referredId: {type: string}
+        decision: {type: string, enum: [APPROVED, REJECTED, SYSTEM]}
+        reason: {type: string}
+        decidedBy: {type: string, description: The staff member, or system}
     PaymentsIntentActionRequired:
       type: object
       required: [paymentId, orderId, parentPaymentId, customerId, amountMinor, currency, reason]
